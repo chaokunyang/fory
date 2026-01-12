@@ -68,8 +68,8 @@ func (g *DynamicSliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, 
 	buf.WriteInt32(g.structHash)
 
 	// WriteData fields in sorted order
-	// Field: DynamicSlice ([]interface{})
-	// Dynamic slice []interface{} handling - manual serialization
+	// Field: DynamicSlice ([]any)
+	// Dynamic slice []any handling - manual serialization
 	{
 		isXlang := ctx.TypeResolver().IsXlang()
 		if isXlang {
@@ -80,7 +80,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, 
 			}
 			buf.WriteVaruint32(uint32(sliceLen))
 			if sliceLen > 0 {
-				// WriteData collection flags for dynamic slice []interface{}
+				// WriteData collection flags for dynamic slice []any
 				// Only CollectionTrackingRef is set (no declared type, may have different types)
 				buf.WriteInt8(1) // CollectionTrackingRef only
 				// WriteData each element using WriteValue
@@ -97,7 +97,7 @@ func (g *DynamicSliceDemo_ForyGenSerializer) WriteTyped(ctx *fory.WriteContext, 
 				sliceLen := len(v.DynamicSlice)
 				buf.WriteVaruint32(uint32(sliceLen))
 				if sliceLen > 0 {
-					// WriteData collection flags for dynamic slice []interface{}
+					// WriteData collection flags for dynamic slice []any
 					// Only CollectionTrackingRef is set (no declared type, may have different types)
 					buf.WriteInt8(1) // CollectionTrackingRef only
 					// WriteData each element using WriteValue
@@ -174,20 +174,20 @@ func (g *DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v 
 	}
 
 	// ReadData fields in same order as write
-	// Field: DynamicSlice ([]interface{})
-	// Dynamic slice []interface{} handling - manual deserialization
+	// Field: DynamicSlice ([]any)
+	// Dynamic slice []any handling - manual deserialization
 	{
 		isXlang := ctx.TypeResolver().IsXlang()
 		if isXlang {
 			// xlang mode: slices are not nullable, read directly without null flag
 			sliceLen := int(buf.ReadVaruint32(err))
 			if sliceLen == 0 {
-				v.DynamicSlice = make([]interface{}, 0)
+				v.DynamicSlice = make([]any, 0)
 			} else {
 				// ReadData collection flags (ignore for now)
 				_ = buf.ReadInt8(err)
 				// Create slice with proper capacity
-				v.DynamicSlice = make([]interface{}, sliceLen)
+				v.DynamicSlice = make([]any, sliceLen)
 				// ReadData each element using ReadValue
 				for i := range v.DynamicSlice {
 					ctx.ReadValue(reflect.ValueOf(&v.DynamicSlice[i]).Elem(), fory.RefModeTracking, true)
@@ -201,12 +201,12 @@ func (g *DynamicSliceDemo_ForyGenSerializer) ReadTyped(ctx *fory.ReadContext, v 
 			} else {
 				sliceLen := int(buf.ReadVaruint32(err))
 				if sliceLen == 0 {
-					v.DynamicSlice = make([]interface{}, 0)
+					v.DynamicSlice = make([]any, 0)
 				} else {
 					// ReadData collection flags (ignore for now)
 					_ = buf.ReadInt8(err)
 					// Create slice with proper capacity
-					v.DynamicSlice = make([]interface{}, sliceLen)
+					v.DynamicSlice = make([]any, sliceLen)
 					// ReadData each element using ReadValue
 					for i := range v.DynamicSlice {
 						ctx.ReadValue(reflect.ValueOf(&v.DynamicSlice[i]).Elem(), fory.RefModeTracking, true)
@@ -1422,7 +1422,7 @@ func (g *ValidationDemo_ForyGenSerializer) ReadWithTypeInfo(ctx *fory.ReadContex
 
 // Snapshot of DynamicSliceDemo's underlying type at generation time.
 type _DynamicSliceDemo_expected struct {
-	DynamicSlice []interface{}
+	DynamicSlice []any
 }
 
 // Compile-time check: this conversion is legal only if DynamicSliceDemo's underlying type

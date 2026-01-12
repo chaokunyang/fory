@@ -62,7 +62,7 @@ type MapDataClass struct {
 }
 
 type ComplexObject1 struct {
-	F1  interface{}
+	F1  any
 	F2  string
 	F3  []string
 	F4  map[int8]int32
@@ -77,7 +77,7 @@ type ComplexObject1 struct {
 }
 
 type ComplexObject2 struct {
-	F1 interface{}
+	F1 any
 	F2 map[int8]int32
 }
 
@@ -142,7 +142,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			writeType: SimpleDataClass{},
 			readType:  SimpleDataClass{},
 			input:     SimpleDataClass{Name: "test", Age: 25, Active: true},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(SimpleDataClass)
 				out := output.(SimpleDataClass)
 				assert.Equal(t, in.Age, out.Age)
@@ -181,7 +181,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			readerSetup: func(f *Fory) error {
 				return f.RegisterNamedStruct(ComplexObject2{}, "test.ComplexObject2")
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(ComplexObject1)
 				out := output.(ComplexObject1)
 				// Note: F1 may be either ComplexObject2 or *ComplexObject2 depending on reference tracking
@@ -216,7 +216,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			writeType: SimpleDataClass{},
 			readType:  InconsistentDataClass{},
 			input:     SimpleDataClass{Name: "test", Age: 25, Active: true},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(SimpleDataClass)
 				out := output.(InconsistentDataClass)
 				assert.Zero(t, out.Name)
@@ -236,7 +236,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				IntField:    42,
 				ByteField:   255,
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(UnsortedStruct)
 				out := output.(UnsortedStruct)
 				assert.Equal(t, in.FloatField, out.FloatField)
@@ -252,7 +252,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			writeType: SimpleDataClass{},
 			readType:  ExtendedDataClass{},
 			input:     SimpleDataClass{Name: "test", Age: 25, Active: true},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(SimpleDataClass)
 				out := output.(ExtendedDataClass)
 				assert.Equal(t, in.Name, out.Name)
@@ -267,7 +267,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			writeType: SimpleDataClass{},
 			readType:  ReducedDataClass{},
 			input:     SimpleDataClass{Name: "test", Age: 25, Active: true},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(SimpleDataClass)
 				out := output.(ReducedDataClass)
 				assert.Equal(t, in.Name, out.Name)
@@ -284,7 +284,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				Items: []string{"item1", "item2", "item3"},
 				Nums:  []int32{10, 20, 30, 40},
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(SliceDataClass)
 				out := output.(SliceDataClass)
 				assert.Equal(t, in.Name, out.Name)
@@ -302,7 +302,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				Items: []string{"item1", "item2"},
 				Nums:  []int32{1, 2, 3},
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(SliceDataClass)
 				out := output.(InconsistentSliceDataClass)
 				assert.Equal(t, in.Name, out.Name)
@@ -328,7 +328,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 					"success":  95,
 				},
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(MapDataClass)
 				out := output.(MapDataClass)
 				assert.Equal(t, in.Name, out.Name)
@@ -358,7 +358,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			readerSetup: func(f *Fory) error {
 				return f.RegisterNamedStruct(SimpleDataClass{}, "SimpleDataClass")
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(PointerDataClass)
 				out := output.(PointerDataClass)
 				if assert.NotNil(t, out.Inner) {
@@ -386,7 +386,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			readerSetup: func(f *Fory) error {
 				return f.RegisterNamedStruct(InconsistentDataClass{}, "SimpleDataClass")
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(PointerDataClass)
 				out := output.(PointerInconsistentDataClass)
 				if assert.NotNil(t, out.Inner) {
@@ -412,7 +412,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 					"c2": 20,
 				},
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(MapDataClass)
 				out := output.(InconsistentMapDataClass)
 				assert.Equal(t, in.Name, out.Name)
@@ -441,7 +441,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				}
 				return nil
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(NestedOuter)
 				out := output.(NestedOuter)
 				assert.Equal(t, in.Name, out.Name)
@@ -469,7 +469,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				}
 				return nil
 			},
-			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
+			assertFunc: func(t *testing.T, input any, output any) {
 				in := input.(NestedOuter)
 				out := output.(NestedOuterIncompatible)
 				assert.Equal(t, in.Name, out.Name)
@@ -490,10 +490,10 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 type compatibilityCase struct {
 	name        string
 	tag         string
-	writeType   interface{}
-	readType    interface{}
-	input       interface{}
-	assertFunc  func(t *testing.T, input interface{}, output interface{})
+	writeType   any
+	readType    any
+	input       any
+	assertFunc  func(t *testing.T, input any, output any)
 	writerSetup func(*Fory) error
 	readerSetup func(*Fory) error
 }

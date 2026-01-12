@@ -32,7 +32,7 @@ func TestArrayDynSerializer(t *testing.T) {
 	})
 
 	t.Run("accepts interface element type", func(t *testing.T) {
-		var arr [3]interface{}
+		var arr [3]any
 		_, err := newArrayDynSerializer(reflect.TypeOf(arr).Elem())
 		require.NoError(t, err)
 	})
@@ -42,17 +42,17 @@ func TestArrayDynSerializerRoundTrip(t *testing.T) {
 	f := NewFory()
 
 	t.Run("array of interfaces with strings", func(t *testing.T) {
-		arr := [3]interface{}{"hello", "world", "test"}
+		arr := [3]any{"hello", "world", "test"}
 
 		bytes, err := f.Marshal(arr)
 		require.NoError(t, err)
 
-		var result interface{}
+		var result any
 		err = f.Unmarshal(bytes, &result)
 		require.NoError(t, err)
 
 		// Result will be a slice, not an array
-		resultSlice, ok := result.([]interface{})
+		resultSlice, ok := result.([]any)
 		require.True(t, ok)
 		require.Equal(t, 3, len(resultSlice))
 		require.Equal(t, arr[0], resultSlice[0])
@@ -61,16 +61,16 @@ func TestArrayDynSerializerRoundTrip(t *testing.T) {
 	})
 
 	t.Run("array of interfaces with nil", func(t *testing.T) {
-		arr := [3]interface{}{"hello", nil, "world"}
+		arr := [3]any{"hello", nil, "world"}
 
 		bytes, err := f.Marshal(arr)
 		require.NoError(t, err)
 
-		var result interface{}
+		var result any
 		err = f.Unmarshal(bytes, &result)
 		require.NoError(t, err)
 
-		resultSlice, ok := result.([]interface{})
+		resultSlice, ok := result.([]any)
 		require.True(t, ok)
 		require.Equal(t, 3, len(resultSlice))
 		require.Equal(t, arr[0], resultSlice[0])
@@ -79,16 +79,16 @@ func TestArrayDynSerializerRoundTrip(t *testing.T) {
 	})
 
 	t.Run("array of interfaces with mixed types", func(t *testing.T) {
-		arr := [4]interface{}{"string", int32(42), true, float64(3.14)}
+		arr := [4]any{"string", int32(42), true, float64(3.14)}
 
 		bytes, err := f.Marshal(arr)
 		require.NoError(t, err)
 
-		var result interface{}
+		var result any
 		err = f.Unmarshal(bytes, &result)
 		require.NoError(t, err)
 
-		resultSlice, ok := result.([]interface{})
+		resultSlice, ok := result.([]any)
 		require.True(t, ok)
 		require.Equal(t, 4, len(resultSlice))
 		require.Equal(t, arr[0], resultSlice[0])

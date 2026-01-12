@@ -60,7 +60,7 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 			serializer := ctx.TypeResolver().getSerializerByTypeID(wroteTypeID)
 			if serializer != nil {
 				// Use the serializer to read and discard the value
-				var dummy interface{}
+				var dummy any
 				dummyVal := reflect.ValueOf(&dummy).Elem()
 				serializer.Read(ctx, RefModeNone, false, false, dummyVal)
 				return
@@ -75,7 +75,7 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID, err)
 			if typeInfo.Serializer != nil {
 				// Use the serializer to read and discard the value
-				var dummy interface{}
+				var dummy any
 				dummyVal := reflect.ValueOf(&dummy).Elem()
 				typeInfo.Serializer.Read(ctx, RefModeNone, false, false, dummyVal)
 				return
@@ -555,7 +555,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 			if serializer != nil {
 				// Use the serializer to read and discard the value
 				// Create a dummy value to read into
-				var dummy interface{}
+				var dummy any
 				dummyVal := reflect.ValueOf(&dummy).Elem()
 				serializer.Read(ctx, RefModeNone, false, false, dummyVal)
 				return

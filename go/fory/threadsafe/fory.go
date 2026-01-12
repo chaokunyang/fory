@@ -55,7 +55,7 @@ func (f *Fory) release(inner *fory.Fory) {
 // ============================================================================
 
 // Serialize serializes a value using a pooled Fory instance
-func (f *Fory) Serialize(v interface{}) ([]byte, error) {
+func (f *Fory) Serialize(v any) ([]byte, error) {
 	inner := f.acquire()
 	data, err := inner.Marshal(v)
 	if err != nil {
@@ -70,14 +70,14 @@ func (f *Fory) Serialize(v interface{}) ([]byte, error) {
 }
 
 // Deserialize deserializes data into the provided value using a pooled Fory instance
-func (f *Fory) Deserialize(data []byte, v interface{}) error {
+func (f *Fory) Deserialize(data []byte, v any) error {
 	inner := f.acquire()
 	defer f.release(inner)
 	return inner.Unmarshal(data, v)
 }
 
 // RegisterNamedStruct registers a named struct type for cross-language serialization
-func (f *Fory) RegisterNamedStruct(type_ interface{}, typeName string) error {
+func (f *Fory) RegisterNamedStruct(type_ any, typeName string) error {
 	inner := f.acquire()
 	defer f.release(inner)
 	return inner.RegisterNamedStruct(type_, typeName)
@@ -132,6 +132,6 @@ func Unmarshal[T any](data []byte, target *T) error {
 
 // UnmarshalTo deserializes data into the provided pointer using the global thread-safe instance.
 // This is for non-generic use cases.
-func UnmarshalTo(data []byte, v interface{}) error {
+func UnmarshalTo(data []byte, v any) error {
 	return globalFory.Deserialize(data, v)
 }

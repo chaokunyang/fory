@@ -139,13 +139,13 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	// Handle slice types
 	if slice, ok := field.Type.(*types.Slice); ok {
 		elemType := slice.Elem()
-		// Check if element type is interface{} (dynamic type)
+		// Check if element type is any (dynamic type)
 		if iface, ok := elemType.(*types.Interface); ok && iface.Empty() {
-			// For []interface{}, we need to manually implement the serialization
+			// For []any, we need to manually implement the serialization
 			// because WriteValue produces incorrect length encoding.
 			// In xlang mode, slices are NOT nullable by default.
 			// In native Go mode, slices can be nil and need null flags.
-			fmt.Fprintf(buf, "\t// Dynamic slice []interface{} handling - manual serialization\n")
+			fmt.Fprintf(buf, "\t// Dynamic slice []any handling - manual serialization\n")
 			fmt.Fprintf(buf, "\t{\n")
 			fmt.Fprintf(buf, "\t\tisXlang := ctx.TypeResolver().IsXlang()\n")
 			fmt.Fprintf(buf, "\t\tif isXlang {\n")
@@ -156,7 +156,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t\t}\n")
 			fmt.Fprintf(buf, "\t\t\tbuf.WriteVaruint32(uint32(sliceLen))\n")
 			fmt.Fprintf(buf, "\t\t\tif sliceLen > 0 {\n")
-			fmt.Fprintf(buf, "\t\t\t\t// WriteData collection flags for dynamic slice []interface{}\n")
+			fmt.Fprintf(buf, "\t\t\t\t// WriteData collection flags for dynamic slice []any\n")
 			fmt.Fprintf(buf, "\t\t\t\t// Only CollectionTrackingRef is set (no declared type, may have different types)\n")
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteInt8(1) // CollectionTrackingRef only\n")
 			fmt.Fprintf(buf, "\t\t\t\t// WriteData each element using WriteValue\n")
@@ -173,7 +173,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t\t\tsliceLen := len(%s)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\tbuf.WriteVaruint32(uint32(sliceLen))\n")
 			fmt.Fprintf(buf, "\t\t\t\tif sliceLen > 0 {\n")
-			fmt.Fprintf(buf, "\t\t\t\t\t// WriteData collection flags for dynamic slice []interface{}\n")
+			fmt.Fprintf(buf, "\t\t\t\t\t// WriteData collection flags for dynamic slice []any\n")
 			fmt.Fprintf(buf, "\t\t\t\t\t// Only CollectionTrackingRef is set (no declared type, may have different types)\n")
 			fmt.Fprintf(buf, "\t\t\t\t\tbuf.WriteInt8(1) // CollectionTrackingRef only\n")
 			fmt.Fprintf(buf, "\t\t\t\t\t// WriteData each element using WriteValue\n")
@@ -205,7 +205,7 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	// Handle interface types
 	if iface, ok := field.Type.(*types.Interface); ok {
 		if iface.Empty() {
-			// For interface{}, use WriteValue for dynamic type handling
+			// For any, use WriteValue for dynamic type handling
 			fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", fieldAccess)
 			return nil
 		}
@@ -456,7 +456,7 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 	keyType := mapType.Key()
 	valueType := mapType.Elem()
 
-	// Check if key or value types are interface{}
+	// Check if key or value types are any
 	keyIsInterface := false
 	valueIsInterface := false
 	if iface, ok := keyType.(*types.Interface); ok && iface.Empty() {
@@ -529,7 +529,7 @@ func writeMapChunksCode(buf *bytes.Buffer, keyType, valueType types.Type, fieldA
 			fmt.Fprintf(buf, "%s\t}\n", indent)
 		}
 	} else {
-		// For interface{} keys, always set not declared type flag
+		// For any keys, always set not declared type flag
 		fmt.Fprintf(buf, "%s\tkvHeader |= 0x4 // key type not declared\n", indent)
 	}
 
@@ -541,7 +541,7 @@ func writeMapChunksCode(buf *bytes.Buffer, keyType, valueType types.Type, fieldA
 			fmt.Fprintf(buf, "%s\t}\n", indent)
 		}
 	} else {
-		// For interface{} values, always set not declared type flag
+		// For any values, always set not declared type flag
 		fmt.Fprintf(buf, "%s\tkvHeader |= 0x20 // value type not declared\n", indent)
 	}
 
@@ -786,7 +786,7 @@ func generateSliceElementWriteInline(buf *bytes.Buffer, elemType types.Type, ele
 	// Handle interface types
 	if iface, ok := elemType.(*types.Interface); ok {
 		if iface.Empty() {
-			// For interface{} elements, use WriteValue for dynamic type handling
+			// For any elements, use WriteValue for dynamic type handling
 			fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", elemAccess)
 			return nil
 		}
@@ -833,7 +833,7 @@ func generateSliceElementWriteInlineIndented(buf *bytes.Buffer, elemType types.T
 	// Handle interface types
 	if iface, ok := elemType.(*types.Interface); ok {
 		if iface.Empty() {
-			// For interface{} elements, use WriteValue for dynamic type handling
+			// For any elements, use WriteValue for dynamic type handling
 			fmt.Fprintf(buf, "%sctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", indent, elemAccess)
 			return nil
 		}

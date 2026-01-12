@@ -154,7 +154,7 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 		fieldType := field.Type
 
 		var fieldSerializer Serializer
-		// For interface{} fields, don't get a serializer - use WriteValue/ReadValue instead
+		// For any fields, don't get a serializer - use WriteValue/ReadValue instead
 		// which will handle polymorphic types dynamically
 		if fieldType.Kind() != reflect.Interface {
 			// Get serializer for all non-interface field types
@@ -372,7 +372,7 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) error {
 	type_ := s.type_
 	if type_ == nil {
-		// Type is not known - we'll create an interface{} placeholder
+		// Type is not known - we'll create an any placeholder
 		// This happens when deserializing unknown types in compatible mode
 		// For now, we'll create fields that discard all data
 		var fields []FieldInfo
@@ -381,7 +381,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
 			remoteType := remoteTypeInfo.Type
 			if remoteType == nil {
-				remoteType = reflect.TypeOf((*interface{})(nil)).Elem()
+				remoteType = reflect.TypeOf((*any)(nil)).Elem()
 			}
 			// Get TypeId from FieldType's TypeId method
 			fieldTypeId := def.fieldType.TypeId()
@@ -480,8 +480,8 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
 		remoteType := remoteTypeInfo.Type
 		// Track if type lookup failed - we'll need to skip such fields
-		// Note: DynamicFieldType.getTypeInfoWithResolver returns interface{} (not nil) when lookup fails
-		emptyInterfaceType := reflect.TypeOf((*interface{})(nil)).Elem()
+		// Note: DynamicFieldType.getTypeInfoWithResolver returns any (not nil) when lookup fails
+		emptyInterfaceType := reflect.TypeOf((*any)(nil)).Elem()
 		typeLookupFailed := remoteType == nil || remoteType == emptyInterfaceType
 		if remoteType == nil {
 			remoteType = emptyInterfaceType
@@ -543,7 +543,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				_, isEnumField = fieldSerializer.(*enumSerializer)
 			}
 			if isPolymorphicField && localType.Kind() == reflect.Interface {
-				// For polymorphic (UNKNOWN) fields with interface{} local type,
+				// For polymorphic (UNKNOWN) fields with any local type,
 				// allow reading - the actual type will be determined at runtime
 				shouldRead = true
 				fieldType = localType

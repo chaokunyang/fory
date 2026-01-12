@@ -96,9 +96,9 @@ func TestSliceDemo(t *testing.T) {
 }
 
 func TestDynamicSliceDemo(t *testing.T) {
-	// 1. Create test instance with various interface{} types
+	// 1. Create test instance with various any types
 	original := &DynamicSliceDemo{
-		DynamicSlice: []interface{}{
+		DynamicSlice: []any{
 			int32(42),
 			"hello",
 			float64(3.14),
@@ -158,7 +158,7 @@ func TestDynamicSliceDemoWithNilAndEmpty(t *testing.T) {
 
 	// Test with empty slice
 	originalEmpty := &DynamicSliceDemo{
-		DynamicSlice: []interface{}{}, // empty slice
+		DynamicSlice: []any{}, // empty slice
 	}
 
 	dataEmpty, err := f.Marshal(originalEmpty)

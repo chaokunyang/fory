@@ -43,7 +43,7 @@ type SliceDemo struct {
 // DynamicSliceDemo is a struct for testing dynamic slice serialization
 // fory:generate
 type DynamicSliceDemo struct {
-	DynamicSlice []interface{} // slice of interface{}
+	DynamicSlice []any // slice of any
 }
 
 // MapDemo demonstrates map field support

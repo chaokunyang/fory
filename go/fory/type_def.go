@@ -931,7 +931,7 @@ func (d *DynamicFieldType) String() string {
 
 func (d *DynamicFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
 	// leave empty for runtime resolution, we not know the actual type here
-	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
+	return TypeInfo{Type: reflect.TypeOf((*any)(nil)).Elem(), Serializer: nil}, nil
 }
 
 func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
@@ -958,8 +958,8 @@ func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (Type
 		}
 	}
 
-	// Fallback to interface{} for unknown types
-	return TypeInfo{Type: reflect.TypeOf((*interface{})(nil)).Elem(), Serializer: nil}, nil
+	// Fallback to any for unknown types
+	return TypeInfo{Type: reflect.TypeOf((*any)(nil)).Elem(), Serializer: nil}, nil
 }
 
 // buildFieldType builds field type from reflect.Type, handling collection, map recursively

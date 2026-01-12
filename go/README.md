@@ -65,7 +65,7 @@ func main() {
 - `[]bool`, `[]int16`, `[]int32`, `[]int64`
 - `[]float32`, `[]float64`
 - `[]string`
-- `[]interface{}` (dynamic slice)
+- `[]any` (dynamic slice)
 - `map[string]string`, `map[int]int`, `map[string]int`, and more
 
 ### Time Types

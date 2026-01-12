@@ -570,7 +570,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 		return
 	}
 
-	// For interface{} types, we need to read the actual type from the buffer first
+	// For any types, we need to read the actual type from the buffer first
 	if value.Type().Kind() == reflect.Interface {
 		// Handle ref tracking based on refMode
 		var refID int32 = int32(NotNullValueFlag)
@@ -598,7 +598,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 
 		// Read type info to determine the actual type
 		if !readType {
-			c.SetError(DeserializationError("cannot read interface{} without type info"))
+			c.SetError(DeserializationError("cannot read any without type info"))
 			return
 		}
 		ctxErr := c.Err()
@@ -625,7 +625,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 
 		// For named struct types, create a pointer type to support circular references.
 		// In Java/xlang serialization, objects are always by reference, so when deserializing
-		// into interface{}, we need to use pointers to maintain reference semantics.
+		// into any, we need to use pointers to maintain reference semantics.
 		isNamedStruct := actualType.Kind() == reflect.Struct &&
 			(internalTypeID == NAMED_STRUCT || internalTypeID == NAMED_COMPATIBLE_STRUCT ||
 				internalTypeID == COMPATIBLE_STRUCT || internalTypeID == STRUCT)

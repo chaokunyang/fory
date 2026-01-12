@@ -205,7 +205,7 @@ func NewFory(opts ...Option) *Fory {
 // type_ can be either a reflect.Type or an instance of the type
 // typeID should be the user type ID in the range 0-8192 (the internal type ID will be added automatically)
 // Note: For enum types, use RegisterEnum instead.
-func (f *Fory) RegisterStruct(type_ interface{}, typeID uint32) error {
+func (f *Fory) RegisterStruct(type_ any, typeID uint32) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -241,7 +241,7 @@ func (f *Fory) RegisterStruct(type_ interface{}, typeID uint32) error {
 // type_ can be either a reflect.Type or an instance of the type
 // typeName can include a namespace prefix separated by "." (e.g., "example.Foo")
 // Note: For enum types, use RegisterNamedEnum instead.
-func (f *Fory) RegisterNamedStruct(type_ interface{}, typeName string) error {
+func (f *Fory) RegisterNamedStruct(type_ any, typeName string) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -269,7 +269,7 @@ func (f *Fory) RegisterNamedStruct(type_ interface{}, typeName string) error {
 // This method creates an enum serializer that writes/reads the enum value as Varuint32Small7.
 // type_ can be either a reflect.Type or an instance of the enum type
 // typeID should be the user type ID in the range 0-8192 (the internal type ID will be added automatically)
-func (f *Fory) RegisterEnum(type_ interface{}, typeID uint32) error {
+func (f *Fory) RegisterEnum(type_ any, typeID uint32) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -299,7 +299,7 @@ func (f *Fory) RegisterEnum(type_ interface{}, typeID uint32) error {
 // In Go, enums are typically defined as int-based types (e.g., type Color int32).
 // type_ can be either a reflect.Type or an instance of the enum type
 // typeName can include a namespace prefix separated by "." (e.g., "example.Color")
-func (f *Fory) RegisterNamedEnum(type_ interface{}, typeName string) error {
+func (f *Fory) RegisterNamedEnum(type_ any, typeName string) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -332,7 +332,7 @@ func (f *Fory) RegisterNamedEnum(type_ interface{}, typeName string) error {
 // RegisterExtension registers a type as an extension type with a numeric ID.
 // Extension types use a custom serializer provided by the user.
 // typeID should be the user type ID in the range 0-8192.
-func (f *Fory) RegisterExtension(type_ interface{}, typeID uint32, serializer ExtensionSerializer) error {
+func (f *Fory) RegisterExtension(type_ any, typeID uint32, serializer ExtensionSerializer) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -353,20 +353,20 @@ func (f *Fory) RegisterExtension(type_ interface{}, typeID uint32, serializer Ex
 //
 //	type MyExtSerializer struct{}
 //
-//	func (s *MyExtSerializer) Write(buf *ByteBuffer, value interface{}) error {
+//	func (s *MyExtSerializer) Write(buf *ByteBuffer, value any) error {
 //	    myExt := value.(MyExt)
 //	    buf.WriteVarint32(myExt.Id)
 //	    return nil
 //	}
 //
-//	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
+//	func (s *MyExtSerializer) Read(buf *ByteBuffer) (any, error) {
 //	    id := buf.ReadVarint32(err)
 //	    return MyExt{Id: id}, nil
 //	}
 //
 //	// Register with custom serializer
 //	f.RegisterNamedExtension(MyExt{}, "my_ext", &MyExtSerializer{})
-func (f *Fory) RegisterNamedExtension(type_ interface{}, typeName string, serializer ExtensionSerializer) error {
+func (f *Fory) RegisterNamedExtension(type_ any, typeName string, serializer ExtensionSerializer) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -441,7 +441,7 @@ func (f *Fory) Serialize(value any) ([]byte, error) {
 
 // Deserialize deserializes data directly into the provided target value.
 // The target must be a pointer to the value to deserialize into.
-func (f *Fory) Deserialize(data []byte, v interface{}) error {
+func (f *Fory) Deserialize(data []byte, v any) error {
 	defer f.resetReadState()
 	f.readCtx.SetData(data)
 
@@ -511,7 +511,7 @@ func (f *Fory) resetWriteState() {
 // SerializeTo serializes a value and appends the bytes to the provided buffer.
 // This is useful when you need to write multiple serialized values to the same buffer.
 // Returns error if serialization fails.
-func (f *Fory) SerializeTo(buf *ByteBuffer, value interface{}) error {
+func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
 	// Handle nil values
 	if isNilValue(value) {
 		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
@@ -590,7 +590,7 @@ finish:
 // DeserializeFrom deserializes data from an existing buffer directly into the provided target value.
 // The buffer's reader index is advanced as data is read.
 // This is useful when reading multiple serialized values from the same buffer.
-func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
+func (f *Fory) DeserializeFrom(buf *ByteBuffer, v any) error {
 	// Reset contexts for each independent serialized object
 	defer f.resetReadState()
 
@@ -662,12 +662,12 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer, v interface{}) error {
 //	safeCopy := bytes.Clone(data)
 //
 // For thread-safe usage, use threadsafe.Fory which copies the data internally.
-func (f *Fory) Marshal(v interface{}) ([]byte, error) {
+func (f *Fory) Marshal(v any) ([]byte, error) {
 	return f.Serialize(v)
 }
 
 // Unmarshal deserializes bytes into the provided value.
-func (f *Fory) Unmarshal(data []byte, v interface{}) error {
+func (f *Fory) Unmarshal(data []byte, v any) error {
 	return f.Deserialize(data, v)
 }
 
@@ -675,7 +675,7 @@ func (f *Fory) Unmarshal(data []byte, v interface{}) error {
 // The third parameter is an optional callback for buffer objects (can be nil).
 // If callback is provided, it will be called for each BufferObject during serialization.
 // Return true from callback to write in-band, false for out-of-band.
-func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v interface{}, callback func(BufferObject) bool) error {
+func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v any, callback func(BufferObject) bool) error {
 	buf := f.writeCtx.buffer
 	defer func() {
 		// Reset internal state but NOT the buffer - caller manages buffer state
@@ -733,7 +733,7 @@ func (f *Fory) SerializeWithCallback(buffer *ByteBuffer, v interface{}, callback
 
 // DeserializeWithCallbackBuffers deserializes from buffer into the provided value (for streaming/cross-language use).
 // The third parameter is optional external buffers for out-of-band data (can be nil).
-func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v interface{}, buffers []*ByteBuffer) error {
+func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v any, buffers []*ByteBuffer) error {
 	// Reset context and use the provided buffer
 	f.readCtx.buffer = buffer
 	defer func() {
@@ -871,7 +871,7 @@ func writeHeader(ctx *WriteContext, config Config) {
 	ctx.buffer.WriteByte_(LangGO)
 }
 
-// isNilValue checks if a value is nil, including nil pointers wrapped in interface{}
+// isNilValue checks if a value is nil, including nil pointers wrapped in any
 // In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to treat it as null.
 func isNilValue(value any) bool {
 	if value == nil {

@@ -152,25 +152,25 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	// Handle slice types
 	if slice, ok := field.Type.(*types.Slice); ok {
 		elemType := slice.Elem()
-		// Check if element type is interface{} (dynamic type)
+		// Check if element type is any (dynamic type)
 		if iface, ok := elemType.(*types.Interface); ok && iface.Empty() {
-			// For []interface{}, we need to manually implement the deserialization
+			// For []any, we need to manually implement the deserialization
 			// to match our custom encoding.
 			// In xlang mode, slices are NOT nullable by default.
 			// In native Go mode, slices can be nil and need null flags.
-			fmt.Fprintf(buf, "\t// Dynamic slice []interface{} handling - manual deserialization\n")
+			fmt.Fprintf(buf, "\t// Dynamic slice []any handling - manual deserialization\n")
 			fmt.Fprintf(buf, "\t{\n")
 			fmt.Fprintf(buf, "\t\tisXlang := ctx.TypeResolver().IsXlang()\n")
 			fmt.Fprintf(buf, "\t\tif isXlang {\n")
 			fmt.Fprintf(buf, "\t\t\t// xlang mode: slices are not nullable, read directly without null flag\n")
 			fmt.Fprintf(buf, "\t\t\tsliceLen := int(buf.ReadVaruint32(err))\n")
 			fmt.Fprintf(buf, "\t\t\tif sliceLen == 0 {\n")
-			fmt.Fprintf(buf, "\t\t\t\t%s = make([]interface{}, 0)\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = make([]any, 0)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t} else {\n")
 			fmt.Fprintf(buf, "\t\t\t\t// ReadData collection flags (ignore for now)\n")
 			fmt.Fprintf(buf, "\t\t\t\t_ = buf.ReadInt8(err)\n")
 			fmt.Fprintf(buf, "\t\t\t\t// Create slice with proper capacity\n")
-			fmt.Fprintf(buf, "\t\t\t\t%s = make([]interface{}, sliceLen)\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t%s = make([]any, sliceLen)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t// ReadData each element using ReadValue\n")
 			fmt.Fprintf(buf, "\t\t\t\tfor i := range %s {\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
@@ -184,12 +184,12 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 			fmt.Fprintf(buf, "\t\t\t} else {\n")
 			fmt.Fprintf(buf, "\t\t\t\tsliceLen := int(buf.ReadVaruint32(err))\n")
 			fmt.Fprintf(buf, "\t\t\t\tif sliceLen == 0 {\n")
-			fmt.Fprintf(buf, "\t\t\t\t\t%s = make([]interface{}, 0)\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t\t%s = make([]any, 0)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t} else {\n")
 			fmt.Fprintf(buf, "\t\t\t\t\t// ReadData collection flags (ignore for now)\n")
 			fmt.Fprintf(buf, "\t\t\t\t\t_ = buf.ReadInt8(err)\n")
 			fmt.Fprintf(buf, "\t\t\t\t\t// Create slice with proper capacity\n")
-			fmt.Fprintf(buf, "\t\t\t\t\t%s = make([]interface{}, sliceLen)\n", fieldAccess)
+			fmt.Fprintf(buf, "\t\t\t\t\t%s = make([]any, sliceLen)\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t\t// ReadData each element using ReadValue\n")
 			fmt.Fprintf(buf, "\t\t\t\t\tfor i := range %s {\n", fieldAccess)
 			fmt.Fprintf(buf, "\t\t\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s[i]).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
@@ -219,7 +219,7 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	// Handle interface types
 	if iface, ok := field.Type.(*types.Interface); ok {
 		if iface.Empty() {
-			// For interface{}, use ReadValue for dynamic type handling
+			// For any, use ReadValue for dynamic type handling
 			fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
 			return nil
 		}
@@ -610,7 +610,7 @@ func generateSliceElementReadInline(buf *bytes.Buffer, elemType types.Type, elem
 	// Handle interface types
 	if iface, ok := elemType.(*types.Interface); ok {
 		if iface.Empty() {
-			// For interface{} elements, use ReadValue for dynamic type handling
+			// For any elements, use ReadValue for dynamic type handling
 			fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", elemAccess)
 			return nil
 		}
@@ -704,7 +704,7 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 	keyType := mapType.Key()
 	valueType := mapType.Elem()
 
-	// Check if key or value types are interface{}
+	// Check if key or value types are any
 	keyIsInterface := false
 	valueIsInterface := false
 	if iface, ok := keyType.(*types.Interface); ok && iface.Empty() {
@@ -780,7 +780,7 @@ func writeMapReadChunks(buf *bytes.Buffer, mapType *types.Map, fieldAccess strin
 
 	// ReadData key
 	if keyIsInterface {
-		fmt.Fprintf(buf, "%s\t\tvar mapKey interface{}\n", indent)
+		fmt.Fprintf(buf, "%s\t\tvar mapKey any\n", indent)
 		fmt.Fprintf(buf, "%s\t\tctx.ReadValue(reflect.ValueOf(&mapKey).Elem(), fory.RefModeTracking, true)\n", indent)
 	} else {
 		keyVarType := getGoTypeString(keyType)
@@ -792,7 +792,7 @@ func writeMapReadChunks(buf *bytes.Buffer, mapType *types.Map, fieldAccess strin
 
 	// ReadData value
 	if valueIsInterface {
-		fmt.Fprintf(buf, "%s\t\tvar mapValue interface{}\n", indent)
+		fmt.Fprintf(buf, "%s\t\tvar mapValue any\n", indent)
 		fmt.Fprintf(buf, "%s\t\tctx.ReadValue(reflect.ValueOf(&mapValue).Elem(), fory.RefModeTracking, true)\n", indent)
 	} else {
 		valueVarType := getGoTypeString(valueType)

@@ -28,7 +28,7 @@ import (
 func TestReferenceResolver(t *testing.T) {
 	refResolver := newRefResolver(true)
 	buf := NewByteBuffer(nil)
-	var values []interface{}
+	var values []any
 	values = append(values, commonSlice()...)
 	values = append(values, commonMap()...)
 	foo := newFoo()
@@ -67,7 +67,7 @@ func TestReferenceResolver(t *testing.T) {
 func TestNonReferenceResolver(t *testing.T) {
 	refResolver := newRefResolver(false)
 	buf := NewByteBuffer(nil)
-	var values []interface{}
+	var values []any
 	values = append(values, commonSlice()...)
 	values = append(values, commonMap()...)
 	foo := newFoo()
@@ -89,7 +89,7 @@ func TestNonReferenceResolver(t *testing.T) {
 }
 
 func TestNullable(t *testing.T) {
-	var values []interface{}
+	var values []any
 	values = append(values, commonSlice()...)
 	values = append(values, commonMap()...)
 	foo := newFoo()
@@ -104,11 +104,11 @@ func TestNullable(t *testing.T) {
 	var v2 map[string]int
 	require.True(t, isNil(reflect.ValueOf(v2)))
 	require.False(t, isNil(reflect.ValueOf("")))
-	var v3 interface{}
+	var v3 any
 	require.True(t, isNil(reflect.ValueOf(v3)))
 }
 
-func same(x, y interface{}) bool {
+func same(x, y any) bool {
 	var vx, vy = reflect.ValueOf(x), reflect.ValueOf(y)
 	if vx.Type() != vy.Type() {
 		return false

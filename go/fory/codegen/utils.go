@@ -90,7 +90,7 @@ func isSupportedFieldType(t types.Type) bool {
 
 	// Check interface types
 	if iface, ok := t.(*types.Interface); ok {
-		// Support empty interface{} for dynamic types
+		// Support empty any for dynamic types
 		if iface.Empty() {
 			return true
 		}
@@ -177,7 +177,7 @@ func getTypeID(t types.Type) string {
 	// Check interface types
 	if iface, ok := t.(*types.Interface); ok {
 		if iface.Empty() {
-			return "INTERFACE" // Use a placeholder for empty interface{}
+			return "INTERFACE" // Use a placeholder for empty any
 		}
 	}
 

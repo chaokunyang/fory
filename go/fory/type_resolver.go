@@ -52,7 +52,7 @@ const (
 )
 
 var (
-	interfaceType = reflect.TypeOf((*interface{})(nil)).Elem()
+	interfaceType = reflect.TypeOf((*any)(nil)).Elem()
 	stringType    = reflect.TypeOf((*string)(nil)).Elem()
 	// Make compilation support tinygo
 	stringPtrType = reflect.TypeOf((*string)(nil))
@@ -68,8 +68,8 @@ var (
 	uintSliceType        = reflect.TypeOf((*[]uint)(nil)).Elem()
 	float32SliceType     = reflect.TypeOf((*[]float32)(nil)).Elem()
 	float64SliceType     = reflect.TypeOf((*[]float64)(nil)).Elem()
-	interfaceSliceType   = reflect.TypeOf((*[]interface{})(nil)).Elem()
-	interfaceMapType     = reflect.TypeOf((*map[interface{}]interface{})(nil)).Elem()
+	interfaceSliceType   = reflect.TypeOf((*[]any)(nil)).Elem()
+	interfaceMapType     = reflect.TypeOf((*map[any]any)(nil)).Elem()
 	stringStringMapType  = reflect.TypeOf((*map[string]string)(nil)).Elem()
 	stringInt64MapType   = reflect.TypeOf((*map[string]int64)(nil)).Elem()
 	stringIntMapType     = reflect.TypeOf((*map[string]int)(nil)).Elem()
@@ -106,7 +106,7 @@ var generatedSerializerFactories = struct {
 }
 
 // RegisterSerializerFactory registers a factory function for a generated serializer
-func RegisterSerializerFactory(type_ interface{}, factory func() Serializer) {
+func RegisterSerializerFactory(type_ any, factory func() Serializer) {
 	reflectType := reflect.TypeOf(type_)
 	if reflectType.Kind() == reflect.Ptr {
 		reflectType = reflectType.Elem()
@@ -317,7 +317,7 @@ func (r *TypeResolver) initialize() {
 		{stringType, STRING, stringSerializer{}},
 		{stringPtrType, STRING, ptrToStringSerializer{}},
 		// Register interface types first so typeIDToTypeInfo maps to generic types
-		// that can hold any element type when deserializing into interface{}
+		// that can hold any element type when deserializing into any
 		{interfaceSliceType, LIST, sliceDynSerializer{}},
 		{interfaceMapType, MAP, mapSerializer{}},
 		// stringSliceType uses dedicated stringSliceSerializer for optimized serialization
@@ -808,11 +808,6 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 	}
 
 	var internal = false
-
-	// Early return if type registration is required but not allowed
-	if !create {
-		fmt.Errorf("type %v not registered and create=false", value.Type())
-	}
 	type_ := value.Type()
 	// Get package path and type name for registration
 	var typeName string
@@ -935,7 +930,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 	   Named structs need both value and pointer types registered using the negative ID system
 	   to assign the correct typeID.
 	   Multidimensional slices should use typeID = 21 for recursive serialization; on
-	   deserialization, users receive []interface{} and must apply conversion function.
+	   deserialization, users receive []any and must apply conversion function.
 	   Array types aren’t tracked separately in fory-go’s type system; semantically,
 	   arrays reuse their corresponding slice serializer/deserializer. We serialize arrays
 	   via their slice metadata and convert back to arrays by conversion function.
@@ -1129,7 +1124,7 @@ func (r *TypeResolver) registerType(
 		   the serializer for typeID 23.
 		   Overwriting here would replace info.Type with incorrect data,
 		   causing map deserialization to load the wrong type.
-		   Therefore, we always keep the initial record for map[interface{}]interface{}.
+		   Therefore, we always keep the initial record for map[any]any.
 		   For standalone maps, we use this generic type loader.
 		   For maps inside named structs, the map serializer
 		   will be supplied with the correct element type at serialization time.

@@ -124,7 +124,7 @@ func formatGoType(t types.Type) string {
 		return obj.Name()
 	case *types.Interface:
 		if type_.Empty() {
-			return "interface{}"
+			return "any"
 		}
 		// For non-empty interfaces, we need to format method signatures
 		var methods []string

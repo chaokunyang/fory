@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func primitiveData() []interface{} {
-	return []interface{}{
+func primitiveData() []any {
+	return []any{
 		false,
 		true,
 		byte(0),
@@ -62,8 +62,8 @@ func primitiveData() []interface{} {
 	}
 }
 
-func commonSlice() []interface{} {
-	return []interface{}{
+func commonSlice() []any {
+	return []any{
 		(&[100]bool{})[:],
 		(&[100]byte{})[:],
 		// (&[100]int8{})[:],
@@ -76,8 +76,8 @@ func commonSlice() []interface{} {
 	}
 }
 
-func commonMap() []interface{} {
-	return []interface{}{
+func commonMap() []any {
+	return []any{
 		// TODO: map[string]bool with false values has a pre-existing serialization bug
 		// where false values become true after deserialization. Skip until fixed.
 		// map[string]bool{"k1": false, "k2": true, "str": true, "": true},
@@ -99,14 +99,14 @@ func commonMap() []interface{} {
 		map[int64]int64{1: 1, 2: 2, 3: 3},
 		map[float32]float32{1: 1, 2: 2, 3: 3},
 		map[float64]float64{1: 1, 2: 2, 3: 3},
-		map[interface{}]interface{}{"k1": "v1", "k2": "v2", "str": "", "": ""},
-		map[string]interface{}{"k1": "v1", "k2": "v2", "str": "", "": ""},
-		map[interface{}]string{"k1": "v1", "k2": "v2", "str": "", "": ""},
+		map[any]any{"k1": "v1", "k2": "v2", "str": "", "": ""},
+		map[string]any{"k1": "v1", "k2": "v2", "str": "", "": ""},
+		map[any]string{"k1": "v1", "k2": "v2", "str": "", "": ""},
 	}
 }
 
-func commonArray() []interface{} {
-	return []interface{}{
+func commonArray() []any {
+	return []any{
 		[100]bool{false, true, true},
 		[100]byte{1, 2, 3},
 		// [100]int8{1, 2, 3},
@@ -131,13 +131,13 @@ func TestSerializePrimitives(t *testing.T) {
 func TestSerializeInterface(t *testing.T) {
 	for _, referenceTracking := range []bool{false, true} {
 		fory := NewFory(WithXlang(true), WithRefTracking(referenceTracking))
-		var a interface{}
+		var a any
 		a = -1
 		serde(t, fory, a)
 		// Use int64 for interface values since fory deserializes integers to int64 for cross-language compatibility
-		b := []interface{}{int64(1), int64(2), "str"}
+		b := []any{int64(1), int64(2), "str"}
 		serde(t, fory, b)
-		var newB []interface{}
+		var newB []any
 		serDeserializeTo(t, fory, b, &newB)
 		require.Equal(t, b, newB)
 		// pointer to interface is not allowed.
@@ -173,7 +173,7 @@ func TestSerializeSlice(t *testing.T) {
 		serde(t, fory, []float32{-1.0, 0, 1.0})
 		serde(t, fory, []float64{-1.0, 0, 1.0})
 		serde(t, fory, []string{"str1", "", "str2"})
-		serde(t, fory, []interface{}{"", "", "str", "str"})
+		serde(t, fory, []any{"", "", "str", "str"})
 		serde(t, fory, primitiveData())
 		for _, data := range commonSlice() {
 			serde(t, fory, data)
@@ -188,11 +188,11 @@ func TestSerializeMap(t *testing.T) {
 		// "str1" is deserialized by interface type, which will be set to map key whose type is string.
 		// so we need to save interface dynamic value type instead of interface value in reference resolver.
 		{
-			value := []interface{}{"str1", map[string]interface{}{"str1": "str2"}}
+			value := []any{"str1", map[string]any{"str1": "str2"}}
 			serde(t, fory, value)
 		}
 		{
-			value := map[string]interface{}{"k1": "v1", "str": "", "": ""}
+			value := map[string]any{"k1": "v1", "str": "", "": ""}
 			serde(t, fory, value)
 		}
 		{
@@ -360,12 +360,12 @@ func TestSerializeStruct(t *testing.T) {
 
 		type A struct {
 			F1 Bar
-			F2 interface{}
+			F2 any
 		}
 		require.Nil(t, fory.RegisterNamedStruct(A{}, "example.A"))
 		serde(t, fory, A{})
 		serde(t, fory, &A{})
-		// Use int64 for interface{} fields since xlang deserializes integers to int64
+		// Use int64 for any fields since xlang deserializes integers to int64
 		serde(t, fory, A{F1: Bar{F1: 1, F2: "str"}, F2: int64(-1)})
 		serde(t, fory, &A{F1: Bar{F1: 1, F2: "str"}, F2: int64(-1)})
 
@@ -459,14 +459,14 @@ func TestSerializeComplexReference(t *testing.T) {
 
 func TestSerializeCommonReference(t *testing.T) {
 	fory := NewFory(WithXlang(true), WithRefTracking(true))
-	var values []interface{}
+	var values []any
 	values = append(values, commonSlice()...)
 	values = append(values, commonMap()...)
 	for _, data := range values {
-		value := []interface{}{data, data}
+		value := []any{data, data}
 		bytes, err := fory.Marshal(value)
 		require.Nil(t, err)
-		var newValue []interface{}
+		var newValue []any
 		require.Nil(t, fory.Unmarshal(bytes, &newValue))
 		require.Equal(t, unsafe.Pointer(reflect.ValueOf(newValue[0]).Pointer()),
 			unsafe.Pointer(reflect.ValueOf(newValue[1]).Pointer()))
@@ -479,7 +479,7 @@ func TestSerializeCommonReference(t *testing.T) {
 /*
 func TestSerializeZeroCopy(t *testing.T) {
 	fory := NewFory(WithXlang(true), WithRefTracking(true))
-	list := []interface{}{"str", make([]byte, 1000)}
+	list := []any{"str", make([]byte, 1000)}
 	buf := NewByteBuffer(nil)
 	var bufferObjects []BufferObject
 	require.Nil(t, fory.SerializeWithCallback(buf, list, func(o BufferObject) bool {
@@ -487,7 +487,7 @@ func TestSerializeZeroCopy(t *testing.T) {
 		return false
 	}))
 	require.Equal(t, 1, len(bufferObjects))
-	var newList []interface{}
+	var newList []any
 	var buffers []*ByteBuffer
 	for _, o := range bufferObjects {
 		buffers = append(buffers, o.ToBuffer())
@@ -498,7 +498,7 @@ func TestSerializeZeroCopy(t *testing.T) {
 }
 */
 
-func serDeserializeTo(t *testing.T, fory *Fory, value interface{}, to interface{}) {
+func serDeserializeTo(t *testing.T, fory *Fory, value any, to any) {
 	bytes, err := fory.Marshal(value)
 	require.Nil(t, err, fmt.Sprintf("serialize value %s with type %s failed: %s",
 		reflect.ValueOf(value), reflect.TypeOf(value), err))
@@ -508,11 +508,11 @@ func serDeserializeTo(t *testing.T, fory *Fory, value interface{}, to interface{
 	require.Equal(t, value, reflect.ValueOf(to).Elem().Interface())
 }
 
-func serde(t *testing.T, fory *Fory, value interface{}) {
+func serde(t *testing.T, fory *Fory, value any) {
 	bytes, err := fory.Marshal(value)
 	require.Nil(t, err, fmt.Sprintf("serialize value %s with type %s failed: %s",
 		reflect.ValueOf(value), reflect.TypeOf(value), err))
-	var newValue interface{}
+	var newValue any
 	require.Nil(t, fory.Unmarshal(bytes, &newValue), "deserialize value %s with type %s failed: %s",
 		fmt.Sprintf("deserialize value %s with type %s failed: %s",
 			reflect.ValueOf(value), reflect.TypeOf(value), err))
@@ -571,7 +571,7 @@ func BenchmarkUnmarshal(b *testing.B) {
 		panic(err)
 	}
 	for i := 0; i < b.N; i++ {
-		var newFoo interface{}
+		var newFoo any
 		err := fory.Unmarshal(data, &newFoo)
 		if err != nil {
 			panic(err)
@@ -579,7 +579,7 @@ func BenchmarkUnmarshal(b *testing.B) {
 	}
 }
 
-func benchData() interface{} {
+func benchData() any {
 	var strData []byte
 	for i := 0; i < 1000; i++ {
 		strData = append(strData, 100)
@@ -590,19 +590,19 @@ func benchData() interface{} {
 
 func ExampleFory_Serialize() {
 	f := New(WithXlang(true))
-	list := []interface{}{true, false, "str", -1.1, 1, make([]int32, 5), make([]float64, 5)}
+	list := []any{true, false, "str", -1.1, 1, make([]int32, 5), make([]float64, 5)}
 	bytes, err := f.Serialize(list)
 	if err != nil {
 		panic(err)
 	}
 	// bytes can be data serialized by other languages.
-	var newValue interface{}
+	var newValue any
 	if err = f.Deserialize(bytes, &newValue); err != nil {
 		panic(err)
 	}
 	fmt.Println(newValue)
 
-	dict := map[string]interface{}{
+	dict := map[string]any{
 		"k1": "v1",
 		"k2": list,
 		"k3": -1,
@@ -693,17 +693,17 @@ func TestStructWithNestedSlice(t *testing.T) {
 		{Name: "test"},
 	}}
 	bytes, _ := fory.Marshal(example)
-	var deserialized2 interface{}
+	var deserialized2 any
 	if err := fory.Unmarshal(bytes, &deserialized2); err != nil {
 		panic(err)
 	}
-	// When unmarshaling to interface{}, named structs are returned as pointers
+	// When unmarshaling to any, named structs are returned as pointers
 	// for circular reference support
 	require.Equal(t, deserialized2, example)
 }
 
 func convertRecursively(newVal, tmplVal reflect.Value) (reflect.Value, error) {
-	// Unwrap any interface{}
+	// Unwrap any any
 	if newVal.Kind() == reflect.Interface && !newVal.IsNil() {
 		newVal = newVal.Elem()
 	}
@@ -797,7 +797,7 @@ func convertRecursively(newVal, tmplVal reflect.Value) (reflect.Value, error) {
 		}
 		return out, nil
 	default:
-		// Handle pointer-to-value conversion (common when deserializing named structs into interface{})
+		// Handle pointer-to-value conversion (common when deserializing named structs into any)
 		if newVal.Kind() == reflect.Ptr && tmplVal.Kind() == reflect.Struct {
 			if !newVal.IsNil() && newVal.Elem().Type() == tmplVal.Type() {
 				return newVal.Elem(), nil

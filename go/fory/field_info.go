@@ -719,7 +719,7 @@ func typesCompatible(actual, expected reflect.Type) bool {
 	if actual == expected {
 		return true
 	}
-	// interface{} can accept any value
+	// any can accept any value
 	if actual.Kind() == reflect.Interface && actual.NumMethod() == 0 {
 		return true
 	}

@@ -197,11 +197,12 @@ public class PrimitiveSerializers {
     public static Expression writeInt64(
         Expression buffer, Expression v, LongEncoding longEncoding, boolean ensureBounds) {
       switch (longEncoding) {
-        case LE_RAW_BYTES:
+        case FIXED:
           return new Invoke(buffer, "writeInt64", v);
-        case SLI:
-          return new Invoke(buffer, ensureBounds ? "writeSliInt64" : "_unsafeWriteSliInt64", v);
-        case PVL:
+        case TAGGED:
+          return new Invoke(
+              buffer, ensureBounds ? "writeTaggedInt64" : "_unsafeWriteTaggedInt64", v);
+        case VARINT:
           return new Invoke(buffer, ensureBounds ? "writeVarInt64" : "_unsafeWriteVarInt64", v);
         default:
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);
@@ -209,9 +210,9 @@ public class PrimitiveSerializers {
     }
 
     public static void writeInt64(MemoryBuffer buffer, long value, LongEncoding longEncoding) {
-      if (longEncoding == LongEncoding.SLI) {
-        buffer.writeSliInt64(value);
-      } else if (longEncoding == LongEncoding.LE_RAW_BYTES) {
+      if (longEncoding == LongEncoding.TAGGED) {
+        buffer.writeTaggedInt64(value);
+      } else if (longEncoding == LongEncoding.FIXED) {
         buffer.writeInt64(value);
       } else {
         buffer.writeVarInt64(value);
@@ -219,9 +220,9 @@ public class PrimitiveSerializers {
     }
 
     public static long readInt64(MemoryBuffer buffer, LongEncoding longEncoding) {
-      if (longEncoding == LongEncoding.SLI) {
-        return buffer.readSliInt64();
-      } else if (longEncoding == LongEncoding.LE_RAW_BYTES) {
+      if (longEncoding == LongEncoding.TAGGED) {
+        return buffer.readTaggedInt64();
+      } else if (longEncoding == LongEncoding.FIXED) {
         return buffer.readInt64();
       } else {
         return buffer.readVarInt64();
@@ -234,11 +235,11 @@ public class PrimitiveSerializers {
 
     public static String readLongFunc(LongEncoding longEncoding) {
       switch (longEncoding) {
-        case LE_RAW_BYTES:
+        case FIXED:
           return Platform.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
-        case SLI:
-          return Platform.IS_LITTLE_ENDIAN ? "_readSliInt64OnLE" : "_readSliInt64OnBE";
-        case PVL:
+        case TAGGED:
+          return Platform.IS_LITTLE_ENDIAN ? "_readTaggedInt64OnLE" : "_readTaggedInt64OnBE";
+        case VARINT:
           return Platform.IS_LITTLE_ENDIAN ? "_readVarInt64OnLE" : "_readVarInt64OnBE";
         default:
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);

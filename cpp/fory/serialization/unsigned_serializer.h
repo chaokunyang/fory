@@ -38,7 +38,7 @@ namespace serialization {
 
 /// uint8_t serializer (native mode only)
 template <> struct Serializer<uint8_t> {
-  static constexpr TypeId type_id = TypeId::U8;
+  static constexpr TypeId type_id = TypeId::UINT8;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -102,7 +102,7 @@ template <> struct Serializer<uint8_t> {
 
 /// uint16_t serializer (native mode only)
 template <> struct Serializer<uint16_t> {
-  static constexpr TypeId type_id = TypeId::U16;
+  static constexpr TypeId type_id = TypeId::UINT16;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -165,9 +165,9 @@ template <> struct Serializer<uint16_t> {
   }
 };
 
-/// uint32_t serializer (native mode only)
+/// uint32_t serializer - uses VAR_UINT32 to match Rust xlang mode
 template <> struct Serializer<uint32_t> {
-  static constexpr TypeId type_id = TypeId::U32;
+  static constexpr TypeId type_id = TypeId::VAR_UINT32;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -230,9 +230,9 @@ template <> struct Serializer<uint32_t> {
   }
 };
 
-/// uint64_t serializer (native mode only)
+/// uint64_t serializer - uses VAR_UINT64 to match Rust xlang mode
 template <> struct Serializer<uint64_t> {
-  static constexpr TypeId type_id = TypeId::U64;
+  static constexpr TypeId type_id = TypeId::VAR_UINT64;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -386,7 +386,7 @@ template <size_t N> struct Serializer<std::array<uint8_t, N>> {
 
 /// Serializer for std::array<uint16_t, N> (native mode only)
 template <size_t N> struct Serializer<std::array<uint16_t, N>> {
-  static constexpr TypeId type_id = TypeId::U16_ARRAY;
+  static constexpr TypeId type_id = TypeId::UINT16_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -470,7 +470,7 @@ template <size_t N> struct Serializer<std::array<uint16_t, N>> {
 
 /// Serializer for std::array<uint32_t, N> (native mode only)
 template <size_t N> struct Serializer<std::array<uint32_t, N>> {
-  static constexpr TypeId type_id = TypeId::U32_ARRAY;
+  static constexpr TypeId type_id = TypeId::UINT32_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -554,7 +554,7 @@ template <size_t N> struct Serializer<std::array<uint32_t, N>> {
 
 /// Serializer for std::array<uint64_t, N> (native mode only)
 template <size_t N> struct Serializer<std::array<uint64_t, N>> {
-  static constexpr TypeId type_id = TypeId::U64_ARRAY;
+  static constexpr TypeId type_id = TypeId::UINT64_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -731,7 +731,7 @@ template <> struct Serializer<std::vector<uint8_t>> {
 
 /// Serializer for std::vector<uint16_t> (native mode only)
 template <> struct Serializer<std::vector<uint16_t>> {
-  static constexpr TypeId type_id = TypeId::U16_ARRAY;
+  static constexpr TypeId type_id = TypeId::UINT16_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -821,7 +821,7 @@ template <> struct Serializer<std::vector<uint16_t>> {
 
 /// Serializer for std::vector<uint32_t> (native mode only)
 template <> struct Serializer<std::vector<uint32_t>> {
-  static constexpr TypeId type_id = TypeId::U32_ARRAY;
+  static constexpr TypeId type_id = TypeId::UINT32_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));
@@ -911,7 +911,7 @@ template <> struct Serializer<std::vector<uint32_t>> {
 
 /// Serializer for std::vector<uint64_t> (native mode only)
 template <> struct Serializer<std::vector<uint64_t>> {
-  static constexpr TypeId type_id = TypeId::U64_ARRAY;
+  static constexpr TypeId type_id = TypeId::UINT64_ARRAY;
 
   static inline void write_type_info(WriteContext &ctx) {
     ctx.write_varuint32(static_cast<uint32_t>(type_id));

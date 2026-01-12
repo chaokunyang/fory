@@ -29,6 +29,8 @@ import org.apache.fory.Fory;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.MapEntry;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.resolver.ClassInfo;
@@ -43,11 +45,13 @@ import org.apache.fory.serializer.NonexistentClass.NonexistentEnum;
 import org.apache.fory.serializer.Serializers.CrossLanguageCompatibleSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.Preconditions;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class NonexistentClassSerializers {
+  private static final Logger LOG = LoggerFactory.getLogger(NonexistentClassSerializers.class);
 
   private static final class ClassFieldsInfo {
     private final SerializationFieldInfo[] buildInFields;
@@ -117,8 +121,18 @@ public final class NonexistentClassSerializers {
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
         ClassInfo classInfo = fieldInfo.classInfo;
-        if (classResolver.isPrimitive(fieldInfo.classId)) {
-          classInfo.getSerializer().write(buffer, fieldValue);
+        if (fory.getConfig().isForyDebugOutputEnabled()) {
+          LOG.info(
+              "NonexistentClassSerializer.write: field={}, dispatchId={}, isPrimitive={}, value={}, serializer={}",
+              fieldInfo.qualifiedFieldName,
+              fieldInfo.dispatchId,
+              DispatchId.isPrimitive(fieldInfo.dispatchId),
+              fieldValue,
+              classInfo != null ? classInfo.getSerializer() : null);
+        }
+        if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
+          // Use dispatch-based write to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
+          Serializers.writePrimitiveValue(buffer, fieldValue, fieldInfo.dispatchId);
         } else {
           if (fieldInfo.useDeclaredTypeInfo) {
             // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
@@ -180,8 +194,9 @@ public final class NonexistentClassSerializers {
           // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
           fieldValue = fory.readRef(buffer, classInfoHolder);
         } else {
-          if (classResolver.isPrimitive(fieldInfo.classId)) {
-            fieldValue = fieldInfo.classInfo.getSerializer().read(buffer);
+          if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
+            // Use dispatch-based read to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
+            fieldValue = Serializers.readPrimitiveValue(fory, buffer, fieldInfo.dispatchId);
           } else {
             fieldValue =
                 AbstractObjectSerializer.readFinalObjectFieldValue(

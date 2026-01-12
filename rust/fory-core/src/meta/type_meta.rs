@@ -622,27 +622,37 @@ impl TypeMeta {
                 TypeId::INT8 => 1,
                 TypeId::INT16 => 2,
                 TypeId::INT32 => 4,
-                TypeId::VAR_INT32 => 4,
+                TypeId::VARINT32 => 4,
                 TypeId::INT64 => 8,
-                TypeId::VAR_INT64 => 8,
+                TypeId::VARINT64 => 8,
+                TypeId::TAGGED_INT64 => 8,
+                TypeId::UINT8 => 1,
+                TypeId::UINT16 => 2,
+                TypeId::UINT32 => 4,
+                TypeId::VAR_UINT32 => 4,
+                TypeId::UINT64 => 8,
+                TypeId::VAR_UINT64 => 8,
+                TypeId::TAGGED_UINT64 => 8,
                 TypeId::FLOAT16 => 2,
                 TypeId::FLOAT32 => 4,
                 TypeId::FLOAT64 => 8,
-                TypeId::U8 => 1,
-                TypeId::U16 => 2,
-                TypeId::U32 => 4,
-                TypeId::U64 => 8,
                 TypeId::U128 => 16,
                 TypeId::INT128 => 16,
+                TypeId::USIZE => std::mem::size_of::<usize>() as i32,
+                TypeId::ISIZE => std::mem::size_of::<isize>() as i32,
                 _ => unreachable!(),
             }
         }
         fn is_compress(type_id: u32) -> bool {
+            // Variable-size integer types (both signed and unsigned)
+            // These are sorted after fixed-size types in field ordering
             [
-                TypeId::INT32 as u32,
-                TypeId::INT64 as u32,
-                TypeId::VAR_INT32 as u32,
-                TypeId::VAR_INT64 as u32,
+                TypeId::VARINT32 as u32,
+                TypeId::VARINT64 as u32,
+                TypeId::TAGGED_INT64 as u32,
+                TypeId::VAR_UINT32 as u32,
+                TypeId::VAR_UINT64 as u32,
+                TypeId::TAGGED_UINT64 as u32,
             ]
             .contains(&type_id)
         }
@@ -660,7 +670,7 @@ impl TypeMeta {
                 .cmp(&b_nullable) // non-nullable first
                 .then_with(|| compress_a.cmp(&compress_b)) // fixed-size (false) first, then variable-size (true) last
                 .then_with(|| size_b.cmp(&size_a)) // when same compress status: larger size first
-                .then_with(|| a_id.cmp(&b_id)) // when same size: smaller type id first
+                .then_with(|| b_id.cmp(&a_id)) // when same size: larger type id first
                 .then_with(|| a_field_name.cmp(b_field_name)) // when same id: lexicographic name
         }
         fn type_then_name_sorter(a: &FieldInfo, b: &FieldInfo) -> std::cmp::Ordering {
@@ -740,8 +750,28 @@ impl TypeMeta {
     }
 
     fn assign_field_ids(type_info_current: &TypeInfo, field_infos: &mut [FieldInfo]) {
+        if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+            eprintln!(
+                "[fory-debug] assign_field_ids called for type: {:?}",
+                type_info_current.get_type_name()
+            );
+            for f in field_infos.iter() {
+                eprintln!(
+                    "[fory-debug]   remote field before assign: name={}, field_id={}, type={:?}",
+                    f.field_name, f.field_id, f.field_type
+                );
+            }
+        }
         let type_meta = type_info_current.get_type_meta();
         let local_field_infos = type_meta.get_field_infos();
+        if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+            for f in local_field_infos.iter() {
+                eprintln!(
+                    "[fory-debug]   local field: name={}, field_id={}, type={:?}",
+                    f.field_name, f.field_id, f.field_type
+                );
+            }
+        }
 
         // Build maps for both name-based and ID-based lookup.
         // The value is the SORTED INDEX (position in local_field_infos), not the field's ID attribute.
@@ -783,13 +813,31 @@ impl TypeMeta {
                     // Use FieldType comparison which normalizes type IDs for cross-language
                     // schema evolution (e.g., UNKNOWN=0 matches STRUCT variants)
                     if field.field_type != local_info.field_type {
+                        if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                            eprintln!(
+                                "[fory-debug] field type mismatch: name={}, remote_type={:?}, local_type={:?}",
+                                field.field_name, field.field_type, local_info.field_type
+                            );
+                        }
                         field.field_id = -1; // Type mismatch, skip
                     } else {
                         // Assign SORTED INDEX for matching in generated code
                         field.field_id = sorted_index as i16;
+                        if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                            eprintln!(
+                                "[fory-debug]   matched field: name={}, assigned_field_id={}",
+                                field.field_name, field.field_id
+                            );
+                        }
                     }
                 }
                 None => {
+                    if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                        eprintln!(
+                            "[fory-debug] no local match for field: name={}",
+                            field.field_name
+                        );
+                    }
                     field.field_id = -1; // No match, skip
                 }
             }

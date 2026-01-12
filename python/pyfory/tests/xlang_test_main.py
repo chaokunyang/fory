@@ -1308,6 +1308,229 @@ def test_circular_ref_compatible():
         f.write(new_bytes)
 
 
+# ============================================================================
+# Unsigned Number Test Types
+# ============================================================================
+
+
+@dataclass
+class UnsignedSchemaConsistent:
+    """
+    Test struct for unsigned number schema consistent tests (Python side).
+    Primitive fields first, then nullable boxed fields (using Optional).
+
+    Must match Java UnsignedSchemaConsistent (type id 501).
+    """
+
+    # Primitive unsigned fields (non-nullable)
+    u8_field: pyfory.uint8 = 0
+    u16_field: pyfory.uint16 = 0
+    u32_var_field: pyfory.uint32 = 0  # VAR_UINT32 encoding
+    u32_fixed_field: pyfory.fixed_uint32 = 0  # Fixed 4-byte encoding
+    u64_var_field: pyfory.uint64 = 0  # VAR_UINT64 encoding
+    u64_fixed_field: pyfory.fixed_uint64 = 0  # Fixed 8-byte encoding
+    u64_tagged_field: pyfory.tagged_uint64 = 0  # Tagged encoding
+
+    # Boxed nullable unsigned fields (using Optional)
+    u8_nullable_field: Optional[pyfory.uint8] = None
+    u16_nullable_field: Optional[pyfory.uint16] = None
+    u32_var_nullable_field: Optional[pyfory.uint32] = None
+    u32_fixed_nullable_field: Optional[pyfory.fixed_uint32] = None
+    u64_var_nullable_field: Optional[pyfory.uint64] = None
+    u64_fixed_nullable_field: Optional[pyfory.fixed_uint64] = None
+    u64_tagged_nullable_field: Optional[pyfory.tagged_uint64] = None
+
+
+@dataclass
+class UnsignedSchemaCompatible:
+    """
+    Test struct for unsigned number schema compatible tests (Python side).
+    Group 1: Optional fields (nullable in Python, non-nullable in Java).
+    Group 2: Non-Optional fields with field2 suffix (non-nullable in Python, nullable in Java).
+
+    Must match Java UnsignedSchemaCompatible (type id 502).
+    """
+
+    # Group 1: Optional unsigned fields (nullable in Python, non-nullable in Java)
+    u8_field1: Optional[pyfory.uint8] = None
+    u16_field1: Optional[pyfory.uint16] = None
+    u32_var_field1: Optional[pyfory.uint32] = None  # VAR_UINT32 encoding
+    u32_fixed_field1: Optional[pyfory.fixed_uint32] = None  # Fixed 4-byte encoding
+    u64_var_field1: Optional[pyfory.uint64] = None  # VAR_UINT64 encoding
+    u64_fixed_field1: Optional[pyfory.fixed_uint64] = None  # Fixed 8-byte encoding
+    u64_tagged_field1: Optional[pyfory.tagged_uint64] = None  # Tagged encoding
+
+    # Group 2: Non-Optional unsigned fields (non-nullable in Python, nullable in Java)
+    u8_field2: pyfory.uint8 = 0
+    u16_field2: pyfory.uint16 = 0
+    u32_var_field2: pyfory.uint32 = 0
+    u32_fixed_field2: pyfory.fixed_uint32 = 0
+    u64_var_field2: pyfory.uint64 = 0
+    u64_fixed_field2: pyfory.fixed_uint64 = 0
+    u64_tagged_field2: pyfory.tagged_uint64 = 0
+
+
+@dataclass
+class UnsignedSchemaConsistentSimple:
+    """
+    Simple test struct for tagged uint64 in schema consistent mode.
+    Must match Java UnsignedSchemaConsistentSimple (type id 1).
+    """
+
+    u64_tagged: pyfory.tagged_uint64 = 0
+    u64_tagged_nullable: Optional[pyfory.tagged_uint64] = None
+
+
+# ============================================================================
+# Unsigned Number Tests
+# ============================================================================
+
+
+def test_unsigned_schema_consistent_simple():
+    """Test simple tagged uint64 in schema consistent mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=False)
+    fory.register_type(UnsignedSchemaConsistentSimple, type_id=1)
+
+    expected = UnsignedSchemaConsistentSimple(
+        u64_tagged=1000000000,
+        u64_tagged_nullable=500000000,
+    )
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+
+    assert obj.u64_tagged == expected.u64_tagged, f"u64_tagged: {obj.u64_tagged} != {expected.u64_tagged}"
+    assert obj.u64_tagged_nullable == expected.u64_tagged_nullable, (
+        f"u64_tagged_nullable: {obj.u64_tagged_nullable} != {expected.u64_tagged_nullable}"
+    )
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_unsigned_schema_consistent():
+    """Test unsigned number types with schema consistent mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=False)
+    fory.register_type(UnsignedSchemaConsistent, type_id=501)
+
+    expected = UnsignedSchemaConsistent(
+        # Primitive fields
+        u8_field=200,
+        u16_field=60000,
+        u32_var_field=3000000000,
+        u32_fixed_field=4000000000,
+        u64_var_field=10000000000,
+        u64_fixed_field=15000000000,
+        u64_tagged_field=1000000000,
+        # Nullable boxed fields with values
+        u8_nullable_field=128,
+        u16_nullable_field=40000,
+        u32_var_nullable_field=2500000000,
+        u32_fixed_nullable_field=3500000000,
+        u64_var_nullable_field=8000000000,
+        u64_fixed_nullable_field=12000000000,
+        u64_tagged_nullable_field=500000000,
+    )
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+
+    # Verify primitive unsigned fields
+    assert obj.u8_field == expected.u8_field, f"u8_field: {obj.u8_field} != {expected.u8_field}"
+    assert obj.u16_field == expected.u16_field, f"u16_field: {obj.u16_field} != {expected.u16_field}"
+    assert obj.u32_var_field == expected.u32_var_field, f"u32_var_field: {obj.u32_var_field} != {expected.u32_var_field}"
+    assert obj.u32_fixed_field == expected.u32_fixed_field, f"u32_fixed_field: {obj.u32_fixed_field} != {expected.u32_fixed_field}"
+    assert obj.u64_var_field == expected.u64_var_field, f"u64_var_field: {obj.u64_var_field} != {expected.u64_var_field}"
+    assert obj.u64_fixed_field == expected.u64_fixed_field, f"u64_fixed_field: {obj.u64_fixed_field} != {expected.u64_fixed_field}"
+    assert obj.u64_tagged_field == expected.u64_tagged_field, f"u64_tagged_field: {obj.u64_tagged_field} != {expected.u64_tagged_field}"
+
+    # Verify nullable boxed fields
+    assert obj.u8_nullable_field == expected.u8_nullable_field, f"u8_nullable_field: {obj.u8_nullable_field} != {expected.u8_nullable_field}"
+    assert obj.u16_nullable_field == expected.u16_nullable_field, f"u16_nullable_field: {obj.u16_nullable_field} != {expected.u16_nullable_field}"
+    assert obj.u32_var_nullable_field == expected.u32_var_nullable_field, (
+        f"u32_var_nullable_field: {obj.u32_var_nullable_field} != {expected.u32_var_nullable_field}"
+    )
+    assert obj.u32_fixed_nullable_field == expected.u32_fixed_nullable_field, (
+        f"u32_fixed_nullable_field: {obj.u32_fixed_nullable_field} != {expected.u32_fixed_nullable_field}"
+    )
+    assert obj.u64_var_nullable_field == expected.u64_var_nullable_field, (
+        f"u64_var_nullable_field: {obj.u64_var_nullable_field} != {expected.u64_var_nullable_field}"
+    )
+    assert obj.u64_fixed_nullable_field == expected.u64_fixed_nullable_field, (
+        f"u64_fixed_nullable_field: {obj.u64_fixed_nullable_field} != {expected.u64_fixed_nullable_field}"
+    )
+    assert obj.u64_tagged_nullable_field == expected.u64_tagged_nullable_field, (
+        f"u64_tagged_nullable_field: {obj.u64_tagged_nullable_field} != {expected.u64_tagged_nullable_field}"
+    )
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_unsigned_schema_compatible():
+    """Test unsigned number types with schema compatible mode."""
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True, meta_compressor=NoOpMetaCompressor())
+    fory.register_type(UnsignedSchemaCompatible, type_id=502)
+
+    expected = UnsignedSchemaCompatible(
+        # Group 1: Optional fields (values from Java's non-nullable fields)
+        u8_field1=200,
+        u16_field1=60000,
+        u32_var_field1=3000000000,
+        u32_fixed_field1=4000000000,
+        u64_var_field1=10000000000,
+        u64_fixed_field1=15000000000,
+        u64_tagged_field1=1000000000,
+        # Group 2: Non-Optional fields (values from Java's nullable fields)
+        u8_field2=128,
+        u16_field2=40000,
+        u32_var_field2=2500000000,
+        u32_fixed_field2=3500000000,
+        u64_var_field2=8000000000,
+        u64_fixed_field2=12000000000,
+        u64_tagged_field2=500000000,
+    )
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+
+    # Verify Group 1: Optional unsigned fields
+    assert obj.u8_field1 == expected.u8_field1, f"u8_field1: {obj.u8_field1} != {expected.u8_field1}"
+    assert obj.u16_field1 == expected.u16_field1, f"u16_field1: {obj.u16_field1} != {expected.u16_field1}"
+    assert obj.u32_var_field1 == expected.u32_var_field1, f"u32_var_field1: {obj.u32_var_field1} != {expected.u32_var_field1}"
+    assert obj.u32_fixed_field1 == expected.u32_fixed_field1, f"u32_fixed_field1: {obj.u32_fixed_field1} != {expected.u32_fixed_field1}"
+    assert obj.u64_var_field1 == expected.u64_var_field1, f"u64_var_field1: {obj.u64_var_field1} != {expected.u64_var_field1}"
+    assert obj.u64_fixed_field1 == expected.u64_fixed_field1, f"u64_fixed_field1: {obj.u64_fixed_field1} != {expected.u64_fixed_field1}"
+    assert obj.u64_tagged_field1 == expected.u64_tagged_field1, f"u64_tagged_field1: {obj.u64_tagged_field1} != {expected.u64_tagged_field1}"
+
+    # Verify Group 2: Non-Optional fields
+    assert obj.u8_field2 == expected.u8_field2, f"u8_field2: {obj.u8_field2} != {expected.u8_field2}"
+    assert obj.u16_field2 == expected.u16_field2, f"u16_field2: {obj.u16_field2} != {expected.u16_field2}"
+    assert obj.u32_var_field2 == expected.u32_var_field2, f"u32_var_field2: {obj.u32_var_field2} != {expected.u32_var_field2}"
+    assert obj.u32_fixed_field2 == expected.u32_fixed_field2, f"u32_fixed_field2: {obj.u32_fixed_field2} != {expected.u32_fixed_field2}"
+    assert obj.u64_var_field2 == expected.u64_var_field2, f"u64_var_field2: {obj.u64_var_field2} != {expected.u64_var_field2}"
+    assert obj.u64_fixed_field2 == expected.u64_fixed_field2, f"u64_fixed_field2: {obj.u64_fixed_field2} != {expected.u64_fixed_field2}"
+    assert obj.u64_tagged_field2 == expected.u64_tagged_field2, f"u64_tagged_field2: {obj.u64_tagged_field2} != {expected.u64_tagged_field2}"
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
 if __name__ == "__main__":
     """
     This file is executed by PythonXlangTest.java and other cross-language tests.

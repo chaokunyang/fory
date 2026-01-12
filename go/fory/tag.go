@@ -30,52 +30,71 @@ const (
 
 // ForyTag represents parsed fory struct tag options.
 //
-// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool"` or `fory:"-"`
+// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value"` or `fory:"-"`
 //
 // Options:
 //   - id: Field tag ID. -1 (default) uses field name, >=0 uses numeric tag ID for compact encoding
 //   - nullable: Whether to write null flag. Default false (skip null flag for non-nullable fields)
 //   - ref: Whether to enable reference tracking. Default false (skip ref tracking overhead)
 //   - ignore: Whether to skip this field during serialization. Default false
+//   - compress: For int32/uint32 fields: true=varint encoding (default), false=fixed encoding
+//   - encoding: For numeric fields:
+//   - int32/uint32: "varint" (default) or "fixed"
+//   - int64/uint64: "varint" (default), "fixed", or "tagged"
+//
+// Note: For int32/uint32, use either `compress` or `encoding`, not both.
 //
 // Examples:
 //
 //	type Example struct {
-//	    Name   string  `fory:"id=0"`                           // Use tag ID 0
-//	    Age    int     `fory:"id=1,nullable=false"`            // Explicit nullable=false
-//	    Email  *string `fory:"id=2,nullable=true,ref=false"`   // Nullable pointer, no ref tracking
-//	    Parent *Node   `fory:"id=3,ref=true,nullable=true"`    // With reference tracking
-//	    Secret string  `fory:"ignore"`                         // Skip this field
-//	    Hidden string  `fory:"-"`                              // Skip this field (shorthand)
+//	    Name       string  `fory:"id=0"`                           // Use tag ID 0
+//	    Age        int     `fory:"id=1,nullable=false"`            // Explicit nullable=false
+//	    Email      *string `fory:"id=2,nullable=true,ref=false"`   // Nullable pointer, no ref tracking
+//	    Parent     *Node   `fory:"id=3,ref=true,nullable=true"`    // With reference tracking
+//	    FixedI32   int32   `fory:"compress=false"`                 // Use fixed 4-byte INT32
+//	    VarI32     int32   `fory:"encoding=varint"`                // Use VARINT32 (default)
+//	    FixedU32   uint32  `fory:"encoding=fixed"`                 // Use fixed 4-byte UINT32
+//	    TaggedI64  int64   `fory:"encoding=tagged"`                // Use TAGGED_INT64
+//	    VarU64     uint64  `fory:"encoding=varint"`                // Use VAR_UINT64 (default)
+//	    Secret     string  `fory:"ignore"`                         // Skip this field
+//	    Hidden     string  `fory:"-"`                              // Skip this field (shorthand)
 //	}
 type ForyTag struct {
-	ID       int  // Field tag ID (-1 = use field name, >=0 = use tag ID)
-	Nullable bool // Whether to write null flag (default: false)
-	Ref      bool // Whether to enable reference tracking (default: false)
-	Ignore   bool // Whether to ignore this field during serialization (default: false)
-	HasTag   bool // Whether field has fory tag at all
+	ID       int    // Field tag ID (-1 = use field name, >=0 = use tag ID)
+	Nullable bool   // Whether to write null flag (default: false)
+	Ref      bool   // Whether to enable reference tracking (default: false)
+	Ignore   bool   // Whether to ignore this field during serialization (default: false)
+	HasTag   bool   // Whether field has fory tag at all
+	Compress bool   // For int32/uint32: true=varint, false=fixed (default: true)
+	Encoding string // For int64/uint64: "fixed", "varint", "tagged" (default: "varint")
 
 	// Track which options were explicitly set (for override logic)
 	NullableSet bool
 	RefSet      bool
 	IgnoreSet   bool
+	CompressSet bool
+	EncodingSet bool
 }
 
-// ParseForyTag parses a fory struct tag from reflect.StructField.Tag.
+// parseForyTag parses a fory struct tag from reflect.StructField.Tag.
 //
-// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool"` or `fory:"-"`
+// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value"` or `fory:"-"`
 //
 // Supported syntaxes:
 //   - Key-value: `nullable=true`, `ref=false`, `ignore=true`, `id=0`
+//   - For int32/uint32: `compress=true` (varint) or `compress=false` (fixed), default is true
+//   - For int64/uint64: `encoding=fixed`, `encoding=varint`, `encoding=tagged`, default is varint
 //   - Standalone flags: `nullable`, `ref`, `ignore` (equivalent to =true)
 //   - Shorthand: `-` (equivalent to `ignore=true`)
-func ParseForyTag(field reflect.StructField) ForyTag {
+func parseForyTag(field reflect.StructField) ForyTag {
 	tag := ForyTag{
 		ID:       TagIDUseFieldName,
 		Nullable: false,
 		Ref:      false,
 		Ignore:   false,
 		HasTag:   false,
+		Compress: true,     // default: varint encoding
+		Encoding: "varint", // default: varint encoding
 	}
 
 	tagValue, ok := field.Tag.Lookup("fory")
@@ -119,6 +138,12 @@ func ParseForyTag(field reflect.StructField) ForyTag {
 			case "ignore":
 				tag.Ignore = parseBool(value)
 				tag.IgnoreSet = true
+			case "compress":
+				tag.Compress = parseBool(value)
+				tag.CompressSet = true
+			case "encoding":
+				tag.Encoding = strings.ToLower(strings.TrimSpace(value))
+				tag.EncodingSet = true
 			}
 		} else {
 			// Handle standalone flags (presence means true)
@@ -146,14 +171,14 @@ func parseBool(s string) bool {
 	return s == "true" || s == "1" || s == "yes"
 }
 
-// ValidateForyTags validates all fory tags in a struct type.
+// validateForyTags validates all fory tags in a struct type.
 // Returns an error if validation fails.
 //
 // Validation rules:
 //   - Tag ID must be >= -1
 //   - Tag IDs must be unique within a struct (except -1)
 //   - Ignored fields are not validated for ID uniqueness
-func ValidateForyTags(t reflect.Type) error {
+func validateForyTags(t reflect.Type) error {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
@@ -165,7 +190,7 @@ func ValidateForyTags(t reflect.Type) error {
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
-		tag := ParseForyTag(field)
+		tag := parseForyTag(field)
 
 		// Skip ignored fields for ID uniqueness validation
 		if tag.Ignore {
@@ -191,18 +216,18 @@ func ValidateForyTags(t reflect.Type) error {
 	return nil
 }
 
-// ShouldIncludeField returns true if the field should be serialized.
+// shouldIncludeField returns true if the field should be serialized.
 // A field is excluded if:
 //   - It's unexported (starts with lowercase)
 //   - It has `fory:"-"` tag
 //   - It has `fory:"ignore"` or `fory:"ignore=true"` tag
-func ShouldIncludeField(field reflect.StructField) bool {
+func shouldIncludeField(field reflect.StructField) bool {
 	// Skip unexported fields
 	if field.PkgPath != "" {
 		return false
 	}
 
 	// Check for ignore tag
-	tag := ParseForyTag(field)
+	tag := parseForyTag(field)
 	return !tag.Ignore
 }

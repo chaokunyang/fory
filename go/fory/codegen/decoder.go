@@ -63,14 +63,14 @@ func generateReadTyped(buf *bytes.Buffer, s *StructInfo) error {
 func generateReadInterface(buf *bytes.Buffer, s *StructInfo) error {
 	// Generate ReadData method (reflect.Value-based API)
 	fmt.Fprintf(buf, "// ReadData provides reflect.Value interface compatibility (implements fory.Serializer)\n")
-	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) ReadData(ctx *fory.ReadContext, type_ reflect.Type, value reflect.Value) {\n", s.Name)
+	fmt.Fprintf(buf, "func (g *%s_ForyGenSerializer) ReadData(ctx *fory.ReadContext, value reflect.Value) {\n", s.Name)
 	fmt.Fprintf(buf, "\tg.initHash(ctx.TypeResolver())\n")
 	fmt.Fprintf(buf, "\t// Convert reflect.Value to concrete type and delegate to typed method\n")
 	fmt.Fprintf(buf, "\tvar v *%s\n", s.Name)
 	fmt.Fprintf(buf, "\tif value.Kind() == reflect.Ptr {\n")
 	fmt.Fprintf(buf, "\t\tif value.IsNil() {\n")
-	fmt.Fprintf(buf, "\t\t\t// For pointer types, allocate using type_.Elem()\n")
-	fmt.Fprintf(buf, "\t\t\tvalue.Set(reflect.New(type_.Elem()))\n")
+	fmt.Fprintf(buf, "\t\t\t// For pointer types, allocate using value.Type().Elem()\n")
+	fmt.Fprintf(buf, "\t\t\tvalue.Set(reflect.New(value.Type().Elem()))\n")
 	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t\tv = value.Interface().(*%s)\n", s.Name)
 	fmt.Fprintf(buf, "\t} else {\n")
@@ -541,21 +541,21 @@ func generateElementTypeIDReadInline(buf *bytes.Buffer, elemType types.Type) err
 		case types.Int16:
 			expectedTypeID = int(fory.INT16)
 		case types.Int32:
-			expectedTypeID = int(fory.INT32)
+			expectedTypeID = int(fory.VARINT32)
 		case types.Int, types.Int64:
-			expectedTypeID = int(fory.INT64)
+			expectedTypeID = int(fory.VARINT64)
 		case types.Uint8:
 			expectedTypeID = int(fory.UINT8)
 		case types.Uint16:
 			expectedTypeID = int(fory.UINT16)
 		case types.Uint32:
-			expectedTypeID = int(fory.UINT32)
+			expectedTypeID = int(fory.VAR_UINT32)
 		case types.Uint, types.Uint64:
-			expectedTypeID = int(fory.UINT64)
+			expectedTypeID = int(fory.VAR_UINT64)
 		case types.Float32:
-			expectedTypeID = int(fory.FLOAT)
+			expectedTypeID = int(fory.FLOAT32)
 		case types.Float64:
-			expectedTypeID = int(fory.DOUBLE)
+			expectedTypeID = int(fory.FLOAT64)
 		case types.String:
 			expectedTypeID = int(fory.STRING)
 		default:

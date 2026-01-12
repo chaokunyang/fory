@@ -15,11 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use super::field_meta::parse_field_meta;
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
     determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts, get_field_accessor,
-    get_field_name, get_filtered_source_fields_iter, get_primitive_writer_method, get_struct_name,
-    get_type_id_by_type_ast, is_debug_enabled, is_direct_primitive_type, FieldRefMode, StructField,
+    get_field_name, get_filtered_source_fields_iter, get_option_inner_primitive_name,
+    get_primitive_writer_method_with_encoding, get_struct_name, get_type_id_by_type_ast,
+    is_debug_enabled, is_direct_primitive_type, is_option_encoding_primitive, FieldRefMode,
+    StructField,
 };
 use crate::util::SourceField;
 use fory_core::types::TypeId;
@@ -248,10 +251,28 @@ fn gen_write_field_impl(
         }
         _ => {
             let type_id = get_type_id_by_type_ast(ty);
+            let meta = parse_field_meta(field).unwrap_or_default();
 
+            // Check if this is Option<u32> or Option<u64> with encoding attributes
+            // These need special inline handling because the generic Option<T> serializer
+            // doesn't know about field-level encoding attributes.
+            if is_option_encoding_primitive(ty, &meta) {
+                let inner_name = get_option_inner_primitive_name(ty).unwrap();
+                let writer_method = get_primitive_writer_method_with_encoding(inner_name, &meta);
+                let writer_ident = syn::Ident::new(writer_method, proc_macro2::Span::call_site());
+                // For Option<primitive>, write null flag first, then value if Some
+                quote! {
+                    if let Some(v) = &#value_ts {
+                        context.writer.write_i8(fory_core::RefFlag::NotNullValue as i8);
+                        context.writer.#writer_ident(*v);
+                    } else {
+                        context.writer.write_i8(fory_core::RefFlag::Null as i8);
+                    }
+                }
+            }
             // Check if this is a direct primitive type that can use direct writer calls
             // Only apply when ref_mode is None (no ref tracking needed)
-            if ref_mode == FieldRefMode::None && is_direct_primitive_type(ty) {
+            else if ref_mode == FieldRefMode::None && is_direct_primitive_type(ty) {
                 let type_name = extract_type_name(ty);
                 if type_name == "String" {
                     // String: call fory_write_data directly
@@ -260,7 +281,9 @@ fn gen_write_field_impl(
                     }
                 } else {
                     // Numeric primitives: use direct buffer methods
-                    let writer_method = get_primitive_writer_method(&type_name);
+                    // For u32/u64, consider encoding attributes
+                    let writer_method =
+                        get_primitive_writer_method_with_encoding(&type_name, &meta);
                     let writer_ident =
                         syn::Ident::new(writer_method, proc_macro2::Span::call_site());
                     // For primitives:

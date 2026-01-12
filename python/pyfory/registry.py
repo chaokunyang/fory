@@ -43,6 +43,16 @@ from pyfory.serializer import (
     Int16Serializer,
     Int32Serializer,
     Int64Serializer,
+    FixedInt32Serializer,
+    FixedInt64Serializer,
+    TaggedInt64Serializer,
+    Uint8Serializer,
+    Uint16Serializer,
+    Uint32Serializer,
+    VarUint32Serializer,
+    Uint64Serializer,
+    VarUint64Serializer,
+    TaggedUint64Serializer,
     Float32Serializer,
     Float64Serializer,
     StringSerializer,
@@ -71,16 +81,28 @@ from pyfory.serializer import (
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
-from pyfory.type import (
+from pyfory.types import (
     TypeId,
     int8,
     int16,
     int32,
     int64,
+    fixed_int32,
+    fixed_int64,
+    tagged_int64,
+    uint8,
+    uint16,
+    uint32,
+    fixed_uint32,
+    uint64,
+    fixed_uint64,
+    tagged_uint64,
     float32,
     float64,
-    load_class,
     is_struct_type,
+)
+from pyfory.type_util import (
+    load_class,
     record_class_factory,
 )
 from pyfory._fory import (
@@ -259,11 +281,26 @@ class TypeResolver:
         register = functools.partial(self._register_type, internal=True)
         register(None, type_id=TypeId.UNKNOWN, serializer=NoneSerializer)
         register(bool, type_id=TypeId.BOOL, serializer=BooleanSerializer)
+        # Signed integers
+        # Note: int32/int64 use VARINT32/VARINT64 for xlang compatibility (matches Java/Rust)
+        # fixed_int32/fixed_int64 use INT32/INT64 for fixed-width encoding
         register(int8, type_id=TypeId.INT8, serializer=ByteSerializer)
         register(int16, type_id=TypeId.INT16, serializer=Int16Serializer)
-        register(int32, type_id=TypeId.INT32, serializer=Int32Serializer)
-        register(int64, type_id=TypeId.INT64, serializer=Int64Serializer)
-        register(int, type_id=TypeId.INT64, serializer=Int64Serializer)
+        register(int32, type_id=TypeId.VARINT32, serializer=Int32Serializer)
+        register(fixed_int32, type_id=TypeId.INT32, serializer=FixedInt32Serializer)
+        register(int64, type_id=TypeId.VARINT64, serializer=Int64Serializer)
+        register(int, type_id=TypeId.VARINT64, serializer=Int64Serializer)
+        register(fixed_int64, type_id=TypeId.INT64, serializer=FixedInt64Serializer)
+        register(tagged_int64, type_id=TypeId.TAGGED_INT64, serializer=TaggedInt64Serializer)
+        # Unsigned integers
+        register(uint8, type_id=TypeId.UINT8, serializer=Uint8Serializer)
+        register(uint16, type_id=TypeId.UINT16, serializer=Uint16Serializer)
+        register(uint32, type_id=TypeId.VAR_UINT32, serializer=VarUint32Serializer)
+        register(fixed_uint32, type_id=TypeId.UINT32, serializer=Uint32Serializer)
+        register(uint64, type_id=TypeId.VAR_UINT64, serializer=VarUint64Serializer)
+        register(fixed_uint64, type_id=TypeId.UINT64, serializer=Uint64Serializer)
+        register(tagged_uint64, type_id=TypeId.TAGGED_UINT64, serializer=TaggedUint64Serializer)
+        # Floats
         register(
             float32,
             type_id=TypeId.FLOAT32,

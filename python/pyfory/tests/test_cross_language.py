@@ -30,7 +30,7 @@ try:
 except ImportError:
     pytest = None
 from dataclasses import dataclass
-from pyfory.util import lazy_import
+from pyfory.utils import lazy_import
 from typing import List, Dict, Any
 
 

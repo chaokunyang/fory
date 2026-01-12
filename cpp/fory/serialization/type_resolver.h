@@ -57,6 +57,7 @@
 #include "fory/util/flat_int_map.h"
 #include "fory/util/logging.h"
 #include "fory/util/result.h"
+#include "fory/util/string_util.h"
 
 namespace fory {
 namespace serialization {
@@ -509,13 +510,73 @@ constexpr bool compute_track_ref() {
   }
 }
 
+// Helper to check if a type is unsigned integer
+template <typename T> struct is_unsigned_integer : std::false_type {};
+template <> struct is_unsigned_integer<uint8_t> : std::true_type {};
+template <> struct is_unsigned_integer<uint16_t> : std::true_type {};
+template <> struct is_unsigned_integer<uint32_t> : std::true_type {};
+template <> struct is_unsigned_integer<uint64_t> : std::true_type {};
+template <typename T>
+inline constexpr bool is_unsigned_integer_v = is_unsigned_integer<T>::value;
+
+// Helper to get inner type of optional, or the type itself
+template <typename T, typename Enable = void> struct unwrap_optional_inner {
+  using type = T;
+};
+template <typename T>
+struct unwrap_optional_inner<T, std::enable_if_t<is_optional_v<decay_t<T>>>> {
+  using type = typename decay_t<T>::value_type;
+};
+template <typename T>
+using unwrap_optional_inner_t = typename unwrap_optional_inner<T>::type;
+
+// Helper to compute the correct type_id for unsigned types based on encoding
+template <typename FieldT, typename StructT, size_t Index>
+constexpr uint32_t compute_unsigned_type_id() {
+  // For unsigned types, check if FORY_FIELD_CONFIG specifies an encoding
+  if constexpr (::fory::detail::has_field_config_v<StructT>) {
+    constexpr auto enc =
+        ::fory::detail::GetFieldConfigEntry<StructT, Index>::encoding;
+    // Handle inner type for std::optional
+    using InnerType = unwrap_optional_inner_t<FieldT>;
+    if constexpr (std::is_same_v<InnerType, uint8_t>) {
+      return static_cast<uint32_t>(TypeId::UINT8);
+    } else if constexpr (std::is_same_v<InnerType, uint16_t>) {
+      return static_cast<uint32_t>(TypeId::UINT16);
+    } else if constexpr (std::is_same_v<InnerType, uint32_t>) {
+      if constexpr (enc == Encoding::Varint) {
+        return static_cast<uint32_t>(TypeId::VAR_UINT32);
+      } else {
+        return static_cast<uint32_t>(TypeId::UINT32);
+      }
+    } else if constexpr (std::is_same_v<InnerType, uint64_t>) {
+      if constexpr (enc == Encoding::Varint) {
+        return static_cast<uint32_t>(TypeId::VAR_UINT64);
+      } else if constexpr (enc == Encoding::Tagged) {
+        return static_cast<uint32_t>(TypeId::TAGGED_UINT64);
+      } else {
+        return static_cast<uint32_t>(TypeId::UINT64);
+      }
+    }
+  }
+  // Not an unsigned type with field config, use default
+  return 0;
+}
+
 template <typename T, size_t Index> struct FieldInfoBuilder {
   static FieldInfo build() {
     const auto meta = ForyFieldInfo(T{});
     const auto field_names = decltype(meta)::Names;
     const auto field_ptrs = decltype(meta)::Ptrs;
 
-    std::string field_name(field_names[Index]);
+    // Convert camelCase field name to snake_case for cross-language
+    // compatibility
+    std::string_view original_name = field_names[Index];
+    constexpr size_t max_snake_len = 128; // Reasonable max for field names
+    auto [snake_buffer, snake_len] =
+        ::fory::to_snake_case<max_snake_len>(original_name);
+    std::string field_name(snake_buffer.data(), snake_len);
+
     const auto field_ptr = std::get<Index>(field_ptrs);
     using RawFieldType =
         typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
@@ -531,6 +592,16 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr bool track_ref = compute_track_ref<ActualFieldType, T, Index>();
 
     FieldType field_type = FieldTypeBuilder<UnwrappedFieldType>::build(false);
+
+    // Override type_id for unsigned types based on encoding from
+    // FORY_FIELD_CONFIG
+    using InnerType = unwrap_optional_inner_t<UnwrappedFieldType>;
+    constexpr uint32_t unsigned_tid =
+        compute_unsigned_type_id<UnwrappedFieldType, T, Index>();
+    if constexpr (unsigned_tid != 0 && is_unsigned_integer_v<InnerType>) {
+      field_type.type_id = unsigned_tid;
+    }
+
     // Override nullable and ref_tracking from field-level metadata
     field_type.nullable = is_nullable;
     field_type.ref_tracking = track_ref;
@@ -538,7 +609,8 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
 #ifdef FORY_DEBUG
     // DEBUG: Print field info for debugging fingerprint mismatch
     std::cerr << "[xlang][debug] FieldInfoBuilder T=" << typeid(T).name()
-              << " Index=" << Index << " field=" << field_name << " has_tags="
+              << " Index=" << Index << " field=" << field_name
+              << " type_id=" << field_type.type_id << " has_tags="
               << ::fory::detail::has_field_tags_v<T> << " is_nullable="
               << is_nullable << " track_ref=" << track_ref << std::endl;
 #endif
@@ -976,7 +1048,13 @@ TypeResolver::build_struct_type_info(uint32_t type_id, std::string ns,
 
   entry->name_to_index.reserve(field_count);
   for (size_t i = 0; i < field_count; ++i) {
-    entry->name_to_index.emplace(std::string(field_names[i]), i);
+    // Convert camelCase field name to snake_case for cross-language
+    // compatibility
+    constexpr size_t max_snake_len = 128;
+    auto [snake_buffer, snake_len] =
+        ::fory::to_snake_case<max_snake_len>(field_names[i]);
+    entry->name_to_index.emplace(std::string(snake_buffer.data(), snake_len),
+                                 i);
   }
 
   auto field_infos =

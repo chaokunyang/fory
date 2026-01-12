@@ -39,14 +39,18 @@ pub(super) fn get_primitive_type_id<T: Serializer>() -> TypeId {
         TypeId::BOOL => TypeId::BOOL_ARRAY,
         TypeId::INT8 => TypeId::INT8_ARRAY,
         TypeId::INT16 => TypeId::INT16_ARRAY,
-        TypeId::INT32 => TypeId::INT32_ARRAY,
-        TypeId::INT64 => TypeId::INT64_ARRAY,
+        // Handle both INT32 and VARINT32 (i32 uses VARINT32 in xlang mode)
+        TypeId::INT32 | TypeId::VARINT32 => TypeId::INT32_ARRAY,
+        // Handle INT64, VARINT64, and TAGGED_INT64 (i64 uses VARINT64 in xlang mode)
+        TypeId::INT64 | TypeId::VARINT64 | TypeId::TAGGED_INT64 => TypeId::INT64_ARRAY,
         TypeId::FLOAT32 => TypeId::FLOAT32_ARRAY,
         TypeId::FLOAT64 => TypeId::FLOAT64_ARRAY,
-        TypeId::U8 => TypeId::BINARY,
-        TypeId::U16 => TypeId::U16_ARRAY,
-        TypeId::U32 => TypeId::U32_ARRAY,
-        TypeId::U64 => TypeId::U64_ARRAY,
+        TypeId::UINT8 => TypeId::BINARY,
+        TypeId::UINT16 => TypeId::UINT16_ARRAY,
+        // Handle both UINT32 and VAR_UINT32 (u32 uses VAR_UINT32 in xlang mode)
+        TypeId::UINT32 | TypeId::VAR_UINT32 => TypeId::UINT32_ARRAY,
+        // Handle UINT64, VAR_UINT64, and TAGGED_UINT64 (u64 uses VAR_UINT64 in xlang mode)
+        TypeId::UINT64 | TypeId::VAR_UINT64 | TypeId::TAGGED_UINT64 => TypeId::UINT64_ARRAY,
         TypeId::U128 => TypeId::U128_ARRAY,
         TypeId::INT128 => TypeId::INT128_ARRAY,
         TypeId::USIZE => TypeId::USIZE_ARRAY,
@@ -66,14 +70,20 @@ pub(super) fn is_primitive_type<T: Serializer>() -> bool {
             | TypeId::INT8
             | TypeId::INT16
             | TypeId::INT32
+            | TypeId::VARINT32
             | TypeId::INT64
+            | TypeId::VARINT64
+            | TypeId::TAGGED_INT64
             | TypeId::INT128
             | TypeId::FLOAT32
             | TypeId::FLOAT64
-            | TypeId::U8
-            | TypeId::U16
-            | TypeId::U32
-            | TypeId::U64
+            | TypeId::UINT8
+            | TypeId::UINT16
+            | TypeId::UINT32
+            | TypeId::VAR_UINT32
+            | TypeId::UINT64
+            | TypeId::VAR_UINT64
+            | TypeId::TAGGED_UINT64
             | TypeId::U128,
     )
 }

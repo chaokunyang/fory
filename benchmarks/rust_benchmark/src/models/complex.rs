@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Fory models
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(ForyObject, Debug, Clone, PartialEq, Default)]
 pub struct ForyProduct {
     pub id: String,
     pub name: String,
@@ -39,7 +39,7 @@ pub struct ForyOrderItem {
     pub customizations: HashMap<String, String>,
 }
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(ForyObject, Debug, Clone, PartialEq, Default)]
 pub struct ForyCustomer {
     pub id: String,
     pub name: String,

@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
 
 	"github.com/apache/fory/go/fory"
@@ -126,6 +127,39 @@ func getNullableComprehensiveCompatible(obj interface{}) NullableComprehensiveCo
 		return *v
 	default:
 		panic(fmt.Sprintf("expected NullableComprehensiveCompatible, got %T", obj))
+	}
+}
+
+func getUnsignedSchemaConsistent(obj interface{}) UnsignedSchemaConsistent {
+	switch v := obj.(type) {
+	case UnsignedSchemaConsistent:
+		return v
+	case *UnsignedSchemaConsistent:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected UnsignedSchemaConsistent, got %T", obj))
+	}
+}
+
+func getUnsignedSchemaCompatible(obj interface{}) UnsignedSchemaCompatible {
+	switch v := obj.(type) {
+	case UnsignedSchemaCompatible:
+		return v
+	case *UnsignedSchemaCompatible:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected UnsignedSchemaCompatible, got %T", obj))
+	}
+}
+
+func getUnsignedSchemaConsistentSimple(obj interface{}) UnsignedSchemaConsistentSimple {
+	switch v := obj.(type) {
+	case UnsignedSchemaConsistentSimple:
+		return v
+	case *UnsignedSchemaConsistentSimple:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected UnsignedSchemaConsistentSimple, got %T", obj))
 	}
 }
 
@@ -315,7 +349,7 @@ type NullableComprehensiveSchemaConsistent struct {
 	// Base non-nullable reference fields
 	StringField string
 	ListField   []string
-	SetField    map[string]bool
+	SetField    fory.Set[string]
 	MapField    map[string]string
 
 	// Nullable fields - first half (boxed types in Java)
@@ -328,7 +362,7 @@ type NullableComprehensiveSchemaConsistent struct {
 	NullableBool   *bool             `fory:"nullable"`
 	NullableString *string           `fory:"nullable"`
 	NullableList   []string          `fory:"nullable"`
-	NullableSet    map[string]bool   `fory:"nullable"`
+	NullableSet    fory.Set[string]  `fory:"nullable"`
 	NullableMap    map[string]string `fory:"nullable"`
 }
 
@@ -358,7 +392,7 @@ type NullableComprehensiveCompatible struct {
 	// Reference fields - also nullable in Go
 	StringField *string           `fory:"nullable"`
 	ListField   []string          `fory:"nullable"`
-	SetField    map[string]bool   `fory:"nullable"`
+	SetField    fory.Set[string]  `fory:"nullable"`
 	MapField    map[string]string `fory:"nullable"`
 
 	// Group 2: Non-nullable in Go, Nullable in Java (@ForyField(nullable=true))
@@ -372,7 +406,7 @@ type NullableComprehensiveCompatible struct {
 	// Reference types
 	NullableString2 string
 	NullableList2   []string
-	NullableSet2    map[string]bool
+	NullableSet2    fory.Set[string]
 	NullableMap2    map[string]string
 }
 
@@ -382,21 +416,16 @@ type NullableComprehensiveCompatible struct {
 
 type MyExtSerializer struct{}
 
-func (s *MyExtSerializer) Write(buf *fory.ByteBuffer, value interface{}) error {
-	myExt := value.(MyExt)
+func (s *MyExtSerializer) WriteData(ctx *fory.WriteContext, value reflect.Value) {
+	myExt := value.Interface().(MyExt)
 	// WriteVarint32 uses zigzag encoding (compatible with Java's writeVarint32)
-	buf.WriteVarint32(myExt.Id)
-	return nil
+	ctx.Buffer().WriteVarint32(myExt.Id)
 }
 
-func (s *MyExtSerializer) Read(buf *fory.ByteBuffer) (interface{}, error) {
-	var bufErr fory.Error
+func (s *MyExtSerializer) ReadData(ctx *fory.ReadContext, value reflect.Value) {
 	// ReadVarint32 uses zigzag decoding (compatible with Java's readVarint32)
-	id := buf.ReadVarint32(&bufErr)
-	if bufErr.HasError() {
-		return nil, bufErr.CheckError()
-	}
-	return MyExt{Id: id}, nil
+	id := ctx.Buffer().ReadVarint32(ctx.Err())
+	value.Set(reflect.ValueOf(MyExt{Id: id}))
 }
 
 // ============================================================================
@@ -634,8 +663,8 @@ func testSimpleStruct() {
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric IDs to match Java's fory.register(Color.class, 101), etc.
 	f.RegisterEnum(Color(0), 101)
-	f.Register(Item{}, 102)
-	f.Register(SimpleStruct{}, 103)
+	f.RegisterStruct(Item{}, 102)
+	f.RegisterStruct(SimpleStruct{}, 103)
 
 	var obj SimpleStruct
 	if err := f.Deserialize(data, &obj); err != nil {
@@ -655,9 +684,9 @@ func testNamedSimpleStruct() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use namespace "demo" to match Java's fory.register(Color.class, "demo", "color"), etc.
-	f.RegisterEnumByName(Color(0), "demo.color")
-	f.RegisterByName(Item{}, "demo.item")
-	f.RegisterByName(SimpleStruct{}, "demo.simple_struct")
+	f.RegisterNamedEnum(Color(0), "demo.color")
+	f.RegisterNamedStruct(Item{}, "demo.item")
+	f.RegisterNamedStruct(SimpleStruct{}, "demo.simple_struct")
 
 	var obj SimpleStruct
 	if err := f.Deserialize(data, &obj); err != nil {
@@ -677,7 +706,7 @@ func testList() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
-	f.Register(Item{}, 102)
+	f.RegisterStruct(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
 	lists := make([]interface{}, 4)
@@ -709,7 +738,7 @@ func testMap() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
-	f.Register(Item{}, 102)
+	f.RegisterStruct(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
 	maps := make([]interface{}, 2)
@@ -741,7 +770,7 @@ func testInteger() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 101 to match Java's fory.register(Item1.class, 101)
-	f.Register(Item1{}, 101)
+	f.RegisterStruct(Item1{}, 101)
 
 	buf := fory.NewByteBuffer(data)
 
@@ -814,7 +843,7 @@ func testItem() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 102 to match Java's fory.register(Item.class, 102)
-	f.Register(Item{}, 102)
+	f.RegisterStruct(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
 	items := make([]interface{}, 3)
@@ -878,7 +907,7 @@ func testStructWithList() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 201 to match Java's fory.register(StructWithList.class, 201)
-	f.Register(StructWithList{}, 201)
+	f.RegisterStruct(StructWithList{}, 201)
 
 	// Java serializes two objects to the same buffer, so we need to deserialize twice
 	readBuf := fory.NewByteBuffer(data)
@@ -915,7 +944,7 @@ func testStructWithMap() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric ID 202 to match Java's fory.register(StructWithMap.class, 202)
-	f.Register(StructWithMap{}, 202)
+	f.RegisterStruct(StructWithMap{}, 202)
 
 	// Java serializes two objects to the same buffer, so we need to deserialize twice
 	readBuf := fory.NewByteBuffer(data)
@@ -954,8 +983,8 @@ func testSkipIdCustom() {
 	// Use numeric IDs to match Java's registration:
 	// fory2.register(MyExt.class, 103)
 	// fory2.register(EmptyWrapper.class, 104)
-	f.RegisterExtensionType(MyExt{}, 103, &MyExtSerializer{})
-	f.Register(EmptyWrapper{}, 104)
+	f.RegisterExtension(MyExt{}, 103, &MyExtSerializer{})
+	f.RegisterStruct(EmptyWrapper{}, 104)
 
 	var obj EmptyWrapper
 	if err := f.Deserialize(data, &obj); err != nil {
@@ -975,8 +1004,8 @@ func testSkipNameCustom() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.RegisterExtensionTypeByName(MyExt{}, "my_ext", &MyExtSerializer{})
-	f.RegisterByName(EmptyWrapper{}, "my_wrapper")
+	f.RegisterNamedExtension(MyExt{}, "my_ext", &MyExtSerializer{})
+	f.RegisterNamedStruct(EmptyWrapper{}, "my_wrapper")
 
 	var obj EmptyWrapper
 	if err := f.Deserialize(data, &obj); err != nil {
@@ -998,10 +1027,10 @@ func testConsistentNamed() {
 	// Java uses SCHEMA_CONSISTENT mode which doesn't enable metaShare
 	// So Go should NOT expect meta offset field
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
-	f.RegisterEnumByName(Color(0), "color")
-	f.RegisterByName(MyStruct{}, "my_struct")
+	f.RegisterNamedEnum(Color(0), "color")
+	f.RegisterNamedStruct(MyStruct{}, "my_struct")
 	// MyExt uses an extension serializer in Java (MyExtSerializer), so register as extension type
-	f.RegisterExtensionTypeByName(MyExt{}, "my_ext", &MyExtSerializer{})
+	f.RegisterNamedExtension(MyExt{}, "my_ext", &MyExtSerializer{})
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 9)
@@ -1035,7 +1064,7 @@ func testStructVersionCheck() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
 	// Use numeric ID 201 to match Java's fory.register(VersionCheckStruct.class, 201)
-	f.Register(VersionCheckStruct{}, 201)
+	f.RegisterStruct(VersionCheckStruct{}, 201)
 
 	var obj VersionCheckStruct
 	if err := f.Deserialize(data, &obj); err != nil {
@@ -1056,9 +1085,9 @@ func testPolymorphicList() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric IDs to match Java's registration: Dog=302, Cat=303, AnimalListHolder=304
-	f.Register(&Dog{}, 302)
-	f.Register(&Cat{}, 303)
-	f.Register(AnimalListHolder{}, 304)
+	f.RegisterStruct(&Dog{}, 302)
+	f.RegisterStruct(&Cat{}, 303)
+	f.RegisterStruct(AnimalListHolder{}, 304)
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 2)
@@ -1091,9 +1120,9 @@ func testPolymorphicMap() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use numeric IDs to match Java's registration: Dog=302, Cat=303, AnimalMapHolder=305
-	f.Register(&Dog{}, 302)
-	f.Register(&Cat{}, 303)
-	f.Register(AnimalMapHolder{}, 305)
+	f.RegisterStruct(&Dog{}, 302)
+	f.RegisterStruct(&Cat{}, 303)
+	f.RegisterStruct(AnimalMapHolder{}, 305)
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]interface{}, 2)
@@ -1132,7 +1161,7 @@ func testOneFieldStructCompatible() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Register with numeric ID 200 to match Java's fory.register(OneFieldStruct.class, 200)
-	f.Register(OneFieldStruct{}, 200)
+	f.RegisterStruct(OneFieldStruct{}, 200)
 
 	// Parse header and meta offset manually for debugging
 	if len(data) >= 8 {
@@ -1186,7 +1215,7 @@ func testOneFieldStructSchema() {
 	fmt.Println()
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
-	f.Register(OneFieldStruct{}, 200)
+	f.RegisterStruct(OneFieldStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1218,7 +1247,7 @@ func testOneStringFieldSchemaConsistent() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
-	f.Register(OneStringFieldStruct{}, 200)
+	f.RegisterStruct(OneStringFieldStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1245,7 +1274,7 @@ func testOneStringFieldCompatible() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.Register(OneStringFieldStruct{}, 200)
+	f.RegisterStruct(OneStringFieldStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1272,7 +1301,7 @@ func testTwoStringFieldCompatible() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.Register(TwoStringFieldStruct{}, 201)
+	f.RegisterStruct(TwoStringFieldStruct{}, 201)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1299,7 +1328,7 @@ func testSchemaEvolutionCompatible() {
 
 	// Read TwoStringFieldStruct data, deserialize as EmptyStruct
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.Register(EmptyStruct{}, 200)
+	f.RegisterStruct(EmptyStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1324,7 +1353,7 @@ func testSchemaEvolutionCompatibleReverse() {
 	// Read OneStringFieldStruct data, deserialize as TwoStringFieldStruct
 	// Missing f2 field will be Go's zero value (empty string)
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.Register(TwoStringFieldStruct{}, 200)
+	f.RegisterStruct(TwoStringFieldStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1354,7 +1383,7 @@ func testOneEnumFieldSchemaConsistent() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
 	f.RegisterEnum(TestEnum(0), 210)
-	f.Register(OneEnumFieldStruct{}, 211)
+	f.RegisterStruct(OneEnumFieldStruct{}, 211)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1382,7 +1411,7 @@ func testOneEnumFieldCompatible() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterEnum(TestEnum(0), 210)
-	f.Register(OneEnumFieldStruct{}, 211)
+	f.RegisterStruct(OneEnumFieldStruct{}, 211)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1410,7 +1439,7 @@ func testTwoEnumFieldCompatible() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterEnum(TestEnum(0), 210)
-	f.Register(TwoEnumFieldStruct{}, 212)
+	f.RegisterStruct(TwoEnumFieldStruct{}, 212)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1442,7 +1471,7 @@ func testEnumSchemaEvolutionCompatible() {
 	// Read TwoEnumFieldStruct data, deserialize as EmptyStruct
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterEnum(TestEnum(0), 210)
-	f.Register(EmptyStruct{}, 211)
+	f.RegisterStruct(EmptyStruct{}, 211)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1468,7 +1497,7 @@ func testEnumSchemaEvolutionCompatibleReverse() {
 	// Missing f2 field will be Go's zero value (nil for pointer)
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterEnum(TestEnum(0), 210)
-	f.Register(TwoEnumFieldStruct{}, 211)
+	f.RegisterStruct(TwoEnumFieldStruct{}, 211)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1504,7 +1533,7 @@ func testNullableFieldSchemaConsistentNotNull() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
-	f.Register(NullableComprehensiveSchemaConsistent{}, 401)
+	f.RegisterStruct(NullableComprehensiveSchemaConsistent{}, 401)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1529,7 +1558,7 @@ func testNullableFieldSchemaConsistentNotNull() {
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
-	if len(result.SetField) != 2 || !result.SetField["x"] || !result.SetField["y"] {
+	if len(result.SetField) != 2 || !result.SetField.Contains("x") || !result.SetField.Contains("y") {
 		panic(fmt.Sprintf("SetField mismatch: expected {x, y}, got %v", result.SetField))
 	}
 	if len(result.MapField) != 2 || result.MapField["key1"] != "value1" || result.MapField["key2"] != "value2" {
@@ -1562,7 +1591,7 @@ func testNullableFieldSchemaConsistentNotNull() {
 	if len(result.NullableList) != 2 || result.NullableList[0] != "p" || result.NullableList[1] != "q" {
 		panic(fmt.Sprintf("NullableList mismatch: expected [p, q], got %v", result.NullableList))
 	}
-	if len(result.NullableSet) != 2 || !result.NullableSet["m"] || !result.NullableSet["n"] {
+	if len(result.NullableSet) != 2 || !result.NullableSet.Contains("m") || !result.NullableSet.Contains("n") {
 		panic(fmt.Sprintf("NullableSet mismatch: expected {m, n}, got %v", result.NullableSet))
 	}
 	if len(result.NullableMap) != 1 || result.NullableMap["nk1"] != "nv1" {
@@ -1582,7 +1611,7 @@ func testNullableFieldSchemaConsistentNull() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
-	f.Register(NullableComprehensiveSchemaConsistent{}, 401)
+	f.RegisterStruct(NullableComprehensiveSchemaConsistent{}, 401)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1607,7 +1636,7 @@ func testNullableFieldSchemaConsistentNull() {
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
-	if len(result.SetField) != 2 || !result.SetField["x"] || !result.SetField["y"] {
+	if len(result.SetField) != 2 || !result.SetField.Contains("x") || !result.SetField.Contains("y") {
 		panic(fmt.Sprintf("SetField mismatch: expected {x, y}, got %v", result.SetField))
 	}
 	if len(result.MapField) != 2 || result.MapField["key1"] != "value1" || result.MapField["key2"] != "value2" {
@@ -1661,7 +1690,7 @@ func testNullableFieldCompatibleNotNull() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.Register(NullableComprehensiveCompatible{}, 402)
+	f.RegisterStruct(NullableComprehensiveCompatible{}, 402)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1723,7 +1752,7 @@ func testNullableFieldCompatibleNotNull() {
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
-	if len(result.SetField) != 2 || !result.SetField["x"] || !result.SetField["y"] {
+	if len(result.SetField) != 2 || !result.SetField.Contains("x") || !result.SetField.Contains("y") {
 		panic(fmt.Sprintf("SetField mismatch: expected {x, y}, got %v", result.SetField))
 	}
 	if len(result.MapField) != 2 || result.MapField["key1"] != "value1" || result.MapField["key2"] != "value2" {
@@ -1741,7 +1770,7 @@ func testNullableFieldCompatibleNotNull() {
 	if len(result.NullableList2) != 2 || result.NullableList2[0] != "p" || result.NullableList2[1] != "q" {
 		panic(fmt.Sprintf("NullableList2 mismatch: expected [p, q], got %v", result.NullableList2))
 	}
-	if len(result.NullableSet2) != 2 || !result.NullableSet2["m"] || !result.NullableSet2["n"] {
+	if len(result.NullableSet2) != 2 || !result.NullableSet2.Contains("m") || !result.NullableSet2.Contains("n") {
 		panic(fmt.Sprintf("NullableSet2 mismatch: expected {m, n}, got %v", result.NullableSet2))
 	}
 	if len(result.NullableMap2) != 1 || result.NullableMap2["nk1"] != "nv1" {
@@ -1767,7 +1796,7 @@ func testNullableFieldCompatibleNull() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.Register(NullableComprehensiveCompatible{}, 402)
+	f.RegisterStruct(NullableComprehensiveCompatible{}, 402)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1829,7 +1858,7 @@ func testNullableFieldCompatibleNull() {
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
-	if len(result.SetField) != 2 || !result.SetField["x"] || !result.SetField["y"] {
+	if len(result.SetField) != 2 || !result.SetField.Contains("x") || !result.SetField.Contains("y") {
 		panic(fmt.Sprintf("SetField mismatch: expected {x, y}, got %v", result.SetField))
 	}
 	if len(result.MapField) != 2 || result.MapField["key1"] != "value1" || result.MapField["key2"] != "value2" {
@@ -1951,8 +1980,8 @@ func testRefSchemaConsistent() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false), fory.WithRefTracking(true))
-	f.Register(RefInnerSchemaConsistent{}, 501)
-	f.Register(RefOuterSchemaConsistent{}, 502)
+	f.RegisterStruct(RefInnerSchemaConsistent{}, 501)
+	f.RegisterStruct(RefOuterSchemaConsistent{}, 502)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -1999,8 +2028,8 @@ func testRefCompatible() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true), fory.WithRefTracking(true))
-	f.Register(RefInnerCompatible{}, 503)
-	f.Register(RefOuterCompatible{}, 504)
+	f.RegisterStruct(RefInnerCompatible{}, 503)
+	f.RegisterStruct(RefOuterCompatible{}, 504)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -2051,7 +2080,7 @@ func testCircularRefSchemaConsistent() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false), fory.WithRefTracking(true))
-	f.Register(CircularRefStruct{}, 601)
+	f.RegisterStruct(CircularRefStruct{}, 601)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -2088,7 +2117,7 @@ func testCircularRefCompatible() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true), fory.WithRefTracking(true))
-	f.Register(CircularRefStruct{}, 602)
+	f.RegisterStruct(CircularRefStruct{}, 602)
 
 	buf := fory.NewByteBuffer(data)
 	var obj interface{}
@@ -2116,6 +2145,218 @@ func testCircularRefCompatible() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
+
+	writeFile(dataFile, serialized)
+}
+
+// ============================================================================
+// Unsigned Number Test Types
+// ============================================================================
+
+// UnsignedSchemaConsistent - Test struct for unsigned numbers in SCHEMA_CONSISTENT mode.
+// All fields use the same nullability as Java.
+// Note: Go currently only supports uint8, uint16, uint32 (VAR_UINT32), uint64 (VAR_UINT64).
+// Fixed and tagged encodings require fory encoding tags (TODO).
+// Matches Java's UnsignedSchemaConsistent (type id 501)
+// UnsignedSchemaConsistentSimple - Simple test struct for unsigned numbers.
+// Matches Java's UnsignedSchemaConsistentSimple (type id 1)
+type UnsignedSchemaConsistentSimple struct {
+	U64Tagged         uint64  `fory:"encoding=tagged"`          // TAGGED_UINT64 - tagged encoding
+	U64TaggedNullable *uint64 `fory:"nullable,encoding=tagged"` // Nullable TAGGED_UINT64
+}
+
+type UnsignedSchemaConsistent struct {
+	// Primitive unsigned fields (non-nullable, use Field suffix to avoid reserved keywords)
+	U8Field        uint8  // UINT8 - fixed 8-bit
+	U16Field       uint16 // UINT16 - fixed 16-bit
+	U32VarField    uint32 `fory:"compress=true"`   // VAR_UINT32 - variable-length
+	U32FixedField  uint32 `fory:"compress=false"`  // UINT32 - fixed 4-byte
+	U64VarField    uint64 `fory:"encoding=varint"` // VAR_UINT64 - variable-length
+	U64FixedField  uint64 `fory:"encoding=fixed"`  // UINT64 - fixed 8-byte
+	U64TaggedField uint64 `fory:"encoding=tagged"` // TAGGED_UINT64 - tagged encoding
+
+	// Nullable unsigned fields (pointers)
+	U8NullableField        *uint8  `fory:"nullable"`
+	U16NullableField       *uint16 `fory:"nullable"`
+	U32VarNullableField    *uint32 `fory:"nullable,compress=true"`
+	U32FixedNullableField  *uint32 `fory:"nullable,compress=false"`
+	U64VarNullableField    *uint64 `fory:"nullable,encoding=varint"`
+	U64FixedNullableField  *uint64 `fory:"nullable,encoding=fixed"`
+	U64TaggedNullableField *uint64 `fory:"nullable,encoding=tagged"`
+}
+
+// UnsignedSchemaCompatible - Test struct for unsigned numbers in COMPATIBLE mode.
+// Group 1: Pointer types (nullable in Go, non-nullable in Java)
+// Group 2: Non-pointer types with Field2 suffix (non-nullable in Go, nullable in Java)
+// Matches Java's UnsignedSchemaCompatible (type id 502)
+type UnsignedSchemaCompatible struct {
+	// Group 1: Nullable in Go (pointers), non-nullable in Java
+	U8Field1        *uint8  `fory:"nullable"`
+	U16Field1       *uint16 `fory:"nullable"`
+	U32VarField1    *uint32 `fory:"nullable,compress=true"`
+	U32FixedField1  *uint32 `fory:"nullable,compress=false"`
+	U64VarField1    *uint64 `fory:"nullable,encoding=varint"`
+	U64FixedField1  *uint64 `fory:"nullable,encoding=fixed"`
+	U64TaggedField1 *uint64 `fory:"nullable,encoding=tagged"`
+
+	// Group 2: Non-nullable in Go, nullable in Java
+	U8Field2        uint8
+	U16Field2       uint16
+	U32VarField2    uint32 `fory:"compress=true"`
+	U32FixedField2  uint32 `fory:"compress=false"`
+	U64VarField2    uint64 `fory:"encoding=varint"`
+	U64FixedField2  uint64 `fory:"encoding=fixed"`
+	U64TaggedField2 uint64 `fory:"encoding=tagged"`
+}
+
+// ============================================================================
+// Unsigned Number Tests
+// ============================================================================
+
+func testUnsignedSchemaConsistentSimple() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.RegisterStruct(UnsignedSchemaConsistentSimple{}, 1)
+
+	var obj interface{}
+	err := f.Deserialize(data, &obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getUnsignedSchemaConsistentSimple(obj)
+
+	// Verify fields
+	assertEqual(uint64(1000000000), result.U64Tagged, "U64Tagged")
+	if result.U64TaggedNullable == nil || *result.U64TaggedNullable != 500000000 {
+		panic(fmt.Sprintf("U64TaggedNullable mismatch: expected 500000000, got %v", result.U64TaggedNullable))
+	}
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testUnsignedSchemaConsistent() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	fmt.Printf("Input size: %d bytes\n", len(data))
+	fmt.Printf("Input hex: %x\n", data)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.RegisterStruct(UnsignedSchemaConsistent{}, 501)
+
+	var obj interface{}
+	err := f.Deserialize(data, &obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getUnsignedSchemaConsistent(obj)
+
+	// Verify primitive unsigned fields
+	assertEqual(uint8(200), result.U8Field, "U8Field")
+	assertEqual(uint16(60000), result.U16Field, "U16Field")
+	assertEqual(uint32(3000000000), result.U32VarField, "U32VarField")
+	assertEqual(uint32(4000000000), result.U32FixedField, "U32FixedField")
+	assertEqual(uint64(10000000000), result.U64VarField, "U64VarField")
+	assertEqual(uint64(15000000000), result.U64FixedField, "U64FixedField")
+	assertEqual(uint64(1000000000), result.U64TaggedField, "U64TaggedField")
+
+	// Verify nullable unsigned fields
+	if result.U8NullableField == nil || *result.U8NullableField != 128 {
+		panic(fmt.Sprintf("U8NullableField mismatch: expected 128, got %v", result.U8NullableField))
+	}
+	if result.U16NullableField == nil || *result.U16NullableField != 40000 {
+		panic(fmt.Sprintf("U16NullableField mismatch: expected 40000, got %v", result.U16NullableField))
+	}
+	if result.U32VarNullableField == nil || *result.U32VarNullableField != 2500000000 {
+		panic(fmt.Sprintf("U32VarNullableField mismatch: expected 2500000000, got %v", result.U32VarNullableField))
+	}
+	if result.U32FixedNullableField == nil || *result.U32FixedNullableField != 3500000000 {
+		panic(fmt.Sprintf("U32FixedNullableField mismatch: expected 3500000000, got %v", result.U32FixedNullableField))
+	}
+	if result.U64VarNullableField == nil || *result.U64VarNullableField != 8000000000 {
+		panic(fmt.Sprintf("U64VarNullableField mismatch: expected 8000000000, got %v", result.U64VarNullableField))
+	}
+	if result.U64FixedNullableField == nil || *result.U64FixedNullableField != 12000000000 {
+		panic(fmt.Sprintf("U64FixedNullableField mismatch: expected 12000000000, got %v", result.U64FixedNullableField))
+	}
+	if result.U64TaggedNullableField == nil || *result.U64TaggedNullableField != 500000000 {
+		panic(fmt.Sprintf("U64TaggedNullableField mismatch: expected 500000000, got %v", result.U64TaggedNullableField))
+	}
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	fmt.Printf("Output size: %d bytes\n", len(serialized))
+	fmt.Printf("Output hex: %x\n", serialized)
+
+	writeFile(dataFile, serialized)
+}
+
+func testUnsignedSchemaCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterStruct(UnsignedSchemaCompatible{}, 502)
+
+	var obj interface{}
+	err := f.Deserialize(data, &obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getUnsignedSchemaCompatible(obj)
+
+	// Verify Group 1: Nullable fields (values from Java's non-nullable fields)
+	if result.U8Field1 == nil || *result.U8Field1 != 200 {
+		panic(fmt.Sprintf("U8Field1 mismatch: expected 200, got %v", result.U8Field1))
+	}
+	if result.U16Field1 == nil || *result.U16Field1 != 60000 {
+		panic(fmt.Sprintf("U16Field1 mismatch: expected 60000, got %v", result.U16Field1))
+	}
+	if result.U32VarField1 == nil || *result.U32VarField1 != 3000000000 {
+		panic(fmt.Sprintf("U32VarField1 mismatch: expected 3000000000, got %v", result.U32VarField1))
+	}
+	if result.U32FixedField1 == nil || *result.U32FixedField1 != 4000000000 {
+		panic(fmt.Sprintf("U32FixedField1 mismatch: expected 4000000000, got %v", result.U32FixedField1))
+	}
+	if result.U64VarField1 == nil || *result.U64VarField1 != 10000000000 {
+		panic(fmt.Sprintf("U64VarField1 mismatch: expected 10000000000, got %v", result.U64VarField1))
+	}
+	if result.U64FixedField1 == nil || *result.U64FixedField1 != 15000000000 {
+		panic(fmt.Sprintf("U64FixedField1 mismatch: expected 15000000000, got %v", result.U64FixedField1))
+	}
+	if result.U64TaggedField1 == nil || *result.U64TaggedField1 != 1000000000 {
+		panic(fmt.Sprintf("U64TaggedField1 mismatch: expected 1000000000, got %v", result.U64TaggedField1))
+	}
+
+	// Verify Group 2: Non-nullable fields (values from Java's nullable fields)
+	assertEqual(uint8(128), result.U8Field2, "U8Field2")
+	assertEqual(uint16(40000), result.U16Field2, "U16Field2")
+	assertEqual(uint32(2500000000), result.U32VarField2, "U32VarField2")
+	assertEqual(uint32(3500000000), result.U32FixedField2, "U32FixedField2")
+	assertEqual(uint64(8000000000), result.U64VarField2, "U64VarField2")
+	assertEqual(uint64(12000000000), result.U64FixedField2, "U64FixedField2")
+	assertEqual(uint64(500000000), result.U64TaggedField2, "U64TaggedField2")
+
+	serialized, err := f.Serialize(result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	fmt.Printf("[Go] Serialized output size: %d bytes\n", len(serialized))
+	fmt.Printf("[Go] Serialized output hex: %x\n", serialized)
 
 	writeFile(dataFile, serialized)
 }
@@ -2223,6 +2464,12 @@ func main() {
 		testCircularRefSchemaConsistent()
 	case "test_circular_ref_compatible":
 		testCircularRefCompatible()
+	case "test_unsigned_schema_consistent_simple":
+		testUnsignedSchemaConsistentSimple()
+	case "test_unsigned_schema_consistent":
+		testUnsignedSchemaConsistent()
+	case "test_unsigned_schema_compatible":
+		testUnsignedSchemaCompatible()
 	default:
 		panic(fmt.Sprintf("Unknown test case: %s", *caseName))
 	}

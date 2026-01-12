@@ -120,7 +120,7 @@ type NestedOuterIncompatible struct {
 }
 
 func TestMetaShareEnabled(t *testing.T) {
-	fory := NewForyWithOptions(WithCompatible(true))
+	fory := NewForyWithOptions(WithXlang(true), WithCompatible(true))
 
 	assert.True(t, fory.config.Compatible, "Expected compatible mode to be enabled")
 	assert.NotNil(t, fory.metaContext, "Expected metaContext to be initialized when compatible=true")
@@ -128,7 +128,7 @@ func TestMetaShareEnabled(t *testing.T) {
 }
 
 func TestMetaShareDisabled(t *testing.T) {
-	fory := NewForyWithOptions(WithCompatible(false))
+	fory := NewForyWithOptions(WithXlang(true), WithCompatible(false))
 
 	assert.False(t, fory.config.Compatible, "Expected compatible mode to be disabled")
 	assert.Nil(t, fory.metaContext, "Expected metaContext to be nil when compatible=false")
@@ -176,10 +176,10 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				}
 			}(),
 			writerSetup: func(f *Fory) error {
-				return f.RegisterByName(ComplexObject2{}, "test.ComplexObject2")
+				return f.RegisterNamedStruct(ComplexObject2{}, "test.ComplexObject2")
 			},
 			readerSetup: func(f *Fory) error {
-				return f.RegisterByName(ComplexObject2{}, "test.ComplexObject2")
+				return f.RegisterNamedStruct(ComplexObject2{}, "test.ComplexObject2")
 			},
 			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
 				in := input.(ComplexObject1)
@@ -353,10 +353,10 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				}
 			}(),
 			writerSetup: func(f *Fory) error {
-				return f.RegisterByName(SimpleDataClass{}, "SimpleDataClass")
+				return f.RegisterNamedStruct(SimpleDataClass{}, "SimpleDataClass")
 			},
 			readerSetup: func(f *Fory) error {
-				return f.RegisterByName(SimpleDataClass{}, "SimpleDataClass")
+				return f.RegisterNamedStruct(SimpleDataClass{}, "SimpleDataClass")
 			},
 			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
 				in := input.(PointerDataClass)
@@ -381,10 +381,10 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				}
 			}(),
 			writerSetup: func(f *Fory) error {
-				return f.RegisterByName(SimpleDataClass{}, "SimpleDataClass")
+				return f.RegisterNamedStruct(SimpleDataClass{}, "SimpleDataClass")
 			},
 			readerSetup: func(f *Fory) error {
-				return f.RegisterByName(InconsistentDataClass{}, "SimpleDataClass")
+				return f.RegisterNamedStruct(InconsistentDataClass{}, "SimpleDataClass")
 			},
 			assertFunc: func(t *testing.T, input interface{}, output interface{}) {
 				in := input.(PointerDataClass)
@@ -430,13 +430,13 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				Inner: SimpleDataClass{Name: "inner", Age: 18, Active: true},
 			},
 			writerSetup: func(f *Fory) error {
-				if err := f.RegisterByName(SimpleDataClass{}, "SimpleDataClass"); err != nil {
+				if err := f.RegisterNamedStruct(SimpleDataClass{}, "SimpleDataClass"); err != nil {
 					return err
 				}
 				return nil
 			},
 			readerSetup: func(f *Fory) error {
-				if err := f.RegisterByName(SimpleDataClass{}, "SimpleDataClass"); err != nil {
+				if err := f.RegisterNamedStruct(SimpleDataClass{}, "SimpleDataClass"); err != nil {
 					return err
 				}
 				return nil
@@ -458,13 +458,13 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				Inner: SimpleDataClass{Name: "inner", Age: 18, Active: true},
 			},
 			writerSetup: func(f *Fory) error {
-				if err := f.RegisterByName(SimpleDataClass{}, "SimpleDataClass"); err != nil {
+				if err := f.RegisterNamedStruct(SimpleDataClass{}, "SimpleDataClass"); err != nil {
 					return err
 				}
 				return nil
 			},
 			readerSetup: func(f *Fory) error {
-				if err := f.RegisterByName(InconsistentDataClass{}, "SimpleDataClass"); err != nil {
+				if err := f.RegisterNamedStruct(InconsistentDataClass{}, "SimpleDataClass"); err != nil {
 					return err
 				}
 				return nil
@@ -501,23 +501,23 @@ type compatibilityCase struct {
 func runCompatibilityCase(t *testing.T, tc compatibilityCase) {
 	t.Helper()
 
-	writer := NewForyWithOptions(WithCompatible(true))
+	writer := NewForyWithOptions(WithXlang(true), WithCompatible(true))
 	if tc.writerSetup != nil {
 		err := tc.writerSetup(writer)
 		assert.NoError(t, err)
 	}
-	err := writer.RegisterByName(tc.writeType, tc.tag)
+	err := writer.RegisterNamedStruct(tc.writeType, tc.tag)
 	assert.NoError(t, err)
 
 	data, err := writer.Marshal(tc.input)
 	assert.NoError(t, err)
 
-	reader := NewForyWithOptions(WithCompatible(true))
+	reader := NewForyWithOptions(WithXlang(true), WithCompatible(true))
 	if tc.readerSetup != nil {
 		err = tc.readerSetup(reader)
 		assert.NoError(t, err)
 	}
-	err = reader.RegisterByName(tc.readType, tc.tag)
+	err = reader.RegisterNamedStruct(tc.readType, tc.tag)
 	assert.NoError(t, err)
 
 	target := reflect.New(reflect.TypeOf(tc.readType))

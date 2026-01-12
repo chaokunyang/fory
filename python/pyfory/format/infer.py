@@ -19,7 +19,7 @@ import datetime
 import typing
 
 from typing import Optional
-from pyfory.type import TypeVisitor, infer_field
+from pyfory.type_util import TypeVisitor, infer_field
 from pyfory.format._format import (
     Schema,
     DataType,
@@ -61,7 +61,7 @@ def get_cls_by_schema(schema):
             mod = importlib.import_module(module_name)
             cls_ = getattr(mod, class_name)
         else:
-            from pyfory.type import record_class_factory
+            from pyfory.type_util import record_class_factory
 
             cls_ = record_class_factory("Record" + str(id(schema)), [schema.field(i).name for i in range(schema.num_fields)])
         __type_map__[id_] = cls_
@@ -103,7 +103,7 @@ _supported_types_mapping = {
 }
 
 # Add pyfory type annotations support
-from pyfory.type import (
+from pyfory.types import (
     int8 as int8_type,
     int16 as int16_type,
     int32 as int32_type,

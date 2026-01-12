@@ -68,6 +68,16 @@ public class DeferedLazySerializer extends Serializer {
     return serializer;
   }
 
+  /**
+   * Force resolution of the deferred serializer without writing data. Used during GraalVM build
+   * time to ensure the actual serializer is compiled.
+   *
+   * @return the resolved serializer
+   */
+  public Serializer resolveSerializer() {
+    return getSerializer();
+  }
+
   @Override
   public Object copy(Object value) {
     return getSerializer().copy(value);

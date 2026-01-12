@@ -313,7 +313,7 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
          field.getDefaultValue should not be null
          field.getFieldName should not be null
          field.getFieldAccessor should not be null
-         field.getClassId.toInt should be >= 0
+         field.getDispatchId.toInt should be >= 0
        }
      }
 
@@ -380,7 +380,7 @@ class ScalaDefaultValueUtilsTest extends AnyWordSpec with Matchers {
          field.getFieldName should not be null
          field.getDefaultValue should not be null
          field.getFieldAccessor should not be null
-         field.getClassId.toInt should be >= 0
+         field.getDispatchId.toInt should be >= 0
        }
      }
   }

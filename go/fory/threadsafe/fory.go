@@ -76,11 +76,11 @@ func (f *Fory) Deserialize(data []byte, v interface{}) error {
 	return inner.Unmarshal(data, v)
 }
 
-// RegisterNamedType registers a named type for cross-language serialization
-func (f *Fory) RegisterNamedType(type_ interface{}, typeName string) error {
+// RegisterNamedStruct registers a named struct type for cross-language serialization
+func (f *Fory) RegisterNamedStruct(type_ interface{}, typeName string) error {
 	inner := f.acquire()
 	defer f.release(inner)
-	return inner.RegisterByName(type_, typeName)
+	return inner.RegisterNamedStruct(type_, typeName)
 }
 
 // ============================================================================

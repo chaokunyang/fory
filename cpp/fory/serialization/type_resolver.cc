@@ -443,8 +443,9 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
     field_infos.push_back(std::move(field));
   }
 
-  // Sort fields according to xlang spec
-  field_infos = sort_field_infos(std::move(field_infos));
+  // NOTE: Do NOT sort remote fields! They are already in the sender's sorted
+  // order, which matches the data order. Re-sorting would cause misalignment
+  // with the serialized data.
 
   // Assign field IDs by comparing with local type
   if (local_type_info != nullptr) {
@@ -539,8 +540,8 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
     field_infos.push_back(std::move(field));
   }
 
-  // Sort fields according to xlang spec
-  field_infos = sort_field_infos(std::move(field_infos));
+  // NOTE: Do NOT sort remote fields! They are already in the sender's sorted
+  // order, which matches the data order.
 
   // CRITICAL FIX: Ensure we consume exactly meta_size bytes
   size_t current_pos = buffer.reader_index();
@@ -606,16 +607,24 @@ int32_t get_primitive_type_size(uint32_t type_id) {
   switch (static_cast<TypeId>(type_id)) {
   case TypeId::BOOL:
   case TypeId::INT8:
+  case TypeId::UINT8:
     return 1;
   case TypeId::INT16:
+  case TypeId::UINT16:
   case TypeId::FLOAT16:
     return 2;
   case TypeId::INT32:
-  case TypeId::VAR_INT32:
+  case TypeId::VARINT32:
+  case TypeId::UINT32:
+  case TypeId::VAR_UINT32:
   case TypeId::FLOAT32:
     return 4;
   case TypeId::INT64:
-  case TypeId::VAR_INT64:
+  case TypeId::VARINT64:
+  case TypeId::TAGGED_INT64:
+  case TypeId::UINT64:
+  case TypeId::VAR_UINT64:
+  case TypeId::TAGGED_UINT64:
   case TypeId::FLOAT64:
     return 8;
   default:
@@ -623,11 +632,18 @@ int32_t get_primitive_type_size(uint32_t type_id) {
   }
 }
 
+/// Check if a type ID represents a compressed (varint/tagged) type.
+/// This must match Java's Types.isCompressedType() exactly for consistent
+/// field ordering. Java only considers VARINT32, VAR_UINT32, VARINT64,
+/// VAR_UINT64, TAGGED_INT64, and TAGGED_UINT64 as compressed.
+/// Note: INT32, INT64, UINT32, UINT64 are NOT compressed - they are fixed-size.
 bool is_compress(uint32_t type_id) {
-  return type_id == static_cast<uint32_t>(TypeId::INT32) ||
-         type_id == static_cast<uint32_t>(TypeId::INT64) ||
-         type_id == static_cast<uint32_t>(TypeId::VAR_INT32) ||
-         type_id == static_cast<uint32_t>(TypeId::VAR_INT64);
+  return type_id == static_cast<uint32_t>(TypeId::VARINT32) ||
+         type_id == static_cast<uint32_t>(TypeId::VARINT64) ||
+         type_id == static_cast<uint32_t>(TypeId::TAGGED_INT64) ||
+         type_id == static_cast<uint32_t>(TypeId::VAR_UINT32) ||
+         type_id == static_cast<uint32_t>(TypeId::VAR_UINT64) ||
+         type_id == static_cast<uint32_t>(TypeId::TAGGED_UINT64);
 }
 
 // Numeric field sorter (for primitive fields)
@@ -1250,7 +1266,18 @@ void TypeResolver::register_builtin_types() {
   register_type_id_only(TypeId::INT8);
   register_type_id_only(TypeId::INT16);
   register_type_id_only(TypeId::INT32);
+  register_type_id_only(TypeId::VARINT32);
   register_type_id_only(TypeId::INT64);
+  register_type_id_only(TypeId::VARINT64);
+  register_type_id_only(TypeId::TAGGED_INT64);
+  register_type_id_only(TypeId::UINT8);
+  register_type_id_only(TypeId::UINT16);
+  register_type_id_only(TypeId::UINT32);
+  register_type_id_only(TypeId::VAR_UINT32);
+  register_type_id_only(TypeId::UINT64);
+  register_type_id_only(TypeId::VAR_UINT64);
+  register_type_id_only(TypeId::TAGGED_UINT64);
+  register_type_id_only(TypeId::FLOAT16);
   register_type_id_only(TypeId::FLOAT32);
   register_type_id_only(TypeId::FLOAT64);
   register_type_id_only(TypeId::STRING);
@@ -1261,6 +1288,10 @@ void TypeResolver::register_builtin_types() {
   register_type_id_only(TypeId::INT16_ARRAY);
   register_type_id_only(TypeId::INT32_ARRAY);
   register_type_id_only(TypeId::INT64_ARRAY);
+  register_type_id_only(TypeId::UINT8_ARRAY);
+  register_type_id_only(TypeId::UINT16_ARRAY);
+  register_type_id_only(TypeId::UINT32_ARRAY);
+  register_type_id_only(TypeId::UINT64_ARRAY);
   register_type_id_only(TypeId::FLOAT16_ARRAY);
   register_type_id_only(TypeId::FLOAT32_ARRAY);
   register_type_id_only(TypeId::FLOAT64_ARRAY);
@@ -1277,6 +1308,8 @@ void TypeResolver::register_builtin_types() {
   register_type_id_only(TypeId::EXT);
 
   // Other internal types
+  register_type_id_only(TypeId::UNION);
+  register_type_id_only(TypeId::NONE);
   register_type_id_only(TypeId::DURATION);
   register_type_id_only(TypeId::TIMESTAMP);
   register_type_id_only(TypeId::LOCAL_DATE);

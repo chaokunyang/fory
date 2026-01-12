@@ -19,9 +19,13 @@
 
 package org.apache.fory.type;
 
-import static org.apache.fory.collection.Collections.ofHashMap;
-
-import java.util.Map;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import org.apache.fory.Fory;
+import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.resolver.ClassInfo;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.util.Preconditions;
 
 public class Types {
@@ -32,7 +36,7 @@ public class Types {
   /** bool: a boolean value (true or false). */
   public static final int BOOL = 1;
 
-  /** int8: a 8-bit signed integer. */
+  /** int8: an 8-bit signed integer. */
   public static final int INT8 = 2;
 
   /** int16: a 16-bit signed integer. */
@@ -41,129 +45,162 @@ public class Types {
   /** int32: a 32-bit signed integer. */
   public static final int INT32 = 4;
 
-  /** var_int32: a 32-bit signed integer which uses fory var_int32 encoding. */
-  public static final int VAR_INT32 = 5;
+  /** var32: a 32-bit signed integer which uses fory var_int32 encoding. */
+  public static final int VARINT32 = 5;
 
   /** int64: a 64-bit signed integer. */
   public static final int INT64 = 6;
 
-  /** var_int64: a 64-bit signed integer which uses fory PVL encoding. */
-  public static final int VAR_INT64 = 7;
+  /** var64: a 64-bit signed integer which uses fory PVL encoding. */
+  public static final int VARINT64 = 7;
 
-  /** sli_int64: a 64-bit signed integer which uses fory SLI encoding. */
-  public static final int SLI_INT64 = 8;
+  /** tagged_int64: a 64-bit signed integer which uses fory hybrid encoding. */
+  public static final int TAGGED_INT64 = 8;
+
+  /** uint8: an 8-bit unsigned integer. */
+  public static final int UINT8 = 9;
+
+  /** uint16: a 16-bit unsigned integer. */
+  public static final int UINT16 = 10;
+
+  /** uint32: a 32-bit unsigned integer. */
+  public static final int UINT32 = 11;
+
+  /** var_uint32: a 32-bit unsigned integer which uses fory var_uint32 encoding. */
+  public static final int VAR_UINT32 = 12;
+
+  /** uint64: a 64-bit unsigned integer. */
+  public static final int UINT64 = 13;
+
+  /** var_uint64: a 64-bit unsigned integer which uses fory var_uint64 encoding. */
+  public static final int VAR_UINT64 = 14;
+
+  /** tagged_uint64: a 64-bit unsigned integer which uses fory tagged int64 encoding. */
+  public static final int TAGGED_UINT64 = 15;
 
   /** float16: a 16-bit floating point number. */
-  public static final int FLOAT16 = 9;
+  public static final int FLOAT16 = 16;
 
   /** float32: a 32-bit floating point number. */
-  public static final int FLOAT32 = 10;
+  public static final int FLOAT32 = 17;
 
   /** float64: a 64-bit floating point number including NaN and Infinity. */
-  public static final int FLOAT64 = 11;
+  public static final int FLOAT64 = 18;
 
   /** string: a text string encoded using Latin1/UTF16/UTF-8 encoding. */
-  public static final int STRING = 12;
+  public static final int STRING = 19;
+
+  /** A sequence of objects. */
+  public static final int LIST = 20;
+
+  /** An unordered set of unique elements. */
+  public static final int SET = 21;
+
+  /**
+   * A map of key-value pairs. Mutable types such as `list/map/set/array/tensor/arrow` are not
+   * allowed as key of map.
+   */
+  public static final int MAP = 22;
 
   /** enum: a data type consisting of a set of named values. */
-  public static final int ENUM = 13;
+  public static final int ENUM = 23;
 
   /** named_enum: an enum whose value will be serialized as the registered name. */
-  public static final int NAMED_ENUM = 14;
+  public static final int NAMED_ENUM = 24;
 
   /**
    * A morphic(final) type serialized by Fory Struct serializer. i.e. it doesn't have subclasses.
    * Suppose we're deserializing {@code List<SomeClass>}, we can save dynamic serializer dispatch
    * since `SomeClass` is morphic(final).
    */
-  public static final int STRUCT = 15;
+  public static final int STRUCT = 25;
 
   /** A morphic(final) type serialized by Fory compatible Struct serializer. */
-  public static final int COMPATIBLE_STRUCT = 16;
+  public static final int COMPATIBLE_STRUCT = 26;
 
   /** A `struct` whose type mapping will be encoded as a name. */
-  public static final int NAMED_STRUCT = 17;
+  public static final int NAMED_STRUCT = 27;
 
   /** A `compatible_struct` whose type mapping will be encoded as a name. */
-  public static final int NAMED_COMPATIBLE_STRUCT = 18;
+  public static final int NAMED_COMPATIBLE_STRUCT = 28;
 
   /** A type which will be serialized by a customized serializer. */
-  public static final int EXT = 19;
+  public static final int EXT = 29;
 
   /** An `ext` type whose type mapping will be encoded as a name. */
-  public static final int NAMED_EXT = 20;
+  public static final int NAMED_EXT = 30;
 
-  /** A sequence of objects. */
-  public static final int LIST = 21;
+  /** A tagged union type that can hold one of several alternative types. */
+  public static final int UNION = 31;
 
-  /** An unordered set of unique elements. */
-  public static final int SET = 22;
-
-  /**
-   * A map of key-value pairs. Mutable types such as `list/map/set/array/tensor/arrow` are not
-   * allowed as key of map.
-   */
-  public static final int MAP = 23;
+  /** Represents an empty/unit value with no data (e.g., for empty union alternatives). */
+  public static final int NONE = 32;
 
   /**
    * An absolute length of time, independent of any calendar/timezone, as a count of nanoseconds.
    */
-  public static final int DURATION = 24;
+  public static final int DURATION = 33;
 
   /**
    * A point in time, independent of any calendar/timezone, as a count of nanoseconds. The count is
    * relative to an epoch at UTC midnight on January 1, 1970.
    */
-  public static final int TIMESTAMP = 25;
+  public static final int TIMESTAMP = 34;
 
   /**
    * A naive date without timezone. The count is days relative to an epoch at UTC midnight on Jan 1,
    * 1970.
    */
-  public static final int LOCAL_DATE = 26;
+  public static final int LOCAL_DATE = 35;
 
   /** Exact decimal value represented as an integer value in two's complement. */
-  public static final int DECIMAL = 27;
+  public static final int DECIMAL = 36;
 
   /** A variable-length array of bytes. */
-  public static final int BINARY = 28;
+  public static final int BINARY = 37;
 
   /**
    * A multidimensional array where every sub-array can have different sizes but all have the same
    * type. Only numeric components allowed. Other arrays will be taken as List. The implementation
    * should support interoperability between array and list.
    */
-  public static final int ARRAY = 29;
+  public static final int ARRAY = 38;
 
   /** One dimensional bool array. */
-  public static final int BOOL_ARRAY = 30;
+  public static final int BOOL_ARRAY = 39;
 
   /** One dimensional int8 array. */
-  public static final int INT8_ARRAY = 31;
+  public static final int INT8_ARRAY = 40;
 
   /** One dimensional int16 array. */
-  public static final int INT16_ARRAY = 32;
+  public static final int INT16_ARRAY = 41;
 
   /** One dimensional int32 array. */
-  public static final int INT32_ARRAY = 33;
+  public static final int INT32_ARRAY = 42;
 
   /** One dimensional int64 array. */
-  public static final int INT64_ARRAY = 34;
+  public static final int INT64_ARRAY = 43;
 
-  /** One dimensional half_float_16 array. */
-  public static final int FLOAT16_ARRAY = 35;
+  /** One dimensional uint8 array. */
+  public static final int UINT8_ARRAY = 44;
+
+  /** One dimensional uint16 array. */
+  public static final int UINT16_ARRAY = 45;
+
+  /** One dimensional uint32 array. */
+  public static final int UINT32_ARRAY = 46;
+
+  /** One dimensional uint64 array. */
+  public static final int UINT64_ARRAY = 47;
+
+  /** One dimensional float16 array. */
+  public static final int FLOAT16_ARRAY = 48;
 
   /** One dimensional float32 array. */
-  public static final int FLOAT32_ARRAY = 36;
+  public static final int FLOAT32_ARRAY = 49;
 
   /** One dimensional float64 array. */
-  public static final int FLOAT64_ARRAY = 37;
-
-  /** A tagged union type that can hold one of several alternative types. */
-  public static final int UNION = 38;
-
-  /** Represents an empty/unit value with no data (e.g., for empty union alternatives). */
-  public static final int NONE = 39;
+  public static final int FLOAT64_ARRAY = 50;
 
   /** Bound value for range checks (types with id >= BOUND are not internal types). */
   public static final int BOUND = 64;
@@ -204,35 +241,8 @@ public class Types {
     return isStructType(typeId) || isExtType(typeId) || isEnumType(typeId);
   }
 
-  private static final Map<Class, Integer> PRIMITIVE_TYPE_ID_MAP =
-      ofHashMap(
-          boolean.class, BOOL,
-          byte.class, INT8,
-          short.class, INT16,
-          int.class, INT32,
-          long.class, INT64,
-          float.class, FLOAT32,
-          double.class, FLOAT64);
-
-  public static int getPrimitiveTypeId(Class<?> cls) {
-    Preconditions.checkArgument(cls.isPrimitive(), "Class %s is not primitive", cls);
-    return PRIMITIVE_TYPE_ID_MAP.getOrDefault(cls, -1);
-  }
-
   public static boolean isPrimitiveType(int typeId) {
-    // noinspection Duplicates
-    switch (typeId) {
-      case BOOL:
-      case INT8:
-      case INT16:
-      case INT32:
-      case INT64:
-      case FLOAT32:
-      case FLOAT64:
-        return true;
-      default:
-        return false;
-    }
+    return typeId >= BOOL && typeId <= FLOAT64;
   }
 
   public static boolean isPrimitiveArray(int typeId) {
@@ -243,6 +253,11 @@ public class Types {
       case INT16_ARRAY:
       case INT32_ARRAY:
       case INT64_ARRAY:
+      case UINT8_ARRAY:
+      case UINT16_ARRAY:
+      case UINT32_ARRAY:
+      case UINT64_ARRAY:
+      case FLOAT16_ARRAY:
       case FLOAT32_ARRAY:
       case FLOAT64_ARRAY:
         return true;
@@ -263,6 +278,14 @@ public class Types {
         return INT32_ARRAY;
       case INT64:
         return INT64_ARRAY;
+      case UINT8:
+        return UINT8_ARRAY;
+      case UINT16:
+        return UINT16_ARRAY;
+      case UINT32:
+        return UINT32_ARRAY;
+      case UINT64:
+        return UINT64_ARRAY;
       case FLOAT16:
         return FLOAT16_ARRAY;
       case FLOAT32:
@@ -272,6 +295,110 @@ public class Types {
       default:
         throw new IllegalArgumentException(
             String.format("Type id %d is not a primitive id", typeId));
+    }
+  }
+
+  public static int getDescriptorTypeId(Fory fory, Field field) {
+    Annotation annotation = Descriptor.getAnnotation(field);
+    Class<?> rawType = field.getType();
+    if (annotation != null) {
+      return TypeAnnotationUtils.getTypeId(annotation, rawType);
+    } else {
+      return getTypeId(fory, rawType);
+    }
+  }
+
+  public static int getDescriptorTypeId(Fory fory, Descriptor d) {
+    TypeRef<?> typeRef = d.getTypeRef();
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (extMeta != null) {
+      return extMeta.typeId();
+    } else {
+      Class<?> rawType = typeRef.getRawType();
+      Annotation typeAnnotation = d.getTypeAnnotation();
+      if (typeAnnotation != null) {
+        return TypeAnnotationUtils.getTypeId(typeAnnotation, rawType);
+      } else {
+        return getTypeId(fory, rawType);
+      }
+    }
+  }
+
+  public static int getTypeId(Fory fory, Class<?> clz) {
+    Class<?> unwrapped = TypeUtils.unwrap(clz);
+    if (unwrapped == char.class) {
+      Preconditions.checkArgument(!fory.isCrossLanguage(), "Char is not support for xlang");
+      return clz.isPrimitive() ? ClassResolver.PRIMITIVE_CHAR_ID : ClassResolver.CHAR_ID;
+    }
+    if (unwrapped.isPrimitive()) {
+      if (unwrapped == boolean.class) {
+        return Types.BOOL;
+      } else if (unwrapped == byte.class) {
+        return Types.INT8;
+      } else if (unwrapped == short.class) {
+        return Types.INT16;
+      } else if (unwrapped == int.class) {
+        return fory.compressInt() ? Types.VARINT32 : Types.INT32;
+      } else if (unwrapped == long.class) {
+        return fory.compressLong() ? Types.VARINT64 : Types.INT64;
+      } else if (unwrapped == float.class) {
+        return Types.FLOAT32;
+      } else if (unwrapped == double.class) {
+        return Types.FLOAT64;
+      }
+    }
+    ClassInfo classInfo = fory._getTypeResolver().getClassInfo(clz, false);
+    if (classInfo != null) {
+      return fory.isCrossLanguage() ? classInfo.getXtypeId() : classInfo.getClassId();
+    }
+    return Types.UNKNOWN;
+  }
+
+  public static Class<?> getClassForTypeId(int typeId) {
+    switch (typeId) {
+      case BOOL:
+        return Boolean.class;
+      case INT8:
+      case UINT8:
+        return Byte.class;
+      case INT16:
+      case UINT16:
+        return Short.class;
+      case INT32:
+      case VARINT32:
+      case UINT32:
+      case VAR_UINT32:
+        return Integer.class;
+      case INT64:
+      case VARINT64:
+      case TAGGED_INT64:
+      case UINT64:
+      case VAR_UINT64:
+      case TAGGED_UINT64:
+        return Long.class;
+      case FLOAT16:
+      case FLOAT32:
+        return Float.class;
+      case FLOAT64:
+        return Double.class;
+      case STRING:
+        return String.class;
+      default:
+        return null;
+    }
+  }
+
+  public static boolean isCompressedType(int typeId) {
+    switch (typeId) {
+      case VARINT32:
+      case VAR_UINT32:
+      case VARINT64:
+      case VAR_UINT64:
+      case TAGGED_INT64:
+      case TAGGED_UINT64:
+        return true;
+      default:
+        return false;
     }
   }
 }

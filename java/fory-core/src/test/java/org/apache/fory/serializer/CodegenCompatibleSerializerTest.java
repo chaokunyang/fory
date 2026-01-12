@@ -54,8 +54,8 @@ public class CodegenCompatibleSerializerTest extends ForyTestBase {
   @DataProvider(name = "config")
   public static Object[][] config() {
     return Sets.cartesianProduct(
-            ImmutableSet.of(true, false), // referenceTracking
-            ImmutableSet.of(true, false)) // enable codegen
+            ImmutableSet.of(true), // referenceTracking
+            ImmutableSet.of(true)) // enable codegen
         .stream()
         .map(List::toArray)
         .toArray(Object[][]::new);

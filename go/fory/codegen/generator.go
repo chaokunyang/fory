@@ -509,7 +509,7 @@ func generateReadMethod(buf *bytes.Buffer, s *StructInfo) error {
 	fmt.Fprintf(buf, "\tif readType {\n")
 	fmt.Fprintf(buf, "\t\tctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), err)\n")
 	fmt.Fprintf(buf, "\t}\n")
-	fmt.Fprintf(buf, "\tg.ReadData(ctx, value.Type(), value)\n")
+	fmt.Fprintf(buf, "\tg.ReadData(ctx, value)\n")
 	fmt.Fprintf(buf, "}\n\n")
 	return nil
 }

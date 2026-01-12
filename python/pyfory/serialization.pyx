@@ -27,15 +27,15 @@ import time
 import warnings
 from typing import TypeVar, Union, Iterable
 
-from pyfory._util import get_bit, set_bit, clear_bit
+from pyfory.buffer import get_bit, set_bit, clear_bit
 from pyfory import _fory as fmod
 from pyfory._fory import Language
 from pyfory._fory import _ENABLE_TYPE_REGISTRATION_FORCIBLY
 from pyfory.lib import mmh3
 from pyfory.meta.metastring import Encoding
-from pyfory.type import is_primitive_type
+from pyfory.types import is_primitive_type
 from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
-from pyfory.util import is_little_endian
+from pyfory.utils import is_little_endian
 from pyfory.includes.libserialization cimport \
     (TypeId, IsNamespacedType, IsTypeShareMeta, Fory_PyBooleanSequenceWriteToBuffer, Fory_PyFloatSequenceWriteToBuffer)
 
@@ -50,7 +50,7 @@ from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from libcpp cimport bool as c_bool
 from libcpp.utility cimport pair
 from cython.operator cimport dereference as deref
-from pyfory._util cimport Buffer
+from pyfory.buffer cimport Buffer
 from pyfory.includes.libabsl cimport flat_hash_map
 from pyfory.meta.metastring import MetaStringDecoder
 
@@ -514,7 +514,7 @@ cdef class TypeResolver:
         self.fory = fory
         self.metastring_resolver = fory.metastring_resolver
         self.meta_share = meta_share
-        from pyfory._registry import TypeResolver
+        from pyfory.registry import TypeResolver
         self._resolver = TypeResolver(fory, meta_share=meta_share, meta_compressor=meta_compressor)
 
     def initialize(self):

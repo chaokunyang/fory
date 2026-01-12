@@ -47,10 +47,10 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.serializer.NonexistentClass;
 import org.apache.fory.type.Descriptor;
-import org.apache.fory.type.FinalObjectTypeStub;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
+import org.apache.fory.type.union.Union;
 import org.apache.fory.util.Preconditions;
 
 public class FieldTypes {
@@ -58,9 +58,7 @@ public class FieldTypes {
 
   /** Returns true if can use current field type. */
   static boolean useFieldType(Class<?> parsedType, Descriptor descriptor) {
-    if (parsedType.isEnum()
-        || parsedType.isAssignableFrom(descriptor.getRawType())
-        || parsedType == FinalObjectTypeStub.class) {
+    if (parsedType.isEnum() || parsedType.isAssignableFrom(descriptor.getRawType())) {
       return true;
     }
     if (parsedType.isArray()) {
@@ -69,7 +67,7 @@ public class FieldTypes {
       if (!field.getType().isArray() || getArrayDimensions(field.getType()) != info.f1) {
         return false;
       }
-      return info.f0 == FinalObjectTypeStub.class || info.f0.isEnum();
+      return info.f0.isEnum();
     }
     return false;
   }
@@ -87,8 +85,16 @@ public class FieldTypes {
     Preconditions.checkNotNull(genericType);
     Class<?> rawType = genericType.getCls();
     boolean isXlang = resolver.getFory().isCrossLanguage();
-    int xtypeId = -1;
-    if (isXlang) {
+    // Get type ID for both xlang and native mode
+    // This supports unsigned types and field-configurable compression in both modes
+    int xtypeId;
+    if (TypeUtils.unwrap(rawType).isPrimitive()) {
+      if (field != null) {
+        xtypeId = Types.getDescriptorTypeId(resolver.getFory(), field);
+      } else {
+        xtypeId = Types.getTypeId(resolver.getFory(), rawType);
+      }
+    } else {
       ClassInfo info = resolver.getClassInfo(genericType.getCls(), false);
       if (info != null) {
         xtypeId = info.getXtypeId();
@@ -96,10 +102,9 @@ public class FieldTypes {
         xtypeId = Types.UNKNOWN;
       }
     }
-    boolean isMonomorphic = genericType.isMonomorphic();
     // For xlang: ref tracking is false by default (no shared ownership like Rust's Rc/Arc)
     // For native: use the type's default tracking behavior
-    boolean trackingRef = isXlang ? false : genericType.trackingRef(resolver);
+    boolean trackingRef = !isXlang && genericType.trackingRef(resolver);
     // For xlang: nullable is false by default (aligned with all languages)
     // Exception: Optional types are nullable (like Rust's Option<T>)
     // For native: non-primitive types are nullable by default
@@ -108,9 +113,9 @@ public class FieldTypes {
       // Only Optional types and boxed types are nullable by default in xlang mode
       nullable = isOptionalType(rawType) || TypeUtils.isBoxed(rawType);
     } else {
-      // For nested types (field=null), nullable defaults to true to match decoding behavior
-      // since the encoding doesn't persist nullable for nested types (see FieldType.read())
-      nullable = field == null || !genericType.getCls().isPrimitive();
+      // Primitives are never nullable, non-primitives are nullable by default
+      // This applies to both top-level fields and nested types (in arrays, collections, maps)
+      nullable = !genericType.getCls().isPrimitive();
     }
 
     // Apply @ForyField annotation if present
@@ -125,7 +130,6 @@ public class FieldTypes {
     if (COLLECTION_TYPE.isSupertypeOf(genericType.getTypeRef())) {
       return new CollectionFieldType(
           xtypeId,
-          isMonomorphic,
           nullable,
           trackingRef,
           buildFieldType(
@@ -137,7 +141,6 @@ public class FieldTypes {
     } else if (MAP_TYPE.isSupertypeOf(genericType.getTypeRef())) {
       return new MapFieldType(
           xtypeId,
-          isMonomorphic,
           nullable,
           trackingRef,
           buildFieldType(
@@ -152,18 +155,22 @@ public class FieldTypes {
               genericType.getTypeParameter1() == null
                   ? GenericType.build(Object.class)
                   : genericType.getTypeParameter1()));
+    } else if (Union.class.isAssignableFrom(rawType)) {
+      return new UnionFieldType(nullable, trackingRef);
+    } else if (TypeUtils.unwrap(rawType).isPrimitive()) {
+      // unified basic types for xlang and native mode
+      return new RegisteredFieldType(nullable, trackingRef, xtypeId);
     } else {
-      if (isXlang
+      if (rawType.isEnum()) {
+        return new EnumFieldType(nullable, xtypeId);
+      } else if (isXlang
           && !Types.isUserDefinedType((byte) xtypeId)
           && resolver.isRegisteredById(rawType)) {
-        return new RegisteredFieldType(isMonomorphic, nullable, trackingRef, xtypeId);
+        return new RegisteredFieldType(nullable, trackingRef, xtypeId);
       } else if (!isXlang && resolver.isRegisteredById(rawType)) {
         Short classId = ((ClassResolver) resolver).getRegisteredClassId(rawType);
-        return new RegisteredFieldType(isMonomorphic, nullable, trackingRef, classId);
+        return new RegisteredFieldType(nullable, trackingRef, classId);
       } else {
-        if (rawType.isEnum()) {
-          return new EnumFieldType(nullable, xtypeId);
-        }
         if (rawType.isArray()) {
           Class<?> elemType = rawType.getComponentType();
           while (elemType.isArray()) {
@@ -172,40 +179,32 @@ public class FieldTypes {
           if (isXlang && !elemType.isPrimitive()) {
             return new CollectionFieldType(
                 xtypeId,
-                isMonomorphic,
                 nullable,
                 trackingRef,
                 buildFieldType(resolver, null, GenericType.build(elemType)));
           }
-          Tuple2<Class<?>, Integer> info = getArrayComponentInfo(rawType);
+          Tuple2<Class<?>, Integer> arrayComponentInfo = getArrayComponentInfo(rawType);
           return new ArrayFieldType(
               xtypeId,
-              isMonomorphic,
               nullable,
               trackingRef,
-              buildFieldType(resolver, null, GenericType.build(info.f0)),
-              info.f1);
+              buildFieldType(resolver, null, GenericType.build(arrayComponentInfo.f0)),
+              arrayComponentInfo.f1);
         }
-        return new ObjectFieldType(xtypeId, isMonomorphic, nullable, trackingRef);
+        return new ObjectFieldType(xtypeId, nullable, trackingRef);
       }
     }
   }
 
   public abstract static class FieldType implements Serializable {
     protected final int xtypeId;
-    protected final boolean isMonomorphic;
     protected final boolean nullable;
     protected final boolean trackingRef;
 
-    public FieldType(int xtypeId, boolean isMonomorphic, boolean nullable, boolean trackingRef) {
-      this.isMonomorphic = isMonomorphic;
+    public FieldType(int xtypeId, boolean nullable, boolean trackingRef) {
       this.trackingRef = trackingRef;
       this.nullable = nullable;
       this.xtypeId = xtypeId;
-    }
-
-    public boolean isMonomorphic() {
-      return isMonomorphic;
     }
 
     public boolean trackingRef() {
@@ -220,10 +219,12 @@ public class FieldTypes {
      * Convert a serializable field type to type token. If field type is a generic type with
      * generics, the generics will be built up recursively. The final leaf object type will be built
      * from class id or class stub.
-     *
-     * @see FinalObjectTypeStub
      */
     public abstract TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared);
+
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      return typeRef.getType().getTypeName();
+    }
 
     @Override
     public boolean equals(Object o) {
@@ -234,21 +235,21 @@ public class FieldTypes {
         return false;
       }
       FieldType fieldType = (FieldType) o;
-      return isMonomorphic == fieldType.isMonomorphic
-          && trackingRef == fieldType.trackingRef
-          && nullable == fieldType.nullable;
+      return trackingRef == fieldType.trackingRef && nullable == fieldType.nullable;
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(isMonomorphic, nullable, trackingRef);
+      return Objects.hash(nullable, trackingRef);
     }
 
     /** Write field type info. */
     public void write(MemoryBuffer buffer, boolean writeHeader) {
-      byte header = (byte) ((isMonomorphic ? 1 : 0) << 1);
-      // header of nested generic fields in collection/map will be written independently
-      header |= (byte) (trackingRef ? 1 : 0);
+      // Header format for nested types (writeHeader=true):
+      // - bit 0: trackingRef
+      // - bit 1: nullable
+      // - bits 2+: typeId
+      byte header = (byte) ((nullable ? 0b10 : 0) | (trackingRef ? 0b1 : 0));
       if (this instanceof RegisteredFieldType) {
         short classId = ((RegisteredFieldType) this).getClassId();
         buffer.writeVarUint32Small7(writeHeader ? ((5 + classId) << 2) | header : 5 + classId);
@@ -280,35 +281,38 @@ public class FieldTypes {
     }
 
     public static FieldType read(MemoryBuffer buffer, TypeResolver resolver) {
+      // Header format for nested types:
+      // - bit 0: trackingRef
+      // - bit 1: nullable
+      // - bits 2+: typeId
       int header = buffer.readVarUint32Small7();
-      boolean isMonomorphic = (header & 0b10) != 0;
       boolean trackingRef = (header & 0b1) != 0;
-      // For nested types (in collections/maps), nullable defaults to true
-      return read(buffer, resolver, isMonomorphic, true, trackingRef, header >>> 2);
+      boolean nullable = (header & 0b10) != 0;
+      int typeId = header >>> 2;
+      return read(buffer, resolver, nullable, trackingRef, typeId);
     }
 
     /** Read field type info. */
     public static FieldType read(
         MemoryBuffer buffer,
         TypeResolver resolver,
-        boolean isFinal,
         boolean nullable,
         boolean trackingRef,
         int typeId) {
       if (typeId == 0) {
-        return new ObjectFieldType(-1, isFinal, nullable, trackingRef);
+        return new ObjectFieldType(-1, nullable, trackingRef);
       } else if (typeId == 1) {
         return new MapFieldType(
-            -1, isFinal, nullable, trackingRef, read(buffer, resolver), read(buffer, resolver));
+            -1, nullable, trackingRef, read(buffer, resolver), read(buffer, resolver));
       } else if (typeId == 2) {
-        return new CollectionFieldType(-1, isFinal, nullable, trackingRef, read(buffer, resolver));
+        return new CollectionFieldType(-1, nullable, trackingRef, read(buffer, resolver));
       } else if (typeId == 3) {
         int dims = buffer.readVarUint32Small7();
-        return new ArrayFieldType(-1, isFinal, nullable, trackingRef, read(buffer, resolver), dims);
+        return new ArrayFieldType(-1, nullable, trackingRef, read(buffer, resolver), dims);
       } else if (typeId == 4) {
         return new EnumFieldType(nullable, -1);
       } else {
-        return new RegisteredFieldType(isFinal, nullable, trackingRef, (typeId - 5));
+        return new RegisteredFieldType(nullable, trackingRef, (typeId - 5));
       }
     }
 
@@ -358,25 +362,24 @@ public class FieldTypes {
       switch (xtypeId & 0xff) {
         case Types.LIST:
         case Types.SET:
-          return new CollectionFieldType(
-              xtypeId, true, nullable, trackingRef, xread(buffer, resolver));
+          return new CollectionFieldType(xtypeId, nullable, trackingRef, xread(buffer, resolver));
         case Types.MAP:
           return new MapFieldType(
-              xtypeId,
-              true,
-              nullable,
-              trackingRef,
-              xread(buffer, resolver),
-              xread(buffer, resolver));
+              xtypeId, nullable, trackingRef, xread(buffer, resolver), xread(buffer, resolver));
         case Types.ENUM:
         case Types.NAMED_ENUM:
           return new EnumFieldType(nullable, xtypeId);
         case Types.UNION:
           return new UnionFieldType(nullable, trackingRef);
         case Types.UNKNOWN:
-          return new ObjectFieldType(xtypeId, false, nullable, trackingRef);
+          return new ObjectFieldType(xtypeId, nullable, trackingRef);
         default:
           {
+            if (Types.isPrimitiveType(xtypeId)) {
+              // unsigned types share same class with signed numeric types, so unsigned types are
+              // not registered.
+              return new RegisteredFieldType(nullable, trackingRef, xtypeId);
+            }
             if (!Types.isUserDefinedType((byte) xtypeId)) {
               ClassInfo classInfo = resolver.getXtypeInfo(xtypeId);
               if (classInfo == null) {
@@ -384,13 +387,11 @@ public class FieldTypes {
                 // when remote sends a type ID that's not registered here.
                 // Fall back to ObjectFieldType to handle gracefully.
                 LOG.warn("Type {} not registered locally, treating as ObjectFieldType", xtypeId);
-                return new ObjectFieldType(xtypeId, false, nullable, trackingRef);
+                return new ObjectFieldType(xtypeId, nullable, trackingRef);
               }
-              Class<?> cls = classInfo.getCls();
-              return new RegisteredFieldType(
-                  resolver.isMonomorphic(cls), nullable, trackingRef, xtypeId);
+              return new RegisteredFieldType(nullable, trackingRef, xtypeId);
             } else {
-              return new ObjectFieldType(xtypeId, false, nullable, trackingRef);
+              return new ObjectFieldType(xtypeId, nullable, trackingRef);
             }
           }
       }
@@ -401,9 +402,9 @@ public class FieldTypes {
   public static class RegisteredFieldType extends FieldType {
     private final short classId;
 
-    public RegisteredFieldType(
-        boolean isFinal, boolean nullable, boolean trackingRef, int classId) {
-      super(classId, isFinal, nullable, trackingRef);
+    public RegisteredFieldType(boolean nullable, boolean trackingRef, int classId) {
+      super(classId, nullable, trackingRef);
+      Preconditions.checkArgument(classId > 0);
       this.classId = (short) classId;
     }
 
@@ -414,27 +415,31 @@ public class FieldTypes {
     @Override
     public TypeRef<?> toTypeToken(TypeResolver resolver, TypeRef<?> declared) {
       Class<?> cls;
-      if (resolver instanceof XtypeResolver) {
-        cls = ((XtypeResolver) resolver).getXtypeInfo(classId).getCls();
-        if (Types.isPrimitiveType(classId)) {
-          if (declared == null) {
-            // For primitive types, ensure we use the correct primitive/boxed form
-            // based on the nullable flag, not the declared type
-            if (!nullable) {
-              // nullable=false means the source was primitive, use primitive type
-              cls = TypeUtils.unwrap(cls);
-            } else {
-              // nullable=true means the source was boxed, use boxed type
-              cls = TypeUtils.wrap(cls);
-            }
+      if (Types.isPrimitiveType(classId)) {
+        cls = Types.getClassForTypeId(classId);
+        if (declared == null) {
+          // For primitive types, ensure we use the correct primitive/boxed form
+          // based on the nullable flag, not the declared type
+          if (!nullable) {
+            // nullable=false means the source was primitive, use primitive type
+            cls = TypeUtils.unwrap(cls);
           } else {
-            if (TypeUtils.unwrap(declared.getRawType()) == TypeUtils.unwrap(cls)) {
-              // we still need correct type, the `read/write` should use `nullable` of `Descriptor`
-              // for serialization
-              return declared;
-            }
+            // nullable=true means the source was boxed, use boxed type
+            cls = TypeUtils.wrap(cls);
+          }
+        } else {
+          if (TypeUtils.unwrap(declared.getRawType()) == TypeUtils.unwrap(cls)) {
+            // we still need correct type, the `read/write` should use `nullable` of `Descriptor`
+            // for serialization
+            cls = declared.getRawType();
           }
         }
+        return TypeRef.of(cls, new TypeExtMeta(classId, nullable, trackingRef));
+      }
+      if (resolver instanceof XtypeResolver) {
+        ClassInfo xtypeInfo = ((XtypeResolver) resolver).getXtypeInfo(classId);
+        Preconditions.checkNotNull(xtypeInfo);
+        cls = xtypeInfo.getCls();
       } else {
         cls = ((ClassResolver) resolver).getRegisteredClass(classId);
       }
@@ -442,7 +447,25 @@ public class FieldTypes {
         LOG.warn("Class {} not registered, take it as Struct type for deserialization.", classId);
         cls = NonexistentClass.NonexistentMetaShared.class;
       }
-      return TypeRef.of(cls, new TypeExtMeta(nullable, trackingRef));
+      return TypeRef.of(cls, new TypeExtMeta(classId, nullable, trackingRef));
+    }
+
+    @Override
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      // Some registered class may not be registered on peer class, we always use
+      // registered id to keep consistent order.
+      // Note that this is only used for fields sort in native mode.
+      // For xlang mode, we always sort fields by type id in
+      if (resolver instanceof ClassResolver) {
+        ClassResolver classResolver = (ClassResolver) resolver;
+        // Peer class may not register this class id, which will introduce inconsistent field order
+        if (classResolver.isInternalRegistered(classId)) {
+          return String.valueOf(classId);
+        } else {
+          return "Registered";
+        }
+      }
+      return String.valueOf(classId);
     }
 
     @Override
@@ -468,9 +491,7 @@ public class FieldTypes {
     @Override
     public String toString() {
       return "RegisteredFieldType{"
-          + "isMonomorphic="
-          + isMonomorphic()
-          + ", nullable="
+          + "nullable="
           + nullable()
           + ", trackingRef="
           + trackingRef()
@@ -492,12 +513,8 @@ public class FieldTypes {
     private final FieldType elementType;
 
     public CollectionFieldType(
-        int xtypeId,
-        boolean isFinal,
-        boolean nullable,
-        boolean trackingRef,
-        FieldType elementType) {
-      super(xtypeId, isFinal, nullable, trackingRef);
+        int xtypeId, boolean nullable, boolean trackingRef, FieldType elementType) {
+      super(xtypeId, nullable, trackingRef);
       this.elementType = elementType;
     }
 
@@ -527,10 +544,10 @@ public class FieldTypes {
       }
       TypeRef<?> elementType = this.elementType.toTypeToken(classResolver, declElementType);
       if (declared == null) {
-        return collectionOf(elementType, new TypeExtMeta(nullable, trackingRef));
+        return collectionOf(elementType, new TypeExtMeta(xtypeId, nullable, trackingRef));
       }
       TypeRef<? extends Collection<?>> collectionTypeRef =
-          collectionOf(declaredClass, elementType, new TypeExtMeta(nullable, trackingRef));
+          collectionOf(declaredClass, elementType, new TypeExtMeta(xtypeId, nullable, trackingRef));
       if (!declaredClass.isArray()) {
         if (declElementType.equals(elementType)) {
           return declared;
@@ -549,7 +566,7 @@ public class FieldTypes {
         TypeRef<?> typeRef =
             TypeRef.of(
                 Array.newInstance(arrayType.getRawType(), 1).getClass(),
-                typeRefs.get(i).getExtInfo());
+                typeRefs.get(i).getTypeExtMeta());
         typeRefs.set(i, typeRef);
       }
       return typeRefs.get(typeRefs.size() - 1);
@@ -580,8 +597,6 @@ public class FieldTypes {
       return "CollectionFieldType{"
           + "elementType="
           + elementType
-          + ", isFinal="
-          + isMonomorphic()
           + ", nullable="
           + nullable()
           + ", trackingRef="
@@ -604,12 +619,11 @@ public class FieldTypes {
 
     public MapFieldType(
         int xtypeId,
-        boolean isFinal,
         boolean nullable,
         boolean trackingRef,
         FieldType keyType,
         FieldType valueType) {
-      super(xtypeId, isFinal, nullable, trackingRef);
+      super(xtypeId, nullable, trackingRef);
       this.keyType = keyType;
       this.valueType = valueType;
     }
@@ -643,12 +657,12 @@ public class FieldTypes {
             declared.getRawType(),
             keyType.toTypeToken(classResolver, keyDecl),
             valueType.toTypeToken(classResolver, valueDecl),
-            new TypeExtMeta(nullable, trackingRef));
+            new TypeExtMeta(xtypeId, nullable, trackingRef));
       }
       return mapOf(
           keyType.toTypeToken(classResolver, keyDecl),
           valueType.toTypeToken(classResolver, valueDecl),
-          new TypeExtMeta(nullable, trackingRef));
+          new TypeExtMeta(xtypeId, nullable, trackingRef));
     }
 
     @Override
@@ -678,8 +692,6 @@ public class FieldTypes {
           + keyType
           + ", valueType="
           + valueType
-          + ", isFinal="
-          + isMonomorphic()
           + ", nullable="
           + nullable()
           + ", trackingRef="
@@ -690,7 +702,7 @@ public class FieldTypes {
 
   public static class EnumFieldType extends FieldType {
     private EnumFieldType(boolean nullable, int xtypeId) {
-      super(xtypeId, true, nullable, false);
+      super(xtypeId, nullable, false);
     }
 
     @Override
@@ -699,6 +711,11 @@ public class FieldTypes {
         return declared;
       }
       return TypeRef.of(NonexistentClass.NonexistentEnum.class);
+    }
+
+    @Override
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      return "Enum";
     }
 
     @Override
@@ -712,18 +729,12 @@ public class FieldTypes {
     private final int dimensions;
 
     public ArrayFieldType(
-        boolean isMonomorphic, boolean trackingRef, FieldType componentType, int dimensions) {
-      this(-1, isMonomorphic, true, trackingRef, componentType, dimensions);
-    }
-
-    public ArrayFieldType(
         int xtypeId,
-        boolean isMonomorphic,
         boolean nullable,
         boolean trackingRef,
         FieldType componentType,
         int dimensions) {
-      super(xtypeId, isMonomorphic, nullable, trackingRef);
+      super(xtypeId, nullable, trackingRef);
       this.componentType = componentType;
       this.dimensions = dimensions;
     }
@@ -737,16 +748,23 @@ public class FieldTypes {
       Class<?> componentRawType = componentTypeRef.getRawType();
       if (NonexistentClass.class.isAssignableFrom(componentRawType)) {
         return TypeRef.of(
-            // We embed `isMonomorphic` flag in ObjectArraySerializer, so this flag can be ignored
-            // here.
             NonexistentClass.getNonexistentClass(
                 componentType instanceof EnumFieldType, dimensions, true),
-            new TypeExtMeta(nullable, trackingRef));
+            new TypeExtMeta(xtypeId, nullable, trackingRef));
       } else {
         return TypeRef.of(
             Array.newInstance(componentRawType, new int[dimensions]).getClass(),
-            new TypeExtMeta(nullable, trackingRef));
+            new TypeExtMeta(xtypeId, nullable, trackingRef));
       }
+    }
+
+    @Override
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      // For native mode, this return same `Array` type to ensure consistent order even some array
+      // type
+      // is not exist on current deserialization process.
+      // For primitive/registered array, it goes to RegisteredFieldType.
+      return "Array";
     }
 
     public int getDimensions() {
@@ -784,8 +802,6 @@ public class FieldTypes {
           + componentType
           + ", dimensions="
           + dimensions
-          + ", isMonomorphic="
-          + isMonomorphic
           + ", nullable="
           + nullable
           + ", trackingRef="
@@ -797,15 +813,21 @@ public class FieldTypes {
   /** Class for field type which isn't registered and not collection/map type too. */
   public static class ObjectFieldType extends FieldType {
 
-    public ObjectFieldType(int xtypeId, boolean isFinal, boolean nullable, boolean trackingRef) {
-      super(xtypeId, isFinal, nullable, trackingRef);
+    public ObjectFieldType(int xtypeId, boolean nullable, boolean trackingRef) {
+      super(xtypeId, nullable, trackingRef);
     }
 
     @Override
     public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
-      return isMonomorphic()
-          ? TypeRef.of(FinalObjectTypeStub.class, new TypeExtMeta(nullable, trackingRef))
-          : TypeRef.of(Object.class, new TypeExtMeta(nullable, trackingRef));
+      Class<?> clz = declared == null ? Object.class : declared.getRawType();
+      return TypeRef.of(clz, new TypeExtMeta(xtypeId, nullable, trackingRef));
+    }
+
+    @Override
+    public String getTypeName(TypeResolver resolver, TypeRef<?> typeRef) {
+      // When fields not exist on deserializing struct, we can't know its actual field type,
+      // sort based on actual type name will incur inconsistent fields order
+      return "Object";
     }
 
     @Override
@@ -823,8 +845,6 @@ public class FieldTypes {
       return "ObjectFieldType{"
           + "xtypeId="
           + xtypeId
-          + ", isMonomorphic="
-          + isMonomorphic
           + ", nullable="
           + nullable
           + ", trackingRef="
@@ -833,11 +853,11 @@ public class FieldTypes {
     }
   }
 
-  /** Class for Union field type. Union types are always monomorphic and use declared type. */
+  /** Class for Union field type. Union types use declared type. */
   public static class UnionFieldType extends FieldType {
 
     public UnionFieldType(boolean nullable, boolean trackingRef) {
-      super(Types.UNION, true, nullable, trackingRef);
+      super(Types.UNION, nullable, trackingRef);
     }
 
     @Override
@@ -848,7 +868,7 @@ public class FieldTypes {
       }
       // Fallback to base Union class if no declared type
       return TypeRef.of(
-          org.apache.fory.type.union.Union.class, new TypeExtMeta(nullable, trackingRef));
+          org.apache.fory.type.union.Union.class, new TypeExtMeta(xtypeId, nullable, trackingRef));
     }
 
     @Override

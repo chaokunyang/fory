@@ -458,4 +458,19 @@ public class GoXlangTest extends XlangTestBase {
   public void testCircularRefCompatible(boolean enableCodegen) throws java.io.IOException {
     super.testCircularRefCompatible(enableCodegen);
   }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testUnsignedSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
+    super.testUnsignedSchemaConsistent(enableCodegen);
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testUnsignedSchemaConsistentSimple(boolean enableCodegen) throws java.io.IOException {
+    super.testUnsignedSchemaConsistentSimple(enableCodegen);
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testUnsignedSchemaCompatible(boolean enableCodegen) throws java.io.IOException {
+    super.testUnsignedSchemaCompatible(enableCodegen);
+  }
 }

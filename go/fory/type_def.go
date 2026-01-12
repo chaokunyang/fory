@@ -218,7 +218,7 @@ func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, 
 			}
 		} else {
 			// Known struct type - use structSerializer with fieldDefs
-			structSer := newStructSerializer(type_, "", td.fieldDefs)
+			structSer := newStructSerializerFromTypeDef(type_, "", td.fieldDefs)
 			// Eagerly initialize the struct serializer with pre-computed field metadata
 			if resolver != nil {
 				if err := structSer.initialize(resolver); err != nil {
@@ -417,7 +417,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		}
 
 		// Parse fory struct tag and check for ignore
-		foryTag := ParseForyTag(field)
+		foryTag := parseForyTag(field)
 		if foryTag.Ignore {
 			continue // skip ignored fields
 		}
@@ -431,6 +431,67 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to build field type for field %s: %w", fieldName, err)
 		}
+
+		// Apply encoding override from struct tags if set
+		// This works for both direct types and pointer-wrapped types
+		baseKind := field.Type.Kind()
+		// Handle pointer types - get the element kind
+		if baseKind == reflect.Ptr {
+			baseKind = field.Type.Elem().Kind()
+		}
+
+		// Check if we need to override the TypeID based on compress/encoding tags
+		var overrideTypeId TypeId = 0
+		switch baseKind {
+		case reflect.Uint32:
+			if foryTag.CompressSet {
+				if foryTag.Compress {
+					overrideTypeId = VAR_UINT32
+				} else {
+					overrideTypeId = UINT32
+				}
+			}
+		case reflect.Int32:
+			if foryTag.CompressSet {
+				if foryTag.Compress {
+					overrideTypeId = VARINT32
+				} else {
+					overrideTypeId = INT32
+				}
+			}
+		case reflect.Uint64:
+			if foryTag.EncodingSet {
+				switch foryTag.Encoding {
+				case "fixed":
+					overrideTypeId = UINT64
+				case "varint":
+					overrideTypeId = VAR_UINT64
+				case "tagged":
+					overrideTypeId = TAGGED_UINT64
+				default:
+					return nil, fmt.Errorf("field %s: invalid encoding value %q for uint64, must be 'fixed', 'varint', or 'tagged'", fieldName, foryTag.Encoding)
+				}
+			}
+		case reflect.Int64:
+			if foryTag.EncodingSet {
+				switch foryTag.Encoding {
+				case "fixed":
+					overrideTypeId = INT64
+				case "varint":
+					overrideTypeId = VARINT64
+				case "tagged":
+					overrideTypeId = TAGGED_INT64
+				default:
+					return nil, fmt.Errorf("field %s: invalid encoding value %q for int64, must be 'fixed', 'varint', or 'tagged'", fieldName, foryTag.Encoding)
+				}
+			}
+		}
+
+		// Apply the override if one was determined
+		if overrideTypeId != 0 {
+			ft = NewSimpleFieldType(overrideTypeId)
+		}
+
 		// Determine nullable based on mode:
 		// - In xlang mode: Per xlang spec, fields are NON-NULLABLE by default.
 		//   Only pointer types are nullable by default.
@@ -712,9 +773,9 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 		return TypeInfo{}, err
 	}
 
-	// For SET type, Go uses map[T]bool to represent sets
+	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
 	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(true))
+		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
 		setSerializer, serErr := f.GetTypeResolver().GetSetSerializer(setType)
 		if serErr != nil {
 			return TypeInfo{}, serErr
@@ -738,9 +799,9 @@ func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (T
 		return TypeInfo{}, err
 	}
 
-	// For SET type, Go uses map[T]bool to represent sets
+	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
 	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(true))
+		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
 		setSerializer, serErr := resolver.GetSetSerializer(setType)
 		if serErr != nil {
 			return TypeInfo{}, serErr
@@ -910,31 +971,32 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 	}
 
 	// Handle slice and array types BEFORE getTypeInfo to avoid anonymous type errors
-	// For fixed-size arrays with primitive elements, use primitive array type IDs (INT16_ARRAY, etc.)
-	// For slices and arrays with non-primitive elements, use collection format
+	// For primitive element types, use primitive array type IDs (INT16_ARRAY, etc.)
+	// For non-primitive elements, use collection format (LIST with element type)
 	if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
 		elemType := fieldType.Elem()
 
 		// Check if element is a primitive type that maps to a primitive array type ID
-		// Only fixed-size arrays use primitive array format; slices always use LIST
-		if fieldType.Kind() == reflect.Array {
-			switch elemType.Kind() {
-			case reflect.Int8:
-				return NewSimpleFieldType(INT8_ARRAY), nil
-			case reflect.Int16:
-				return NewSimpleFieldType(INT16_ARRAY), nil
-			case reflect.Int32:
-				return NewSimpleFieldType(INT32_ARRAY), nil
-			case reflect.Int64:
-				return NewSimpleFieldType(INT64_ARRAY), nil
-			case reflect.Float32:
-				return NewSimpleFieldType(FLOAT32_ARRAY), nil
-			case reflect.Float64:
-				return NewSimpleFieldType(FLOAT64_ARRAY), nil
-			}
+		// Both slices and fixed-size arrays with primitive elements use primitive array format
+		// This matches typeIdFromKind in field_info.go for consistent field sorting
+		switch elemType.Kind() {
+		case reflect.Bool:
+			return NewSimpleFieldType(BOOL_ARRAY), nil
+		case reflect.Int8:
+			return NewSimpleFieldType(INT8_ARRAY), nil
+		case reflect.Int16:
+			return NewSimpleFieldType(INT16_ARRAY), nil
+		case reflect.Int32:
+			return NewSimpleFieldType(INT32_ARRAY), nil
+		case reflect.Int64, reflect.Int:
+			return NewSimpleFieldType(INT64_ARRAY), nil
+		case reflect.Float32:
+			return NewSimpleFieldType(FLOAT32_ARRAY), nil
+		case reflect.Float64:
+			return NewSimpleFieldType(FLOAT64_ARRAY), nil
 		}
 
-		// For slices and non-primitive arrays, use collection format
+		// For non-primitive elements, use collection format (LIST with element type)
 		elemValue := reflect.Zero(elemType)
 		elementFieldType, err := buildFieldType(fory, elemValue)
 		if err != nil {
@@ -947,11 +1009,9 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 	// Handle map types BEFORE getTypeInfo to avoid anonymous type errors
 	if fieldType.Kind() == reflect.Map {
 		keyType := fieldType.Key()
-		valueType := fieldType.Elem()
 
-		// In Go xlang mode, map[T]bool is used to represent a Set<T>
-		// The key type becomes the element type of the set
-		if valueType.Kind() == reflect.Bool {
+		// fory.Set[T] is defined as map[T]struct{} (empty struct value type)
+		if isSetReflectType(fieldType) {
 			keyValue := reflect.Zero(keyType)
 			keyFieldType, err := buildFieldType(fory, keyValue)
 			if err != nil {
@@ -961,6 +1021,7 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		}
 
 		// Regular map type
+		valueType := fieldType.Elem()
 		keyValue := reflect.Zero(keyType)
 		valueValue := reflect.Zero(valueType)
 

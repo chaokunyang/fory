@@ -85,7 +85,7 @@ type Serializer interface {
 	// This method should ONLY be used by collection serializers for nested element deserialization.
 	// For general deserialization, use ReadFull instead.
 	// Errors are set on the context via ctx.SetError().
-	ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value)
+	ReadData(ctx *ReadContext, value reflect.Value)
 
 	// ReadWithTypeInfo deserializes with pre-read type information.
 	//
@@ -109,7 +109,7 @@ type Serializer interface {
 
 // ExtensionSerializer is a simplified interface for user-implemented extension serializers.
 // Users implement this interface to provide custom serialization logic for types
-// registered via RegisterExtensionTypeByName.
+// registered via RegisterNamedExtension.
 //
 // Unlike the full Serializer interface, ExtensionSerializer only requires implementing
 // the core data serialization logic - reference tracking, type info, and protocol
@@ -119,117 +119,26 @@ type Serializer interface {
 //
 //	type MyExtSerializer struct{}
 //
-//	func (s *MyExtSerializer) Write(buf *ByteBuffer, value interface{}) error {
-//	    myExt := value.(MyExt)
-//	    buf.WriteVarint32(myExt.Id)
-//	    return nil
+//	func (s *MyExtSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+//	    myExt := value.Interface().(MyExt)
+//	    ctx.Buffer().WriteVarint32(myExt.Id)
 //	}
 //
-//	func (s *MyExtSerializer) Read(buf *ByteBuffer) (interface{}, error) {
-//	    id := buf.ReadVarint32(err)
-//	    return MyExt{Id: id}, nil
+//	func (s *MyExtSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+//	    id := ctx.Buffer().ReadVarint32(ctx.Err())
+//	    value.Set(reflect.ValueOf(MyExt{Id: id}))
 //	}
 //
 //	// Register with custom serializer
-//	f.RegisterExtensionTypeByName(MyExt{}, "my_ext", &MyExtSerializer{})
+//	f.RegisterNamedExtension(MyExt{}, "my_ext", &MyExtSerializer{})
 type ExtensionSerializer interface {
-	// Write serializes the value's data to the buffer.
+	// WriteData serializes the value's data to the buffer.
 	// Only write the data fields - don't write ref flags or type info.
-	Write(buf *ByteBuffer, value interface{}) error
+	// Errors should be set on the context via ctx.SetError().
+	WriteData(ctx *WriteContext, value reflect.Value)
 
-	// Read deserializes the value's data from the buffer.
+	// ReadData deserializes the value's data from the buffer into the provided value.
 	// Only read the data fields - don't read ref flags or type info.
-	// Returns the deserialized value.
-	Read(buf *ByteBuffer) (interface{}, error)
-}
-
-// extensionSerializerAdapter wraps an ExtensionSerializer to implement the full Serializer interface.
-// This adapter handles reference tracking, type info writing/reading, and delegates the actual
-// data serialization to the user-provided ExtensionSerializer.
-type extensionSerializerAdapter struct {
-	type_      reflect.Type
-	typeTag    string
-	userSerial ExtensionSerializer
-}
-
-func (s *extensionSerializerAdapter) GetType() reflect.Type { return s.type_ }
-
-func (s *extensionSerializerAdapter) WriteData(ctx *WriteContext, value reflect.Value) {
-	// Delegate to user's serializer
-	if err := s.userSerial.Write(ctx.Buffer(), value.Interface()); err != nil {
-		ctx.SetError(FromError(err))
-	}
-}
-
-func (s *extensionSerializerAdapter) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
-	_ = hasGenerics // not used for extension serializers
-	buf := ctx.Buffer()
-	switch refMode {
-	case RefModeTracking:
-		refWritten, err := ctx.RefResolver().WriteRefOrNull(buf, value)
-		if err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
-		if refWritten {
-			return
-		}
-	case RefModeNullOnly:
-		if isNil(value) {
-			buf.WriteInt8(NullFlag)
-			return
-		}
-		buf.WriteInt8(NotNullValueFlag)
-	}
-	if writeType {
-		typeInfo, err := ctx.TypeResolver().getTypeInfo(value, true)
-		if err != nil {
-			ctx.SetError(FromError(err))
-			return
-		}
-		ctx.TypeResolver().WriteTypeInfo(buf, typeInfo, ctx.Err())
-	}
-	s.WriteData(ctx, value)
-}
-
-func (s *extensionSerializerAdapter) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
-	// Delegate to user's serializer
-	result, err := s.userSerial.Read(ctx.Buffer())
-	if err != nil {
-		ctx.SetError(FromError(err))
-		return
-	}
-	// Set the result into the value
-	value.Set(reflect.ValueOf(result))
-}
-
-func (s *extensionSerializerAdapter) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
-	_ = hasGenerics // not used for extension serializers
-	buf := ctx.Buffer()
-	ctxErr := ctx.Err()
-	switch refMode {
-	case RefModeTracking:
-		refID, refErr := ctx.RefResolver().TryPreserveRefId(buf)
-		if refErr != nil {
-			ctx.SetError(FromError(refErr))
-			return
-		}
-		if refID < int32(NotNullValueFlag) {
-			obj := ctx.RefResolver().GetReadObject(refID)
-			if obj.IsValid() {
-				value.Set(obj)
-			}
-			return
-		}
-	case RefModeNullOnly:
-		flag := buf.ReadInt8(ctxErr)
-		if flag == NullFlag {
-			return
-		}
-	}
-	s.ReadData(ctx, value.Type(), value)
-}
-
-func (s *extensionSerializerAdapter) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
-	s.Read(ctx, refMode, false, false, value)
+	// Errors should be set on the context via ctx.SetError().
+	ReadData(ctx *ReadContext, value reflect.Value)
 }

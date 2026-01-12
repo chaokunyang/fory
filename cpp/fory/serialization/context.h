@@ -200,6 +200,16 @@ public:
     buffer().WriteVarInt64(value);
   }
 
+  /// Write uint64_t value using tagged encoding to buffer.
+  FORY_ALWAYS_INLINE void write_tagged_uint64(uint64_t value) {
+    buffer().WriteTaggedUint64(value);
+  }
+
+  /// Write int64_t value using tagged encoding to buffer.
+  FORY_ALWAYS_INLINE void write_tagged_int64(int64_t value) {
+    buffer().WriteTaggedInt64(value);
+  }
+
   /// Write uint64_t value as varuint36small to buffer.
   /// This is the special variable-length encoding used for string headers.
   FORY_ALWAYS_INLINE void write_varuint36small(uint64_t value) {
@@ -497,6 +507,18 @@ public:
   /// Read int64_t value as zigzag varint from buffer. Sets error on failure.
   FORY_ALWAYS_INLINE int64_t read_varint64(Error &error) {
     return buffer().ReadVarInt64(error);
+  }
+
+  /// Read uint64_t value using tagged encoding from buffer. Sets error on
+  /// failure.
+  FORY_ALWAYS_INLINE uint64_t read_tagged_uint64(Error &error) {
+    return buffer().ReadTaggedUint64(error);
+  }
+
+  /// Read int64_t value using tagged encoding from buffer. Sets error on
+  /// failure.
+  FORY_ALWAYS_INLINE int64_t read_tagged_int64(Error &error) {
+    return buffer().ReadTaggedInt64(error);
   }
 
   /// Read uint64_t value as varuint36small from buffer. Sets error on failure.

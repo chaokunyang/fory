@@ -74,7 +74,7 @@ fn test_buffer() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
     let mut reader = Reader::new(bytes.as_slice());
-    assert_eq!(reader.read_u8().unwrap(), 1);
+    assert!(reader.read_bool().unwrap());
     assert_eq!(reader.read_i8().unwrap(), i8::MAX);
     assert_eq!(reader.read_i16().unwrap(), i16::MAX);
     assert_eq!(reader.read_i32().unwrap(), i32::MAX);
@@ -88,7 +88,7 @@ fn test_buffer() {
 
     let mut buffer = vec![];
     let mut writer = Writer::from_buffer(&mut buffer);
-    writer.write_u8(1);
+    writer.write_bool(true);
     writer.write_i8(i8::MAX);
     writer.write_i16(i16::MAX);
     writer.write_i32(i32::MAX);
@@ -1881,5 +1881,156 @@ fn test_circular_ref_compatible() {
     // Re-serialize and write back - serialize the Rc, not the dereferenced value
     // This ensures the Rc is registered before the RcWeak self-reference tries to reference it
     let new_bytes = fory.serialize(&obj).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+// ============================================================================
+// Unsigned Number Tests - Test unsigned integer serialization across languages
+// ============================================================================
+
+/// Test struct for unsigned numbers in SCHEMA_CONSISTENT mode.
+/// All fields use the same nullability as Java.
+/// Note: Rust supports u8, u16, u32, u64 natively. Different encodings (fixed, var, tagged)
+/// are handled via field attributes.
+/// Matches Java's UnsignedSchemaConsistent (type id 501)
+#[derive(ForyObject, Debug, PartialEq)]
+#[fory(debug)]
+struct UnsignedSchemaConsistent {
+    // Primitive unsigned fields (non-nullable, use Field suffix to avoid reserved keywords)
+    u8_field: u8,       // UINT8 - fixed 8-bit
+    u16_field: u16,     // UINT16 - fixed 16-bit
+    u32_var_field: u32, // VAR_UINT32 - variable-length (default)
+    #[fory(compress = false)]
+    u32_fixed_field: u32, // UINT32 - fixed 4-byte
+    u64_var_field: u64, // VAR_UINT64 - variable-length (default)
+    #[fory(encoding = "fixed")]
+    u64_fixed_field: u64, // UINT64 - fixed 8-byte
+    #[fory(encoding = "tagged")]
+    u64_tagged_field: u64, // TAGGED_UINT64
+
+    // Nullable unsigned fields (using Option)
+    #[fory(nullable = true)]
+    u8_nullable_field: Option<u8>,
+    #[fory(nullable = true)]
+    u16_nullable_field: Option<u16>,
+    #[fory(nullable = true)]
+    u32_var_nullable_field: Option<u32>,
+    #[fory(nullable = true, compress = false)]
+    u32_fixed_nullable_field: Option<u32>,
+    #[fory(nullable = true)]
+    u64_var_nullable_field: Option<u64>,
+    #[fory(nullable = true, encoding = "fixed")]
+    u64_fixed_nullable_field: Option<u64>,
+    #[fory(nullable = true, encoding = "tagged")]
+    u64_tagged_nullable_field: Option<u64>,
+}
+
+/// Test struct for unsigned numbers in COMPATIBLE mode.
+/// Group 1: Option types (nullable in Rust, non-nullable in Java)
+/// Group 2: Non-Option types with Field2 suffix (non-nullable in Rust, nullable in Java)
+/// Matches Java's UnsignedSchemaCompatible (type id 502)
+#[derive(ForyObject, Debug, PartialEq)]
+#[fory(debug)]
+struct UnsignedSchemaCompatible {
+    // Group 1: Nullable in Rust (Option), non-nullable in Java
+    #[fory(nullable = true)]
+    u8_field1: Option<u8>,
+    #[fory(nullable = true)]
+    u16_field1: Option<u16>,
+    #[fory(nullable = true)]
+    u32_var_field1: Option<u32>,
+    #[fory(nullable = true, compress = false)]
+    u32_fixed_field1: Option<u32>,
+    #[fory(nullable = true)]
+    u64_var_field1: Option<u64>,
+    #[fory(nullable = true, encoding = "fixed")]
+    u64_fixed_field1: Option<u64>,
+    #[fory(nullable = true, encoding = "tagged")]
+    u64_tagged_field1: Option<u64>,
+
+    // Group 2: Non-nullable in Rust, nullable in Java
+    u8_field2: u8,
+    u16_field2: u16,
+    u32_var_field2: u32,
+    #[fory(compress = false)]
+    u32_fixed_field2: u32,
+    u64_var_field2: u64,
+    #[fory(encoding = "fixed")]
+    u64_fixed_field2: u64,
+    #[fory(encoding = "tagged")]
+    u64_tagged_field2: u64,
+}
+
+/// Test unsigned numbers in SCHEMA_CONSISTENT mode.
+#[test]
+#[ignore]
+fn test_unsigned_schema_consistent() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(false).xlang(true);
+    fory.register::<UnsignedSchemaConsistent>(501).unwrap();
+
+    let local_obj = UnsignedSchemaConsistent {
+        // Primitive unsigned fields
+        u8_field: 200,
+        u16_field: 60000,
+        u32_var_field: 3000000000,
+        u32_fixed_field: 4000000000,
+        u64_var_field: 10000000000,
+        u64_fixed_field: 15000000000,
+        u64_tagged_field: 1000000000,
+
+        // Nullable unsigned fields with values
+        u8_nullable_field: Some(128),
+        u16_nullable_field: Some(40000),
+        u32_var_nullable_field: Some(2500000000),
+        u32_fixed_nullable_field: Some(3500000000),
+        u64_var_nullable_field: Some(8000000000),
+        u64_fixed_nullable_field: Some(12000000000),
+        u64_tagged_nullable_field: Some(500000000),
+    };
+
+    let remote_obj: UnsignedSchemaConsistent = fory.deserialize(&bytes).unwrap();
+    assert_eq!(remote_obj, local_obj);
+
+    let new_bytes = fory.serialize(&remote_obj).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+/// Test unsigned numbers in COMPATIBLE mode with inverted nullability.
+#[test]
+#[ignore]
+fn test_unsigned_schema_compatible() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::default().compatible(true).xlang(true);
+    fory.register::<UnsignedSchemaCompatible>(502).unwrap();
+
+    let local_obj = UnsignedSchemaCompatible {
+        // Group 1: Option fields (values from Java's non-nullable fields)
+        u8_field1: Some(200),
+        u16_field1: Some(60000),
+        u32_var_field1: Some(3000000000),
+        u32_fixed_field1: Some(4000000000),
+        u64_var_field1: Some(10000000000),
+        u64_fixed_field1: Some(15000000000),
+        u64_tagged_field1: Some(1000000000),
+
+        // Group 2: Non-nullable fields (values from Java's nullable fields)
+        u8_field2: 128,
+        u16_field2: 40000,
+        u32_var_field2: 2500000000,
+        u32_fixed_field2: 3500000000,
+        u64_var_field2: 8000000000,
+        u64_fixed_field2: 12000000000,
+        u64_tagged_field2: 500000000,
+    };
+
+    let remote_obj: UnsignedSchemaCompatible = fory.deserialize(&bytes).unwrap();
+    assert_eq!(remote_obj, local_obj);
+
+    let new_bytes = fory.serialize(&remote_obj).unwrap();
     fs::write(&data_file_path, new_bytes).unwrap();
 }

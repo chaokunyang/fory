@@ -41,8 +41,8 @@ from pyfory.serializer import (
     PyArraySerializer,
     Numpy1DArraySerializer,
 )
-from pyfory.type import TypeId
-from pyfory.util import lazy_import
+from pyfory.types import TypeId
+from pyfory.utils import lazy_import
 
 pa = lazy_import("pyarrow")
 

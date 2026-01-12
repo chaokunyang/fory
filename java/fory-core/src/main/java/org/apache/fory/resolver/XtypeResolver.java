@@ -265,6 +265,13 @@ public class XtypeResolver extends TypeResolver {
     if (serializer == null) {
       if (type.isEnum()) {
         classInfo.serializer = new EnumSerializer(fory, (Class<Enum>) type);
+      } else if (GraalvmSupport.isGraalBuildtime()) {
+        // For GraalVM build time, directly create the serializer to avoid
+        // issues with DeferedLazySerializer persistence in native image
+        Class<? extends Serializer> c =
+            classResolver.getObjectSerializerClass(
+                type, shareMeta, fory.getConfig().isCodeGenEnabled(), null);
+        classInfo.serializer = Serializers.newSerializer(fory, type, c);
       } else {
         AtomicBoolean updated = new AtomicBoolean(false);
         AtomicReference<Serializer> ref = new AtomicReference(null);
@@ -618,10 +625,19 @@ public class XtypeResolver extends TypeResolver {
 
   private void registerDefaultTypes() {
     registerDefaultTypes(Types.BOOL, Boolean.class, boolean.class, AtomicBoolean.class);
-    registerDefaultTypes(Types.INT8, Byte.class, byte.class);
-    registerDefaultTypes(Types.INT16, Short.class, short.class);
+    registerDefaultTypes(Types.UINT8, Byte.class, byte.class);
+    registerDefaultTypes(Types.UINT16, Short.class, short.class);
+    registerDefaultTypes(Types.UINT32, Integer.class, int.class, AtomicInteger.class);
+    registerDefaultTypes(Types.UINT64, Long.class, long.class, AtomicLong.class);
+    registerDefaultTypes(Types.TAGGED_UINT64, Long.class, long.class, AtomicLong.class);
     registerDefaultTypes(Types.INT32, Integer.class, int.class, AtomicInteger.class);
     registerDefaultTypes(Types.INT64, Long.class, long.class, AtomicLong.class);
+    registerDefaultTypes(Types.TAGGED_INT64, Long.class, long.class, AtomicLong.class);
+
+    registerDefaultTypes(Types.INT8, Byte.class, byte.class);
+    registerDefaultTypes(Types.INT16, Short.class, short.class);
+    registerDefaultTypes(Types.VARINT32, Integer.class, int.class, AtomicInteger.class);
+    registerDefaultTypes(Types.VARINT64, Long.class, long.class, AtomicLong.class);
     registerDefaultTypes(Types.FLOAT32, Float.class, float.class);
     registerDefaultTypes(Types.FLOAT64, Double.class, double.class);
     registerDefaultTypes(Types.STRING, String.class, StringBuilder.class, StringBuffer.class);
@@ -953,19 +969,17 @@ public class XtypeResolver extends TypeResolver {
             descriptors,
             descriptorsGroupedOrdered,
             descriptorUpdator,
-            fory.compressInt(),
-            fory.compressLong(),
+            getPrimitiveComparator(),
             (o1, o2) -> {
               int xtypeId = getXtypeId(o1.getRawType());
               int xtypeId2 = getXtypeId(o2.getRawType());
               if (xtypeId == xtypeId2) {
-                return DescriptorGrouper.getFieldSortKey(o1)
-                    .compareTo(DescriptorGrouper.getFieldSortKey(o2));
+                return getFieldSortKey(o1).compareTo(getFieldSortKey(o2));
               } else {
                 return xtypeId - xtypeId2;
               }
             })
-        .setOtherDescriptorComparator(Comparator.comparing(DescriptorGrouper::getFieldSortKey))
+        .setOtherDescriptorComparator(Comparator.comparing(TypeResolver::getFieldSortKey))
         .sort();
   }
 
@@ -1020,5 +1034,34 @@ public class XtypeResolver extends TypeResolver {
 
   private boolean isEnum(int internalTypeId) {
     return internalTypeId == Types.ENUM || internalTypeId == Types.NAMED_ENUM;
+  }
+
+  /**
+   * Ensure all serializers for registered classes are compiled at GraalVM build time. This method
+   * should be called after all classes are registered.
+   */
+  @Override
+  public void ensureSerializersCompiled() {
+    classInfoMap.forEach(
+        (cls, classInfo) -> {
+          GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+          if (classInfo.serializer != null) {
+            // Trigger serializer initialization and resolution for deferred serializers
+            if (classInfo.serializer instanceof DeferedLazyObjectSerializer) {
+              ((DeferedLazyObjectSerializer) classInfo.serializer).resolveSerializer();
+            } else {
+              classInfo.serializer.getClass();
+            }
+          }
+          // For enums at GraalVM build time, also handle anonymous enum value classes
+          if (cls.isEnum() && GraalvmSupport.isGraalBuildtime()) {
+            for (Object enumConstant : cls.getEnumConstants()) {
+              Class<?> enumValueClass = enumConstant.getClass();
+              if (enumValueClass != cls) {
+                getSerializer(enumValueClass);
+              }
+            }
+          }
+        });
   }
 }

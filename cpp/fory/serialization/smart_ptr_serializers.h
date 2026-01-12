@@ -133,6 +133,10 @@ template <typename T> struct Serializer<std::optional<T>> {
                                       bool read_type) {
     constexpr bool inner_requires_ref = requires_ref_metadata_v<T>;
 
+    std::cerr << "[optional::read] T=" << typeid(T).name()
+              << ", ref_mode=" << static_cast<int>(ref_mode)
+              << ", buffer_pos=" << ctx.buffer().reader_index() << std::endl;
+
     if (ref_mode == RefMode::None) {
       T value = Serializer<T>::read(ctx, RefMode::None, read_type);
       if (ctx.has_error()) {

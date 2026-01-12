@@ -89,7 +89,7 @@ func (s arraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType boo
 	s.WriteData(ctx, value)
 }
 
-func (s arraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s arraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := int(buf.ReadVaruint32(err))
@@ -103,7 +103,7 @@ func (s arraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, 
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s arraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -223,7 +223,7 @@ func (s *arrayConcreteValueSerializer) Write(ctx *WriteContext, refMode RefMode,
 	s.WriteData(ctx, value)
 }
 
-func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := int(buf.ReadVaruint32(err))
@@ -258,7 +258,7 @@ func (s *arrayConcreteValueSerializer) ReadData(ctx *ReadContext, type_ reflect.
 		if trackRefs {
 			s.elemSerializer.Read(ctx, RefModeTracking, false, false, elem)
 		} else {
-			s.elemSerializer.ReadData(ctx, elem.Type(), elem)
+			s.elemSerializer.ReadData(ctx, elem)
 		}
 		if ctx.HasError() {
 			return
@@ -271,7 +271,7 @@ func (s *arrayConcreteValueSerializer) Read(ctx *ReadContext, refMode RefMode, r
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 	if ctx.HasError() {
 		return
 	}
@@ -312,11 +312,11 @@ func (s arrayDynSerializer) Write(ctx *WriteContext, refMode RefMode, writeType 
 	s.WriteData(ctx, value)
 }
 
-func (s arrayDynSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s arrayDynSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// Create a temp slice to read into, then copy back to array
 	sliceType := reflect.SliceOf(value.Type().Elem())
 	tempSlice := reflect.MakeSlice(sliceType, value.Len(), value.Len())
-	s.sliceSerializer.ReadData(ctx, sliceType, tempSlice)
+	s.sliceSerializer.ReadData(ctx, tempSlice)
 	if ctx.HasError() {
 		return
 	}
@@ -335,7 +335,7 @@ func (s arrayDynSerializer) Read(ctx *ReadContext, refMode RefMode, readType boo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s arrayDynSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -367,7 +367,7 @@ func (s byteArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 	s.WriteData(ctx, value)
 }
 
-func (s byteArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s byteArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err)
@@ -388,7 +388,7 @@ func (s byteArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s byteArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {

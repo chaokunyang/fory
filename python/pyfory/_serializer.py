@@ -23,7 +23,7 @@ from abc import ABC
 
 from pyfory._fory import NOT_NULL_INT64_FLAG
 from pyfory.resolver import NOT_NULL_VALUE_FLAG, NULL_FLAG
-from pyfory.type import is_primitive_type
+from pyfory.types import is_primitive_type
 
 try:
     import numpy as np
@@ -94,6 +94,8 @@ class Int16Serializer(XlangCompatibleSerializer):
 
 
 class Int32Serializer(XlangCompatibleSerializer):
+    """Serializer for INT32/VARINT32 type - uses variable-length encoding for xlang compatibility."""
+
     def write(self, buffer, value):
         buffer.write_varint32(value)
 
@@ -101,7 +103,19 @@ class Int32Serializer(XlangCompatibleSerializer):
         return buffer.read_varint32()
 
 
+class FixedInt32Serializer(XlangCompatibleSerializer):
+    """Serializer for fixed-width 32-bit signed integer (INT32 type_id=4)."""
+
+    def write(self, buffer, value):
+        buffer.write_int32(value)
+
+    def read(self, buffer):
+        return buffer.read_int32()
+
+
 class Int64Serializer(Serializer):
+    """Serializer for INT64/VARINT64 type - uses variable-length encoding for xlang compatibility."""
+
     def xwrite(self, buffer, value):
         buffer.write_varint64(value)
 
@@ -113,6 +127,116 @@ class Int64Serializer(Serializer):
 
     def read(self, buffer):
         return buffer.read_varint64()
+
+
+class FixedInt64Serializer(XlangCompatibleSerializer):
+    """Serializer for fixed-width 64-bit signed integer (INT64 type_id=6)."""
+
+    def write(self, buffer, value):
+        buffer.write_int64(value)
+
+    def read(self, buffer):
+        return buffer.read_int64()
+
+
+class Varint32Serializer(XlangCompatibleSerializer):
+    """Serializer for VARINT32 type - variable-length encoded signed 32-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_varint32(value)
+
+    def read(self, buffer):
+        return buffer.read_varint32()
+
+
+class Varint64Serializer(XlangCompatibleSerializer):
+    """Serializer for VARINT64 type - variable-length encoded signed 64-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_varint64(value)
+
+    def read(self, buffer):
+        return buffer.read_varint64()
+
+
+class TaggedInt64Serializer(XlangCompatibleSerializer):
+    """Serializer for TAGGED_INT64 type - tagged encoding for signed 64-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_tagged_int64(value)
+
+    def read(self, buffer):
+        return buffer.read_tagged_int64()
+
+
+class Uint8Serializer(XlangCompatibleSerializer):
+    """Serializer for UINT8 type - unsigned 8-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_uint8(value)
+
+    def read(self, buffer):
+        return buffer.read_uint8()
+
+
+class Uint16Serializer(XlangCompatibleSerializer):
+    """Serializer for UINT16 type - unsigned 16-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_uint16(value)
+
+    def read(self, buffer):
+        return buffer.read_uint16()
+
+
+class Uint32Serializer(XlangCompatibleSerializer):
+    """Serializer for UINT32 type - fixed-size unsigned 32-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_uint32(value)
+
+    def read(self, buffer):
+        return buffer.read_uint32()
+
+
+class VarUint32Serializer(XlangCompatibleSerializer):
+    """Serializer for VAR_UINT32 type - variable-length encoded unsigned 32-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_varuint32(value)
+
+    def read(self, buffer):
+        return buffer.read_varuint32()
+
+
+class Uint64Serializer(XlangCompatibleSerializer):
+    """Serializer for UINT64 type - fixed-size unsigned 64-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_uint64(value)
+
+    def read(self, buffer):
+        return buffer.read_uint64()
+
+
+class VarUint64Serializer(XlangCompatibleSerializer):
+    """Serializer for VAR_UINT64 type - variable-length encoded unsigned 64-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_varuint64(value)
+
+    def read(self, buffer):
+        return buffer.read_varuint64()
+
+
+class TaggedUint64Serializer(XlangCompatibleSerializer):
+    """Serializer for TAGGED_UINT64 type - tagged encoding for unsigned 64-bit integer."""
+
+    def write(self, buffer, value):
+        buffer.write_tagged_uint64(value)
+
+    def read(self, buffer):
+        return buffer.read_tagged_uint64()
 
 
 class Float32Serializer(XlangCompatibleSerializer):

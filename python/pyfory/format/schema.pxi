@@ -51,18 +51,25 @@ class TypeId:
     INT16 = 3
     INT32 = 4
     INT64 = 6
-    FLOAT16 = 9
-    FLOAT32 = 10
-    FLOAT64 = 11
-    STRING = 12
-    STRUCT = 15
-    LIST = 21
-    MAP = 23
-    DURATION = 24
-    TIMESTAMP = 25
-    LOCAL_DATE = 26
-    DECIMAL = 27
-    BINARY = 28
+    UINT8 = 9
+    UINT16 = 10
+    UINT32 = 11
+    UINT64 = 13
+    FLOAT16 = 16
+    FLOAT32 = 17
+    FLOAT64 = 18
+    STRING = 19
+    LIST = 20
+    SET = 21
+    MAP = 22
+    STRUCT = 25
+    UNION = 31
+    NONE = 32
+    DURATION = 33
+    TIMESTAMP = 34
+    LOCAL_DATE = 35
+    DECIMAL = 36
+    BINARY = 37
 
 
 cdef class DataType:

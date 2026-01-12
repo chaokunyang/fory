@@ -94,12 +94,12 @@ func (s *ptrToValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeTy
 	s.WriteData(ctx, value)
 }
 
-func (s *ptrToValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s *ptrToValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// Check if value is already allocated (for circular reference handling)
 	var newVal reflect.Value
 	if value.IsNil() {
 		// Allocate new value
-		newVal = reflect.New(type_.Elem())
+		newVal = reflect.New(value.Type().Elem())
 		value.Set(newVal)
 	} else {
 		// Value already allocated (circular reference case)
@@ -110,7 +110,7 @@ func (s *ptrToValueSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, va
 	// This allows circular references to work correctly
 	ctx.RefResolver().Reference(value)
 
-	s.valueSerializer.ReadData(ctx, type_.Elem(), newVal.Elem())
+	s.valueSerializer.ReadData(ctx, newVal.Elem())
 }
 
 func (s *ptrToValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
@@ -157,13 +157,13 @@ func (s *ptrToValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 					value.Set(reflect.New(value.Type().Elem()))
 				}
 				ctx.RefResolver().Reference(value)
-				structSer.ReadData(ctx, value.Type().Elem(), value.Elem())
+				structSer.ReadData(ctx, value.Elem())
 				return
 			}
 		}
 	}
 
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s *ptrToValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -210,9 +210,9 @@ func (s *ptrToInterfaceSerializer) Write(ctx *WriteContext, refMode RefMode, wri
 	s.WriteData(ctx, value)
 }
 
-func (s *ptrToInterfaceSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s *ptrToInterfaceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// Create a new interface pointer
-	newVal := reflect.New(type_.Elem())
+	newVal := reflect.New(value.Type().Elem())
 
 	// Use ReadValue to handle the polymorphic interface value with ref tracking and type info
 	ctx.ReadValue(newVal.Elem(), RefModeTracking, true)
@@ -248,7 +248,7 @@ func (s *ptrToInterfaceSerializer) Read(ctx *ReadContext, refMode RefMode, readT
 		}
 	}
 
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s *ptrToInterfaceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {

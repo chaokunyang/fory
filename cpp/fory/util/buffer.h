@@ -441,6 +441,74 @@ public:
     return result;
   }
 
+  /// Read uint64_t using tagged encoding at given offset.
+  /// Similar to GetVarUint64 but for tagged encoding:
+  /// - If bit 0 is 0: read 4 bytes, return value >> 1
+  /// - If bit 0 is 1: read 1 byte flag + 8 bytes uint64
+  FORY_ALWAYS_INLINE uint64_t GetTaggedUint64(uint32_t offset,
+                                              uint32_t *readBytesLength) {
+    uint32_t i = *reinterpret_cast<const uint32_t *>(data_ + offset);
+    if ((i & 0b1) != 0b1) {
+      *readBytesLength = 4;
+      return static_cast<uint64_t>(i >> 1);
+    } else {
+      *readBytesLength = 9;
+      return *reinterpret_cast<const uint64_t *>(data_ + offset + 1);
+    }
+  }
+
+  /// Read int64_t using tagged encoding at given offset.
+  /// - If bit 0 is 0: read 4 bytes as signed int, return value >> 1
+  /// (arithmetic)
+  /// - If bit 0 is 1: read 1 byte flag + 8 bytes int64
+  FORY_ALWAYS_INLINE int64_t GetTaggedInt64(uint32_t offset,
+                                            uint32_t *readBytesLength) {
+    int32_t i = *reinterpret_cast<const int32_t *>(data_ + offset);
+    if ((i & 0b1) != 0b1) {
+      *readBytesLength = 4;
+      return static_cast<int64_t>(i >> 1); // Arithmetic shift for signed
+    } else {
+      *readBytesLength = 9;
+      return *reinterpret_cast<const int64_t *>(data_ + offset + 1);
+    }
+  }
+
+  /// Write uint64_t using tagged encoding at given offset. Returns bytes
+  /// written.
+  /// - If value is in [0, 0x7fffffff]: write 4 bytes (value << 1), return 4
+  /// - Otherwise: write 1 byte flag + 8 bytes uint64, return 9
+  FORY_ALWAYS_INLINE uint32_t PutTaggedUint64(uint32_t offset, uint64_t value) {
+    constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff; // INT32_MAX as u64
+    if (value <= MAX_SMALL_VALUE) {
+      *reinterpret_cast<int32_t *>(data_ + offset) = static_cast<int32_t>(value)
+                                                     << 1;
+      return 4;
+    } else {
+      data_[offset] = 0b1;
+      *reinterpret_cast<uint64_t *>(data_ + offset + 1) = value;
+      return 9;
+    }
+  }
+
+  /// Write int64_t using tagged encoding at given offset. Returns bytes
+  /// written.
+  /// - If value is in [-1073741824, 1073741823]: write 4 bytes (value << 1),
+  /// return 4
+  /// - Otherwise: write 1 byte flag + 8 bytes int64, return 9
+  FORY_ALWAYS_INLINE uint32_t PutTaggedInt64(uint32_t offset, int64_t value) {
+    constexpr int64_t MIN_SMALL_VALUE = -1073741824; // -2^30
+    constexpr int64_t MAX_SMALL_VALUE = 1073741823;  // 2^30 - 1
+    if (value >= MIN_SMALL_VALUE && value <= MAX_SMALL_VALUE) {
+      *reinterpret_cast<int32_t *>(data_ + offset) = static_cast<int32_t>(value)
+                                                     << 1;
+      return 4;
+    } else {
+      data_[offset] = 0b1;
+      *reinterpret_cast<int64_t *>(data_ + offset + 1) = value;
+      return 9;
+    }
+  }
+
   /// Write uint8_t value to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
   FORY_ALWAYS_INLINE void WriteUint8(uint8_t value) {
@@ -751,6 +819,85 @@ public:
   FORY_ALWAYS_INLINE int64_t ReadVarInt64(Error &error) {
     uint64_t raw = ReadVarUint64(error);
     return static_cast<int64_t>((raw >> 1) ^ (~(raw & 1) + 1));
+  }
+
+  /// Write int64_t value using tagged encoding.
+  /// If value is in [-1073741824, 1073741823], encode as 4 bytes: ((value as
+  /// i32) << 1). Otherwise write as 9 bytes: 0b1 | little-endian 8 bytes i64.
+  FORY_ALWAYS_INLINE void WriteTaggedInt64(int64_t value) {
+    constexpr int64_t HALF_MIN_INT_VALUE = -1073741824; // INT32_MIN / 2
+    constexpr int64_t HALF_MAX_INT_VALUE = 1073741823;  // INT32_MAX / 2
+    if (value >= HALF_MIN_INT_VALUE && value <= HALF_MAX_INT_VALUE) {
+      WriteInt32(static_cast<int32_t>(value) << 1);
+    } else {
+      Grow(9);
+      data_[writer_index_] = 0b1;
+      UnsafePut<int64_t>(writer_index_ + 1, value);
+      IncreaseWriterIndex(9);
+    }
+  }
+
+  /// Read int64_t value using tagged encoding. Sets error on bounds violation.
+  /// If bit 0 is 0, return value >> 1 (arithmetic shift).
+  /// Otherwise, skip flag byte and read 8 bytes as int64.
+  FORY_ALWAYS_INLINE int64_t ReadTaggedInt64(Error &error) {
+    if (FORY_PREDICT_FALSE(reader_index_ + 4 > size_)) {
+      error.set_buffer_out_of_bound(reader_index_, 4, size_);
+      return 0;
+    }
+    int32_t i = reinterpret_cast<const int32_t *>(data_ + reader_index_)[0];
+    if ((i & 0b1) != 0b1) {
+      reader_index_ += 4;
+      return static_cast<int64_t>(i >> 1); // arithmetic right shift
+    } else {
+      if (FORY_PREDICT_FALSE(reader_index_ + 9 > size_)) {
+        error.set_buffer_out_of_bound(reader_index_, 9, size_);
+        return 0;
+      }
+      int64_t value =
+          reinterpret_cast<const int64_t *>(data_ + reader_index_ + 1)[0];
+      reader_index_ += 9;
+      return value;
+    }
+  }
+
+  /// Write uint64_t value using tagged encoding.
+  /// If value is in [0, 0x7fffffff], encode as 4 bytes: ((value as u32) << 1).
+  /// Otherwise write as 9 bytes: 0b1 | little-endian 8 bytes u64.
+  FORY_ALWAYS_INLINE void WriteTaggedUint64(uint64_t value) {
+    constexpr uint64_t MAX_SMALL_VALUE = 0x7fffffff; // INT32_MAX as u64
+    if (value <= MAX_SMALL_VALUE) {
+      WriteInt32(static_cast<int32_t>(value) << 1);
+    } else {
+      Grow(9);
+      data_[writer_index_] = 0b1;
+      UnsafePut<uint64_t>(writer_index_ + 1, value);
+      IncreaseWriterIndex(9);
+    }
+  }
+
+  /// Read uint64_t value using tagged encoding. Sets error on bounds violation.
+  /// If bit 0 is 0, return value >> 1.
+  /// Otherwise, skip flag byte and read 8 bytes as uint64.
+  FORY_ALWAYS_INLINE uint64_t ReadTaggedUint64(Error &error) {
+    if (FORY_PREDICT_FALSE(reader_index_ + 4 > size_)) {
+      error.set_buffer_out_of_bound(reader_index_, 4, size_);
+      return 0;
+    }
+    uint32_t i = reinterpret_cast<const uint32_t *>(data_ + reader_index_)[0];
+    if ((i & 0b1) != 0b1) {
+      reader_index_ += 4;
+      return static_cast<uint64_t>(i >> 1);
+    } else {
+      if (FORY_PREDICT_FALSE(reader_index_ + 9 > size_)) {
+        error.set_buffer_out_of_bound(reader_index_, 9, size_);
+        return 0;
+      }
+      uint64_t value =
+          reinterpret_cast<const uint64_t *>(data_ + reader_index_ + 1)[0];
+      reader_index_ += 9;
+      return value;
+    }
   }
 
   /// Read uint64_t value as varuint36small. Sets error on bounds violation.

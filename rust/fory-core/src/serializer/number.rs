@@ -89,13 +89,13 @@ impl_num_serializer!(
     i32,
     Writer::write_varint32,
     Reader::read_varint32,
-    TypeId::INT32
+    TypeId::VARINT32
 );
 impl_num_serializer!(
     i64,
     Writer::write_varint64,
     Reader::read_varint64,
-    TypeId::INT64
+    TypeId::VARINT64
 );
 impl_num_serializer!(f32, Writer::write_f32, Reader::read_f32, TypeId::FLOAT32);
 impl_num_serializer!(f64, Writer::write_f64, Reader::read_f64, TypeId::FLOAT64);

@@ -29,6 +29,7 @@ import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
+import org.apache.fory.type.Types;
 
 /**
  * FieldInfo contains all necessary info of a field to execute serialization/deserialization logic.
@@ -89,9 +90,11 @@ public final class FieldInfo implements Serializable {
   Descriptor toDescriptor(TypeResolver resolver, Descriptor descriptor) {
     TypeRef<?> declared = descriptor != null ? descriptor.getTypeRef() : null;
     TypeRef<?> typeRef = fieldType.toTypeToken(resolver, declared);
-    String typeName = typeRef.getType().getTypeName();
+    String typeName = fieldType.getTypeName(resolver, typeRef);
     if (fieldType instanceof FieldTypes.RegisteredFieldType) {
-      typeName = String.valueOf(((FieldTypes.RegisteredFieldType) fieldType).getClassId());
+      if (!Types.isPrimitiveType(fieldType.xtypeId)) {
+        typeName = String.valueOf(((FieldTypes.RegisteredFieldType) fieldType).getClassId());
+      }
     }
     // Get nullable and trackingRef from remote FieldType - these are what the remote peer
     // used when serializing, so we must respect them when deserializing
@@ -112,6 +115,7 @@ public final class FieldInfo implements Serializable {
             .typeName(typeName)
             .trackingRef(remoteTrackingRef)
             .nullable(remoteNullable)
+            .typeRef(typeRef)
             .build();
       }
       DescriptorBuilder builder =

@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -580,6 +581,145 @@ struct CircularRefStruct {
 FORY_STRUCT(CircularRefStruct, name, selfRef);
 FORY_FIELD_TAGS(CircularRefStruct, (name, 0), (selfRef, 1, nullable, ref));
 
+// ============================================================================
+// Unsigned Number Test Types
+// ============================================================================
+
+// UnsignedSchemaConsistentSimple (type id 1)
+// A simple test struct for unsigned numbers with tagged encoding.
+struct UnsignedSchemaConsistentSimple {
+  uint64_t u64Tagged;                        // TAGGED_UINT64
+  std::optional<uint64_t> u64TaggedNullable; // TAGGED_UINT64, nullable
+
+  bool operator==(const UnsignedSchemaConsistentSimple &other) const {
+    return u64Tagged == other.u64Tagged &&
+           u64TaggedNullable == other.u64TaggedNullable;
+  }
+};
+FORY_STRUCT(UnsignedSchemaConsistentSimple, u64Tagged, u64TaggedNullable);
+FORY_FIELD_CONFIG(UnsignedSchemaConsistentSimple,
+                  (u64Tagged, fory::F(0).tagged()),
+                  (u64TaggedNullable, fory::F(1).nullable().tagged()));
+
+// UnsignedSchemaConsistent (type id 501)
+// Test struct for unsigned numbers in SCHEMA_CONSISTENT mode.
+// All fields use the same nullability as Java.
+// Note: C++ uses std::optional for nullable fields.
+struct UnsignedSchemaConsistent {
+  // Primitive unsigned fields (non-nullable)
+  uint8_t u8Field;
+  uint16_t u16Field;
+  uint32_t u32VarField;    // VAR_UINT32 - variable-length
+  uint32_t u32FixedField;  // UINT32 - fixed 4-byte
+  uint64_t u64VarField;    // VAR_UINT64 - variable-length
+  uint64_t u64FixedField;  // UINT64 - fixed 8-byte
+  uint64_t u64TaggedField; // TAGGED_UINT64
+
+  // Nullable unsigned fields (using std::optional)
+  std::optional<uint8_t> u8NullableField;
+  std::optional<uint16_t> u16NullableField;
+  std::optional<uint32_t> u32VarNullableField;
+  std::optional<uint32_t> u32FixedNullableField;
+  std::optional<uint64_t> u64VarNullableField;
+  std::optional<uint64_t> u64FixedNullableField;
+  std::optional<uint64_t> u64TaggedNullableField;
+
+  bool operator==(const UnsignedSchemaConsistent &other) const {
+    return u8Field == other.u8Field && u16Field == other.u16Field &&
+           u32VarField == other.u32VarField &&
+           u32FixedField == other.u32FixedField &&
+           u64VarField == other.u64VarField &&
+           u64FixedField == other.u64FixedField &&
+           u64TaggedField == other.u64TaggedField &&
+           u8NullableField == other.u8NullableField &&
+           u16NullableField == other.u16NullableField &&
+           u32VarNullableField == other.u32VarNullableField &&
+           u32FixedNullableField == other.u32FixedNullableField &&
+           u64VarNullableField == other.u64VarNullableField &&
+           u64FixedNullableField == other.u64FixedNullableField &&
+           u64TaggedNullableField == other.u64TaggedNullableField;
+  }
+};
+FORY_STRUCT(UnsignedSchemaConsistent, u8Field, u16Field, u32VarField,
+            u32FixedField, u64VarField, u64FixedField, u64TaggedField,
+            u8NullableField, u16NullableField, u32VarNullableField,
+            u32FixedNullableField, u64VarNullableField, u64FixedNullableField,
+            u64TaggedNullableField);
+// Use new FORY_FIELD_CONFIG with builder pattern for encoding specification
+FORY_FIELD_CONFIG(UnsignedSchemaConsistent, (u8Field, fory::F(0)),
+                  (u16Field, fory::F(1)), (u32VarField, fory::F(2).varint()),
+                  (u32FixedField, fory::F(3).fixed()),
+                  (u64VarField, fory::F(4).varint()),
+                  (u64FixedField, fory::F(5).fixed()),
+                  (u64TaggedField, fory::F(6).tagged()),
+                  (u8NullableField, fory::F(7).nullable()),
+                  (u16NullableField, fory::F(8).nullable()),
+                  (u32VarNullableField, fory::F(9).nullable().varint()),
+                  (u32FixedNullableField, fory::F(10).nullable().fixed()),
+                  (u64VarNullableField, fory::F(11).nullable().varint()),
+                  (u64FixedNullableField, fory::F(12).nullable().fixed()),
+                  (u64TaggedNullableField, fory::F(13).nullable().tagged()));
+
+// UnsignedSchemaCompatible (type id 502)
+// Test struct for unsigned numbers in COMPATIBLE mode.
+// Group 1: std::optional types (nullable in C++, non-nullable in Java)
+// Group 2: Non-optional types with Field2 suffix (non-nullable in C++, nullable
+// in Java)
+struct UnsignedSchemaCompatible {
+  // Group 1: Nullable in C++ (std::optional), non-nullable in Java
+  std::optional<uint8_t> u8Field1;
+  std::optional<uint16_t> u16Field1;
+  std::optional<uint32_t> u32VarField1;
+  std::optional<uint32_t> u32FixedField1;
+  std::optional<uint64_t> u64VarField1;
+  std::optional<uint64_t> u64FixedField1;
+  std::optional<uint64_t> u64TaggedField1;
+
+  // Group 2: Non-nullable in C++, nullable in Java
+  uint8_t u8Field2;
+  uint16_t u16Field2;
+  uint32_t u32VarField2;
+  uint32_t u32FixedField2;
+  uint64_t u64VarField2;
+  uint64_t u64FixedField2;
+  uint64_t u64TaggedField2;
+
+  bool operator==(const UnsignedSchemaCompatible &other) const {
+    return u8Field1 == other.u8Field1 && u16Field1 == other.u16Field1 &&
+           u32VarField1 == other.u32VarField1 &&
+           u32FixedField1 == other.u32FixedField1 &&
+           u64VarField1 == other.u64VarField1 &&
+           u64FixedField1 == other.u64FixedField1 &&
+           u64TaggedField1 == other.u64TaggedField1 &&
+           u8Field2 == other.u8Field2 && u16Field2 == other.u16Field2 &&
+           u32VarField2 == other.u32VarField2 &&
+           u32FixedField2 == other.u32FixedField2 &&
+           u64VarField2 == other.u64VarField2 &&
+           u64FixedField2 == other.u64FixedField2 &&
+           u64TaggedField2 == other.u64TaggedField2;
+  }
+};
+FORY_STRUCT(UnsignedSchemaCompatible, u8Field1, u16Field1, u32VarField1,
+            u32FixedField1, u64VarField1, u64FixedField1, u64TaggedField1,
+            u8Field2, u16Field2, u32VarField2, u32FixedField2, u64VarField2,
+            u64FixedField2, u64TaggedField2);
+// Use new FORY_FIELD_CONFIG with builder pattern for encoding specification
+// Group 1: nullable in C++ (std::optional), non-nullable in Java
+// Group 2: non-nullable in C++, nullable in Java
+FORY_FIELD_CONFIG(UnsignedSchemaCompatible, (u8Field1, fory::F(0).nullable()),
+                  (u16Field1, fory::F(1).nullable()),
+                  (u32VarField1, fory::F(2).nullable().varint()),
+                  (u32FixedField1, fory::F(3).nullable().fixed()),
+                  (u64VarField1, fory::F(4).nullable().varint()),
+                  (u64FixedField1, fory::F(5).nullable().fixed()),
+                  (u64TaggedField1, fory::F(6).nullable().tagged()),
+                  (u8Field2, fory::F(7)), (u16Field2, fory::F(8)),
+                  (u32VarField2, fory::F(9).varint()),
+                  (u32FixedField2, fory::F(10).fixed()),
+                  (u64VarField2, fory::F(11).varint()),
+                  (u64FixedField2, fory::F(12).fixed()),
+                  (u64TaggedField2, fory::F(13).tagged()));
+
 namespace fory {
 namespace serialization {
 
@@ -706,10 +846,16 @@ void AppendSerialized(Fory &fory, const T &value, std::vector<uint8_t> &out) {
 
 Fory BuildFory(bool compatible = true, bool xlang = true,
                bool check_struct_version = false, bool track_ref = false) {
+  // In Java xlang mode, checkClassVersion is automatically set to true for
+  // SCHEMA_CONSISTENT mode (compatible=false). Match this behavior in C++.
+  bool actual_check_version = check_struct_version;
+  if (xlang && !compatible) {
+    actual_check_version = true;
+  }
   return Fory::builder()
       .compatible(compatible)
       .xlang(xlang)
-      .check_struct_version(check_struct_version)
+      .check_struct_version(actual_check_version)
       .track_ref(track_ref)
       .build();
 }
@@ -760,6 +906,9 @@ void RunTestRefSchemaConsistent(const std::string &data_file);
 void RunTestRefCompatible(const std::string &data_file);
 void RunTestCircularRefSchemaConsistent(const std::string &data_file);
 void RunTestCircularRefCompatible(const std::string &data_file);
+void RunTestUnsignedSchemaConsistentSimple(const std::string &data_file);
+void RunTestUnsignedSchemaConsistent(const std::string &data_file);
+void RunTestUnsignedSchemaCompatible(const std::string &data_file);
 } // namespace
 
 int main(int argc, char **argv) {
@@ -859,6 +1008,12 @@ int main(int argc, char **argv) {
       RunTestCircularRefSchemaConsistent(data_file);
     } else if (case_name == "test_circular_ref_compatible") {
       RunTestCircularRefCompatible(data_file);
+    } else if (case_name == "test_unsigned_schema_consistent_simple") {
+      RunTestUnsignedSchemaConsistentSimple(data_file);
+    } else if (case_name == "test_unsigned_schema_consistent") {
+      RunTestUnsignedSchemaConsistent(data_file);
+    } else if (case_name == "test_unsigned_schema_compatible") {
+      RunTestUnsignedSchemaCompatible(data_file);
     } else {
       Fail("Unknown test case: " + case_name);
     }
@@ -2057,26 +2212,6 @@ void RunTestNullableFieldSchemaConsistentNotNull(const std::string &data_file) {
   EnsureOk(fory.register_struct<NullableComprehensiveSchemaConsistent>(401),
            "register NullableComprehensiveSchemaConsistent");
 
-  // Debug: Print sorted field order
-  {
-    const char *debug_env = std::getenv("ENABLE_FORY_DEBUG_OUTPUT");
-    if (debug_env && std::string(debug_env) == "1") {
-      using Helpers = fory::serialization::detail::CompileTimeFieldHelpers<
-          NullableComprehensiveSchemaConsistent>;
-      std::cerr << "[C++][fory-debug] NullableComprehensiveSchemaConsistent "
-                   "sorted field order:\n";
-      for (size_t i = 0; i < Helpers::FieldCount; ++i) {
-        size_t orig_idx = Helpers::sorted_indices[i];
-        std::cerr << "  [" << i << "] orig_idx=" << orig_idx
-                  << " name=" << Helpers::sorted_field_names[i]
-                  << " type_id=" << Helpers::type_ids[orig_idx]
-                  << " nullable=" << Helpers::nullable_flags[orig_idx]
-                  << " group=" << Helpers::group_rank(orig_idx) << "\n";
-      }
-      std::cerr << std::endl;
-    }
-  }
-
   NullableComprehensiveSchemaConsistent expected;
   // Base non-nullable primitive fields
   expected.byte_field = 1;
@@ -2445,6 +2580,226 @@ void RunTestCircularRefCompatible(const std::string &data_file) {
   if (obj->selfRef.get() != obj.get()) {
     Fail("CircularRefStruct: selfRef should point to same object (circular "
          "reference)");
+  }
+
+  // Re-serialize and write back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, obj, out);
+  WriteFile(data_file, out);
+}
+
+// ============================================================================
+// Unsigned Number Tests
+// ============================================================================
+
+void RunTestUnsignedSchemaConsistentSimple(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  std::cerr << "[DEBUG] test_unsigned_schema_consistent_simple: read "
+            << bytes.size() << " bytes from " << data_file << std::endl;
+  // Print first 32 bytes as hex
+  std::cerr << "[DEBUG] First bytes: ";
+  for (size_t i = 0; i < std::min(bytes.size(), size_t(32)); ++i) {
+    std::cerr << std::hex << std::setw(2) << std::setfill('0')
+              << static_cast<int>(bytes[i]) << " ";
+  }
+  std::cerr << std::dec << std::endl;
+
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true
+  auto fory = BuildFory(false, true, false, false);
+  EnsureOk(fory.register_struct<UnsignedSchemaConsistentSimple>(1),
+           "register UnsignedSchemaConsistentSimple");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto obj = ReadNext<UnsignedSchemaConsistentSimple>(fory, buffer);
+  std::cerr << "[DEBUG] Deserialized: u64Tagged=" << obj.u64Tagged
+            << ", u64TaggedNullable="
+            << (obj.u64TaggedNullable.has_value()
+                    ? std::to_string(obj.u64TaggedNullable.value())
+                    : "null")
+            << std::endl;
+
+  // Verify fields
+  if (obj.u64Tagged != 1000000000) {
+    Fail(
+        "UnsignedSchemaConsistentSimple: u64Tagged should be 1000000000, got " +
+        std::to_string(obj.u64Tagged));
+  }
+  if (!obj.u64TaggedNullable.has_value() ||
+      obj.u64TaggedNullable.value() != 500000000) {
+    Fail("UnsignedSchemaConsistentSimple: u64TaggedNullable should be "
+         "500000000");
+  }
+
+  // Re-serialize and write back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, obj, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestUnsignedSchemaConsistent(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // SCHEMA_CONSISTENT mode: compatible=false, xlang=true
+  auto fory = BuildFory(false, true, false, false);
+  EnsureOk(fory.register_struct<UnsignedSchemaConsistent>(501),
+           "register UnsignedSchemaConsistent");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto obj = ReadNext<UnsignedSchemaConsistent>(fory, buffer);
+
+  // Verify primitive unsigned fields
+  if (obj.u8Field != 200) {
+    Fail("UnsignedSchemaConsistent: u8Field should be 200, got " +
+         std::to_string(obj.u8Field));
+  }
+  if (obj.u16Field != 60000) {
+    Fail("UnsignedSchemaConsistent: u16Field should be 60000, got " +
+         std::to_string(obj.u16Field));
+  }
+  if (obj.u32VarField != 3000000000) {
+    Fail("UnsignedSchemaConsistent: u32VarField should be 3000000000, got " +
+         std::to_string(obj.u32VarField));
+  }
+  if (obj.u32FixedField != 4000000000) {
+    Fail("UnsignedSchemaConsistent: u32FixedField should be 4000000000, got " +
+         std::to_string(obj.u32FixedField));
+  }
+  if (obj.u64VarField != 10000000000) {
+    Fail("UnsignedSchemaConsistent: u64VarField should be 10000000000, got " +
+         std::to_string(obj.u64VarField));
+  }
+  if (obj.u64FixedField != 15000000000) {
+    Fail("UnsignedSchemaConsistent: u64FixedField should be 15000000000, got " +
+         std::to_string(obj.u64FixedField));
+  }
+  if (obj.u64TaggedField != 1000000000) {
+    Fail("UnsignedSchemaConsistent: u64TaggedField should be 1000000000, got " +
+         std::to_string(obj.u64TaggedField));
+  }
+
+  // Verify nullable unsigned fields
+  if (!obj.u8NullableField.has_value() || obj.u8NullableField.value() != 128) {
+    Fail("UnsignedSchemaConsistent: u8NullableField should be 128");
+  }
+  if (!obj.u16NullableField.has_value() ||
+      obj.u16NullableField.value() != 40000) {
+    Fail("UnsignedSchemaConsistent: u16NullableField should be 40000");
+  }
+  if (!obj.u32VarNullableField.has_value() ||
+      obj.u32VarNullableField.value() != 2500000000) {
+    Fail("UnsignedSchemaConsistent: u32VarNullableField should be 2500000000");
+  }
+  if (!obj.u32FixedNullableField.has_value() ||
+      obj.u32FixedNullableField.value() != 3500000000) {
+    Fail(
+        "UnsignedSchemaConsistent: u32FixedNullableField should be 3500000000");
+  }
+  if (!obj.u64VarNullableField.has_value() ||
+      obj.u64VarNullableField.value() != 8000000000) {
+    Fail("UnsignedSchemaConsistent: u64VarNullableField should be 8000000000");
+  }
+  if (!obj.u64FixedNullableField.has_value() ||
+      obj.u64FixedNullableField.value() != 12000000000) {
+    Fail("UnsignedSchemaConsistent: u64FixedNullableField should be "
+         "12000000000");
+  }
+  if (!obj.u64TaggedNullableField.has_value() ||
+      obj.u64TaggedNullableField.value() != 500000000) {
+    Fail(
+        "UnsignedSchemaConsistent: u64TaggedNullableField should be 500000000");
+  }
+
+  // Debug: print field values before re-serialization
+  std::cerr << "[DEBUG] Before re-serialization:\n";
+  std::cerr << "  u8Field=" << static_cast<int>(obj.u8Field)
+            << " u16Field=" << obj.u16Field
+            << " u32VarField=" << obj.u32VarField
+            << " u32FixedField=" << obj.u32FixedField << "\n";
+  std::cerr << "  u64VarField=" << obj.u64VarField
+            << " u64FixedField=" << obj.u64FixedField
+            << " u64TaggedField=" << obj.u64TaggedField << "\n";
+
+  // Re-serialize and write back
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, obj, out);
+
+  // Debug: print output bytes for inspection
+  std::cerr << "[DEBUG] Serialized " << out.size() << " bytes:\n";
+  std::cerr << "[DEBUG] Hex: ";
+  for (size_t i = 0; i < std::min(out.size(), size_t(80)); ++i) {
+    std::cerr << std::hex << std::setw(2) << std::setfill('0')
+              << static_cast<int>(out[i]);
+  }
+  std::cerr << std::dec << "\n";
+
+  WriteFile(data_file, out);
+}
+
+void RunTestUnsignedSchemaCompatible(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  // COMPATIBLE mode: compatible=true, xlang=true
+  auto fory = BuildFory(true, true, false, false);
+  EnsureOk(fory.register_struct<UnsignedSchemaCompatible>(502),
+           "register UnsignedSchemaCompatible");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto obj = ReadNext<UnsignedSchemaCompatible>(fory, buffer);
+
+  // Verify Group 1: Nullable fields (values from Java's non-nullable fields)
+  if (!obj.u8Field1.has_value() || obj.u8Field1.value() != 200) {
+    Fail("UnsignedSchemaCompatible: u8Field1 should be 200");
+  }
+  if (!obj.u16Field1.has_value() || obj.u16Field1.value() != 60000) {
+    Fail("UnsignedSchemaCompatible: u16Field1 should be 60000");
+  }
+  if (!obj.u32VarField1.has_value() || obj.u32VarField1.value() != 3000000000) {
+    Fail("UnsignedSchemaCompatible: u32VarField1 should be 3000000000");
+  }
+  if (!obj.u32FixedField1.has_value() ||
+      obj.u32FixedField1.value() != 4000000000) {
+    Fail("UnsignedSchemaCompatible: u32FixedField1 should be 4000000000");
+  }
+  if (!obj.u64VarField1.has_value() ||
+      obj.u64VarField1.value() != 10000000000) {
+    Fail("UnsignedSchemaCompatible: u64VarField1 should be 10000000000");
+  }
+  if (!obj.u64FixedField1.has_value() ||
+      obj.u64FixedField1.value() != 15000000000) {
+    Fail("UnsignedSchemaCompatible: u64FixedField1 should be 15000000000");
+  }
+  if (!obj.u64TaggedField1.has_value() ||
+      obj.u64TaggedField1.value() != 1000000000) {
+    Fail("UnsignedSchemaCompatible: u64TaggedField1 should be 1000000000");
+  }
+
+  // Verify Group 2: Non-nullable fields (values from Java's nullable fields)
+  if (obj.u8Field2 != 128) {
+    Fail("UnsignedSchemaCompatible: u8Field2 should be 128, got " +
+         std::to_string(obj.u8Field2));
+  }
+  if (obj.u16Field2 != 40000) {
+    Fail("UnsignedSchemaCompatible: u16Field2 should be 40000, got " +
+         std::to_string(obj.u16Field2));
+  }
+  if (obj.u32VarField2 != 2500000000) {
+    Fail("UnsignedSchemaCompatible: u32VarField2 should be 2500000000, got " +
+         std::to_string(obj.u32VarField2));
+  }
+  if (obj.u32FixedField2 != 3500000000) {
+    Fail("UnsignedSchemaCompatible: u32FixedField2 should be 3500000000, got " +
+         std::to_string(obj.u32FixedField2));
+  }
+  if (obj.u64VarField2 != 8000000000) {
+    Fail("UnsignedSchemaCompatible: u64VarField2 should be 8000000000, got " +
+         std::to_string(obj.u64VarField2));
+  }
+  if (obj.u64FixedField2 != 12000000000) {
+    Fail(
+        "UnsignedSchemaCompatible: u64FixedField2 should be 12000000000, got " +
+        std::to_string(obj.u64FixedField2));
+  }
+  if (obj.u64TaggedField2 != 500000000) {
+    Fail("UnsignedSchemaCompatible: u64TaggedField2 should be 500000000, got " +
+         std::to_string(obj.u64TaggedField2));
   }
 
   // Re-serialize and write back

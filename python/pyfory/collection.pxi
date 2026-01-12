@@ -310,7 +310,7 @@ cdef class ListSerializer(CollectionSerializer):
                 if type_id == <int32_t>TypeId.STRING:
                     self._read_string(buffer, len_, list_)
                     return list_
-                elif type_id == <int32_t>TypeId.VAR_INT64:
+                elif type_id == <int32_t>TypeId.VARINT64:
                     self._read_int(buffer, len_, list_)
                     return list_
                 elif type_id == <int32_t>TypeId.BOOL:
@@ -387,7 +387,7 @@ cdef inline get_next_element(
     # error.
     if type_id == <int32_t>TypeId.STRING:
         return buffer.read_string()
-    elif type_id == <int32_t>TypeId.VAR_INT32:
+    elif type_id == <int32_t>TypeId.VARINT32:
         return buffer.read_varint64()
     elif type_id == <int32_t>TypeId.BOOL:
         return buffer.read_bool()
@@ -428,7 +428,7 @@ cdef class TupleSerializer(CollectionSerializer):
                 if type_id == <int32_t>TypeId.STRING:
                     self._read_string(buffer, len_, tuple_)
                     return tuple_
-                if type_id == <int32_t>TypeId.VAR_INT64:
+                if type_id == <int32_t>TypeId.VARINT64:
                     self._read_int(buffer, len_, tuple_)
                     return tuple_
                 if type_id == <int32_t>TypeId.BOOL:
@@ -521,7 +521,7 @@ cdef class SetSerializer(CollectionSerializer):
                 if type_id == <int32_t>TypeId.STRING:
                     self._read_string(buffer, len_, instance)
                     return instance
-                if type_id == <int32_t>TypeId.VAR_INT64:
+                if type_id == <int32_t>TypeId.VARINT64:
                     self._read_int(buffer, len_, instance)
                     return instance
                 if type_id == <int32_t>TypeId.BOOL:
@@ -551,7 +551,7 @@ cdef class SetSerializer(CollectionSerializer):
                     type_id = typeinfo.type_id
                     if type_id == <int32_t>TypeId.STRING:
                         instance.add(buffer.read_string())
-                    elif type_id == <int32_t>TypeId.VAR_INT64:
+                    elif type_id == <int32_t>TypeId.VARINT64:
                         instance.add(buffer.read_varint64())
                     elif type_id == <int32_t>TypeId.BOOL:
                         instance.add(buffer.read_bool())
@@ -571,7 +571,7 @@ cdef class SetSerializer(CollectionSerializer):
                     type_id = typeinfo.type_id
                     if type_id == <int32_t>TypeId.STRING:
                         instance.add(buffer.read_string())
-                    elif type_id == <int32_t>TypeId.VAR_INT64:
+                    elif type_id == <int32_t>TypeId.VARINT64:
                         instance.add(buffer.read_varint64())
                     elif type_id == <int32_t>TypeId.BOOL:
                         instance.add(buffer.read_bool())
@@ -593,7 +593,7 @@ cdef class SetSerializer(CollectionSerializer):
                         type_id = typeinfo.type_id
                         if type_id == <int32_t>TypeId.STRING:
                             instance.add(buffer.read_string())
-                        elif type_id == <int32_t>TypeId.VAR_INT64:
+                        elif type_id == <int32_t>TypeId.VARINT64:
                             instance.add(buffer.read_varint64())
                         elif type_id == <int32_t>TypeId.BOOL:
                             instance.add(buffer.read_bool())

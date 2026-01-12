@@ -180,31 +180,31 @@ func (c *ReadContext) ReadTypeId() TypeId {
 	return TypeId(c.buffer.ReadVaruint32Small7(c.Err()))
 }
 
-// readFast reads a value using fast path based on StaticTypeId
-func (c *ReadContext) readFast(ptr unsafe.Pointer, ct StaticTypeId) {
+// readFast reads a value using fast path based on DispatchId
+func (c *ReadContext) readFast(ptr unsafe.Pointer, ct DispatchId) {
 	err := c.Err()
 	switch ct {
-	case ConcreteTypeBool:
+	case PrimitiveBoolDispatchId:
 		*(*bool)(ptr) = c.buffer.ReadBool(err)
-	case ConcreteTypeInt8:
+	case PrimitiveInt8DispatchId:
 		*(*int8)(ptr) = int8(c.buffer.ReadByte(err))
-	case ConcreteTypeInt16:
+	case PrimitiveInt16DispatchId:
 		*(*int16)(ptr) = c.buffer.ReadInt16(err)
-	case ConcreteTypeInt32:
+	case PrimitiveInt32DispatchId:
 		*(*int32)(ptr) = c.buffer.ReadVarint32(err)
-	case ConcreteTypeInt:
+	case PrimitiveIntDispatchId:
 		if strconv.IntSize == 64 {
 			*(*int)(ptr) = int(c.buffer.ReadVarint64(err))
 		} else {
 			*(*int)(ptr) = int(c.buffer.ReadVarint32(err))
 		}
-	case ConcreteTypeInt64:
+	case PrimitiveInt64DispatchId:
 		*(*int64)(ptr) = c.buffer.ReadVarint64(err)
-	case ConcreteTypeFloat32:
+	case PrimitiveFloat32DispatchId:
 		*(*float32)(ptr) = c.buffer.ReadFloat32(err)
-	case ConcreteTypeFloat64:
+	case PrimitiveFloat64DispatchId:
 		*(*float64)(ptr) = c.buffer.ReadFloat64(err)
-	case ConcreteTypeString:
+	case StringDispatchId:
 		*(*string)(ptr) = readString(c.buffer, err)
 	}
 }
@@ -612,7 +612,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 		if actualType == nil {
 			// Unknown type - skip the data using the serializer (skipStructSerializer)
 			if typeInfo.Serializer != nil {
-				typeInfo.Serializer.ReadData(c, nil, reflect.Value{})
+				typeInfo.Serializer.ReadData(c, reflect.Value{})
 			}
 			// Leave interface value as nil for unknown types
 			return
@@ -659,7 +659,7 @@ func (c *ReadContext) ReadValue(value reflect.Value, refMode RefMode, readType b
 			readTarget = newValue
 		}
 
-		typeInfo.Serializer.ReadData(c, actualType, readTarget)
+		typeInfo.Serializer.ReadData(c, readTarget)
 		if c.HasError() {
 			return
 		}
@@ -769,7 +769,7 @@ func (c *ReadContext) ReadStruct(value reflect.Value) {
 	}
 
 	// Read struct data directly
-	serializer.ReadData(c, structType, readTarget)
+	serializer.ReadData(c, readTarget)
 }
 
 // ReadInto reads a value using a specific serializer with optional ref/type info
@@ -833,7 +833,7 @@ func (c *ReadContext) ReadArrayValue(target reflect.Value, refMode RefMode, read
 	tempSlice.Set(reflect.MakeSlice(sliceType, target.Len(), target.Len()))
 
 	// Use ReadData to read slice data (ref/type already handled)
-	serializer.ReadData(c, sliceType, tempSlice)
+	serializer.ReadData(c, tempSlice)
 	if c.HasError() {
 		return
 	}

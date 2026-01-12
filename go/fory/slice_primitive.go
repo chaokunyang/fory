@@ -57,14 +57,14 @@ func (s byteSliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s byteSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s byteSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s byteSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := buf.ReadLength(ctxErr)
@@ -118,14 +118,14 @@ func (s boolSliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s boolSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s boolSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s boolSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]bool)(value.Addr().UnsafePointer()) = ReadBoolSlice(ctx.Buffer(), ctx.Err())
 }
 
@@ -152,14 +152,14 @@ func (s int8SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s int8SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s int8SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s int8SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]int8)(value.Addr().UnsafePointer()) = ReadInt8Slice(ctx.Buffer(), ctx.Err())
 }
 
@@ -186,14 +186,14 @@ func (s int16SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s int16SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s int16SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s int16SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]int16)(value.Addr().UnsafePointer()) = ReadInt16Slice(ctx.Buffer(), ctx.Err())
 }
 
@@ -220,14 +220,14 @@ func (s int32SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s int32SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s int32SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s int32SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]int32)(value.Addr().UnsafePointer()) = ReadInt32Slice(ctx.Buffer(), ctx.Err())
 }
 
@@ -254,14 +254,14 @@ func (s int64SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s int64SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s int64SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s int64SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]int64)(value.Addr().UnsafePointer()) = ReadInt64Slice(ctx.Buffer(), ctx.Err())
 }
 
@@ -288,14 +288,14 @@ func (s float32SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s float32SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s float32SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s float32SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]float32)(value.Addr().UnsafePointer()) = ReadFloat32Slice(ctx.Buffer(), ctx.Err())
 }
 
@@ -322,14 +322,14 @@ func (s float64SliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s float64SliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s float64SliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s float64SliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]float64)(value.Addr().UnsafePointer()) = ReadFloat64Slice(ctx.Buffer(), ctx.Err())
 }
 
@@ -360,14 +360,14 @@ func (s intSliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType boo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s intSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s intSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s intSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]int)(value.Addr().UnsafePointer()) = ReadIntSlice(ctx.Buffer(), ctx.Err())
 }
 
@@ -400,14 +400,14 @@ func (s uintSliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s uintSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s uintSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s uintSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	*(*[]uint)(value.Addr().UnsafePointer()) = ReadUintSlice(ctx.Buffer(), ctx.Err())
 }
 
@@ -459,14 +459,14 @@ func (s stringSliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, nil, value)
+	s.ReadData(ctx, value)
 }
 
 func (s stringSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
 
-func (s stringSliceSerializer) ReadData(ctx *ReadContext, _ reflect.Type, value reflect.Value) {
+func (s stringSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	length := int(buf.ReadVaruint32(ctxErr))

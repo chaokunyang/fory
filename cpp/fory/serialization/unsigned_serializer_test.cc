@@ -246,25 +246,28 @@ TEST(UnsignedSerializerTest, BoundaryValues) {
 // ============================================================================
 
 TEST(UnsignedSerializerTest, UnsignedTypeIdsAreDistinct) {
-  // Verify that unsigned types use distinct TypeIds (U8, U16, U32, U64)
+  // Verify that unsigned types use distinct TypeIds
+  // uint8_t and uint16_t use fixed encoding (UINT8, UINT16)
+  // uint32_t and uint64_t use variable encoding (VAR_UINT32, VAR_UINT64) to
+  // match Rust xlang mode
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint8_t>::type_id),
-            static_cast<uint32_t>(TypeId::U8));
+            static_cast<uint32_t>(TypeId::UINT8));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint16_t>::type_id),
-            static_cast<uint32_t>(TypeId::U16));
+            static_cast<uint32_t>(TypeId::UINT16));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint32_t>::type_id),
-            static_cast<uint32_t>(TypeId::U32));
+            static_cast<uint32_t>(TypeId::VAR_UINT32));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<uint64_t>::type_id),
-            static_cast<uint32_t>(TypeId::U64));
+            static_cast<uint32_t>(TypeId::VAR_UINT64));
 }
 
 TEST(UnsignedSerializerTest, UnsignedArrayTypeIdsAreDistinct) {
   // Verify that unsigned array types use distinct TypeIds
   EXPECT_EQ(static_cast<uint32_t>(Serializer<std::vector<uint16_t>>::type_id),
-            static_cast<uint32_t>(TypeId::U16_ARRAY));
+            static_cast<uint32_t>(TypeId::UINT16_ARRAY));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<std::vector<uint32_t>>::type_id),
-            static_cast<uint32_t>(TypeId::U32_ARRAY));
+            static_cast<uint32_t>(TypeId::UINT32_ARRAY));
   EXPECT_EQ(static_cast<uint32_t>(Serializer<std::vector<uint64_t>>::type_id),
-            static_cast<uint32_t>(TypeId::U64_ARRAY));
+            static_cast<uint32_t>(TypeId::UINT64_ARRAY));
   // uint8_t vector uses BINARY type
   EXPECT_EQ(static_cast<uint32_t>(Serializer<std::vector<uint8_t>>::type_id),
             static_cast<uint32_t>(TypeId::BINARY));

@@ -20,7 +20,9 @@ use quote::quote;
 use std::sync::atomic::{AtomicU32, Ordering};
 use syn::Field;
 
-use super::field_meta::{classify_field_type, is_option_type, parse_field_meta};
+use super::field_meta::{
+    classify_field_type, extract_option_inner_type, is_option_type, parse_field_meta,
+};
 use super::util::{
     classify_trait_object_field, generic_tree_to_tokens, get_filtered_source_fields_iter,
     get_sort_fields_ts, parse_generic_tree, StructField,
@@ -87,7 +89,7 @@ pub fn gen_field_fields_info(source_fields: &[SourceField<'_>]) -> TokenStream {
         // but we also need to detect that the outer wrapper is Option for nullable.
         let is_outer_option = is_option_type(ty);
         let nullable = meta.effective_nullable(type_class) || is_outer_option;
-        let ref_tracking = meta.effective_ref_tracking(type_class);
+        let ref_tracking = meta.effective_ref(type_class);
         // Only use explicit field ID when user sets #[fory(id = N)]
         // Otherwise use -1 to indicate field name encoding should be used
         let field_id = if meta.uses_tag_id() {
@@ -98,19 +100,76 @@ pub fn gen_field_fields_info(source_fields: &[SourceField<'_>]) -> TokenStream {
 
         match classify_trait_object_field(ty) {
             StructField::None => {
-                let generic_tree = parse_generic_tree(ty);
-                let generic_token = generic_tree_to_tokens(&generic_tree);
-                quote! {
-                    fory_core::meta::FieldInfo::new_with_id(
-                        #field_id,
-                        #name,
-                        {
-                            let mut ft = #generic_token;
-                            ft.nullable = #nullable;
-                            ft.ref_tracking = #ref_tracking;
-                            ft
+                // Check if this is an i32/u32/u64 field (or Option<i32>/Option<u32>/Option<u64>) with encoding attributes
+                // In this case, we need to generate the FieldType with the correct type ID directly
+                let inner_ty = extract_option_inner_type(ty).unwrap_or_else(|| ty.clone());
+                let inner_ty_str = quote::ToTokens::to_token_stream(&inner_ty)
+                    .to_string()
+                    .replace(' ', "");
+
+                let has_encoding =
+                    (inner_ty_str == "i32" || inner_ty_str == "u32" || inner_ty_str == "u64")
+                        && meta.type_id.is_some();
+
+                if has_encoding {
+                    // Generate FieldType directly with the correct type ID based on meta.type_id
+                    let type_id_ts = match (inner_ty_str.as_str(), meta.type_id) {
+                        // i32: VARINT32 (default) or INT32 (fixed)
+                        ("i32", Some(tid)) if tid == fory_core::types::TypeId::INT32 as i16 => {
+                            quote! { fory_core::types::TypeId::INT32 as u32 }
                         }
-                    )
+                        ("i32", _) => {
+                            quote! { fory_core::types::TypeId::VARINT32 as u32 }
+                        }
+                        // u32: VAR_UINT32 (default) or UINT32 (fixed)
+                        ("u32", Some(tid)) if tid == fory_core::types::TypeId::INT32 as i16 => {
+                            quote! { fory_core::types::TypeId::UINT32 as u32 }
+                        }
+                        ("u32", _) => {
+                            quote! { fory_core::types::TypeId::VAR_UINT32 as u32 }
+                        }
+                        // u64: VAR_UINT64 (default), UINT64 (fixed), or TAGGED_UINT64 (tagged)
+                        ("u64", Some(tid)) if tid == fory_core::types::TypeId::INT32 as i16 => {
+                            quote! { fory_core::types::TypeId::UINT64 as u32 }
+                        }
+                        ("u64", Some(tid))
+                            if tid == fory_core::types::TypeId::TAGGED_UINT64 as i16 =>
+                        {
+                            quote! { fory_core::types::TypeId::TAGGED_UINT64 as u32 }
+                        }
+                        ("u64", _) => {
+                            quote! { fory_core::types::TypeId::VAR_UINT64 as u32 }
+                        }
+                        _ => unreachable!(),
+                    };
+
+                    quote! {
+                        fory_core::meta::FieldInfo::new_with_id(
+                            #field_id,
+                            #name,
+                            fory_core::meta::FieldType {
+                                type_id: #type_id_ts,
+                                nullable: #nullable,
+                                ref_tracking: #ref_tracking,
+                                generics: Vec::new()
+                            }
+                        )
+                    }
+                } else {
+                    let generic_tree = parse_generic_tree(ty);
+                    let generic_token = generic_tree_to_tokens(&generic_tree);
+                    quote! {
+                        fory_core::meta::FieldInfo::new_with_id(
+                            #field_id,
+                            #name,
+                            {
+                                let mut ft = #generic_token;
+                                ft.nullable = #nullable;
+                                ft.ref_tracking = #ref_tracking;
+                                ft
+                            }
+                        )
+                    }
                 }
             }
             StructField::VecBox(_) | StructField::VecRc(_) | StructField::VecArc(_) => {

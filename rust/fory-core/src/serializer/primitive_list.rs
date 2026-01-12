@@ -23,15 +23,31 @@ use crate::serializer::Serializer;
 use crate::types::TypeId;
 
 pub fn fory_write_data<T: Serializer>(this: &[T], context: &mut WriteContext) -> Result<(), Error> {
-    if context.is_xlang()
-        && matches!(
-            T::fory_static_type_id(),
-            TypeId::U16 | TypeId::U32 | TypeId::U64 | TypeId::U128
-        )
-    {
-        return Err(Error::not_allowed(
-            "Unsigned types are not supported in cross-language mode",
-        ));
+    // U128, USIZE, ISIZE, INT128 are Rust-specific and not supported in xlang mode
+    if context.is_xlang() {
+        match T::fory_static_type_id() {
+            TypeId::U128 => {
+                return Err(Error::not_allowed(
+                    "u128 is not supported in cross-language mode",
+                ));
+            }
+            TypeId::INT128 => {
+                return Err(Error::not_allowed(
+                    "i128 is not supported in cross-language mode",
+                ));
+            }
+            TypeId::USIZE => {
+                return Err(Error::not_allowed(
+                    "usize is not supported in cross-language mode",
+                ));
+            }
+            TypeId::ISIZE => {
+                return Err(Error::not_allowed(
+                    "isize is not supported in cross-language mode",
+                ));
+            }
+            _ => {}
+        }
     }
     let len_bytes = std::mem::size_of_val(this);
     context.writer.write_varuint32(len_bytes as u32);

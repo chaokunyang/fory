@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import pyfory as fory
 from typing import List, Dict
 
-from pyfory.util import lazy_import
+from pyfory.utils import lazy_import
 
 pa = lazy_import("pyarrow")
 

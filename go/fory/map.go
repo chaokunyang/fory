@@ -282,15 +282,16 @@ func (s mapSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, ha
 	if readMapRefAndType(ctx, refMode, readType, value) || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 // ReadData deserializes map data using chunk protocol
-func (s mapSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s mapSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 	refResolver := ctx.RefResolver()
 	typeResolver := ctx.TypeResolver()
+	type_ := value.Type()
 
 	// Initialize map
 	if value.IsNil() {
@@ -412,7 +413,7 @@ func (s mapSerializer) readSingleValue(ctx *ReadContext, buf *ByteBuffer, ctxErr
 			valType = staticType
 		}
 		v := reflect.New(valType).Elem()
-		ti.Serializer.ReadData(ctx, valType, v)
+		ti.Serializer.ReadData(ctx, v)
 		if ctx.HasError() {
 			return reflect.Value{}
 		}

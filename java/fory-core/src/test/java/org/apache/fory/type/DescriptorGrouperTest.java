@@ -75,8 +75,9 @@ public class DescriptorGrouperTest extends ForyTestBase {
 
   @Test
   public void testComparatorByTypeAndName() {
+    Fory fory = Fory.builder().build();
     List<Descriptor> descriptors = createDescriptors();
-    descriptors.sort(DescriptorGrouper.COMPARATOR_BY_TYPE_AND_NAME);
+    descriptors.sort(fory.getClassResolver().createTypeAndNameComparator());
     List<? extends Class<?>> classes =
         descriptors.stream().map(Descriptor::getRawType).collect(Collectors.toList());
     List<Class<?>> expected =
@@ -106,26 +107,30 @@ public class DescriptorGrouperTest extends ForyTestBase {
 
   @Test
   public void testPrimitiveComparator() {
+    Fory fory = Fory.builder().build();
     List<Descriptor> descriptors = new ArrayList<>();
     int index = 0;
     for (Class<?> aClass : Primitives.allPrimitiveTypes()) {
       descriptors.add(createDescriptor(TypeRef.of(aClass), "f" + index++, -1, "TestClass", false));
     }
     Collections.shuffle(descriptors, new Random(7));
-    descriptors.sort(DescriptorGrouper.getPrimitiveComparator(false, false));
+    descriptors.sort(fory.getClassResolver().getPrimitiveComparator());
     List<? extends Class<?>> classes =
         descriptors.stream().map(Descriptor::getRawType).collect(Collectors.toList());
+    // With compression enabled (default): int/long are compressed and go to the end
+    // Non-compressed sorted by size (desc), then typeId (desc): char(25) > short(3), byte(2) >
+    // boolean(1)
     List<Class<?>> expected =
         Arrays.asList(
             double.class,
-            long.class,
             float.class,
-            int.class,
-            short.class,
             char.class,
+            short.class,
             byte.class,
             boolean.class,
-            void.class);
+            void.class,
+            long.class,
+            int.class);
     assertEquals(classes, expected);
   }
 
@@ -137,15 +142,19 @@ public class DescriptorGrouperTest extends ForyTestBase {
       descriptors.add(createDescriptor(TypeRef.of(aClass), "f" + index++, -1, "TestClass", false));
     }
     Collections.shuffle(descriptors, new Random(7));
-    descriptors.sort(DescriptorGrouper.getPrimitiveComparator(true, true));
+    Fory fory = Fory.builder().build();
+    descriptors.sort(fory.getClassResolver().getPrimitiveComparator());
     List<? extends Class<?>> classes =
         descriptors.stream().map(Descriptor::getRawType).collect(Collectors.toList());
+    // With compression enabled (default): int/long are compressed and go to the end
+    // Non-compressed sorted by size (desc), then typeId (desc): char(25) > short(3), byte(2) >
+    // boolean(1)
     List<Class<?>> expected =
         Arrays.asList(
             double.class,
             float.class,
-            short.class,
             char.class,
+            short.class,
             byte.class,
             boolean.class,
             void.class,
@@ -156,6 +165,7 @@ public class DescriptorGrouperTest extends ForyTestBase {
 
   @Test
   public void testGrouper() {
+    Fory fory = Fory.builder().build();
     List<Descriptor> descriptors = createDescriptors();
     int index = 0;
     descriptors.add(
@@ -182,26 +192,26 @@ public class DescriptorGrouperTest extends ForyTestBase {
                 descriptors,
                 false,
                 null,
-                false,
-                false,
-                DescriptorGrouper.COMPARATOR_BY_TYPE_AND_NAME)
+                fory.getClassResolver().getPrimitiveComparator(),
+                fory.getClassResolver().createTypeAndNameComparator())
             .sort();
     {
       List<? extends Class<?>> classes =
           grouper.getPrimitiveDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
+      // With compression enabled: int/long go to end, sorted by size then typeId (desc)
       List<Class<?>> expected =
           Arrays.asList(
               double.class,
-              long.class,
               float.class,
-              int.class,
-              short.class,
               char.class,
+              short.class,
               byte.class,
               boolean.class,
-              void.class);
+              void.class,
+              long.class,
+              int.class);
       assertEquals(classes, expected);
     }
     {
@@ -209,17 +219,18 @@ public class DescriptorGrouperTest extends ForyTestBase {
           grouper.getBoxedDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
+      // With compression enabled: Integer/Long go to end, sorted by size then typeId (desc)
       List<Class<?>> expected =
           Arrays.asList(
               Double.class,
-              Long.class,
               Float.class,
-              Integer.class,
-              Short.class,
               Character.class,
+              Short.class,
               Byte.class,
               Boolean.class,
-              Void.class);
+              Void.class,
+              Long.class,
+              Integer.class);
       assertEquals(classes, expected);
     }
     {
@@ -227,9 +238,9 @@ public class DescriptorGrouperTest extends ForyTestBase {
           grouper.getCollectionDescriptors().stream()
               .map(Descriptor::getTypeRef)
               .collect(Collectors.toList());
-      // Sorted by type name: List<Integer> < List<String> (alphabetically)
+      // Normalized type name is the same (Collection), fallback to field name order (c4 then c5)
       List<TypeRef<?>> expected =
-          Arrays.asList(new TypeRef<List<Integer>>() {}, new TypeRef<List<String>>() {});
+          Arrays.asList(new TypeRef<List<String>>() {}, new TypeRef<List<Integer>>() {});
       assertEquals(types, expected);
     }
     {
@@ -260,27 +271,29 @@ public class DescriptorGrouperTest extends ForyTestBase {
 
   @Test
   public void testCompressedPrimitiveGrouper() {
+    Fory fory = Fory.builder().build();
     DescriptorGrouper grouper =
         DescriptorGrouper.createDescriptorGrouper(
                 d -> ReflectionUtils.isMonomorphic(d.getRawType()),
                 createDescriptors(),
                 false,
                 null,
-                true,
-                true,
-                DescriptorGrouper.COMPARATOR_BY_TYPE_AND_NAME)
+                fory.getClassResolver().getPrimitiveComparator(),
+                fory.getClassResolver().createTypeAndNameComparator())
             .sort();
     {
       List<? extends Class<?>> classes =
           grouper.getPrimitiveDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
+      // With compression enabled: int/long go to end, sorted by size then typeId (desc)
+      // char has higher typeId (25) than short (3)
       List<Class<?>> expected =
           Arrays.asList(
               double.class,
               float.class,
-              short.class,
               char.class,
+              short.class,
               byte.class,
               boolean.class,
               void.class,
@@ -293,12 +306,14 @@ public class DescriptorGrouperTest extends ForyTestBase {
           grouper.getBoxedDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
+      // With compression enabled: Integer/Long go to end, sorted by size then typeId (desc)
+      // Character has higher typeId than Short
       List<Class<?>> expected =
           Arrays.asList(
               Double.class,
               Float.class,
-              Short.class,
               Character.class,
+              Short.class,
               Byte.class,
               Boolean.class,
               Void.class,
@@ -383,9 +398,9 @@ public class DescriptorGrouperTest extends ForyTestBase {
     descriptors.add(
         createDescriptor(
             new TypeRef<ArrayList<String>>() {}, "arrayListField", -1, "TestClass", false));
-
+    Fory fory = Fory.builder().build();
     // Sort with the static comparator
-    descriptors.sort(DescriptorGrouper.COMPARATOR_BY_TYPE_AND_NAME);
+    descriptors.sort(fory.getClassResolver().createTypeAndNameComparator());
 
     // Get type names after sorting
     List<String> typeNames =

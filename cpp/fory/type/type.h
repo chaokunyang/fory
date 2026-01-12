@@ -34,104 +34,111 @@ enum class TypeId : int32_t {
   // a 32-bit signed integer.
   INT32 = 4,
   // a 32-bit signed integer which uses fory var_int32 encoding.
-  VAR_INT32 = 5,
+  VARINT32 = 5,
   // a 64-bit signed integer.
   INT64 = 6,
   // a 64-bit signed integer which uses fory PVL encoding.
-  VAR_INT64 = 7,
-  // a 64-bit signed integer which uses fory SLI encoding.
-  SLI_INT64 = 8,
+  VARINT64 = 7,
+  // a 64-bit signed integer which uses fory hybrid encoding.
+  TAGGED_INT64 = 8,
+  // an 8-bit unsigned integer.
+  UINT8 = 9,
+  // a 16-bit unsigned integer.
+  UINT16 = 10,
+  // a 32-bit unsigned integer.
+  UINT32 = 11,
+  // a 32-bit unsigned integer which uses fory var_uint32 encoding.
+  VAR_UINT32 = 12,
+  // a 64-bit unsigned integer.
+  UINT64 = 13,
+  // a 64-bit unsigned integer which uses fory var_uint64 encoding.
+  VAR_UINT64 = 14,
+  // a 64-bit unsigned integer which uses fory hybrid encoding.
+  TAGGED_UINT64 = 15,
   // a 16-bit floating point number.
-  FLOAT16 = 9,
+  FLOAT16 = 16,
   // a 32-bit floating point number.
-  FLOAT32 = 10,
+  FLOAT32 = 17,
   // a 64-bit floating point number including NaN and Infinity.
-  FLOAT64 = 11,
+  FLOAT64 = 18,
   // a text string encoded using Latin1/UTF16/UTF-8 encoding.
-  STRING = 12,
-  // a data type consisting of a set of named values.
-  ENUM = 13,
-  // an enum whose value will be serialized as the registered name.
-  NAMED_ENUM = 14,
-  // a morphic(final) type serialized by Fory Struct serializer.
-  STRUCT = 15,
-  // a morphic(final) type serialized by Fory compatible Struct serializer.
-  COMPATIBLE_STRUCT = 16,
-  // a `struct` whose type mapping will be encoded as a name.
-  NAMED_STRUCT = 17,
-  // a `compatible_struct` whose type mapping will be encoded as a name.
-  NAMED_COMPATIBLE_STRUCT = 18,
-  // a type which will be serialized by a customized serializer.
-  EXT = 19,
-  // an `ext` type whose type mapping will be encoded as a name.
-  NAMED_EXT = 20,
+  STRING = 19,
   // a sequence of objects.
-  LIST = 21,
+  LIST = 20,
   // an unordered set of unique elements.
-  SET = 22,
+  SET = 21,
   // a map of key-value pairs.
-  MAP = 23,
+  MAP = 22,
+  // a data type consisting of a set of named values.
+  ENUM = 23,
+  // an enum whose value will be serialized as the registered name.
+  NAMED_ENUM = 24,
+  // a morphic(final) type serialized by Fory Struct serializer.
+  STRUCT = 25,
+  // a morphic(final) type serialized by Fory compatible Struct serializer.
+  COMPATIBLE_STRUCT = 26,
+  // a `struct` whose type mapping will be encoded as a name.
+  NAMED_STRUCT = 27,
+  // a `compatible_struct` whose type mapping will be encoded as a name.
+  NAMED_COMPATIBLE_STRUCT = 28,
+  // a type which will be serialized by a customized serializer.
+  EXT = 29,
+  // an `ext` type whose type mapping will be encoded as a name.
+  NAMED_EXT = 30,
+  // an union type that can hold different types of values.
+  UNION = 31,
+  // a null value with no data.
+  NONE = 32,
   // an absolute length of time, independent of any calendar/timezone,
   // as a count of nanoseconds.
-  DURATION = 24,
+  DURATION = 33,
   // a point in time, independent of any calendar/timezone, as a count
   // of nanoseconds.
-  TIMESTAMP = 25,
+  TIMESTAMP = 34,
   // a naive date without timezone. The count is days relative to an
   // epoch at UTC midnight on Jan 1, 1970.
-  LOCAL_DATE = 26,
+  LOCAL_DATE = 35,
   // exact decimal value represented as an integer value in two's
   // complement.
-  DECIMAL = 27,
+  DECIMAL = 36,
   // a variable-length array of bytes.
-  BINARY = 28,
+  BINARY = 37,
   // a multidimensional array with varying sub-array sizes but same type.
-  ARRAY = 29,
+  ARRAY = 38,
   // one-dimensional boolean array.
-  BOOL_ARRAY = 30,
+  BOOL_ARRAY = 39,
   // one-dimensional int8 array.
-  INT8_ARRAY = 31,
+  INT8_ARRAY = 40,
   // one-dimensional int16 array.
-  INT16_ARRAY = 32,
+  INT16_ARRAY = 41,
   // one-dimensional int32 array.
-  INT32_ARRAY = 33,
+  INT32_ARRAY = 42,
   // one-dimensional int64 array.
-  INT64_ARRAY = 34,
-  // one-dimensional float16 array.
-  FLOAT16_ARRAY = 35,
-  // one-dimensional float32 array.
-  FLOAT32_ARRAY = 36,
-  // one-dimensional float64 array.
-  FLOAT64_ARRAY = 37,
-  // an union type that can hold different types of values.
-  UNION = 38,
-  // a null value with no data.
-  NONE = 39,
-  // Unsigned integer types (native mode only, not supported in xlang mode)
-  // an 8-bit unsigned integer.
-  U8 = 64,
-  // a 16-bit unsigned integer.
-  U16 = 65,
-  // a 32-bit unsigned integer.
-  U32 = 66,
-  // a 64-bit unsigned integer.
-  U64 = 67,
-  // 8-bits character.
-  CHAR = 68,
-  // 16-bits character
-  CHAR16 = 69,
-  // 32-bits character
-  CHAR32 = 70,
-  // Unsigned integer array types (native mode only)
+  INT64_ARRAY = 43,
+  // one-dimensional uint8 array.
+  UINT8_ARRAY = 44,
   // one-dimensional uint16 array.
-  U16_ARRAY = 73,
+  UINT16_ARRAY = 45,
   // one-dimensional uint32 array.
-  U32_ARRAY = 74,
+  UINT32_ARRAY = 46,
   // one-dimensional uint64 array.
-  U64_ARRAY = 75,
+  UINT64_ARRAY = 47,
+  // one-dimensional float16 array.
+  FLOAT16_ARRAY = 48,
+  // one-dimensional float32 array.
+  FLOAT32_ARRAY = 49,
+  // one-dimensional float64 array.
+  FLOAT64_ARRAY = 50,
+  // C++ specific types (not part of xlang spec)
+  // 8-bits character.
+  CHAR = 64,
+  // 16-bits character
+  CHAR16 = 65,
+  // 32-bits character
+  CHAR32 = 66,
   // Bound value for range checks (types with id >= BOUND are not internal
   // types).
-  BOUND = 78
+  BOUND = 67
 };
 
 inline bool IsUserType(int32_t type_id) {

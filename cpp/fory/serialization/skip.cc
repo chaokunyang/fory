@@ -489,8 +489,8 @@ void skip_field_value(ReadContext &ctx, const FieldType &field_type,
     ctx.buffer().IncreaseReaderIndex(8);
     return;
 
-  case TypeId::VAR_INT32:
-  case TypeId::VAR_INT64:
+  case TypeId::VARINT32:
+  case TypeId::VARINT64:
     skip_varint(ctx);
     return;
 

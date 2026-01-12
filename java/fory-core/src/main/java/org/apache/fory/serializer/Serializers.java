@@ -50,6 +50,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.type.DispatchId;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
@@ -176,32 +177,97 @@ public class Serializers {
     }
   }
 
-  public static Object readPrimitiveValue(Fory fory, MemoryBuffer buffer, short classId) {
-    switch (classId) {
-      case ClassResolver.PRIMITIVE_BOOLEAN_CLASS_ID:
+  public static Object readPrimitiveValue(Fory fory, MemoryBuffer buffer, int dispatchId) {
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
         return buffer.readBoolean();
-      case ClassResolver.PRIMITIVE_BYTE_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
         return buffer.readByte();
-      case ClassResolver.PRIMITIVE_CHAR_CLASS_ID:
+      case DispatchId.PRIMITIVE_CHAR:
         return buffer.readChar();
-      case ClassResolver.PRIMITIVE_SHORT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
         return buffer.readInt16();
-      case ClassResolver.PRIMITIVE_INT_CLASS_ID:
-        if (fory.compressInt()) {
-          return buffer.readVarInt32();
-        } else {
-          return buffer.readInt32();
-        }
-      case ClassResolver.PRIMITIVE_FLOAT_CLASS_ID:
+      case DispatchId.PRIMITIVE_INT32:
+        return buffer.readInt32();
+      case DispatchId.PRIMITIVE_VARINT32:
+        return buffer.readVarInt32();
+      case DispatchId.PRIMITIVE_UINT32:
+        return buffer.readInt32();
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        return buffer.readVarUint32();
+      case DispatchId.PRIMITIVE_INT64:
+        return buffer.readInt64();
+      case DispatchId.PRIMITIVE_VARINT64:
+        return buffer.readVarInt64();
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        return buffer.readTaggedInt64();
+      case DispatchId.PRIMITIVE_UINT64:
+        return buffer.readInt64();
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        return buffer.readVarUint64();
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        return buffer.readTaggedUint64();
+      case DispatchId.PRIMITIVE_FLOAT32:
         return buffer.readFloat32();
-      case ClassResolver.PRIMITIVE_LONG_CLASS_ID:
-        return fory.readInt64(buffer);
-      case ClassResolver.PRIMITIVE_DOUBLE_CLASS_ID:
+      case DispatchId.PRIMITIVE_FLOAT64:
         return buffer.readFloat64();
       default:
-        {
-          throw new IllegalStateException("unreachable");
-        }
+        throw new IllegalStateException("unreachable");
+    }
+  }
+
+  public static void writePrimitiveValue(MemoryBuffer buffer, Object value, int dispatchId) {
+    switch (dispatchId) {
+      case DispatchId.PRIMITIVE_BOOL:
+        buffer.writeBoolean((Boolean) value);
+        break;
+      case DispatchId.PRIMITIVE_INT8:
+      case DispatchId.PRIMITIVE_UINT8:
+        buffer.writeByte((Byte) value);
+        break;
+      case DispatchId.PRIMITIVE_CHAR:
+        buffer.writeChar((Character) value);
+        break;
+      case DispatchId.PRIMITIVE_INT16:
+      case DispatchId.PRIMITIVE_UINT16:
+        buffer.writeInt16((Short) value);
+        break;
+      case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.PRIMITIVE_UINT32:
+        buffer.writeInt32((Integer) value);
+        break;
+      case DispatchId.PRIMITIVE_VARINT32:
+        buffer.writeVarInt32((Integer) value);
+        break;
+      case DispatchId.PRIMITIVE_VAR_UINT32:
+        buffer.writeVarUint32((Integer) value);
+        break;
+      case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.PRIMITIVE_UINT64:
+        buffer.writeInt64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_VARINT64:
+        buffer.writeVarInt64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        buffer.writeTaggedInt64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_VAR_UINT64:
+        buffer.writeVarUint64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        buffer.writeTaggedUint64((Long) value);
+        break;
+      case DispatchId.PRIMITIVE_FLOAT32:
+        buffer.writeFloat32((Float) value);
+        break;
+      case DispatchId.PRIMITIVE_FLOAT64:
+        buffer.writeFloat64((Double) value);
+        break;
+      default:
+        throw new IllegalStateException("unreachable dispatchId: " + dispatchId);
     }
   }
 

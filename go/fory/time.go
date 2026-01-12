@@ -61,10 +61,10 @@ func (s dateSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, h
 	if ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
-func (s dateSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s dateSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	err := ctx.Err()
 	diff := time.Duration(ctx.buffer.ReadInt32(err)) * 24 * time.Hour
 	date := time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local).Add(diff)
@@ -91,7 +91,7 @@ func (s timeSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool
 	s.WriteData(ctx, value)
 }
 
-func (s timeSerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s timeSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	err := ctx.Err()
 	value.Set(reflect.ValueOf(CreateTimeFromUnixMicro(ctx.buffer.ReadInt64(err))))
 }
@@ -109,7 +109,7 @@ func (s timeSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, h
 	if ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s timeSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {

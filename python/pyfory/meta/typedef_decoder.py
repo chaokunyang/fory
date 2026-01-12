@@ -23,7 +23,7 @@ This module implements the decoding of TypeDef objects according to the xlang se
 
 from dataclasses import make_dataclass
 from typing import List, Any
-from pyfory._util import Buffer
+from pyfory.buffer import Buffer
 from pyfory.meta.typedef import TypeDef, FieldInfo, FieldType
 from pyfory.meta.typedef import (
     SMALL_NUM_FIELDS_THRESHOLD,
@@ -39,7 +39,7 @@ from pyfory.meta.typedef import (
     FIELD_NAME_ENCODING_TAG_ID,
     TAG_ID_SIZE_THRESHOLD,
 )
-from pyfory.type import TypeId
+from pyfory.types import TypeId
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
 

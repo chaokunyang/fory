@@ -60,15 +60,15 @@ func (s boolArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 	s.WriteData(ctx, value)
 }
 
-func (s boolArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s boolArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err)
 	if ctx.HasError() {
 		return
 	}
-	if length != type_.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+	if length != value.Type().Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, value.Type()))
 		return
 	}
 	if length > 0 {
@@ -84,7 +84,7 @@ func (s boolArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s boolArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -125,15 +125,15 @@ func (s int8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType
 	s.WriteData(ctx, value)
 }
 
-func (s int8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s int8ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err)
 	if ctx.HasError() {
 		return
 	}
-	if length != type_.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+	if length != value.Type().Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, value.Type()))
 		return
 	}
 	if length > 0 {
@@ -149,7 +149,7 @@ func (s int8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bo
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s int8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -191,7 +191,7 @@ func (s int16ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 	s.WriteData(ctx, value)
 }
 
-func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s int16ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	size := buf.ReadLength(err)
@@ -199,8 +199,8 @@ func (s int16ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	if ctx.HasError() {
 		return
 	}
-	if length != type_.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+	if length != value.Type().Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, value.Type()))
 		return
 	}
 	if length > 0 {
@@ -221,7 +221,7 @@ func (s int16ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s int16ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -263,7 +263,7 @@ func (s int32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 	s.WriteData(ctx, value)
 }
 
-func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s int32ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	size := buf.ReadLength(err)
@@ -271,8 +271,8 @@ func (s int32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	if ctx.HasError() {
 		return
 	}
-	if length != type_.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+	if length != value.Type().Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, value.Type()))
 		return
 	}
 	if length > 0 {
@@ -293,7 +293,7 @@ func (s int32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s int32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -335,7 +335,7 @@ func (s int64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 	s.WriteData(ctx, value)
 }
 
-func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s int64ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	size := buf.ReadLength(err)
@@ -343,8 +343,8 @@ func (s int64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, val
 	if ctx.HasError() {
 		return
 	}
-	if length != type_.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+	if length != value.Type().Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, value.Type()))
 		return
 	}
 	if length > 0 {
@@ -365,7 +365,7 @@ func (s int64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s int64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -407,7 +407,7 @@ func (s float32ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 	s.WriteData(ctx, value)
 }
 
-func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s float32ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	size := buf.ReadLength(err)
@@ -415,8 +415,8 @@ func (s float32ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 	if ctx.HasError() {
 		return
 	}
-	if length != type_.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+	if length != value.Type().Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, value.Type()))
 		return
 	}
 	if length > 0 {
@@ -437,7 +437,7 @@ func (s float32ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s float32ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -479,7 +479,7 @@ func (s float64ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeT
 	s.WriteData(ctx, value)
 }
 
-func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s float64ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	size := buf.ReadLength(err)
@@ -487,8 +487,8 @@ func (s float64ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, v
 	if ctx.HasError() {
 		return
 	}
-	if length != type_.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+	if length != value.Type().Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, value.Type()))
 		return
 	}
 	if length > 0 {
@@ -509,7 +509,7 @@ func (s float64ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s float64ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
@@ -550,15 +550,15 @@ func (s uint8ArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeTyp
 	s.WriteData(ctx, value)
 }
 
-func (s uint8ArraySerializer) ReadData(ctx *ReadContext, type_ reflect.Type, value reflect.Value) {
+func (s uint8ArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	buf := ctx.Buffer()
 	err := ctx.Err()
 	length := buf.ReadLength(err)
 	if ctx.HasError() {
 		return
 	}
-	if length != type_.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, type_))
+	if length != value.Type().Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match type %v", length, value.Type()))
 		return
 	}
 	if length > 0 {
@@ -574,7 +574,7 @@ func (s uint8ArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType b
 	if done || ctx.HasError() {
 		return
 	}
-	s.ReadData(ctx, value.Type(), value)
+	s.ReadData(ctx, value)
 }
 
 func (s uint8ArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {

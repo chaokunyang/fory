@@ -28,8 +28,8 @@ from pyfory.resolver import (
     NULL_FLAG,
     NOT_NULL_VALUE_FLAG,
 )
-from pyfory.util import is_little_endian, set_bit, get_bit, clear_bit
-from pyfory.type import TypeId
+from pyfory.utils import is_little_endian, set_bit, get_bit, clear_bit
+from pyfory.types import TypeId
 from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
 
 try:
@@ -48,7 +48,7 @@ USE_TYPE_NAME = 0
 USE_TYPE_ID = 1
 # preserve 0 as flag for type id not set in TypeInfo`
 NO_TYPE_ID = 0
-INT64_TYPE_ID = TypeId.INT64
+INT64_TYPE_ID = TypeId.VARINT64
 FLOAT64_TYPE_ID = TypeId.FLOAT64
 BOOL_TYPE_ID = TypeId.BOOL
 STRING_TYPE_ID = TypeId.STRING
@@ -242,7 +242,7 @@ class Fory:
         self.compatible = compatible
         self.field_nullable = field_nullable if self.is_py else False
         from pyfory.serialization import MetaStringResolver, SerializationContext
-        from pyfory._registry import TypeResolver
+        from pyfory.registry import TypeResolver
 
         self.metastring_resolver = MetaStringResolver()
         self.type_resolver = TypeResolver(self, meta_share=compatible, meta_compressor=meta_compressor)

@@ -185,9 +185,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     super(new CodegenContext(), beanType);
     this.fory = fory;
     typeResolver = fory._getTypeResolver();
-    // Use TypeResolver interface instead of concrete class to support both xlang and non-xlang
-    // modes
-    TypeRef<?> typeResolverType = TypeRef.of(TypeResolver.class);
+    TypeRef<?> typeResolverType = TypeRef.of(typeResolver.getClass());
     this.parentSerializerClass = parentSerializerClass;
     if (fory.isCrossLanguage()) {
       writeMethodName = "xwrite";
@@ -199,7 +197,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     addCommonImports();
     ctx.reserveName(REF_RESOLVER_NAME);
     ctx.reserveName(TYPE_RESOLVER_NAME);
-    typeResolverRef = fieldRef(TYPE_RESOLVER_NAME, typeResolverType);
+    // use concrete type to avoid virtual methods call in generated code
     TypeRef<?> refResolverTypeRef = TypeRef.of(fory.getRefResolver().getClass());
     refResolverRef = fieldRef(REF_RESOLVER_NAME, refResolverTypeRef);
     Expression refResolverExpr =
@@ -208,8 +206,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         ctx.type(refResolverTypeRef),
         REF_RESOLVER_NAME,
         new Cast(refResolverExpr, refResolverTypeRef));
+    typeResolverRef = fieldRef(TYPE_RESOLVER_NAME, typeResolverType);
     Expression typeResolverExpr =
-        inlineInvoke(foryRef, "_getTypeResolver", TypeRef.of(TypeResolver.class));
+        cast(
+            inlineInvoke(foryRef, "_getTypeResolver", TypeRef.of(TypeResolver.class)),
+            typeResolverType);
     ctx.addField(ctx.type(typeResolverType), TYPE_RESOLVER_NAME, typeResolverExpr);
     ctx.reserveName(STRING_SERIALIZER_NAME);
     stringSerializerRef = fieldRef(STRING_SERIALIZER_NAME, STRING_SERIALIZER_TYPE_TOKEN);
@@ -227,17 +228,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   public String codecClassName(Class<?> beanClass) {
     String name = ReflectionUtils.getClassNameWithoutPackage(beanClass).replace("$", "_");
     StringBuilder nameBuilder = new StringBuilder(name);
+    if (fory.isCrossLanguage()) {
+      // Generated classes are different when xlang mode is enabled.
+      // So we need to use a different name to generate xwrite/xread methods.
+      nameBuilder.append("Xlang");
+    }
     if (fory.trackingRef()) {
       // Generated classes are different when referenceTracking is switched.
       // So we need to use a different name.
       nameBuilder.append("ForyRef");
     } else {
       nameBuilder.append("Fory");
-    }
-    if (fory.isCrossLanguage()) {
-      // Generated classes are different when xlang mode is enabled.
-      // So we need to use a different name to generate xwrite/xread methods.
-      nameBuilder.append("Xlang");
     }
     nameBuilder.append("Codec").append(codecSuffix());
     Map<String, Integer> subGenerator =

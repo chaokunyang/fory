@@ -83,8 +83,8 @@ public class DeferedLazySerializer extends Serializer {
     return getSerializer().copy(value);
   }
 
-  public static class DeferedLazyObjectSerializer extends DeferedLazySerializer {
-    public DeferedLazyObjectSerializer(
+  public static class DeferredLazyObjectSerializer extends DeferedLazySerializer {
+    public DeferredLazyObjectSerializer(
         Fory fory, Class type, Supplier<Tuple2<Boolean, Serializer>> serializerSupplier) {
       super(fory, type, serializerSupplier);
     }

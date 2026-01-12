@@ -35,11 +35,11 @@ import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
 /** Codec util to create and load jit serializer class. */
-@SuppressWarnings("rawtypes")
+@SuppressWarnings({"rawtypes", "unchecked"})
 public class CodecUtils {
   // Cache key includes configHash to distinguish between xlang and non-xlang modes
-  private static ConcurrentHashMap<Tuple3<String, Class<?>, Integer>, Class> graalvmSerializers =
-      new ConcurrentHashMap<>();
+  private static final ConcurrentHashMap<Tuple3<String, Class<?>, Integer>, Class>
+      graalvmSerializers = new ConcurrentHashMap<>();
 
   // TODO(chaokunyang) how to uninstall org.apache.fory.codegen/builder classes for graalvm build
   // time

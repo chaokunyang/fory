@@ -72,7 +72,8 @@ import org.apache.fory.meta.MetaString;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.ArraySerializers;
-import org.apache.fory.serializer.DeferedLazySerializer.DeferedLazyObjectSerializer;
+import org.apache.fory.serializer.DeferedLazySerializer;
+import org.apache.fory.serializer.DeferedLazySerializer.DeferredLazyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.NonexistentClass;
 import org.apache.fory.serializer.NonexistentClass.NonexistentMetaShared;
@@ -265,18 +266,11 @@ public class XtypeResolver extends TypeResolver {
     if (serializer == null) {
       if (type.isEnum()) {
         classInfo.serializer = new EnumSerializer(fory, (Class<Enum>) type);
-      } else if (GraalvmSupport.isGraalBuildtime()) {
-        // For GraalVM build time, directly create the serializer to avoid
-        // issues with DeferedLazySerializer persistence in native image
-        Class<? extends Serializer> c =
-            classResolver.getObjectSerializerClass(
-                type, shareMeta, fory.getConfig().isCodeGenEnabled(), null);
-        classInfo.serializer = Serializers.newSerializer(fory, type, c);
       } else {
         AtomicBoolean updated = new AtomicBoolean(false);
         AtomicReference<Serializer> ref = new AtomicReference(null);
         classInfo.serializer =
-            new DeferedLazyObjectSerializer(
+            new DeferedLazySerializer.DeferredLazyObjectSerializer(
                 fory,
                 type,
                 () -> {
@@ -327,7 +321,7 @@ public class XtypeResolver extends TypeResolver {
     if (serializer instanceof ObjectSerializer || serializer instanceof GeneratedSerializer) {
       return true;
     }
-    return serializer instanceof DeferedLazyObjectSerializer;
+    return serializer instanceof DeferredLazyObjectSerializer;
   }
 
   private ClassInfo newClassInfo(Class<?> type, Serializer<?> serializer, int xtypeId) {
@@ -1047,8 +1041,10 @@ public class XtypeResolver extends TypeResolver {
           GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
           if (classInfo.serializer != null) {
             // Trigger serializer initialization and resolution for deferred serializers
-            if (classInfo.serializer instanceof DeferedLazyObjectSerializer) {
-              ((DeferedLazyObjectSerializer) classInfo.serializer).resolveSerializer();
+            if (classInfo.serializer
+                instanceof DeferedLazySerializer.DeferredLazyObjectSerializer) {
+              ((DeferedLazySerializer.DeferredLazyObjectSerializer) classInfo.serializer)
+                  .resolveSerializer();
             } else {
               classInfo.serializer.getClass();
             }

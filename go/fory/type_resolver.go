@@ -1423,9 +1423,9 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 			}, nil
 		}
 	case reflect.Map:
-		// Check if this is a Set[T] type (named type with struct{} value)
-		// Users must use fory.Set[T], not raw map[T]struct{}
-		if type_.Elem() == emptyStructType && strings.HasPrefix(type_.Name(), "Set[") {
+		// Check if this is a Set type (map[T]struct{} where value is empty struct)
+		// This includes both fory.Set[T] and raw map[T]struct{}
+		if isSetReflectType(type_) {
 			return setSerializer{}, nil
 		}
 		hasKeySerializer, hasValueSerializer := !isDynamicType(type_.Key()), !isDynamicType(type_.Elem())
@@ -1529,13 +1529,10 @@ func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, e
 }
 
 // GetSetSerializer returns the setSerializer for a Set[T] type.
-// Users must use fory.Set[T], not raw map[T]struct{}.
+// Accepts both fory.Set[T] and anonymous map[T]struct{} types.
 func (r *TypeResolver) GetSetSerializer(setType reflect.Type) (Serializer, error) {
-	if setType.Kind() != reflect.Map {
-		return nil, fmt.Errorf("expected map type but got %s", setType.Kind())
-	}
-	if setType.Elem() != emptyStructType || !strings.HasPrefix(setType.Name(), "Set[") {
-		return nil, fmt.Errorf("expected fory.Set[T] but got %s", setType)
+	if !isSetReflectType(setType) {
+		return nil, fmt.Errorf("expected Set type (map[T]struct{}) but got %s", setType)
 	}
 	return setSerializer{}, nil
 }

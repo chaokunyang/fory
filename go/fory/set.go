@@ -69,6 +69,9 @@ func (s Set[T]) Clear() {
 	}
 }
 
+// emptyStructVal is a pre-created reflect.Value of struct{}{} to avoid repeated allocations
+var emptyStructVal = reflect.ValueOf(struct{}{})
+
 type setSerializer struct {
 }
 
@@ -350,7 +353,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 			if refID < int32(NotNullValueFlag) {
 				// Use existing reference if available
 				elem := ctx.RefResolver().GetReadObject(refID)
-				value.SetMapIndex(reflect.ValueOf(elem), reflect.ValueOf(struct{}{}))
+				value.SetMapIndex(reflect.ValueOf(elem), emptyStructVal)
 				continue
 			}
 		}
@@ -366,7 +369,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 			ctx.RefResolver().SetReadObject(refID, elem)
 		}
 		// Add element to set
-		value.SetMapIndex(elem, reflect.ValueOf(struct{}{}))
+		value.SetMapIndex(elem, emptyStructVal)
 	}
 }
 
@@ -392,7 +395,7 @@ func (s setSerializer) readDifferentTypes(ctx *ReadContext, buf *ByteBuffer, val
 			if refID < int32(NotNullValueFlag) {
 				// Use existing reference if available
 				elem := ctx.RefResolver().GetReadObject(refID)
-				value.SetMapIndex(elem, reflect.ValueOf(struct{}{}))
+				value.SetMapIndex(elem, emptyStructVal)
 				continue
 			}
 			// Read type info (handles namespaced types, meta sharing, etc.)
@@ -448,15 +451,15 @@ func setMapKey(mapValue, key reflect.Value, keyType reflect.Type) {
 	if keyType.Kind() == reflect.Interface {
 		// Check if key is directly assignable to the interface
 		if key.Type().AssignableTo(keyType) {
-			mapValue.SetMapIndex(key, reflect.ValueOf(struct{}{}))
+			mapValue.SetMapIndex(key, emptyStructVal)
 		} else {
 			// Try pointer - common case where interface has pointer receivers
 			ptr := reflect.New(key.Type())
 			ptr.Elem().Set(key)
-			mapValue.SetMapIndex(ptr, reflect.ValueOf(struct{}{}))
+			mapValue.SetMapIndex(ptr, emptyStructVal)
 		}
 	} else {
-		mapValue.SetMapIndex(key, reflect.ValueOf(struct{}{}))
+		mapValue.SetMapIndex(key, emptyStructVal)
 	}
 }
 
@@ -470,7 +473,7 @@ func (s setSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, ha
 			return
 		}
 		if refID < int32(NotNullValueFlag) {
-			// Reference found
+			// Reference found or null
 			obj := ctx.RefResolver().GetReadObject(refID)
 			if obj.IsValid() {
 				value.Set(obj)

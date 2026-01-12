@@ -584,6 +584,10 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					shouldRead = true
 					fieldType = localType
 				}
+			} else if defTypeId == SET && isSetReflectType(localType) {
+				// Both remote and local are Set types, allow reading
+				shouldRead = true
+				fieldType = localType
 			} else if !typeLookupFailed && typesCompatible(localType, remoteType) {
 				shouldRead = true
 				fieldType = localType
@@ -601,6 +605,10 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					if localType.Kind() == reflect.Slice && localType.Elem().Kind() == reflect.Interface {
 						fieldSerializer = mustNewSliceDynSerializer(localType.Elem())
 					}
+				}
+				// For Set fields (fory.Set[T] = map[T]struct{}), get the setSerializer
+				if defTypeId == SET && isSetReflectType(localType) && fieldSerializer == nil {
+					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
 				}
 				// If local type is *T and remote type is T, we need the serializer for *T
 				// This handles Java's Integer/Long (nullable boxed types) mapping to Go's *int32/*int64
@@ -829,8 +837,8 @@ func (s *structSerializer) computeHash() int32 {
 			} else if field.Meta.Type.Kind() == reflect.Slice {
 				typeId = LIST
 			} else if field.Meta.Type.Kind() == reflect.Map {
-				// map[T]bool is used to represent a Set in Go
-				if field.Meta.Type.Elem().Kind() == reflect.Bool {
+				// fory.Set[T] is defined as map[T]struct{} - check for struct{} elem type
+				if isSetReflectType(field.Meta.Type) {
 					typeId = SET
 				} else {
 					typeId = MAP
@@ -1367,11 +1375,13 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			ctx.WriteStringFloat64Map(*(*map[string]float64)(fieldPtr), field.RefMode, false)
 			return
 		case StringBoolMapDispatchId:
-			// NOTE: map[string]bool is used to represent SETs in Go xlang mode.
-			// We CANNOT use the fast path here because it writes MAP format,
-			// but the data should be written in SET format. Fall through to slow path
-			// which uses setSerializer to correctly write the SET format.
-			break
+			// map[string]bool is a regular map in Go - use MAP format
+			// Note: fory.Set[T] uses struct{} values and has its own setSerializer
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			ctx.WriteStringBoolMap(*(*map[string]bool)(fieldPtr), field.RefMode, false)
+			return
 		case IntIntMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
@@ -2147,11 +2157,13 @@ func (s *structSerializer) readRemainingField(ctx *ReadContext, ptr unsafe.Point
 			*(*map[string]float64)(fieldPtr) = ctx.ReadStringFloat64Map(field.RefMode, false)
 			return
 		case StringBoolMapDispatchId:
-			// NOTE: map[string]bool is used to represent SETs in Go xlang mode.
-			// We CANNOT use the fast path here because it reads MAP format,
-			// but the data is actually in SET format. Fall through to slow path
-			// which uses setSerializer to correctly read the SET format.
-			break
+			// map[string]bool is a regular map in Go - use MAP format
+			// Note: fory.Set[T] uses struct{} values and has its own setSerializer
+			if field.RefMode == RefModeTracking {
+				break
+			}
+			*(*map[string]bool)(fieldPtr) = ctx.ReadStringBoolMap(field.RefMode, false)
+			return
 		case IntIntMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break

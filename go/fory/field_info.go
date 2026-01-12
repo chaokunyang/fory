@@ -439,6 +439,17 @@ func isStructField(t reflect.Type) bool {
 	return false
 }
 
+// isSetReflectType checks if a reflect.Type is a Set type (map[T]struct{})
+// fory.Set[T] is defined as map[T]struct{} where the value type is empty struct
+func isSetReflectType(t reflect.Type) bool {
+	if t.Kind() != reflect.Map {
+		return false
+	}
+	// Check if value type is empty struct (struct{})
+	elemType := t.Elem()
+	return elemType.Kind() == reflect.Struct && elemType.NumField() == 0
+}
+
 // isStructFieldType checks if a FieldType represents a type that needs type info written
 // This is used to determine if type info was written for the field in compatible mode
 // In compatible mode, Java writes type info for struct and ext types, but NOT for enum types
@@ -823,8 +834,8 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 			return LIST
 		}
 	case reflect.Map:
-		// map[T]bool is used to represent a Set in Go
-		if type_.Elem().Kind() == reflect.Bool {
+		// fory.Set[T] is defined as map[T]struct{} - check for struct{} elem type
+		if isSetReflectType(type_) {
 			return SET
 		}
 		return MAP

@@ -349,7 +349,7 @@ type NullableComprehensiveSchemaConsistent struct {
 	// Base non-nullable reference fields
 	StringField string
 	ListField   []string
-	SetField    map[string]bool
+	SetField    fory.Set[string]
 	MapField    map[string]string
 
 	// Nullable fields - first half (boxed types in Java)
@@ -362,7 +362,7 @@ type NullableComprehensiveSchemaConsistent struct {
 	NullableBool   *bool             `fory:"nullable"`
 	NullableString *string           `fory:"nullable"`
 	NullableList   []string          `fory:"nullable"`
-	NullableSet    map[string]bool   `fory:"nullable"`
+	NullableSet    fory.Set[string]  `fory:"nullable"`
 	NullableMap    map[string]string `fory:"nullable"`
 }
 
@@ -392,7 +392,7 @@ type NullableComprehensiveCompatible struct {
 	// Reference fields - also nullable in Go
 	StringField *string           `fory:"nullable"`
 	ListField   []string          `fory:"nullable"`
-	SetField    map[string]bool   `fory:"nullable"`
+	SetField    fory.Set[string]  `fory:"nullable"`
 	MapField    map[string]string `fory:"nullable"`
 
 	// Group 2: Non-nullable in Go, Nullable in Java (@ForyField(nullable=true))
@@ -406,7 +406,7 @@ type NullableComprehensiveCompatible struct {
 	// Reference types
 	NullableString2 string
 	NullableList2   []string
-	NullableSet2    map[string]bool
+	NullableSet2    fory.Set[string]
 	NullableMap2    map[string]string
 }
 
@@ -1558,7 +1558,7 @@ func testNullableFieldSchemaConsistentNotNull() {
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
-	if len(result.SetField) != 2 || !result.SetField["x"] || !result.SetField["y"] {
+	if len(result.SetField) != 2 || !result.SetField.Contains("x") || !result.SetField.Contains("y") {
 		panic(fmt.Sprintf("SetField mismatch: expected {x, y}, got %v", result.SetField))
 	}
 	if len(result.MapField) != 2 || result.MapField["key1"] != "value1" || result.MapField["key2"] != "value2" {
@@ -1591,7 +1591,7 @@ func testNullableFieldSchemaConsistentNotNull() {
 	if len(result.NullableList) != 2 || result.NullableList[0] != "p" || result.NullableList[1] != "q" {
 		panic(fmt.Sprintf("NullableList mismatch: expected [p, q], got %v", result.NullableList))
 	}
-	if len(result.NullableSet) != 2 || !result.NullableSet["m"] || !result.NullableSet["n"] {
+	if len(result.NullableSet) != 2 || !result.NullableSet.Contains("m") || !result.NullableSet.Contains("n") {
 		panic(fmt.Sprintf("NullableSet mismatch: expected {m, n}, got %v", result.NullableSet))
 	}
 	if len(result.NullableMap) != 1 || result.NullableMap["nk1"] != "nv1" {
@@ -1636,7 +1636,7 @@ func testNullableFieldSchemaConsistentNull() {
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
-	if len(result.SetField) != 2 || !result.SetField["x"] || !result.SetField["y"] {
+	if len(result.SetField) != 2 || !result.SetField.Contains("x") || !result.SetField.Contains("y") {
 		panic(fmt.Sprintf("SetField mismatch: expected {x, y}, got %v", result.SetField))
 	}
 	if len(result.MapField) != 2 || result.MapField["key1"] != "value1" || result.MapField["key2"] != "value2" {
@@ -1752,7 +1752,7 @@ func testNullableFieldCompatibleNotNull() {
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
-	if len(result.SetField) != 2 || !result.SetField["x"] || !result.SetField["y"] {
+	if len(result.SetField) != 2 || !result.SetField.Contains("x") || !result.SetField.Contains("y") {
 		panic(fmt.Sprintf("SetField mismatch: expected {x, y}, got %v", result.SetField))
 	}
 	if len(result.MapField) != 2 || result.MapField["key1"] != "value1" || result.MapField["key2"] != "value2" {
@@ -1770,7 +1770,7 @@ func testNullableFieldCompatibleNotNull() {
 	if len(result.NullableList2) != 2 || result.NullableList2[0] != "p" || result.NullableList2[1] != "q" {
 		panic(fmt.Sprintf("NullableList2 mismatch: expected [p, q], got %v", result.NullableList2))
 	}
-	if len(result.NullableSet2) != 2 || !result.NullableSet2["m"] || !result.NullableSet2["n"] {
+	if len(result.NullableSet2) != 2 || !result.NullableSet2.Contains("m") || !result.NullableSet2.Contains("n") {
 		panic(fmt.Sprintf("NullableSet2 mismatch: expected {m, n}, got %v", result.NullableSet2))
 	}
 	if len(result.NullableMap2) != 1 || result.NullableMap2["nk1"] != "nv1" {
@@ -1858,7 +1858,7 @@ func testNullableFieldCompatibleNull() {
 	if len(result.ListField) != 3 || result.ListField[0] != "a" || result.ListField[1] != "b" || result.ListField[2] != "c" {
 		panic(fmt.Sprintf("ListField mismatch: expected [a, b, c], got %v", result.ListField))
 	}
-	if len(result.SetField) != 2 || !result.SetField["x"] || !result.SetField["y"] {
+	if len(result.SetField) != 2 || !result.SetField.Contains("x") || !result.SetField.Contains("y") {
 		panic(fmt.Sprintf("SetField mismatch: expected {x, y}, got %v", result.SetField))
 	}
 	if len(result.MapField) != 2 || result.MapField["key1"] != "value1" || result.MapField["key2"] != "value2" {

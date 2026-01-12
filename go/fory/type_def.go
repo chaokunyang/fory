@@ -773,9 +773,9 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 		return TypeInfo{}, err
 	}
 
-	// For SET type, Go uses map[T]bool to represent sets
+	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
 	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(true))
+		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
 		setSerializer, serErr := f.GetTypeResolver().GetSetSerializer(setType)
 		if serErr != nil {
 			return TypeInfo{}, serErr
@@ -799,9 +799,9 @@ func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (T
 		return TypeInfo{}, err
 	}
 
-	// For SET type, Go uses map[T]bool to represent sets
+	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
 	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(true))
+		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
 		setSerializer, serErr := resolver.GetSetSerializer(setType)
 		if serErr != nil {
 			return TypeInfo{}, serErr
@@ -1009,11 +1009,9 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 	// Handle map types BEFORE getTypeInfo to avoid anonymous type errors
 	if fieldType.Kind() == reflect.Map {
 		keyType := fieldType.Key()
-		valueType := fieldType.Elem()
 
-		// In Go xlang mode, map[T]bool is used to represent a Set<T>
-		// The key type becomes the element type of the set
-		if valueType.Kind() == reflect.Bool {
+		// fory.Set[T] is defined as map[T]struct{} (empty struct value type)
+		if isSetReflectType(fieldType) {
 			keyValue := reflect.Zero(keyType)
 			keyFieldType, err := buildFieldType(fory, keyValue)
 			if err != nil {
@@ -1023,6 +1021,7 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		}
 
 		// Regular map type
+		valueType := fieldType.Elem()
 		keyValue := reflect.Zero(keyType)
 		valueValue := reflect.Zero(valueType)
 

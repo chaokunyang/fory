@@ -927,7 +927,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 		// Auto-assign IDs
 		typeID = 0
 	default:
-		fmt.Errorf("type %v must be registered explicitly", type_)
+		panic(fmt.Errorf("type %v must be registered explicitly", type_))
 	}
 
 	/*

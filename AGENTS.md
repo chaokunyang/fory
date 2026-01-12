@@ -288,7 +288,7 @@ sbt scalafmt
 
 - All commands must be executed within the `integration_tests` directory.
 - For java related integration tests, please install the java libraries first by `cd ../java && mvn -T16 install -DskipTests`. If no code changes after installed fory java, you can skip the installation step.
-- For mac, graalvm is installed at `/Library/Java/JavaVirtualMachines/graalvm-xxx` by default. 
+- For mac, graalvm is installed at `/Library/Java/JavaVirtualMachines/graalvm-xxx` by default.
 
 ```bash
 it_dir=$(pwd)

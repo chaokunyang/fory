@@ -185,7 +185,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     super(new CodegenContext(), beanType);
     this.fory = fory;
     typeResolver = fory._getTypeResolver();
-    // Use TypeResolver interface instead of concrete class to support both xlang and non-xlang modes
+    // Use TypeResolver interface instead of concrete class to support both xlang and non-xlang
+    // modes
     TypeRef<?> typeResolverType = TypeRef.of(TypeResolver.class);
     this.parentSerializerClass = parentSerializerClass;
     if (fory.isCrossLanguage()) {

@@ -101,14 +101,14 @@ print(f"{person.name}, {person.age}")  # Alice, 30
 
 ## Documentation
 
-| Topic                                                                         | Description                                      |
-| ----------------------------------------------------------------------------- | ------------------------------------------------ |
-| [Getting Started](getting-started.md)                                         | Installation and basic setup for all languages   |
+| Topic                                                     | Description                                      |
+| --------------------------------------------------------- | ------------------------------------------------ |
+| [Getting Started](getting-started.md)                     | Installation and basic setup for all languages   |
 | [Type Mapping](../../specification/xlang_type_mapping.md) | Cross-language type mapping reference            |
-| [Serialization](serialization.md)                                             | Built-in types, custom types, reference handling |
-| [Zero-Copy](zero-copy.md)                                                     | Out-of-band serialization for large data         |
-| [Row Format](row_format.md)                                                   | Cache-friendly binary format with random access  |
-| [Troubleshooting](troubleshooting.md)                                         | Common issues and solutions                      |
+| [Serialization](serialization.md)                         | Built-in types, custom types, reference handling |
+| [Zero-Copy](zero-copy.md)                                 | Out-of-band serialization for large data         |
+| [Row Format](row_format.md)                               | Cache-friendly binary format with random access  |
+| [Troubleshooting](troubleshooting.md)                     | Common issues and solutions                      |
 
 ## Language-Specific Guides
 

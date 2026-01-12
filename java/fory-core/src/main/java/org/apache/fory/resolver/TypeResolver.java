@@ -496,6 +496,8 @@ public abstract class TypeResolver {
 
   public abstract void initialize();
 
+  public abstract void ensureSerializersCompiled();
+
   public abstract ClassDef getTypeDef(Class<?> cls, boolean resolveParent);
 
   public final boolean isSerializable(Class<?> cls) {

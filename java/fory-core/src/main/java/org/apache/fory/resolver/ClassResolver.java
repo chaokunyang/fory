@@ -1956,6 +1956,7 @@ public class ClassResolver extends TypeResolver {
    * <p>Note that this method should be invoked after all registrations and invoked only once.
    * Repeated invocations will have no effect.
    */
+  @Override
   public void ensureSerializersCompiled() {
     if (extRegistry.ensureSerializersCompiled) {
       return;

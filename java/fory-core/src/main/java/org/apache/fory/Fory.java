@@ -1602,10 +1602,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public void ensureSerializersCompiled() {
-    classResolver.ensureSerializersCompiled();
-    if (crossLanguage && xtypeResolver != null) {
-      xtypeResolver.ensureSerializersCompiled();
-    }
+    _getTypeResolver().ensureSerializersCompiled();
   }
 
   public JITContext getJITContext() {

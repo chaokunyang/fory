@@ -1033,7 +1033,9 @@ public class XtypeResolver extends TypeResolver {
    * Ensure all serializers for registered classes are compiled at GraalVM build time. This method
    * should be called after all classes are registered.
    */
+  @Override
   public void ensureSerializersCompiled() {
+    classResolver.ensureSerializersCompiled();
     classInfoMap.forEach(
         (cls, classInfo) -> {
           GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());

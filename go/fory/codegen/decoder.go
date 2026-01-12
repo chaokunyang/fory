@@ -153,7 +153,9 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	if slice, ok := field.Type.(*types.Slice); ok {
 		elemType := slice.Elem()
 		// Check if element type is any (dynamic type)
-		if iface, ok := elemType.(*types.Interface); ok && iface.Empty() {
+		// Unwrap alias types (e.g., 'any' is an alias for 'interface{}')
+		unwrappedElem := types.Unalias(elemType)
+		if iface, ok := unwrappedElem.(*types.Interface); ok && iface.Empty() {
 			// For []any, we need to manually implement the deserialization
 			// to match our custom encoding.
 			// In xlang mode, slices are NOT nullable by default.
@@ -216,8 +218,9 @@ func generateFieldReadTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		return nil
 	}
 
-	// Handle interface types
-	if iface, ok := field.Type.(*types.Interface); ok {
+	// Handle interface types (including 'any' which is an alias for interface{})
+	unwrappedType := types.Unalias(field.Type)
+	if iface, ok := unwrappedType.(*types.Interface); ok {
 		if iface.Empty() {
 			// For any, use ReadValue for dynamic type handling
 			fmt.Fprintf(buf, "\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", fieldAccess)
@@ -607,8 +610,9 @@ func generateSliceElementReadInline(buf *bytes.Buffer, elemType types.Type, elem
 		return nil
 	}
 
-	// Handle interface types
-	if iface, ok := elemType.(*types.Interface); ok {
+	// Handle interface types (including 'any' which is an alias for interface{})
+	unwrappedElem := types.Unalias(elemType)
+	if iface, ok := unwrappedElem.(*types.Interface); ok {
 		if iface.Empty() {
 			// For any elements, use ReadValue for dynamic type handling
 			fmt.Fprintf(buf, "\t\t\t\tctx.ReadValue(reflect.ValueOf(&%s).Elem(), fory.RefModeTracking, true)\n", elemAccess)
@@ -704,13 +708,15 @@ func generateMapReadInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess st
 	keyType := mapType.Key()
 	valueType := mapType.Elem()
 
-	// Check if key or value types are any
+	// Check if key or value types are any (unwrap aliases like 'any')
 	keyIsInterface := false
 	valueIsInterface := false
-	if iface, ok := keyType.(*types.Interface); ok && iface.Empty() {
+	unwrappedKey := types.Unalias(keyType)
+	unwrappedValue := types.Unalias(valueType)
+	if iface, ok := unwrappedKey.(*types.Interface); ok && iface.Empty() {
 		keyIsInterface = true
 	}
-	if iface, ok := valueType.(*types.Interface); ok && iface.Empty() {
+	if iface, ok := unwrappedValue.(*types.Interface); ok && iface.Empty() {
 		valueIsInterface = true
 	}
 

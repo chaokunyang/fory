@@ -140,7 +140,9 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 	if slice, ok := field.Type.(*types.Slice); ok {
 		elemType := slice.Elem()
 		// Check if element type is any (dynamic type)
-		if iface, ok := elemType.(*types.Interface); ok && iface.Empty() {
+		// Unwrap alias types (e.g., 'any' is an alias for 'interface{}')
+		unwrappedElem := types.Unalias(elemType)
+		if iface, ok := unwrappedElem.(*types.Interface); ok && iface.Empty() {
 			// For []any, we need to manually implement the serialization
 			// because WriteValue produces incorrect length encoding.
 			// In xlang mode, slices are NOT nullable by default.
@@ -202,8 +204,9 @@ func generateFieldWriteTyped(buf *bytes.Buffer, field *FieldInfo) error {
 		return nil
 	}
 
-	// Handle interface types
-	if iface, ok := field.Type.(*types.Interface); ok {
+	// Handle interface types (including 'any' which is an alias for interface{})
+	unwrappedType := types.Unalias(field.Type)
+	if iface, ok := unwrappedType.(*types.Interface); ok {
 		if iface.Empty() {
 			// For any, use WriteValue for dynamic type handling
 			fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", fieldAccess)
@@ -456,13 +459,15 @@ func generateMapWriteInline(buf *bytes.Buffer, mapType *types.Map, fieldAccess s
 	keyType := mapType.Key()
 	valueType := mapType.Elem()
 
-	// Check if key or value types are any
+	// Check if key or value types are any (unwrap aliases like 'any')
 	keyIsInterface := false
 	valueIsInterface := false
-	if iface, ok := keyType.(*types.Interface); ok && iface.Empty() {
+	unwrappedKey := types.Unalias(keyType)
+	unwrappedValue := types.Unalias(valueType)
+	if iface, ok := unwrappedKey.(*types.Interface); ok && iface.Empty() {
 		keyIsInterface = true
 	}
-	if iface, ok := valueType.(*types.Interface); ok && iface.Empty() {
+	if iface, ok := unwrappedValue.(*types.Interface); ok && iface.Empty() {
 		valueIsInterface = true
 	}
 
@@ -783,8 +788,9 @@ func generateSliceElementWriteInline(buf *bytes.Buffer, elemType types.Type, ele
 		return nil
 	}
 
-	// Handle interface types
-	if iface, ok := elemType.(*types.Interface); ok {
+	// Handle interface types (including 'any' which is an alias for interface{})
+	unwrappedElem := types.Unalias(elemType)
+	if iface, ok := unwrappedElem.(*types.Interface); ok {
 		if iface.Empty() {
 			// For any elements, use WriteValue for dynamic type handling
 			fmt.Fprintf(buf, "\t\t\t\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", elemAccess)
@@ -830,8 +836,9 @@ func generateSliceElementWriteInlineIndented(buf *bytes.Buffer, elemType types.T
 		return nil
 	}
 
-	// Handle interface types
-	if iface, ok := elemType.(*types.Interface); ok {
+	// Handle interface types (including 'any' which is an alias for interface{})
+	unwrappedElem := types.Unalias(elemType)
+	if iface, ok := unwrappedElem.(*types.Interface); ok {
 		if iface.Empty() {
 			// For any elements, use WriteValue for dynamic type handling
 			fmt.Fprintf(buf, "%sctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", indent, elemAccess)

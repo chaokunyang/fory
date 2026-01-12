@@ -265,6 +265,13 @@ public class XtypeResolver extends TypeResolver {
     if (serializer == null) {
       if (type.isEnum()) {
         classInfo.serializer = new EnumSerializer(fory, (Class<Enum>) type);
+      } else if (GraalvmSupport.isGraalBuildtime()) {
+        // For GraalVM build time, directly create the serializer to avoid
+        // issues with DeferedLazySerializer persistence in native image
+        Class<? extends Serializer> c =
+            classResolver.getObjectSerializerClass(
+                type, shareMeta, fory.getConfig().isCodeGenEnabled(), null);
+        classInfo.serializer = Serializers.newSerializer(fory, type, c);
       } else {
         AtomicBoolean updated = new AtomicBoolean(false);
         AtomicReference<Serializer> ref = new AtomicReference(null);
@@ -1035,13 +1042,16 @@ public class XtypeResolver extends TypeResolver {
    */
   @Override
   public void ensureSerializersCompiled() {
-    classResolver.ensureSerializersCompiled();
     classInfoMap.forEach(
         (cls, classInfo) -> {
           GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
           if (classInfo.serializer != null) {
-            // Trigger serializer initialization
-            classInfo.serializer.getClass();
+            // Trigger serializer initialization and resolution for deferred serializers
+            if (classInfo.serializer instanceof DeferedLazyObjectSerializer) {
+              ((DeferedLazyObjectSerializer) classInfo.serializer).resolveSerializer();
+            } else {
+              classInfo.serializer.getClass();
+            }
           }
           // For enums at GraalVM build time, also handle anonymous enum value classes
           if (cls.isEnum() && GraalvmSupport.isGraalBuildtime()) {

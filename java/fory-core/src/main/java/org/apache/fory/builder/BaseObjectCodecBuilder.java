@@ -185,7 +185,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     super(new CodegenContext(), beanType);
     this.fory = fory;
     typeResolver = fory._getTypeResolver();
-    TypeRef<?> typeResolverType = TypeRef.of(typeResolver.getClass());
+    // Use TypeResolver interface instead of concrete class to support both xlang and non-xlang modes
+    TypeRef<?> typeResolverType = TypeRef.of(TypeResolver.class);
     this.parentSerializerClass = parentSerializerClass;
     if (fory.isCrossLanguage()) {
       writeMethodName = "xwrite";
@@ -207,9 +208,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         REF_RESOLVER_NAME,
         new Cast(refResolverExpr, refResolverTypeRef));
     Expression typeResolverExpr =
-        cast(
-            inlineInvoke(foryRef, "_getTypeResolver", TypeRef.of(TypeResolver.class)),
-            typeResolverType);
+        inlineInvoke(foryRef, "_getTypeResolver", TypeRef.of(TypeResolver.class));
     ctx.addField(ctx.type(typeResolverType), TYPE_RESOLVER_NAME, typeResolverExpr);
     ctx.reserveName(STRING_SERIALIZER_NAME);
     stringSerializerRef = fieldRef(STRING_SERIALIZER_NAME, STRING_SERIALIZER_TYPE_TOKEN);
@@ -233,6 +232,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       nameBuilder.append("ForyRef");
     } else {
       nameBuilder.append("Fory");
+    }
+    if (fory.isCrossLanguage()) {
+      // Generated classes are different when xlang mode is enabled.
+      // So we need to use a different name to generate xwrite/xread methods.
+      nameBuilder.append("Xlang");
     }
     nameBuilder.append("Codec").append(codecSuffix());
     Map<String, Integer> subGenerator =

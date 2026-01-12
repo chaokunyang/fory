@@ -1964,9 +1964,12 @@ public class ClassResolver extends TypeResolver {
     extRegistry.ensureSerializersCompiled = true;
     try {
       fory.getJITContext().lock();
-      Serializers.newSerializer(fory, LambdaSerializer.STUB_LAMBDA_CLASS, LambdaSerializer.class);
-      Serializers.newSerializer(
-          fory, JdkProxySerializer.SUBT_PROXY.getClass(), JdkProxySerializer.class);
+      // Lambda and JdkProxy serializers use java.lang.Class which is not supported in xlang mode
+      if (!fory.isCrossLanguage()) {
+        Serializers.newSerializer(fory, LambdaSerializer.STUB_LAMBDA_CLASS, LambdaSerializer.class);
+        Serializers.newSerializer(
+            fory, JdkProxySerializer.SUBT_PROXY.getClass(), JdkProxySerializer.class);
+      }
       classInfoMap.forEach(
           (cls, classInfo) -> {
             GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());

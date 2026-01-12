@@ -1034,24 +1034,22 @@ public class XtypeResolver extends TypeResolver {
    * should be called after all classes are registered.
    */
   public void ensureSerializersCompiled() {
-    if (GraalvmSupport.isGraalBuildtime()) {
-      classInfoMap.forEach(
-          (cls, classInfo) -> {
-            GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
-            if (classInfo.serializer != null) {
-              // Trigger serializer initialization
-              classInfo.serializer.getClass();
-            }
-            // For enums, also handle anonymous enum value classes
-            if (cls.isEnum()) {
-              for (Object enumConstant : cls.getEnumConstants()) {
-                Class<?> enumValueClass = enumConstant.getClass();
-                if (enumValueClass != cls) {
-                  getSerializer(enumValueClass);
-                }
+    classInfoMap.forEach(
+        (cls, classInfo) -> {
+          GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+          if (classInfo.serializer != null) {
+            // Trigger serializer initialization
+            classInfo.serializer.getClass();
+          }
+          // For enums at GraalVM build time, also handle anonymous enum value classes
+          if (cls.isEnum() && GraalvmSupport.isGraalBuildtime()) {
+            for (Object enumConstant : cls.getEnumConstants()) {
+              Class<?> enumValueClass = enumConstant.getClass();
+              if (enumValueClass != cls) {
+                getSerializer(enumValueClass);
               }
             }
-          });
-    }
+          }
+        });
   }
 }

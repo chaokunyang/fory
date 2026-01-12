@@ -1028,4 +1028,30 @@ public class XtypeResolver extends TypeResolver {
   private boolean isEnum(int internalTypeId) {
     return internalTypeId == Types.ENUM || internalTypeId == Types.NAMED_ENUM;
   }
+
+  /**
+   * Ensure all serializers for registered classes are compiled at GraalVM build time. This method
+   * should be called after all classes are registered.
+   */
+  public void ensureSerializersCompiled() {
+    if (GraalvmSupport.isGraalBuildtime()) {
+      classInfoMap.forEach(
+          (cls, classInfo) -> {
+            GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+            if (classInfo.serializer != null) {
+              // Trigger serializer initialization
+              classInfo.serializer.getClass();
+            }
+            // For enums, also handle anonymous enum value classes
+            if (cls.isEnum()) {
+              for (Object enumConstant : cls.getEnumConstants()) {
+                Class<?> enumValueClass = enumConstant.getClass();
+                if (enumValueClass != cls) {
+                  getSerializer(enumValueClass);
+                }
+              }
+            }
+          });
+    }
+  }
 }

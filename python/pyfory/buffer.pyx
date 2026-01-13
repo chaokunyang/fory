@@ -822,6 +822,10 @@ cdef inline uint8_t* get_address(v):
         return <uint8_t*>(PyBytes_AsString(v))
     view = memoryview(v)
     cdef str dtype = view.format
+    # Handle little-endian format codes (e.g., "<h", "<i", etc.)
+    # Strip the endian prefix since we only care about the type
+    if len(dtype) > 1 and dtype[0] in ('<', '>', '=', '@', '!'):
+        dtype = dtype[1:]
     cdef:
         const char[:] signed_char_data
         const unsigned char[:] unsigned_data

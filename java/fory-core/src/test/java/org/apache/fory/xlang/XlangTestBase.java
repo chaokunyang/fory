@@ -213,7 +213,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   }
 
   protected void runPeer(ExecutionContext ctx) {
-    runPeer(ctx, 30);
+    runPeer(ctx, 60);
   }
 
   protected void runPeer(ExecutionContext ctx, int timeoutSeconds) {

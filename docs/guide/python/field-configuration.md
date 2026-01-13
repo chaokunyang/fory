@@ -25,7 +25,7 @@ This page explains how to configure field-level metadata for serialization in Py
 
 Apache Fory™ provides field-level configuration through:
 
-- **`pyfory.field()`**: Configure field metadata (id, nullable, ref, ignore)
+- **`pyfory.field()`**: Configure field metadata (id, nullable, ref, ignore, dynamic)
 - **Type annotations**: Control integer encoding (varint, fixed, tagged)
 - **`Optional[T]`**: Mark fields as nullable
 
@@ -36,6 +36,7 @@ This enables:
 - **Reference Tracking**: Enable reference tracking for shared objects
 - **Field Skipping**: Exclude fields from serialization
 - **Encoding Control**: Specify how integers are encoded (varint, fixed, tagged)
+- **Polymorphism**: Control whether type info is written for struct fields
 
 ## Basic Syntax
 
@@ -69,14 +70,15 @@ class User:
 
 ### Parameters
 
-| Parameter         | Type     | Default   | Description                        |
-| ----------------- | -------- | --------- | ---------------------------------- |
-| `id`              | `int`    | `-1`      | Field tag ID (-1 = use field name) |
-| `nullable`        | `bool`   | `False`   | Whether the field can be null      |
-| `ref`             | `bool`   | `False`   | Enable reference tracking          |
-| `ignore`          | `bool`   | `False`   | Exclude field from serialization   |
-| `default`         | Any      | `MISSING` | Default value for the field        |
-| `default_factory` | Callable | `MISSING` | Factory function for default value |
+| Parameter         | Type   | Default   | Description                            |
+| ----------------- | ------ | --------- | -------------------------------------- |
+| `id`              | `int`  | `-1`      | Field tag ID (-1 = use field name)     |
+| `nullable`        | `bool` | `False`   | Whether the field can be null          |
+| `ref`             | `bool` | `False`   | Enable reference tracking              |
+| `ignore`          | `bool` | `False`   | Exclude field from serialization       |
+| `dynamic`         | `bool` | `None`    | Control whether type info is written   |
+| `default`         | Any    | `MISSING` | Default value for the field            |
+| `default_factory` | Callable | `MISSING` | Factory function for default value   |
 
 ## Field ID (`id`)
 
@@ -176,6 +178,52 @@ class User:
     _cache: dict = pyfory.field(ignore=True, default_factory=dict)
     _internal_state: str = pyfory.field(ignore=True, default="")
 ```
+
+## Dynamic Fields (`dynamic`)
+
+Control whether type information is written for struct fields. This is essential for polymorphism support:
+
+```python
+from abc import ABC, abstractmethod
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self) -> float:
+        pass
+
+@dataclass
+class Circle(Shape):
+    radius: float = 0.0
+
+    def area(self) -> float:
+        return 3.14159 * self.radius * self.radius
+
+@dataclass
+class Container:
+    # Abstract class: dynamic is always True (type info written)
+    shape: Shape = pyfory.field(id=0)
+
+    # Force type info for concrete type (support runtime subtypes)
+    circle: Circle = pyfory.field(id=1, dynamic=True)
+
+    # Skip type info for concrete type (use declared type directly)
+    fixed_circle: Circle = pyfory.field(id=2, dynamic=False)
+```
+
+**Default Behavior**:
+
+| Mode        | Abstract Class | Concrete Object Types | Numeric/str/time Types |
+| ----------- | -------------- | --------------------- | ---------------------- |
+| Native mode | `True`         | `True`                | `False`                |
+| Xlang mode  | `True`         | `False`               | `False`                |
+
+**Notes**:
+
+- **Abstract classes**: `dynamic` is always `True` (type info must be written)
+- **Native mode**: `dynamic` defaults to `True` for object types, `False` for numeric/str/time types
+- **Xlang mode**: `dynamic` defaults to `False` for concrete types
+- Use `dynamic=True` when a concrete field may hold subclass instances
+- Use `dynamic=False` for performance optimization when type is known
 
 ## Integer Type Annotations
 
@@ -410,6 +458,7 @@ class User:
 | ---------- | ----------------------------------------------------- | ------------------ |
 | `nullable` | `False` for `str`/numeric; others nullable by default | `False`            |
 | `ref`      | `True` (except `str` and numeric types)               | `False`            |
+| `dynamic`  | `True` (except numeric/str/time types)                | `False` (concrete) |
 
 ## Best Practices
 
@@ -422,17 +471,19 @@ class User:
 
 ## Options Reference
 
-| Configuration                                | Description                          |
-| -------------------------------------------- | ------------------------------------ |
-| `pyfory.field(id=N)`                         | Field tag ID to reduce metadata size |
-| `pyfory.field(nullable=True)`                | Mark field as nullable               |
-| `pyfory.field(ref=True)`                     | Enable reference tracking            |
-| `pyfory.field(ignore=True)`                  | Exclude field from serialization     |
-| `Optional[T]`                                | Type hint for nullable fields        |
-| `pyfory.int32`, `pyfory.int64`               | Signed integers (varint encoding)    |
-| `pyfory.uint32`, `pyfory.uint64`             | Unsigned integers (varint encoding)  |
-| `pyfory.fixed_uint32`, `pyfory.fixed_uint64` | Fixed-size unsigned                  |
-| `pyfory.tagged_uint64`                       | Tagged encoding for uint64           |
+| Configuration                                | Description                           |
+| -------------------------------------------- | ------------------------------------- |
+| `pyfory.field(id=N)`                         | Field tag ID to reduce metadata size  |
+| `pyfory.field(nullable=True)`                | Mark field as nullable                |
+| `pyfory.field(ref=True)`                     | Enable reference tracking             |
+| `pyfory.field(ignore=True)`                  | Exclude field from serialization      |
+| `pyfory.field(dynamic=True)`                 | Force type info to be written         |
+| `pyfory.field(dynamic=False)`                | Skip type info (use declared type)    |
+| `Optional[T]`                                | Type hint for nullable fields         |
+| `pyfory.int32`, `pyfory.int64`               | Signed integers (varint encoding)     |
+| `pyfory.uint32`, `pyfory.uint64`             | Unsigned integers (varint encoding)   |
+| `pyfory.fixed_uint32`, `pyfory.fixed_uint64` | Fixed-size unsigned                   |
+| `pyfory.tagged_uint64`                       | Tagged encoding for uint64            |
 
 ## Related Topics
 

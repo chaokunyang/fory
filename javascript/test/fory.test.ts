@@ -28,30 +28,24 @@ describe('fory', () => {
         expect(fory.deserialize(new Uint8Array([1]))).toBe(null)
     });
 
-    test('should deserialize big endian work', () => {
-        const fory = new Fory();
-        try {
-            fory.deserialize(new Uint8Array([0]))
-            throw new Error('unreachable code')
-        } catch (error) {
-            expect(error.message).toBe('big endian is not supported now');
-        }
-    });
-
     test('should deserialize xlang disable work', () => {
         const fory = new Fory();
         try {
-            fory.deserialize(new Uint8Array([2]))
+            // bit 0 = null flag, bit 1 = xlang flag, bit 2 = oob flag
+            // value 0 means xlang is disabled
+            fory.deserialize(new Uint8Array([0]))
             throw new Error('unreachable code')
         } catch (error) {
             expect(error.message).toBe('support crosslanguage mode only');
         }
     });
 
-    test('should deserialize xlang disable work', () => {
+    test('should deserialize oob mode work', () => {
         const fory = new Fory();
         try {
-            fory.deserialize(new Uint8Array([14]))
+            // bit 0 = null flag, bit 1 = xlang flag, bit 2 = oob flag
+            // value 6 = xlang (2) + oob (4) = 6
+            fory.deserialize(new Uint8Array([6]))
             throw new Error('unreachable code')
         } catch (error) {
             expect(error.message).toBe('outofband mode is not supported now');

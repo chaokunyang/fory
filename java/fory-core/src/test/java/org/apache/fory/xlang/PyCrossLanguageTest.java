@@ -103,9 +103,9 @@ public class PyCrossLanguageTest extends ForyTestBase {
    *
    * @return Whether the command succeeded.
    */
-  private boolean executeCommand(List<String> command, int waitTimeoutSeconds) {
+  private boolean executeCommand(List<String> command) {
     return TestUtils.executeCommand(
-        command, waitTimeoutSeconds, ImmutableMap.of("ENABLE_CROSS_LANGUAGE_TESTS", "true"));
+        command, 60, ImmutableMap.of("ENABLE_CROSS_LANGUAGE_TESTS", "true"));
   }
 
   @Data
@@ -147,7 +147,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
             PYTHON_MODULE,
             "test_buffer",
             dataFile.toAbsolutePath().toString());
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
     buffer = MemoryUtils.wrap(Files.readAllBytes(dataFile));
     Assert.assertTrue(buffer.readBoolean());
     Assert.assertEquals(buffer.readByte(), Byte.MAX_VALUE);
@@ -179,14 +179,14 @@ public class PyCrossLanguageTest extends ForyTestBase {
             PYTHON_MODULE,
             "test_murmurhash3",
             dataFile.toAbsolutePath().toString());
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
     long[] longs = MurmurHash3.murmurhash3_x64_128(new byte[] {1, 2, 8}, 0, 3, 47);
     buffer.writerIndex(0);
     buffer.writeInt64(longs[0]);
     buffer.writeInt64(longs[1]);
     Files.write(
         dataFile, buffer.getBytes(0, buffer.writerIndex()), StandardOpenOption.TRUNCATE_EXISTING);
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
   }
 
   /** Keep this in sync with `foo_schema` in test_cross_language.py */
@@ -320,7 +320,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
             PYTHON_MODULE,
             "test_cross_language_serializer",
             dataFile.toAbsolutePath().toString());
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
     MemoryBuffer buffer2 = MemoryUtils.wrap(Files.readAllBytes(dataFile));
     function.accept(buffer2, true);
   }
@@ -443,7 +443,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
             PYTHON_MODULE,
             "test_cross_language_reference",
             dataFile.toAbsolutePath().toString());
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
     MemoryBuffer buffer2 = MemoryUtils.wrap(Files.readAllBytes(dataFile));
     function.accept(buffer2);
   }
@@ -607,7 +607,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     ImmutableList<String> command =
         ImmutableList.of(
             PYTHON_EXECUTABLE, "-m", PYTHON_MODULE, testName, dataFile.toAbsolutePath().toString());
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
     Assert.assertEquals(fory.deserialize(Files.readAllBytes(dataFile)), obj);
   }
 
@@ -624,7 +624,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
         ImmutableList.of(
             PYTHON_EXECUTABLE, "-m", PYTHON_MODULE, testName, dataFile.toAbsolutePath().toString());
     // Just test that Python can read the data - don't check round-trip
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
   }
 
   private static class ComplexObject1Serializer extends Serializer<ComplexObject1> {
@@ -687,7 +687,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
             PYTHON_MODULE,
             "test_register_serializer",
             dataFile.toAbsolutePath().toString());
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
     Assert.assertEquals(fory.deserialize(Files.readAllBytes(dataFile)), obj);
   }
 
@@ -700,7 +700,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     ImmutableList<String> command =
         ImmutableList.of(
             PYTHON_EXECUTABLE, "-m", PYTHON_MODULE, testName, dataFile.toAbsolutePath().toString());
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
     return Files.readAllBytes(dataFile);
   }
 
@@ -754,7 +754,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
             "test_oob_buffer",
             intBandDataFile.toAbsolutePath().toString(),
             outOfBandDataFile.toAbsolutePath().toString());
-    Assert.assertTrue(executeCommand(command, 30));
+    Assert.assertTrue(executeCommand(command));
 
     MemoryBuffer inBandBuffer = MemoryUtils.wrap(Files.readAllBytes(intBandDataFile));
     outOfBandBuffer = MemoryUtils.wrap(Files.readAllBytes(outOfBandDataFile));

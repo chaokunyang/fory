@@ -18,7 +18,6 @@
 package fory
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"reflect"

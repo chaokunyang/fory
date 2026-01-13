@@ -70,14 +70,14 @@ class User:
 
 ### Parameters
 
-| Parameter         | Type   | Default   | Description                            |
-| ----------------- | ------ | --------- | -------------------------------------- |
-| `id`              | `int`  | `-1`      | Field tag ID (-1 = use field name)     |
-| `nullable`        | `bool` | `False`   | Whether the field can be null          |
-| `ref`             | `bool` | `False`   | Enable reference tracking              |
-| `ignore`          | `bool` | `False`   | Exclude field from serialization       |
-| `dynamic`         | `bool` | `None`    | Control whether type info is written   |
-| `default`         | Any    | `MISSING` | Default value for the field            |
+| Parameter         | Type     | Default   | Description                          |
+| ----------------- | -------- | --------- | ------------------------------------ |
+| `id`              | `int`    | `-1`      | Field tag ID (-1 = use field name)   |
+| `nullable`        | `bool`   | `False`   | Whether the field can be null        |
+| `ref`             | `bool`   | `False`   | Enable reference tracking            |
+| `ignore`          | `bool`   | `False`   | Exclude field from serialization     |
+| `dynamic`         | `bool`   | `None`    | Control whether type info is written |
+| `default`         | Any      | `MISSING` | Default value for the field          |
 | `default_factory` | Callable | `MISSING` | Factory function for default value   |
 
 ## Field ID (`id`)
@@ -471,19 +471,19 @@ class User:
 
 ## Options Reference
 
-| Configuration                                | Description                           |
-| -------------------------------------------- | ------------------------------------- |
-| `pyfory.field(id=N)`                         | Field tag ID to reduce metadata size  |
-| `pyfory.field(nullable=True)`                | Mark field as nullable                |
-| `pyfory.field(ref=True)`                     | Enable reference tracking             |
-| `pyfory.field(ignore=True)`                  | Exclude field from serialization      |
-| `pyfory.field(dynamic=True)`                 | Force type info to be written         |
-| `pyfory.field(dynamic=False)`                | Skip type info (use declared type)    |
-| `Optional[T]`                                | Type hint for nullable fields         |
-| `pyfory.int32`, `pyfory.int64`               | Signed integers (varint encoding)     |
-| `pyfory.uint32`, `pyfory.uint64`             | Unsigned integers (varint encoding)   |
-| `pyfory.fixed_uint32`, `pyfory.fixed_uint64` | Fixed-size unsigned                   |
-| `pyfory.tagged_uint64`                       | Tagged encoding for uint64            |
+| Configuration                                | Description                          |
+| -------------------------------------------- | ------------------------------------ |
+| `pyfory.field(id=N)`                         | Field tag ID to reduce metadata size |
+| `pyfory.field(nullable=True)`                | Mark field as nullable               |
+| `pyfory.field(ref=True)`                     | Enable reference tracking            |
+| `pyfory.field(ignore=True)`                  | Exclude field from serialization     |
+| `pyfory.field(dynamic=True)`                 | Force type info to be written        |
+| `pyfory.field(dynamic=False)`                | Skip type info (use declared type)   |
+| `Optional[T]`                                | Type hint for nullable fields        |
+| `pyfory.int32`, `pyfory.int64`               | Signed integers (varint encoding)    |
+| `pyfory.uint32`, `pyfory.uint64`             | Unsigned integers (varint encoding)  |
+| `pyfory.fixed_uint32`, `pyfory.fixed_uint64` | Fixed-size unsigned                  |
+| `pyfory.tagged_uint64`                       | Tagged encoding for uint64           |
 
 ## Related Topics
 

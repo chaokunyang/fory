@@ -249,6 +249,21 @@ public class CodeGenerator {
       // in such cases we just ignore the reject exception by log it.
       executor.allowCoreThreadTimeOut(true);
       compilationExecutorService = executor;
+      Runtime.getRuntime()
+          .addShutdownHook(
+              new Thread(
+                  () -> {
+                    executor.shutdown();
+                    try {
+                      if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+                        executor.shutdownNow();
+                      }
+                    } catch (InterruptedException e) {
+                      executor.shutdownNow();
+                      Thread.currentThread().interrupt();
+                    }
+                  },
+                  "fory-jit-compiler-shutdown"));
     }
     return compilationExecutorService;
   }

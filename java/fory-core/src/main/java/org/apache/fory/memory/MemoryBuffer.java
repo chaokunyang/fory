@@ -468,6 +468,22 @@ public final class MemoryBuffer {
     UNSAFE.putShort(heapMemory, pos, value);
   }
 
+  // CHECKSTYLE.OFF:MethodName
+  public short _unsafeGetInt16(int index) {
+    // CHECKSTYLE.ON:MethodName
+    short v = UNSAFE.getShort(heapMemory, address + index);
+    return LITTLE_ENDIAN ? v : Short.reverseBytes(v);
+  }
+
+  // CHECKSTYLE.OFF:MethodName
+  public void _unsafePutInt16(int index, short value) {
+    // CHECKSTYLE.ON:MethodName
+    if (!LITTLE_ENDIAN) {
+      value = Short.reverseBytes(value);
+    }
+    UNSAFE.putShort(heapMemory, address + index, value);
+  }
+
   public int getInt32(int index) {
     final long pos = address + index;
     checkPosition(index, pos, 4);
@@ -485,7 +501,7 @@ public final class MemoryBuffer {
   }
 
   // CHECKSTYLE.OFF:MethodName
-  private int _unsafeGetInt32(int index) {
+  public int _unsafeGetInt32(int index) {
     // CHECKSTYLE.ON:MethodName
     int v = UNSAFE.getInt(heapMemory, address + index);
     return LITTLE_ENDIAN ? v : Integer.reverseBytes(v);
@@ -517,14 +533,14 @@ public final class MemoryBuffer {
   }
 
   // CHECKSTYLE.OFF:MethodName
-  long _unsafeGetInt64(int index) {
+  public long _unsafeGetInt64(int index) {
     // CHECKSTYLE.ON:MethodName
     long v = UNSAFE.getLong(heapMemory, address + index);
     return LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
   // CHECKSTYLE.OFF:MethodName
-  private void _unsafePutInt64(int index, long value) {
+  public void _unsafePutInt64(int index, long value) {
     // CHECKSTYLE.ON:MethodName
     if (!LITTLE_ENDIAN) {
       value = Long.reverseBytes(value);
@@ -1254,15 +1270,6 @@ public final class MemoryBuffer {
     idx += _unsafeWriteVarUint32(numBytes);
     Platform.copyMemory(arr, offset, heapMemory, address + idx, numBytes);
     writerIndex = idx + numBytes;
-  }
-
-  public void writePrimitiveArrayAlignedSize(Object arr, int offset, int numBytes) {
-    writeVarUint32Aligned(numBytes);
-    final int writerIdx = writerIndex;
-    final int newIdx = writerIdx + numBytes;
-    ensure(newIdx);
-    Platform.copyMemory(arr, offset, heapMemory, address + writerIdx, numBytes);
-    writerIndex = newIdx;
   }
 
   public void writePrimitiveArray(Object arr, int offset, int numBytes) {
@@ -2428,21 +2435,6 @@ public final class MemoryBuffer {
     return arr;
   }
 
-  public byte[] readBytesWithAlignedSize() {
-    final int numBytes = readAlignedVarUint32();
-    int readerIdx = readerIndex;
-    final byte[] arr = new byte[numBytes];
-    // use subtract to avoid overflow
-    if (readerIdx > size - numBytes) {
-      streamReader.readTo(arr, 0, numBytes);
-      return arr;
-    }
-    Platform.UNSAFE.copyMemory(
-        this.heapMemory, this.address + readerIdx, arr, Platform.BYTE_ARRAY_OFFSET, numBytes);
-    readerIndex = readerIdx + numBytes;
-    return arr;
-  }
-
   /** This method should be used to read data written by {@link #writePrimitiveArrayWithSize}. */
   public char[] readChars(int numBytes) {
     int readerIdx = readerIndex;
@@ -2483,11 +2475,6 @@ public final class MemoryBuffer {
         heapMemory, address + readerIdx, arr, Platform.CHAR_ARRAY_OFFSET, numBytes);
     readerIndex = readerIdx + numBytes;
     return arr;
-  }
-
-  public char[] readCharsWithAlignedSize() {
-    final int numBytes = readAlignedVarUint32();
-    return readChars(numBytes);
   }
 
   public long[] readLongs(int numBytes) {

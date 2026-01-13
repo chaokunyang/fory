@@ -355,10 +355,66 @@ class Data:
     name: str = ""
 ```
 
+## Native Mode vs Xlang Mode
+
+Field configuration behaves differently depending on the serialization mode:
+
+### Native Mode (Python-only)
+
+Native mode has **relaxed default values** for maximum compatibility:
+
+- **Nullable**: `str` and numeric types are non-nullable by default unless `Optional` is used
+- **Ref tracking**: Enabled by default for object references (except `str` and numeric types)
+
+In native mode, you typically **don't need to configure field annotations** unless you want to:
+
+- Reduce serialized size by using field IDs
+- Optimize performance by disabling unnecessary ref tracking
+
+```python
+# Native mode: works without field configuration
+@dataclass
+class User:
+    id: int = 0
+    name: str = ""
+    tags: List[str] = None
+```
+
+### Xlang Mode (Cross-language)
+
+Xlang mode has **stricter default values** due to type system differences between languages:
+
+- **Nullable**: Fields are non-nullable by default (`nullable=False`)
+- **Ref tracking**: Disabled by default (`ref=False`)
+
+In xlang mode, you **need to configure fields** when:
+
+- A field can be None (use `Optional[T]` with `nullable=True`)
+- A field needs reference tracking for shared/circular objects (use `ref=True`)
+- Integer types need specific encoding for cross-language compatibility
+- You want to reduce metadata size (use field IDs)
+
+```python
+# Xlang mode: explicit configuration required for nullable/ref fields
+@dataclass
+class User:
+    id: pyfory.int64 = pyfory.field(id=0, default=0)
+    name: str = pyfory.field(id=1, default="")
+    email: Optional[str] = pyfory.field(id=2, nullable=True, default=None)  # Must declare nullable
+    friend: Optional["User"] = pyfory.field(id=3, ref=True, nullable=True, default=None)  # Must declare ref
+```
+
+### Default Values Summary
+
+| Option     | Native Mode Default                                   | Xlang Mode Default |
+| ---------- | ----------------------------------------------------- | ------------------ |
+| `nullable` | `False` for `str`/numeric; others nullable by default | `False`            |
+| `ref`      | `True` (except `str` and numeric types)               | `False`            |
+
 ## Best Practices
 
 1. **Configure field IDs**: Recommended for compatible mode to reduce serialization cost
-2. **Use `Optional[T]` with `nullable=True`**: Required for nullable fields
+2. **Use `Optional[T]` with `nullable=True`**: Required for nullable fields in xlang mode
 3. **Enable ref tracking for shared objects**: Use `ref=True` when objects are shared or circular
 4. **Use `ignore=True` for sensitive data**: Passwords, tokens, internal state
 5. **Choose appropriate encoding**: `varint` for small values, `fixed` for full-range values

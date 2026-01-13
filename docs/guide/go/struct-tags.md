@@ -282,6 +282,37 @@ err := f.RegisterStruct(BadStruct{}, 1)
 // Error: ErrKindInvalidTag
 ```
 
+## Xlang Mode Defaults
+
+Go only supports xlang (cross-language) mode. The defaults are strict due to type system differences between languages:
+
+- **Nullable**: Fields are non-nullable by default
+- **Ref tracking**: Disabled by default (`ref` tag not set)
+
+You **need to configure fields** when:
+
+- A field can be nil (use pointer types like `*string`, `*int32`)
+- A field needs reference tracking for shared/circular objects (use `fory:"ref"`)
+- You want to reduce metadata size (use field IDs with `fory:"id=N"`)
+
+```go
+// Xlang mode: explicit configuration required
+type User struct {
+    ID    int64   `fory:"id=0"`
+    Name  string  `fory:"id=1"`
+    Email *string `fory:"id=2"`           // Pointer type for nullable
+    Friend *User  `fory:"id=3,ref"`       // Must declare ref for shared objects
+}
+```
+
+### Default Values Summary
+
+| Option     | Default | How to Enable            |
+| ---------- | ------- | ------------------------ |
+| `nullable` | `false` | Use pointer types (`*T`) |
+| `ref`      | `false` | Add `fory:"ref"` tag     |
+| `id`       | `-1`    | Add `fory:"id=N"` tag    |
+
 ## Best Practices
 
 1. **Use `-` for sensitive data**: Passwords, tokens, internal state

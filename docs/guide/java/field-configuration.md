@@ -514,7 +514,7 @@ Field configuration behaves differently depending on the serialization mode:
 Native mode has **relaxed default values** for maximum compatibility:
 
 - **Nullable**: Reference types are nullable by default
-- **Ref tracking**: Enabled by default for object references
+- **Ref tracking**: Enabled by default for object references (except `String`, boxed types, and time types)
 - **Polymorphism**: All non-final classes support polymorphism by default
 
 In native mode, you typically **don't need to configure field annotations** unless you want to:

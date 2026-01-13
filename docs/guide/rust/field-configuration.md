@@ -397,6 +397,44 @@ struct Data {
 }
 ```
 
+## Xlang Mode Defaults
+
+Rust only supports xlang (cross-language) mode. The defaults are strict due to type system differences between languages:
+
+- **Nullable**: Fields are non-nullable by default (except `Option<T>`)
+- **Ref tracking**: Disabled by default (except `Rc<T>`, `Arc<T>`, weak types)
+
+You **need to configure fields** when:
+
+- A field can be None (use `Option<T>`)
+- A field needs reference tracking for shared/circular objects (use `ref = true`)
+- Integer types need specific encoding for cross-language compatibility
+- You want to reduce metadata size (use field IDs)
+
+```rust
+// Xlang mode: explicit configuration required
+#[derive(Fory)]
+struct User {
+    #[fory(id = 0)]
+    name: String,                    // Non-nullable by default
+
+    #[fory(id = 1)]
+    email: Option<String>,           // Nullable (Option<T>)
+
+    #[fory(id = 2, ref = true)]
+    friend: Rc<User>,                // Ref tracking (default for Rc)
+}
+```
+
+### Default Values Summary
+
+| Type                      | Default Nullable | Default Ref Tracking |
+| ------------------------- | ---------------- | -------------------- |
+| Primitives, `String`      | `false`          | `false`              |
+| `Option<T>`               | `true`           | `false`              |
+| `Rc<T>`, `Arc<T>`         | `false`          | `true`               |
+| `RcWeak<T>`, `ArcWeak<T>` | `true`           | `true`               |
+
 ## Best Practices
 
 1. **Configure field IDs**: Recommended for compatible mode to reduce serialization cost

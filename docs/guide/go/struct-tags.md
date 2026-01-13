@@ -1,5 +1,5 @@
 ---
-title: Struct Tags
+title: Struct Field Tags
 sidebar_position: 60
 id: struct_tags
 license: |

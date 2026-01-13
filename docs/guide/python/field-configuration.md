@@ -1,0 +1,385 @@
+---
+title: Field Configuration
+sidebar_position: 5
+id: field_configuration
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+---
+
+This page explains how to configure field-level metadata for serialization in Python.
+
+## Overview
+
+Apache Fory™ provides field-level configuration through:
+
+- **`pyfory.field()`**: Configure field metadata (id, nullable, ref, ignore)
+- **Type annotations**: Control integer encoding (varint, fixed, tagged)
+- **`Optional[T]`**: Mark fields as nullable
+
+This enables:
+
+- **Tag IDs**: Assign compact numeric IDs to reduce struct field meta size overhead
+- **Nullability**: Control whether fields can be null
+- **Reference Tracking**: Enable reference tracking for shared objects
+- **Field Skipping**: Exclude fields from serialization
+- **Encoding Control**: Specify how integers are encoded (varint, fixed, tagged)
+
+## Basic Syntax
+
+Use `@dataclass` decorator with type annotations and `pyfory.field()`:
+
+```python
+from dataclasses import dataclass
+from typing import Optional
+import pyfory
+
+@dataclass
+class Person:
+    name: str = pyfory.field(id=0)
+    age: pyfory.int32 = pyfory.field(id=1, default=0)
+    nickname: Optional[str] = pyfory.field(id=2, nullable=True, default=None)
+```
+
+## The `pyfory.field()` Function
+
+Use `pyfory.field()` to configure field-level metadata:
+
+```python
+@dataclass
+class User:
+    id: pyfory.int64 = pyfory.field(id=0, default=0)
+    name: str = pyfory.field(id=1, default="")
+    email: Optional[str] = pyfory.field(id=2, nullable=True, default=None)
+    friends: List["User"] = pyfory.field(id=3, ref=True, default_factory=list)
+    _cache: dict = pyfory.field(ignore=True, default_factory=dict)
+```
+
+### Parameters
+
+| Parameter         | Type     | Default   | Description                        |
+| ----------------- | -------- | --------- | ---------------------------------- |
+| `id`              | `int`    | `-1`      | Field tag ID (-1 = use field name) |
+| `nullable`        | `bool`   | `False`   | Whether the field can be null      |
+| `ref`             | `bool`   | `False`   | Enable reference tracking          |
+| `ignore`          | `bool`   | `False`   | Exclude field from serialization   |
+| `default`         | Any      | `MISSING` | Default value for the field        |
+| `default_factory` | Callable | `MISSING` | Factory function for default value |
+
+## Field ID (`id`)
+
+Assigns a numeric ID to a field to minimize struct field meta size overhead:
+
+```python
+@dataclass
+class User:
+    id: pyfory.int64 = pyfory.field(id=0, default=0)
+    name: str = pyfory.field(id=1, default="")
+    age: pyfory.int32 = pyfory.field(id=2, default=0)
+```
+
+**Benefits**:
+
+- Smaller serialized size (numeric IDs vs field names in metadata)
+- Reduced struct field meta overhead
+- Allows renaming fields without breaking binary compatibility
+
+**Recommendation**: It is recommended to configure field IDs for compatible mode since it reduces serialization cost.
+
+**Notes**:
+
+- IDs must be unique within a class
+- IDs must be >= 0 (use -1 to use field name encoding, which is the default)
+- If not specified, field name is used in metadata (larger overhead)
+
+**Without field IDs** (field names used in metadata):
+
+```python
+@dataclass
+class User:
+    id: pyfory.int64 = 0
+    name: str = ""
+```
+
+## Nullable Fields (`nullable`)
+
+Use `nullable=True` for fields that can be `None`:
+
+```python
+from typing import Optional
+
+@dataclass
+class Record:
+    # Nullable string field
+    optional_name: Optional[str] = pyfory.field(id=0, nullable=True, default=None)
+
+    # Nullable integer field
+    optional_count: Optional[pyfory.int32] = pyfory.field(id=1, nullable=True, default=None)
+```
+
+**Notes**:
+
+- `Optional[T]` fields must have `nullable=True`
+- Non-optional fields default to `nullable=False`
+
+## Reference Tracking (`ref`)
+
+Enable reference tracking for fields that may be shared or circular:
+
+```python
+@dataclass
+class RefOuter:
+    # Both fields may point to the same inner object
+    inner1: Optional[RefInner] = pyfory.field(id=0, ref=True, nullable=True, default=None)
+    inner2: Optional[RefInner] = pyfory.field(id=1, ref=True, nullable=True, default=None)
+
+
+@dataclass
+class CircularRef:
+    name: str = pyfory.field(id=0, default="")
+    # Self-referencing field for circular references
+    self_ref: Optional["CircularRef"] = pyfory.field(id=1, ref=True, nullable=True, default=None)
+```
+
+**Use Cases**:
+
+- Enable for fields that may be circular or shared
+- When the same object is referenced from multiple fields
+
+**Notes**:
+
+- Reference tracking only takes effect when `Fory(ref=True)` is set globally
+- Field-level `ref=True` AND global `ref=True` must both be enabled
+
+## Skipping Fields (`ignore`)
+
+Exclude fields from serialization:
+
+```python
+@dataclass
+class User:
+    id: pyfory.int64 = pyfory.field(id=0, default=0)
+    name: str = pyfory.field(id=1, default="")
+    # Not serialized
+    _cache: dict = pyfory.field(ignore=True, default_factory=dict)
+    _internal_state: str = pyfory.field(ignore=True, default="")
+```
+
+## Integer Type Annotations
+
+Fory provides type annotations to control integer encoding:
+
+### Signed Integers
+
+```python
+@dataclass
+class SignedIntegers:
+    byte_val: pyfory.int8 = 0      # 8-bit signed
+    short_val: pyfory.int16 = 0    # 16-bit signed
+    int_val: pyfory.int32 = 0      # 32-bit signed (varint encoding)
+    long_val: pyfory.int64 = 0     # 64-bit signed (varint encoding)
+```
+
+### Unsigned Integers
+
+```python
+@dataclass
+class UnsignedIntegers:
+    # Fixed-size encoding
+    u8_val: pyfory.uint8 = 0       # 8-bit unsigned (fixed)
+    u16_val: pyfory.uint16 = 0     # 16-bit unsigned (fixed)
+
+    # Variable-length encoding (default for u32/u64)
+    u32_var: pyfory.uint32 = 0     # 32-bit unsigned (varint)
+    u64_var: pyfory.uint64 = 0     # 64-bit unsigned (varint)
+
+    # Explicit fixed-size encoding
+    u32_fixed: pyfory.fixed_uint32 = 0   # 32-bit unsigned (fixed 4 bytes)
+    u64_fixed: pyfory.fixed_uint64 = 0   # 64-bit unsigned (fixed 8 bytes)
+
+    # Tagged encoding (includes type tag)
+    u64_tagged: pyfory.tagged_uint64 = 0  # 64-bit unsigned (tagged)
+```
+
+### Floating Point
+
+```python
+@dataclass
+class FloatingPoint:
+    float_val: pyfory.float32 = 0.0   # 32-bit float
+    double_val: pyfory.float64 = 0.0  # 64-bit double
+```
+
+### Encoding Summary
+
+| Type                   | Encoding | Size       |
+| ---------------------- | -------- | ---------- |
+| `pyfory.int8`          | fixed    | 1 byte     |
+| `pyfory.int16`         | fixed    | 2 bytes    |
+| `pyfory.int32`         | varint   | 1-5 bytes  |
+| `pyfory.int64`         | varint   | 1-10 bytes |
+| `pyfory.uint8`         | fixed    | 1 byte     |
+| `pyfory.uint16`        | fixed    | 2 bytes    |
+| `pyfory.uint32`        | varint   | 1-5 bytes  |
+| `pyfory.uint64`        | varint   | 1-10 bytes |
+| `pyfory.fixed_uint32`  | fixed    | 4 bytes    |
+| `pyfory.fixed_uint64`  | fixed    | 8 bytes    |
+| `pyfory.tagged_uint64` | tagged   | 1-9 bytes  |
+| `pyfory.float32`       | fixed    | 4 bytes    |
+| `pyfory.float64`       | fixed    | 8 bytes    |
+
+**When to Use**:
+
+- `varint`: Best for values that are often small (default for int32/int64/uint32/uint64)
+- `fixed`: Best for values that use full range (e.g., timestamps, hashes)
+- `tagged`: When type information needs to be preserved (uint64 only)
+
+## Complete Example
+
+```python
+from dataclasses import dataclass
+from typing import Optional, List, Dict, Set
+import pyfory
+
+
+@dataclass
+class Document:
+    # Fields with tag IDs (recommended for compatible mode)
+    title: str = pyfory.field(id=0, default="")
+    version: pyfory.int32 = pyfory.field(id=1, default=0)
+
+    # Nullable field
+    description: Optional[str] = pyfory.field(id=2, nullable=True, default=None)
+
+    # Collection fields
+    tags: List[str] = pyfory.field(id=3, default_factory=list)
+    metadata: Dict[str, str] = pyfory.field(id=4, default_factory=dict)
+    categories: Set[str] = pyfory.field(id=5, default_factory=set)
+
+    # Unsigned integers with different encodings
+    view_count: pyfory.uint64 = pyfory.field(id=6, default=0)           # varint encoding
+    file_size: pyfory.fixed_uint64 = pyfory.field(id=7, default=0)      # fixed encoding
+    checksum: pyfory.tagged_uint64 = pyfory.field(id=8, default=0)      # tagged encoding
+
+    # Reference-tracked field for shared/circular references
+    parent: Optional["Document"] = pyfory.field(id=9, ref=True, nullable=True, default=None)
+
+    # Ignored field (not serialized)
+    _cache: dict = pyfory.field(ignore=True, default_factory=dict)
+
+
+def main():
+    fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
+    fory.register_type(Document, type_id=100)
+
+    doc = Document(
+        title="My Document",
+        version=1,
+        description="A sample document",
+        tags=["tag1", "tag2"],
+        metadata={"key": "value"},
+        categories={"cat1"},
+        view_count=42,
+        file_size=1024,
+        checksum=123456789,
+        parent=None,
+    )
+
+    # Serialize
+    data = fory.serialize(doc)
+
+    # Deserialize
+    decoded = fory.deserialize(data)
+    assert decoded.title == doc.title
+    assert decoded.version == doc.version
+
+
+if __name__ == "__main__":
+    main()
+```
+
+## Cross-Language Compatibility
+
+When serializing data to be read by other languages (Java, Rust, C++, Go), use field IDs and matching type annotations:
+
+```python
+@dataclass
+class CrossLangData:
+    # Use field IDs for cross-language compatibility
+    int_var: pyfory.int32 = pyfory.field(id=0, default=0)
+    long_fixed: pyfory.fixed_uint64 = pyfory.field(id=1, default=0)
+    long_tagged: pyfory.tagged_uint64 = pyfory.field(id=2, default=0)
+    optional_value: Optional[str] = pyfory.field(id=3, nullable=True, default=None)
+```
+
+## Schema Evolution
+
+Compatible mode supports schema evolution. It is recommended to configure field IDs to reduce serialization cost:
+
+```python
+# Version 1
+@dataclass
+class DataV1:
+    id: pyfory.int64 = pyfory.field(id=0, default=0)
+    name: str = pyfory.field(id=1, default="")
+
+
+# Version 2: Added new field
+@dataclass
+class DataV2:
+    id: pyfory.int64 = pyfory.field(id=0, default=0)
+    name: str = pyfory.field(id=1, default="")
+    email: Optional[str] = pyfory.field(id=2, nullable=True, default=None)  # New field
+```
+
+Data serialized with V1 can be deserialized with V2 (new field will be `None`).
+
+Alternatively, field IDs can be omitted (field names will be used in metadata with larger overhead):
+
+```python
+@dataclass
+class Data:
+    id: pyfory.int64 = 0
+    name: str = ""
+```
+
+## Best Practices
+
+1. **Configure field IDs**: Recommended for compatible mode to reduce serialization cost
+2. **Use `Optional[T]` with `nullable=True`**: Required for nullable fields
+3. **Enable ref tracking for shared objects**: Use `ref=True` when objects are shared or circular
+4. **Use `ignore=True` for sensitive data**: Passwords, tokens, internal state
+5. **Choose appropriate encoding**: `varint` for small values, `fixed` for full-range values
+6. **Keep IDs stable**: Once assigned, don't change field IDs
+
+## Options Reference
+
+| Configuration                                | Description                          |
+| -------------------------------------------- | ------------------------------------ |
+| `pyfory.field(id=N)`                         | Field tag ID to reduce metadata size |
+| `pyfory.field(nullable=True)`                | Mark field as nullable               |
+| `pyfory.field(ref=True)`                     | Enable reference tracking            |
+| `pyfory.field(ignore=True)`                  | Exclude field from serialization     |
+| `Optional[T]`                                | Type hint for nullable fields        |
+| `pyfory.int32`, `pyfory.int64`               | Signed integers (varint encoding)    |
+| `pyfory.uint32`, `pyfory.uint64`             | Unsigned integers (varint encoding)  |
+| `pyfory.fixed_uint32`, `pyfory.fixed_uint64` | Fixed-size unsigned                  |
+| `pyfory.tagged_uint64`                       | Tagged encoding for uint64           |
+
+## Related Topics
+
+- [Basic Serialization](basic-serialization.md) - Getting started with Fory serialization
+- [Schema Evolution](schema-evolution.md) - Compatible mode and schema evolution
+- [Cross-Language](cross-language.md) - Interoperability with Java, Rust, C++, Go

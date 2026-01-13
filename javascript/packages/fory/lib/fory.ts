@@ -114,10 +114,6 @@ export default class {
     if ((bitmap & ConfigFlags.isNullFlag) === ConfigFlags.isNullFlag) {
       return null;
     }
-    const isLittleEndian = (bitmap & ConfigFlags.isLittleEndianFlag) === ConfigFlags.isLittleEndianFlag;
-    if (!isLittleEndian) {
-      throw new Error("big endian is not supported now");
-    }
     const isCrossLanguage = (bitmap & ConfigFlags.isCrossLanguageFlag) == ConfigFlags.isCrossLanguageFlag;
     if (!isCrossLanguage) {
       throw new Error("support crosslanguage mode only");
@@ -147,7 +143,6 @@ export default class {
     if (data === null) {
       bitmap |= ConfigFlags.isNullFlag;
     }
-    bitmap |= ConfigFlags.isLittleEndianFlag;
     bitmap |= ConfigFlags.isCrossLanguageFlag;
     this.binaryWriter.uint8(bitmap);
     this.binaryWriter.uint8(Language.JAVASCRIPT);

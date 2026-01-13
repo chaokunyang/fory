@@ -485,10 +485,6 @@ public:
     if (header.is_null) {
       return Unexpected(Error::invalid_data("Cannot deserialize null object"));
     }
-    if (header.is_little_endian != is_little_endian_system()) {
-      return Unexpected(
-          Error::unsupported("Cross-endian deserialization not yet supported"));
-    }
 
     read_ctx_->attach(buffer);
     ReadContextGuard guard(*read_ctx_);
@@ -525,10 +521,6 @@ public:
     FORY_TRY(header, read_header(buffer));
     if (header.is_null) {
       return Unexpected(Error::invalid_data("Cannot deserialize null object"));
-    }
-    if (header.is_little_endian != is_little_endian_system()) {
-      return Unexpected(
-          Error::unsupported("Cross-endian deserialization not yet supported"));
     }
 
     read_ctx_->attach(buffer);
@@ -593,11 +585,8 @@ private:
     uint16_t header = 0;
     // Flags byte at position 0
     uint8_t flags = 0;
-    if (is_little_endian_system()) {
-      flags |= (1 << 1); // bit 1: endian flag
-    }
     if (xlang) {
-      flags |= (1 << 2); // bit 2: xlang flag
+      flags |= (1 << 1); // bit 1: xlang flag
     }
     header |= flags;
     // Language byte at position 1 (only used if xlang)

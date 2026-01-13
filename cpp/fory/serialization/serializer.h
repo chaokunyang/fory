@@ -88,7 +88,6 @@ inline bool is_little_endian_system() {
 /// Fory header information
 struct HeaderInfo {
   bool is_null;
-  bool is_little_endian;
   bool is_xlang;
   bool is_oob;
   Language language;
@@ -112,14 +111,13 @@ inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
   // Read flags byte
   uint8_t flags = buffer.GetByteAs<uint8_t>(start_pos);
   info.is_null = (flags & (1 << 0)) != 0;
-  info.is_little_endian = (flags & (1 << 1)) != 0;
-  info.is_xlang = (flags & (1 << 2)) != 0;
-  info.is_oob = (flags & (1 << 3)) != 0;
+  info.is_xlang = (flags & (1 << 1)) != 0;
+  info.is_oob = (flags & (1 << 2)) != 0;
 
   // Update reader index (1 byte consumed: flags)
   buffer.IncreaseReaderIndex(1);
 
-  // Java writes a language byte after header in xlang mode - read and ignore it
+  // Language byte after header in xlang mode
   if (info.is_xlang) {
     Error error;
     uint8_t lang_byte = buffer.ReadUint8(error);

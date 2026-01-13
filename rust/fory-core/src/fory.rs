@@ -23,11 +23,8 @@ use crate::resolver::context::{ContextCache, ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::ForyDefault;
 use crate::serializer::{Serializer, StructSerializer};
-use crate::types::config_flags::IS_NULL_FLAG;
-use crate::types::{
-    config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_LITTLE_ENDIAN_FLAG},
-    Language, RefMode, SIZE_OF_REF_AND_TYPE,
-};
+use crate::types::config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_NULL_FLAG};
+use crate::types::{Language, RefMode, SIZE_OF_REF_AND_TYPE};
 use std::cell::UnsafeCell;
 use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -833,10 +830,7 @@ impl Fory {
     pub fn write_head<T: Serializer>(&self, is_none: bool, writer: &mut Writer) {
         const HEAD_SIZE: usize = 10;
         writer.reserve(T::fory_reserved_space() + SIZE_OF_REF_AND_TYPE + HEAD_SIZE);
-        #[cfg(target_endian = "big")]
-        let mut bitmap = 0;
-        #[cfg(target_endian = "little")]
-        let mut bitmap = IS_LITTLE_ENDIAN_FLAG;
+        let mut bitmap: u8 = 0;
         if self.config.xlang {
             bitmap |= IS_CROSS_LANGUAGE_FLAG;
         }
@@ -1033,13 +1027,6 @@ impl Fory {
         ensure!(
             self.config.xlang == peer_is_xlang,
             Error::invalid_data("header bitmap mismatch at xlang bit")
-        );
-        let is_little_endian = (bitmap & IS_LITTLE_ENDIAN_FLAG) != 0;
-        ensure!(
-            is_little_endian,
-            Error::invalid_data(
-                "Big endian is not supported for now, please ensure peer machine is little endian."
-            )
         );
         let is_none = (bitmap & IS_NULL_FLAG) != 0;
         if is_none {

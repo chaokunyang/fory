@@ -40,13 +40,11 @@ final class Fory implements BaseFory{
   late final XtypeResolver _xtypeResolver;
 
   Fory({
-    bool isLittleEndian = true,
     bool refTracking = true,
     bool basicTypesRefIgnored = true,
     bool timeRefIgnored = true,
     // bool stringRefIgnored = true,
   }) : _conf = ForyConfigManager.inst.createConfig(
-    isLittleEndian: isLittleEndian,
     refTracking: refTracking,
     basicTypesRefIgnored: basicTypesRefIgnored,
     timeRefIgnored: timeRefIgnored,

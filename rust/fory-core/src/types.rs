@@ -474,9 +474,8 @@ pub fn compute_field_hash(hash: u32, id: i16) -> u32 {
 
 pub mod config_flags {
     pub const IS_NULL_FLAG: u8 = 1 << 0;
-    pub const IS_LITTLE_ENDIAN_FLAG: u8 = 2;
-    pub const IS_CROSS_LANGUAGE_FLAG: u8 = 4;
-    pub const IS_OUT_OF_BAND_FLAG: u8 = 8;
+    pub const IS_CROSS_LANGUAGE_FLAG: u8 = 1 << 1;
+    pub const IS_OUT_OF_BAND_FLAG: u8 = 1 << 2;
 }
 
 #[derive(Debug, PartialEq)]

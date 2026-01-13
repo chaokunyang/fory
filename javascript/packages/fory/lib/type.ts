@@ -173,9 +173,8 @@ export enum InternalSerializerType {
 
 export enum ConfigFlags {
   isNullFlag = 1 << 0,
-  isLittleEndianFlag = 2,
-  isCrossLanguageFlag = 4,
-  isOutOfBandFlag = 8,
+  isCrossLanguageFlag = 1 << 1,
+  isOutOfBandFlag = 1 << 2,
 }
 
 // read, write

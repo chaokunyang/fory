@@ -35,7 +35,6 @@ from pyfory.lib import mmh3
 from pyfory.meta.metastring import Encoding
 from pyfory.types import is_primitive_type
 from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
-from pyfory.utils import is_little_endian
 from pyfory.includes.libserialization cimport \
     (TypeId, IsNamespacedType, IsTypeShareMeta, Fory_PyBooleanSequenceWriteToBuffer, Fory_PyFloatSequenceWriteToBuffer)
 
@@ -1195,24 +1194,19 @@ cdef class Fory:
             set_bit(buffer, mask_index, 0)
         else:
             clear_bit(buffer, mask_index, 0)
-        # set endian
-        if is_little_endian:
-            set_bit(buffer, mask_index, 1)
-        else:
-            clear_bit(buffer, mask_index, 1)
 
         if self.language == Language.XLANG:
             # set reader as x_lang.
-            set_bit(buffer, mask_index, 2)
+            set_bit(buffer, mask_index, 1)
             # set writer language.
             buffer.write_int8(Language.PYTHON.value)
         else:
             # set reader as native.
-            clear_bit(buffer, mask_index, 2)
+            clear_bit(buffer, mask_index, 1)
         if self.buffer_callback is not None:
-            set_bit(buffer, mask_index, 3)
+            set_bit(buffer, mask_index, 2)
         else:
-            clear_bit(buffer, mask_index, 3)
+            clear_bit(buffer, mask_index, 2)
         # Reserve space for type definitions offset, similar to Java implementation
         cdef int32_t type_defs_offset_pos = -1
         if self.serialization_context.scoped_meta_share_enabled:
@@ -1356,18 +1350,13 @@ cdef class Fory:
         buffer.reader_index = reader_index + 1
         if get_bit(buffer, reader_index, 0):
             return None
-        cdef c_bool is_little_endian_ = get_bit(buffer, reader_index, 1)
-        assert is_little_endian_, (
-            "Big endian is not supported for now, "
-            "please ensure peer machine is little endian."
-        )
-        cdef c_bool is_target_x_lang = get_bit(buffer, reader_index, 2)
+        cdef c_bool is_target_x_lang = get_bit(buffer, reader_index, 1)
         if is_target_x_lang:
             self._peer_language = Language(buffer.read_int8())
         else:
             self._peer_language = Language.PYTHON
         cdef c_bool is_out_of_band_serialization_enabled = \
-            get_bit(buffer, reader_index, 3)
+            get_bit(buffer, reader_index, 2)
         if is_out_of_band_serialization_enabled:
             assert buffers is not None, (
                 "buffers shouldn't be null when the serialized stream is "

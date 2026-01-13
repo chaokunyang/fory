@@ -29,7 +29,6 @@ class ForyConfigManager{
   int get nextConfigId => configId++;
 
   ForyConfig createConfig({
-    bool isLittleEndian = true,
     bool refTracking = true,
     bool basicTypesRefIgnored = true,
     bool timeRefIgnored = true,
@@ -37,7 +36,6 @@ class ForyConfigManager{
   }) {
     return ForyConfig.onlyForManager(
       nextConfigId,
-      isLittleEndian: isLittleEndian,
       refTracking: refTracking,
       basicTypesRefIgnored: basicTypesRefIgnored,
       timeRefIgnored: timeRefIgnored,

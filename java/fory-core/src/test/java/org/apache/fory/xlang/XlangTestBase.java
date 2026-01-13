@@ -2190,10 +2190,10 @@ public abstract class XlangTestBase extends ForyTestBase {
    */
   @Data
   static class RefOuterSchemaConsistent {
-    @ForyField(ref = true, nullable = true, morphic = ForyField.Morphic.FINAL)
+    @ForyField(ref = true, nullable = true, dynamic = ForyField.Dynamic.FALSE)
     RefInnerSchemaConsistent inner1;
 
-    @ForyField(ref = true, nullable = true, morphic = ForyField.Morphic.FINAL)
+    @ForyField(ref = true, nullable = true, dynamic = ForyField.Dynamic.FALSE)
     RefInnerSchemaConsistent inner2;
   }
 

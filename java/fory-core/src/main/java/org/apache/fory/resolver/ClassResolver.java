@@ -685,10 +685,10 @@ public class ClassResolver extends TypeResolver {
   public boolean isMonomorphic(Descriptor descriptor) {
     ForyField foryField = descriptor.getForyField();
     if (foryField != null) {
-      switch (foryField.morphic()) {
-        case POLYMORPHIC:
+      switch (foryField.dynamic()) {
+        case TRUE:
           return false;
-        case FINAL:
+        case FALSE:
           return true;
         default:
           return isMonomorphic(descriptor.getRawType());

@@ -80,12 +80,12 @@ enum ObjType {
   /// named_enum: an enum whose value will be serialized as the registered name.
   NAMED_ENUM(14, true), // 14
 
-  /// A morphic(final) type serialized by Fory Struct serializer. i.e. it doesn't have subclasses.
+  /// A dynamic(final) type serialized by Fory Struct serializer. i.e. it doesn't have subclasses.
   /// Suppose we're deserializing {@code List<SomeClass>}, we can save dynamic serializer dispatch
-  /// since `SomeClass` is morphic(final).
+  /// since `SomeClass` is dynamic(final).
   STRUCT(15, false), // 15
 
-  /// A morphic(final) type serialized by Fory compatible Struct serializer.
+  /// A dynamic(final) type serialized by Fory compatible Struct serializer.
   COMPATIBLE_STRUCT(16, false), // 16
 
   // x
@@ -149,25 +149,25 @@ enum ObjType {
 
   /// One dimensional int16 array.
   INT16_ARRAY(32, true),
-  
+
   /// One dimensional int32 array.
   INT32_ARRAY(33, true),
-  
+
   /// One dimensional int64 array.
   INT64_ARRAY(34, true),
-  
+
   /// One dimensional half_float_16 array.
   FLOAT16_ARRAY(35, true),
-  
+
   /// One dimensional float32 array.
   FLOAT32_ARRAY(36, true),
-  
+
   /// One dimensional float64 array.
   FLOAT64_ARRAY(37, true),
-  
+
   /// An (arrow record batch) object.
   ARROW_RECORD_BATCH(38, false),
-  
+
   /// An (arrow table) object.
   ARROW_TABLE(39, false);
 
@@ -189,7 +189,7 @@ enum ObjType {
         || this == NAMED_STRUCT
         || this == NAMED_COMPATIBLE_STRUCT;
   }
-  
+
   bool isTimeType() {
     return this == TIMESTAMP
         || this == LOCAL_DATE

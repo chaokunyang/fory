@@ -408,27 +408,28 @@ template <typename T> struct CompileTimeFieldHelpers {
     }
   }
 
-  /// Returns true if the field at Index is marked as monomorphic.
-  /// Use this for shared_ptr/unique_ptr fields with polymorphic inner types
-  /// when you know the actual runtime type will always be exactly T.
-  template <size_t Index> static constexpr bool field_monomorphic() {
+  /// Returns the dynamic value for the field at Index.
+  /// -1 = AUTO (use std::is_polymorphic to decide)
+  /// 0 = FALSE (skip type info, use declared type directly)
+  /// 1 = TRUE (write type info, enable runtime subtype support)
+  template <size_t Index> static constexpr int field_dynamic_value() {
     if constexpr (FieldCount == 0) {
-      return false;
+      return -1; // AUTO
     } else {
       using PtrT = std::tuple_element_t<Index, FieldPtrs>;
       using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
 
-      // If it's a fory::field<> wrapper, use its is_monomorphic metadata
+      // If it's a fory::field<> wrapper, use its dynamic_value metadata
       if constexpr (is_fory_field_v<RawFieldType>) {
-        return RawFieldType::is_monomorphic;
+        return RawFieldType::dynamic_value;
       }
       // Else if FORY_FIELD_TAGS is defined, use that metadata
       else if constexpr (::fory::detail::has_field_tags_v<T>) {
-        return ::fory::detail::GetFieldTagEntry<T, Index>::is_monomorphic;
+        return ::fory::detail::GetFieldTagEntry<T, Index>::dynamic_value;
       }
-      // Default: not monomorphic (polymorphic types use dynamic dispatch)
+      // Default: AUTO (use std::is_polymorphic to decide)
       else {
-        return false;
+        return -1;
       }
     }
   }
@@ -1529,13 +1530,18 @@ void write_single_field(const T &obj, WriteContext &ctx,
   constexpr bool is_ext = is_ext_type(field_type_id);
   constexpr bool is_polymorphic = field_type_id == TypeId::UNKNOWN;
 
-  // Check if field is marked as monomorphic (skip dynamic type dispatch)
-  constexpr bool is_monomorphic = Helpers::template field_monomorphic<Index>();
+  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type info)
+  constexpr int dynamic_val = Helpers::template field_dynamic_value<Index>();
 
   // Per C++ read logic: struct fields need type info only in compatible mode
-  // Polymorphic types always need type info, UNLESS marked as monomorphic
-  bool write_type = (is_polymorphic && !is_monomorphic) ||
-                    ((is_struct || is_ext) && ctx.is_compatible());
+  // Polymorphic types need type info based on dynamic_val:
+  // - TRUE (1): always write type info
+  // - FALSE (0): never write type info for this field
+  // - AUTO (-1): write type info if is_polymorphic (auto-detected)
+  bool polymorphic_write_type =
+      (dynamic_val == 1) || (dynamic_val == -1 && is_polymorphic);
+  bool write_type =
+      polymorphic_write_type || ((is_struct || is_ext) && ctx.is_compatible());
 
   Serializer<FieldType>::write(field_value, ctx, field_ref_mode, write_type);
 }
@@ -1757,11 +1763,15 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   constexpr bool is_ext_field = is_ext_type(field_type_id);
   constexpr bool is_polymorphic_field = field_type_id == TypeId::UNKNOWN;
 
-  // Check if field is marked as monomorphic (skip dynamic type dispatch)
-  constexpr bool is_monomorphic = Helpers::template field_monomorphic<Index>();
+  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type info)
+  constexpr int dynamic_val = Helpers::template field_dynamic_value<Index>();
 
-  // Polymorphic types need type info, UNLESS marked as monomorphic
-  bool read_type = is_polymorphic_field && !is_monomorphic;
+  // Polymorphic types need type info based on dynamic_val:
+  // - TRUE (1): always read type info
+  // - FALSE (0): never read type info for this field
+  // - AUTO (-1): read type info if is_polymorphic_field (auto-detected)
+  bool read_type =
+      (dynamic_val == 1) || (dynamic_val == -1 && is_polymorphic_field);
 
   // Get field metadata from fory::field<> or FORY_FIELD_TAGS or defaults
   constexpr bool is_nullable = Helpers::template field_nullable<Index>();
@@ -1949,11 +1959,15 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   constexpr bool is_polymorphic_field = field_type_id == TypeId::UNKNOWN;
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
 
-  // Check if field is marked as monomorphic (skip dynamic type dispatch)
-  constexpr bool is_monomorphic = Helpers::template field_monomorphic<Index>();
+  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type info)
+  constexpr int dynamic_val = Helpers::template field_dynamic_value<Index>();
 
-  // Polymorphic types need type info, UNLESS marked as monomorphic
-  bool read_type = is_polymorphic_field && !is_monomorphic;
+  // Polymorphic types need type info based on dynamic_val:
+  // - TRUE (1): always read type info
+  // - FALSE (0): never read type info for this field
+  // - AUTO (-1): read type info if is_polymorphic_field (auto-detected)
+  bool read_type =
+      (dynamic_val == 1) || (dynamic_val == -1 && is_polymorphic_field);
 
   // In compatible mode, nested struct fields always carry type metadata
   // (xtypeId + meta index). We must read this metadata so that

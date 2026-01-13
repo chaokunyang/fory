@@ -438,11 +438,11 @@ public class XtypeResolver extends TypeResolver {
   @Override
   public boolean isMonomorphic(Descriptor descriptor) {
     ForyField foryField = descriptor.getForyField();
-    ForyField.Morphic morphic = foryField != null ? foryField.morphic() : ForyField.Morphic.AUTO;
-    switch (morphic) {
-      case POLYMORPHIC:
+    ForyField.Dynamic dynamic = foryField != null ? foryField.dynamic() : ForyField.Dynamic.AUTO;
+    switch (dynamic) {
+      case TRUE:
         return false;
-      case FINAL:
+      case FALSE:
         return true;
       default:
         Class<?> rawType = descriptor.getRawType();

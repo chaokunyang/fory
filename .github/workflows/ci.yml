@@ -72,8 +72,10 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: surefire-reports-${{ matrix.java-version }}
-          path: "**/target/surefire-reports/**"
+          name: test-reports-${{ matrix.java-version }}
+          path: |
+            **/target/surefire-reports/**
+            **/hs_err*.log
 
   openj9:
     name: Openj9 Java CI

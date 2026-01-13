@@ -276,7 +276,6 @@ cdef int8_t FLOAT64_TYPE_ID = fmod.FLOAT64_TYPE_ID
 cdef int8_t BOOL_TYPE_ID = fmod.BOOL_TYPE_ID
 cdef int8_t STRING_TYPE_ID = fmod.STRING_TYPE_ID
 
-cdef int16_t MAGIC_NUMBER = fmod.MAGIC_NUMBER
 cdef int32_t NOT_NULL_INT64_FLAG = fmod.NOT_NULL_INT64_FLAG
 cdef int32_t NOT_NULL_FLOAT64_FLAG = fmod.NOT_NULL_FLOAT64_FLAG
 cdef int32_t NOT_NULL_BOOL_FLAG = fmod.NOT_NULL_BOOL_FLAG
@@ -1188,8 +1187,6 @@ cdef class Fory:
         if buffer is None:
             self.buffer.writer_index = 0
             buffer = self.buffer
-        if self.language == Language.XLANG:
-            buffer.write_int16(MAGIC_NUMBER)
         cdef int32_t mask_index = buffer.writer_index
         # 1byte used for bit mask
         buffer.grow(1)
@@ -1355,13 +1352,6 @@ cdef class Fory:
         self.depth += 1
         if unsupported_objects is not None:
             self._unsupported_objects = iter(unsupported_objects)
-        if self.language == Language.XLANG:
-            magic_numer = buffer.read_int16()
-            assert magic_numer == MAGIC_NUMBER, (
-                f"The fory xlang serialization must start with magic number {hex(MAGIC_NUMBER)}. "
-                "Please check whether the serialization is based on the xlang protocol and the "
-                "data didn't corrupt."
-            )
         cdef int32_t reader_index = buffer.reader_index
         buffer.reader_index = reader_index + 1
         if get_bit(buffer, reader_index, 0):

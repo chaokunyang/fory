@@ -104,7 +104,6 @@ public final class Fory implements BaseFory {
   private static final byte isOutOfBandFlag = 1 << 3;
   private static final boolean isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
   private static final byte BITMAP = isLittleEndian ? isLittleEndianFlag : 0;
-  private static final short MAGIC_NUMBER = 0x62D4;
 
   private final Config config;
   private final boolean refTracking;
@@ -298,9 +297,6 @@ public final class Fory implements BaseFory {
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj, BufferCallback callback) {
-    if (crossLanguage) {
-      buffer.writeInt16(MAGIC_NUMBER);
-    }
     byte bitmap = BITMAP;
     if (crossLanguage) {
       bitmap |= isCrossLanguageFlag;
@@ -831,14 +827,6 @@ public final class Fory implements BaseFory {
         throwDepthDeserializationException();
       }
       depth = 0;
-      if (crossLanguage) {
-        short magicNumber = buffer.readInt16();
-        assert magicNumber == MAGIC_NUMBER
-            : String.format(
-                "The fory xlang serialization must start with magic number 0x%x. Please "
-                    + "check whether the serialization is based on the xlang protocol and the data didn't corrupt.",
-                MAGIC_NUMBER);
-      }
       byte bitmap = buffer.readByte();
       if ((bitmap & isNilFlag) == isNilFlag) {
         return null;

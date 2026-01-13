@@ -522,8 +522,6 @@ impl TryFrom<u8> for Language {
 // every object start with i8 i16 reference flag and type flag
 pub const SIZE_OF_REF_AND_TYPE: usize = mem::size_of::<i8>() + mem::size_of::<i16>();
 
-pub const MAGIC_NUMBER: u16 = 0x62d4;
-
 /// Formats a combined type ID into a human-readable string.
 ///
 /// Combined type IDs have the format: `(registered_id << 8) + internal_type_id`.

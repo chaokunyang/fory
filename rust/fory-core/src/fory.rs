@@ -26,7 +26,7 @@ use crate::serializer::{Serializer, StructSerializer};
 use crate::types::config_flags::IS_NULL_FLAG;
 use crate::types::{
     config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_LITTLE_ENDIAN_FLAG},
-    Language, RefMode, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
+    Language, RefMode, SIZE_OF_REF_AND_TYPE,
 };
 use std::cell::UnsafeCell;
 use std::mem;
@@ -833,9 +833,6 @@ impl Fory {
     pub fn write_head<T: Serializer>(&self, is_none: bool, writer: &mut Writer) {
         const HEAD_SIZE: usize = 10;
         writer.reserve(T::fory_reserved_space() + SIZE_OF_REF_AND_TYPE + HEAD_SIZE);
-        if self.config.xlang {
-            writer.write_u16(MAGIC_NUMBER);
-        }
         #[cfg(target_endian = "big")]
         let mut bitmap = 0;
         #[cfg(target_endian = "little")]
@@ -1031,18 +1028,6 @@ impl Fory {
 
     #[inline(always)]
     fn read_head(&self, reader: &mut Reader) -> Result<bool, Error> {
-        if self.config.xlang {
-            let magic_numer = reader.read_u16()?;
-            ensure!(
-                magic_numer == MAGIC_NUMBER,
-                Error::invalid_data(format!(
-                    "The fory xlang serialization must start with magic number {:X}. \
-                    Please check whether the serialization is based on the xlang protocol \
-                    and the data didn't corrupt.",
-                    MAGIC_NUMBER
-                ))
-            )
-        }
         let bitmap = reader.read_u8()?;
         let peer_is_xlang = (bitmap & IS_CROSS_LANGUAGE_FLAG) != 0;
         ensure!(

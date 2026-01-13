@@ -31,20 +31,12 @@ import (
 // Errors
 // ============================================================================
 
-// ErrMagicNumber indicates an invalid magic number in the data stream
-var ErrMagicNumber = errors.New("fory: invalid magic number")
-
 // ErrNoSerializer indicates no serializer is registered for a type
 var ErrNoSerializer = errors.New("fory: no serializer registered for type")
 
 // ============================================================================
 // Constants
 // ============================================================================
-
-// Protocol constants
-const (
-	MAGIC_NUMBER int16 = 0x62D4
-)
 
 // Language constants for protocol header
 const (
@@ -514,8 +506,7 @@ func (f *Fory) resetWriteState() {
 func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
 	// Handle nil values
 	if isNilValue(value) {
-		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
-		buf.WriteInt16(MAGIC_NUMBER)
+		// Use Java-compatible null format: 1 byte (bitmap with isNilFlag)
 		buf.WriteByte_(IsNilFlag)
 		return nil
 	}
@@ -855,8 +846,6 @@ func (f *Fory) serializeReflectValue(value reflect.Value) ([]byte, error) {
 
 // writeHeader writes the Fory protocol header
 func writeHeader(ctx *WriteContext, config Config) {
-	ctx.buffer.WriteInt16(MAGIC_NUMBER)
-
 	var bitmap byte = 0
 	if nativeEndian == binary.LittleEndian {
 		bitmap |= LittleEndianFlag
@@ -885,10 +874,9 @@ func isNilValue(value any) bool {
 	return false
 }
 
-// writeNullHeader writes a null object header (3 bytes: magic + bitmap with isNilFlag)
+// writeNullHeader writes a null object header (1 byte: bitmap with isNilFlag)
 // This is compatible with Java's null serialization format
 func writeNullHeader(ctx *WriteContext) {
-	ctx.buffer.WriteInt16(MAGIC_NUMBER)
 	ctx.buffer.WriteByte_(IsNilFlag) // bitmap with only isNilFlag set
 }
 
@@ -902,17 +890,12 @@ const NullObjectMetaOffset int32 = -0x7FFFFFFF
 // Sets error on ctx if header is invalid (use ctx.HasError() to check)
 func readHeader(ctx *ReadContext) int32 {
 	err := ctx.Err()
-	magicNumber := ctx.buffer.ReadInt16(err)
+	bitmap := ctx.buffer.ReadByte(err)
 	if ctx.HasError() {
 		return 0
 	}
-	if magicNumber != MAGIC_NUMBER {
-		ctx.SetError(DeserializationError("invalid magic number"))
-		return 0
-	}
-	bitmap := ctx.buffer.ReadByte(err)
 
-	// Check if this is a null object - only magic number + bitmap with isNilFlag was written
+	// Check if this is a null object - only bitmap with isNilFlag was written
 	if (bitmap & IsNilFlag) != 0 {
 		return NullObjectMetaOffset
 	}

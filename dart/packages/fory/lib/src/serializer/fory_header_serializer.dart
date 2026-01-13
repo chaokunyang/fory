@@ -38,9 +38,6 @@ final class ForyHeaderSerializer {
   ForyHeaderSerializer._();
 
   HeaderBrief? read(ByteReader br, ForyConfig conf) {
-    int magicNumber = br.readUint16();
-    // Note: In AOT mode, assert will be removed, do not put code that affects subsequent logic in assert
-    assert(magicNumber == ForyHeaderConst.magicNumber, 'no magic number detected');
     int bitmap = br.readInt8();
     // header: nullFlag
     if ((bitmap & ForyHeaderConst.nullFlag) != 0){
@@ -77,7 +74,6 @@ final class ForyHeaderSerializer {
   }
 
   void write(ByteWriter bd, bool objNull, ForyConfig conf) {
-    bd.writeInt16(ForyHeaderConst.magicNumber);
     int bitmap = ForyHeaderConst.littleEndianFlag;
     bitmap |= ForyHeaderConst.crossLanguageFlag;
     if (objNull){

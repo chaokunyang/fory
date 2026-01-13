@@ -241,8 +241,6 @@ export enum Language {
   DART = 7,
 }
 
-export const MAGIC_NUMBER = 0x62D4;
-
 export interface WithForyClsInfo {
   structTypeInfo: StructTypeInfo;
 }

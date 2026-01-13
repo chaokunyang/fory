@@ -557,7 +557,7 @@ private:
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), finalized_(false),
         precomputed_header_(compute_header(config.xlang)),
-        header_length_(config.xlang ? 4 : 3) {}
+        header_length_(config.xlang ? 2 : 1) {}
 
   /// Constructor for ThreadSafeFory pool - resolver is already finalized.
   struct PreFinalized {};
@@ -565,7 +565,7 @@ private:
                 PreFinalized)
       : BaseFory(config, std::move(resolver)), finalized_(false),
         precomputed_header_(compute_header(config.xlang)),
-        header_length_(config.xlang ? 4 : 3) {
+        header_length_(config.xlang ? 2 : 1) {
     // Pre-finalized, immediately create contexts
     ensure_finalized();
   }
@@ -589,11 +589,9 @@ private:
   }
 
   /// Compute the precomputed header value.
-  static uint32_t compute_header(bool xlang) {
-    uint32_t header = 0;
-    // Magic number (2 bytes, little endian)
-    header |= (MAGIC_NUMBER & 0xFFFF);
-    // Flags byte at position 2
+  static uint16_t compute_header(bool xlang) {
+    uint16_t header = 0;
+    // Flags byte at position 0
     uint8_t flags = 0;
     if (is_little_endian_system()) {
       flags |= (1 << 1); // bit 1: endian flag
@@ -601,9 +599,9 @@ private:
     if (xlang) {
       flags |= (1 << 2); // bit 2: xlang flag
     }
-    header |= (static_cast<uint32_t>(flags) << 16);
-    // Language byte at position 3 (only used if xlang)
-    header |= (static_cast<uint32_t>(Language::CPP) << 24);
+    header |= flags;
+    // Language byte at position 1 (only used if xlang)
+    header |= (static_cast<uint16_t>(Language::CPP) << 8);
     return header;
   }
 
@@ -612,9 +610,9 @@ private:
   Result<size_t, Error> serialize_impl(const T &obj, Buffer &buffer) {
     size_t start_pos = buffer.writer_index();
 
-    // Write precomputed header (4 bytes), then adjust index if not xlang
-    buffer.Grow(4);
-    buffer.UnsafePut<uint32_t>(buffer.writer_index(), precomputed_header_);
+    // Write precomputed header (2 bytes), then adjust index if not xlang
+    buffer.Grow(2);
+    buffer.UnsafePut<uint16_t>(buffer.writer_index(), precomputed_header_);
     buffer.IncreaseWriterIndex(header_length_);
 
     // Reserve space for meta offset in compatible mode
@@ -676,7 +674,7 @@ private:
   }
 
   bool finalized_;
-  uint32_t precomputed_header_;
+  uint16_t precomputed_header_;
   uint8_t header_length_;
   std::optional<WriteContext> write_ctx_;
   std::optional<ReadContext> read_ctx_;

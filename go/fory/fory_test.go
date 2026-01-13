@@ -310,10 +310,8 @@ func TestSerializeBeginWithMagicNumber(t *testing.T) {
 	bytes, err := fory.Marshal(strSlice)
 	require.Nil(t, err, fmt.Sprintf("serialize value %s with type %s failed: %s",
 		reflect.ValueOf(strSlice), reflect.TypeOf(strSlice), err))
-	// Contains at least two bytes.
-	require.True(t, len(bytes) > 2)
-	magicNumber := int16(bytes[0]) | (int16(bytes[1]) << 8)
-	require.Equal(t, magicNumber, MAGIC_NUMBER)
+	// Contains at least one byte for the bitmap.
+	require.True(t, len(bytes) >= 1)
 }
 
 type Foo struct {

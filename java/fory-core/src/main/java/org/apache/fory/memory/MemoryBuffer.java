@@ -761,7 +761,9 @@ public final class MemoryBuffer {
    */
   public int writeVarInt32(int v) {
     ensure(writerIndex + 8);
-    int varintBytes = _unsafePutVarUint36Small(writerIndex, ((long) v << 1) ^ (v >> 31));
+    // Zigzag encoding: maps negative values to positive values
+    // This works entirely in int without conversion to long
+    int varintBytes = _unsafePutVarUint32(writerIndex, (v << 1) ^ (v >> 31));
     writerIndex += varintBytes;
     return varintBytes;
   }
@@ -774,8 +776,8 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarInt32(int v) {
     // CHECKSTYLE.ON:MethodName
-    // Ensure negatives close to zero is encode in little bytes.
-    int varintBytes = _unsafePutVarUint36Small(writerIndex, ((long) v << 1) ^ (v >> 31));
+    // Zigzag encoding ensures negatives close to zero are encoded in few bytes
+    int varintBytes = _unsafePutVarUint32(writerIndex, (v << 1) ^ (v >> 31));
     writerIndex += varintBytes;
     return varintBytes;
   }
@@ -790,10 +792,7 @@ public final class MemoryBuffer {
     // generated code is smaller. Otherwise, `MapRefResolver.writeRefOrNull`
     // may be `callee is too large`/`already compiled into a big method`
     ensure(writerIndex + 8);
-    // Use Integer.toUnsignedLong to handle values > INT32_MAX correctly
-    // Without this, negative int values would be sign-extended to long,
-    // causing incorrect varint encoding (9+ bytes instead of 5)
-    int varintBytes = _unsafePutVarUint36Small(writerIndex, Integer.toUnsignedLong(v));
+    int varintBytes = _unsafePutVarUint32(writerIndex, v);
     writerIndex += varintBytes;
     return varintBytes;
   }
@@ -805,8 +804,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarUint32(int v) {
     // CHECKSTYLE.ON:MethodName
-    // Use Integer.toUnsignedLong to handle values > INT32_MAX correctly
-    int varintBytes = _unsafePutVarUint36Small(writerIndex, Integer.toUnsignedLong(v));
+    int varintBytes = _unsafePutVarUint32(writerIndex, v);
     writerIndex += varintBytes;
     return varintBytes;
   }
@@ -836,6 +834,54 @@ public final class MemoryBuffer {
     int diff = continuePutVarInt36(writerIdx, encoded, value);
     writerIndex += diff;
     return diff;
+  }
+
+  /**
+   * Writes an unsigned 32-bit varint at the given index using int operations. Caller must ensure
+   * there are at least 8 bytes available for writing. This method avoids int-to-long conversion
+   * overhead for the common cases (1-4 bytes).
+   *
+   * @param index the position to write at
+   * @param value the unsigned 32-bit value (high bit may be set)
+   * @return the number of bytes written (1-5)
+   */
+  // CHECKSTYLE.OFF:MethodName
+  public int _unsafePutVarUint32(int index, int value) {
+    // CHECKSTYLE.ON:MethodName
+    int encoded = (value & 0x7F);
+    if (value >>> 7 == 0) {
+      UNSAFE.putByte(heapMemory, address + index, (byte) value);
+      return 1;
+    }
+    // bit 8 `set` indicates have next data bytes.
+    // 0x3f80: 0b1111111 << 7
+    encoded |= (((value & 0x3f80) << 1) | 0x80);
+    if (value >>> 14 == 0) {
+      _unsafePutInt32(index, encoded);
+      return 2;
+    }
+    return continuePutVarUint32(index, encoded, value);
+  }
+
+  private int continuePutVarUint32(int index, int encoded, int value) {
+    // 0x1fc000: 0b1111111 << 14
+    encoded |= (((value & 0x1fc000) << 2) | 0x8000);
+    if (value >>> 21 == 0) {
+      _unsafePutInt32(index, encoded);
+      return 3;
+    }
+    // 0xfe00000: 0b1111111 << 21
+    encoded |= ((value & 0xfe00000) << 3) | 0x800000;
+    if (value >>> 28 == 0) {
+      _unsafePutInt32(index, encoded);
+      return 4;
+    }
+    // 5-byte case: bits 28-31 go to the 5th byte
+    // Need long for the final write to include the 5th byte
+    long encodedLong = Integer.toUnsignedLong(encoded) | 0x80000000L;
+    encodedLong |= (long) (value >>> 28) << 32;
+    _unsafePutInt64(index, encodedLong);
+    return 5;
   }
 
   /**

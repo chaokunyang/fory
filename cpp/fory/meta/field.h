@@ -51,7 +51,8 @@ struct not_null {};
 struct ref {};
 
 /// Template tag to control dynamic type dispatch for smart pointer fields.
-/// - `dynamic<true>`: Force type info to be written (enable runtime subtype support)
+/// - `dynamic<true>`: Force type info to be written (enable runtime subtype
+/// support)
 /// - `dynamic<false>`: Skip type info (use declared type directly)
 ///
 /// By default, Fory auto-detects polymorphism via `std::is_polymorphic<T>`.
@@ -113,14 +114,17 @@ template <typename... Options>
 inline constexpr bool has_dynamic_option_v = (is_dynamic_tag_v<Options> || ...);
 
 /// Extract the dynamic value from Options pack (default = -1 for AUTO)
-/// Returns: 1 for dynamic<true>, 0 for dynamic<false>, -1 for AUTO (not specified)
+/// Returns: 1 for dynamic<true>, 0 for dynamic<false>, -1 for AUTO (not
+/// specified)
 template <typename... Options> struct get_dynamic_value {
   static constexpr int value = -1; // AUTO
 };
-template <bool V, typename... Rest> struct get_dynamic_value<dynamic<V>, Rest...> {
+template <bool V, typename... Rest>
+struct get_dynamic_value<dynamic<V>, Rest...> {
   static constexpr int value = V ? 1 : 0;
 };
-template <typename First, typename... Rest> struct get_dynamic_value<First, Rest...> {
+template <typename First, typename... Rest>
+struct get_dynamic_value<First, Rest...> {
   static constexpr int value = get_dynamic_value<Rest...>::value;
 };
 template <typename... Options>
@@ -131,7 +135,8 @@ inline constexpr int get_dynamic_value_v = get_dynamic_value<Options...>::value;
 // ============================================================================
 
 /// Compile-time field tag metadata entry
-/// Dynamic: -1 = AUTO (use std::is_polymorphic), 0 = FALSE (not dynamic), 1 = TRUE (dynamic)
+/// Dynamic: -1 = AUTO (use std::is_polymorphic), 0 = FALSE (not dynamic), 1 =
+/// TRUE (dynamic)
 template <int16_t Id, bool Nullable, bool Ref, int Dynamic = -1>
 struct FieldTagEntry {
   static constexpr int16_t id = Id;
@@ -250,8 +255,7 @@ constexpr FieldMeta apply_tag(FieldMeta m, not_null) {
   return m.nullable(false);
 }
 constexpr FieldMeta apply_tag(FieldMeta m, ref) { return m.ref(); }
-template <bool V>
-constexpr FieldMeta apply_tag(FieldMeta m, dynamic<V>) {
+template <bool V> constexpr FieldMeta apply_tag(FieldMeta m, dynamic<V>) {
   return m.dynamic(V);
 }
 
@@ -571,8 +575,7 @@ struct ParseFieldTagEntry {
   static_assert(!has_option_v<ref, Options...> || is_shared_ptr_v<FieldType>,
                 "fory::ref is only valid for shared_ptr");
 
-  static_assert(!has_dynamic_option_v<Options...> ||
-                    is_smart_ptr_v<FieldType>,
+  static_assert(!has_dynamic_option_v<Options...> || is_smart_ptr_v<FieldType>,
                 "fory::dynamic<V> is only valid for shared_ptr/unique_ptr");
 
   using type = FieldTagEntry<Id, is_nullable, track_ref, dynamic_value>;

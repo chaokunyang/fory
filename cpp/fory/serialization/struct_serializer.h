@@ -1530,7 +1530,8 @@ void write_single_field(const T &obj, WriteContext &ctx,
   constexpr bool is_ext = is_ext_type(field_type_id);
   constexpr bool is_polymorphic = field_type_id == TypeId::UNKNOWN;
 
-  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type info)
+  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type
+  // info)
   constexpr int dynamic_val = Helpers::template field_dynamic_value<Index>();
 
   // Per C++ read logic: struct fields need type info only in compatible mode
@@ -1763,7 +1764,8 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   constexpr bool is_ext_field = is_ext_type(field_type_id);
   constexpr bool is_polymorphic_field = field_type_id == TypeId::UNKNOWN;
 
-  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type info)
+  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type
+  // info)
   constexpr int dynamic_val = Helpers::template field_dynamic_value<Index>();
 
   // Polymorphic types need type info based on dynamic_val:
@@ -1959,7 +1961,8 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   constexpr bool is_polymorphic_field = field_type_id == TypeId::UNKNOWN;
   constexpr bool is_primitive_field = is_primitive_type_id(field_type_id);
 
-  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type info)
+  // Get dynamic value: -1=AUTO, 0=FALSE (no type info), 1=TRUE (write type
+  // info)
   constexpr int dynamic_val = Helpers::template field_dynamic_value<Index>();
 
   // Polymorphic types need type info based on dynamic_val:

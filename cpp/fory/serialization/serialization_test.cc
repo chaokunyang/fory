@@ -239,10 +239,10 @@ TEST(SerializationTest, EnumSerializesOrdinalValue) {
   std::vector<uint8_t> bytes = bytes_result.value();
   // Xlang spec: enums are serialized as varuint32, not fixed int32_t
   // With registration, type_id = (1 << 8) + ENUM = 279, which takes 2 bytes as
-  // varuint32 Expected: 4 (header) + 1 (ref flag) + 2 (type id as varuint) + 1
-  // (ordinal as varuint32) = 8 bytes
-  ASSERT_GE(bytes.size(), 4 + 1 + 2 + 1);
-  size_t offset = 4;
+  // varuint32 Expected: 2 (header) + 1 (ref flag) + 2 (type id as varuint) + 1
+  // (ordinal as varuint32) = 6 bytes
+  ASSERT_GE(bytes.size(), 2 + 1 + 2 + 1);
+  size_t offset = 2;
   EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
   // Type ID 279 = (1 << 8) + ENUM encoded as varuint32: 0x97, 0x02
   EXPECT_EQ(bytes[offset + 1], 0x97);
@@ -261,8 +261,8 @@ TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
 
   std::vector<uint8_t> bytes = bytes_result.value();
   // With registration, type_id = (1 << 8) + ENUM = 279, which takes 2 bytes
-  ASSERT_GE(bytes.size(), 4 + 1 + 2 + 1);
-  size_t offset = 4;
+  ASSERT_GE(bytes.size(), 2 + 1 + 2 + 1);
+  size_t offset = 2;
   EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
   // Type ID 279 encoded as varuint32: 0x97, 0x02
   EXPECT_EQ(bytes[offset + 1], 0x97);
@@ -281,8 +281,8 @@ TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
 
   std::vector<uint8_t> bytes = bytes_result.value();
   // With registration, type_id = (1 << 8) + ENUM = 279, which takes 2 bytes
-  ASSERT_GE(bytes.size(), 4 + 1 + 2 + 1);
-  size_t offset = 4;
+  ASSERT_GE(bytes.size(), 2 + 1 + 2 + 1);
+  size_t offset = 2;
   EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
   // Type ID 279 encoded as varuint32: 0x97, 0x02
   EXPECT_EQ(bytes[offset + 1], 0x97);
@@ -305,7 +305,7 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
       << "Serialization failed: " << bytes_result.error().to_string();
 
   std::vector<uint8_t> bytes = bytes_result.value();
-  size_t offset = 4;
+  size_t offset = 2;
   // With registration, type_id takes 2 bytes, ordinal is at offset + 3
   // Replace the valid ordinal with an invalid one (99 as varuint32)
   bytes[offset + 3] = 99;
@@ -324,8 +324,8 @@ TEST(SerializationTest, OldEnumOrdinalMappingHandlesNonZeroStart) {
 
   std::vector<uint8_t> bytes = bytes_result.value();
   // With registration, type_id = (1 << 8) + ENUM = 279, which takes 2 bytes
-  ASSERT_GE(bytes.size(), 4 + 1 + 2 + 1);
-  size_t offset = 4;
+  ASSERT_GE(bytes.size(), 2 + 1 + 2 + 1);
+  size_t offset = 2;
   EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
   // Type ID 279 encoded as varuint32: 0x97, 0x02
   EXPECT_EQ(bytes[offset + 1], 0x97);

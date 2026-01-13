@@ -131,6 +131,7 @@ from pyfory.types import (
     Float64NDArrayType,
     TypeId,
 )
+from pyfory.utils import is_little_endian
 
 
 class NoneSerializer(Serializer):
@@ -290,25 +291,43 @@ class PyArraySerializer(XlangCompatibleSerializer):
         assert view.c_contiguous  # TODO handle contiguous
         nbytes = len(value) * self.itemsize
         buffer.write_varuint32(nbytes)
-        buffer.write_buffer(value)
+        if is_little_endian or self.itemsize == 1:
+            buffer.write_buffer(value)
+        else:
+            # Swap bytes on big-endian machines for multi-byte types
+            swapped = array.array(self.typecode, value)
+            swapped.byteswap()
+            buffer.write_buffer(swapped)
 
     def xread(self, buffer):
         data = buffer.read_bytes_and_size()
         arr = array.array(self.typecode, [])
         arr.frombytes(data)
+        if not is_little_endian and self.itemsize > 1:
+            # Swap bytes on big-endian machines for multi-byte types
+            arr.byteswap()
         return arr
 
     def write(self, buffer, value: array.array):
         nbytes = len(value) * value.itemsize
         buffer.write_string(value.typecode)
         buffer.write_varuint32(nbytes)
-        buffer.write_buffer(value)
+        if is_little_endian or value.itemsize == 1:
+            buffer.write_buffer(value)
+        else:
+            # Swap bytes on big-endian machines for multi-byte types
+            swapped = array.array(value.typecode, value)
+            swapped.byteswap()
+            buffer.write_buffer(swapped)
 
     def read(self, buffer):
         typecode = buffer.read_string()
         data = buffer.read_bytes_and_size()
         arr = array.array(typecode[0], [])  # Take first character
         arr.frombytes(data)
+        if not is_little_endian and arr.itemsize > 1:
+            # Swap bytes on big-endian machines for multi-byte types
+            arr.byteswap()
         return arr
 
 
@@ -326,16 +345,30 @@ class DynamicPyArraySerializer(Serializer):
         buffer.write_varuint32(type_id)
         buffer.write_varuint32(nbytes)
         if not view.c_contiguous:
-            buffer.write_bytes(value.tobytes())
-        else:
+            data = value.tobytes()
+            if not is_little_endian and itemsize > 1:
+                swapped = array.array(value.typecode, [])
+                swapped.frombytes(data)
+                swapped.byteswap()
+                data = swapped.tobytes()
+            buffer.write_bytes(data)
+        elif is_little_endian or itemsize == 1:
             buffer.write_buffer(value)
+        else:
+            # Swap bytes on big-endian machines for multi-byte types
+            swapped = array.array(value.typecode, value)
+            swapped.byteswap()
+            buffer.write_buffer(swapped)
 
     def xread(self, buffer):
         type_id = buffer.read_varint32()
         typecode = typeid_code[type_id]
+        itemsize = typecode_dict[typecode][0]
         data = buffer.read_bytes_and_size()
         arr = array.array(typecode, [])
         arr.frombytes(data)
+        if not is_little_endian and itemsize > 1:
+            arr.byteswap()
         return arr
 
     def write(self, buffer, value):
@@ -390,13 +423,24 @@ class Numpy1DArraySerializer(Serializer):
         nbytes = len(value) * self.itemsize
         buffer.write_varuint32(nbytes)
         if self.dtype == np.dtype("bool") or not view.c_contiguous:
-            buffer.write_bytes(value.tobytes())
-        else:
+            if not is_little_endian and self.itemsize > 1:
+                # Swap bytes on big-endian machines for multi-byte types
+                buffer.write_bytes(value.astype(value.dtype.newbyteorder("<")).tobytes())
+            else:
+                buffer.write_bytes(value.tobytes())
+        elif is_little_endian or self.itemsize == 1:
             buffer.write_buffer(value)
+        else:
+            # Swap bytes on big-endian machines for multi-byte types
+            buffer.write_bytes(value.astype(value.dtype.newbyteorder("<")).tobytes())
 
     def xread(self, buffer):
         data = buffer.read_bytes_and_size()
-        return np.frombuffer(data, dtype=self.dtype)
+        arr = np.frombuffer(data, dtype=self.dtype.newbyteorder("<"))
+        if not is_little_endian and self.itemsize > 1:
+            # Convert from little-endian to native byte order
+            arr = arr.astype(self.dtype)
+        return arr
 
     def write(self, buffer, value):
         self._serializer.write(buffer, value)

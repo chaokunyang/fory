@@ -27,6 +27,9 @@ import 'package:fory/src/config/fory_config.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/serializer_cache.dart';
 
+/// Whether the host machine is little-endian
+const bool isLittleEndian = Endian.host == Endian.little;
+
 abstract base class ArraySerializerCache extends SerializerCache{
   const ArraySerializerCache();
 
@@ -44,14 +47,29 @@ abstract base class ArraySerializer<T> extends Serializer<List<T>> {
 abstract base class NumericArraySerializer<T extends num> extends ArraySerializer<T> {
   const NumericArraySerializer(super.type, super.writeRef);
 
-  TypedDataList<T> readToList(Uint8List copiedMem);
+  /// Reads bytes and converts to a typed list.
+  /// Subclasses must handle endianness for multi-byte types.
+  TypedDataList<T> readToList(Uint8List copiedMem, ByteReader br);
 
   int get bytesPerNum;
 
   @override
   TypedDataList<T> read(ByteReader br, int refId, DeserializerPack pack) {
-    int num = br.readVarUint32Small7();
-    return readToList(br.copyBytes(num));
+    int numBytes = br.readVarUint32Small7();
+    int length = numBytes ~/ bytesPerNum;
+    if (isLittleEndian || bytesPerNum == 1) {
+      // Fast path: direct memory copy on little-endian or for single-byte types
+      return readToList(br.copyBytes(numBytes), br);
+    } else {
+      // Slow path: element-by-element read on big-endian machines
+      return readToListBigEndian(length, br);
+    }
+  }
+
+  /// Read elements one by one on big-endian machines.
+  /// Default implementation; subclasses should override for multi-byte types.
+  TypedDataList<T> readToListBigEndian(int length, ByteReader br) {
+    throw UnsupportedError('readToListBigEndian not implemented for $runtimeType');
   }
 
   @override
@@ -60,6 +78,18 @@ abstract base class NumericArraySerializer<T extends num> extends ArraySerialize
       throw ArgumentError('NumArray lengthInBytes is not valid int32: ${v.lengthInBytes}');
     }
     bw.writeVarUint32(v.lengthInBytes);
-    bw.writeBytes(v.buffer.asUint8List(v.offsetInBytes, v.lengthInBytes));
+    if (isLittleEndian || bytesPerNum == 1) {
+      // Fast path: direct memory copy on little-endian or for single-byte types
+      bw.writeBytes(v.buffer.asUint8List(v.offsetInBytes, v.lengthInBytes));
+    } else {
+      // Slow path: element-by-element write on big-endian machines
+      writeListBigEndian(bw, v);
+    }
+  }
+
+  /// Write elements one by one on big-endian machines.
+  /// Default implementation; subclasses should override for multi-byte types.
+  void writeListBigEndian(ByteWriter bw, TypedDataList<T> v) {
+    throw UnsupportedError('writeListBigEndian not implemented for $runtimeType');
   }
 }

@@ -731,3 +731,72 @@ def test_optional_compatible_mode_evolution():
     assert v1_result.f1 == 300
     assert v1_result.f2 == "test3"
     assert v1_result.f3 is None
+
+
+# ============================================================================
+# Tests for dynamic field configuration
+# ============================================================================
+
+
+@dataclass
+class Animal:
+    name: str = pyfory.field(id=0, default="")
+
+
+@dataclass
+class Dog(Animal):
+    breed: str = pyfory.field(id=1, default="")
+
+
+@dataclass
+class Zoo:
+    # dynamic=True: can hold Dog instance in Animal field
+    animal: Animal = pyfory.field(id=0, dynamic=True)
+    # dynamic=False: use declared type's serializer, subclass info lost
+    animal2: Animal = pyfory.field(id=1, dynamic=False)
+
+
+def test_dynamic_with_inheritance():
+    """Test dynamic=True allows polymorphic serialization with inheritance."""
+    fory = Fory(xlang=False, ref=True, strict=False)
+    fory.register_type(Animal)
+    fory.register_type(Dog)
+    fory.register_type(Zoo)
+
+    dog1 = Dog(name="Buddy", breed="Labrador")
+    dog2 = Dog(name="Rex", breed="German Shepherd")
+    zoo = Zoo(animal=dog1, animal2=dog2)
+
+    result = ser_de(fory, zoo)
+    # dynamic=True: Dog type preserved
+    assert isinstance(result.animal, Dog)
+    assert result.animal.name == "Buddy"
+    assert result.animal.breed == "Labrador"
+    # dynamic=False: subclass info lost, only Animal fields deserialized
+    assert isinstance(result.animal2, Animal)
+    assert not isinstance(result.animal2, Dog)
+    assert result.animal2.name == "Rex"
+    assert not hasattr(result.animal2, "breed") or getattr(result.animal2, "breed", None) != "German Shepherd"
+
+
+def test_dynamic_with_inheritance_xlang():
+    """Test dynamic=True allows polymorphic serialization in xlang mode."""
+    fory = Fory(xlang=True, ref=True)
+    fory.register_type(Animal, typename="example.Animal")
+    fory.register_type(Dog, typename="example.Dog")
+    fory.register_type(Zoo, typename="example.Zoo")
+
+    dog1 = Dog(name="Max", breed="Husky")
+    dog2 = Dog(name="Luna", breed="Poodle")
+    zoo = Zoo(animal=dog1, animal2=dog2)
+
+    result = ser_de(fory, zoo)
+    # dynamic=True: Dog type preserved
+    assert isinstance(result.animal, Dog)
+    assert result.animal.name == "Max"
+    assert result.animal.breed == "Husky"
+    # dynamic=False: subclass info lost, only Animal fields deserialized
+    assert isinstance(result.animal2, Animal)
+    assert not isinstance(result.animal2, Dog)
+    assert result.animal2.name == "Luna"
+    assert not hasattr(result.animal2, "breed") or getattr(result.animal2, "breed", None) != "Poodle"

@@ -279,7 +279,9 @@ class TypeResolver:
 
     def _initialize_common(self):
         register = functools.partial(self._register_type, internal=True)
-        register(None, type_id=TypeId.UNKNOWN, serializer=NoneSerializer)
+        register(type(None), type_id=TypeId.NONE, serializer=NoneSerializer)
+        # Also register None value to map to type(None) for get_typeinfo(None) calls
+        self._types_info[None] = self._types_info[type(None)]
         register(bool, type_id=TypeId.BOOL, serializer=BooleanSerializer)
         # Signed integers
         # Note: int32/int64 use VARINT32/VARINT64 for xlang compatibility (matches Java/Rust)

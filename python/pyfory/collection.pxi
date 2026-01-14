@@ -112,19 +112,23 @@ cdef class CollectionSerializer(Serializer):
         cdef c_bool tracking_ref
         cdef c_bool has_null
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
-            if elem_type is str:
-                self._write_string(buffer, value)
-            elif serializer is Int64Serializer:
-                self._write_int(buffer, value)
-            elif elem_type is bool:
-                self._write_bool(buffer, value)
-            elif serializer is Float64Serializer:
-                self._write_float(buffer, value)
-            else:
-                if (collect_flag & COLL_TRACKING_REF) == 0:
+            if (collect_flag & COLL_HAS_NULL) == 0:
+                if elem_type is str:
+                    self._write_string(buffer, value)
+                elif serializer is Int64Serializer:
+                    self._write_int(buffer, value)
+                elif elem_type is bool:
+                    self._write_bool(buffer, value)
+                elif serializer is Float64Serializer:
+                    self._write_float(buffer, value)
+                elif (collect_flag & COLL_TRACKING_REF) == 0:
                     self._write_same_type_no_ref(buffer, value, elem_typeinfo)
                 else:
                     self._write_same_type_ref(buffer, value, elem_typeinfo)
+            elif (collect_flag & COLL_TRACKING_REF) != 0:
+                self._write_same_type_ref(buffer, value, elem_typeinfo)
+            else:
+                self._write_same_type_has_null(buffer, value, elem_typeinfo)
         else:
             # Check tracking_ref and has_null flags for different types writing
             tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
@@ -248,6 +252,41 @@ cdef class CollectionSerializer(Serializer):
                 self._add_element(collection_, i, obj)
         self.fory.dec_depth()
 
+    cpdef _write_same_type_has_null(self, Buffer buffer, value, TypeInfo typeinfo):
+        if self.is_py:
+            for s in value:
+                if s is None:
+                    buffer.write_int8(NULL_FLAG)
+                else:
+                    buffer.write_int8(NOT_NULL_VALUE_FLAG)
+                    typeinfo.serializer.write(buffer, s)
+        else:
+            for s in value:
+                if s is None:
+                    buffer.write_int8(NULL_FLAG)
+                else:
+                    buffer.write_int8(NOT_NULL_VALUE_FLAG)
+                    typeinfo.serializer.xwrite(buffer, s)
+
+    cpdef _read_same_type_has_null(self, Buffer buffer, int64_t len_, object collection_, TypeInfo typeinfo):
+        cdef int8_t flag
+        self.fory.inc_depth()
+        if self.is_py:
+            for i in range(len_):
+                flag = buffer.read_int8()
+                if flag == NULL_FLAG:
+                    self._add_element(collection_, i, None)
+                else:
+                    self._add_element(collection_, i, typeinfo.serializer.read(buffer))
+        else:
+            for i in range(len_):
+                flag = buffer.read_int8()
+                if flag == NULL_FLAG:
+                    self._add_element(collection_, i, None)
+                else:
+                    self._add_element(collection_, i, typeinfo.serializer.xread(buffer))
+        self.fory.dec_depth()
+
     cpdef _write_same_type_ref(self, Buffer buffer, value, TypeInfo typeinfo):
         cdef MapRefResolver ref_resolver = self.ref_resolver
         cdef TypeResolver type_resolver = self.type_resolver
@@ -319,10 +358,14 @@ cdef class ListSerializer(CollectionSerializer):
                 elif type_id == <int32_t>TypeId.FLOAT64:
                     self._read_float(buffer, len_, list_)
                     return list_
-            if (collect_flag & COLL_TRACKING_REF) == 0:
-                self._read_same_type_no_ref(buffer, len_, list_, typeinfo)
-            else:
+                elif (collect_flag & COLL_TRACKING_REF) == 0:
+                    self._read_same_type_no_ref(buffer, len_, list_, typeinfo)
+                else:
+                    self._read_same_type_ref(buffer, len_, list_, typeinfo)
+            elif (collect_flag & COLL_TRACKING_REF) != 0:
                 self._read_same_type_ref(buffer, len_, list_, typeinfo)
+            else:
+                self._read_same_type_has_null(buffer, len_, list_, typeinfo)
         else:
             self.fory.inc_depth()
             # Check tracking_ref and has_null flags for different types handling
@@ -437,10 +480,14 @@ cdef class TupleSerializer(CollectionSerializer):
                 if type_id == <int32_t>TypeId.FLOAT64:
                     self._read_float(buffer, len_, tuple_)
                     return tuple_
-            if (collect_flag & COLL_TRACKING_REF) == 0:
-                self._read_same_type_no_ref(buffer, len_, tuple_, typeinfo)
-            else:
+                elif (collect_flag & COLL_TRACKING_REF) == 0:
+                    self._read_same_type_no_ref(buffer, len_, tuple_, typeinfo)
+                else:
+                    self._read_same_type_ref(buffer, len_, tuple_, typeinfo)
+            elif (collect_flag & COLL_TRACKING_REF) != 0:
                 self._read_same_type_ref(buffer, len_, tuple_, typeinfo)
+            else:
+                self._read_same_type_has_null(buffer, len_, tuple_, typeinfo)
         else:
             self.fory.inc_depth()
             # Check tracking_ref and has_null flags for different types handling
@@ -530,10 +577,14 @@ cdef class SetSerializer(CollectionSerializer):
                 if type_id == <int32_t>TypeId.FLOAT64:
                     self._read_float(buffer, len_, instance)
                     return instance
-            if (collect_flag & COLL_TRACKING_REF) == 0:
-                self._read_same_type_no_ref(buffer, len_, instance, typeinfo)
-            else:
+                elif (collect_flag & COLL_TRACKING_REF) == 0:
+                    self._read_same_type_no_ref(buffer, len_, instance, typeinfo)
+                else:
+                    self._read_same_type_ref(buffer, len_, instance, typeinfo)
+            elif (collect_flag & COLL_TRACKING_REF) != 0:
                 self._read_same_type_ref(buffer, len_, instance, typeinfo)
+            else:
+                self._read_same_type_has_null(buffer, len_, instance, typeinfo)
         else:
             self.fory.inc_depth()
             # Check tracking_ref and has_null flags for different types handling

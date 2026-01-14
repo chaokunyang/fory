@@ -397,9 +397,9 @@ struct Data {
 }
 ```
 
-## Xlang Mode Defaults
+## Default Values
 
-Rust only supports xlang (cross-language) mode. The defaults are strict due to type system differences between languages:
+Rust native mode and xlang mode share the same default values:
 
 - **Nullable**: Fields are non-nullable by default (except `Option<T>`)
 - **Ref tracking**: Disabled by default (except `Rc<T>`, `Arc<T>`, weak types)

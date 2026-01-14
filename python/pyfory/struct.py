@@ -189,7 +189,7 @@ def _extract_field_infos(
 
     # Collect fields from class hierarchy (parent first, child last)
     # Child fields override parent fields with same name
-    all_fields: dict[str, dataclasses.Field] = {}
+    all_fields: Dict[str, dataclasses.Field] = {}
     for klass in clz.__mro__[::-1]:  # Reverse MRO: base classes first
         if dataclasses.is_dataclass(klass) and klass is not clz:
             for f in dataclasses.fields(klass):
@@ -199,8 +199,8 @@ def _extract_field_infos(
         all_fields[f.name] = f
 
     # Extract field metas and filter ignored fields
-    field_metas: dict[str, ForyFieldMeta] = {}
-    active_fields: list[tuple[str, dataclasses.Field]] = []
+    field_metas: Dict[str, ForyFieldMeta] = {}
+    active_fields: List[tuple] = []
 
     # Check if fory has field_nullable global setting
     global_field_nullable = getattr(fory, "field_nullable", False)
@@ -222,7 +222,7 @@ def _extract_field_infos(
     validate_field_metas(clz, field_metas, type_hints)
 
     # Build FieldInfo list
-    field_infos: list[FieldInfo] = []
+    field_infos: List[FieldInfo] = []
     visitor = StructFieldSerializerVisitor(fory)
     global_ref_tracking = fory.ref_tracking
 

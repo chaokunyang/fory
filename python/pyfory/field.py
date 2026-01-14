@@ -35,7 +35,7 @@ Example:
 
 import dataclasses
 from dataclasses import MISSING
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional
 
 
 # Key used to store Fory metadata in field.metadata
@@ -188,8 +188,8 @@ def extract_field_meta(dataclass_field: dataclasses.Field) -> Optional[ForyField
 
 def validate_field_metas(
     cls: type,
-    field_metas: dict[str, ForyFieldMeta],
-    type_hints: dict[str, type],
+    field_metas: Dict[str, ForyFieldMeta],
+    type_hints: Dict[str, type],
 ) -> None:
     """
     Validate field metadata for a dataclass.
@@ -209,7 +209,7 @@ def validate_field_metas(
     from pyfory.type_util import is_optional_type
 
     # Check tag ID uniqueness
-    tag_ids_seen: dict[int, str] = {}
+    tag_ids_seen: Dict[int, str] = {}
     for field_name, meta in field_metas.items():
         if meta.id >= 0:
             if meta.id in tag_ids_seen:

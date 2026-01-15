@@ -473,25 +473,12 @@ class Fory:
             set_bit(buffer, mask_index, 2)
         else:
             clear_bit(buffer, mask_index, 2)
-        # Reserve space for type definitions offset, similar to Java implementation
-        type_defs_offset_pos = None
-        if self.serialization_context.scoped_meta_share_enabled:
-            type_defs_offset_pos = buffer.writer_index
-            buffer.write_int32(-1)  # Reserve 4 bytes for type definitions offset
+        # Type definitions are now written inline (streaming) instead of deferred to end
 
         if self.language == Language.PYTHON:
             self.write_ref(buffer, obj)
         else:
             self.xwrite_ref(buffer, obj)
-
-        # Write type definitions at the end, similar to Java implementation
-        if self.serialization_context.scoped_meta_share_enabled:
-            meta_context = self.serialization_context.meta_context
-            if meta_context is not None and len(meta_context.get_writing_type_defs()) > 0:
-                # Update the offset to point to current position
-                current_pos = buffer.writer_index
-                buffer.put_int32(type_defs_offset_pos, current_pos - type_defs_offset_pos - 4)
-                self.type_resolver.write_type_defs(buffer)
         if buffer is not self.buffer:
             return buffer
         else:
@@ -618,31 +605,12 @@ class Fory:
         else:
             assert buffers is None, "buffers should be null when the serialized stream is produced with buffer_callback null."
 
-        # Read type definitions at the start, similar to Java implementation
-        end_reader_index = None
-        if self.serialization_context.scoped_meta_share_enabled:
-            relative_type_defs_offset = buffer.read_int32()
-            if relative_type_defs_offset != -1:
-                # Save current reader position
-                current_reader_index = buffer.reader_index
-                # Jump to type definitions
-                buffer.reader_index = current_reader_index + relative_type_defs_offset
-                # Read type definitions
-                self.type_resolver.read_type_defs(buffer)
-                # Save the end position (after type defs) - this is the true end of serialized data
-                end_reader_index = buffer.reader_index
-                # Jump back to continue with object deserialization
-                buffer.reader_index = current_reader_index
+        # Type definitions are now read inline (streaming) instead of at the end
 
         if is_target_x_lang:
             obj = self.xread_ref(buffer)
         else:
             obj = self.read_ref(buffer)
-
-        # After reading the object, position buffer at the end of serialized data
-        # (which is after the type definitions, not after the object data)
-        if end_reader_index is not None:
-            buffer.reader_index = end_reader_index
 
         return obj
 

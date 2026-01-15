@@ -23,9 +23,12 @@ use crate::TypeResolver;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+/// Streaming meta writer that writes TypeMeta inline during serialization.
+/// Uses the streaming protocol:
+/// - (index << 1) | 0 for new type definition (followed by TypeMeta bytes)
+/// - (index << 1) | 1 for reference to previously written type
 #[derive(Default)]
 pub struct MetaWriterResolver {
-    type_defs: Vec<Rc<Vec<u8>>>,
     type_id_index_map: HashMap<std::any::TypeId, usize>,
 }
 
@@ -33,44 +36,43 @@ const MAX_PARSED_NUM_TYPE_DEFS: usize = 8192;
 
 #[allow(dead_code)]
 impl MetaWriterResolver {
+    /// Write type meta inline using streaming protocol.
+    /// Returns the index assigned to this type.
     #[inline(always)]
-    pub fn push(
+    pub fn write_type_meta(
         &mut self,
+        writer: &mut Writer,
         type_id: std::any::TypeId,
         type_resolver: &TypeResolver,
-    ) -> Result<usize, Error> {
+    ) -> Result<(), Error> {
         match self.type_id_index_map.get(&type_id) {
-            None => {
-                let index = self.type_defs.len();
-                self.type_defs
-                    .push(type_resolver.get_type_info(&type_id)?.get_type_def());
-                self.type_id_index_map.insert(type_id, index);
-                Ok(index)
+            Some(&index) => {
+                // Reference to previously written type: (index << 1) | 1, LSB=1
+                writer.write_varuint32(((index as u32) << 1) | 1);
             }
-            Some(index) => Ok(*index),
+            None => {
+                // New type: index << 1, LSB=0, followed by TypeMeta bytes inline
+                let index = self.type_id_index_map.len();
+                writer.write_varuint32((index as u32) << 1);
+                self.type_id_index_map.insert(type_id, index);
+                // Write TypeMeta bytes inline
+                let type_def = type_resolver.get_type_info(&type_id)?.get_type_def();
+                writer.write_bytes(&type_def);
+            }
         }
-    }
-
-    #[inline(always)]
-    pub fn to_bytes(&self, writer: &mut Writer) {
-        writer.write_varuint32(self.type_defs.len() as u32);
-        for item in &self.type_defs {
-            writer.write_bytes(item);
-        }
-    }
-
-    #[inline(always)]
-    pub fn empty(&mut self) -> bool {
-        self.type_defs.is_empty()
+        Ok(())
     }
 
     #[inline(always)]
     pub fn reset(&mut self) {
-        self.type_defs.clear();
         self.type_id_index_map.clear();
     }
 }
 
+/// Streaming meta reader that reads TypeMeta inline during deserialization.
+/// Uses the streaming protocol:
+/// - (index << 1) | 0 for new type definition (followed by TypeMeta bytes)
+/// - (index << 1) | 1 for reference to previously read type
 #[derive(Default)]
 pub struct MetaReaderResolver {
     pub reading_type_infos: Vec<Rc<TypeInfo>>,
@@ -83,18 +85,30 @@ impl MetaReaderResolver {
         self.reading_type_infos.get(index)
     }
 
-    pub fn load(
+    /// Read type meta inline using streaming protocol.
+    /// Returns the TypeInfo for this type.
+    #[inline(always)]
+    pub fn read_type_meta(
         &mut self,
-        type_resolver: &TypeResolver,
         reader: &mut Reader,
-    ) -> Result<usize, Error> {
-        let meta_size = reader.read_varuint32()?;
-        // self.reading_type_infos.reserve(meta_size as usize);
-        for _ in 0..meta_size {
+        type_resolver: &TypeResolver,
+    ) -> Result<Rc<TypeInfo>, Error> {
+        let index_marker = reader.read_varuint32()?;
+        let is_ref = (index_marker & 1) == 1;
+        let index = (index_marker >> 1) as usize;
+
+        if is_ref {
+            // Reference to previously read type
+            self.reading_type_infos.get(index).cloned().ok_or_else(|| {
+                Error::type_error(format!("TypeInfo not found for type index: {}", index))
+            })
+        } else {
+            // New type - read TypeMeta inline
             let meta_header = reader.read_i64()?;
             if let Some(type_info) = self.parsed_type_infos.get(&meta_header) {
                 self.reading_type_infos.push(type_info.clone());
                 TypeMeta::skip_bytes(reader, meta_header)?;
+                Ok(type_info.clone())
             } else {
                 let type_meta = Rc::new(TypeMeta::from_bytes_with_header(
                     reader,
@@ -139,10 +153,10 @@ impl MetaReaderResolver {
                     self.parsed_type_infos
                         .insert(meta_header, type_info.clone());
                 }
-                self.reading_type_infos.push(type_info);
+                self.reading_type_infos.push(type_info.clone());
+                Ok(type_info)
             }
         }
-        Ok(reader.get_cursor())
     }
 
     #[inline(always)]

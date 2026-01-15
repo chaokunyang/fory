@@ -837,6 +837,26 @@ class TypeResolver:
         )
         return typeinfo
 
+    def _read_and_build_typeinfo(self, buffer):
+        """Read TypeDef inline from buffer and build TypeInfo.
+
+        Used for streaming meta share where TypeDef is written inline.
+        """
+        # Read the header (first 8 bytes) to get the type ID
+        header = buffer.read_int64()
+        # Check if we already have this TypeDef cached
+        type_info = self._meta_shared_typeinfo.get(header)
+        if type_info is not None:
+            # Skip the rest of the TypeDef binary for faster performance
+            skip_typedef(buffer, header)
+        else:
+            # Read the TypeDef and create TypeInfo
+            type_def = decode_typedef(buffer, self, header=header)
+            type_info = self._build_type_info_from_typedef(type_def)
+            # Cache the tuple for future use
+            self._meta_shared_typeinfo[header] = type_info
+        return type_info
+
     def reset(self):
         pass
 

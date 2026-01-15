@@ -98,10 +98,12 @@ public final class NonexistentClassSerializers {
       // class not exist, use class def id for identity.
       int id = classMap.putOrGet(value.classDef.getId(), newId);
       if (id >= 0) {
-        buffer.writeVarUint32(id << 1 | 0b1);
+        // Reference to previously written type: (index << 1) | 1, LSB=1
+        buffer.writeVarUint32((id << 1) | 1);
       } else {
-        buffer.writeVarUint32(newId << 1 | 0b1);
-        metaContext.writingClassDefs.add(value.classDef);
+        // New type: index << 1, LSB=0, followed by ClassDef bytes inline
+        buffer.writeVarUint32(newId << 1);
+        buffer.writeBytes(value.classDef.getEncoded());
       }
     }
 

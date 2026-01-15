@@ -70,12 +70,15 @@ public class DispatchId {
     TypeRef<?> typeRef = d.getTypeRef();
     Class<?> rawType = typeRef.getRawType();
     TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
-    // A field is treated as primitive for dispatch only if the Java type itself is primitive.
-    // Boxed types with nullable=false are still dispatched as boxed types,
-    // but serialized without null checks.
+    // A field is treated as primitive for dispatch if:
+    // 1. The Java type itself is primitive, OR
+    // 2. The boxed type has nullable=false (meaning writer wrote without null flag), OR
+    // 3. TypeExtMeta says nullable=false and typeId is a primitive type (for schema compatible mode
+    //    where local field may be boxed but remote wrote primitive)
     boolean isPrimitive =
         typeRef.isPrimitive()
-            || (rawType.isPrimitive() && typeExtMeta != null && !typeExtMeta.nullable());
+            || (rawType.isPrimitive() && typeExtMeta != null && !typeExtMeta.nullable())
+            || (typeExtMeta != null && !typeExtMeta.nullable() && Types.isPrimitiveType(typeId));
     if (fory.isCrossLanguage()) {
       return xlangTypeIdToDispatchId(typeId, isPrimitive);
     } else {

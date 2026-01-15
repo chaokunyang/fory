@@ -164,11 +164,13 @@ public class FieldGroups {
       this.qualifiedFieldName = d.getDeclaringClass() + "." + d.getName();
       if (d.getField() != null) {
         this.fieldAccessor = FieldAccessor.createAccessor(d.getField());
-        isPrimitive = d.getField().getType().isPrimitive();
       } else {
         this.fieldAccessor = null;
-        isPrimitive = d.getTypeRef().getRawType().isPrimitive();
       }
+      // Use dispatchId to determine isPrimitive for consistency with how data was written.
+      // This ensures correct handling in schema compatible mode where local field type
+      // may differ from remote (ClassDef) field type.
+      isPrimitive = DispatchId.isPrimitive(dispatchId);
       fieldConverter = d.getFieldConverter();
       nullable = d.isNullable();
       // descriptor.isTrackingRef() already includes the needToWriteRef check

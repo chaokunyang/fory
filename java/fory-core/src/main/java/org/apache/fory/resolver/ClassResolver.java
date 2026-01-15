@@ -1515,24 +1515,44 @@ public class ClassResolver extends TypeResolver {
   }
 
   public void writeClassInfoWithMetaShare(MemoryBuffer buffer, ClassInfo classInfo) {
-    if (classInfo.classId != NO_CLASS_ID && !classInfo.needToWriteClassDef) {
-      buffer.writeVarUint32(classInfo.classId << 1);
+    // For NonexistentClassSerializer, the serializer handles ClassDef writing itself
+    // because the ClassDef comes from the object being serialized, not from the class.
+    // We just write a placeholder that the serializer will overwrite.
+    if (classInfo.serializer != null
+        && classInfo.serializer.getClass()
+            == NonexistentClassSerializers.NonexistentClassSerializer.class) {
+      // Write a 2-byte placeholder that NonexistentClassSerializer.writeClassDef will overwrite
+      buffer.writeInt16((short) 0);
       return;
+    }
+    // For dynamically generated classes (lambdas, JDK proxies), use their stub class
+    // for the ClassDef since the dynamic class names cannot be loaded by name.
+    // The serializer will handle the actual serialization correctly.
+    Class<?> classForMeta = classInfo.cls;
+    if (classInfo.isDynamicGeneratedClass) {
+      if (classInfo.classId == LAMBDA_STUB_ID) {
+        classForMeta = LambdaSerializer.ReplaceStub.class;
+      } else if (classInfo.classId == JDK_PROXY_STUB_ID) {
+        classForMeta = JdkProxySerializer.ReplaceStub.class;
+      }
     }
     MetaContext metaContext = fory.getSerializationContext().getMetaContext();
     assert metaContext != null : SET_META__CONTEXT_MSG;
     IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
     int newId = classMap.size;
-    int id = classMap.putOrGet(classInfo.cls, newId);
+    int id = classMap.putOrGet(classForMeta, newId);
     if (id >= 0) {
-      buffer.writeVarUint32(id << 1 | 0b1);
+      // Reference to previously written type: (index << 1) | 1, LSB=1
+      buffer.writeVarUint32((id << 1) | 1);
     } else {
-      buffer.writeVarUint32(newId << 1 | 0b1);
-      ClassDef classDef = classInfo.classDef;
+      // New type: index << 1, LSB=0, followed by ClassDef bytes inline
+      buffer.writeVarUint32(newId << 1);
+      ClassInfo stubClassInfo = classForMeta == classInfo.cls ? classInfo : getClassInfo(classForMeta);
+      ClassDef classDef = stubClassInfo.classDef;
       if (classDef == null) {
-        classDef = buildClassDef(classInfo);
+        classDef = buildClassDef(stubClassInfo);
       }
-      metaContext.writingClassDefs.add(classDef);
+      buffer.writeBytes(classDef.getEncoded());
     }
   }
 
@@ -1556,14 +1576,34 @@ public class ClassResolver extends TypeResolver {
   @Override
   public ClassInfo readSharedClassMeta(MemoryBuffer buffer, MetaContext metaContext) {
     assert metaContext != null : SET_META__CONTEXT_MSG;
-    int header = buffer.readVarUint32Small14();
-    int id = header >>> 1;
-    if ((header & 0b1) == 0) {
-      return getOrUpdateClassInfo((short) id);
-    }
-    ClassInfo classInfo = metaContext.readClassInfos.get(id);
-    if (classInfo == null) {
-      classInfo = readSharedClassMeta(metaContext, id);
+    int indexMarker = buffer.readVarUint32Small14();
+    boolean isRef = (indexMarker & 1) == 1;
+    int index = indexMarker >>> 1;
+    ClassInfo classInfo;
+    if (isRef) {
+      // Reference to previously read type in this stream
+      classInfo = metaContext.readClassInfos.get(index);
+    } else {
+      // New type in stream - but may already be known from registry
+      long id = buffer.readInt64();
+      Tuple2<ClassDef, ClassInfo> tuple2 = extRegistry.classIdToDef.get(id);
+      if (tuple2 != null) {
+        // Already known - skip the ClassDef bytes, reuse existing ClassInfo
+        ClassDef.skipClassDef(buffer, id);
+        classInfo = tuple2.f1;
+        if (classInfo == null) {
+          classInfo = buildMetaSharedClassInfo(tuple2, tuple2.f0);
+        }
+      } else {
+        // Unknown - read ClassDef and create ClassInfo
+        tuple2 = readClassDef(buffer, id);
+        classInfo = tuple2.f1;
+        if (classInfo == null) {
+          classInfo = buildMetaSharedClassInfo(tuple2, tuple2.f0);
+        }
+      }
+      // index == readClassInfos.size() since types are written sequentially
+      metaContext.readClassInfos.add(classInfo);
     }
     return classInfo;
   }

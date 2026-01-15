@@ -110,12 +110,12 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     int newId = classMap.size;
     int id = classMap.putOrGet(layerMarkerClass, newId);
     if (id >= 0) {
-      // Already sent this layer definition
-      buffer.writeVarUint32(id << 1 | 0b1);
+      // Reference to previously written type: (index << 1) | 1, LSB=1
+      buffer.writeVarUint32((id << 1) | 1);
     } else {
-      // First time, queue the layer ClassDef to be written at stream end
-      buffer.writeVarUint32(newId << 1 | 0b1);
-      metaContext.writingClassDefs.add(layerClassDef);
+      // New type: index << 1, LSB=0, followed by ClassDef bytes inline
+      buffer.writeVarUint32(newId << 1);
+      buffer.writeBytes(layerClassDef.getEncoded());
     }
   }
 
@@ -210,17 +210,16 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     if (metaContext == null) {
       return;
     }
-    int header = buffer.readVarUint32Small14();
-    int id = header >>> 1;
-    // The class def will be read at stream end via readClassDefs()
-    // Here we just verify the ID is valid
-    if ((header & 0b1) != 0) {
-      // Meta share ID - either already known or will be resolved from stream end
-      ObjectArray<ClassInfo> readClassInfos = metaContext.readClassInfos;
-      if (id >= readClassInfos.size) {
-        // ClassDef not yet read - it will be available after readClassDefs() is called
-        // For now, we proceed with field reading using our local field info
-      }
+    int indexMarker = buffer.readVarUint32Small14();
+    boolean isRef = (indexMarker & 1) == 1;
+    int index = indexMarker >>> 1;
+    if (isRef) {
+      // Reference to previously read type - already in readClassInfos, nothing to do
+    } else {
+      // New type in stream - read ClassDef inline
+      long id = buffer.readInt64();
+      ClassDef.skipClassDef(buffer, id);
+      // Layer class info is managed by this serializer, not stored in readClassInfos
     }
   }
 

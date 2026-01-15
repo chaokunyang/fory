@@ -610,11 +610,7 @@ impl Fory {
     ) -> Result<(), Error> {
         let is_none = record.fory_is_none();
         self.write_head::<T>(is_none, &mut context.writer);
-        let meta_start_offset = context.writer.len();
         if !is_none {
-            if context.is_compatible() {
-                context.writer.write_i32(-1);
-            };
             // Use RefMode based on config:
             // - If track_ref is enabled, use RefMode::Tracking for the root object
             // - Otherwise, use RefMode::NullOnly which writes NOT_NULL_VALUE_FLAG
@@ -623,10 +619,8 @@ impl Fory {
             } else {
                 RefMode::NullOnly
             };
+            // TypeMeta is written inline during serialization (streaming protocol)
             <T as Serializer>::fory_write(record, context, ref_mode, true, false)?;
-            if context.is_compatible() && !context.empty() {
-                context.write_meta(meta_start_offset);
-            }
         }
         Ok(())
     }
@@ -997,13 +991,6 @@ impl Fory {
         if is_none {
             return Ok(T::fory_default());
         }
-        let mut bytes_to_skip = 0;
-        if context.is_compatible() {
-            let meta_offset = context.reader.read_i32()?;
-            if meta_offset != -1 {
-                bytes_to_skip = context.load_type_meta(meta_offset as usize)?;
-            }
-        }
         // Use RefMode based on config:
         // - If track_ref is enabled, use RefMode::Tracking for the root object
         // - Otherwise, use RefMode::NullOnly
@@ -1012,10 +999,8 @@ impl Fory {
         } else {
             RefMode::NullOnly
         };
+        // TypeMeta is read inline during deserialization (streaming protocol)
         let result = <T as Serializer>::fory_read(context, ref_mode, true);
-        if bytes_to_skip > 0 {
-            context.reader.skip(bytes_to_skip)?;
-        }
         context.ref_reader.resolve_callbacks();
         result
     }

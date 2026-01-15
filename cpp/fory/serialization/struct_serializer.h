@@ -2503,11 +2503,9 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     const TypeInfo *type_info = type_info_res.value();
     ctx.write_varuint32(type_info->type_id);
 
-    // In compatible mode, always write meta index (matches Rust behavior)
+    // In compatible mode, write type meta inline (streaming protocol)
     if (ctx.is_compatible() && type_info->type_meta) {
-      // Use TypeInfo* overload to avoid type_index creation
-      size_t meta_index = ctx.push_meta(type_info);
-      ctx.write_varuint32(static_cast<uint32_t>(meta_index));
+      ctx.write_type_meta(type_info);
     }
   }
 
@@ -2672,13 +2670,8 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
                   static_cast<uint8_t>(TypeId::COMPATIBLE_STRUCT) ||
               local_type_id_low ==
                   static_cast<uint8_t>(TypeId::NAMED_COMPATIBLE_STRUCT)) {
-            // Use meta sharing: read varint index and get TypeInfo from
-            // meta_reader
-            uint32_t meta_index = ctx.read_varuint32(ctx.error());
-            if (FORY_PREDICT_FALSE(ctx.has_error())) {
-              return T{};
-            }
-            auto remote_type_info_res = ctx.get_type_info_by_index(meta_index);
+            // Read TypeMeta inline using streaming protocol
+            auto remote_type_info_res = ctx.read_type_meta();
             if (!remote_type_info_res.ok()) {
               ctx.set_error(std::move(remote_type_info_res).error());
               return T{};

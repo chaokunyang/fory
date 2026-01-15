@@ -595,6 +595,7 @@ private:
   }
 
   /// Core serialization implementation.
+  /// TypeMeta is written inline using streaming protocol (no deferred writing).
   template <typename T>
   Result<size_t, Error> serialize_impl(const T &obj, Buffer &buffer) {
     size_t start_pos = buffer.writer_index();
@@ -604,15 +605,9 @@ private:
     buffer.UnsafePut<uint16_t>(buffer.writer_index(), precomputed_header_);
     buffer.IncreaseWriterIndex(header_length_);
 
-    // Reserve space for meta offset in compatible mode
-    size_t meta_start_offset = 0;
-    if (write_ctx_->is_compatible()) {
-      meta_start_offset = buffer.writer_index();
-      buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
-    }
-
     // Top-level serialization: use Tracking if ref tracking is enabled,
     // otherwise NullOnly for nullable handling
+    // TypeMeta is written inline during serialization (streaming protocol)
     const RefMode top_level_ref_mode =
         write_ctx_->track_ref() ? RefMode::Tracking : RefMode::NullOnly;
     Serializer<T>::write(obj, *write_ctx_, top_level_ref_mode, true);
@@ -621,32 +616,15 @@ private:
       return Unexpected(write_ctx_->take_error());
     }
 
-    // Write collected TypeMetas at the end in compatible mode
-    if (write_ctx_->is_compatible() && !write_ctx_->meta_empty()) {
-      write_ctx_->write_meta(meta_start_offset);
-    }
-
     return buffer.writer_index() - start_pos;
   }
 
   /// Core deserialization implementation.
+  /// TypeMeta is read inline using streaming protocol.
   template <typename T> Result<T, Error> deserialize_impl(Buffer &buffer) {
-    // Load TypeMetas at the beginning in compatible mode
-    size_t bytes_to_skip = 0;
-    if (read_ctx_->is_compatible()) {
-      Error error;
-      int32_t meta_offset = buffer.ReadInt32(error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
-      }
-      if (meta_offset != -1) {
-        FORY_TRY(meta_size, read_ctx_->load_type_meta(meta_offset));
-        bytes_to_skip = meta_size;
-      }
-    }
-
     // Top-level deserialization: use Tracking if ref tracking is enabled,
     // otherwise NullOnly for nullable handling
+    // TypeMeta is read inline during deserialization (streaming protocol)
     const RefMode top_level_ref_mode =
         read_ctx_->track_ref() ? RefMode::Tracking : RefMode::NullOnly;
     T result = Serializer<T>::read(*read_ctx_, top_level_ref_mode, true);
@@ -656,9 +634,6 @@ private:
     }
 
     read_ctx_->ref_reader().resolve_callbacks();
-    if (bytes_to_skip > 0) {
-      buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
-    }
     return result;
   }
 

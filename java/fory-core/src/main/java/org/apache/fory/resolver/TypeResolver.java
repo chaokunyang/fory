@@ -280,19 +280,6 @@ public abstract class TypeResolver {
     return classInfo;
   }
 
-  final ClassInfo readSharedClassMeta(MetaContext metaContext, int index) {
-    ClassDef classDef = metaContext.readClassDefs.get(index);
-    Tuple2<ClassDef, ClassInfo> classDefTuple = extRegistry.classIdToDef.get(classDef.getId());
-    ClassInfo classInfo;
-    if (classDefTuple == null || classDefTuple.f1 == null || classDefTuple.f1.serializer == null) {
-      classInfo = buildMetaSharedClassInfo(classDefTuple, classDef);
-    } else {
-      classInfo = classDefTuple.f1;
-    }
-    metaContext.readClassInfos.set(index, classInfo);
-    return classInfo;
-  }
-
   final ClassInfo buildMetaSharedClassInfo(
       Tuple2<ClassDef, ClassInfo> classDefTuple, ClassDef classDef) {
     ClassInfo classInfo;
@@ -300,7 +287,15 @@ public abstract class TypeResolver {
       classDef = classDefTuple.f0;
     }
     Class<?> cls = loadClass(classDef.getClassSpec());
-    if (!classDef.hasFieldsMeta()) {
+    // For nonexistent classes, always create a new ClassInfo with the correct classDef,
+    // even if the classDef has no fields meta. This ensures the NonexistentClassSerializer
+    // has access to the classDef for proper deserialization.
+    if (!classDef.hasFieldsMeta()
+        && !NonexistentClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
+      classInfo = getClassInfo(cls);
+    } else if (ClassResolver.useReplaceResolveSerializer(cls)) {
+      // For classes with writeReplace/readResolve, use their natural serializer
+      // (ReplaceResolveSerializer) instead of MetaSharedSerializer
       classInfo = getClassInfo(cls);
     } else {
       classInfo = getMetaSharedClassInfo(classDef, cls);
@@ -365,56 +360,7 @@ public abstract class TypeResolver {
     return classInfo;
   }
 
-  /**
-   * Write all new class definitions meta to buffer at last, so that if some class doesn't exist on
-   * peer, but one of class which exists on both side are sent in this stream, the definition meta
-   * can still be stored in peer, and can be resolved next time when sent only an id.
-   */
-  public final void writeClassDefs(MemoryBuffer buffer) {
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    ObjectArray<ClassDef> writingClassDefs = metaContext.writingClassDefs;
-    final int size = writingClassDefs.size;
-    buffer.writeVarUint32Small7(size);
-    if (buffer.isHeapFullyWriteable()) {
-      writeClassDefs(buffer, writingClassDefs, size);
-    } else {
-      for (int i = 0; i < size; i++) {
-        writingClassDefs.get(i).writeClassDef(buffer);
-      }
-    }
-    metaContext.writingClassDefs.size = 0;
-  }
-
-  private void writeClassDefs(
-      MemoryBuffer buffer, ObjectArray<ClassDef> writingClassDefs, int size) {
-    for (int i = 0; i < size; i++) {
-      buffer.writeBytes(writingClassDefs.get(i).getEncoded());
-    }
-  }
-
-  /**
-   * Ensure all class definition are read and populated, even there are deserialization exception
-   * such as ClassNotFound. So next time a class def written previously identified by an id can be
-   * got from the meta context.
-   */
-  public final void readClassDefs(MemoryBuffer buffer) {
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    assert metaContext != null : SET_META__CONTEXT_MSG;
-    int numClassDefs = buffer.readVarUint32Small7();
-    for (int i = 0; i < numClassDefs; i++) {
-      long id = buffer.readInt64();
-      Tuple2<ClassDef, ClassInfo> tuple2 = extRegistry.classIdToDef.get(id);
-      if (tuple2 != null) {
-        ClassDef.skipClassDef(buffer, id);
-      } else {
-        tuple2 = readClassDef(buffer, id);
-      }
-      metaContext.readClassDefs.add(tuple2.f0);
-      metaContext.readClassInfos.add(tuple2.f1);
-    }
-  }
-
-  private Tuple2<ClassDef, ClassInfo> readClassDef(MemoryBuffer buffer, long header) {
+  protected Tuple2<ClassDef, ClassInfo> readClassDef(MemoryBuffer buffer, long header) {
     ClassDef readClassDef = ClassDef.readClassDef(fory, buffer, header);
     Tuple2<ClassDef, ClassInfo> tuple2 = extRegistry.classIdToDef.get(readClassDef.getId());
     if (tuple2 == null) {

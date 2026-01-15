@@ -58,8 +58,8 @@ pub fn write_type_info<T: Serializer>(context: &mut WriteContext) -> Result<(), 
     }
     let rs_type_id = std::any::TypeId::of::<T>();
     if context.is_share_meta() {
-        let meta_index = context.push_meta(rs_type_id)? as u32;
-        context.writer.write_varuint32(meta_index);
+        // Write type meta inline using streaming protocol
+        context.write_type_meta(rs_type_id)?;
     } else {
         let type_info = context.get_type_resolver().get_type_info(&rs_type_id)?;
         let namespace = type_info.get_namespace();
@@ -111,7 +111,8 @@ pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Er
         return Ok(());
     }
     if context.is_share_meta() {
-        let _meta_index = context.reader.read_varuint32()?;
+        // Read type meta inline using streaming protocol
+        let _type_info = context.read_type_meta()?;
     } else {
         let _namespace_msb = context.read_meta_string()?;
         let _type_name_msb = context.read_meta_string()?;

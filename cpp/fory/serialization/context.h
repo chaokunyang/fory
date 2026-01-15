@@ -221,20 +221,15 @@ public:
     buffer().WriteBytes(data, length);
   }
 
-  /// Push a TypeId's TypeMeta into the meta collection.
-  /// Returns the index for writing as varint.
-  Result<size_t, Error> push_meta(const std::type_index &type_id);
+  /// Write TypeMeta inline using streaming protocol.
+  /// First occurrence: writes (index << 1) | 0 followed by TypeDef bytes.
+  /// Subsequent occurrences: writes (index << 1) | 1 as reference.
+  Result<void, Error> write_type_meta(const std::type_index &type_id);
 
-  /// Push meta using TypeInfo pointer directly (avoids type_index lookup).
-  /// Returns the index for writing as varint.
-  size_t push_meta(const TypeInfo *type_info);
-
-  /// Write all collected TypeMetas at the specified offset.
-  /// Updates the meta_offset field at 'offset' to point to meta section.
-  void write_meta(size_t offset);
-
-  /// Check if any TypeMetas were collected.
-  bool meta_empty() const;
+  /// Write TypeMeta inline using TypeInfo pointer (fast path).
+  /// First occurrence: writes (index << 1) | 0 followed by TypeDef bytes.
+  /// Subsequent occurrences: writes (index << 1) | 1 as reference.
+  void write_type_meta(const TypeInfo *type_info);
 
   /// Write type information for polymorphic types.
   /// Handles different type categories:
@@ -305,10 +300,8 @@ private:
   RefWriter ref_writer_;
   uint32_t current_dyn_depth_;
 
-  // Meta sharing state (for compatible mode)
-  std::vector<std::vector<uint8_t>> write_type_defs_;
-  absl::flat_hash_map<std::type_index, size_t> write_type_id_index_map_;
-  // Fast path: use TypeInfo pointer as key (avoids type_index hash overhead)
+  // Meta sharing state (for streaming inline TypeMeta)
+  // Maps TypeInfo* to index for reference tracking - uses map size as counter
   absl::flat_hash_map<const TypeInfo *, size_t> write_type_info_index_map_;
 };
 
@@ -543,12 +536,13 @@ public:
   /// Read enum type info without type_index (fast path).
   Result<const TypeInfo *, Error> read_enum_type_info(uint32_t base_type_id);
 
-  /// Load all TypeMetas from buffer at the specified offset.
-  /// After loading, the reader position is restored to where it was before.
-  /// @return Size of the meta section in bytes, or error
-  Result<size_t, Error> load_type_meta(int32_t meta_offset);
+  /// Read TypeMeta inline using streaming protocol.
+  /// Reads index marker: if LSB=0, reads new TypeDef inline; if LSB=1, returns
+  /// reference.
+  /// @return const pointer to TypeInfo, or error
+  Result<const TypeInfo *, Error> read_type_meta();
 
-  /// Get TypeInfo by meta index.
+  /// Get TypeInfo by meta index (internal use for reference lookups).
   /// @return const pointer to TypeInfo if found, error otherwise
   Result<const TypeInfo *, Error> get_type_info_by_index(size_t index) const;
 

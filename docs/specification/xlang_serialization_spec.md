@@ -290,7 +290,9 @@ All data is encoded in little-endian format.
 
 ### Meta Start Offset
 
-If compatible mode is enabled, an uncompressed unsigned int32 (4 bytes, little endian) is appended to indicate the start offset of metadata. During serialization, this is initially written as a placeholder (e.g., `-1` or `0`), then updated after all objects are serialized and metadata is collected.
+In non-streaming compatible mode, an uncompressed unsigned int32 (4 bytes, little endian) is appended to indicate the start offset of metadata. During serialization, this is initially written as a placeholder (e.g., `-1` or `0`), then updated after all objects are serialized and metadata is collected.
+
+**Note:** In streaming mode, the meta start offset is omitted because type metadata is written inline during serialization rather than being deferred to the end of the buffer.
 
 ## Reference Meta
 
@@ -481,18 +483,24 @@ using one of the following mode. Which mode to use is configured when creating f
   - If type meta hasn't been written before, the data will be written as:
 
     ```
-    | unsigned varint: 0b11111111 | type def |
+    | unsigned varint: index << 1 | type def bytes |
     ```
+
+    The LSB=0 indicates this is a new type definition. The `index` is the sequential index
+    assigned to this type (starting from 0), and `type def bytes` contains the complete
+    TypeDef including the 8-byte global header.
 
   - If type meta has been written before, the data will be written as:
 
     ```
-    | unsigned varint: written index << 1 |
+    | unsigned varint: (index << 1) | 1 |
     ```
 
-    `written index` is the id in `captured_type_defs`.
+    The LSB=1 indicates this is a reference to a previously written type. The `index` is
+    the same sequential index that was assigned when the type was first written.
 
-  - With this mode, `meta start offset` can be omitted.
+  - With this mode, `meta start offset` can be omitted since all type metadata is written
+    inline during serialization rather than being deferred to the end.
 
 > The normal mode and meta share mode will forbid streaming writing since it needs to look back for update the start
 > offset after the whole object graph writing and meta collecting is finished. Only in this way we can ensure

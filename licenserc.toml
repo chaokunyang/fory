@@ -24,18 +24,18 @@ excludes = [
     "go/fory/tests/structs_fory_gen.go",
 
     # Generated
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/state/generated/**",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/state/generated/**",
 
     # Derived
     "ci/format.sh",
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/Identity2IdMap.java",
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/data/Data.java",
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/data/Image.java",
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/data/Media.java",
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/data/MediaContent.java",
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/data/Sample.java",
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/state/BufferType.java",
-    "java/benchmark/src/main/java/org/apache/fory/benchmark/state/KryoState.java",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/Identity2IdMap.java",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/data/Data.java",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/data/Image.java",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/data/Media.java",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/data/MediaContent.java",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/data/Sample.java",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/state/BufferType.java",
+    "benchmarks/java_benchmark/src/main/java/org/apache/fory/benchmark/state/KryoState.java",
     "java/fory-core/src/main/java/org/apache/fory/codegen/Code.java",
     "java/fory-core/src/main/java/org/apache/fory/collection/ForyObjectMap.java",
     "java/fory-core/src/main/java/org/apache/fory/collection/IdentityMap.java",

@@ -180,7 +180,7 @@ integration_tests() {
   cd "$ROOT"/java
   mvn -T10 -B --no-transfer-progress clean install -DskipTests
   echo "benchmark tests"
-  cd "$ROOT"/java/benchmark
+  cd "$ROOT"/benchmarks/java_benchmark
   mvn -T10 -B --no-transfer-progress clean test install -Pjmh
   echo "Start latest jdk tests"
   cd "$ROOT"/integration_tests/latest_jdk_tests

@@ -1,1 +1,2 @@
-java/benchmark export-ignore
+benchmarks export-ignore
+integration_tests export-ignore

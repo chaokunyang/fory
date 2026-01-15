@@ -188,7 +188,7 @@ def bump_java_version(new_version):
         "integration_tests/jpms_tests",
         "integration_tests/latest_jdk_tests",
         "integration_tests/latest_jdk_tests",
-        "java/benchmark",
+        "benchmarks/java_benchmark",
         "java/fory-core",
         "java/fory-format",
         "java/fory-simd",

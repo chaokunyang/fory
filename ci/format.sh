@@ -139,7 +139,8 @@ format_java() {
       cd "$ROOT/java"
       mvn -T10 --no-transfer-progress spotless:apply
       mvn -T10 --no-transfer-progress checkstyle:check
-      cd "$ROOT/java/benchmark"
+      mvn -T10 --no-transfer-progress install -DskipTests
+      cd "$ROOT/benchmarks/java_benchmark"
       mvn -T10 --no-transfer-progress spotless:apply
       cd "$ROOT/integration_tests"
       dirs=("graalvm_tests" "jdk_compatibility_tests" "latest_jdk_tests")

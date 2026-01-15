@@ -15,7 +15,7 @@
 ## Benchmarks
 
 - Benchmark source code:
-  - Java: [Java Benchmarks Source](../java/benchmark)
+  - Java: [Java Benchmarks Source](../benchmarks/java_benchmark)
   - Python: [Python Benchmarks Source](../benchmarks/cpython_benchmark)
   - Rust: [Rust Benchmarks Source](../benchmarks/rust_benchmark/)
 - Benchmark result:

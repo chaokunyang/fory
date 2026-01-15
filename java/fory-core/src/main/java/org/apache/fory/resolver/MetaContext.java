@@ -30,7 +30,7 @@ import org.apache.fory.meta.ClassDef;
  */
 public class MetaContext {
   /** Classes which has sent definitions to peer. */
-  public final IdentityObjectIntMap<Class<?>> classMap = new IdentityObjectIntMap<>(8, 0.4f);
+  public final IdentityObjectIntMap<Class<?>> classMap = new IdentityObjectIntMap<>(1, 0.5f);
 
   /** Class definitions read from peer. */
   public final ObjectArray<ClassDef> readClassDefs = new ObjectArray<>();

@@ -39,9 +39,8 @@ public final class MapRefResolver implements RefResolver {
   private static final boolean ENABLE_FORY_REF_PROFILING =
       "true".equalsIgnoreCase(System.getProperty("fory.enable_ref_profiling"));
 
-  // Map clean will zero all key array elements, which is unnecessary for
-  private static final int DEFAULT_MAP_CAPACITY = 4;
-  private static final int DEFAULT_ARRAY_CAPACITY = 4;
+  private static final int DEFAULT_MAP_CAPACITY = 3;
+  private static final int DEFAULT_ARRAY_CAPACITY = 3;
   // use average size to amortise resize/clear cost.
   // exponential smoothing can't reflect overall reference size, thus not
   // suitable for amortization.

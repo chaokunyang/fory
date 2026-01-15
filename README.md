@@ -141,7 +141,7 @@ For more detailed benchmarks and methodology, see [C++ Benchmarks](benchmarks/cp
 </dependency>
 ```
 
-Snapshots are available from `https://repository.apache.org/snapshots/` (version `0.14.0-SNAPSHOT`).
+Snapshots are available from `https://repository.apache.org/snapshots/` (version `0.15.0-SNAPSHOT`).
 
 **Scala**:
 

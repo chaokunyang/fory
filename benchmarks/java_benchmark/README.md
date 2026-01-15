@@ -25,7 +25,7 @@ as an optional feature. So Apache Fory™ make it as an optional dependency and 
 
 ```bash
 # Install fory
-cd ../java && mvn install -DskipTests -Dcheckstyle.skip -Dlicense.skip -Dmaven.javadoc.skip && cd -
+cd ../../java && mvn install -DskipTests -Dcheckstyle.skip -Dlicense.skip -Dmaven.javadoc.skip && cd -
 
 # build benchmark jar
 # use `-Pjmh` to download jmh dependencies, we mark it as optional
@@ -33,7 +33,7 @@ cd ../java && mvn install -DskipTests -Dcheckstyle.skip -Dlicense.skip -Dmaven.j
 mvn package -Pjmh
 # run benchmark
 nohup java -jar target/benchmarks.jar -f 5 -wi 3 -i 5 -t 1 -w 3s -r 5s -rf csv >bench.log 2>&1 &
-java -jar target/benchmarks.jar "org.apache.fory.*\.deserialize$" -f 1 -wi 1 -i 3 -t 1 -w 2s -r 2s -rf csv -p objectType=MEDIA_CONTENT -p bufferType=array -p references=false
+java -jar target/benchmarks.jar "org.apache.fory.*UserTypeSerializeSuite.*" -f 1 -wi 1 -i 1 -t 1 -w 2s -r 2s -rf csv -p objectType=MEDIA_CONTENT -p bufferType=array -p references=false
 ```
 
 Generate Protobuf/Flatbuffers code manually:

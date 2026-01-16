@@ -229,10 +229,17 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         int dispatchId = fieldInfo.dispatchId;
         boolean needRead = true;
         if (fieldInfo.isPrimitive) {
-          // PRIMITIVE_* dispatch IDs mean non-nullable, so no null flag is read
-          needRead =
-              AbstractObjectSerializer.readPrimitiveFieldValue(
-                  buffer, obj, fieldAccessor, dispatchId);
+          if (nullable) {
+            // Remote wrote with null flag (e.g., Go's *int32), read null flag first
+            needRead =
+                AbstractObjectSerializer.readPrimitiveNullableFieldValue(
+                    buffer, obj, fieldAccessor, dispatchId);
+          } else {
+            // PRIMITIVE_* dispatch IDs with nullable=false mean no null flag is read
+            needRead =
+                AbstractObjectSerializer.readPrimitiveFieldValue(
+                    buffer, obj, fieldAccessor, dispatchId);
+          }
         }
         // For NOTNULL_BOXED and other boxed types, let readBasicObjectFieldValue handle it
         // which uses putObject for proper boxing

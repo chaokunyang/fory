@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import org.apache.fory.Fory;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassInfo;
@@ -167,16 +168,20 @@ public class FieldGroups {
       } else {
         this.fieldAccessor = null;
       }
-      // Use dispatchId to determine isPrimitive for consistency with how data was written.
-      // This ensures correct handling in schema compatible mode where local field type
-      // may differ from remote (ClassDef) field type.
-      // Note: NOTNULL_BOXED dispatch IDs are NOT primitive - they are handled by
-      // readBasicObjectFieldValue
-      isPrimitiveField = DispatchId.isPrimitive(dispatchId);
+      // Use local field type to determine if field is primitive.
+      // This determines how to write the value to the object (Platform.putInt vs putObject).
+      isPrimitiveField = typeRef.getRawType().isPrimitive();
       fieldConverter = d.getFieldConverter();
-      nullable = d.isNullable();
-      // descriptor.isTrackingRef() already includes the needToWriteRef check
-      trackingRef = d.isTrackingRef();
+      // For xlang compatibility, check TypeExtMeta first (from remote peer's type meta)
+      // This ensures we read data correctly when remote's nullable differs from local
+      TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+      if (extMeta != null) {
+        nullable = extMeta.nullable();
+        trackingRef = extMeta.trackingRef();
+      } else {
+        nullable = d.isNullable();
+        trackingRef = d.isTrackingRef();
+      }
       refMode = RefMode.of(trackingRef, nullable);
 
       GenericType t = resolver.buildGenericType(typeRef);

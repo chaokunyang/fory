@@ -272,7 +272,8 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
    * @return array of field values in putFields order
    */
   @Override
-  public Object[] getFieldValuesForPutFields(Object obj, ObjectIntMap fieldIndexMap, int arraySize) {
+  public Object[] getFieldValuesForPutFields(
+      Object obj, ObjectIntMap fieldIndexMap, int arraySize) {
     Object[] vals = new Object[arraySize];
     // Get final fields
     getFieldValuesForPutFields(obj, fieldIndexMap, vals, buildInFields);

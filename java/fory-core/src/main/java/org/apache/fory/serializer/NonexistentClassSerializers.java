@@ -32,7 +32,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.MetaStringResolver;
 import org.apache.fory.resolver.RefResolver;
@@ -109,7 +108,6 @@ public final class NonexistentClassSerializers {
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(classDef);
       Fory fory = this.fory;
       RefResolver refResolver = fory.getRefResolver();
-      ClassResolver classResolver = fory.getClassResolver();
       if (fory.checkClassVersion()) {
         buffer.writeInt32(fieldsInfo.classVersionHash);
       }
@@ -162,7 +160,8 @@ public final class NonexistentClassSerializers {
       // read order: primitive,boxed,final,other,collection,map
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(classDef);
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
-        Object fieldValue = AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
+        Object fieldValue =
+            AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       Generics generics = fory.getGenerics();

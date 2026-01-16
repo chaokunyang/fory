@@ -105,8 +105,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
             d.isNullable());
       }
     }
-    objectCodecOptimizer =
-        new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
+    objectCodecOptimizer = new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
 
     String defaultValueLanguage = "None";
     DefaultValueUtils.DefaultValueField[] defaultValueFields =

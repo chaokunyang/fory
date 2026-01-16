@@ -19,6 +19,8 @@
 
 package org.apache.fory.serializer;
 
+import static org.apache.fory.serializer.AbstractObjectSerializer.readBuildInFieldValue;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
@@ -37,7 +39,6 @@ import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.struct.Fingerprint;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.MurmurHash3;
 import org.apache.fory.util.Utils;
@@ -168,8 +169,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     for (SerializationFieldInfo fieldInfo : containerFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
-      writeContainerFieldValue(
-          binding, refResolver, generics, fieldInfo, buffer, fieldValue);
+      writeContainerFieldValue(binding, refResolver, generics, fieldInfo, buffer, fieldValue);
     }
   }
 
@@ -203,13 +203,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     int counter = 0;
     // read order: primitive,boxed,final,other,collection,map
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
-      int dispatchId = fieldInfo.dispatchId;
-      if (DispatchId.isPrimitive(dispatchId)) {
-        fieldValues[counter++] = AbstractObjectSerializer.readPrimitiveValue(buffer, dispatchId);
-      } else {
-        Object fieldValue = binding.readField(fieldInfo, buffer);
-        fieldValues[counter++] = fieldValue;
-      }
+      fieldValues[counter++] = readBuildInFieldValue(binding, fieldInfo, buffer);
     }
     Generics generics = fory.getGenerics();
     for (SerializationFieldInfo fieldInfo : containerFields) {

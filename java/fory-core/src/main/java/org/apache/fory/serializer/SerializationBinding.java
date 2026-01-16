@@ -82,11 +82,21 @@ abstract class SerializationBinding {
   abstract void writeContainerFieldValue(
       SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue);
 
-  abstract void writeField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue);
+  public final void writeField(
+      SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+    writeField(fieldInfo, fieldInfo.refMode, buffer, fieldValue);
+  }
+
+  abstract void writeField(
+      SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer, Object fieldValue);
 
   abstract void write(MemoryBuffer buffer, Serializer serializer, Object value);
 
-  abstract Object readField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer);
+  public final Object readField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    return readField(fieldInfo, fieldInfo.refMode, buffer);
+  }
+
+  abstract Object readField(SerializationFieldInfo fieldInfo, RefMode mode, MemoryBuffer buffer);
 
   abstract Object read(MemoryBuffer buffer, Serializer serializer);
 
@@ -257,20 +267,20 @@ abstract class SerializationBinding {
     }
 
     @Override
-    Object readField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    Object readField(SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer) {
       if (fieldInfo.useDeclaredTypeInfo) {
-        if (fieldInfo.refMode == RefMode.TRACKING) {
+        if (refMode == RefMode.TRACKING) {
           return fory.readRef(buffer, fieldInfo.classInfo);
         } else {
-          if (fieldInfo.refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
+          if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
             return fory.readNonRef(buffer, fieldInfo.classInfo);
           }
         }
       } else {
-        if (fieldInfo.refMode == RefMode.TRACKING) {
+        if (refMode == RefMode.TRACKING) {
           return fory.readRef(buffer, fieldInfo.classInfoHolder);
         } else {
-          if (fieldInfo.refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
+          if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
             return fory.readNonRef(buffer, fieldInfo.classInfoHolder);
           }
         }
@@ -371,33 +381,38 @@ abstract class SerializationBinding {
     }
 
     @Override
-    void writeField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+    void writeField(
+        SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer, Object fieldValue) {
       if (fieldInfo.useDeclaredTypeInfo) {
         Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
-        if (fieldInfo.refMode == RefMode.TRACKING) {
+        if (refMode == RefMode.TRACKING) {
           if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
             serializer.write(buffer, fieldValue);
           }
-        } else {
-          if (fieldInfo.refMode == RefMode.NULL_ONLY) {
-            if (fieldValue == null) {
-              buffer.writeByte(Fory.NULL_FLAG);
-              return;
-            }
-            serializer.write(buffer, fieldValue);
+        } else if (refMode == RefMode.NULL_ONLY) {
+          if (fieldValue == null) {
+            buffer.writeByte(Fory.NULL_FLAG);
+            return;
           }
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          serializer.write(buffer, fieldValue);
+        } else {
+          // RefMode.NONE - write value directly without null flag
+          serializer.write(buffer, fieldValue);
         }
       } else {
-        if (fieldInfo.refMode == RefMode.TRACKING) {
+        if (refMode == RefMode.TRACKING) {
           fory.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-        } else {
-          if (fieldInfo.refMode == RefMode.NULL_ONLY) {
-            if (fieldValue == null) {
-              buffer.writeByte(Fory.NULL_FLAG);
-              return;
-            }
-            fory.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        } else if (refMode == RefMode.NULL_ONLY) {
+          if (fieldValue == null) {
+            buffer.writeByte(Fory.NULL_FLAG);
+            return;
           }
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          fory.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        } else {
+          // RefMode.NONE - write value directly without null flag
+          fory.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
         }
       }
     }
@@ -412,14 +427,15 @@ abstract class SerializationBinding {
     }
 
     @Override
-    void writeField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+    void writeField(
+        SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer, Object fieldValue) {
       if (fieldInfo.useDeclaredTypeInfo) {
         Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
-        if (fieldInfo.refMode == RefMode.TRACKING) {
+        if (refMode == RefMode.TRACKING) {
           if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
             serializer.xwrite(buffer, fieldValue);
           }
-        } else if (fieldInfo.refMode == RefMode.NULL_ONLY) {
+        } else if (refMode == RefMode.NULL_ONLY) {
           if (fieldValue == null) {
             buffer.writeByte(Fory.NULL_FLAG);
             return;
@@ -431,9 +447,9 @@ abstract class SerializationBinding {
           serializer.xwrite(buffer, fieldValue);
         }
       } else {
-        if (fieldInfo.refMode == RefMode.TRACKING) {
+        if (refMode == RefMode.TRACKING) {
           fory.xwriteRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-        } else if (fieldInfo.refMode == RefMode.NULL_ONLY) {
+        } else if (refMode == RefMode.NULL_ONLY) {
           if (fieldValue == null) {
             buffer.writeByte(Fory.NULL_FLAG);
             return;
@@ -580,20 +596,20 @@ abstract class SerializationBinding {
     }
 
     @Override
-    Object readField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    Object readField(SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer) {
       if (fieldInfo.useDeclaredTypeInfo) {
-        if (fieldInfo.refMode == RefMode.TRACKING) {
+        if (refMode == RefMode.TRACKING) {
           return fory.xreadRef(buffer, fieldInfo.classInfo);
         } else {
-          if (fieldInfo.refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
+          if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
             return fory.xreadNonRef(buffer, fieldInfo.classInfo);
           }
         }
       } else {
-        if (fieldInfo.refMode == RefMode.TRACKING) {
+        if (refMode == RefMode.TRACKING) {
           return fory.xreadRef(buffer, fieldInfo.classInfoHolder);
         } else {
-          if (fieldInfo.refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
+          if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
             return fory.xreadNonRef(buffer, fieldInfo.classInfoHolder);
           }
         }

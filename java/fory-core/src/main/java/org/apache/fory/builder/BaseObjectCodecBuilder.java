@@ -480,54 +480,36 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression inputObject, Expression buffer, Descriptor descriptor) {
     int dispatchId = getNumericDescriptorDispatchId(descriptor);
     switch (dispatchId) {
-      case DispatchId.PRIMITIVE_BOOL:
       case DispatchId.BOOL:
         return new Invoke(buffer, "writeBoolean", inputObject);
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
       case DispatchId.INT8:
       case DispatchId.UINT8:
         return new Invoke(buffer, "writeByte", inputObject);
-      case DispatchId.PRIMITIVE_CHAR:
       case DispatchId.CHAR:
         return new Invoke(buffer, "writeChar", inputObject);
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
       case DispatchId.INT16:
       case DispatchId.UINT16:
         return new Invoke(buffer, "writeInt16", inputObject);
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_UINT32:
       case DispatchId.INT32:
       case DispatchId.UINT32:
         return new Invoke(buffer, "writeInt32", inputObject);
-      case DispatchId.PRIMITIVE_VARINT32:
       case DispatchId.VARINT32:
         return new Invoke(buffer, "writeVarInt32", inputObject);
-      case DispatchId.PRIMITIVE_VAR_UINT32:
       case DispatchId.VAR_UINT32:
         return new Invoke(buffer, "writeVarUint32", inputObject);
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
       case DispatchId.INT64:
       case DispatchId.UINT64:
         return new Invoke(buffer, "writeInt64", inputObject);
-      case DispatchId.PRIMITIVE_VARINT64:
       case DispatchId.VARINT64:
         return new Invoke(buffer, "writeVarInt64", inputObject);
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
       case DispatchId.TAGGED_INT64:
         return new Invoke(buffer, "writeTaggedInt64", inputObject);
-      case DispatchId.PRIMITIVE_VAR_UINT64:
       case DispatchId.VAR_UINT64:
         return new Invoke(buffer, "writeVarUint64", inputObject);
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
       case DispatchId.TAGGED_UINT64:
         return new Invoke(buffer, "writeTaggedUint64", inputObject);
-      case DispatchId.PRIMITIVE_FLOAT32:
       case DispatchId.FLOAT32:
         return new Invoke(buffer, "writeFloat32", inputObject);
-      case DispatchId.PRIMITIVE_FLOAT64:
       case DispatchId.FLOAT64:
         return new Invoke(buffer, "writeFloat64", inputObject);
       default:
@@ -1971,71 +1953,48 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   private Expression deserializePrimitiveField(Expression buffer, Descriptor descriptor) {
     int dispatchId = getNumericDescriptorDispatchId(descriptor);
+    boolean isPrimitive = descriptor.getRawType().isPrimitive();
     switch (dispatchId) {
-      case DispatchId.PRIMITIVE_BOOL:
-        return new Invoke(buffer, "readBoolean", PRIMITIVE_BOOLEAN_TYPE);
       case DispatchId.BOOL:
-        return new Invoke(buffer, "readBoolean", BOOLEAN_TYPE);
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
-        return new Invoke(buffer, "readByte", PRIMITIVE_BYTE_TYPE);
+        return new Invoke(
+            buffer, "readBoolean", isPrimitive ? PRIMITIVE_BOOLEAN_TYPE : BOOLEAN_TYPE);
       case DispatchId.INT8:
       case DispatchId.UINT8:
-        return new Invoke(buffer, "readByte", BYTE_TYPE);
-      case DispatchId.PRIMITIVE_CHAR:
-        return readChar(buffer);
+        return new Invoke(buffer, "readByte", isPrimitive ? PRIMITIVE_BYTE_TYPE : BYTE_TYPE);
       case DispatchId.CHAR:
-        return new Invoke(buffer, "readChar", CHAR_TYPE);
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
-        return readInt16(buffer);
+        return isPrimitive ? readChar(buffer) : new Invoke(buffer, "readChar", CHAR_TYPE);
       case DispatchId.INT16:
       case DispatchId.UINT16:
-        return new Invoke(buffer, readInt16Func(), SHORT_TYPE);
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_UINT32:
-        return readInt32(buffer);
+        return isPrimitive ? readInt16(buffer) : new Invoke(buffer, readInt16Func(), SHORT_TYPE);
       case DispatchId.INT32:
       case DispatchId.UINT32:
-        return new Invoke(buffer, readIntFunc(), INT_TYPE);
-      case DispatchId.PRIMITIVE_VARINT32:
-        return readVarInt32(buffer);
+        return isPrimitive ? readInt32(buffer) : new Invoke(buffer, readIntFunc(), INT_TYPE);
       case DispatchId.VARINT32:
-        return new Invoke(buffer, readVarInt32Func(), INT_TYPE);
-      case DispatchId.PRIMITIVE_VAR_UINT32:
-        return new Invoke(buffer, "readVarUint32", PRIMITIVE_INT_TYPE);
+        return isPrimitive
+            ? readVarInt32(buffer)
+            : new Invoke(buffer, readVarInt32Func(), INT_TYPE);
       case DispatchId.VAR_UINT32:
-        return new Invoke(buffer, "readVarUint32", INT_TYPE);
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
-        return readInt64(buffer);
+        return new Invoke(buffer, "readVarUint32", isPrimitive ? PRIMITIVE_INT_TYPE : INT_TYPE);
       case DispatchId.INT64:
       case DispatchId.UINT64:
-        return new Invoke(buffer, readLongFunc(), LONG_TYPE);
-      case DispatchId.PRIMITIVE_VARINT64:
-        return new Invoke(buffer, "readVarInt64", PRIMITIVE_LONG_TYPE);
+        return isPrimitive ? readInt64(buffer) : new Invoke(buffer, readLongFunc(), LONG_TYPE);
       case DispatchId.VARINT64:
-        return new Invoke(buffer, "readVarInt64", LONG_TYPE);
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
-        return new Invoke(buffer, "readTaggedInt64", PRIMITIVE_LONG_TYPE);
+        return new Invoke(buffer, "readVarInt64", isPrimitive ? PRIMITIVE_LONG_TYPE : LONG_TYPE);
       case DispatchId.TAGGED_INT64:
-        return new Invoke(buffer, "readTaggedInt64", LONG_TYPE);
-      case DispatchId.PRIMITIVE_VAR_UINT64:
-        return new Invoke(buffer, "readVarUint64", PRIMITIVE_LONG_TYPE);
+        return new Invoke(buffer, "readTaggedInt64", isPrimitive ? PRIMITIVE_LONG_TYPE : LONG_TYPE);
       case DispatchId.VAR_UINT64:
-        return new Invoke(buffer, "readVarUint64", LONG_TYPE);
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
-        return new Invoke(buffer, "readTaggedUint64", PRIMITIVE_LONG_TYPE);
+        return new Invoke(buffer, "readVarUint64", isPrimitive ? PRIMITIVE_LONG_TYPE : LONG_TYPE);
       case DispatchId.TAGGED_UINT64:
-        return new Invoke(buffer, "readTaggedUint64", LONG_TYPE);
-      case DispatchId.PRIMITIVE_FLOAT32:
-        return readFloat32(buffer);
+        return new Invoke(
+            buffer, "readTaggedUint64", isPrimitive ? PRIMITIVE_LONG_TYPE : LONG_TYPE);
       case DispatchId.FLOAT32:
-        return new Invoke(buffer, readFloat32Func(), FLOAT_TYPE);
-      case DispatchId.PRIMITIVE_FLOAT64:
-        return readFloat64(buffer);
+        return isPrimitive
+            ? readFloat32(buffer)
+            : new Invoke(buffer, readFloat32Func(), FLOAT_TYPE);
       case DispatchId.FLOAT64:
-        return new Invoke(buffer, readFloat64Func(), DOUBLE_TYPE);
+        return isPrimitive
+            ? readFloat64(buffer)
+            : new Invoke(buffer, readFloat64Func(), DOUBLE_TYPE);
       default:
         throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
     }

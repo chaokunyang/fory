@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.RefMode;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.DispatchId;
 
@@ -32,8 +33,8 @@ import org.apache.fory.type.DispatchId;
 public class FieldSkipper {
 
   /**
-   * Skip a field value in the buffer. Handles all dispatch IDs including primitive types,
-   * non-null boxed types, nullable boxed types, and compressed number encodings.
+   * Skip a field value in the buffer. Handles all dispatch IDs including basic types and complex
+   * types. Whether to read a null flag is determined by fieldInfo.refMode.
    *
    * @param binding the serialization binding for fallback reads
    * @param fieldInfo the field metadata
@@ -41,194 +42,89 @@ public class FieldSkipper {
    */
   static void skipField(
       SerializationBinding binding, SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    if (!skipFieldValue(fieldInfo, buffer)) {
+    if (!skipFieldValue(binding, fieldInfo, buffer)) {
       // Fall back to binding.read for complex types (objects, collections, etc.)
       binding.readField(fieldInfo, buffer);
     }
   }
 
   /**
-   * Skip a field value based on its dispatch ID. Handles primitive types, non-null boxed types,
-   * and nullable boxed types with their specific encodings (including compressed numbers).
+   * Skip a field value based on its dispatch ID and refMode. The refMode determines whether a null
+   * flag exists in the stream.
    *
    * @return true if the field was skipped, false if it needs fallback handling
    */
-  private static boolean skipFieldValue(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    switch (fieldInfo.dispatchId) {
-      // ============ Primitive types (no null flag) ============
-      case DispatchId.PRIMITIVE_BOOL:
-        buffer.increaseReaderIndex(1);
-        return true;
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
-        buffer.increaseReaderIndex(1);
-        return true;
-      case DispatchId.PRIMITIVE_CHAR:
-        buffer.increaseReaderIndex(2);
-        return true;
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
-        buffer.increaseReaderIndex(2);
-        return true;
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_UINT32:
-        buffer.increaseReaderIndex(4);
-        return true;
-      case DispatchId.PRIMITIVE_VARINT32:
-        buffer.readVarInt32();
-        return true;
-      case DispatchId.PRIMITIVE_VAR_UINT32:
-        buffer.readVarUint32();
-        return true;
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
-        buffer.increaseReaderIndex(8);
-        return true;
-      case DispatchId.PRIMITIVE_VARINT64:
-        buffer.readVarInt64();
-        return true;
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
-        buffer.readTaggedInt64();
-        return true;
-      case DispatchId.PRIMITIVE_VAR_UINT64:
-        buffer.readVarUint64();
-        return true;
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
-        buffer.readTaggedUint64();
-        return true;
-      case DispatchId.PRIMITIVE_FLOAT32:
-        buffer.increaseReaderIndex(4);
-        return true;
-      case DispatchId.PRIMITIVE_FLOAT64:
-        buffer.increaseReaderIndex(8);
-        return true;
+  private static boolean skipFieldValue(
+      SerializationBinding binding, SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    int dispatchId = fieldInfo.dispatchId;
+    RefMode refMode = fieldInfo.refMode;
 
-      // ============ Non-null boxed types (no null flag) ============
-      case DispatchId.NOTNULL_BOXED_BOOL:
-        buffer.increaseReaderIndex(1);
-        return true;
-      case DispatchId.NOTNULL_BOXED_INT8:
-      case DispatchId.NOTNULL_BOXED_UINT8:
-        buffer.increaseReaderIndex(1);
-        return true;
-      case DispatchId.NOTNULL_BOXED_CHAR:
-        buffer.increaseReaderIndex(2);
-        return true;
-      case DispatchId.NOTNULL_BOXED_INT16:
-      case DispatchId.NOTNULL_BOXED_UINT16:
-        buffer.increaseReaderIndex(2);
-        return true;
-      case DispatchId.NOTNULL_BOXED_INT32:
-      case DispatchId.NOTNULL_BOXED_UINT32:
-        buffer.increaseReaderIndex(4);
-        return true;
-      case DispatchId.NOTNULL_BOXED_VARINT32:
-        buffer.readVarInt32();
-        return true;
-      case DispatchId.NOTNULL_BOXED_VAR_UINT32:
-        buffer.readVarUint32();
-        return true;
-      case DispatchId.NOTNULL_BOXED_INT64:
-      case DispatchId.NOTNULL_BOXED_UINT64:
-        buffer.increaseReaderIndex(8);
-        return true;
-      case DispatchId.NOTNULL_BOXED_VARINT64:
-        buffer.readVarInt64();
-        return true;
-      case DispatchId.NOTNULL_BOXED_TAGGED_INT64:
-        buffer.readTaggedInt64();
-        return true;
-      case DispatchId.NOTNULL_BOXED_VAR_UINT64:
-        buffer.readVarUint64();
-        return true;
-      case DispatchId.NOTNULL_BOXED_TAGGED_UINT64:
-        buffer.readTaggedUint64();
-        return true;
-      case DispatchId.NOTNULL_BOXED_FLOAT32:
-        buffer.increaseReaderIndex(4);
-        return true;
-      case DispatchId.NOTNULL_BOXED_FLOAT64:
-        buffer.increaseReaderIndex(8);
-        return true;
+    // For non-basic types, let the binding handle it
+    if (!DispatchId.isBasicType(dispatchId)) {
+      return false;
+    }
 
-      // ============ Nullable boxed types (with null flag) ============
+    // If refMode is not NONE, we need to check for null flag first
+    if (refMode != RefMode.NONE) {
+      if (buffer.readByte() == Fory.NULL_FLAG) {
+        return true; // Field is null, nothing more to skip
+      }
+    }
+
+    // Now skip the actual value bytes based on dispatch ID
+    switch (dispatchId) {
       case DispatchId.BOOL:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.increaseReaderIndex(1);
-        }
+        buffer.increaseReaderIndex(1);
         return true;
       case DispatchId.INT8:
       case DispatchId.UINT8:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.increaseReaderIndex(1);
-        }
+        buffer.increaseReaderIndex(1);
         return true;
       case DispatchId.CHAR:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.increaseReaderIndex(2);
-        }
+        buffer.increaseReaderIndex(2);
         return true;
       case DispatchId.INT16:
       case DispatchId.UINT16:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.increaseReaderIndex(2);
-        }
+        buffer.increaseReaderIndex(2);
         return true;
       case DispatchId.INT32:
       case DispatchId.UINT32:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.increaseReaderIndex(4);
-        }
+        buffer.increaseReaderIndex(4);
         return true;
       case DispatchId.VARINT32:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.readVarInt32();
-        }
+        buffer.readVarInt32();
         return true;
       case DispatchId.VAR_UINT32:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.readVarUint32();
-        }
+        buffer.readVarUint32();
         return true;
       case DispatchId.INT64:
       case DispatchId.UINT64:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.increaseReaderIndex(8);
-        }
+        buffer.increaseReaderIndex(8);
         return true;
       case DispatchId.VARINT64:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.readVarInt64();
-        }
+        buffer.readVarInt64();
         return true;
       case DispatchId.TAGGED_INT64:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.readTaggedInt64();
-        }
+        buffer.readTaggedInt64();
         return true;
       case DispatchId.VAR_UINT64:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.readVarUint64();
-        }
+        buffer.readVarUint64();
         return true;
       case DispatchId.TAGGED_UINT64:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.readTaggedUint64();
-        }
+        buffer.readTaggedUint64();
         return true;
       case DispatchId.FLOAT32:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.increaseReaderIndex(4);
-        }
+        buffer.increaseReaderIndex(4);
         return true;
       case DispatchId.FLOAT64:
-        if (buffer.readByte() != Fory.NULL_FLAG) {
-          buffer.increaseReaderIndex(8);
-        }
+        buffer.increaseReaderIndex(8);
         return true;
-
+      case DispatchId.STRING:
+        // Read and discard the string - no class info in stream for STRING
+        binding.fory.readJavaString(buffer);
+        return true;
       default:
-        // Complex types (String, objects, collections, etc.) need fallback handling
+        // Other types need fallback handling
         return false;
     }
   }

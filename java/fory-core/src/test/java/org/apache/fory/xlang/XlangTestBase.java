@@ -1386,7 +1386,7 @@ public abstract class XlangTestBase extends ForyTestBase {
 
   @Data
   static class OneStringFieldStruct {
-    @ForyField(id = -1, nullable = true)
+    @ForyField(nullable = true)
     String f1;
   }
 
@@ -1435,6 +1435,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     OneStringFieldStruct obj = new OneStringFieldStruct();
     obj.f1 = "hello";
 
+    serDeCheck(fory, obj);
+
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(64);
     fory.serialize(buffer, obj);
 
@@ -1460,6 +1462,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     TwoStringFieldStruct obj = new TwoStringFieldStruct();
     obj.f1 = "first";
     obj.f2 = "second";
+
+    serDeCheck(fory, obj);
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(64);
     fory.serialize(buffer, obj);

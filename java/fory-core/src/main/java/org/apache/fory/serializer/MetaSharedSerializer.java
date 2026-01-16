@@ -38,7 +38,6 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.DefaultValueUtils;
@@ -226,14 +225,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private void compatibleRead(MemoryBuffer buffer, SerializationFieldInfo fieldInfo, Object obj) {
-    Object fieldValue;
-    int dispatchId = fieldInfo.dispatchId;
-    if (DispatchId.isPrimitive(dispatchId)) {
-      fieldValue = AbstractObjectSerializer.readPrimitiveValue(buffer, dispatchId);
-    } else {
-      fieldValue = binding.readField(fieldInfo, buffer);
-      ;
-    }
+    Object fieldValue = AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
     fieldInfo.fieldConverter.set(obj, fieldValue);
   }
 
@@ -244,7 +236,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     // read order: primitive,boxed,final,other,collection,map
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       if (fieldInfo.fieldAccessor != null) {
-        fields[counter++] = AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
+        fields[counter++] =
+            AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
       } else {
         // Skip the field value from buffer since it doesn't exist in current class.
         // For records, fieldConverter can't be used since records are immutable and

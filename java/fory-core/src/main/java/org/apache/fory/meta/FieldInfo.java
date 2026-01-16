@@ -130,8 +130,15 @@ public final class FieldInfo implements Serializable {
       boolean typeMismatch = !typeRef.equals(declared);
       if (typeMismatch) {
         if (!declared.getRawType().isAssignableFrom(rawType)) {
-          // boxed/primitive are handled automatically
-          if (!declared.unwrap().isPrimitive() || !typeRef.unwrap().isPrimitive()) {
+          // Check if both are primitives (or boxed primitives) of the same underlying type
+          // For example: Integer <-> int is OK, but Long -> int is NOT OK
+          Class<?> declaredPrimitive = declared.unwrap().getRawType();
+          Class<?> remotePrimitive = typeRef.unwrap().getRawType();
+          boolean bothPrimitives = declaredPrimitive.isPrimitive() && remotePrimitive.isPrimitive();
+          boolean samePrimitiveType =
+              bothPrimitives && declaredPrimitive.equals(remotePrimitive);
+          // Set field to null if types are incompatible (not the same primitive type)
+          if (!samePrimitiveType) {
             builder.field(null);
           }
         }

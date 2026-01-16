@@ -461,9 +461,6 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 // skipStruct skips a struct value using TypeInfo
 // Uses context error state for deferred error checking.
 func skipStruct(ctx *ReadContext, info *TypeInfo) {
-	err := ctx.Err()
-	// Read struct hash (4 bytes)
-	_ = ctx.buffer.ReadInt32(err)
 	if ctx.HasError() {
 		return
 	}

@@ -50,7 +50,6 @@ import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
 import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.LongMap;
-import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.exception.ForyException;

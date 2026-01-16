@@ -497,14 +497,14 @@ public abstract class FieldAccessor {
     }
   }
 
-  static class GeneratedAccessor extends FieldAccessor {
+  static final class GeneratedAccessor extends FieldAccessor {
     private static final ClassValueCache<ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>>>
         cache = ClassValueCache.newClassKeyCache(8);
 
     private final MethodHandle getter;
     private final MethodHandle setter;
 
-    protected GeneratedAccessor(Field field) {
+    GeneratedAccessor(Field field) {
       super(field, -1);
       ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>> map =
           cache.get(field.getDeclaringClass(), ConcurrentHashMap::new);

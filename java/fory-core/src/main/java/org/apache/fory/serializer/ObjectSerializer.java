@@ -150,7 +150,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       buffer.writeInt32(classVersionHash);
     }
     // write order: primitive,boxed,final,other,collection,map
-    writeBuildInFields(buffer, value, fory, refResolver, typeResolver);
+    writeBuildInFields(buffer, value, fory);
     writeContainerFields(buffer, value, fory, refResolver, typeResolver);
     writeOtherFields(buffer, value);
   }
@@ -163,8 +163,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     }
   }
 
-  private void writeBuildInFields(
-      MemoryBuffer buffer, T value, Fory fory, RefResolver refResolver, TypeResolver typeResolver) {
+  private void writeBuildInFields(MemoryBuffer buffer, T value, Fory fory) {
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
@@ -227,8 +226,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       if (DispatchId.isPrimitive(dispatchId)) {
         fieldValues[counter++] = Serializers.readPrimitiveValue(buffer, dispatchId);
       } else {
-        Object fieldValue =
-            readFinalObjectFieldValue(binding, fieldInfo, buffer);
+        Object fieldValue = binding.read(fieldInfo, buffer);
         fieldValues[counter++] = fieldValue;
       }
     }
@@ -238,7 +236,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       fieldValues[counter++] = fieldValue;
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = readOtherFieldValue(binding, fieldInfo, buffer);
+      Object fieldValue = binding.read(fieldInfo, buffer);
       fieldValues[counter++] = fieldValue;
     }
     return fieldValues;
@@ -259,8 +257,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
           && (nullable
               ? readBasicNullableObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)
               : readBasicObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId))) {
-        Object fieldValue =
-            readFinalObjectFieldValue(binding, fieldInfo, buffer);
+        Object fieldValue = binding.read(fieldInfo, buffer);
         fieldAccessor.putObject(obj, fieldValue);
       }
     }
@@ -271,7 +268,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       fieldAccessor.putObject(obj, fieldValue);
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = readOtherFieldValue(binding, fieldInfo, buffer);
+      Object fieldValue = binding.read(fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       fieldAccessor.putObject(obj, fieldValue);
     }

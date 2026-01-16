@@ -34,7 +34,6 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassInfoHolder;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -165,6 +164,21 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     write(buffer, value);
   }
 
+  private T newInstance() {
+    if (!hasDefaultValues) {
+      return newBean();
+    }
+    T obj = GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? newBean() : Platform.newInstance(type);
+    // Set default values for missing fields in Scala case classes
+    DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
+    return obj;
+  }
+
+  @Override
+  public T xread(MemoryBuffer buffer) {
+    return read(buffer);
+  }
+
   @Override
   public T read(MemoryBuffer buffer) {
     if (isRecord) {
@@ -194,24 +208,18 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         }
         // For NOTNULL_BOXED and other boxed types, let readBasicObjectFieldValue handle it
         // which uses putObject for proper boxing
-        if (nullable ? readBasicNullableObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)
-                : readBasicObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)) {
+        if (nullable
+            ? readBasicNullableObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)
+            : readBasicObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)) {
           assert fieldInfo.classInfo != null;
-          Object fieldValue =
-              readFinalObjectFieldValue(binding, fieldInfo, buffer);
+          Object fieldValue = binding.read(fieldInfo, buffer);
           fieldAccessor.putObject(obj, fieldValue);
         }
       } else {
         if (fieldInfo.fieldConverter == null) {
           // Skip the field value from buffer since it doesn't exist in current class
           if (!skipPrimitiveFieldValue(fieldInfo, buffer)) {
-            if (fieldInfo.classInfo == null) {
-              // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
-              binding.readRef(buffer, classInfoHolder);
-            } else {
-              readFinalObjectFieldValue(
-                  binding, fieldInfo, buffer);
-            }
+            binding.read(fieldInfo, buffer);
           }
         } else {
           compatibleRead(buffer, fieldInfo, obj);
@@ -228,7 +236,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       }
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = AbstractObjectSerializer.readOtherFieldValue(binding, fieldInfo, buffer);
+      Object fieldValue = binding.read(fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(obj, fieldValue);
@@ -243,24 +251,10 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     if (DispatchId.isPrimitive(dispatchId)) {
       fieldValue = Serializers.readPrimitiveValue(buffer, dispatchId);
     } else {
-      fieldValue = readFinalObjectFieldValue(binding, fieldInfo, buffer);
+      fieldValue = binding.read(fieldInfo, buffer);
+      ;
     }
     fieldInfo.fieldConverter.set(obj, fieldValue);
-  }
-
-  private T newInstance() {
-    if (!hasDefaultValues) {
-      return newBean();
-    }
-    T obj = GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? newBean() : Platform.newInstance(type);
-    // Set default values for missing fields in Scala case classes
-    DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
-    return obj;
-  }
-
-  @Override
-  public T xread(MemoryBuffer buffer) {
-    return read(buffer);
   }
 
   private void readFields(MemoryBuffer buffer, Object[] fields) {
@@ -275,9 +269,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         if (DispatchId.isPrimitive(dispatchId)) {
           fields[counter++] = Serializers.readPrimitiveValue(buffer, dispatchId);
         } else {
-          Object fieldValue =
-              readFinalObjectFieldValue(
-                  binding, fieldInfo, buffer);
+          Object fieldValue = binding.read(fieldInfo, buffer);
           fields[counter++] = fieldValue;
         }
       } else {
@@ -289,14 +281,14 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         fields[counter++] = null;
       }
     }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = AbstractObjectSerializer.readOtherFieldValue(binding, fieldInfo, buffer);
-      fields[counter++] = fieldValue;
-    }
     Generics generics = fory.getGenerics();
     for (SerializationFieldInfo fieldInfo : containerFields) {
       Object fieldValue =
           AbstractObjectSerializer.readContainerFieldValue(binding, generics, fieldInfo, buffer);
+      fields[counter++] = fieldValue;
+    }
+    for (SerializationFieldInfo fieldInfo : otherFields) {
+      Object fieldValue = binding.read(fieldInfo, buffer);
       fields[counter++] = fieldValue;
     }
   }
@@ -316,8 +308,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         default:
       }
     } else {
-      readFinalObjectFieldValue(
-          binding, fieldInfo, buffer);
+      binding.read(fieldInfo, buffer);
     }
   }
 

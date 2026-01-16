@@ -190,6 +190,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     if (fieldOffset != -1) {
       return writePrimitiveFieldValue(buffer, targetObject, fieldOffset, dispatchId);
     }
+    // graalvm use GeneratedAccessor, which will be this code path.
     switch (dispatchId) {
       case DispatchId.PRIMITIVE_BOOL:
         buffer.writeBoolean((Boolean) fieldAccessor.get(targetObject));
@@ -461,29 +462,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   /**
-   * Read final object field value. Note that primitive field value can't be read by this method,
-   * because primitive field doesn't write null flag.
-   */
-  static Object readFinalObjectFieldValue(
-      SerializationBinding binding, SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    return binding.read(fieldInfo, buffer);
-  }
-
-  /**
-   * Read a non-container field value that is not a final type. Handles enum types, reference
-   * tracking, and nullable fields according to xlang serialization protocol.
-   *
-   * @param binding the serialization binding for read operations
-   * @param fieldInfo the field metadata including type info and nullability
-   * @param buffer the buffer to read from
-   * @return the deserialized field value, or null if the field is nullable and was null
-   */
-  static Object readOtherFieldValue(
-      SerializationBinding binding, SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    return binding.read(fieldInfo, buffer);
-  }
-
-  /**
    * Read a container field value (Collection or Map). Handles reference tracking, nullable fields,
    * and pushes/pops generic type information for proper deserialization of parameterized types.
    *
@@ -541,6 +519,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     if (fieldOffset != -1) {
       return readPrimitiveFieldValue(buffer, targetObject, fieldOffset, dispatchId);
     }
+    // graalvm use GeneratedAccessor, which will be this code path.
     switch (dispatchId) {
       case DispatchId.PRIMITIVE_BOOL:
         fieldAccessor.set(targetObject, buffer.readBoolean());

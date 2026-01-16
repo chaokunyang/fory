@@ -1545,7 +1545,8 @@ public class ClassResolver extends TypeResolver {
     } else {
       // New type: index << 1, LSB=0, followed by ClassDef bytes inline
       buffer.writeVarUint32(newId << 1);
-      ClassInfo stubClassInfo = classForMeta == classInfo.cls ? classInfo : getClassInfo(classForMeta);
+      ClassInfo stubClassInfo =
+          classForMeta == classInfo.cls ? classInfo : getClassInfo(classForMeta);
       ClassDef classDef = stubClassInfo.classDef;
       if (classDef == null) {
         classDef = buildClassDef(stubClassInfo);

@@ -27,9 +27,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassInfoHolder;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MetaContext;
-import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.Descriptor;
@@ -126,7 +124,8 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
           buffer, value, fieldAccessor, dispatchId)) {
         Object fieldValue = fieldAccessor.getObject(value);
         boolean needWrite =
-            nullable ? writeNullableBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId)
+            nullable
+                ? writeNullableBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId)
                 : writeNotNullBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId);
         if (needWrite) {
           binding.write(fieldInfo, buffer, fieldValue);
@@ -201,9 +200,6 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   private void readFinalFields(MemoryBuffer buffer, T obj) {
     Fory fory = this.fory;
-    RefResolver refResolver = this.refResolver;
-    ClassResolver classResolver = this.classResolver;
-
     for (SerializationFieldInfo fieldInfo : buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
@@ -215,9 +211,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
                     fory, buffer, obj, fieldAccessor, dispatchId)
                 : AbstractObjectSerializer.readBasicObjectFieldValue(
                     fory, buffer, obj, fieldAccessor, dispatchId))) {
-          Object fieldValue =
-              AbstractObjectSerializer.readFinalObjectFieldValue(
-                  binding, fieldInfo, buffer);
+          Object fieldValue = binding.read(fieldInfo, buffer);
           fieldAccessor.putObject(obj, fieldValue);
         }
       } else {
@@ -226,8 +220,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
           if (fieldInfo.classInfo == null) {
             fory.readRef(buffer, classInfoHolder);
           } else {
-            AbstractObjectSerializer.readFinalObjectFieldValue(
-                binding, fieldInfo, buffer);
+            binding.read(fieldInfo, buffer);
           }
         }
       }
@@ -248,7 +241,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   private void readUserTypeFields(MemoryBuffer buffer, T obj) {
     for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = AbstractObjectSerializer.readOtherFieldValue(binding, fieldInfo, buffer);
+      Object fieldValue = binding.read(fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(obj, fieldValue);

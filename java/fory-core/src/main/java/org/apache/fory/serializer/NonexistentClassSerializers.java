@@ -33,7 +33,6 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.resolver.ClassInfo;
-import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.MetaStringResolver;
@@ -189,8 +188,7 @@ public final class NonexistentClassSerializers {
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
-        Object fieldValue =
-            AbstractObjectSerializer.readOtherFieldValue(binding, fieldInfo, buffer);
+        Object fieldValue = binding.read(fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       obj.setEntries(entries);

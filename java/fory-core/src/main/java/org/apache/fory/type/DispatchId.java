@@ -89,8 +89,10 @@ public class DispatchId {
 
   // Dispatch mode for determining how to read/write a field
   private static final int MODE_PRIMITIVE = 0; // Local field is primitive, use Platform.putInt
-  private static final int MODE_NOTNULL_BOXED = 1; // Local is boxed, remote nullable=false, box and putObject
-  private static final int MODE_NULLABLE_BOXED = 2; // Local is boxed, remote nullable=true, read null flag
+  private static final int MODE_NOTNULL_BOXED =
+      1; // Local is boxed, remote nullable=false, box and putObject
+  private static final int MODE_NULLABLE_BOXED =
+      2; // Local is boxed, remote nullable=true, read null flag
 
   public static int getDispatchId(Fory fory, Descriptor d) {
     int typeId = Types.getDescriptorTypeId(fory, d);

@@ -53,7 +53,6 @@ import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MapRefResolver;
-import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.MetaStringResolver;
 import org.apache.fory.resolver.NoRefResolver;
 import org.apache.fory.resolver.RefResolver;

@@ -121,7 +121,7 @@ class TypeDefEncoder {
             true,
             encodeClassDef.getInt64(0),
             classDefBytes);
-    if (Utils.debugOutputEnabled()) {
+    if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info("[Java TypeDef BUILT] " + classDef);
     }
     return classDef;

@@ -86,7 +86,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         "Class version check should be disabled when compatible mode is enabled.");
     Preconditions.checkArgument(
         fory.getConfig().isMetaShareEnabled(), "Meta share must be enabled.");
-    if (Utils.debugOutputEnabled()) {
+    if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info("========== MetaSharedSerializer ClassDef for {} ==========", type.getName());
       LOG.info("ClassDef fieldsInfo count: {}", classDef.getFieldsInfo().size());
       for (int i = 0; i < classDef.getFieldsInfo().size(); i++) {
@@ -96,7 +96,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     Collection<Descriptor> descriptors = consolidateFields(fory._getTypeResolver(), type, classDef);
     DescriptorGrouper descriptorGrouper =
         fory._getTypeResolver().createDescriptorGrouper(descriptors, false);
-    if (Utils.debugOutputEnabled()) {
+    if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info(
           "========== MetaSharedSerializer sorted descriptors for {} ==========", type.getName());
       for (Descriptor d : descriptorGrouper.getSortedDescriptors()) {

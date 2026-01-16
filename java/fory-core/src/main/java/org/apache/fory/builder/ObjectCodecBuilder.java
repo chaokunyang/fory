@@ -104,7 +104,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     }
     Collection<Descriptor> p = descriptors;
     DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(p, false));
-    if (org.apache.fory.util.Utils.debugOutputEnabled()) {
+    if (org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info("========== sorted descriptors for {} ==========", beanClass.getSimpleName());
       List<Descriptor> sortedDescriptors = grouper.getSortedDescriptors();
       for (Descriptor d : sortedDescriptors) {

@@ -88,7 +88,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     boolean shareMeta = fory.getConfig().isMetaShareEnabled();
     if (shareMeta) {
       ClassDef classDef = typeResolver.getTypeDef(cls, resolveParent);
-      if (Utils.debugOutputEnabled()) {
+      if (Utils.DEBUG_OUTPUT_ENABLED) {
         LOG.info("========== ObjectSerializer ClassDef for {} ==========", cls.getName());
         LOG.info("ClassDef fieldsInfo count: {}", classDef.getFieldsInfo().size());
         for (int i = 0; i < classDef.getFieldsInfo().size(); i++) {
@@ -101,7 +101,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     }
     DescriptorGrouper grouper = typeResolver.createDescriptorGrouper(descriptors, false);
     descriptors = grouper.getSortedDescriptors();
-    if (Utils.debugOutputEnabled()) {
+    if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info("========== ObjectSerializer sorted descriptors for {} ==========", cls.getName());
       for (Descriptor d : descriptors) {
         LOG.info(

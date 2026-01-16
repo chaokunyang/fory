@@ -170,6 +170,7 @@ public class FieldGroups {
       // Use dispatchId to determine isPrimitive for consistency with how data was written.
       // This ensures correct handling in schema compatible mode where local field type
       // may differ from remote (ClassDef) field type.
+      // Note: NOTNULL_BOXED dispatch IDs are NOT primitive - they are handled by readBasicObjectFieldValue
       isPrimitive = DispatchId.isPrimitive(dispatchId);
       fieldConverter = d.getFieldConverter();
       nullable = d.isNullable();

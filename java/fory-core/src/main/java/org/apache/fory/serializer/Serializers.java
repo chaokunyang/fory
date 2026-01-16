@@ -177,7 +177,7 @@ public class Serializers {
     }
   }
 
-  public static Object readPrimitiveValue(Fory fory, MemoryBuffer buffer, int dispatchId) {
+  public static Object readPrimitiveValue(MemoryBuffer buffer, int dispatchId) {
     switch (dispatchId) {
       case DispatchId.PRIMITIVE_BOOL:
         return buffer.readBoolean();

@@ -834,66 +834,84 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         }
         return false;
       case DispatchId.PRIMITIVE_BOOL:
+      case DispatchId.NOTNULL_BOXED_BOOL:
       case DispatchId.BOOL:
         fieldAccessor.putObject(targetObject, buffer.readBoolean());
         return false;
       case DispatchId.PRIMITIVE_INT8:
       case DispatchId.PRIMITIVE_UINT8:
+      case DispatchId.NOTNULL_BOXED_INT8:
+      case DispatchId.NOTNULL_BOXED_UINT8:
       case DispatchId.INT8:
       case DispatchId.UINT8:
         fieldAccessor.putObject(targetObject, buffer.readByte());
         return false;
       case DispatchId.PRIMITIVE_CHAR:
+      case DispatchId.NOTNULL_BOXED_CHAR:
       case DispatchId.CHAR:
         fieldAccessor.putObject(targetObject, buffer.readChar());
         return false;
       case DispatchId.PRIMITIVE_INT16:
       case DispatchId.PRIMITIVE_UINT16:
+      case DispatchId.NOTNULL_BOXED_INT16:
+      case DispatchId.NOTNULL_BOXED_UINT16:
       case DispatchId.INT16:
       case DispatchId.UINT16:
         fieldAccessor.putObject(targetObject, buffer.readInt16());
         return false;
       case DispatchId.PRIMITIVE_INT32:
       case DispatchId.PRIMITIVE_UINT32:
+      case DispatchId.NOTNULL_BOXED_INT32:
+      case DispatchId.NOTNULL_BOXED_UINT32:
       case DispatchId.INT32:
       case DispatchId.UINT32:
         fieldAccessor.putObject(targetObject, buffer.readInt32());
         return false;
       case DispatchId.PRIMITIVE_VARINT32:
+      case DispatchId.NOTNULL_BOXED_VARINT32:
       case DispatchId.VARINT32:
         fieldAccessor.putObject(targetObject, buffer.readVarInt32());
         return false;
       case DispatchId.PRIMITIVE_VAR_UINT32:
+      case DispatchId.NOTNULL_BOXED_VAR_UINT32:
       case DispatchId.VAR_UINT32:
         fieldAccessor.putObject(targetObject, buffer.readVarUint32());
         return false;
       case DispatchId.PRIMITIVE_INT64:
       case DispatchId.PRIMITIVE_UINT64:
+      case DispatchId.NOTNULL_BOXED_INT64:
+      case DispatchId.NOTNULL_BOXED_UINT64:
       case DispatchId.INT64:
       case DispatchId.UINT64:
         fieldAccessor.putObject(targetObject, buffer.readInt64());
         return false;
       case DispatchId.PRIMITIVE_VARINT64:
+      case DispatchId.NOTNULL_BOXED_VARINT64:
       case DispatchId.VARINT64:
         fieldAccessor.putObject(targetObject, buffer.readVarInt64());
         return false;
       case DispatchId.PRIMITIVE_TAGGED_INT64:
+      case DispatchId.NOTNULL_BOXED_TAGGED_INT64:
       case DispatchId.TAGGED_INT64:
         fieldAccessor.putObject(targetObject, buffer.readTaggedInt64());
         return false;
       case DispatchId.PRIMITIVE_VAR_UINT64:
+      case DispatchId.NOTNULL_BOXED_VAR_UINT64:
       case DispatchId.VAR_UINT64:
         fieldAccessor.putObject(targetObject, buffer.readVarUint64());
         return false;
       case DispatchId.PRIMITIVE_TAGGED_UINT64:
+      case DispatchId.NOTNULL_BOXED_TAGGED_UINT64:
       case DispatchId.TAGGED_UINT64:
         fieldAccessor.putObject(targetObject, buffer.readTaggedUint64());
         return false;
       case DispatchId.PRIMITIVE_FLOAT32:
+      case DispatchId.NOTNULL_BOXED_FLOAT32:
       case DispatchId.FLOAT32:
         fieldAccessor.putObject(targetObject, buffer.readFloat32());
         return false;
       case DispatchId.PRIMITIVE_FLOAT64:
+      case DispatchId.NOTNULL_BOXED_FLOAT64:
       case DispatchId.FLOAT64:
         fieldAccessor.putObject(targetObject, buffer.readFloat64());
         return false;

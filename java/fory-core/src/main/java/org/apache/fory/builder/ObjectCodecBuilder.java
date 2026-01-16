@@ -702,40 +702,56 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       for (Descriptor descriptor : group) {
         int dispatchId = getNumericDescriptorDispatchId(descriptor);
         Expression fieldValue;
-        if (dispatchId == DispatchId.PRIMITIVE_BOOL || dispatchId == DispatchId.BOOL) {
+        if (dispatchId == DispatchId.PRIMITIVE_BOOL
+            || dispatchId == DispatchId.NOTNULL_BOXED_BOOL
+            || dispatchId == DispatchId.BOOL) {
           fieldValue = unsafeGetBoolean(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 1;
         } else if (dispatchId == DispatchId.PRIMITIVE_INT8
             || dispatchId == DispatchId.PRIMITIVE_UINT8
+            || dispatchId == DispatchId.NOTNULL_BOXED_INT8
+            || dispatchId == DispatchId.NOTNULL_BOXED_UINT8
             || dispatchId == DispatchId.INT8
             || dispatchId == DispatchId.UINT8) {
           fieldValue = unsafeGet(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 1;
-        } else if (dispatchId == DispatchId.PRIMITIVE_CHAR || dispatchId == DispatchId.CHAR) {
+        } else if (dispatchId == DispatchId.PRIMITIVE_CHAR
+            || dispatchId == DispatchId.NOTNULL_BOXED_CHAR
+            || dispatchId == DispatchId.CHAR) {
           fieldValue = unsafeGetChar(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 2;
         } else if (dispatchId == DispatchId.PRIMITIVE_INT16
             || dispatchId == DispatchId.PRIMITIVE_UINT16
+            || dispatchId == DispatchId.NOTNULL_BOXED_INT16
+            || dispatchId == DispatchId.NOTNULL_BOXED_UINT16
             || dispatchId == DispatchId.INT16
             || dispatchId == DispatchId.UINT16) {
           fieldValue = unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 2;
         } else if (dispatchId == DispatchId.PRIMITIVE_INT32
             || dispatchId == DispatchId.PRIMITIVE_UINT32
+            || dispatchId == DispatchId.NOTNULL_BOXED_INT32
+            || dispatchId == DispatchId.NOTNULL_BOXED_UINT32
             || dispatchId == DispatchId.INT32
             || dispatchId == DispatchId.UINT32) {
           fieldValue = unsafeGetInt(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 4;
         } else if (dispatchId == DispatchId.PRIMITIVE_INT64
             || dispatchId == DispatchId.PRIMITIVE_UINT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_INT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_UINT64
             || dispatchId == DispatchId.INT64
             || dispatchId == DispatchId.UINT64) {
           fieldValue = unsafeGetLong(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 8;
-        } else if (dispatchId == DispatchId.PRIMITIVE_FLOAT32 || dispatchId == DispatchId.FLOAT32) {
+        } else if (dispatchId == DispatchId.PRIMITIVE_FLOAT32
+            || dispatchId == DispatchId.NOTNULL_BOXED_FLOAT32
+            || dispatchId == DispatchId.FLOAT32) {
           fieldValue = unsafeGetFloat(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 4;
-        } else if (dispatchId == DispatchId.PRIMITIVE_FLOAT64 || dispatchId == DispatchId.FLOAT64) {
+        } else if (dispatchId == DispatchId.PRIMITIVE_FLOAT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_FLOAT64
+            || dispatchId == DispatchId.FLOAT64) {
           fieldValue = unsafeGetDouble(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 8;
         } else {
@@ -779,43 +795,60 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       for (Descriptor descriptor : group) {
         int dispatchId = getNumericDescriptorDispatchId(descriptor);
         Expression fieldValue;
-        if (dispatchId == DispatchId.PRIMITIVE_BOOL || dispatchId == DispatchId.BOOL) {
+        if (dispatchId == DispatchId.PRIMITIVE_BOOL
+            || dispatchId == DispatchId.NOTNULL_BOXED_BOOL
+            || dispatchId == DispatchId.BOOL) {
           fieldValue = unsafeGetBoolean(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 1;
         } else if (dispatchId == DispatchId.PRIMITIVE_INT8
             || dispatchId == DispatchId.PRIMITIVE_UINT8
+            || dispatchId == DispatchId.NOTNULL_BOXED_INT8
+            || dispatchId == DispatchId.NOTNULL_BOXED_UINT8
             || dispatchId == DispatchId.INT8
             || dispatchId == DispatchId.UINT8) {
           fieldValue = unsafeGet(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 1;
-        } else if (dispatchId == DispatchId.PRIMITIVE_CHAR || dispatchId == DispatchId.CHAR) {
+        } else if (dispatchId == DispatchId.PRIMITIVE_CHAR
+            || dispatchId == DispatchId.NOTNULL_BOXED_CHAR
+            || dispatchId == DispatchId.CHAR) {
           fieldValue = unsafeGetChar(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 2;
         } else if (dispatchId == DispatchId.PRIMITIVE_INT16
             || dispatchId == DispatchId.PRIMITIVE_UINT16
+            || dispatchId == DispatchId.NOTNULL_BOXED_INT16
+            || dispatchId == DispatchId.NOTNULL_BOXED_UINT16
             || dispatchId == DispatchId.INT16
             || dispatchId == DispatchId.UINT16) {
           fieldValue = unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 2;
-        } else if (dispatchId == DispatchId.PRIMITIVE_FLOAT32 || dispatchId == DispatchId.FLOAT32) {
+        } else if (dispatchId == DispatchId.PRIMITIVE_FLOAT32
+            || dispatchId == DispatchId.NOTNULL_BOXED_FLOAT32
+            || dispatchId == DispatchId.FLOAT32) {
           fieldValue = unsafeGetFloat(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 4;
-        } else if (dispatchId == DispatchId.PRIMITIVE_FLOAT64 || dispatchId == DispatchId.FLOAT64) {
+        } else if (dispatchId == DispatchId.PRIMITIVE_FLOAT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_FLOAT64
+            || dispatchId == DispatchId.FLOAT64) {
           fieldValue = unsafeGetDouble(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 8;
         } else if (dispatchId == DispatchId.PRIMITIVE_INT32
             || dispatchId == DispatchId.PRIMITIVE_UINT32
+            || dispatchId == DispatchId.NOTNULL_BOXED_INT32
+            || dispatchId == DispatchId.NOTNULL_BOXED_UINT32
             || dispatchId == DispatchId.INT32
             || dispatchId == DispatchId.UINT32) {
           fieldValue = unsafeGetInt(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 4;
         } else if (dispatchId == DispatchId.PRIMITIVE_INT64
             || dispatchId == DispatchId.PRIMITIVE_UINT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_INT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_UINT64
             || dispatchId == DispatchId.INT64
             || dispatchId == DispatchId.UINT64) {
           fieldValue = unsafeGetLong(heapBuffer, getReaderAddress(readerAddr, acc));
           acc += 8;
         } else if (dispatchId == DispatchId.PRIMITIVE_VARINT32
+            || dispatchId == DispatchId.NOTNULL_BOXED_VARINT32
             || dispatchId == DispatchId.VARINT32) {
           if (!compressStarted) {
             compressStarted = true;
@@ -823,6 +856,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           }
           fieldValue = readVarInt32(buffer);
         } else if (dispatchId == DispatchId.PRIMITIVE_VAR_UINT32
+            || dispatchId == DispatchId.NOTNULL_BOXED_VAR_UINT32
             || dispatchId == DispatchId.VAR_UINT32) {
           if (!compressStarted) {
             compressStarted = true;
@@ -830,6 +864,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           }
           fieldValue = new Invoke(buffer, "readVarUint32", PRIMITIVE_INT_TYPE);
         } else if (dispatchId == DispatchId.PRIMITIVE_VARINT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_VARINT64
             || dispatchId == DispatchId.VARINT64) {
           if (!compressStarted) {
             compressStarted = true;
@@ -837,6 +872,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           }
           fieldValue = new Invoke(buffer, "readVarInt64", PRIMITIVE_LONG_TYPE);
         } else if (dispatchId == DispatchId.PRIMITIVE_TAGGED_INT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_TAGGED_INT64
             || dispatchId == DispatchId.TAGGED_INT64) {
           if (!compressStarted) {
             compressStarted = true;
@@ -844,6 +880,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           }
           fieldValue = new Invoke(buffer, "readTaggedInt64", PRIMITIVE_LONG_TYPE);
         } else if (dispatchId == DispatchId.PRIMITIVE_VAR_UINT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_VAR_UINT64
             || dispatchId == DispatchId.VAR_UINT64) {
           if (!compressStarted) {
             compressStarted = true;
@@ -851,6 +888,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           }
           fieldValue = new Invoke(buffer, "readVarUint64", PRIMITIVE_LONG_TYPE);
         } else if (dispatchId == DispatchId.PRIMITIVE_TAGGED_UINT64
+            || dispatchId == DispatchId.NOTNULL_BOXED_TAGGED_UINT64
             || dispatchId == DispatchId.TAGGED_UINT64) {
           if (!compressStarted) {
             compressStarted = true;

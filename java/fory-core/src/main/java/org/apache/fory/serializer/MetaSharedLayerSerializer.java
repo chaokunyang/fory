@@ -22,12 +22,10 @@ package org.apache.fory.serializer;
 import java.util.Collection;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.IdentityObjectIntMap;
-import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MetaContext;
@@ -453,7 +451,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     int dispatchId = fieldInfo.dispatchId;
     // Handle primitives
     if (DispatchId.isPrimitive(dispatchId)) {
-      return Serializers.readPrimitiveValue(fory, buffer, dispatchId);
+      return Serializers.readPrimitiveValue(buffer, dispatchId);
     }
     // Handle objects
     return AbstractObjectSerializer.readFinalObjectFieldValue(

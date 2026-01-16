@@ -229,12 +229,13 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         int dispatchId = fieldInfo.dispatchId;
         boolean needRead = true;
         if (fieldInfo.isPrimitive) {
-          if (nullable) {
-            needRead = readPrimitiveNullableFieldValue(buffer, obj, fieldAccessor, dispatchId);
-          } else {
-            needRead = readPrimitiveFieldValue(buffer, obj, fieldAccessor, dispatchId);
-          }
+          // PRIMITIVE_* dispatch IDs mean non-nullable, so no null flag is read
+          needRead =
+              AbstractObjectSerializer.readPrimitiveFieldValue(
+                  buffer, obj, fieldAccessor, dispatchId);
         }
+        // For NOTNULL_BOXED and other boxed types, let readBasicObjectFieldValue handle it
+        // which uses putObject for proper boxing
         if (needRead
             && (nullable
                 ? AbstractObjectSerializer.readBasicNullableObjectFieldValue(
@@ -287,7 +288,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     Object fieldValue;
     int dispatchId = fieldInfo.dispatchId;
     if (DispatchId.isPrimitive(dispatchId)) {
-      fieldValue = Serializers.readPrimitiveValue(fory, buffer, dispatchId);
+      fieldValue = Serializers.readPrimitiveValue(buffer, dispatchId);
     } else {
       fieldValue =
           AbstractObjectSerializer.readFinalObjectFieldValue(
@@ -324,7 +325,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         int dispatchId = fieldInfo.dispatchId;
         // primitive field won't write null flag.
         if (DispatchId.isPrimitive(dispatchId)) {
-          fields[counter++] = Serializers.readPrimitiveValue(fory, buffer, dispatchId);
+          fields[counter++] = Serializers.readPrimitiveValue(buffer, dispatchId);
         } else {
           Object fieldValue =
               AbstractObjectSerializer.readFinalObjectFieldValue(
@@ -358,57 +359,75 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     }
   }
 
-  /** Skip primitive primitive field value since it doesn't write null flag. */
+  /** Skip primitive/notnull-boxed field value since they don't write null flag. */
   static boolean skipPrimitiveFieldValueFailed(Fory fory, int dispatchId, MemoryBuffer buffer) {
     switch (dispatchId) {
       case DispatchId.PRIMITIVE_BOOL:
+      case DispatchId.NOTNULL_BOXED_BOOL:
         buffer.increaseReaderIndex(1);
         return false;
       case DispatchId.PRIMITIVE_INT8:
       case DispatchId.PRIMITIVE_UINT8:
+      case DispatchId.NOTNULL_BOXED_INT8:
+      case DispatchId.NOTNULL_BOXED_UINT8:
         buffer.increaseReaderIndex(1);
         return false;
       case DispatchId.PRIMITIVE_CHAR:
+      case DispatchId.NOTNULL_BOXED_CHAR:
         buffer.increaseReaderIndex(2);
         return false;
       case DispatchId.PRIMITIVE_INT16:
       case DispatchId.PRIMITIVE_UINT16:
+      case DispatchId.NOTNULL_BOXED_INT16:
+      case DispatchId.NOTNULL_BOXED_UINT16:
         buffer.increaseReaderIndex(2);
         return false;
       case DispatchId.PRIMITIVE_INT32:
+      case DispatchId.NOTNULL_BOXED_INT32:
         buffer.increaseReaderIndex(4);
         return false;
       case DispatchId.PRIMITIVE_VARINT32:
+      case DispatchId.NOTNULL_BOXED_VARINT32:
         buffer.readVarInt32();
         return false;
       case DispatchId.PRIMITIVE_UINT32:
+      case DispatchId.NOTNULL_BOXED_UINT32:
         buffer.increaseReaderIndex(4);
         return false;
       case DispatchId.PRIMITIVE_VAR_UINT32:
+      case DispatchId.NOTNULL_BOXED_VAR_UINT32:
         buffer.readVarUint32();
         return false;
       case DispatchId.PRIMITIVE_INT64:
+      case DispatchId.NOTNULL_BOXED_INT64:
         buffer.increaseReaderIndex(8);
         return false;
       case DispatchId.PRIMITIVE_VARINT64:
+      case DispatchId.NOTNULL_BOXED_VARINT64:
         buffer.readVarInt64();
         return false;
       case DispatchId.PRIMITIVE_TAGGED_INT64:
+      case DispatchId.NOTNULL_BOXED_TAGGED_INT64:
         buffer.readTaggedInt64();
         return false;
       case DispatchId.PRIMITIVE_UINT64:
+      case DispatchId.NOTNULL_BOXED_UINT64:
         buffer.increaseReaderIndex(8);
         return false;
       case DispatchId.PRIMITIVE_VAR_UINT64:
+      case DispatchId.NOTNULL_BOXED_VAR_UINT64:
         buffer.readVarUint64();
         return false;
       case DispatchId.PRIMITIVE_TAGGED_UINT64:
+      case DispatchId.NOTNULL_BOXED_TAGGED_UINT64:
         buffer.readTaggedUint64();
         return false;
       case DispatchId.PRIMITIVE_FLOAT32:
+      case DispatchId.NOTNULL_BOXED_FLOAT32:
         buffer.increaseReaderIndex(4);
         return false;
       case DispatchId.PRIMITIVE_FLOAT64:
+      case DispatchId.NOTNULL_BOXED_FLOAT64:
         buffer.increaseReaderIndex(8);
         return false;
       default:

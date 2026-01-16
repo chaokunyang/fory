@@ -522,7 +522,8 @@ impl<'a> Reader<'a> {
 
     #[inline(always)]
     pub fn sub_slice(&self, start: usize, end: usize) -> Result<&[u8], Error> {
-        if start >= self.bf.len() || end > self.bf.len() || end < start {
+        // Allow start == bf.len() when end == bf.len() to support empty slices at buffer end
+        if start > self.bf.len() || end > self.bf.len() || end < start {
             Err(Error::buffer_out_of_bound(
                 start,
                 self.bf.len(),

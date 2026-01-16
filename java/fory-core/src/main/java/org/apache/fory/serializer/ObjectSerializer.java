@@ -270,7 +270,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       int dispatchId = fieldInfo.dispatchId;
       if (DispatchId.isPrimitive(dispatchId)) {
-        fieldValues[counter++] = Serializers.readPrimitiveValue(fory, buffer, dispatchId);
+        fieldValues[counter++] = Serializers.readPrimitiveValue(buffer, dispatchId);
       } else {
         Object fieldValue =
             readFinalObjectFieldValue(binding, refResolver, typeResolver, fieldInfo, buffer);

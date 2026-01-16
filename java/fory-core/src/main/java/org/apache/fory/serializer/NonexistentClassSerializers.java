@@ -198,7 +198,7 @@ public final class NonexistentClassSerializers {
         } else {
           if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
             // Use dispatch-based read to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
-            fieldValue = Serializers.readPrimitiveValue(fory, buffer, fieldInfo.dispatchId);
+            fieldValue = Serializers.readPrimitiveValue(buffer, fieldInfo.dispatchId);
           } else {
             fieldValue =
                 AbstractObjectSerializer.readFinalObjectFieldValue(

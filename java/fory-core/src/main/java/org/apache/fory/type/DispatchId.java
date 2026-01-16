@@ -45,83 +45,153 @@ public class DispatchId {
   public static final int PRIMITIVE_VAR_UINT64 = 17;
   public static final int PRIMITIVE_TAGGED_UINT64 = 18;
 
-  public static final int BOOL = 19;
-  public static final int INT8 = 20;
-  public static final int CHAR = 21;
-  public static final int INT16 = 22;
-  public static final int INT32 = 23;
-  public static final int VARINT32 = 24;
-  public static final int INT64 = 25;
-  public static final int VARINT64 = 26;
-  public static final int TAGGED_INT64 = 27;
-  public static final int FLOAT32 = 28;
-  public static final int FLOAT64 = 29;
-  public static final int UINT8 = 30;
-  public static final int UINT16 = 31;
-  public static final int UINT32 = 32;
-  public static final int VAR_UINT32 = 33;
-  public static final int UINT64 = 34;
-  public static final int VAR_UINT64 = 35;
-  public static final int TAGGED_UINT64 = 36;
-  public static final int STRING = 37;
+  // Non-nullable boxed types: read value directly (no null flag), box it, use putObject
+  // Used when remote TypeMeta has nullable=false but local field is boxed (e.g., Integer)
+  public static final int NOTNULL_BOXED_BOOL = 19;
+  public static final int NOTNULL_BOXED_INT8 = 20;
+  public static final int NOTNULL_BOXED_INT16 = 21;
+  public static final int NOTNULL_BOXED_CHAR = 22;
+  public static final int NOTNULL_BOXED_INT32 = 23;
+  public static final int NOTNULL_BOXED_VARINT32 = 24;
+  public static final int NOTNULL_BOXED_INT64 = 25;
+  public static final int NOTNULL_BOXED_VARINT64 = 26;
+  public static final int NOTNULL_BOXED_TAGGED_INT64 = 27;
+  public static final int NOTNULL_BOXED_FLOAT32 = 28;
+  public static final int NOTNULL_BOXED_FLOAT64 = 29;
+  public static final int NOTNULL_BOXED_UINT8 = 30;
+  public static final int NOTNULL_BOXED_UINT16 = 31;
+  public static final int NOTNULL_BOXED_UINT32 = 32;
+  public static final int NOTNULL_BOXED_VAR_UINT32 = 33;
+  public static final int NOTNULL_BOXED_UINT64 = 34;
+  public static final int NOTNULL_BOXED_VAR_UINT64 = 35;
+  public static final int NOTNULL_BOXED_TAGGED_UINT64 = 36;
+
+  // Nullable boxed types: read null flag first, then box if not null
+  public static final int BOOL = 37;
+  public static final int INT8 = 38;
+  public static final int CHAR = 39;
+  public static final int INT16 = 40;
+  public static final int INT32 = 41;
+  public static final int VARINT32 = 42;
+  public static final int INT64 = 43;
+  public static final int VARINT64 = 44;
+  public static final int TAGGED_INT64 = 45;
+  public static final int FLOAT32 = 46;
+  public static final int FLOAT64 = 47;
+  public static final int UINT8 = 48;
+  public static final int UINT16 = 49;
+  public static final int UINT32 = 50;
+  public static final int VAR_UINT32 = 51;
+  public static final int UINT64 = 52;
+  public static final int VAR_UINT64 = 53;
+  public static final int TAGGED_UINT64 = 54;
+  public static final int STRING = 55;
+
+  // Dispatch mode for determining how to read/write a field
+  private static final int MODE_PRIMITIVE = 0; // Local field is primitive, use Platform.putInt
+  private static final int MODE_NOTNULL_BOXED = 1; // Local is boxed, remote nullable=false, box and putObject
+  private static final int MODE_NULLABLE_BOXED = 2; // Local is boxed, remote nullable=true, read null flag
 
   public static int getDispatchId(Fory fory, Descriptor d) {
     int typeId = Types.getDescriptorTypeId(fory, d);
     TypeRef<?> typeRef = d.getTypeRef();
     Class<?> rawType = typeRef.getRawType();
     TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
-    // A field is treated as primitive for dispatch if:
-    // 1. The Java type itself is primitive, OR
-    // 2. The boxed type has nullable=false (meaning writer wrote without null flag), OR
-    // 3. TypeExtMeta says nullable=false and typeId is a primitive type (for schema compatible mode
-    //    where local field may be boxed but remote wrote primitive)
-    boolean isPrimitive =
-        typeRef.isPrimitive()
-            || (rawType.isPrimitive() && typeExtMeta != null && !typeExtMeta.nullable())
-            || (typeExtMeta != null && !typeExtMeta.nullable() && Types.isPrimitiveType(typeId));
-    if (fory.isCrossLanguage()) {
-      return xlangTypeIdToDispatchId(typeId, isPrimitive);
+
+    // Determine the dispatch mode based on local field type and remote nullable flag
+    int mode;
+    boolean localIsPrimitive = rawType.isPrimitive();
+    boolean remoteNullable = typeExtMeta == null || typeExtMeta.nullable();
+
+    if (localIsPrimitive) {
+      // Local field is primitive (int, long, etc.) - always use PRIMITIVE dispatch
+      mode = MODE_PRIMITIVE;
+    } else if (!remoteNullable && Types.isPrimitiveType(typeId)) {
+      // Local field is boxed (Integer, Long, etc.), remote wrote without null flag
+      // Use NOTNULL_BOXED dispatch: read value directly, box it, use putObject
+      mode = MODE_NOTNULL_BOXED;
     } else {
-      return nativeIdToDispatchId(typeId, d, isPrimitive);
+      // Local field is boxed, remote wrote with null flag (or non-primitive type)
+      mode = MODE_NULLABLE_BOXED;
+    }
+
+    if (fory.isCrossLanguage()) {
+      return xlangTypeIdToDispatchId(typeId, mode);
+    } else {
+      return nativeIdToDispatchId(typeId, d, mode);
     }
   }
 
-  private static int xlangTypeIdToDispatchId(int typeId, boolean isPrimitive) {
+  private static int xlangTypeIdToDispatchId(int typeId, int mode) {
     switch (typeId) {
       case Types.BOOL:
-        return isPrimitive ? PRIMITIVE_BOOL : BOOL;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_BOOL
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_BOOL : BOOL);
       case Types.INT8:
-        return isPrimitive ? PRIMITIVE_INT8 : INT8;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_INT8
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_INT8 : INT8);
       case Types.INT16:
-        return isPrimitive ? PRIMITIVE_INT16 : INT16;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_INT16
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_INT16 : INT16);
       case Types.INT32:
-        return isPrimitive ? PRIMITIVE_INT32 : INT32;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_INT32
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_INT32 : INT32);
       case Types.VARINT32:
-        return isPrimitive ? PRIMITIVE_VARINT32 : VARINT32;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_VARINT32
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_VARINT32 : VARINT32);
       case Types.INT64:
-        return isPrimitive ? PRIMITIVE_INT64 : INT64;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_INT64
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_INT64 : INT64);
       case Types.VARINT64:
-        return isPrimitive ? PRIMITIVE_VARINT64 : VARINT64;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_VARINT64
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_VARINT64 : VARINT64);
       case Types.TAGGED_INT64:
-        return isPrimitive ? PRIMITIVE_TAGGED_INT64 : TAGGED_INT64;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_TAGGED_INT64
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_TAGGED_INT64 : TAGGED_INT64);
       case Types.UINT8:
-        return isPrimitive ? PRIMITIVE_UINT8 : UINT8;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_UINT8
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_UINT8 : UINT8);
       case Types.UINT16:
-        return isPrimitive ? PRIMITIVE_UINT16 : UINT16;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_UINT16
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_UINT16 : UINT16);
       case Types.UINT32:
-        return isPrimitive ? PRIMITIVE_UINT32 : UINT32;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_UINT32
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_UINT32 : UINT32);
       case Types.VAR_UINT32:
-        return isPrimitive ? PRIMITIVE_VAR_UINT32 : VAR_UINT32;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_VAR_UINT32
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_VAR_UINT32 : VAR_UINT32);
       case Types.UINT64:
-        return isPrimitive ? PRIMITIVE_UINT64 : UINT64;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_UINT64
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_UINT64 : UINT64);
       case Types.VAR_UINT64:
-        return isPrimitive ? PRIMITIVE_VAR_UINT64 : VAR_UINT64;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_VAR_UINT64
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_VAR_UINT64 : VAR_UINT64);
       case Types.TAGGED_UINT64:
-        return isPrimitive ? PRIMITIVE_TAGGED_UINT64 : TAGGED_UINT64;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_TAGGED_UINT64
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_TAGGED_UINT64 : TAGGED_UINT64);
       case Types.FLOAT32:
-        return isPrimitive ? PRIMITIVE_FLOAT32 : FLOAT32;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_FLOAT32
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_FLOAT32 : FLOAT32);
       case Types.FLOAT64:
-        return isPrimitive ? PRIMITIVE_FLOAT64 : FLOAT64;
+        return mode == MODE_PRIMITIVE
+            ? PRIMITIVE_FLOAT64
+            : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_FLOAT64 : FLOAT64);
       case Types.STRING:
         return STRING;
       default:
@@ -129,13 +199,14 @@ public class DispatchId {
     }
   }
 
-  private static int nativeIdToDispatchId(
-      int nativeId, Descriptor descriptor, boolean isPrimitive) {
+  private static int nativeIdToDispatchId(int nativeId, Descriptor descriptor, int mode) {
     if (nativeId >= Types.BOOL && nativeId <= ClassResolver.NATIVE_START_ID) {
-      return xlangTypeIdToDispatchId(nativeId, isPrimitive);
+      return xlangTypeIdToDispatchId(nativeId, mode);
     }
     if (nativeId == ClassResolver.CHAR_ID) {
-      return isPrimitive ? PRIMITIVE_CHAR : CHAR;
+      return mode == MODE_PRIMITIVE
+          ? PRIMITIVE_CHAR
+          : (mode == MODE_NOTNULL_BOXED ? NOTNULL_BOXED_CHAR : CHAR);
     }
     if (nativeId == ClassResolver.PRIMITIVE_CHAR_ID) {
       return PRIMITIVE_CHAR;
@@ -147,10 +218,18 @@ public class DispatchId {
               "%s should use `Types.BOOL~Types.FLOAT64` with nullable meta instead, but got %s",
               descriptor.getField(), nativeId));
     }
-    return xlangTypeIdToDispatchId(nativeId, isPrimitive);
+    return xlangTypeIdToDispatchId(nativeId, mode);
   }
 
   public static boolean isPrimitive(int dispatchId) {
     return dispatchId >= PRIMITIVE_BOOL && dispatchId <= PRIMITIVE_TAGGED_UINT64;
+  }
+
+  public static boolean isNotnullBoxed(int dispatchId) {
+    return dispatchId >= NOTNULL_BOXED_BOOL && dispatchId <= NOTNULL_BOXED_TAGGED_UINT64;
+  }
+
+  public static boolean isNullableBoxed(int dispatchId) {
+    return dispatchId >= BOOL && dispatchId <= TAGGED_UINT64;
   }
 }

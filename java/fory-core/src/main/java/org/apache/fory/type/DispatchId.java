@@ -103,17 +103,29 @@ public class DispatchId {
     // Determine the dispatch mode based on local field type and remote nullable flag
     int mode;
     boolean localIsPrimitive = rawType.isPrimitive();
-    boolean remoteNullable = typeExtMeta == null || typeExtMeta.nullable();
 
-    if (localIsPrimitive) {
-      // Local field is primitive (int, long, etc.) - always use PRIMITIVE dispatch
-      mode = MODE_PRIMITIVE;
-    } else if (!remoteNullable && Types.isPrimitiveType(typeId)) {
-      // Local field is boxed (Integer, Long, etc.), remote wrote without null flag
-      // Use NOTNULL_BOXED dispatch: read value directly, box it, use putObject
-      mode = MODE_NOTNULL_BOXED;
+    // Determine remote nullable: if typeExtMeta exists, use remote info; otherwise use local type
+    // For consistent schema (no typeExtMeta), primitive fields never have null flag
+    boolean remoteNullable;
+    if (typeExtMeta != null) {
+      remoteNullable = typeExtMeta.nullable();
     } else {
-      // Local field is boxed, remote wrote with null flag (or non-primitive type)
+      // No remote info (consistent schema) - use local field type to determine nullable
+      // Primitive types are never nullable, boxed/reference types are nullable
+      remoteNullable = !localIsPrimitive;
+    }
+
+    if (!remoteNullable) {
+      // Remote wrote without null flag (or no remote info and local is primitive)
+      if (localIsPrimitive) {
+        mode = MODE_PRIMITIVE;
+      } else if (Types.isPrimitiveType(typeId)) {
+        mode = MODE_NOTNULL_BOXED;
+      } else {
+        mode = MODE_NULLABLE_BOXED;
+      }
+    } else {
+      // Remote wrote with null flag - MUST read null flag regardless of local field type
       mode = MODE_NULLABLE_BOXED;
     }
 

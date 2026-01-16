@@ -581,6 +581,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.f8 = 41;
     obj.last = 42;
 
+    serDeCheck(fory, obj);
+
     MemoryBuffer buffer = MemoryUtils.buffer(64);
     fory.serialize(buffer, obj);
 
@@ -619,6 +621,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.f8 = 41;
     obj.last = 42;
 
+    serDeCheck(fory, obj);
     MemoryBuffer buffer = MemoryUtils.buffer(64);
     fory.serialize(buffer, obj);
 
@@ -653,6 +656,11 @@ public abstract class XlangTestBase extends ForyTestBase {
     fory.serialize(buffer, strList2);
     fory.serialize(buffer, itemList);
     fory.serialize(buffer, itemList2);
+
+    serDeCheck(fory, strList);
+    serDeCheck(fory, strList2);
+    serDeCheck(fory, itemList);
+    serDeCheck(fory, itemList2);
 
     ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     runPeer(ctx);
@@ -690,6 +698,10 @@ public abstract class XlangTestBase extends ForyTestBase {
     itemMap.put(null, item2);
     itemMap.put("k3", null);
     itemMap.put("k4", item3);
+
+    serDeCheck(fory, strMap);
+    serDeCheck(fory, itemMap);
+
     fory.serialize(buffer, strMap);
     fory.serialize(buffer, itemMap);
     ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
@@ -781,6 +793,10 @@ public abstract class XlangTestBase extends ForyTestBase {
     // Use empty string instead of null - xlang mode uses nullable=false by default
     // Go strings are always non-nil (empty string for "no value")
     item3.name = "";
+
+    serDeCheck(fory, item1);
+    serDeCheck(fory, item2);
+    serDeCheck(fory, item3);
 
     MemoryBuffer buffer = MemoryUtils.buffer(64);
     fory.serialize(buffer, item1);
@@ -1022,6 +1038,9 @@ public abstract class XlangTestBase extends ForyTestBase {
     MyStruct myStruct = new MyStruct(42);
     wrapper.myExt = new MyExt(43);
     wrapper.myStruct = myStruct;
+
+    serDeCheck(fory1, wrapper);
+
     byte[] serialize = fory1.serialize(wrapper);
     ExecutionContext ctx = prepareExecution(caseName, serialize);
     runPeer(ctx);
@@ -1152,6 +1171,8 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.f1 = 10;
     obj.f2 = "test";
     obj.f3 = 3.2;
+
+    serDeCheck(fory, obj);
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
     fory.serialize(buffer, obj);
@@ -1798,7 +1819,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.nullableMap.put("nk1", "nv1");
 
     // First verify Java serialization works
-    Assert.assertEquals(xserDe(fory, obj), obj);
+    serDeCheck(fory, obj);
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
     fory.serialize(buffer, obj);
@@ -1856,7 +1877,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.nullableMap = null;
 
     // First verify Java serialization works
-    Assert.assertEquals(xserDe(fory, obj), obj);
+    serDeCheck(fory, obj);
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
     fory.serialize(buffer, obj);
@@ -1990,7 +2011,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.nullableMap2.put("nk1", "nv1");
 
     // First verify Java serialization works
-    Assert.assertEquals(xserDe(fory, obj), obj);
+    serDeCheck(fory, obj);
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(1024);
     fory.serialize(buffer, obj);
@@ -2055,7 +2076,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.nullableMap2 = null;
 
     // First verify Java serialization works
-    Assert.assertEquals(xserDe(fory, obj), obj);
+    serDeCheck(fory, obj);
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(1024);
     fory.serialize(buffer, obj);
@@ -2596,7 +2617,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.u64TaggedNullableField = 500000000L;
 
     // First verify Java serialization works
-    Assert.assertEquals(xserDe(fory, obj), obj);
+    serDeCheck(fory, obj);
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
     fory.serialize(buffer, obj);
@@ -2714,7 +2735,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     obj.u64TaggedField2 = 500000000L;
 
     // First verify Java serialization works
-    Assert.assertEquals(xserDe(fory, obj), obj);
+    serDeCheck(fory, obj);
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(1024);
     fory.serialize(buffer, obj);

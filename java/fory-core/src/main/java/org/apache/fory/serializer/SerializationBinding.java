@@ -80,13 +80,13 @@ abstract class SerializationBinding {
       MemoryBuffer buffer, Object obj, Serializer serializer, boolean nullable);
 
   abstract void writeContainerFieldValue(
-      MemoryBuffer buffer, Object fieldValue, ClassInfo classInfo);
+      SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue);
 
-  abstract void write(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object value);
+  abstract void writeField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue);
 
   abstract void write(MemoryBuffer buffer, Serializer serializer, Object value);
 
-  abstract Object read(SerializationFieldInfo fieldInfo, MemoryBuffer buffer);
+  abstract Object readField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer);
 
   abstract Object read(MemoryBuffer buffer, Serializer serializer);
 
@@ -257,7 +257,7 @@ abstract class SerializationBinding {
     }
 
     @Override
-    Object read(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    Object readField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
       if (fieldInfo.useDeclaredTypeInfo) {
         if (fieldInfo.refMode == RefMode.TRACKING) {
           return fory.readRef(buffer, fieldInfo.classInfo);
@@ -360,12 +360,18 @@ abstract class SerializationBinding {
 
     @Override
     public void writeContainerFieldValue(
-        MemoryBuffer buffer, Object fieldValue, ClassInfo classInfo) {
-      fory.writeNonRef(buffer, fieldValue, classInfo);
+        SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+      if (fieldInfo.useDeclaredTypeInfo) {
+        ClassInfo classInfo =
+            typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder);
+        fory.writeNonRef(buffer, fieldValue, classInfo);
+      } else {
+        fory.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+      }
     }
 
     @Override
-    void write(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+    void writeField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
       if (fieldInfo.useDeclaredTypeInfo) {
         Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
         if (fieldInfo.refMode == RefMode.TRACKING) {
@@ -406,7 +412,7 @@ abstract class SerializationBinding {
     }
 
     @Override
-    void write(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+    void writeField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
       if (fieldInfo.useDeclaredTypeInfo) {
         Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
         if (fieldInfo.refMode == RefMode.TRACKING) {
@@ -574,7 +580,7 @@ abstract class SerializationBinding {
     }
 
     @Override
-    Object read(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    Object readField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
       if (fieldInfo.useDeclaredTypeInfo) {
         if (fieldInfo.refMode == RefMode.TRACKING) {
           return fory.xreadRef(buffer, fieldInfo.classInfo);
@@ -677,7 +683,10 @@ abstract class SerializationBinding {
 
     @Override
     public void writeContainerFieldValue(
-        MemoryBuffer buffer, Object fieldValue, ClassInfo classInfo) {
+        SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+      assert fieldInfo.useDeclaredTypeInfo;
+      ClassInfo classInfo =
+          typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder);
       fory.xwriteData(buffer, classInfo, fieldValue);
     }
   }

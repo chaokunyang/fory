@@ -69,7 +69,7 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     Collection<Descriptor> descriptors = layerClassDef.getDescriptors(typeResolver, beanClass);
     DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(descriptors, false));
     objectCodecOptimizer =
-        new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
+        new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
   }
 
   // Must be static to be shared across the whole process life.

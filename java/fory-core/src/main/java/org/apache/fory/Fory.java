@@ -1719,10 +1719,6 @@ public final class Fory implements BaseFory {
     return config.isStringRefIgnored();
   }
 
-  public boolean isBasicTypesRefIgnored() {
-    return config.isBasicTypesRefIgnored();
-  }
-
   public boolean checkClassVersion() {
     return config.checkClassVersion();
   }

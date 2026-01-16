@@ -32,7 +32,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
-import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.MetaStringResolver;
@@ -43,7 +42,6 @@ import org.apache.fory.serializer.NonexistentClass.NonexistentEnum;
 import org.apache.fory.serializer.Serializers.CrossLanguageCompatibleSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.Preconditions;
 
@@ -118,32 +116,17 @@ public final class NonexistentClassSerializers {
       // write order: primitive,boxed,final,other,collection,map
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
-        ClassInfo classInfo = fieldInfo.classInfo;
-        if (fory.getConfig().isForyDebugOutputEnabled()) {
-          LOG.info(
-              "NonexistentClassSerializer.write: field={}, dispatchId={}, isPrimitive={}, value={}, serializer={}",
-              fieldInfo.qualifiedFieldName,
-              fieldInfo.dispatchId,
-              DispatchId.isPrimitive(fieldInfo.dispatchId),
-              fieldValue,
-              classInfo != null ? classInfo.getSerializer() : null);
-        }
-        if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
-          // Use dispatch-based write to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
-          Serializers.writePrimitiveValue(buffer, fieldValue, fieldInfo.dispatchId);
-        } else {
-          binding.write(fieldInfo, buffer, fieldValue);
-        }
+        AbstractObjectSerializer.writeBuildInFieldValue(binding, fieldInfo, buffer, fieldValue);
       }
       Generics generics = fory.getGenerics();
       for (SerializationFieldInfo fieldInfo : fieldsInfo.containerFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
         AbstractObjectSerializer.writeContainerFieldValue(
-            binding, refResolver, classResolver, generics, fieldInfo, buffer, fieldValue);
+            binding, refResolver, generics, fieldInfo, buffer, fieldValue);
       }
       for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
-        binding.write(fieldInfo, buffer, fieldValue);
+        binding.writeField(fieldInfo, buffer, fieldValue);
       }
     }
 
@@ -179,7 +162,8 @@ public final class NonexistentClassSerializers {
       // read order: primitive,boxed,final,other,collection,map
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(classDef);
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
-        entries.add(new MapEntry(fieldInfo.qualifiedFieldName, binding.read(fieldInfo, buffer)));
+        Object fieldValue = AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
+        entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       Generics generics = fory.getGenerics();
       for (SerializationFieldInfo fieldInfo : fieldsInfo.containerFields) {
@@ -188,7 +172,7 @@ public final class NonexistentClassSerializers {
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
-        Object fieldValue = binding.read(fieldInfo, buffer);
+        Object fieldValue = binding.readField(fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       obj.setEntries(entries);

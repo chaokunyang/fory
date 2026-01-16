@@ -33,7 +33,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -73,7 +72,6 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private final SerializationFieldInfo[] otherFields;
   private final RecordInfo recordInfo;
   private Serializer<T> serializer;
-  private final ClassInfoHolder classInfoHolder;
   private final SerializationBinding binding;
   private final boolean hasDefaultValues;
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
@@ -113,7 +111,6 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     buildInFields = fieldGroups.buildInFields;
     containerFields = fieldGroups.containerFields;
     otherFields = fieldGroups.userTypeFields;
-    classInfoHolder = this.classResolver.nilClassInfoHolder();
     if (isRecord) {
       List<String> fieldNames =
           descriptorGrouper.getSortedDescriptors().stream()
@@ -150,6 +147,11 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   @Override
+  public void xwrite(MemoryBuffer buffer, T value) {
+    write(buffer, value);
+  }
+
+  @Override
   public void write(MemoryBuffer buffer, T value) {
     if (serializer == null) {
       // xlang mode will register class and create serializer in advance, it won't go to here.
@@ -157,11 +159,6 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           this.classResolver.createSerializerSafe(type, () -> new ObjectSerializer<>(fory, type));
     }
     serializer.write(buffer, value);
-  }
-
-  @Override
-  public void xwrite(MemoryBuffer buffer, T value) {
-    write(buffer, value);
   }
 
   private T newInstance() {
@@ -190,39 +187,22 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       Arrays.fill(recordInfo.getRecordComponents(), null);
       return t;
     }
-    T obj = newInstance();
+    T targetObject = newInstance();
     Fory fory = this.fory;
     RefResolver refResolver = this.refResolver;
     SerializationBinding binding = this.binding;
-    refResolver.reference(obj);
+    refResolver.reference(targetObject);
     // read order: primitive,boxed,final,other,collection,map
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      boolean nullable = fieldInfo.nullable;
       if (fieldAccessor != null) {
-        int dispatchId = fieldInfo.dispatchId;
-        if (fieldInfo.isPrimitiveField && (!nullable || buffer.readByte() != Fory.NULL_FLAG)) {
-          if (!readPrimitiveFieldValue(buffer, obj, fieldAccessor, dispatchId)) {
-            continue;
-          }
-        }
-        // For NOTNULL_BOXED and other boxed types, let readBasicObjectFieldValue handle it
-        // which uses putObject for proper boxing
-        if (nullable
-            ? readBasicNullableObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)
-            : readBasicObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)) {
-          assert fieldInfo.classInfo != null;
-          Object fieldValue = binding.read(fieldInfo, buffer);
-          fieldAccessor.putObject(obj, fieldValue);
-        }
+        AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer, targetObject);
       } else {
         if (fieldInfo.fieldConverter == null) {
           // Skip the field value from buffer since it doesn't exist in current class
-          if (!skipPrimitiveFieldValue(fieldInfo, buffer)) {
-            binding.read(fieldInfo, buffer);
-          }
+          FieldSkipper.skipField(binding, fieldInfo, buffer);
         } else {
-          compatibleRead(buffer, fieldInfo, obj);
+          compatibleRead(buffer, fieldInfo, targetObject);
         }
       }
     }
@@ -232,26 +212,26 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           AbstractObjectSerializer.readContainerFieldValue(binding, generics, fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
-        fieldAccessor.putObject(obj, fieldValue);
+        fieldAccessor.putObject(targetObject, fieldValue);
       }
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = binding.read(fieldInfo, buffer);
+      Object fieldValue = binding.readField(fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
-        fieldAccessor.putObject(obj, fieldValue);
+        fieldAccessor.putObject(targetObject, fieldValue);
       }
     }
-    return obj;
+    return targetObject;
   }
 
   private void compatibleRead(MemoryBuffer buffer, SerializationFieldInfo fieldInfo, Object obj) {
     Object fieldValue;
     int dispatchId = fieldInfo.dispatchId;
     if (DispatchId.isPrimitive(dispatchId)) {
-      fieldValue = Serializers.readPrimitiveValue(buffer, dispatchId);
+      fieldValue = AbstractObjectSerializer.readPrimitiveValue(buffer, dispatchId);
     } else {
-      fieldValue = binding.read(fieldInfo, buffer);
+      fieldValue = binding.readField(fieldInfo, buffer);
       ;
     }
     fieldInfo.fieldConverter.set(obj, fieldValue);
@@ -264,19 +244,12 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     // read order: primitive,boxed,final,other,collection,map
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       if (fieldInfo.fieldAccessor != null) {
-        assert fieldInfo.classInfo != null;
-        int dispatchId = fieldInfo.dispatchId;
-        if (DispatchId.isPrimitive(dispatchId)) {
-          fields[counter++] = Serializers.readPrimitiveValue(buffer, dispatchId);
-        } else {
-          Object fieldValue = binding.read(fieldInfo, buffer);
-          fields[counter++] = fieldValue;
-        }
+        fields[counter++] = AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
       } else {
-        // Skip the field value from buffer since it doesn't exist in current class
-        if (!skipPrimitiveFieldValue(fieldInfo, buffer)) {
-          skipObjectFieldValue(buffer, fieldInfo);
-        }
+        // Skip the field value from buffer since it doesn't exist in current class.
+        // For records, fieldConverter can't be used since records are immutable and
+        // constructed all at once. We just read to advance buffer position.
+        FieldSkipper.skipField(binding, fieldInfo, buffer);
         // remapping will handle those extra fields from peers.
         fields[counter++] = null;
       }
@@ -288,103 +261,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       fields[counter++] = fieldValue;
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = binding.read(fieldInfo, buffer);
+      Object fieldValue = binding.readField(fieldInfo, buffer);
       fields[counter++] = fieldValue;
-    }
-  }
-
-  private void skipObjectFieldValue(MemoryBuffer buffer, SerializationFieldInfo fieldInfo) {
-    if (fieldInfo.classInfo == null) {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          binding.readNonRef(buffer, fieldInfo);
-          break;
-        case NULL_ONLY:
-          binding.readNullable(buffer, fieldInfo);
-          break;
-        case TRACKING:
-          binding.readRef(buffer, fieldInfo);
-          break;
-        default:
-      }
-    } else {
-      binding.read(fieldInfo, buffer);
-    }
-  }
-
-  /** Skip primitive/notnull-boxed field value since they don't write null flag. */
-  static boolean skipPrimitiveFieldValue(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    switch (fieldInfo.dispatchId) {
-      case DispatchId.PRIMITIVE_BOOL:
-      case DispatchId.NOTNULL_BOXED_BOOL:
-        buffer.increaseReaderIndex(1);
-        return true;
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
-      case DispatchId.NOTNULL_BOXED_INT8:
-      case DispatchId.NOTNULL_BOXED_UINT8:
-        buffer.increaseReaderIndex(1);
-        return true;
-      case DispatchId.PRIMITIVE_CHAR:
-      case DispatchId.NOTNULL_BOXED_CHAR:
-        buffer.increaseReaderIndex(2);
-        return true;
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
-      case DispatchId.NOTNULL_BOXED_INT16:
-      case DispatchId.NOTNULL_BOXED_UINT16:
-        buffer.increaseReaderIndex(2);
-        return true;
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.NOTNULL_BOXED_INT32:
-        buffer.increaseReaderIndex(4);
-        return true;
-      case DispatchId.PRIMITIVE_VARINT32:
-      case DispatchId.NOTNULL_BOXED_VARINT32:
-        buffer.readVarInt32();
-        return true;
-      case DispatchId.PRIMITIVE_UINT32:
-      case DispatchId.NOTNULL_BOXED_UINT32:
-        buffer.increaseReaderIndex(4);
-        return true;
-      case DispatchId.PRIMITIVE_VAR_UINT32:
-      case DispatchId.NOTNULL_BOXED_VAR_UINT32:
-        buffer.readVarUint32();
-        return true;
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.NOTNULL_BOXED_INT64:
-        buffer.increaseReaderIndex(8);
-        return true;
-      case DispatchId.PRIMITIVE_VARINT64:
-      case DispatchId.NOTNULL_BOXED_VARINT64:
-        buffer.readVarInt64();
-        return true;
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
-      case DispatchId.NOTNULL_BOXED_TAGGED_INT64:
-        buffer.readTaggedInt64();
-        return true;
-      case DispatchId.PRIMITIVE_UINT64:
-      case DispatchId.NOTNULL_BOXED_UINT64:
-        buffer.increaseReaderIndex(8);
-        return true;
-      case DispatchId.PRIMITIVE_VAR_UINT64:
-      case DispatchId.NOTNULL_BOXED_VAR_UINT64:
-        buffer.readVarUint64();
-        return true;
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
-      case DispatchId.NOTNULL_BOXED_TAGGED_UINT64:
-        buffer.readTaggedUint64();
-        return true;
-      case DispatchId.PRIMITIVE_FLOAT32:
-      case DispatchId.NOTNULL_BOXED_FLOAT32:
-        buffer.increaseReaderIndex(4);
-        return true;
-      case DispatchId.PRIMITIVE_FLOAT64:
-      case DispatchId.NOTNULL_BOXED_FLOAT64:
-        buffer.increaseReaderIndex(8);
-        return true;
-      default:
-        return false;
     }
   }
 

@@ -26,7 +26,6 @@ import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -47,14 +46,13 @@ import org.apache.fory.type.Generics;
  * @see ObjectStreamSerializer
  * @see org.apache.fory.builder.LayerMarkerClassGenerator
  */
-@SuppressWarnings({"unchecked"})
+@SuppressWarnings({"unchecked", "rawtypes"})
 public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<T> {
   private final ClassDef layerClassDef;
   private final Class<?> layerMarkerClass;
   private final SerializationFieldInfo[] buildInFields;
   private final SerializationFieldInfo[] otherFields;
   private final SerializationFieldInfo[] containerFields;
-  private final ClassInfoHolder classInfoHolder;
   private final SerializationBinding binding;
   private final TypeResolver typeResolver;
 
@@ -73,7 +71,6 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     this.layerMarkerClass = layerMarkerClass;
     this.typeResolver = fory._getTypeResolver();
     this.binding = SerializationBinding.createBinding(fory);
-    this.classInfoHolder = classResolver.nilClassInfoHolder();
 
     // Build field infos from layerClassDef
     Collection<Descriptor> descriptors = layerClassDef.getDescriptors(typeResolver, type);
@@ -115,22 +112,8 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   }
 
   private void writeFinalFields(MemoryBuffer buffer, T value) {
-    Fory fory = this.fory;
     for (SerializationFieldInfo fieldInfo : buildInFields) {
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      boolean nullable = fieldInfo.nullable;
-      int dispatchId = fieldInfo.dispatchId;
-      if (AbstractObjectSerializer.writePrimitiveFieldValue(
-          buffer, value, fieldAccessor, dispatchId)) {
-        Object fieldValue = fieldAccessor.getObject(value);
-        boolean needWrite =
-            nullable
-                ? writeNullableBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId)
-                : writeNotNullBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId);
-        if (needWrite) {
-          binding.write(fieldInfo, buffer, fieldValue);
-        }
-      }
+      AbstractObjectSerializer.writeBuildInField(binding, fieldInfo, buffer, value);
     }
   }
 
@@ -140,7 +123,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
       AbstractObjectSerializer.writeContainerFieldValue(
-          binding, refResolver, typeResolver, generics, fieldInfo, buffer, fieldValue);
+          binding, refResolver, generics, fieldInfo, buffer, fieldValue);
     }
   }
 
@@ -148,7 +131,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     for (SerializationFieldInfo fieldInfo : otherFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
-      binding.write(fieldInfo, buffer, fieldValue);
+      binding.writeField(fieldInfo, buffer, fieldValue);
     }
   }
 
@@ -198,31 +181,14 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     }
   }
 
-  private void readFinalFields(MemoryBuffer buffer, T obj) {
-    Fory fory = this.fory;
+  private void readFinalFields(MemoryBuffer buffer, T targetObject) {
     for (SerializationFieldInfo fieldInfo : buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
-        boolean nullable = fieldInfo.nullable;
-        int dispatchId = fieldInfo.dispatchId;
-        if (AbstractObjectSerializer.readPrimitiveFieldValue(buffer, obj, fieldAccessor, dispatchId)
-            && (nullable
-                ? AbstractObjectSerializer.readBasicNullableObjectFieldValue(
-                    fory, buffer, obj, fieldAccessor, dispatchId)
-                : AbstractObjectSerializer.readBasicObjectFieldValue(
-                    fory, buffer, obj, fieldAccessor, dispatchId))) {
-          Object fieldValue = binding.read(fieldInfo, buffer);
-          fieldAccessor.putObject(obj, fieldValue);
-        }
+        AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer, targetObject);
       } else {
         // Field doesn't exist in current class - skip the value
-        if (!MetaSharedSerializer.skipPrimitiveFieldValue(fieldInfo, buffer)) {
-          if (fieldInfo.classInfo == null) {
-            fory.readRef(buffer, classInfoHolder);
-          } else {
-            binding.read(fieldInfo, buffer);
-          }
-        }
+        FieldSkipper.skipField(binding, fieldInfo, buffer);
       }
     }
   }
@@ -241,7 +207,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   private void readUserTypeFields(MemoryBuffer buffer, T obj) {
     for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = binding.read(fieldInfo, buffer);
+      Object fieldValue = binding.readField(fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(obj, fieldValue);
@@ -306,9 +272,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
    * @return array of field values in putFields order
    */
   @Override
-  @SuppressWarnings("rawtypes")
-  public Object[] getFieldValuesForPutFields(
-      Object obj, org.apache.fory.collection.ObjectIntMap fieldIndexMap, int arraySize) {
+  public Object[] getFieldValuesForPutFields(Object obj, ObjectIntMap fieldIndexMap, int arraySize) {
     Object[] vals = new Object[arraySize];
     // Get final fields
     getFieldValuesForPutFields(obj, fieldIndexMap, vals, buildInFields);

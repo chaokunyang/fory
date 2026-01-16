@@ -121,7 +121,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
             ? new Literal(ObjectSerializer.computeStructHash(fory, grouper), PRIMITIVE_INT_TYPE)
             : null;
     objectCodecOptimizer =
-        new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
+        new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
     if (isRecord) {
       if (!recordCtrAccessible) {
         buildRecordComponentDefaultValues();

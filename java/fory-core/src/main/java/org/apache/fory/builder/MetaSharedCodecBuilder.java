@@ -106,7 +106,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
       }
     }
     objectCodecOptimizer =
-        new ObjectCodecOptimizer(beanClass, grouper, !fory.isBasicTypesRefIgnored(), ctx);
+        new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
 
     String defaultValueLanguage = "None";
     DefaultValueUtils.DefaultValueField[] defaultValueFields =

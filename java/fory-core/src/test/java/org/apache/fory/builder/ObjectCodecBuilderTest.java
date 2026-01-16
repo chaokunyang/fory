@@ -99,7 +99,6 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
   public static Object[][] codecConfig() {
     return Sets.cartesianProduct(
             ImmutableSet.of(true, false), // referenceTracking
-            ImmutableSet.of(true, false), // basicTypesReferenceIgnored
             ImmutableSet.of(true, false), // compressNumber
             ImmutableSet.of(1, 4, 7) // structFieldsRepeat
             )
@@ -111,7 +110,6 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
   @Test(dataProvider = "codecConfig")
   public void testSeqCodec(
       boolean referenceTracking,
-      boolean basicTypesRefIgnored,
       boolean compressNumber,
       int fieldsRepeat) {
     Class<?> structClass = Struct.createStructClass("Struct" + fieldsRepeat, fieldsRepeat);
@@ -120,7 +118,6 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
             .withLanguage(Language.JAVA)
             .withRefTracking(referenceTracking)
             .withClassLoader(structClass.getClassLoader())
-            .ignoreBasicTypesRef(basicTypesRefIgnored)
             .withNumberCompressed(compressNumber)
             .requireClassRegistration(false)
             .build();

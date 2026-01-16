@@ -128,7 +128,7 @@ public class FieldGroups {
     public final RefMode refMode;
     public final boolean nullable;
     public final boolean trackingRef;
-    public final boolean isPrimitive;
+    public final boolean isPrimitiveField;
     // Use declared type for serialization/deserialization
     public final boolean useDeclaredTypeInfo;
 
@@ -171,7 +171,7 @@ public class FieldGroups {
       // This ensures correct handling in schema compatible mode where local field type
       // may differ from remote (ClassDef) field type.
       // Note: NOTNULL_BOXED dispatch IDs are NOT primitive - they are handled by readBasicObjectFieldValue
-      isPrimitive = DispatchId.isPrimitive(dispatchId);
+      isPrimitiveField = DispatchId.isPrimitive(dispatchId);
       fieldConverter = d.getFieldConverter();
       nullable = d.isNullable();
       // descriptor.isTrackingRef() already includes the needToWriteRef check

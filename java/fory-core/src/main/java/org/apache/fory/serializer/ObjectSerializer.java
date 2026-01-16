@@ -131,6 +131,11 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   @Override
+  public void xwrite(MemoryBuffer buffer, T value) {
+    write(buffer, value);
+  }
+
+  @Override
   public void write(MemoryBuffer buffer, T value) {
     Fory fory = this.fory;
     RefResolver refResolver = this.refResolver;
@@ -154,18 +159,12 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     for (SerializationFieldInfo fieldInfo : otherFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
-      writeOtherFieldValue(binding, buffer, fieldInfo, fieldValue);
+      binding.write(fieldInfo, buffer, fieldValue);
     }
-  }
-
-  @Override
-  public void xwrite(MemoryBuffer buffer, T value) {
-    write(buffer, value);
   }
 
   private void writeBuildInFields(
       MemoryBuffer buffer, T value, Fory fory, RefResolver refResolver, TypeResolver typeResolver) {
-    boolean metaShareEnabled = fory.getConfig().isMetaShareEnabled();
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
@@ -174,52 +173,10 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         Object fieldValue = fieldAccessor.getObject(value);
         boolean needWrite =
             nullable
-                ? writeBasicNullableObjectFieldValue(fory, buffer, fieldValue, dispatchId)
-                : writeBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId);
+                ? writeNullableBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId)
+                : writeNotNullBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId);
         if (needWrite) {
-          Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
-          if (!metaShareEnabled || fieldInfo.useDeclaredTypeInfo) {
-            switch (fieldInfo.refMode) {
-              case NONE:
-                binding.write(buffer, serializer, fieldValue);
-                break;
-              case NULL_ONLY:
-                binding.writeNullable(buffer, fieldValue, serializer);
-                break;
-              case TRACKING:
-                // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
-                // consistent with jit serializer.
-                binding.writeRef(buffer, fieldValue, serializer);
-                break;
-              default:
-                throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
-            }
-          } else {
-            switch (fieldInfo.refMode) {
-              case NONE:
-                typeResolver.writeClassInfo(buffer, fieldInfo.classInfo);
-                binding.write(buffer, serializer, fieldValue);
-                break;
-              case NULL_ONLY:
-                if (fieldValue == null) {
-                  buffer.writeByte(Fory.NULL_FLAG);
-                } else {
-                  buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-                  typeResolver.writeClassInfo(buffer, fieldInfo.classInfo);
-                  binding.write(buffer, serializer, fieldValue);
-                }
-                break;
-              case TRACKING:
-                if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
-                  typeResolver.writeClassInfo(buffer, fieldInfo.classInfo);
-                  // No generics for field, no need to update `depth`.
-                  binding.write(buffer, serializer, fieldValue);
-                }
-                break;
-              default:
-                throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
-            }
-          }
+          binding.write(fieldInfo, buffer, fieldValue);
         }
       }
     }
@@ -257,8 +214,6 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
 
   public Object[] readFields(MemoryBuffer buffer) {
     Fory fory = this.fory;
-    RefResolver refResolver = this.refResolver;
-    TypeResolver typeResolver = this.typeResolver;
     if (fory.checkClassVersion()) {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);
@@ -273,7 +228,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         fieldValues[counter++] = Serializers.readPrimitiveValue(buffer, dispatchId);
       } else {
         Object fieldValue =
-            readFinalObjectFieldValue(binding, refResolver, typeResolver, fieldInfo, buffer);
+            readFinalObjectFieldValue(binding, fieldInfo, buffer);
         fieldValues[counter++] = fieldValue;
       }
     }
@@ -291,8 +246,6 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
 
   public T readAndSetFields(MemoryBuffer buffer, T obj) {
     Fory fory = this.fory;
-    RefResolver refResolver = this.refResolver;
-    TypeResolver typeResolver = this.typeResolver;
     if (fory.checkClassVersion()) {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);
@@ -307,7 +260,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
               ? readBasicNullableObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId)
               : readBasicObjectFieldValue(fory, buffer, obj, fieldAccessor, dispatchId))) {
         Object fieldValue =
-            readFinalObjectFieldValue(binding, refResolver, typeResolver, fieldInfo, buffer);
+            readFinalObjectFieldValue(binding, fieldInfo, buffer);
         fieldAccessor.putObject(obj, fieldValue);
       }
     }

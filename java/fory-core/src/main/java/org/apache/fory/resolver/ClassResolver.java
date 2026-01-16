@@ -710,9 +710,6 @@ public class ClassResolver extends TypeResolver {
       if (!ReflectionUtils.isMonomorphic(clz)) {
         return false;
       }
-      if (Map.class.isAssignableFrom(clz) || Collection.class.isAssignableFrom(clz)) {
-        return true;
-      }
       if (clz.isArray()) {
         Class<?> component = TypeUtils.getArrayComponent(clz);
         return isMonomorphic(component);
@@ -722,6 +719,7 @@ public class ClassResolver extends TypeResolver {
       if (Union.class.isAssignableFrom(clz)) {
         return true;
       }
+      // if internal registered and final, then taken as morphic
       return (isInternalRegistered(clz) || clz.isEnum());
     }
     return ReflectionUtils.isMonomorphic(clz);

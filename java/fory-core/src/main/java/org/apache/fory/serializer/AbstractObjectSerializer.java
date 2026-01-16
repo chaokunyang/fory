@@ -68,52 +68,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     this.objectCreator = objectCreator;
   }
 
-  static void writeOtherFieldValue(
-      SerializationBinding binding,
-      MemoryBuffer buffer,
-      SerializationFieldInfo fieldInfo,
-      Object fieldValue) {
-    if (fieldInfo.useDeclaredTypeInfo) {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          binding.writeNonRef(buffer, fieldValue, fieldInfo.serializer);
-          break;
-        case NULL_ONLY:
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            binding.writeNonRef(buffer, fieldValue, fieldInfo.serializer);
-          }
-          break;
-        case TRACKING:
-          binding.writeRef(buffer, fieldValue, fieldInfo.serializer);
-          break;
-        default:
-          throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
-      }
-    } else {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          binding.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-          break;
-        case NULL_ONLY:
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            binding.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-          }
-          break;
-        case TRACKING:
-          binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-          break;
-        default:
-          throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
-      }
-    }
-  }
-
   static void writeContainerFieldValue(
       SerializationBinding binding,
       RefResolver refResolver,
@@ -293,7 +247,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    *
    * @return true if field value isn't written by this function.
    */
-  static boolean writeBasicObjectFieldValue(
+  static boolean writeNotNullBasicObjectFieldValue(
       Fory fory, MemoryBuffer buffer, Object fieldValue, int dispatchId) {
     if (fieldValue == null) {
       throw new IllegalArgumentException(
@@ -375,7 +329,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * @return true if dispatchId is not a basic type or ref tracking is enabled, needing further
    *     write handling
    */
-  static boolean writeBasicNullableObjectFieldValue(
+  static boolean writeNullableBasicObjectFieldValue(
       Fory fory, MemoryBuffer buffer, Object fieldValue, int dispatchId) {
     if (!fory.isBasicTypesRefIgnored()) {
       return true; // let common path handle this.
@@ -511,65 +465,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * because primitive field doesn't write null flag.
    */
   static Object readFinalObjectFieldValue(
-      SerializationBinding binding,
-      RefResolver refResolver,
-      TypeResolver typeResolver,
-      SerializationFieldInfo fieldInfo,
-      MemoryBuffer buffer) {
-    Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
-    binding.incReadDepth();
-    Object fieldValue;
-    if (fieldInfo.useDeclaredTypeInfo) {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          fieldValue = binding.read(buffer, serializer);
-          break;
-        case NULL_ONLY:
-          fieldValue = binding.readNullable(buffer, serializer);
-          break;
-        case TRACKING:
-          // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
-          // consistent with jit serializer.
-          fieldValue = binding.readRef(buffer, serializer);
-          break;
-        default:
-          throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
-      }
-    } else {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
-          fieldValue = serializer.read(buffer);
-          break;
-        case NULL_ONLY:
-          {
-            byte headFlag = buffer.readByte();
-            if (headFlag == Fory.NULL_FLAG) {
-              binding.decDepth();
-              return null;
-            }
-            typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
-            fieldValue = serializer.read(buffer);
-          }
-          break;
-        case TRACKING:
-          {
-            int nextReadRefId = refResolver.tryPreserveRefId(buffer);
-            if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-              typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
-              fieldValue = serializer.read(buffer);
-              refResolver.setReadObject(nextReadRefId, fieldValue);
-            } else {
-              fieldValue = refResolver.getReadObject();
-            }
-          }
-          break;
-        default:
-          throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
-      }
-    }
-    binding.decDepth();
-    return fieldValue;
+      SerializationBinding binding, SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    return binding.read(fieldInfo, buffer);
   }
 
   /**
@@ -583,37 +480,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    */
   static Object readOtherFieldValue(
       SerializationBinding binding, SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    // Note: Enum has special handling for xlang compatibility - no type info for enum fields
-    if (fieldInfo.genericType.getCls().isEnum()) {
-      // Only read null flag when the field is nullable (for xlang compatibility)
-      if (fieldInfo.nullable && buffer.readByte() == Fory.NULL_FLAG) {
-        return null;
-      }
-      return fieldInfo.genericType.getSerializer(binding.typeResolver).read(buffer);
-    }
-    Object fieldValue;
-    switch (fieldInfo.refMode) {
-      case NONE:
-        binding.preserveRefId(-1);
-        fieldValue = binding.readNonRef(buffer, fieldInfo);
-        break;
-      case NULL_ONLY:
-        {
-          binding.preserveRefId(-1);
-          byte headFlag = buffer.readByte();
-          if (headFlag == Fory.NULL_FLAG) {
-            return null;
-          }
-          fieldValue = binding.readNonRef(buffer, fieldInfo);
-        }
-        break;
-      case TRACKING:
-        fieldValue = binding.readRef(buffer, fieldInfo);
-        break;
-      default:
-        throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
-    }
-    return fieldValue;
+    return binding.read(fieldInfo, buffer);
   }
 
   /**
@@ -787,25 +654,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       default:
         return true;
     }
-  }
-
-  /**
-   * Read a nullable primitive field value from buffer. Reads the null flag first and returns early
-   * if null.
-   *
-   * @param buffer the buffer to read from
-   * @param targetObject the object to set the field value on
-   * @param fieldAccessor the accessor to set the field value
-   * @param dispatchId the class ID of the primitive type
-   * @return true if dispatchId is not a primitive type and needs further read handling; false if
-   *     value was null or successfully read
-   */
-  static boolean readPrimitiveNullableFieldValue(
-      MemoryBuffer buffer, Object targetObject, FieldAccessor fieldAccessor, int dispatchId) {
-    if (buffer.readByte() == Fory.NULL_FLAG) {
-      return false;
-    }
-    return readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
   }
 
   /**

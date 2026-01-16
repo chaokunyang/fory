@@ -472,6 +472,12 @@ public final class Fory implements BaseFory {
     depth--;
   }
 
+  public void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfoHolder holder) {
+    ClassInfo classInfo = classResolver.getClassInfo(obj.getClass(), holder);
+    classResolver.writeClassInfo(buffer, classInfo);
+    writeData(buffer, classInfo, obj);
+  }
+
   public void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo) {
     classResolver.writeClassInfo(buffer, classInfo);
     Serializer serializer = classInfo.getSerializer();
@@ -523,6 +529,12 @@ public final class Fory implements BaseFory {
 
   public void xwriteNonRef(MemoryBuffer buffer, Object obj) {
     ClassInfo classInfo = xtypeResolver.writeClassInfo(buffer, obj);
+    xwriteData(buffer, classInfo, obj);
+  }
+
+  public void xwriteNonRef(MemoryBuffer buffer, Object obj, ClassInfoHolder holder) {
+    ClassInfo classInfo = xtypeResolver.getClassInfo(obj.getClass(), holder);
+    xtypeResolver.writeClassInfo(buffer, obj);
     xwriteData(buffer, classInfo, obj);
   }
 
@@ -879,6 +891,19 @@ public final class Fory implements BaseFory {
     }
   }
 
+  public Object readRef(MemoryBuffer buffer, ClassInfo classInfo) {
+    RefResolver refResolver = this.refResolver;
+    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+    if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
+      // ref value or not-null value
+      Object o = readDataInternal(buffer, classInfo);
+      refResolver.setReadObject(nextReadRefId, o);
+      return o;
+    } else {
+      return refResolver.getReadObject();
+    }
+  }
+
   public Object readRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
     RefResolver refResolver = this.refResolver;
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
@@ -996,6 +1021,38 @@ public final class Fory implements BaseFory {
     }
   }
 
+  private Object xreadDataInternal(MemoryBuffer buffer, ClassInfo classInfo) {
+    switch (classInfo.getClassId()) {
+      case Types.BOOL:
+        return buffer.readBoolean();
+      case Types.INT8:
+        return buffer.readByte();
+      case ClassResolver.CHAR_ID:
+        return buffer.readChar();
+      case Types.INT16:
+        return buffer.readInt16();
+      case Types.INT32:
+        if (compressInt) {
+          return buffer.readVarInt32();
+        } else {
+          return buffer.readInt32();
+        }
+      case Types.FLOAT32:
+        return buffer.readFloat32();
+      case Types.INT64:
+        return LongSerializer.readInt64(buffer, longEncoding);
+      case Types.FLOAT64:
+        return buffer.readFloat64();
+      case Types.STRING:
+        return stringSerializer.readJavaString(buffer);
+      default:
+        incReadDepth();
+        Object read = classInfo.getSerializer().xread(buffer);
+        depth--;
+        return read;
+    }
+  }
+
   public Object xreadRef(MemoryBuffer buffer) {
     RefResolver refResolver = this.refResolver;
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
@@ -1008,12 +1065,25 @@ public final class Fory implements BaseFory {
     }
   }
 
+  public Object xreadRef(MemoryBuffer buffer, ClassInfo classInfo) {
+    RefResolver refResolver = this.refResolver;
+    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+    if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
+      // ref value or not-null value
+      Object o = xreadDataInternal(buffer, classInfo);
+      refResolver.setReadObject(nextReadRefId, o);
+      return o;
+    } else {
+      return refResolver.getReadObject();
+    }
+  }
+
   public Object xreadRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
     RefResolver refResolver = this.refResolver;
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
     if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
       // ref value or not-null value
-      Object o = readDataInternal(buffer, xtypeResolver.readClassInfo(buffer, classInfoHolder));
+      Object o = xreadDataInternal(buffer, xtypeResolver.readClassInfo(buffer, classInfoHolder));
       refResolver.setReadObject(nextReadRefId, o);
       return o;
     } else {
@@ -1087,6 +1157,11 @@ public final class Fory implements BaseFory {
   public Object xreadNonRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
     ClassInfo classInfo = xtypeResolver.readClassInfo(buffer, classInfoHolder);
     return xreadNonRef(buffer, classInfo);
+  }
+
+  public Object xreadNullable(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
+    ClassInfo classInfo = xtypeResolver.readClassInfo(buffer, classInfoHolder);
+    return xreadNullable(buffer, classInfo.getSerializer());
   }
 
   public Object xreadNullable(MemoryBuffer buffer, Serializer<Object> serializer) {

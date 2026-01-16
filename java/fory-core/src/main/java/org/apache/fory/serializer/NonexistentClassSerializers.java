@@ -19,7 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import static org.apache.fory.serializer.AbstractObjectSerializer.writeOtherFieldValue;
 import static org.apache.fory.serializer.SerializationUtils.getTypeResolver;
 
 import java.util.ArrayList;
@@ -69,14 +68,12 @@ public final class NonexistentClassSerializers {
 
   public static final class NonexistentClassSerializer extends Serializer {
     private final ClassDef classDef;
-    private final ClassInfoHolder classInfoHolder;
     private final LongMap<ClassFieldsInfo> fieldsInfoMap;
     private final SerializationBinding binding;
 
     public NonexistentClassSerializer(Fory fory, ClassDef classDef) {
       super(fory, NonexistentClass.NonexistentMetaShared.class);
       this.classDef = classDef;
-      classInfoHolder = fory.getClassResolver().nilClassInfoHolder();
       fieldsInfoMap = new LongMap<>();
       binding = SerializationBinding.createBinding(fory);
       Preconditions.checkArgument(fory.getConfig().isMetaShareEnabled());
@@ -136,14 +133,7 @@ public final class NonexistentClassSerializers {
           // Use dispatch-based write to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
           Serializers.writePrimitiveValue(buffer, fieldValue, fieldInfo.dispatchId);
         } else {
-          if (fieldInfo.useDeclaredTypeInfo) {
-            // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
-            // consistent with jit serializer.
-            Serializer<Object> serializer = classInfo.getSerializer();
-            binding.writeRef(buffer, fieldValue, serializer);
-          } else {
-            binding.writeRef(buffer, fieldValue, classInfo);
-          }
+          binding.write(fieldInfo, buffer, fieldValue);
         }
       }
       Generics generics = fory.getGenerics();
@@ -154,7 +144,7 @@ public final class NonexistentClassSerializers {
       }
       for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
-        writeOtherFieldValue(binding, buffer, fieldInfo, fieldValue);
+        binding.write(fieldInfo, buffer, fieldValue);
       }
     }
 
@@ -185,27 +175,12 @@ public final class NonexistentClassSerializers {
           new NonexistentClass.NonexistentMetaShared(classDef);
       Fory fory = this.fory;
       RefResolver refResolver = fory.getRefResolver();
-      ClassResolver classResolver = fory.getClassResolver();
       refResolver.reference(obj);
       List<MapEntry> entries = new ArrayList<>();
       // read order: primitive,boxed,final,other,collection,map
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(classDef);
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
-        Object fieldValue;
-        if (fieldInfo.classInfo == null) {
-          // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
-          fieldValue = fory.readRef(buffer, classInfoHolder);
-        } else {
-          if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
-            // Use dispatch-based read to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
-            fieldValue = Serializers.readPrimitiveValue(buffer, fieldInfo.dispatchId);
-          } else {
-            fieldValue =
-                AbstractObjectSerializer.readFinalObjectFieldValue(
-                    binding, refResolver, classResolver, fieldInfo, buffer);
-          }
-        }
-        entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
+        entries.add(new MapEntry(fieldInfo.qualifiedFieldName, binding.read(fieldInfo, buffer)));
       }
       Generics generics = fory.getGenerics();
       for (SerializationFieldInfo fieldInfo : fieldsInfo.containerFields) {

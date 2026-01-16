@@ -34,7 +34,6 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
 
 /**
@@ -119,8 +118,6 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   private void writeFinalFields(MemoryBuffer buffer, T value) {
     Fory fory = this.fory;
-    RefResolver refResolver = this.refResolver;
-    boolean metaShareEnabled = fory.getConfig().isMetaShareEnabled();
     for (SerializationFieldInfo fieldInfo : buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       boolean nullable = fieldInfo.nullable;
@@ -128,30 +125,11 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       if (AbstractObjectSerializer.writePrimitiveFieldValue(
           buffer, value, fieldAccessor, dispatchId)) {
         Object fieldValue = fieldAccessor.getObject(value);
-        boolean writeBasicObjectResult =
-            nullable
-                ? AbstractObjectSerializer.writeBasicNullableObjectFieldValue(
-                    fory, buffer, fieldValue, dispatchId)
-                : AbstractObjectSerializer.writeBasicObjectFieldValue(
-                    fory, buffer, fieldValue, dispatchId);
-        if (writeBasicObjectResult) {
-          Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
-          if (!metaShareEnabled || fieldInfo.useDeclaredTypeInfo) {
-            if (!fieldInfo.trackingRef) {
-              binding.writeNullable(buffer, fieldValue, serializer, nullable);
-            } else {
-              binding.writeRef(buffer, fieldValue, serializer);
-            }
-          } else {
-            if (fieldInfo.trackingRef && serializer.needToWriteRef()) {
-              if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
-                typeResolver.writeClassInfo(buffer, fieldInfo.classInfo);
-                binding.write(buffer, serializer, fieldValue);
-              }
-            } else {
-              binding.writeNullable(buffer, fieldValue, serializer, nullable);
-            }
-          }
+        boolean needWrite =
+            nullable ? writeNullableBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId)
+                : writeNotNullBasicObjectFieldValue(fory, buffer, fieldValue, dispatchId);
+        if (needWrite) {
+          binding.write(fieldInfo, buffer, fieldValue);
         }
       }
     }
@@ -171,7 +149,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     for (SerializationFieldInfo fieldInfo : otherFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
-      AbstractObjectSerializer.writeOtherFieldValue(binding, buffer, fieldInfo, fieldValue);
+      binding.write(fieldInfo, buffer, fieldValue);
     }
   }
 
@@ -239,18 +217,17 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
                     fory, buffer, obj, fieldAccessor, dispatchId))) {
           Object fieldValue =
               AbstractObjectSerializer.readFinalObjectFieldValue(
-                  binding, refResolver, classResolver, fieldInfo, buffer);
+                  binding, fieldInfo, buffer);
           fieldAccessor.putObject(obj, fieldValue);
         }
       } else {
         // Field doesn't exist in current class - skip the value
-        if (MetaSharedSerializer.skipPrimitiveFieldValueFailed(
-            fory, fieldInfo.dispatchId, buffer)) {
+        if (!MetaSharedSerializer.skipPrimitiveFieldValue(fieldInfo, buffer)) {
           if (fieldInfo.classInfo == null) {
             fory.readRef(buffer, classInfoHolder);
           } else {
             AbstractObjectSerializer.readFinalObjectFieldValue(
-                binding, refResolver, classResolver, fieldInfo, buffer);
+                binding, fieldInfo, buffer);
           }
         }
       }
@@ -289,173 +266,9 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     return read(buffer);
   }
 
-  /** Returns the ClassDef for this layer. */
-  public ClassDef getLayerClassDef() {
-    return layerClassDef;
-  }
-
-  /** Returns the marker class used as key in metaContext.classMap. */
-  public Class<?> getLayerMarkerClass() {
-    return layerMarkerClass;
-  }
-
   /** Returns the number of fields in this layer. */
   public int getNumFields() {
     return buildInFields.length + containerFields.length + otherFields.length;
-  }
-
-  /**
-   * Write field values from an array. Used by putFields/writeFields in ObjectStreamSerializer.
-   *
-   * @param buffer the memory buffer to write to
-   * @param vals array of field values in the same order as fields are declared
-   */
-  public void writeFieldsValues(MemoryBuffer buffer, Object[] vals) {
-    // Write layer class meta using marker class as key (only if meta share is enabled)
-    if (fory.getConfig().isMetaShareEnabled()) {
-      writeLayerClassMeta(buffer);
-    }
-    // Write field values from array
-    int index = 0;
-    // Write final fields
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      Object fieldValue = vals[index++];
-      writeFieldValueFromArray(buffer, fieldInfo, fieldValue);
-    }
-    // Write container fields
-    Generics generics = fory.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      Object fieldValue = vals[index++];
-      AbstractObjectSerializer.writeContainerFieldValue(
-          binding, refResolver, typeResolver, generics, fieldInfo, buffer, fieldValue);
-    }
-    // Write other fields
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue = vals[index++];
-      AbstractObjectSerializer.writeOtherFieldValue(binding, buffer, fieldInfo, fieldValue);
-    }
-  }
-
-  private void writeFieldValueFromArray(
-      MemoryBuffer buffer, SerializationFieldInfo fieldInfo, Object fieldValue) {
-    int dispatchId = fieldInfo.dispatchId;
-    boolean nullable = fieldInfo.nullable;
-
-    // Handle primitives first
-    switch (dispatchId) {
-      case DispatchId.PRIMITIVE_BOOL:
-        buffer.writeBoolean((Boolean) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
-        buffer.writeByte((Byte) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_CHAR:
-        buffer.writeChar((Character) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
-        buffer.writeInt16((Short) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_INT32:
-        buffer.writeInt32((Integer) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_VARINT32:
-        buffer.writeVarInt32((Integer) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_UINT32:
-        buffer.writeInt32((Integer) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_VAR_UINT32:
-        buffer.writeVarUint32((Integer) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_INT64:
-        buffer.writeInt64((Long) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_VARINT64:
-        buffer.writeVarInt64((Long) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
-        buffer.writeTaggedInt64((Long) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_UINT64:
-        buffer.writeInt64((Long) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_VAR_UINT64:
-        buffer.writeVarUint64((Long) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
-        buffer.writeTaggedUint64((Long) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_FLOAT32:
-        buffer.writeFloat32((Float) fieldValue);
-        return;
-      case DispatchId.PRIMITIVE_FLOAT64:
-        buffer.writeFloat64((Double) fieldValue);
-        return;
-      default:
-        break;
-    }
-
-    // Handle objects
-    boolean metaShareEnabled = fory.getConfig().isMetaShareEnabled();
-    Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
-    if (!metaShareEnabled || fieldInfo.useDeclaredTypeInfo) {
-      if (!fieldInfo.trackingRef) {
-        binding.writeNullable(buffer, fieldValue, serializer, nullable);
-      } else {
-        binding.writeRef(buffer, fieldValue, serializer);
-      }
-    } else {
-      if (fieldInfo.trackingRef && serializer.needToWriteRef()) {
-        if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
-          typeResolver.writeClassInfo(buffer, fieldInfo.classInfo);
-          binding.write(buffer, serializer, fieldValue);
-        }
-      } else {
-        binding.writeNullable(buffer, fieldValue, serializer, nullable);
-      }
-    }
-  }
-
-  /**
-   * Read field values into an array. Used by readFields in ObjectStreamSerializer.
-   *
-   * @param buffer the memory buffer to read from
-   * @param vals array to store field values
-   */
-  public void readFields(MemoryBuffer buffer, Object[] vals) {
-    // Read and verify layer class meta (only if meta share is enabled)
-    if (fory.getConfig().isMetaShareEnabled()) {
-      readLayerClassMeta(buffer);
-    }
-    // Read field values into array
-    int index = 0;
-    // Read final fields
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      vals[index++] = readFieldValueToArray(buffer, fieldInfo);
-    }
-    // Read container fields
-    Generics generics = fory.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      vals[index++] =
-          AbstractObjectSerializer.readContainerFieldValue(binding, generics, fieldInfo, buffer);
-    }
-    // Read other fields
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      vals[index++] = AbstractObjectSerializer.readOtherFieldValue(binding, fieldInfo, buffer);
-    }
-  }
-
-  private Object readFieldValueToArray(MemoryBuffer buffer, SerializationFieldInfo fieldInfo) {
-    int dispatchId = fieldInfo.dispatchId;
-    // Handle primitives
-    if (DispatchId.isPrimitive(dispatchId)) {
-      return Serializers.readPrimitiveValue(buffer, dispatchId);
-    }
-    // Handle objects
-    return AbstractObjectSerializer.readFinalObjectFieldValue(
-        binding, refResolver, classResolver, fieldInfo, buffer);
   }
 
   /**

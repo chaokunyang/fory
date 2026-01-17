@@ -443,6 +443,38 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   /**
+   * Handle all numeric fields read include unsigned and compressed numbers. It also include
+   * fastpath for common type such as String.
+   */
+  static void readBuildInFieldValue(
+      SerializationBinding binding,
+      SerializationFieldInfo fieldInfo,
+      MemoryBuffer buffer,
+      Object targetObject) {
+    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+    int dispatchId = fieldInfo.dispatchId;
+    if (fieldInfo.refMode == RefMode.NONE) {
+      if (fieldInfo.isPrimitiveField) {
+        readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
+      } else {
+        readNotPrimitiveFieldValue(binding, buffer, targetObject, fieldInfo, dispatchId);
+      }
+    } else if (fieldInfo.refMode == RefMode.NULL_ONLY) {
+      if (buffer.readByte() == Fory.NULL_FLAG) {
+        return;
+      }
+      if (fieldInfo.isPrimitiveField) {
+        readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
+      } else {
+        readNotPrimitiveFieldValue(binding, buffer, targetObject, fieldInfo, dispatchId);
+      }
+    } else {
+      Object fieldValue = binding.readField(fieldInfo, buffer);
+      fieldAccessor.putObject(targetObject, fieldValue);
+    }
+  }
+
+  /**
    * Read a non-nullable basic object value from buffer and return it. Handles PRIMITIVE_*, and
    * STRING dispatch IDs with optimized fast paths.
    */
@@ -488,38 +520,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         return binding.fory.readJavaString(buffer);
       default:
         return binding.readField(fieldInfo, RefMode.NONE, buffer);
-    }
-  }
-
-  /**
-   * Handle all numeric fields read include unsigned and compressed numbers. It also include
-   * fastpath for common type such as String.
-   */
-  static void readBuildInFieldValue(
-      SerializationBinding binding,
-      SerializationFieldInfo fieldInfo,
-      MemoryBuffer buffer,
-      Object targetObject) {
-    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-    int dispatchId = fieldInfo.dispatchId;
-    if (fieldInfo.refMode == RefMode.NONE) {
-      if (fieldInfo.isPrimitiveField) {
-        readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
-      } else {
-        readNotPrimitiveFieldValue(binding, buffer, targetObject, fieldInfo, dispatchId);
-      }
-    } else if (fieldInfo.refMode == RefMode.NULL_ONLY) {
-      if (buffer.readByte() == Fory.NULL_FLAG) {
-        return;
-      }
-      if (fieldInfo.isPrimitiveField) {
-        readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
-      } else {
-        readNotPrimitiveFieldValue(binding, buffer, targetObject, fieldInfo, dispatchId);
-      }
-    } else {
-      Object fieldValue = binding.readField(fieldInfo, buffer);
-      fieldAccessor.putObject(targetObject, fieldValue);
     }
   }
 

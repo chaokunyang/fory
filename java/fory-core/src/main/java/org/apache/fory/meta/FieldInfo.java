@@ -135,8 +135,7 @@ public final class FieldInfo implements Serializable {
           Class<?> declaredPrimitive = declared.unwrap().getRawType();
           Class<?> remotePrimitive = typeRef.unwrap().getRawType();
           boolean bothPrimitives = declaredPrimitive.isPrimitive() && remotePrimitive.isPrimitive();
-          boolean samePrimitiveType =
-              bothPrimitives && declaredPrimitive.equals(remotePrimitive);
+          boolean samePrimitiveType = bothPrimitives && declaredPrimitive.equals(remotePrimitive);
           // Set field to null if types are incompatible (not the same primitive type)
           if (!samePrimitiveType) {
             builder.field(null);

@@ -1740,7 +1740,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     if (typeResolver(r -> r.needToWriteRef(typeRef))) {
       return readRef(buffer, callback, () -> deserializeForNotNull(buffer, typeRef, null));
     } else {
-      if (typeRef.isPrimitive()) {
+      if (typeRef.isPrimitive() && !nullable) {
+        // Only skip null check if BOTH: local type is primitive AND sender didn't write null flag
         Expression value = deserializeForNotNull(buffer, typeRef, null);
         // Should put value expr ahead to avoid generated code in wrong scope.
         return new ListExpression(value, callback.apply(value));

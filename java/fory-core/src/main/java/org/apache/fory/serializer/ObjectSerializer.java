@@ -41,6 +41,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.MurmurHash3;
+import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.Utils;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
@@ -103,11 +104,12 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     DescriptorGrouper grouper = typeResolver.createDescriptorGrouper(descriptors, false);
     descriptors = grouper.getSortedDescriptors();
     if (Utils.DEBUG_OUTPUT_ENABLED) {
-      LOG.info("========== ObjectSerializer sorted descriptors for {} ==========", cls.getName());
+      LOG.info("========== ObjectSerializer {} sorted descriptors for {} ==========",
+          descriptors.size(), cls.getName());
       for (Descriptor d : descriptors) {
         LOG.info(
             "  {} -> {}, ref {}, nullable {}",
-            d.getName(),
+            StringUtils.toSnakeCase(d.getName()),
             d.getTypeName(),
             d.isTrackingRef(),
             d.isNullable());

@@ -25,6 +25,6 @@ public class Utils {
   public static final boolean DEBUG_OUTPUT_ENABLED;
 
   static {
-    DEBUG_OUTPUT_ENABLED = "1".equals(System.getenv("ENABLE_FORY_DEBUG_OUTPUT"));
+    DEBUG_OUTPUT_ENABLED = true;
   }
 }

@@ -43,6 +43,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.Utils;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class NonexistentClassSerializers {
@@ -73,6 +74,13 @@ public final class NonexistentClassSerializers {
       fieldsInfoMap = new LongMap<>();
       binding = SerializationBinding.createBinding(fory);
       Preconditions.checkArgument(fory.getConfig().isMetaShareEnabled());
+      if (Utils.DEBUG_OUTPUT_ENABLED && classDef != null) {
+        LOG.info("========== NonexistentClassSerializer ClassDef for {} ==========", type.getName());
+        LOG.info("ClassDef fieldsInfo count: {}", classDef.getFieldCount());
+        for (int i = 0; i < classDef.getFieldsInfo().size(); i++) {
+          LOG.info("  [{}] {}", i, classDef.getFieldsInfo().get(i));
+        }
+      }
     }
 
     /**
@@ -158,19 +166,19 @@ public final class NonexistentClassSerializers {
       refResolver.reference(obj);
       List<MapEntry> entries = new ArrayList<>();
       // read order: primitive,boxed,final,other,collection,map
-      ClassFieldsInfo fieldsInfo = getClassFieldsInfo(classDef);
-      for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
+      ClassFieldsInfo allFieldsInfo = getClassFieldsInfo(classDef);
+      for (SerializationFieldInfo fieldInfo : allFieldsInfo.buildInFields) {
         Object fieldValue =
             AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       Generics generics = fory.getGenerics();
-      for (SerializationFieldInfo fieldInfo : fieldsInfo.containerFields) {
+      for (SerializationFieldInfo fieldInfo : allFieldsInfo.containerFields) {
         Object fieldValue =
             AbstractObjectSerializer.readContainerFieldValue(binding, generics, fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
-      for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
+      for (SerializationFieldInfo fieldInfo : allFieldsInfo.otherFields) {
         Object fieldValue = binding.readField(fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }

@@ -162,6 +162,10 @@ public class ClassDef implements Serializable {
     return encoded;
   }
 
+  public int getFieldCount() {
+    return fieldsInfo.size();
+  }
+
   @Override
   public boolean equals(Object o) {
     if (o == null || getClass() != o.getClass()) {

@@ -64,6 +64,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.SerializableSupplier;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -105,12 +106,13 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     Collection<Descriptor> p = descriptors;
     DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(p, false));
     if (org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
-      LOG.info("========== sorted descriptors for {} ==========", beanClass.getSimpleName());
+      LOG.info("========== {} sorted descriptors for {} ==========",
+          descriptors.size(), beanClass.getSimpleName());
       List<Descriptor> sortedDescriptors = grouper.getSortedDescriptors();
       for (Descriptor d : sortedDescriptors) {
         LOG.info(
             "  {} -> {}, ref {}, nullable {}",
-            d.getName(),
+            StringUtils.toSnakeCase(d.getName()),
             d.getTypeName(),
             d.isTrackingRef(),
             d.isNullable());

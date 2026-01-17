@@ -43,6 +43,7 @@ import org.apache.fory.type.Types;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.Utils;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
@@ -84,7 +85,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         fory.getConfig().isMetaShareEnabled(), "Meta share must be enabled.");
     if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info("========== MetaSharedSerializer ClassDef for {} ==========", type.getName());
-      LOG.info("ClassDef fieldsInfo count: {}", classDef.getFieldsInfo().size());
+      LOG.info("ClassDef fieldsInfo count: {}", classDef.getFieldCount());
       for (int i = 0; i < classDef.getFieldsInfo().size(); i++) {
         LOG.info("  [{}] {}", i, classDef.getFieldsInfo().get(i));
       }
@@ -98,7 +99,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       for (Descriptor d : descriptorGrouper.getSortedDescriptors()) {
         LOG.info(
             "  {} -> {}, ref {}, nullable {}, type id {}",
-            d.getName(),
+            StringUtils.toSnakeCase(d.getName()),
             d.getTypeName(),
             d.isTrackingRef(),
             d.isNullable(),

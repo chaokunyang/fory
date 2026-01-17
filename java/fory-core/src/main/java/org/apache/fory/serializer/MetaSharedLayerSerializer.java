@@ -299,4 +299,42 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       }
     }
   }
+
+  /**
+   * Skip field data in the buffer without setting it to any object. This is used for schema
+   * evolution when a class layer exists in the sender but not in the receiver. The layer meta
+   * should already be consumed before calling this method.
+   *
+   * @param buffer the memory buffer to read from
+   * @param binding the serialization binding for reading field values
+   */
+  public void skipFields(MemoryBuffer buffer, SerializationBinding binding) {
+    // Skip all fields in order: buildIn, container, other
+    // We read the values but don't set them anywhere (they're discarded)
+    skipBuildInFields(buffer, binding);
+    skipContainerFields(buffer, binding);
+    skipOtherFields(buffer, binding);
+  }
+
+  private void skipBuildInFields(MemoryBuffer buffer, SerializationBinding binding) {
+    for (SerializationFieldInfo fieldInfo : buildInFields) {
+      // Read the field value (discarding the result) to advance buffer position
+      FieldSkipper.skipField(binding, fieldInfo, buffer);
+    }
+  }
+
+  private void skipContainerFields(MemoryBuffer buffer, SerializationBinding binding) {
+    Generics generics = fory.getGenerics();
+    for (SerializationFieldInfo fieldInfo : containerFields) {
+      // Read container field value to advance buffer position
+      AbstractObjectSerializer.readContainerFieldValue(binding, generics, fieldInfo, buffer);
+    }
+  }
+
+  private void skipOtherFields(MemoryBuffer buffer, SerializationBinding binding) {
+    for (SerializationFieldInfo fieldInfo : otherFields) {
+      // Read field value to advance buffer position
+      binding.readField(fieldInfo, buffer);
+    }
+  }
 }

@@ -186,8 +186,6 @@ def bump_java_version(new_version):
         "integration_tests/graalvm_tests",
         "integration_tests/jdk_compatibility_tests",
         "integration_tests/jpms_tests",
-        "integration_tests/latest_jdk_tests",
-        "integration_tests/latest_jdk_tests",
         "benchmarks/java_benchmark",
         "java/fory-core",
         "java/fory-format",
@@ -195,6 +193,7 @@ def bump_java_version(new_version):
         "java/fory-extensions",
         "java/fory-test-core",
         "java/fory-testsuite",
+        "java/fory-latest-jdk-tests",
     ]:
         _bump_version(p, "pom.xml", new_version, _update_pom_parent_version)
     # mvn versions:set too slow

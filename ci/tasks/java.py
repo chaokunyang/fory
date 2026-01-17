@@ -175,12 +175,6 @@ def run_jdk17_plus(java_version="17"):
     common.exec_cmd("mvn -T10 --batch-mode --no-transfer-progress install")
 
     logging.info("Executing fory java tests succeeds")
-    logging.info("Executing latest_jdk_tests")
-
-    common.cd_project_subdir("integration_tests/latest_jdk_tests")
-    common.exec_cmd("mvn -T10 -B --no-transfer-progress clean test")
-
-    logging.info("Executing latest_jdk_tests succeeds")
 
 
 def run_windows_java21():
@@ -217,17 +211,6 @@ def run_integration_tests():
     logging.info("benchmark tests")
     common.cd_project_subdir("benchmarks/java_benchmark")
     common.exec_cmd("mvn -T10 -B --no-transfer-progress clean test install -Pjmh")
-
-    logging.info("Start latest jdk tests")
-    common.cd_project_subdir("integration_tests/latest_jdk_tests")
-    logging.info("latest_jdk_tests: JDK 21")
-
-    # Set Java 21 as the current JDK
-    java_home = os.path.join(common.PROJECT_ROOT_DIR, JDKS["21"])
-    os.environ["JAVA_HOME"] = java_home
-    os.environ["PATH"] = f"{java_home}/bin:{os.environ.get('PATH', '')}"
-
-    common.exec_cmd("mvn -T10 -B --no-transfer-progress clean test")
 
     logging.info("Start JPMS tests")
     common.cd_project_subdir("integration_tests/jpms_tests")

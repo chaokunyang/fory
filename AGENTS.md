@@ -296,9 +296,6 @@ it_dir=$(pwd)
 # Run graalvm tests
 cd $it_dir/graalvm_tests && mvn -T16 -DskipTests=true -Pnative package && target/main
 
-# Run latest_jdk_tests
-cd $it_dir/latest_jdk_tests && mvn -T16 test
-
 # Run JDK compatibility tests
 cd $it_dir/jdk_compatibility_tests && mvn -T16 test
 
@@ -499,7 +496,6 @@ Fory rust provides macro-based serialization and deserialization. Fory rust cons
   - Note that fory use codegen to support graalvm instead of reflection, fory don't use `reflect-config.json` for
     serialization, this is the core advantage of compared to graalvm JDK serialization.
 - **jdk_compatibility_tests**: test suite for fory serialization compatibility between multiple JDK versions
-- **latest_jdk_tests**: test suite for `jdk17+` versions
 
 ## Key Development Guidelines
 

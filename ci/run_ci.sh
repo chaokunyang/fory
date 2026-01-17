@@ -182,12 +182,6 @@ integration_tests() {
   echo "benchmark tests"
   cd "$ROOT"/benchmarks/java_benchmark
   mvn -T10 -B --no-transfer-progress clean test install -Pjmh
-  echo "Start latest jdk tests"
-  cd "$ROOT"/integration_tests/latest_jdk_tests
-  echo "latest_jdk_tests: JDK 21"
-  export JAVA_HOME="$ROOT/zulu21.28.85-ca-jdk21.0.0-linux_x64"
-  export PATH=$JAVA_HOME/bin:$PATH
-  mvn -T10 -B --no-transfer-progress clean test
   echo "Start JPMS tests"
   cd "$ROOT"/integration_tests/jpms_tests
   mvn -T10 -B --no-transfer-progress clean compile
@@ -220,10 +214,6 @@ jdk17_plus_tests() {
     exit $testcode
   fi
   echo "Executing fory java tests succeeds"
-  echo "Executing latest_jdk_tests"
-  cd "$ROOT"/integration_tests/latest_jdk_tests
-  mvn -T10 -B --no-transfer-progress clean test
-  echo "Executing latest_jdk_tests succeeds"
 }
 
 kotlin_tests() {

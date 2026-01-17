@@ -156,10 +156,26 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       readLayerClassMeta(buffer);
     }
     // Read fields in order: final, container, other
-    readFinalFields(buffer, obj);
-    readContainerFields(buffer, obj);
-    readUserTypeFields(buffer, obj);
+    readFieldsOnly(buffer, obj);
     return obj;
+  }
+
+  /**
+   * Read fields only, without reading layer class meta. This is used when the caller has already
+   * read and processed the layer class meta (e.g., for schema evolution where different senders may
+   * have different ClassDefs for the same layer).
+   *
+   * @param buffer the memory buffer to read from
+   * @param obj the object to set field values on
+   * @return the object with fields set
+   */
+  @SuppressWarnings("unchecked")
+  public T readFieldsOnly(MemoryBuffer buffer, Object obj) {
+    // Read fields in order: final, container, other
+    readFinalFields(buffer, (T) obj);
+    readContainerFields(buffer, (T) obj);
+    readUserTypeFields(buffer, (T) obj);
+    return (T) obj;
   }
 
   private void readLayerClassMeta(MemoryBuffer buffer) {
@@ -169,7 +185,6 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     }
     int indexMarker = buffer.readVarUint32Small14();
     boolean isRef = (indexMarker & 1) == 1;
-    int index = indexMarker >>> 1;
     if (isRef) {
       // Reference to previously read type - already in readClassInfos, nothing to do
     } else {

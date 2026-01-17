@@ -25,14 +25,21 @@ import static org.testng.Assert.assertTrue;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import java.lang.reflect.Array;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.TestUtils;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.test.bean.Struct;
@@ -361,5 +368,257 @@ public class NonexistentClassSerializersTest extends ForyTestBase {
         foryBuilder().withDeserializeNonexistentClass(false).withClassLoader(classLoader).build();
     byte[] bytes = fory.serialize(pojo);
     assertThrowsCause(RuntimeException.class, () -> fory2.deserialize(bytes));
+  }
+
+
+  /**
+   * Simple test class with primitive types for NonexistentClass serialization testing. Avoids
+   * collection types which require complex type registration in xlang mode.
+   */
+  @Data
+  static class SimpleTestClass {
+    // Primitive fields
+    byte byteField;
+    short shortField;
+    int intField;
+    long longField;
+    float floatField;
+    double doubleField;
+    boolean boolField;
+
+    // Boxed fields
+    Integer boxedInt;
+    Long boxedLong;
+    Float boxedFloat;
+    Double boxedDouble;
+    Boolean boxedBool;
+
+    // String field
+    String stringField;
+
+    // Nullable fields
+    @ForyField(nullable = true)
+    Integer nullableInt;
+
+    @ForyField(nullable = true)
+    String nullableString;
+  }
+
+  /** Create a populated test object with all fields set. */
+  private static SimpleTestClass createTestObject() {
+    SimpleTestClass obj = new SimpleTestClass();
+    // Primitive fields
+    obj.byteField = 1;
+    obj.shortField = 2;
+    obj.intField = 42;
+    obj.longField = 123456789L;
+    obj.floatField = 1.5f;
+    obj.doubleField = 2.5;
+    obj.boolField = true;
+
+    // Boxed fields
+    obj.boxedInt = 10;
+    obj.boxedLong = 20L;
+    obj.boxedFloat = 1.1f;
+    obj.boxedDouble = 2.2;
+    obj.boxedBool = true;
+
+    // String field
+    obj.stringField = "hello";
+
+    // Nullable fields - set values
+    obj.nullableInt = 100;
+    obj.nullableString = "nullable_value";
+
+    return obj;
+  }
+
+  /**
+   * Test that NonexistentClass correctly preserves field values when deserializing an unknown
+   * class. This simulates the scenario where fory2 doesn't have the class registered, so it
+   * deserializes to NonexistentMetaShared.
+   */
+  @Test(dataProvider = "language")
+  public void testNonexistentClassDeserializationPreservesValues(Language language) {
+    // Fory1: serializer with class registered
+    Fory fory1 =
+        Fory.builder()
+            .withLanguage(language)
+            .withCodegen(false)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory1.register(SimpleTestClass.class, "test.SimpleTestClass");
+
+    // Fory2: deserializer without class registered - will use NonexistentClassSerializer
+    Fory fory2 =
+        Fory.builder()
+            .withLanguage(language)
+            .withCodegen(false)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    // Don't register SimpleTestClass - fory2 doesn't know this class
+
+    // Create and serialize object with fory1
+    SimpleTestClass obj = createTestObject();
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(1024);
+    fory1.serialize(buffer, obj);
+
+    // Convert original object to map for comparison
+    Map<String, Object> expectedMap = TestUtils.objectToMap(fory1, obj);
+
+    // Deserialize with fory2 - should return NonexistentMetaShared
+    buffer.readerIndex(0);
+    Object result = fory2.deserialize(buffer);
+
+    // Verify result is NonexistentMetaShared
+    assertEquals(result.getClass(), NonexistentClass.NonexistentMetaShared.class);
+
+    NonexistentClass.NonexistentMetaShared nonexistent =
+        (NonexistentClass.NonexistentMetaShared) result;
+
+    // Convert NonexistentMetaShared to a map keyed by simple field name
+    Map<String, Object> actualMap = new HashMap<>();
+    for (Object key : nonexistent.keySet()) {
+      String qualifiedKey = (String) key;
+      // Extract simple field name from "className.fieldName"
+      String simpleFieldName = qualifiedKey.substring(qualifiedKey.lastIndexOf('.') + 1);
+      actualMap.put(simpleFieldName, nonexistent.get(key));
+    }
+
+    // Verify all field values are preserved (compare by simple field name)
+    for (Map.Entry<String, Object> entry : expectedMap.entrySet()) {
+      String qualifiedFieldName = entry.getKey();
+      String simpleFieldName =
+          qualifiedFieldName.substring(qualifiedFieldName.lastIndexOf('.') + 1);
+      Object expectedValue = entry.getValue();
+      Object actualValue = actualMap.get(simpleFieldName);
+
+      assertEquals(
+          actualValue, expectedValue, String.format("Field '%s' value mismatch", simpleFieldName));
+    }
+  }
+
+  /** Test NonexistentClass with null values in nullable fields. */
+  @Test(dataProvider = "language")
+  public void testNonexistentClassDeserializationWithNulls(Language language) {
+    // Fory1: serializer with class registered
+    Fory fory1 =
+        Fory.builder()
+            .withLanguage(language)
+            .withCodegen(false)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory1.register(SimpleTestClass.class, "test.SimpleTestClass");
+
+    // Fory2: deserializer without class registered
+    Fory fory2 =
+        Fory.builder()
+            .withLanguage(language)
+            .withCodegen(false)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+
+    // Create object with null nullable fields
+    SimpleTestClass obj = createTestObject();
+    obj.nullableInt = null;
+    obj.nullableString = null;
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(1024);
+    fory1.serialize(buffer, obj);
+
+    Map<String, Object> expectedMap = TestUtils.objectToMap(fory1, obj);
+
+    buffer.readerIndex(0);
+    Object result = fory2.deserialize(buffer);
+
+    assertEquals(result.getClass(), NonexistentClass.NonexistentMetaShared.class);
+    NonexistentClass.NonexistentMetaShared nonexistent =
+        (NonexistentClass.NonexistentMetaShared) result;
+
+    // Convert NonexistentMetaShared to a map keyed by simple field name
+    Map<String, Object> actualMap = new HashMap<>();
+    for (Object key : nonexistent.keySet()) {
+      String qualifiedKey = (String) key;
+      String simpleFieldName = qualifiedKey.substring(qualifiedKey.lastIndexOf('.') + 1);
+      actualMap.put(simpleFieldName, nonexistent.get(key));
+    }
+
+    // Verify values including nulls (compare by simple field name)
+    for (Map.Entry<String, Object> entry : expectedMap.entrySet()) {
+      String qualifiedFieldName = entry.getKey();
+      String simpleFieldName =
+          qualifiedFieldName.substring(qualifiedFieldName.lastIndexOf('.') + 1);
+      Object expectedValue = entry.getValue();
+      Object actualValue = actualMap.get(simpleFieldName);
+
+      assertEquals(
+          actualValue, expectedValue, String.format("Field '%s' value mismatch", simpleFieldName));
+    }
+  }
+
+  /**
+   * Test that NonexistentMetaShared can be serialized and deserialized again by the same Fory
+   * instance that doesn't know the class. This verifies that unknown class data is preserved across
+   * serialization cycles.
+   */
+  @Test(dataProvider = "language")
+  public void testNonexistentClassRoundTripWithinSameFory(Language language) {
+    // Fory1: knows the class
+    Fory fory1 =
+        Fory.builder()
+            .withLanguage(language)
+            .withCodegen(false)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+    fory1.register(SimpleTestClass.class, "test.SimpleTestClass");
+
+    // Fory2: doesn't know the class
+    Fory fory2 =
+        Fory.builder()
+            .withLanguage(language)
+            .withCodegen(false)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .build();
+
+    // Step 1: Serialize with fory1
+    SimpleTestClass original = createTestObject();
+    Map<String, Object> expectedMap = TestUtils.objectToMap(fory1, original);
+    MemoryBuffer buffer1 = MemoryBuffer.newHeapBuffer(1024);
+    fory1.serialize(buffer1, original);
+
+    // Step 2: Deserialize with fory2 (gets NonexistentMetaShared)
+    buffer1.readerIndex(0);
+    Object nonexistent1 = fory2.deserialize(buffer1);
+    assertEquals(nonexistent1.getClass(), NonexistentClass.NonexistentMetaShared.class);
+
+    // Step 3: Serialize NonexistentMetaShared with fory2
+    byte[] bytes = fory2.serialize(nonexistent1);
+
+    // Step 4: Deserialize again with fory2 (should get NonexistentMetaShared with same values)
+    Object nonexistent2 = fory2.deserialize(bytes);
+    assertEquals(nonexistent2.getClass(), NonexistentClass.NonexistentMetaShared.class);
+
+    // Verify values are preserved across the round-trip
+    NonexistentClass.NonexistentMetaShared result =
+        (NonexistentClass.NonexistentMetaShared) nonexistent2;
+    Map<String, Object> actualMap = new HashMap<>();
+    for (Object key : result.keySet()) {
+      String qualifiedKey = (String) key;
+      String simpleFieldName = qualifiedKey.substring(qualifiedKey.lastIndexOf('.') + 1);
+      actualMap.put(simpleFieldName, result.get(key));
+    }
+
+    for (Map.Entry<String, Object> entry : expectedMap.entrySet()) {
+      String qualifiedFieldName = entry.getKey();
+      String simpleFieldName =
+          qualifiedFieldName.substring(qualifiedFieldName.lastIndexOf('.') + 1);
+      Object expectedValue = entry.getValue();
+      Object actualValue = actualMap.get(simpleFieldName);
+
+      assertEquals(
+          actualValue,
+          expectedValue,
+          String.format("Field '%s' value mismatch after round-trip", simpleFieldName));
+    }
   }
 }

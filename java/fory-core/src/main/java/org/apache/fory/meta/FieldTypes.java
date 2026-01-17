@@ -163,25 +163,22 @@ public class FieldTypes {
     } else {
       if (rawType.isEnum()) {
         return new EnumFieldType(nullable, xtypeId);
-      } else if (isXlang
-          && !Types.isUserDefinedType((byte) xtypeId)
-          && resolver.isRegisteredById(rawType)) {
-        return new RegisteredFieldType(nullable, trackingRef, xtypeId);
-      } else if (!isXlang && resolver.isRegisteredById(rawType)) {
-        Short classId = ((ClassResolver) resolver).getRegisteredClassId(rawType);
-        return new RegisteredFieldType(nullable, trackingRef, classId);
-      } else {
-        if (rawType.isArray()) {
-          Class<?> elemType = rawType.getComponentType();
-          while (elemType.isArray()) {
-            elemType = elemType.getComponentType();
-          }
-          if (isXlang && !elemType.isPrimitive()) {
-            return new CollectionFieldType(
-                xtypeId,
-                nullable,
-                trackingRef,
-                buildFieldType(resolver, null, GenericType.build(elemType)));
+      }
+      if (rawType.isArray()) {
+        Class<?> elemType = rawType.getComponentType();
+        if (elemType.isPrimitive()) {
+          return new RegisteredFieldType(nullable, trackingRef, xtypeId);
+        }
+        if (isXlang) {
+          // primitive array has bee handled before
+          return new CollectionFieldType(
+              xtypeId,
+              nullable,
+              trackingRef,
+              buildFieldType(resolver, null, GenericType.build(elemType)));
+        } else {
+          if (((ClassResolver)resolver).isInternalRegistered(rawType)) {
+            return new RegisteredFieldType(nullable, trackingRef, xtypeId);
           }
           Tuple2<Class<?>, Integer> arrayComponentInfo = getArrayComponentInfo(rawType);
           return new ArrayFieldType(
@@ -191,6 +188,13 @@ public class FieldTypes {
               buildFieldType(resolver, null, GenericType.build(arrayComponentInfo.f0)),
               arrayComponentInfo.f1);
         }
+      }
+      if (isXlang && !Types.isUserDefinedType((byte) xtypeId) && resolver.isRegisteredById(rawType)) {
+        return new RegisteredFieldType(nullable, trackingRef, xtypeId);
+      } else if (!isXlang && resolver.isRegisteredById(rawType)) {
+        Short classId = ((ClassResolver) resolver).getRegisteredClassId(rawType);
+        return new RegisteredFieldType(nullable, trackingRef, classId);
+      } else {
         return new ObjectFieldType(xtypeId, nullable, trackingRef);
       }
     }
@@ -523,7 +527,7 @@ public class FieldTypes {
     }
 
     @Override
-    public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
+    public TypeRef<?> toTypeToken(TypeResolver resolver, TypeRef<?> declared) {
       // TODO support preserve element TypeExtMeta
       Class<?> declaredClass;
       TypeRef<?> declElementType;
@@ -542,34 +546,34 @@ public class FieldTypes {
           declElementType = declElementType.resolveAllWildcards();
         }
       }
-      TypeRef<?> elementType = this.elementType.toTypeToken(classResolver, declElementType);
+      TypeRef<?> elementType = this.elementType.toTypeToken(resolver, declElementType);
       if (declared == null) {
         return collectionOf(elementType, new TypeExtMeta(xtypeId, nullable, trackingRef));
       }
-      TypeRef<? extends Collection<?>> collectionTypeRef =
-          collectionOf(declaredClass, elementType, new TypeExtMeta(xtypeId, nullable, trackingRef));
       if (!declaredClass.isArray()) {
         if (declElementType.equals(elementType)) {
           return declared;
         }
-        return collectionTypeRef;
+        return collectionOf(declaredClass, elementType, new TypeExtMeta(xtypeId, nullable, trackingRef));
       }
-      Tuple2<Class<?>, Integer> info = TypeUtils.getArrayComponentInfo(declaredClass);
-      List<TypeRef<?>> typeRefs = new ArrayList<>(info.f1 + 1);
-      typeRefs.add(collectionTypeRef);
-      for (int i = 0; i < info.f1; i++) {
-        typeRefs.add(TypeUtils.getElementType(typeRefs.get(i)));
+      // Build array type from element type
+      // elementType could be base type (int) or intermediate array (int[])
+      // Calculate how many dimensions to add
+      int declaredDimensions = getArrayDimensions(declaredClass);
+      Class<?> elemRawType = elementType.getRawType();
+      int elementDimensions = elemRawType.isArray() ? getArrayDimensions(elemRawType) : 0;
+      int dimensionsToAdd = declaredDimensions - elementDimensions;
+      TypeRef<?> currentType = elementType;
+      for (int i = 0; i < dimensionsToAdd; i++) {
+        Class<?> arrayClass = Array.newInstance(currentType.getRawType(), 0).getClass();
+        // Apply field metadata (nullable, trackingRef) to outermost array only
+        TypeExtMeta meta =
+            (i == dimensionsToAdd - 1)
+                ? new TypeExtMeta(xtypeId, nullable, trackingRef)
+                : currentType.getTypeExtMeta();
+        currentType = TypeRef.of(arrayClass, meta);
       }
-      Collections.reverse(typeRefs);
-      for (int i = 1; i < typeRefs.size(); i++) {
-        TypeRef<?> arrayType = typeRefs.get(i - 1);
-        TypeRef<?> typeRef =
-            TypeRef.of(
-                Array.newInstance(arrayType.getRawType(), 1).getClass(),
-                typeRefs.get(i).getTypeExtMeta());
-        typeRefs.set(i, typeRef);
-      }
-      return typeRefs.get(typeRefs.size() - 1);
+      return currentType;
     }
 
     @Override

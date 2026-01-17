@@ -735,7 +735,11 @@ public class XtypeResolver extends TypeResolver {
       case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
         assert shareMeta : "Meta share must be enabled for compatible mode";
-        writeSharedClassMeta(buffer, classInfo);
+        // Skip writeSharedClassMeta for NonexistentMetaShared since
+        // NonexistentClassSerializer.writeClassDef will handle writing the correct classDef.
+        if (classInfo.cls != NonexistentMetaShared.class) {
+          writeSharedClassMeta(buffer, classInfo);
+        }
         break;
       default:
         break;

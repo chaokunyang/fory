@@ -75,4 +75,5 @@ public class MetaSharedXlangTest extends ForyTestBase {
     s.arr = new int[][] {{1, 2}, {3, 4}};
     serDeCheck(fory, s);
   }
+
 }

@@ -156,12 +156,12 @@ public class RecordXlangTest {
    *
    * <ul>
    *   <li>Group 1 (non-nullable in Java): primitives, boxed types, and reference types
-   *   <li>Group 2 (nullable in Java): boxed types and reference types with
-   *       @ForyField(nullable=true)
+   *   <li>Group 2 (nullable in Java): boxed types and reference types
+   *       with @ForyField(nullable=true)
    * </ul>
    *
-   * <p>In Go, Group 1 fields are nullable (*int8, *int16, etc.) and Group 2 fields are
-   * non-nullable (int32, int64, etc.) - this tests schema evolution with inverted nullability.
+   * <p>In Go, Group 1 fields are nullable (*int8, *int16, etc.) and Group 2 fields are non-nullable
+   * (int32, int64, etc.) - this tests schema evolution with inverted nullability.
    */
   public record NullableRecordCompatible(
       // Group 1: Non-nullable in Java (nullable in Go with pointer types)
@@ -682,6 +682,94 @@ public class RecordXlangTest {
             );
 
     Assert.assertEquals(result, expected);
+  }
+
+  // ==================== Reference Tracking Tests ====================
+
+  /** Record for inner struct in reference tracking tests. */
+  public record RefInnerRecord(int id, String name) {}
+
+  /**
+   * Record for outer struct in reference tracking tests. Contains two fields that can point to the
+   * same RefInnerRecord instance.
+   */
+  public record RefOuterRecord(
+      @ForyField(ref = true, nullable = true, dynamic = ForyField.Dynamic.FALSE)
+          RefInnerRecord inner1,
+      @ForyField(ref = true, nullable = true, dynamic = ForyField.Dynamic.FALSE)
+          RefInnerRecord inner2) {}
+
+  /**
+   * Test reference tracking with Record in SCHEMA_CONSISTENT mode. Creates an outer struct with two
+   * fields pointing to the same inner struct instance. Verifies that reference identity is
+   * preserved after serialization/deserialization.
+   */
+  @Test(dataProvider = "enableCodegen")
+  public void testRecordRefSchemaConsistent(boolean enableCodegen) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withRefTracking(true)
+            .withCodegen(enableCodegen)
+            .build();
+    fory.register(RefInnerRecord.class, 501);
+    fory.register(RefOuterRecord.class, 502);
+
+    // Create inner record
+    RefInnerRecord inner = new RefInnerRecord(42, "shared_inner");
+
+    // Create outer record with both fields pointing to the same inner record
+    RefOuterRecord outer = new RefOuterRecord(inner, inner);
+
+    // Serialize and deserialize
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, outer);
+    buffer.readerIndex(0);
+    RefOuterRecord result = (RefOuterRecord) fory.deserialize(buffer);
+
+    // Verify reference identity is preserved
+    Assert.assertSame(
+        result.inner1(), result.inner2(), "inner1 and inner2 should be same object");
+    Assert.assertEquals(result.inner1().id(), 42);
+    Assert.assertEquals(result.inner1().name(), "shared_inner");
+  }
+
+  /**
+   * Test reference tracking with Record in COMPATIBLE mode. Creates an outer struct with two fields
+   * pointing to the same inner struct instance. Verifies that reference identity is preserved after
+   * serialization/deserialization with schema evolution support.
+   */
+  @Test(dataProvider = "enableCodegen")
+  public void testRecordRefCompatible(boolean enableCodegen) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withRefTracking(true)
+            .withCodegen(enableCodegen)
+            .withMetaCompressor(new DeflaterMetaCompressor())
+            .build();
+    fory.register(RefInnerRecord.class, 503);
+    fory.register(RefOuterRecord.class, 504);
+
+    // Create inner record
+    RefInnerRecord inner = new RefInnerRecord(99, "compatible_shared");
+
+    // Create outer record with both fields pointing to the same inner record
+    RefOuterRecord outer = new RefOuterRecord(inner, inner);
+
+    // Serialize and deserialize
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
+    fory.serialize(buffer, outer);
+    buffer.readerIndex(0);
+    RefOuterRecord result = (RefOuterRecord) fory.deserialize(buffer);
+
+    // Verify reference identity is preserved
+    Assert.assertSame(
+        result.inner1(), result.inner2(), "inner1 and inner2 should be same object");
+    Assert.assertEquals(result.inner1().id(), 99);
+    Assert.assertEquals(result.inner1().name(), "compatible_shared");
   }
 
   // ==================== Helper Methods ====================

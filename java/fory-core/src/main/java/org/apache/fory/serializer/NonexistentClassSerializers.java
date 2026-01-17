@@ -87,12 +87,11 @@ public final class NonexistentClassSerializers {
      * Multiple un existed class will correspond to this `NonexistentMetaSharedClass`. When querying
      * classinfo by `class`, it may dispatch to same `NonexistentClassSerializer`, so we can't use
      * `classDef` in this serializer, but use `classDef` in `NonexistentMetaSharedClass` instead.
+     *
+     * <p>Note: XtypeResolver.writeClassInfo skips writeSharedClassMeta for NonexistentMetaShared,
+     * so this method writes the classDef directly without reverting any buffer bytes.
      */
     private void writeClassDef(MemoryBuffer buffer, NonexistentClass.NonexistentMetaShared value) {
-      // Register NotFoundClass ahead to skip write meta shared info,
-      // then revert written class id to write class info here,
-      // since it's the only place to hold class def for not found class.
-      buffer.increaseWriterIndex(-2);
       MetaContext metaContext = fory.getSerializationContext().getMetaContext();
       IdentityObjectIntMap classMap = metaContext.classMap;
       int newId = classMap.size;

@@ -225,32 +225,56 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       TreeMap<Integer, ObjectInputValidation> callbacks = new TreeMap<>(Collections.reverseOrder());
       for (int i = 0; i < numClasses; i++) {
         Class<?> currentClass = classResolver.readClassInternal(buffer);
-        SlotInfo slotsInfo = slotsInfos[slotIndex++];
-        StreamClassInfo streamClassInfo = slotsInfo.getStreamClassInfo();
-        while (currentClass != slotsInfo.getCls()) {
-          // the receiver's version extends classes that are not extended by the sender's version.
-          Method readObjectNoData = streamClassInfo.readObjectNoData;
-          if (readObjectNoData != null) {
-            if (streamClassInfo.readObjectNoDataFunc != null) {
-              streamClassInfo.readObjectNoDataFunc.accept(obj);
-            } else {
-              readObjectNoData.invoke(obj);
+
+        // Find the matching local slot for sender's class
+        SlotInfo matchedSlot = null;
+        while (slotIndex < slotsInfos.length) {
+          SlotInfo candidateSlot = slotsInfos[slotIndex];
+          if (currentClass == candidateSlot.getCls()) {
+            // Found matching slot
+            matchedSlot = candidateSlot;
+            slotIndex++;
+            break;
+          } else if (currentClass.isAssignableFrom(candidateSlot.getCls())) {
+            // Sender's class is an ancestor of candidate's class but they don't match.
+            // This means sender has a layer (currentClass) that receiver doesn't have.
+            // We'll skip sender's data for this layer below.
+            break;
+          } else {
+            // Receiver has an extra layer that sender doesn't have - call readObjectNoData
+            StreamClassInfo streamClassInfo = candidateSlot.getStreamClassInfo();
+            Method readObjectNoData = streamClassInfo.readObjectNoData;
+            if (readObjectNoData != null) {
+              if (streamClassInfo.readObjectNoDataFunc != null) {
+                streamClassInfo.readObjectNoDataFunc.accept(obj);
+              } else {
+                readObjectNoData.invoke(obj);
+              }
             }
+            slotIndex++;
           }
-          slotsInfo = slotsInfos[slotIndex++];
         }
+
+        if (matchedSlot == null) {
+          // Sender has a layer that receiver doesn't have - skip the data
+          skipUnknownLayerData(buffer, currentClass);
+          continue;
+        }
+
+        // Read data for the matched layer
+        StreamClassInfo streamClassInfo = matchedSlot.getStreamClassInfo();
         Method readObjectMethod = streamClassInfo.readObjectMethod;
         if (readObjectMethod == null) {
-          slotsInfo.getSlotsSerializer().readAndSetFields(buffer, obj);
+          matchedSlot.getSlotsSerializer().readAndSetFields(buffer, obj);
         } else {
-          ForyObjectInputStream objectInputStream = slotsInfo.getObjectInputStream();
+          ForyObjectInputStream objectInputStream = matchedSlot.getObjectInputStream();
           MemoryBuffer oldBuffer = objectInputStream.buffer;
           Object oldObject = objectInputStream.targetObject;
           ForyObjectInputStream.GetFieldImpl oldGetField = objectInputStream.getField;
           ForyObjectInputStream.GetFieldImpl getField =
-              (ForyObjectInputStream.GetFieldImpl) slotsInfo.getFieldPool().popOrNull();
+              (ForyObjectInputStream.GetFieldImpl) matchedSlot.getFieldPool().popOrNull();
           if (getField == null) {
-            getField = new ForyObjectInputStream.GetFieldImpl(slotsInfo);
+            getField = new ForyObjectInputStream.GetFieldImpl(matchedSlot);
           }
           boolean fieldsRead = objectInputStream.fieldsRead;
           try {
@@ -269,12 +293,27 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
             objectInputStream.buffer = oldBuffer;
             objectInputStream.targetObject = oldObject;
             objectInputStream.getField = oldGetField;
-            slotsInfo.getFieldPool().add(getField);
+            matchedSlot.getFieldPool().add(getField);
             objectInputStream.callbacks = null;
             Arrays.fill(getField.vals, ForyObjectInputStream.NO_VALUE_STUB);
           }
         }
       }
+
+      // Handle any remaining receiver-only layers at the end
+      while (slotIndex < slotsInfos.length) {
+        SlotInfo remainingSlot = slotsInfos[slotIndex++];
+        StreamClassInfo streamClassInfo = remainingSlot.getStreamClassInfo();
+        Method readObjectNoData = streamClassInfo.readObjectNoData;
+        if (readObjectNoData != null) {
+          if (streamClassInfo.readObjectNoDataFunc != null) {
+            streamClassInfo.readObjectNoDataFunc.accept(obj);
+          } else {
+            readObjectNoData.invoke(obj);
+          }
+        }
+      }
+
       for (ObjectInputValidation validation : callbacks.values()) {
         validation.validateObject();
       }
@@ -282,6 +321,59 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       throwSerializationException(type, e);
     }
     return obj;
+  }
+
+  /**
+   * Skip data for a layer that exists in sender but not in receiver. This is needed for schema
+   * evolution when sender's class hierarchy has layers that receiver doesn't have.
+   *
+   * @param buffer the memory buffer to read from
+   * @param senderClass the sender's class for this layer (not present in receiver)
+   */
+  private void skipUnknownLayerData(MemoryBuffer buffer, Class<?> senderClass) {
+    // For layers without custom writeObject, we can skip using a temporary serializer
+    // created from the ClassDef in the meta context.
+    // Note: For layers with custom writeObject, the sender would have that class locally,
+    // and we'd have a matching slot. This method is only called when sender has a layer
+    // the receiver doesn't have, which means the layer uses standard field serialization.
+
+    // Read and skip the layer class meta
+    if (fory.getConfig().isMetaShareEnabled()) {
+      org.apache.fory.resolver.MetaContext metaContext =
+          fory.getSerializationContext().getMetaContext();
+      if (metaContext != null) {
+        int indexMarker = buffer.readVarUint32Small14();
+        boolean isRef = (indexMarker & 1) == 1;
+        if (!isRef) {
+          // New type - read ClassDef and use it to skip fields
+          long id = buffer.readInt64();
+          ClassDef classDef = ClassDef.readClassDef(fory, buffer, id);
+          // Create a temporary serializer to skip the fields
+          MetaSharedLayerSerializer<?> skipSerializer =
+              new MetaSharedLayerSerializer<>(
+                  fory,
+                  senderClass,
+                  classDef,
+                  LayerMarkerClassGenerator.getOrCreate(fory, senderClass, 0));
+          // Read fields to skip them (result is discarded)
+          skipSerializer.read(buffer);
+        } else {
+          // Reference to previously seen ClassDef - need to look it up
+          int index = indexMarker >>> 1;
+          // For referenced types, we need to find the ClassDef and skip accordingly
+          // This is a simplified approach - in practice we'd need to track layer ClassDefs
+          throw new UnsupportedOperationException(
+              "Cannot skip referenced layer class meta for unknown layer: "
+                  + senderClass.getName()
+                  + ". Schema evolution with removed parent classes is not fully supported.");
+        }
+      }
+    } else {
+      throw new UnsupportedOperationException(
+          "Cannot skip unknown layer data without meta share enabled for class: "
+              + senderClass.getName()
+              + ". Schema evolution with removed parent classes requires meta share.");
+    }
   }
 
   private static void throwUnsupportedEncodingException(Class<?> cls)

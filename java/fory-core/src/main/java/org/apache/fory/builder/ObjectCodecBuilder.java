@@ -613,7 +613,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     // use Reference to cut-off expr dependency.
     for (Descriptor d : group) {
       boolean nullable = d.isNullable();
-      Expression v = deserializeForNullable(buffer, d.getTypeRef(), expr -> expr, nullable);
+      Expression v = deserializeForNullableField(buffer, d, expr -> expr, nullable);
       Expression action = setFieldValue(bean, d, tryInlineCast(v, d.getTypeRef()));
       groupExpressions.add(action);
     }

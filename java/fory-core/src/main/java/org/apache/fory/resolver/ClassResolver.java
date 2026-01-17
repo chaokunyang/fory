@@ -704,6 +704,9 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public boolean isMonomorphic(Class<?> clz) {
+    if (clz == NonexistentMetaShared.class) {
+      return true;
+    }
     if (fory.getConfig().isMetaShareEnabled()) {
       // can't create final map/collection type using TypeUtils.mapOf(TypeToken<K>,
       // TypeToken<V>)
@@ -1513,16 +1516,6 @@ public class ClassResolver extends TypeResolver {
   }
 
   public void writeClassInfoWithMetaShare(MemoryBuffer buffer, ClassInfo classInfo) {
-    // For NonexistentClassSerializer, the serializer handles ClassDef writing itself
-    // because the ClassDef comes from the object being serialized, not from the class.
-    // We just write a placeholder that the serializer will overwrite.
-    if (classInfo.serializer != null
-        && classInfo.serializer.getClass()
-            == NonexistentClassSerializers.NonexistentClassSerializer.class) {
-      // Write a 2-byte placeholder that NonexistentClassSerializer.writeClassDef will overwrite
-      buffer.writeInt16((short) 0);
-      return;
-    }
     // For dynamically generated classes (lambdas, JDK proxies), use their stub class
     // for the ClassDef since the dynamic class names cannot be loaded by name.
     // The serializer will handle the actual serialization correctly.

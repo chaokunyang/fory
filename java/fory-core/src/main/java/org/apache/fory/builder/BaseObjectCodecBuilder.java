@@ -19,12 +19,6 @@
 
 package org.apache.fory.builder;
 
-import static org.apache.fory.builder.CodecBuilder.readFloat32Func;
-import static org.apache.fory.builder.CodecBuilder.readFloat64Func;
-import static org.apache.fory.builder.CodecBuilder.readInt16Func;
-import static org.apache.fory.builder.CodecBuilder.readIntFunc;
-import static org.apache.fory.builder.CodecBuilder.readLongFunc;
-import static org.apache.fory.builder.CodecBuilder.readVarInt32Func;
 import static org.apache.fory.codegen.CodeGenerator.getPackage;
 import static org.apache.fory.codegen.Expression.Invoke.inlineInvoke;
 import static org.apache.fory.codegen.Expression.Literal.ofInt;
@@ -35,7 +29,6 @@ import static org.apache.fory.codegen.ExpressionUtils.add;
 import static org.apache.fory.codegen.ExpressionUtils.bitand;
 import static org.apache.fory.codegen.ExpressionUtils.bitor;
 import static org.apache.fory.codegen.ExpressionUtils.cast;
-import static org.apache.fory.codegen.ExpressionUtils.defaultValue;
 import static org.apache.fory.codegen.ExpressionUtils.eq;
 import static org.apache.fory.codegen.ExpressionUtils.eqNull;
 import static org.apache.fory.codegen.ExpressionUtils.gt;
@@ -1727,16 +1720,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         // Should put value expr ahead to avoid generated code in wrong scope.
         return new ListExpression(value, callback.apply(value));
       }
-      return readNullable(
+      return readNullableField(
           buffer, typeRef, callback, () -> deserializeForNotNull(buffer, typeRef, invokeHint));
     }
   }
 
-  protected Expression deserializeForNullable(
+  protected Expression deserializeForNullableField(
       Expression buffer,
-      TypeRef<?> typeRef,
+      Descriptor descriptor,
       Function<Expression, Expression> callback,
       boolean nullable) {
+    TypeRef<?> typeRef = descriptor.getTypeRef();
     if (typeResolver(r -> r.needToWriteRef(typeRef))) {
       return readRef(buffer, callback, () -> deserializeForNotNull(buffer, typeRef, null));
     } else {
@@ -1746,8 +1740,15 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         // Should put value expr ahead to avoid generated code in wrong scope.
         return new ListExpression(value, callback.apply(value));
       }
-      return readNullable(
-          buffer, typeRef, callback, () -> deserializeForNotNull(buffer, typeRef, null), nullable);
+      // Pass local field type so readNullable can use default value for primitives when null
+      Class<?> localFieldType = typeRef.isPrimitive() ? typeRef.getRawType() : null;
+      return readNullableField(
+          buffer,
+          descriptor,
+          callback,
+          () -> deserializeForNotNull(buffer, typeRef, null),
+          nullable
+      );
     }
   }
 
@@ -1772,7 +1773,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         false);
   }
 
-  private Expression readNullable(
+  private Expression readNullableField(
       Expression buffer,
       TypeRef<?> typeRef,
       Function<Expression, Expression> callback,
@@ -1786,22 +1787,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return new If(notNull, callback.apply(value), callback.apply(nullValue(typeRef)), false);
   }
 
-  private Expression readNullable(
+  private Expression readNullableField(
       Expression buffer,
-      TypeRef<?> typeRef,
+      Descriptor descriptor,
       Function<Expression, Expression> callback,
       Supplier<Expression> deserializeForNotNull,
       boolean nullable) {
-    return readNullable(buffer, typeRef, callback, deserializeForNotNull, nullable, null);
-  }
-
-  private Expression readNullable(
-      Expression buffer,
-      TypeRef<?> typeRef,
-      Function<Expression, Expression> callback,
-      Supplier<Expression> deserializeForNotNull,
-      boolean nullable,
-      Class<?> localFieldType) {
     if (nullable) {
       Expression notNull =
           neq(
@@ -1810,12 +1801,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression value = deserializeForNotNull.get();
       // When local field is primitive but remote was nullable (boxed), use default value
       // instead of null. This handles compatibility between boxed/primitive field types.
-      Expression nullExpr;
-      if (localFieldType != null && isPrimitive(localFieldType)) {
-        nullExpr = defaultValue(localFieldType);
-      } else {
-        nullExpr = nullValue(typeRef);
-      }
+      Expression nullExpr = nullValue(descriptor.getField() != null
+          ? descriptor.getField().getType() : descriptor.getRawType());
       // use false to ignore null.
       return new If(notNull, callback.apply(value), callback.apply(nullExpr), false);
     } else {
@@ -1902,13 +1889,13 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       java.lang.reflect.Field field = descriptor.getField();
       Class<?> localFieldType = field != null ? field.getType() : null;
       Expression readNullableExpr =
-          readNullable(
+          readNullableField(
               buffer,
-              typeRef,
+              descriptor,
               callback,
               () -> deserializeForNotNullForField(buffer, descriptor, null),
-              true,
-              localFieldType);
+              true
+          );
 
       if (serializerCallsReference) {
         Expression preserveStubRefId =
@@ -2251,7 +2238,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         read =
             new If(
                 hasNull,
-                readNullable(
+                readNullableField(
                     buffer,
                     elementType,
                     callback,

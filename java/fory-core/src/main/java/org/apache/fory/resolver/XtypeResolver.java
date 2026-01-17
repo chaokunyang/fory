@@ -449,6 +449,9 @@ public class XtypeResolver extends TypeResolver {
         if (rawType.isEnum()) {
           return true;
         }
+        if (rawType == NonexistentMetaShared.class) {
+          return true;
+        }
         byte xtypeId = getXtypeId(rawType);
         if (fory.isCompatible()) {
           return !Types.isUserDefinedType(xtypeId) && xtypeId != Types.UNKNOWN;
@@ -463,6 +466,9 @@ public class XtypeResolver extends TypeResolver {
       return true;
     }
     if (clz.isArray()) {
+      return true;
+    }
+    if (clz == NonexistentMetaShared.class) {
       return true;
     }
     ClassInfo classInfo = getClassInfo(clz, false);
@@ -486,6 +492,9 @@ public class XtypeResolver extends TypeResolver {
   public boolean isBuildIn(Descriptor descriptor) {
     Class<?> rawType = descriptor.getRawType();
     byte xtypeId = getXtypeId(rawType);
+    if (rawType == NonexistentMetaShared.class) {
+      return true;
+    }
     return !Types.isUserDefinedType(xtypeId) && xtypeId != Types.UNKNOWN;
   }
 
@@ -735,11 +744,7 @@ public class XtypeResolver extends TypeResolver {
       case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
         assert shareMeta : "Meta share must be enabled for compatible mode";
-        // Skip writeSharedClassMeta for NonexistentMetaShared since
-        // NonexistentClassSerializer.writeClassDef will handle writing the correct classDef.
-        if (classInfo.cls != NonexistentMetaShared.class) {
-          writeSharedClassMeta(buffer, classInfo);
-        }
+        writeSharedClassMeta(buffer, classInfo);
         break;
       default:
         break;

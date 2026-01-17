@@ -166,19 +166,23 @@ public class FieldTypes {
       }
       if (rawType.isArray()) {
         Class<?> elemType = rawType.getComponentType();
-        if (elemType.isPrimitive()) {
-          return new RegisteredFieldType(nullable, trackingRef, xtypeId);
-        }
         if (isXlang) {
-          // primitive array has bee handled before
+          if (elemType.isPrimitive()) {
+            // For xlang mode, use xlang primitive array type IDs
+            int elemTypeId = Types.getTypeId(resolver.getFory(), elemType);
+            int arrayTypeId = Types.getPrimitiveArrayTypeId(elemTypeId);
+            return new RegisteredFieldType(nullable, trackingRef, arrayTypeId);
+          }
           return new CollectionFieldType(
               xtypeId,
               nullable,
               trackingRef,
               buildFieldType(resolver, null, GenericType.build(elemType)));
         } else {
+          // For native mode, use Java class IDs for arrays
           if (((ClassResolver)resolver).isInternalRegistered(rawType)) {
-            return new RegisteredFieldType(nullable, trackingRef, xtypeId);
+            Short classId = ((ClassResolver) resolver).getRegisteredClassId(rawType);
+            return new RegisteredFieldType(nullable, trackingRef, classId);
           }
           Tuple2<Class<?>, Integer> arrayComponentInfo = getArrayComponentInfo(rawType);
           return new ArrayFieldType(

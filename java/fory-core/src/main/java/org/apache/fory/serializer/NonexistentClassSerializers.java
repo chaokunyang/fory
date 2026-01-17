@@ -88,8 +88,8 @@ public final class NonexistentClassSerializers {
      * classinfo by `class`, it may dispatch to same `NonexistentClassSerializer`, so we can't use
      * `classDef` in this serializer, but use `classDef` in `NonexistentMetaSharedClass` instead.
      *
-     * <p>Note: XtypeResolver.writeClassInfo skips writeSharedClassMeta for NonexistentMetaShared,
-     * so this method writes the classDef directly without reverting any buffer bytes.
+     * <p>XtypeResolver.writeSharedClassMeta writes a stub (1-byte ref marker + stub bytes) for
+     * NonexistentMetaShared. This method rewinds past that stub and writes the actual classDef.
      */
     private void writeClassDef(MemoryBuffer buffer, NonexistentClass.NonexistentMetaShared value) {
       MetaContext metaContext = fory.getSerializationContext().getMetaContext();

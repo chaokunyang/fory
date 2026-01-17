@@ -151,6 +151,13 @@ public class ExpressionUtils {
     return new Not(target);
   }
 
+  public static Literal nullValue(Class<?> type) {
+    if (type.isPrimitive()) {
+      return defaultValue(type);
+    }
+    return new Literal(null, TypeRef.of(type));
+  }
+
   public static Literal nullValue(TypeRef<?> type) {
     if (type.isPrimitive()) {
       return defaultValue(type.getRawType());

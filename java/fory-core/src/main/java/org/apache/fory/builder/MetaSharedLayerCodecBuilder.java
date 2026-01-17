@@ -20,7 +20,6 @@
 package org.apache.fory.builder;
 
 import static org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer.SERIALIZER_FIELD_NAME;
-import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
 
 import java.util.Collection;
 import java.util.Map;
@@ -29,9 +28,6 @@ import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
-import org.apache.fory.codegen.Expression.ListExpression;
-import org.apache.fory.codegen.Expression.Reference;
-import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.TypeRef;
@@ -157,52 +153,8 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     throw new IllegalStateException("unreachable");
   }
 
-  @Override
-  public Expression buildDecodeExpression() {
-    // Build the base decode expression from parent
-    Expression baseDecodeExpr = super.buildDecodeExpression();
-
-    // Prepend layer class meta reading if meta share is enabled
-    if (fory.getConfig().isMetaShareEnabled()) {
-      ListExpression expressions = new ListExpression();
-      Reference buffer = new Reference(BUFFER_NAME, bufferTypeRef, false);
-      // Call static helper to read layer class meta
-      Expression readMeta =
-          new StaticInvoke(
-              MetaSharedLayerCodecBuilder.class,
-              "readLayerClassMeta",
-              PRIMITIVE_VOID_TYPE,
-              foryRef,
-              buffer);
-      expressions.add(readMeta);
-      expressions.add(baseDecodeExpr);
-      return expressions;
-    }
-    return baseDecodeExpr;
-  }
-
-  /**
-   * Static helper method to read layer class meta from buffer. Called by generated code to maintain
-   * consistency with interpreter-mode MetaSharedLayerSerializer.
-   *
-   * @param fory the Fory instance
-   * @param buffer the memory buffer to read from
-   */
-  public static void readLayerClassMeta(Fory fory, MemoryBuffer buffer) {
-    org.apache.fory.resolver.MetaContext metaContext =
-        fory.getSerializationContext().getMetaContext();
-    if (metaContext == null) {
-      return;
-    }
-    int indexMarker = buffer.readVarUint32Small14();
-    boolean isRef = (indexMarker & 1) == 1;
-    if (!isRef) {
-      // New type in stream - read ClassDef inline and skip it
-      long id = buffer.readInt64();
-      ClassDef.skipClassDef(buffer, id);
-    }
-    // If isRef, it's a reference to previously read type - nothing to do
-  }
+  // Note: Layer class meta is read by ObjectStreamSerializer before calling this serializer.
+  // The generated read() method only reads field data, not the layer class meta.
 
   @Override
   protected Expression buildComponentsArray() {

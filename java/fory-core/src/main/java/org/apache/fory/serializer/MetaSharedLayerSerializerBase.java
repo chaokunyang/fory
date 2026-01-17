@@ -37,7 +37,9 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
   }
 
   /**
-   * Read layer class meta and fields, setting values on the provided object.
+   * Read fields and set values on the provided object. Note: When meta share is enabled, the caller
+   * (typically ObjectStreamSerializer) is responsible for reading the layer class meta first. This
+   * method only reads field data, not the layer class meta.
    *
    * @param buffer the memory buffer to read from
    * @param obj the object to set field values on

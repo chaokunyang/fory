@@ -136,14 +136,17 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   @Override
   public T read(MemoryBuffer buffer) {
-    // This method creates a new object - for layer serialization, use readAndSetFields instead
+    // Note: Layer class meta is read by ObjectStreamSerializer before calling this method.
+    // This serializer is designed for use with ObjectStreamSerializer only.
     T obj = newBean();
     refResolver.reference(obj);
-    return readAndSetFields(buffer, obj);
+    return readFieldsOnly(buffer, obj);
   }
 
   /**
-   * Read layer class meta and fields, setting values on the provided object.
+   * Read fields and set values on the provided object. Note: When meta share is enabled, the caller
+   * (typically ObjectStreamSerializer) is responsible for reading the layer class meta first. This
+   * method only reads field data.
    *
    * @param buffer the memory buffer to read from
    * @param obj the object to set field values on
@@ -151,13 +154,9 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
    */
   @Override
   public T readAndSetFields(MemoryBuffer buffer, T obj) {
-    // Read and verify layer class meta (only if meta share is enabled)
-    if (fory.getConfig().isMetaShareEnabled()) {
-      readLayerClassMeta(buffer);
-    }
-    // Read fields in order: final, container, other
-    readFieldsOnly(buffer, obj);
-    return obj;
+    // Note: Layer class meta is read by ObjectStreamSerializer before calling this method
+    // (when meta share is enabled). This method only reads field values.
+    return readFieldsOnly(buffer, obj);
   }
 
   /**
@@ -176,23 +175,6 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     readContainerFields(buffer, (T) obj);
     readUserTypeFields(buffer, (T) obj);
     return (T) obj;
-  }
-
-  private void readLayerClassMeta(MemoryBuffer buffer) {
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    if (metaContext == null) {
-      return;
-    }
-    int indexMarker = buffer.readVarUint32Small14();
-    boolean isRef = (indexMarker & 1) == 1;
-    if (isRef) {
-      // Reference to previously read type - already in readClassInfos, nothing to do
-    } else {
-      // New type in stream - read ClassDef inline
-      long id = buffer.readInt64();
-      ClassDef.skipClassDef(buffer, id);
-      // Layer class info is managed by this serializer, not stored in readClassInfos
-    }
   }
 
   private void readFinalFields(MemoryBuffer buffer, T targetObject) {

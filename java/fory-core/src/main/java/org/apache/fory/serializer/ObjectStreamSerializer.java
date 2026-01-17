@@ -39,9 +39,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
@@ -49,6 +47,7 @@ import java.util.function.Consumer;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
+import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.logging.Logger;
@@ -59,6 +58,8 @@ import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.resolver.ClassInfo;
+import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -82,6 +83,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   private static final Logger LOG = LoggerFactory.getLogger(ObjectStreamSerializer.class);
 
   private final SlotInfo[] slotsInfos;
+  // Instance-level cache: ClassDef ID -> ClassInfo (shared across all slots)
+  private final LongMap<ClassInfo> classDefIdToClassInfo = new LongMap<>(4, 0.4f);
 
   /**
    * Interface for slot information used in ObjectStreamSerializer. This allows both full SlotsInfo
@@ -93,6 +96,27 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     StreamClassInfo getStreamClassInfo();
 
     MetaSharedLayerSerializerBase getSlotsSerializer();
+
+    /**
+     * Read the layer ClassDef from buffer (if meta share enabled) and return the appropriate
+     * serializer. When meta share is enabled, reads the ClassDef from buffer, caches the serializer
+     * by ClassDef ID, and returns it. When meta share is disabled, returns the default slots
+     * serializer. Also stores the returned serializer for later retrieval via {@link
+     * #getCurrentReadSerializer()}.
+     *
+     * @param fory the Fory instance
+     * @param buffer the memory buffer to read ClassDef from
+     * @return the serializer to use for reading
+     */
+    MetaSharedLayerSerializerBase getReadSerializer(Fory fory, MemoryBuffer buffer);
+
+    /**
+     * Get the current read serializer (last returned by {@link #getReadSerializer}). This is used
+     * by defaultReadObject() to get the serializer without reading from buffer again.
+     *
+     * @return the current read serializer
+     */
+    MetaSharedLayerSerializerBase getCurrentReadSerializer();
 
     ForyObjectOutputStream getObjectOutputStream();
 
@@ -224,9 +248,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     int numClasses = buffer.readInt16();
     int slotIndex = 0;
 
-    // Create context to track layer ClassDefs for schema evolution
-    LayerReadContext layerContext = new LayerReadContext();
-
     try {
       TreeMap<Integer, ObjectInputValidation> callbacks = new TreeMap<>(Collections.reverseOrder());
       for (int i = 0; i < numClasses; i++) {
@@ -261,34 +282,22 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           }
         }
 
-        // Read and track the layer ClassDef first (for both matched and unmatched)
-        // This is critical because different senders may have different ClassDefs for the same
-        // layer
-        ClassDef classDef = readAndTrackLayerMeta(buffer, layerContext);
-
         if (matchedSlot == null) {
-          // Sender has a layer that receiver doesn't have - skip the data
-          skipUnknownLayerData(buffer, currentClass, layerContext, classDef);
+          // Sender has a layer that receiver doesn't have - read ClassDef and skip the data
+          skipUnknownLayerData(buffer, currentClass);
           continue;
         }
 
-        // Read data for the matched layer
+        // Read data for the matched layer - getReadSerializer reads ClassDef from buffer
+        // This must be called exactly once per layer to read the ClassDef
+        matchedSlot.getReadSerializer(fory, buffer);
+
         StreamClassInfo streamClassInfo = matchedSlot.getStreamClassInfo();
         Method readObjectMethod = streamClassInfo.readObjectMethod;
+
         if (readObjectMethod == null) {
-          // For standard field serialization, create/get a serializer based on the sender's
-          // ClassDef
-          // This ensures we read fields according to the sender's schema, not the receiver's
-          if (classDef != null) {
-            int classDefIndex = layerContext.getClassDefIndex(classDef);
-            MetaSharedLayerSerializer<?> layerSerializer =
-                layerContext.getOrCreateSerializer(fory, classDefIndex, currentClass);
-            layerSerializer.readFieldsOnly(buffer, obj);
-          } else {
-            // Meta share not enabled - use the slot's serializer directly
-            // Note: readAndSetFields won't try to read meta if meta share is disabled
-            matchedSlot.getSlotsSerializer().readAndSetFields(buffer, obj);
-          }
+          // For standard field serialization - use getCurrentReadSerializer()
+          matchedSlot.getCurrentReadSerializer().readAndSetFields(buffer, obj);
         } else {
           // For custom readObject, it handles its own format
           ForyObjectInputStream objectInputStream = matchedSlot.getObjectInputStream();
@@ -348,138 +357,66 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   }
 
   /**
-   * Context for tracking layer ClassDefs during deserialization. This is needed for schema
-   * evolution when sender may have different ClassDefs for the same layer, and we need to create
-   * appropriate serializers for each unique ClassDef.
-   */
-  private static class LayerReadContext {
-    /** List of ClassDefs encountered in stream order, indexed by their stream index. */
-    private final List<ClassDef> layerClassDefs = new ArrayList<>();
-
-    /**
-     * Cache of serializers for each ClassDef index. This allows reusing serializers when the same
-     * ClassDef is referenced multiple times (via the reference mechanism).
-     */
-    private final Map<Integer, MetaSharedLayerSerializer<?>> serializerCache = new HashMap<>();
-
-    /** Add a ClassDef to the tracking list and return its index. */
-    int addClassDef(ClassDef classDef) {
-      int index = layerClassDefs.size();
-      layerClassDefs.add(classDef);
-      return index;
-    }
-
-    /** Get a ClassDef by its stream index. */
-    ClassDef getClassDef(int index) {
-      if (index < 0 || index >= layerClassDefs.size()) {
-        throw new IllegalStateException(
-            "Invalid layer ClassDef index: " + index + ", tracked count: " + layerClassDefs.size());
-      }
-      return layerClassDefs.get(index);
-    }
-
-    /** Get the index of a ClassDef, or -1 if not found. */
-    int getClassDefIndex(ClassDef classDef) {
-      for (int i = 0; i < layerClassDefs.size(); i++) {
-        if (layerClassDefs.get(i) == classDef) {
-          return i;
-        }
-      }
-      return -1;
-    }
-
-    /**
-     * Get or create a serializer for a ClassDef at the given index. The serializer is created using
-     * the ClassDef's field layout, allowing it to correctly read data written by a sender with that
-     * specific schema.
-     */
-    MetaSharedLayerSerializer<?> getOrCreateSerializer(Fory fory, int index, Class<?> targetClass) {
-      return serializerCache.computeIfAbsent(
-          index,
-          i -> {
-            ClassDef classDef = getClassDef(i);
-            return new MetaSharedLayerSerializer<>(
-                fory,
-                targetClass,
-                classDef,
-                LayerMarkerClassGenerator.getOrCreate(fory, targetClass, 0));
-          });
-    }
-  }
-
-  /**
-   * Read layer class meta from buffer and track in context. This method handles both new ClassDefs
-   * (read and store) and references (lookup from tracked).
-   *
-   * @param buffer the memory buffer to read from
-   * @param context the layer read context for tracking ClassDefs
-   * @return the ClassDef for this layer (either newly read or looked up from reference)
-   */
-  private ClassDef readAndTrackLayerMeta(MemoryBuffer buffer, LayerReadContext context) {
-    if (!fory.getConfig().isMetaShareEnabled()) {
-      return null;
-    }
-    org.apache.fory.resolver.MetaContext metaContext =
-        fory.getSerializationContext().getMetaContext();
-    if (metaContext == null) {
-      return null;
-    }
-
-    int indexMarker = buffer.readVarUint32Small14();
-    boolean isRef = (indexMarker & 1) == 1;
-    int index = indexMarker >>> 1;
-
-    if (isRef) {
-      // Reference to previously seen ClassDef - look it up
-      return context.getClassDef(index);
-    } else {
-      // New type in stream - read ClassDef inline and track it
-      long id = buffer.readInt64();
-      ClassDef classDef = ClassDef.readClassDef(fory, buffer, id);
-      int storedIndex = context.addClassDef(classDef);
-      if (storedIndex != index) {
-        throw new IllegalStateException(
-            "Layer ClassDef index mismatch: expected " + index + ", got " + storedIndex);
-      }
-      return classDef;
-    }
-  }
-
-  /**
    * Skip data for a layer that exists in sender but not in receiver. This is needed for schema
    * evolution when sender's class hierarchy has layers that receiver doesn't have.
    *
    * @param buffer the memory buffer to read from
-   * @param senderClass the sender's class for this layer (not present in receiver)
-   * @param context the layer read context for tracking ClassDefs
-   * @param classDef the ClassDef for this layer (already read from stream)
+   * @param senderClass the class from sender that receiver doesn't have
    */
-  private void skipUnknownLayerData(
-      MemoryBuffer buffer, Class<?> senderClass, LayerReadContext context, ClassDef classDef) {
+  private void skipUnknownLayerData(MemoryBuffer buffer, Class<?> senderClass) {
     // For layers without custom writeObject, we can skip using a serializer created from the
     // ClassDef. Note: For layers with custom writeObject, the sender would have that class
     // locally, and we'd have a matching slot. This method is only called when sender has a
     // layer the receiver doesn't have.
 
-    if (classDef == null) {
+    if (!fory.getConfig().isMetaShareEnabled()) {
       throw new UnsupportedOperationException(
           "Cannot skip unknown layer data without meta share enabled for class: "
               + senderClass.getName()
               + ". Schema evolution with removed parent classes requires meta share.");
     }
 
-    // Get the ClassDef index and create a serializer to skip the fields
-    int classDefIndex = context.getClassDefIndex(classDef);
-    if (classDefIndex < 0) {
-      throw new IllegalStateException(
-          "ClassDef not found in context for layer: " + senderClass.getName());
+    // Read ClassInfo from buffer (maintains index alignment with readClassInfos)
+    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
+    if (metaContext == null) {
+      throw new IllegalStateException("MetaContext is null but meta share is enabled");
+    }
+    int indexMarker = buffer.readVarUint32Small14();
+    boolean isRef = (indexMarker & 1) == 1;
+    int index = indexMarker >>> 1;
+    ClassInfo classInfo;
+    if (isRef) {
+      // Reference to previously read ClassInfo
+      classInfo = metaContext.readClassInfos.get(index);
+    } else {
+      // New ClassDef in stream - read ID first to check cache
+      long classDefId = buffer.readInt64();
+      classInfo = classDefIdToClassInfo.get(classDefId);
+      if (classInfo != null) {
+        // Already cached - skip the ClassDef bytes, reuse existing ClassInfo
+        ClassDef.skipClassDef(buffer, classDefId);
+      } else {
+        // Not cached - read full ClassDef and create ClassInfo
+        ClassDef classDef = ClassDef.readClassDef(fory, buffer, classDefId);
+        classInfo = new ClassInfo(senderClass, classDef);
+        classDefIdToClassInfo.put(classDefId, classInfo);
+      }
+      metaContext.readClassInfos.add(classInfo);
     }
 
-    // Get or create a serializer and use it to skip (read and discard) the fields
-    MetaSharedLayerSerializer<?> skipSerializer =
-        context.getOrCreateSerializer(fory, classDefIndex, senderClass);
+    // Get or create serializer from ClassInfo to skip the fields
+    MetaSharedLayerSerializerBase skipSerializer =
+        (MetaSharedLayerSerializerBase) classInfo.getSerializer();
+    if (skipSerializer == null) {
+      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, senderClass, 0);
+      MetaSharedLayerSerializer<?> newSerializer =
+          new MetaSharedLayerSerializer(
+              fory, senderClass, classInfo.getClassDef(), layerMarkerClass);
+      classInfo.setSerializer(newSerializer);
+      skipSerializer = newSerializer;
+    }
     SerializationBinding binding = SerializationBinding.createBinding(fory);
-    skipSerializer.skipFields(buffer, binding);
+    ((MetaSharedLayerSerializer<?>) skipSerializer).skipFields(buffer, binding);
   }
 
   private static void throwUnsupportedEncodingException(Class<?> cls)
@@ -596,7 +533,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    * all the details of serializing and deserializing a single class in the class hierarchy using
    * Java's ObjectInputStream/ObjectOutputStream protocol.
    */
-  private static class SlotsInfo implements SlotInfo {
+  private class SlotsInfo implements SlotInfo {
     private final Class<?> cls;
     private final StreamClassInfo streamClassInfo;
     // mark non-final for async-jit to update it to jit-serializer.
@@ -607,6 +544,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final ForyObjectOutputStream objectOutputStream;
     private final ForyObjectInputStream objectInputStream;
     private final ObjectArray getFieldPool;
+    // Current read serializer (set by getReadSerializer, used by getCurrentReadSerializer)
+    private MetaSharedLayerSerializerBase currentReadSerializer;
 
     public SlotsInfo(Fory fory, Class<?> type) {
       this.cls = type;
@@ -745,6 +684,72 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     @Override
     public Class<?>[] getPutFieldTypes() {
       return putFieldTypes;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public MetaSharedLayerSerializerBase getReadSerializer(Fory fory, MemoryBuffer buffer) {
+      MetaSharedLayerSerializerBase result;
+      if (!fory.getConfig().isMetaShareEnabled()) {
+        // Meta share not enabled - use the default slots serializer
+        result = slotsSerializer;
+      } else {
+        // Read ClassInfo from buffer (creates new or returns existing)
+        ClassInfo classInfo = readLayerClassInfo(fory, buffer);
+        if (classInfo == null) {
+          result = slotsSerializer;
+        } else {
+          // Get or create serializer from ClassInfo
+          Serializer<?> serializer = classInfo.getSerializer();
+          if (serializer != null) {
+            result = (MetaSharedLayerSerializerBase) serializer;
+          } else {
+            // Create a new serializer based on the ClassDef from stream
+            Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, cls, 0);
+            MetaSharedLayerSerializer<?> newSerializer =
+                new MetaSharedLayerSerializer(fory, cls, classInfo.getClassDef(), layerMarkerClass);
+            classInfo.setSerializer(newSerializer);
+            result = newSerializer;
+          }
+        }
+      }
+      // Store for getCurrentReadSerializer()
+      this.currentReadSerializer = result;
+      return result;
+    }
+
+    @Override
+    public MetaSharedLayerSerializerBase getCurrentReadSerializer() {
+      return currentReadSerializer;
+    }
+
+    private ClassInfo readLayerClassInfo(Fory fory, MemoryBuffer buffer) {
+      MetaContext metaContext = fory.getSerializationContext().getMetaContext();
+      if (metaContext == null) {
+        return null;
+      }
+      int indexMarker = buffer.readVarUint32Small14();
+      boolean isRef = (indexMarker & 1) == 1;
+      int index = indexMarker >>> 1;
+      if (isRef) {
+        // Reference to previously read ClassInfo
+        return metaContext.readClassInfos.get(index);
+      } else {
+        // New ClassDef in stream - read ID first to check cache
+        long classDefId = buffer.readInt64();
+        ClassInfo classInfo = classDefIdToClassInfo.get(classDefId);
+        if (classInfo != null) {
+          // Already cached - skip the ClassDef bytes, reuse existing ClassInfo
+          ClassDef.skipClassDef(buffer, classDefId);
+        } else {
+          // Not cached - read full ClassDef and create ClassInfo
+          ClassDef classDef = ClassDef.readClassDef(fory, buffer, classDefId);
+          classInfo = new ClassInfo(cls, classDef);
+          classDefIdToClassInfo.put(classDefId, classInfo);
+        }
+        metaContext.readClassInfos.add(classInfo);
+        return classInfo;
+      }
     }
 
     @Override
@@ -1304,10 +1309,13 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     @Override
+    @SuppressWarnings("rawtypes")
     public void defaultReadObject() throws IOException, ClassNotFoundException {
       if (fieldsRead) {
         throw new NotActiveException("not in readObject invocation or fields already read");
       }
+      // Get the serializer that was set by getReadSerializer() - has correct schema from stream
+      MetaSharedLayerSerializerBase serializer = slotsInfo.getCurrentReadSerializer();
       // Read field values in the same format as writeFields, but set to actual class fields
       Class<?>[] fieldTypes = slotsInfo.getPutFieldTypes();
       if (fieldTypes != null && fieldTypes.length > 0) {
@@ -1318,11 +1326,10 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           vals[i] = readPutFieldValue(buffer, fieldTypes[i]);
         }
         // Now set matching fields on the target object
-        MetaSharedLayerSerializerBase slotsSerializer = slotsInfo.getSlotsSerializer();
-        slotsSerializer.setFieldValuesFromPutFields(targetObject, fieldIndexMap, vals);
+        serializer.setFieldValuesFromPutFields(targetObject, fieldIndexMap, vals);
       } else {
         // No custom writeObject/readObject, use normal serialization
-        slotsInfo.getSlotsSerializer().readAndSetFields(buffer, targetObject);
+        serializer.readAndSetFields(buffer, targetObject);
       }
       fieldsRead = true;
     }

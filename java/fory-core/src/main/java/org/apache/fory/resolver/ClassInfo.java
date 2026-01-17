@@ -72,6 +72,25 @@ public class ClassInfo {
     }
   }
 
+  /**
+   * Creates a ClassInfo for deserialization with a ClassDef. Used when reading class meta from
+   * stream where the ClassDef specifies the field layout.
+   *
+   * @param cls the class
+   * @param classDef the class definition from stream
+   */
+  public ClassInfo(Class<?> cls, ClassDef classDef) {
+    this.cls = cls;
+    this.classDef = classDef;
+    this.fullNameBytes = null;
+    this.namespaceBytes = null;
+    this.typeNameBytes = null;
+    this.isDynamicGeneratedClass = false;
+    this.serializer = null;
+    this.classId = TypeResolver.NO_CLASS_ID;
+    this.xtypeId = 0;
+  }
+
   ClassInfo(
       TypeResolver classResolver,
       Class<?> cls,
@@ -123,6 +142,14 @@ public class ClassInfo {
 
   public Class<?> getCls() {
     return cls;
+  }
+
+  public ClassDef getClassDef() {
+    return classDef;
+  }
+
+  void setClassDef(ClassDef classDef) {
+    this.classDef = classDef;
   }
 
   public short getClassId() {

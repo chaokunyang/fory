@@ -54,7 +54,6 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   private final SerializationFieldInfo[] otherFields;
   private final SerializationFieldInfo[] containerFields;
   private final SerializationBinding binding;
-  private final TypeResolver typeResolver;
 
   /**
    * Creates a new MetaSharedLayerSerializer.
@@ -69,7 +68,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     super(fory, type);
     this.layerClassDef = layerClassDef;
     this.layerMarkerClass = layerMarkerClass;
-    this.typeResolver = fory._getTypeResolver();
+    TypeResolver typeResolver = fory._getTypeResolver();
     this.binding = SerializationBinding.createBinding(fory);
 
     // Build field infos from layerClassDef

@@ -30,7 +30,6 @@ import org.apache.fory.memory.MemoryBuffer;
  * @see MetaSharedLayerSerializer
  * @see org.apache.fory.builder.MetaSharedLayerCodecBuilder
  */
-@SuppressWarnings("unchecked")
 public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSerializer<T> {
 
   public MetaSharedLayerSerializerBase(Fory fory, Class<T> type) {

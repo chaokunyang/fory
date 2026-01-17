@@ -701,7 +701,7 @@ public class FieldTypes {
   }
 
   public static class EnumFieldType extends FieldType {
-    private EnumFieldType(boolean nullable, int xtypeId) {
+    public EnumFieldType(boolean nullable, int xtypeId) {
       super(xtypeId, nullable, false);
     }
 

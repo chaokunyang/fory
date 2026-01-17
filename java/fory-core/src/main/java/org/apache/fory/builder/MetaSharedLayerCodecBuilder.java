@@ -28,6 +28,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
+import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.TypeRef;
@@ -37,6 +38,7 @@ import org.apache.fory.serializer.MetaSharedLayerSerializerBase;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -151,6 +153,16 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   @Override
   public Expression buildEncodeExpression() {
     throw new IllegalStateException("unreachable");
+  }
+
+  @Override
+  protected Expression setFieldValue(Expression bean, Descriptor descriptor, Expression value) {
+    if (descriptor.getField() == null) {
+      // Field doesn't exist in current class (e.g., from serialPersistentFields).
+      // Skip setting this field value but still consume the read value.
+      return new StaticInvoke(ExceptionUtils.class, "ignore", value);
+    }
+    return super.setFieldValue(bean, descriptor, value);
   }
 
   // Note: Layer class meta is read by ObjectStreamSerializer before calling this serializer.

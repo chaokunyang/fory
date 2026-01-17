@@ -87,12 +87,11 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       writeLayerClassMeta(buffer);
     }
     // Write fields in order: final, container, other
-    writeFinalFields(buffer, value);
-    writeContainerFields(buffer, value);
-    writeOtherFields(buffer, value);
+    writeFieldsOnly(buffer, value);
   }
 
-  private void writeLayerClassMeta(MemoryBuffer buffer) {
+  @Override
+  public void writeLayerClassMeta(MemoryBuffer buffer) {
     MetaContext metaContext = fory.getSerializationContext().getMetaContext();
     if (metaContext == null) {
       return;
@@ -110,7 +109,15 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     }
   }
 
-  private void writeFinalFields(MemoryBuffer buffer, T value) {
+  @Override
+  public void writeFieldsOnly(MemoryBuffer buffer, T value) {
+    // Write fields in order: buildIn, container, other
+    writeBuildInFields(buffer, value);
+    writeContainerFields(buffer, value);
+    writeOtherFields(buffer, value);
+  }
+
+  private void writeBuildInFields(MemoryBuffer buffer, T value) {
     for (SerializationFieldInfo fieldInfo : buildInFields) {
       AbstractObjectSerializer.writeBuildInField(binding, fieldInfo, buffer, value);
     }
@@ -131,6 +138,81 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
       binding.writeField(fieldInfo, buffer, fieldValue);
+    }
+  }
+
+  @Override
+  public void writeFieldValues(MemoryBuffer buffer, Object[] vals) {
+    // Write fields from array in order: buildIn, container, other
+    int index = 0;
+    // Write buildIn fields
+    for (SerializationFieldInfo fieldInfo : buildInFields) {
+      AbstractObjectSerializer.writeBuildInFieldValue(binding, fieldInfo, buffer, vals[index++]);
+    }
+    // Write container fields
+    Generics generics = fory.getGenerics();
+    for (SerializationFieldInfo fieldInfo : containerFields) {
+      AbstractObjectSerializer.writeContainerFieldValue(
+          binding, refResolver, generics, fieldInfo, buffer, vals[index++]);
+    }
+    // Write other fields
+    for (SerializationFieldInfo fieldInfo : otherFields) {
+      binding.writeField(fieldInfo, buffer, vals[index++]);
+    }
+  }
+
+  @Override
+  public Object[] readFieldValues(MemoryBuffer buffer) {
+    Object[] vals = new Object[getNumFields()];
+    int index = 0;
+    // Read buildIn fields
+    for (SerializationFieldInfo fieldInfo : buildInFields) {
+      vals[index++] = AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
+    }
+    // Read container fields
+    Generics generics = fory.getGenerics();
+    for (SerializationFieldInfo fieldInfo : containerFields) {
+      vals[index++] =
+          AbstractObjectSerializer.readContainerFieldValue(binding, generics, fieldInfo, buffer);
+    }
+    // Read other fields
+    for (SerializationFieldInfo fieldInfo : otherFields) {
+      vals[index++] = binding.readField(fieldInfo, buffer);
+    }
+    return vals;
+  }
+
+  @Override
+  public void populateFieldInfo(ObjectIntMap fieldIndexMap, Class<?>[] fieldTypes) {
+    int index = 0;
+    // BuildIn fields first
+    for (SerializationFieldInfo fieldInfo : buildInFields) {
+      populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
+    }
+    // Container fields next
+    for (SerializationFieldInfo fieldInfo : containerFields) {
+      populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
+    }
+    // Other fields last
+    for (SerializationFieldInfo fieldInfo : otherFields) {
+      populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
+    }
+  }
+
+  private void populateSingleFieldInfo(
+      SerializationFieldInfo fieldInfo,
+      ObjectIntMap fieldIndexMap,
+      Class<?>[] fieldTypes,
+      int index) {
+    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+    if (fieldAccessor != null) {
+      fieldIndexMap.put(fieldAccessor.getField().getName(), index);
+      fieldTypes[index] = fieldAccessor.getField().getType();
+    } else {
+      // Field doesn't exist in actual class (e.g., from serialPersistentFields).
+      // Use descriptor info instead.
+      fieldIndexMap.put(fieldInfo.descriptor.getName(), index);
+      fieldTypes[index] = fieldInfo.descriptor.getRawType();
     }
   }
 

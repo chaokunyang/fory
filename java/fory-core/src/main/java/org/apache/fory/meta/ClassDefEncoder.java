@@ -136,7 +136,7 @@ public class ClassDefEncoder {
         classResolver, type, buildFieldsInfo(classResolver, fields), hasFieldsMeta);
   }
 
-  static ClassDef buildClassDefWithFieldInfos(
+  public static ClassDef buildClassDefWithFieldInfos(
       ClassResolver classResolver,
       Class<?> type,
       List<FieldInfo> fieldInfos,

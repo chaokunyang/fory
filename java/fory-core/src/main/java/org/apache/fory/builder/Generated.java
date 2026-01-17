@@ -156,5 +156,37 @@ public interface Generated {
         Object obj, org.apache.fory.collection.ObjectIntMap fieldIndexMap, int arraySize) {
       return serializer.getFieldValuesForPutFields(obj, fieldIndexMap, arraySize);
     }
+
+    @Override
+    public void writeLayerClassMeta(MemoryBuffer buffer) {
+      serializer.writeLayerClassMeta(buffer);
+    }
+
+    @Override
+    public void writeFieldsOnly(MemoryBuffer buffer, Object value) {
+      serializer.writeFieldsOnly(buffer, value);
+    }
+
+    @Override
+    public void writeFieldValues(MemoryBuffer buffer, Object[] vals) {
+      serializer.writeFieldValues(buffer, vals);
+    }
+
+    @Override
+    public Object[] readFieldValues(MemoryBuffer buffer) {
+      return serializer.readFieldValues(buffer);
+    }
+
+    @Override
+    public int getNumFields() {
+      return serializer.getNumFields();
+    }
+
+    @Override
+    @SuppressWarnings("rawtypes")
+    public void populateFieldInfo(
+        org.apache.fory.collection.ObjectIntMap fieldIndexMap, Class[] fieldTypes) {
+      serializer.populateFieldInfo(fieldIndexMap, fieldTypes);
+    }
   }
 }

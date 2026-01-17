@@ -47,7 +47,7 @@ public final class FieldInfo implements Serializable {
   /** Field ID for schema evolution, -1 means no field ID (use field name). */
   final short fieldId;
 
-  FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType) {
+  public FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType) {
     this(definedClass, fieldName, fieldType, (short) -1);
   }
 

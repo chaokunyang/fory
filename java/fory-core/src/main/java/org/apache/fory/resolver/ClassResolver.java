@@ -98,7 +98,6 @@ import org.apache.fory.serializer.BufferSerializers;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.ExternalizableSerializer;
-import org.apache.fory.serializer.FinalFieldReplaceResolveSerializer;
 import org.apache.fory.serializer.ForyCopyableSerializer;
 import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.JdkProxySerializer;
@@ -420,8 +419,8 @@ public class ClassResolver extends TypeResolver {
   /**
    * Registers a class with a user-specified ID.
    *
-   * <p>The ID is in the user ID space, starting from 0. The unified type ID is encoded as
-   * {@code (userId << 8) | internalTypeId}.
+   * <p>The ID is in the user ID space, starting from 0. The unified type ID is encoded as {@code
+   * (userId << 8) | internalTypeId}.
    *
    * <p>Example:
    *
@@ -465,7 +464,8 @@ public class ClassResolver extends TypeResolver {
         metaStringResolver.getOrCreateMetaStringBytes(encodePackage(namespace));
     MetaStringBytes nameBytes = metaStringResolver.getOrCreateMetaStringBytes(encodeTypeName(name));
     ClassInfo existingInfo = classInfoMap.get(cls);
-    int typeId = buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
+    int typeId =
+        buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
     ClassInfo classInfo =
         new ClassInfo(cls, fullNameBytes, nsBytes, nameBytes, false, null, typeId);
     classInfoMap.put(cls, classInfo);
@@ -925,14 +925,11 @@ public class ClassResolver extends TypeResolver {
     if (classId != null && !isInternalRegisteredClassId(type, classId)) {
       throw new IllegalArgumentException(
           String.format(
-              "Class %s is not registered with an internal id (< %d).",
-              type, INTERNAL_ID_LIMIT));
+              "Class %s is not registered with an internal id (< %d).", type, INTERNAL_ID_LIMIT));
     }
     if (classId != null) {
       Preconditions.checkArgument(
-          classId >= 0 && classId < INTERNAL_ID_LIMIT,
-          "Internal type id overflow: %s",
-          classId);
+          classId >= 0 && classId < INTERNAL_ID_LIMIT, "Internal type id overflow: %s", classId);
     }
     if (classId == null) {
       registerInternal(type);
@@ -1671,8 +1668,7 @@ public class ClassResolver extends TypeResolver {
   public void writeClassInternal(MemoryBuffer buffer, ClassInfo classInfo) {
     int typeId = classInfo.typeId;
     int internalTypeId = typeId & 0xff;
-    boolean writeById =
-        typeId != REPLACE_STUB_ID && !Types.isNamedType(internalTypeId);
+    boolean writeById = typeId != REPLACE_STUB_ID && !Types.isNamedType(internalTypeId);
     if (writeById) {
       buffer.writeVarUint32(typeId << 1);
     } else {
@@ -1807,8 +1803,7 @@ public class ClassResolver extends TypeResolver {
   public Class<?> loadClassForMeta(String className, boolean isEnum, int arrayDims) {
     String pkg = ReflectionUtils.getPackage(className);
     String typeName = ReflectionUtils.getClassNameWithoutPackage(className);
-    MetaStringBytes pkgBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(encodePackage(pkg));
+    MetaStringBytes pkgBytes = metaStringResolver.getOrCreateMetaStringBytes(encodePackage(pkg));
     MetaStringBytes typeBytes =
         metaStringResolver.getOrCreateMetaStringBytes(encodeTypeName(typeName));
     ClassInfo cachedInfo =

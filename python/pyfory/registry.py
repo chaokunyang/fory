@@ -784,40 +784,6 @@ class TypeResolver:
         assert meta_context is not None, "Meta context must be set when meta share is enabled"
         return meta_context.read_shared_typeinfo(buffer)
 
-    def write_type_defs(self, buffer):
-        """Write all type definitions that need to be sent."""
-        meta_context = self.fory.serialization_context.meta_context
-        if meta_context is None:
-            return
-        writing_type_defs = meta_context.get_writing_type_defs()
-        buffer.write_varuint32(len(writing_type_defs))
-        for type_def in writing_type_defs:
-            # Just copy the encoded bytes directly
-            buffer.write_bytes(type_def.encoded)
-
-    def read_type_defs(self, buffer):
-        """Read all type definitions from the buffer."""
-        meta_context = self.fory.serialization_context.meta_context
-        if meta_context is None:
-            return
-
-        num_type_defs = buffer.read_varuint32()
-        for _ in range(num_type_defs):
-            # Read the header (first 8 bytes) to get the type ID
-            header = buffer.read_int64()
-            # Check if we already have this TypeDef cached
-            type_info = self._meta_shared_typeinfo.get(header)
-            if type_info is not None:
-                # Skip the rest of the TypeDef binary for faster performance
-                skip_typedef(buffer, header)
-            else:
-                # Read the TypeDef and create TypeInfo
-                type_def = decode_typedef(buffer, self, header=header)
-                type_info = self._build_type_info_from_typedef(type_def)
-                # Cache the tuple for future use
-                self._meta_shared_typeinfo[header] = type_info
-            meta_context.add_read_typeinfo(type_info)
-
     def _build_type_info_from_typedef(self, type_def):
         """Build TypeInfo from TypeDef using TypeDef's create_serializer method."""
         # Create serializer using TypeDef's create_serializer method

@@ -93,9 +93,8 @@ import org.apache.fory.util.function.Functions;
 public abstract class TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ClassResolver.class);
 
-  public static final int NO_CLASS_ID = 0;
   static final ClassInfo NIL_CLASS_INFO =
-      new ClassInfo(null, null, null, null, false, null, NO_CLASS_ID);
+      new ClassInfo(null, null, null, null, false, null, Types.UNKNOWN);
   // use a lower load factor to minimize hash collision
   static final float foryMapLoadFactor = 0.25f;
   static final int estimatedNumRegistered = 150;
@@ -596,18 +595,6 @@ public abstract class TypeResolver {
    */
   protected abstract ClassInfo getClassInfoByTypeId(int typeId);
 
-  /**
-   * Check if a typeId corresponds to a valid registered class that can be written using the fast
-   * path (typeId << 1) in meta share mode.
-   *
-   * <p>For ClassResolver, this checks if the typeId has an entry in registeredId2ClassInfo. For
-   * XtypeResolver, this checks if the typeId is a valid internal type or has a registered entry.
-   *
-   * @param typeId the type ID to check
-   * @return true if this typeId can use the fast path, false if meta share protocol is needed
-   */
-  protected abstract boolean isValidRegisteredTypeId(int typeId);
-
   final ClassInfo buildMetaSharedClassInfo(
       Tuple2<ClassDef, ClassInfo> classDefTuple, ClassDef classDef) {
     ClassInfo classInfo;
@@ -642,18 +629,19 @@ public abstract class TypeResolver {
     }
     Class<?> cls = clz;
     Short classId = extRegistry.registeredClassIdMap.get(cls);
-    int typeId = NO_CLASS_ID;
+    int typeId;
     if (classId != null) {
       ClassInfo registeredInfo = classInfoMap.get(cls);
-      typeId = registeredInfo == null ? classId : registeredInfo.typeId;
+      if (registeredInfo == null) {
+        registeredInfo = getClassInfo(cls);
+      }
+      typeId = registeredInfo.typeId;
     } else {
       ClassInfo cachedInfo = classInfoMap.get(cls);
       if (cachedInfo != null) {
         typeId = cachedInfo.typeId;
-      } else if (cls.isEnum()) {
-        typeId = Types.NAMED_ENUM;
       } else {
-        typeId = metaContextShareEnabled ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT;
+        typeId = buildUnregisteredTypeId(cls, null);
       }
     }
     ClassInfo classInfo = new ClassInfo(this, cls, null, typeId);
@@ -699,6 +687,27 @@ public abstract class TypeResolver {
       classInfo.setSerializer(this, Serializers.newSerializer(fory, cls, sc));
     }
     return classInfo;
+  }
+
+  protected int buildUnregisteredTypeId(Class<?> cls, Serializer<?> serializer) {
+    if (cls.isEnum()) {
+      return Types.NAMED_ENUM;
+    }
+    if (serializer != null && !isStructSerializer(serializer)) {
+      return Types.NAMED_EXT;
+    }
+    if (fory.isCompatible()) {
+      return Types.NAMED_COMPATIBLE_STRUCT;
+    }
+    return Types.NAMED_STRUCT;
+  }
+
+  protected static boolean isStructSerializer(Serializer<?> serializer) {
+    return serializer instanceof GeneratedObjectSerializer
+        || serializer instanceof GeneratedMetaSharedSerializer
+        || serializer instanceof LazyInitBeanSerializer
+        || serializer instanceof ObjectSerializer
+        || serializer instanceof MetaSharedSerializer;
   }
 
   protected Tuple2<ClassDef, ClassInfo> readClassDef(MemoryBuffer buffer, long header) {
@@ -1250,8 +1259,7 @@ public abstract class TypeResolver {
   }
 
   static class ExtRegistry {
-    // Here we set it to 1 because `NO_CLASS_ID` is 0 to avoid calculating it again in
-    // `register(Class<?> cls)`.
+    // Here we set it to 1 to avoid calculating it again in `register(Class<?> cls)`.
     short classIdGenerator = 1;
     short userIdGenerator = 0;
     SerializerFactory serializerFactory;

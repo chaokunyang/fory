@@ -558,6 +558,14 @@ public class Serializers {
     public Object read(MemoryBuffer buffer) {
       return new Object();
     }
+
+    @Override
+    public void xwrite(MemoryBuffer buffer, Object value) {}
+
+    @Override
+    public Object xread(MemoryBuffer buffer) {
+      return new Object();
+    }
   }
 
   public static void registerDefaultSerializers(Fory fory) {

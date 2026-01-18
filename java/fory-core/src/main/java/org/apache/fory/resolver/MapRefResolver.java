@@ -193,6 +193,10 @@ public final class MapRefResolver implements RefResolver {
     return readRefIds.get(readRefIds.size - 1);
   }
 
+  public boolean hasPreservedRefId() {
+    return readRefIds.size > 0;
+  }
+
   @Override
   public void reference(Object object) {
     int refId = readRefIds.pop();

@@ -83,43 +83,52 @@ class ClassDefDecoder {
       boolean isRegistered = (currentClassHeader & 0b1) != 0;
       int numFields = currentClassHeader >>> 1;
       if (isRegistered) {
-        short registeredId = (short) classDefBuf.readVarUint32Small7();
-        int internalTypeId =
-            resolver.getFory().getConfig().isMetaShareEnabled()
-                ? Types.COMPATIBLE_STRUCT
-                : Types.STRUCT;
-        int typeId = (registeredId << 8) | internalTypeId;
-        if (resolver.getRegisteredClass(registeredId) == null) {
+        int typeId = classDefBuf.readVarUint32Small7();
+        Class<?> cls = resolver.getRegisteredClassByTypeId(typeId);
+        if (cls == null) {
           classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class, typeId);
           className = classSpec.entireClassName;
         } else {
-          Class<?> cls = resolver.getRegisteredClass(registeredId);
           className = cls.getName();
-          classSpec = new ClassSpec(cls, resolver.getTypeIdForClassDef(cls));
+          classSpec = new ClassSpec(cls, typeId);
         }
       } else {
         String pkg = readPkgName(classDefBuf);
         String typeName = readTypeName(classDefBuf);
-        classSpec = Encoders.decodePkgAndClass(pkg, typeName);
-        className = classSpec.entireClassName;
+        ClassSpec decodedSpec = Encoders.decodePkgAndClass(pkg, typeName);
+        className = decodedSpec.entireClassName;
         if (resolver.isRegisteredByName(className)) {
           Class<?> cls = resolver.getRegisteredClass(className);
           className = cls.getName();
           classSpec = new ClassSpec(cls, resolver.getTypeIdForClassDef(cls));
         } else {
-          int typeId =
-              classSpec.isEnum
-                  ? Types.NAMED_ENUM
-                  : (resolver.getFory().getConfig().isMetaShareEnabled()
+          Class<?> cls =
+              resolver.loadClassForMeta(
+                  decodedSpec.entireClassName, decodedSpec.isEnum, decodedSpec.dimension);
+          if (NonexistentClass.isNonexistent(cls)) {
+            int typeId;
+            if (decodedSpec.isEnum) {
+              typeId = Types.NAMED_ENUM;
+            } else {
+              typeId =
+                  resolver.getFory().isCompatible()
                       ? Types.NAMED_COMPATIBLE_STRUCT
-                      : Types.NAMED_STRUCT);
-          classSpec =
-              new ClassSpec(
-                  classSpec.entireClassName,
-                  classSpec.isEnum,
-                  classSpec.isArray,
-                  classSpec.dimension,
-                  typeId);
+                      : Types.NAMED_STRUCT;
+            }
+            classSpec =
+                new ClassSpec(
+                    decodedSpec.entireClassName,
+                    decodedSpec.isEnum,
+                    decodedSpec.isArray,
+                    decodedSpec.dimension,
+                    typeId);
+            classSpec.type = cls;
+            className = classSpec.entireClassName;
+          } else {
+            int typeId = resolver.getTypeIdForClassDef(cls);
+            classSpec = new ClassSpec(cls, typeId);
+            className = classSpec.entireClassName;
+          }
         }
       }
       List<FieldInfo> fieldInfos = readFieldsInfo(classDefBuf, resolver, className, numFields);

@@ -493,6 +493,9 @@ public class XtypeResolver extends TypeResolver {
         return true;
       default:
         Class<?> rawType = descriptor.getRawType();
+        if (rawType == Object.class) {
+          return false;
+        }
         if (rawType.isEnum()) {
           return true;
         }
@@ -509,6 +512,9 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   public boolean isMonomorphic(Class<?> clz) {
+    if (clz == Object.class) {
+      return false;
+    }
     if (TypeUtils.unwrap(clz).isPrimitive() || clz.isEnum() || clz == String.class) {
       return true;
     }
@@ -909,23 +915,6 @@ public class XtypeResolver extends TypeResolver {
     }
   }
 
-  @Override
-  protected boolean isValidRegisteredTypeId(int typeId) {
-    // For XtypeResolver, a valid registered type ID means:
-    // 1. It's a built-in internal type (not UNKNOWN, and not a named type)
-    // 2. Or it has an entry in xtypeIdToClassMap
-    if (typeId == NO_CLASS_ID) {
-      return false;
-    }
-    int internalTypeId = typeId & 0xff;
-    // Named types are not "registered" - they use meta share
-    if (Types.isNamedType(internalTypeId)) {
-      return false;
-    }
-    // Check if it's in the registry
-    return xtypeIdToClassMap.containsKey(typeId);
-  }
-
   private void throwUnexpectTypeIdException(long xtypeId) {
     throw new IllegalStateException(String.format("Type id %s not registered", xtypeId));
   }
@@ -1074,6 +1063,9 @@ public class XtypeResolver extends TypeResolver {
   }
 
   private byte getInternalTypeId(Class<?> cls) {
+    if (cls == Object.class) {
+      return Types.UNKNOWN;
+    }
     if (isSet(cls)) {
       return Types.SET;
     }

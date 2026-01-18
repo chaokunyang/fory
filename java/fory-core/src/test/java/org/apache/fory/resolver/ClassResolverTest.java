@@ -63,6 +63,7 @@ import org.apache.fory.serializer.collection.CollectionSerializers;
 import org.apache.fory.serializer.collection.MapSerializers;
 import org.apache.fory.test.bean.BeanB;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -121,7 +122,7 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testRegisterClassWithUserIds() {
-    // Test that user IDs 0 and 1 work correctly (mapped to internal IDs 256 and 257)
+    // Test that user IDs 0 and 1 work correctly with unified type IDs.
     Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true).build();
     ClassResolver classResolver = fory.getClassResolver();
 
@@ -130,12 +131,17 @@ public class ClassResolverTest extends ForyTestBase {
     // Register with user ID 1
     classResolver.register(Bar.class, 1);
 
-    // Verify internal IDs are offset by USER_ID_BASE (256)
-    assertEquals(
-        classResolver.getRegisteredClassId(Foo.class).shortValue(), ClassResolver.USER_ID_BASE);
-    assertEquals(
-        classResolver.getRegisteredClassId(Bar.class).shortValue(),
-        (short) (ClassResolver.USER_ID_BASE + 1));
+    // Verify registered IDs are user IDs and type IDs encode user ID and internal type.
+    assertEquals(classResolver.getRegisteredClassId(Foo.class).shortValue(), (short) 0);
+    assertEquals(classResolver.getRegisteredClassId(Bar.class).shortValue(), (short) 1);
+    int fooTypeId = classResolver.getClassInfo(Foo.class).getTypeId();
+    int barTypeId = classResolver.getClassInfo(Bar.class).getTypeId();
+    assertEquals(fooTypeId >>> 8, 0);
+    assertEquals(barTypeId >>> 8, 1);
+    int fooInternalType = fooTypeId & 0xff;
+    int barInternalType = barTypeId & 0xff;
+    assertTrue(fooInternalType == Types.STRUCT || fooInternalType == Types.COMPATIBLE_STRUCT);
+    assertTrue(barInternalType == Types.STRUCT || barInternalType == Types.COMPATIBLE_STRUCT);
 
     // Verify serialization/deserialization works
     Foo foo = new Foo();

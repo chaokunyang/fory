@@ -30,7 +30,6 @@ import org.apache.fory.meta.MetaString.Encoding;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Types;
-import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
 
 /**
@@ -67,9 +66,6 @@ public class ClassInfo {
     this.isDynamicGeneratedClass = isDynamicGeneratedClass;
     this.typeId = typeId;
     this.serializer = serializer;
-    if (cls != null && typeId == TypeResolver.NO_CLASS_ID) {
-      Preconditions.checkArgument(typeNameBytes != null);
-    }
   }
 
   /**
@@ -87,7 +83,7 @@ public class ClassInfo {
     this.typeNameBytes = null;
     this.isDynamicGeneratedClass = false;
     this.serializer = null;
-    this.typeId = TypeResolver.NO_CLASS_ID;
+    this.typeId = classDef == null ? Types.UNKNOWN : classDef.getClassSpec().typeId;
   }
 
   ClassInfo(TypeResolver classResolver, Class<?> cls, Serializer<?> serializer, int typeId) {
@@ -107,14 +103,12 @@ public class ClassInfo {
     // - NAMED_COMPATIBLE_STRUCT: unregistered classes in compatible mode
     // - NAMED_ENUM, NAMED_EXT: other named types
     // - REPLACE_STUB_ID: for write replace class in `ClassSerializer`
-    // - NO_CLASS_ID: legacy support (should use NAMED_STRUCT instead)
     boolean isNamedType =
         typeId == Types.NAMED_STRUCT
             || typeId == Types.NAMED_COMPATIBLE_STRUCT
             || typeId == Types.NAMED_ENUM
             || typeId == Types.NAMED_EXT
-            || typeId == ClassResolver.REPLACE_STUB_ID
-            || typeId == TypeResolver.NO_CLASS_ID;
+            || typeId == ClassResolver.REPLACE_STUB_ID;
     if (cls != null && isNamedType) {
       Tuple2<String, String> tuple2 = Encoders.encodePkgAndClass(cls);
       this.namespaceBytes =

@@ -91,7 +91,8 @@ public class FieldTypes {
         typeId = Types.getTypeId(resolver.getFory(), rawType);
       }
     } else {
-      ClassInfo info = resolver.getClassInfo(rawType, false);
+      ClassInfo info =
+          isXlang && rawType == Object.class ? null : resolver.getClassInfo(rawType, false);
       if (info != null) {
         typeId = info.getTypeId();
       } else if (isXlang) {
@@ -123,13 +124,12 @@ public class FieldTypes {
     // For xlang: ref tracking is false by default (no shared ownership like Rust's Rc/Arc)
     // For native: use the type's default tracking behavior
     boolean trackingRef = !isXlang && genericType.trackingRef(resolver);
-    // For xlang: nullable is false by default (aligned with all languages)
-    // Exception: Optional types are nullable (like Rust's Option<T>)
-    // For native: non-primitive types are nullable by default
+    // For xlang: nullable is false by default (aligned with all languages).
+    // Exception: Optional types are nullable (like Rust's Option<T>).
+    // For native: non-primitive types are nullable by default.
     boolean nullable;
     if (isXlang) {
-      // Only Optional types and boxed types are nullable by default in xlang mode
-      nullable = isOptionalType(rawType) || TypeUtils.isBoxed(rawType);
+      nullable = isOptionalType(rawType);
     } else {
       // Primitives are never nullable, non-primitives are nullable by default
       // This applies to both top-level fields and nested types (in arrays, collections, maps)
@@ -465,8 +465,7 @@ public class FieldTypes {
         Preconditions.checkNotNull(xtypeInfo);
         cls = xtypeInfo.getCls();
       } else {
-        int classId = typeId < ClassResolver.USER_ID_BASE ? typeId : (typeId >>> 8);
-        cls = ((ClassResolver) resolver).getRegisteredClass((short) classId);
+        cls = ((ClassResolver) resolver).getRegisteredClassByTypeId(typeId);
       }
       if (cls == null) {
         LOG.warn("Class {} not registered, take it as Struct type for deserialization.", typeId);
@@ -484,9 +483,8 @@ public class FieldTypes {
       if (resolver instanceof ClassResolver) {
         ClassResolver classResolver = (ClassResolver) resolver;
         // Peer class may not register this class id, which will introduce inconsistent field order
-        int classId = typeId < ClassResolver.USER_ID_BASE ? typeId : (typeId >>> 8);
-        if (classResolver.isInternalRegistered(classId)) {
-          return String.valueOf(classId);
+        if (classResolver.isInternalRegistered(typeId)) {
+          return String.valueOf(typeId);
         } else {
           return "Registered";
         }

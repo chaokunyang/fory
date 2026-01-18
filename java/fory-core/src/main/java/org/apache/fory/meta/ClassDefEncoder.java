@@ -178,7 +178,7 @@ public class ClassDefEncoder {
       if (classResolver.isRegisteredById(currentType)) {
         currentClassHeader |= 1;
         classDefBuf.writeVarUint32Small7(currentClassHeader);
-        classDefBuf.writeVarUint32Small7(classResolver.getRegisteredClassId(currentType));
+        classDefBuf.writeVarUint32Small7(classResolver.getTypeIdForClassDef(currentType));
       } else {
         classDefBuf.writeVarUint32Small7(currentClassHeader);
         String ns, typename;

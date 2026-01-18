@@ -240,7 +240,8 @@ public class ReplaceResolveSerializer extends Serializer {
         writeClassInfo = null;
       } else {
         // FIXME new classinfo may miss serializer update in async compilation mode.
-        writeClassInfo = classResolver.newClassInfo(type, this, ClassResolver.NO_CLASS_ID);
+        int typeId = classResolver.getTypeIdForClassDef(type);
+        writeClassInfo = classResolver.newClassInfo(type, this, typeId);
       }
     } else {
       jdkMethodInfoWriteCache = null;

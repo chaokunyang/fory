@@ -130,14 +130,17 @@ public final class NonexistentClassSerializers {
     }
 
     private int resolveTypeId(ClassDef classDef) {
-      int typeId = classDef.getClassSpec().typeId;
-      if (typeId >= 0) {
-        return typeId;
-      }
       if (classDef.getClassSpec().isEnum) {
-        return Types.NAMED_ENUM;
+        if (classDef.isNamed()) {
+          return Types.NAMED_ENUM;
+        }
+        return (classDef.getUserTypeId() << 8) | Types.ENUM;
       }
-      return Types.NAMED_COMPATIBLE_STRUCT;
+      if (classDef.isNamed()) {
+        return classDef.isCompatible() ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT;
+      }
+      int internalTypeId = classDef.isCompatible() ? Types.COMPATIBLE_STRUCT : Types.STRUCT;
+      return (classDef.getUserTypeId() << 8) | internalTypeId;
     }
 
     @Override

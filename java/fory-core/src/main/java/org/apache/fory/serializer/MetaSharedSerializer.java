@@ -33,6 +33,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.resolver.MapRefResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -191,7 +192,14 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     Fory fory = this.fory;
     RefResolver refResolver = this.refResolver;
     SerializationBinding binding = this.binding;
-    refResolver.reference(targetObject);
+    if (refResolver instanceof MapRefResolver) {
+      MapRefResolver mapRefResolver = (MapRefResolver) refResolver;
+      if (mapRefResolver.hasPreservedRefId()) {
+        refResolver.reference(targetObject);
+      }
+    } else {
+      refResolver.reference(targetObject);
+    }
     // read order: primitive,boxed,final,other,collection,map
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;

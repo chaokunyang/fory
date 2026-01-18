@@ -38,6 +38,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Serializers for common guava types. */
@@ -401,7 +402,7 @@ public class GuavaCollectionSerializers {
     // inconsistent if peers load different version of guava.
     // For example: guava 20 return ImmutableBiMap for ImmutableMap.of(), but guava 27 return
     // ImmutableMap.
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     Class cls =
         loadClass(pkg + ".RegularImmutableBiMap", ImmutableBiMap.of("k1", 1, "k2", 4).getClass());
     resolver.registerInternalSerializer(cls, new ImmutableBiMapSerializer(fory, cls));

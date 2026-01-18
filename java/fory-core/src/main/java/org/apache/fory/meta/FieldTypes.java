@@ -97,7 +97,7 @@ public class FieldTypes {
     } else {
       ClassInfo info = resolver.getClassInfo(genericType.getCls(), false);
       if (info != null) {
-        xtypeId = info.getXtypeId();
+        xtypeId = info.getTypeId();
       } else {
         xtypeId = Types.UNKNOWN;
       }
@@ -259,7 +259,7 @@ public class FieldTypes {
       // - bits 2+: typeId
       byte header = (byte) ((nullable ? 0b10 : 0) | (trackingRef ? 0b1 : 0));
       if (this instanceof RegisteredFieldType) {
-        short classId = ((RegisteredFieldType) this).getClassId();
+        short classId = ((RegisteredFieldType) this).getTypeId();
         buffer.writeVarUint32Small7(writeHeader ? ((5 + classId) << 2) | header : 5 + classId);
       } else if (this instanceof EnumFieldType) {
         buffer.writeVarUint32Small7(writeHeader ? ((4) << 2) | header : 4);
@@ -416,7 +416,7 @@ public class FieldTypes {
       this.classId = (short) classId;
     }
 
-    public short getClassId() {
+    public short getTypeId() {
       return classId;
     }
 

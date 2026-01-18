@@ -476,7 +476,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       if (element != null) {
         ClassInfo classInfo = typeResolver.getClassInfo(element.getClass(), elementClassInfoHolder);
         if (!classInfo.getSerializer().isImmutable()) {
-          element = fory.copyObject(element, classInfo.getClassId());
+          element = fory.copyObject(element, classInfo.getTypeId());
         }
       }
       newCollection.add(element);

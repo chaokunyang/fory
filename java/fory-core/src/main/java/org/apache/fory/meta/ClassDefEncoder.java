@@ -76,13 +76,14 @@ public class ClassDefEncoder {
     descriptorGrouper
         .getBuildInDescriptors()
         .forEach(descriptor -> fields.add(descriptor.getField()));
-    descriptorGrouper
-        .getOtherDescriptors()
-        .forEach(descriptor -> fields.add(descriptor.getField()));
+    // Order must match ObjectSerializer serialization order: buildIn, container, other
     descriptorGrouper
         .getCollectionDescriptors()
         .forEach(descriptor -> fields.add(descriptor.getField()));
     descriptorGrouper.getMapDescriptors().forEach(descriptor -> fields.add(descriptor.getField()));
+    descriptorGrouper
+        .getOtherDescriptors()
+        .forEach(descriptor -> fields.add(descriptor.getField()));
     return fields;
   }
 

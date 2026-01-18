@@ -50,6 +50,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
@@ -561,7 +562,7 @@ public class Serializers {
   }
 
   public static void registerDefaultSerializers(Fory fory) {
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(Class.class, new ClassSerializer(fory));
     resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(fory));
     resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(fory));

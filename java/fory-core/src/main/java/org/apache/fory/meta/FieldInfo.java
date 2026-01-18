@@ -94,7 +94,7 @@ public final class FieldInfo implements Serializable {
     String typeName = fieldType.getTypeName(resolver, typeRef);
     if (fieldType instanceof FieldTypes.RegisteredFieldType) {
       if (!Types.isPrimitiveType(fieldType.xtypeId)) {
-        typeName = String.valueOf(((FieldTypes.RegisteredFieldType) fieldType).getClassId());
+        typeName = String.valueOf(((FieldTypes.RegisteredFieldType) fieldType).getTypeId());
       }
     }
     // Get nullable and trackingRef from remote FieldType - these are what the remote peer

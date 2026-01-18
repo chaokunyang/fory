@@ -39,6 +39,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -351,7 +352,7 @@ public class MapSerializers {
           ClassInfo classInfo =
               classResolver.getClassInfo(value.getClass(), valueClassInfoWriteCache);
           if (!classInfo.getSerializer().isImmutable()) {
-            value = fory.copyObject(value, classInfo.getClassId());
+            value = fory.copyObject(value, classInfo.getTypeId());
           }
         }
         newMap.put(entry.getKey(), value);
@@ -494,10 +495,9 @@ public class MapSerializers {
 
   // TODO(chaokunyang) support ConcurrentSkipListMap.SubMap mo efficiently.
   public static void registerDefaultSerializers(Fory fory) {
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(HashMap.class, new HashMapSerializer(fory));
-    fory.getClassResolver()
-        .registerInternalSerializer(LinkedHashMap.class, new LinkedHashMapSerializer(fory));
+    resolver.registerInternalSerializer(LinkedHashMap.class, new LinkedHashMapSerializer(fory));
     resolver.registerInternalSerializer(
         TreeMap.class, new SortedMapSerializer<>(fory, TreeMap.class));
     resolver.registerInternalSerializer(

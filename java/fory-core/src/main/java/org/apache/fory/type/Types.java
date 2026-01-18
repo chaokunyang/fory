@@ -351,7 +351,7 @@ public class Types {
     }
     ClassInfo classInfo = fory._getTypeResolver().getClassInfo(clz, false);
     if (classInfo != null) {
-      return fory.isCrossLanguage() ? classInfo.getXtypeId() : classInfo.getClassId();
+      return classInfo.getTypeId();
     }
     return Types.UNKNOWN;
   }

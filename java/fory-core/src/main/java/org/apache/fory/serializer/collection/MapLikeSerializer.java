@@ -531,7 +531,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       if (key != null) {
         ClassInfo classInfo = classResolver.getClassInfo(key.getClass(), keyClassInfoWriteCache);
         if (!classInfo.getSerializer().isImmutable()) {
-          key = fory.copyObject(key, classInfo.getClassId());
+          key = fory.copyObject(key, classInfo.getTypeId());
         }
       }
       V value = entry.getValue();
@@ -539,7 +539,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         ClassInfo classInfo =
             classResolver.getClassInfo(value.getClass(), valueClassInfoWriteCache);
         if (!classInfo.getSerializer().isImmutable()) {
-          value = fory.copyObject(value, classInfo.getClassId());
+          value = fory.copyObject(value, classInfo.getTypeId());
         }
       }
       newMap.put(key, value);
@@ -553,7 +553,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       if (key != null) {
         ClassInfo classInfo = classResolver.getClassInfo(key.getClass(), keyClassInfoWriteCache);
         if (!classInfo.getSerializer().isImmutable()) {
-          key = fory.copyObject(key, classInfo.getClassId());
+          key = fory.copyObject(key, classInfo.getTypeId());
         }
       }
       V value = entry.getValue();
@@ -561,7 +561,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         ClassInfo classInfo =
             classResolver.getClassInfo(value.getClass(), valueClassInfoWriteCache);
         if (!classInfo.getSerializer().isImmutable()) {
-          value = fory.copyObject(value, classInfo.getClassId());
+          value = fory.copyObject(value, classInfo.getTypeId());
         }
       }
       builder.put(key, value);
@@ -576,7 +576,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       if (key != null) {
         ClassInfo classInfo = classResolver.getClassInfo(key.getClass(), keyClassInfoWriteCache);
         if (!classInfo.getSerializer().isImmutable()) {
-          key = fory.copyObject(key, classInfo.getClassId());
+          key = fory.copyObject(key, classInfo.getTypeId());
         }
       }
       V value = entry.getValue();
@@ -584,7 +584,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         ClassInfo classInfo =
             classResolver.getClassInfo(value.getClass(), valueClassInfoWriteCache);
         if (!classInfo.getSerializer().isImmutable()) {
-          value = fory.copyObject(value, classInfo.getClassId());
+          value = fory.copyObject(value, classInfo.getTypeId());
         }
       }
       elements[index++] = key;

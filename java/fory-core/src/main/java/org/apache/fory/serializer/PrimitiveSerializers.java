@@ -28,6 +28,7 @@ import org.apache.fory.config.LongEncoding;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 
 /** Serializers for java primitive types. */
@@ -294,7 +295,7 @@ public class PrimitiveSerializers {
 
   public static void registerDefaultSerializers(Fory fory) {
     // primitive types will be boxed.
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(boolean.class, new BooleanSerializer(fory, boolean.class));
     resolver.registerInternalSerializer(byte.class, new ByteSerializer(fory, byte.class));
     resolver.registerInternalSerializer(short.class, new ShortSerializer(fory, short.class));

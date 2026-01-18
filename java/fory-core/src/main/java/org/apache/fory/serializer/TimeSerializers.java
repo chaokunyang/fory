@@ -42,6 +42,7 @@ import java.util.TimeZone;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.DateTimeUtils;
 
 /** Serializers for all time related types. */
@@ -708,7 +709,7 @@ public class TimeSerializers {
   }
 
   public static void registerDefaultSerializers(Fory fory) {
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(Date.class, new DateSerializer(fory));
     resolver.registerInternalSerializer(java.sql.Date.class, new SqlDateSerializer(fory));
     resolver.registerInternalSerializer(Time.class, new SqlTimeSerializer(fory));

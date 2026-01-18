@@ -41,6 +41,7 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.ExceptionUtils;
 
@@ -212,7 +213,7 @@ public class SynchronizedSerializers {
    */
   public static void registerSerializers(Fory fory) {
     try {
-      ClassResolver resolver = fory.getClassResolver();
+      TypeResolver resolver = fory._getTypeResolver();
       for (Tuple2<Class<?>, Function> factory : synchronizedFactories()) {
         resolver.registerInternalSerializer(factory.f0, createSerializer(fory, factory));
       }

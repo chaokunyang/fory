@@ -68,8 +68,8 @@ class TypeDefEncoder {
                 Function.identity());
     ClassInfo classInfo = fory._getTypeResolver().getClassInfo(type);
     List<Field> fields;
-    int xtypeId = classInfo.getXtypeId();
-    if (Types.isStructType(xtypeId & 0xff)) {
+    int typeId = classInfo.getTypeId();
+    if (Types.isStructType(typeId & 0xff)) {
       fields =
           descriptorGrouper.getSortedDescriptors().stream()
               .map(Descriptor::getField)
@@ -144,7 +144,7 @@ class TypeDefEncoder {
       buffer.writeVarUint32(fields.size() - SMALL_NUM_FIELDS_THRESHOLD);
     }
     if (resolver.isRegisteredById(type)) {
-      buffer.writeVarUint32(classInfo.getXtypeId());
+      buffer.writeVarUint32(classInfo.getTypeId());
     } else {
       Preconditions.checkArgument(resolver.isRegisteredByName(type));
       currentClassHeader |= REGISTER_BY_NAME_FLAG;

@@ -273,9 +273,9 @@ public class ChildContainerSerializers {
 
   /**
    * Read and skip the layer class meta from buffer. This is used to skip over the class definition
-   * that was written by MetaSharedLayerSerializer.writeLayerClassMeta(). For ChildContainerSerializers,
-   * we use the same serializer on both write and read sides, so we just need to skip the meta
-   * without actually parsing it.
+   * that was written by MetaSharedLayerSerializer.writeLayerClassMeta(). For
+   * ChildContainerSerializers, we use the same serializer on both write and read sides, so we just
+   * need to skip the meta without actually parsing it.
    */
   private static void readAndSkipLayerClassMeta(Fory fory, MemoryBuffer buffer) {
     MetaContext metaContext = fory.getSerializationContext().getMetaContext();

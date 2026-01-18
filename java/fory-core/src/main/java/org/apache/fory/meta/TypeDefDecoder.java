@@ -72,12 +72,12 @@ class TypeDefDecoder {
         classSpec = new ClassSpec(userTypeInfo.getCls());
       }
     } else {
-      int xtypeId = buffer.readVarUint32Small7();
-      ClassInfo userTypeInfo = resolver.getUserTypeInfo(xtypeId);
+      int typeId = buffer.readVarUint32Small7();
+      ClassInfo userTypeInfo = resolver.getUserTypeInfo(typeId);
       if (userTypeInfo == null) {
-        classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class, xtypeId);
+        classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class, typeId);
       } else {
-        classSpec = new ClassSpec(userTypeInfo.getCls(), xtypeId);
+        classSpec = new ClassSpec(userTypeInfo.getCls(), typeId);
       }
     }
     List<FieldInfo> classFields =

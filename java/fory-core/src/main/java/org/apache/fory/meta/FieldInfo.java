@@ -93,7 +93,7 @@ public final class FieldInfo implements Serializable {
     TypeRef<?> typeRef = fieldType.toTypeToken(resolver, declared);
     String typeName = fieldType.getTypeName(resolver, typeRef);
     if (fieldType instanceof FieldTypes.RegisteredFieldType) {
-      if (!Types.isPrimitiveType(fieldType.xtypeId)) {
+      if (!Types.isPrimitiveType(fieldType.typeId)) {
         typeName = String.valueOf(((FieldTypes.RegisteredFieldType) fieldType).getTypeId());
       }
     }

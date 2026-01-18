@@ -729,8 +729,7 @@ public class RecordXlangTest {
     RefOuterRecord result = (RefOuterRecord) fory.deserialize(buffer);
 
     // Verify reference identity is preserved
-    Assert.assertSame(
-        result.inner1(), result.inner2(), "inner1 and inner2 should be same object");
+    Assert.assertSame(result.inner1(), result.inner2(), "inner1 and inner2 should be same object");
     Assert.assertEquals(result.inner1().id(), 42);
     Assert.assertEquals(result.inner1().name(), "shared_inner");
   }
@@ -766,8 +765,7 @@ public class RecordXlangTest {
     RefOuterRecord result = (RefOuterRecord) fory.deserialize(buffer);
 
     // Verify reference identity is preserved
-    Assert.assertSame(
-        result.inner1(), result.inner2(), "inner1 and inner2 should be same object");
+    Assert.assertSame(result.inner1(), result.inner2(), "inner1 and inner2 should be same object");
     Assert.assertEquals(result.inner1().id(), 99);
     Assert.assertEquals(result.inner1().name(), "compatible_shared");
   }

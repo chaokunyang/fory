@@ -1747,8 +1747,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           descriptor,
           callback,
           () -> deserializeForNotNull(buffer, typeRef, null),
-          nullable
-      );
+          nullable);
     }
   }
 
@@ -1801,8 +1800,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression value = deserializeForNotNull.get();
       // When local field is primitive but remote was nullable (boxed), use default value
       // instead of null. This handles compatibility between boxed/primitive field types.
-      Expression nullExpr = nullValue(descriptor.getField() != null
-          ? descriptor.getField().getType() : descriptor.getRawType());
+      Expression nullExpr =
+          nullValue(
+              descriptor.getField() != null
+                  ? descriptor.getField().getType()
+                  : descriptor.getRawType());
       // use false to ignore null.
       return new If(notNull, callback.apply(value), callback.apply(nullExpr), false);
     } else {
@@ -1894,8 +1896,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               descriptor,
               callback,
               () -> deserializeForNotNullForField(buffer, descriptor, null),
-              true
-          );
+              true);
 
       if (serializerCallsReference) {
         Expression preserveStubRefId =

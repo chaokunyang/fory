@@ -104,8 +104,10 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     DescriptorGrouper grouper = typeResolver.createDescriptorGrouper(descriptors, false);
     descriptors = grouper.getSortedDescriptors();
     if (Utils.DEBUG_OUTPUT_ENABLED) {
-      LOG.info("========== ObjectSerializer {} sorted descriptors for {} ==========",
-          descriptors.size(), cls.getName());
+      LOG.info(
+          "========== ObjectSerializer {} sorted descriptors for {} ==========",
+          descriptors.size(),
+          cls.getName());
       for (Descriptor d : descriptors) {
         LOG.info(
             "  {} -> {}, ref {}, nullable {}",

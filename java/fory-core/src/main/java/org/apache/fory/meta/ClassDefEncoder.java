@@ -147,12 +147,10 @@ public class ClassDefEncoder {
     classLayers.values().forEach(fieldInfos::addAll);
     MemoryBuffer encodeClassDef = encodeClassDef(classResolver, type, classLayers, hasFieldsMeta);
     byte[] classDefBytes = encodeClassDef.getBytes(0, encodeClassDef.writerIndex());
+    int typeId = classResolver.getTypeIdForClassDef(type);
+    ClassSpec classSpec = new ClassSpec(type, typeId);
     return new ClassDef(
-        Encoders.buildClassSpec(type),
-        fieldInfos,
-        hasFieldsMeta,
-        encodeClassDef.getInt64(0),
-        classDefBytes);
+        classSpec, fieldInfos, hasFieldsMeta, encodeClassDef.getInt64(0), classDefBytes);
   }
 
   // see spec documentation: docs/specification/java_serialization_spec.md

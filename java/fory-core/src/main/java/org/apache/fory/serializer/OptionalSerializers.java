@@ -25,7 +25,6 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 
 /**

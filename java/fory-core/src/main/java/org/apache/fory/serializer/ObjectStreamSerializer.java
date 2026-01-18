@@ -522,8 +522,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     // For registered types
     if (fory.getClassResolver().isRegisteredById(fieldType)) {
-      Short classId = fory.getClassResolver().getRegisteredClassId(fieldType);
-      return new FieldTypes.RegisteredFieldType(true, true, classId);
+      int typeId = fory.getClassResolver().getTypeIdForClassDef(fieldType);
+      return new FieldTypes.RegisteredFieldType(true, true, typeId);
     }
 
     // For enums

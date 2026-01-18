@@ -37,6 +37,7 @@ import org.apache.fory.meta.MetaString.Encoding;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.NonexistentClass;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -83,13 +84,18 @@ class ClassDefDecoder {
       int numFields = currentClassHeader >>> 1;
       if (isRegistered) {
         short registeredId = (short) classDefBuf.readVarUint32Small7();
+        int internalTypeId =
+            resolver.getFory().getConfig().isMetaShareEnabled()
+                ? Types.COMPATIBLE_STRUCT
+                : Types.STRUCT;
+        int typeId = (registeredId << 8) | internalTypeId;
         if (resolver.getRegisteredClass(registeredId) == null) {
-          classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class);
+          classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class, typeId);
           className = classSpec.entireClassName;
         } else {
           Class<?> cls = resolver.getRegisteredClass(registeredId);
           className = cls.getName();
-          classSpec = new ClassSpec(cls);
+          classSpec = new ClassSpec(cls, resolver.getTypeIdForClassDef(cls));
         }
       } else {
         String pkg = readPkgName(classDefBuf);
@@ -99,7 +105,21 @@ class ClassDefDecoder {
         if (resolver.isRegisteredByName(className)) {
           Class<?> cls = resolver.getRegisteredClass(className);
           className = cls.getName();
-          classSpec = new ClassSpec(cls);
+          classSpec = new ClassSpec(cls, resolver.getTypeIdForClassDef(cls));
+        } else {
+          int typeId =
+              classSpec.isEnum
+                  ? Types.NAMED_ENUM
+                  : (resolver.getFory().getConfig().isMetaShareEnabled()
+                      ? Types.NAMED_COMPATIBLE_STRUCT
+                      : Types.NAMED_STRUCT);
+          classSpec =
+              new ClassSpec(
+                  classSpec.entireClassName,
+                  classSpec.isEnum,
+                  classSpec.isArray,
+                  classSpec.dimension,
+                  typeId);
         }
       }
       List<FieldInfo> fieldInfos = readFieldsInfo(classDefBuf, resolver, className, numFields);

@@ -19,12 +19,10 @@
 
 package org.apache.fory.resolver;
 
-import static org.apache.fory.Fory.NOT_SUPPORT_XLANG;
 import static org.apache.fory.type.TypeUtils.getSizeOfPrimitiveType;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
-import org.apache.fory.collection.ObjectArray;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Type;
@@ -260,6 +258,7 @@ public abstract class TypeResolver {
    * shared by both ClassResolver and XtypeResolver.
    *
    * <p>Encoding:
+   *
    * <ul>
    *   <li>NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: namespace + typename bytes (or meta-share if enabled)
    *   <li>NAMED_COMPATIBLE_STRUCT/COMPATIBLE_STRUCT: always meta-share
@@ -267,14 +266,6 @@ public abstract class TypeResolver {
    * </ul>
    */
   public final void writeClassInfo(MemoryBuffer buffer, ClassInfo classInfo) {
-    // In meta share mode, use the meta share protocol directly
-    // Protocol: LSB=0 means registered type by ID, LSB=1 means meta share data
-    if (metaContextShareEnabled) {
-      writeClassInfoWithMetaShare(buffer, classInfo);
-      return;
-    }
-
-    // Non-meta share mode: write typeId followed by optional class name bytes
     int typeId = classInfo.getTypeId();
     int internalTypeId = typeId & 0xff;
     buffer.writeVarUint32Small7(typeId);
@@ -283,49 +274,25 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
-        assert classInfo.namespaceBytes != null;
-        metaStringResolver.writeMetaStringBytes(buffer, classInfo.namespaceBytes);
-        assert classInfo.typeNameBytes != null;
-        metaStringResolver.writeMetaStringBytes(buffer, classInfo.typeNameBytes);
+        if (metaContextShareEnabled) {
+          writeSharedClassMeta(buffer, classInfo);
+        } else {
+          Preconditions.checkNotNull(classInfo.namespaceBytes);
+          metaStringResolver.writeMetaStringBytes(buffer, classInfo.namespaceBytes);
+          Preconditions.checkNotNull(classInfo.typeNameBytes);
+          metaStringResolver.writeMetaStringBytes(buffer, classInfo.typeNameBytes);
+        }
+        break;
+      case Types.NAMED_COMPATIBLE_STRUCT:
+      case Types.COMPATIBLE_STRUCT:
+        Preconditions.checkArgument(
+            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
+        if (classInfo.cls != NonexistentMetaShared.class) {
+          writeSharedClassMeta(buffer, classInfo);
+        }
         break;
       default:
-        // No additional data needed - type ID already written
         break;
-    }
-  }
-
-  /**
-   * Writes class info using meta share protocol.
-   * Protocol: LSB=0 means registered type by ID, LSB=1 means meta share reference/definition.
-   */
-  private void writeClassInfoWithMetaShare(MemoryBuffer buffer, ClassInfo classInfo) {
-    int typeId = classInfo.getTypeId();
-    // For registered types that don't need ClassDef, just write the type ID.
-    // The isValidRegisteredTypeId check ensures we only use the fast path for
-    // classes that are actually registered in this resolver's registry.
-    // Named types (NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, etc.) will not pass
-    // this check because they don't have entries in the registry.
-    if (isValidRegisteredTypeId(typeId) && !classInfo.needToWriteClassDef) {
-      buffer.writeVarUint32(typeId << 1);
-      return;
-    }
-    // For types that need ClassDef or are not registered, use the meta share protocol
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    assert metaContext != null : SET_META__CONTEXT_MSG;
-    IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
-    int newId = classMap.size;
-    int id = classMap.putOrGet(classInfo.cls, newId);
-    if (id >= 0) {
-      // Reference to previously written type: (index << 1) | 1
-      buffer.writeVarUint32((id << 1) | 1);
-    } else {
-      // New type: (index << 1) | 1, followed by ClassDef bytes
-      buffer.writeVarUint32((newId << 1) | 1);
-      ClassDef classDef = classInfo.classDef;
-      if (classDef == null) {
-        classDef = buildClassDef(classInfo);
-      }
-      metaContext.writingClassDefs.add(classDef);
     }
   }
 
@@ -382,117 +349,53 @@ public abstract class TypeResolver {
    * class info cache.
    */
   public final ClassInfo readClassInfo(MemoryBuffer buffer) {
-    // In meta share mode, use the meta share protocol directly
-    // Protocol: LSB=0 means registered type by ID, LSB=1 means meta share data
-    if (metaContextShareEnabled) {
-      return readClassInfoWithMetaShare(buffer);
-    }
-
-    // Non-meta share mode: read typeId followed by optional class name bytes
     int header = buffer.readVarUint32Small14();
     int internalTypeId = header & 0xff;
-
-    // Check if this is a named type (needs class name bytes)
-    if (isNamedType(internalTypeId)) {
-      // Use cache to avoid reloading dynamically created classes
-      // ensureSerializerForClassInfo is called within readClassInfoFromBytes
-      ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
-      classInfoCache = classInfo;
-      return classInfo;
-    } else {
-      // Lookup by type ID from registry
-      return getClassInfoByTypeId(header);
+    switch (internalTypeId) {
+      case Types.NAMED_ENUM:
+      case Types.NAMED_STRUCT:
+      case Types.NAMED_EXT:
+        if (metaContextShareEnabled) {
+          return readSharedClassMeta(buffer);
+        }
+        ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
+        classInfoCache = classInfo;
+        return classInfo;
+      case Types.NAMED_COMPATIBLE_STRUCT:
+      case Types.COMPATIBLE_STRUCT:
+        Preconditions.checkArgument(
+            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
+        return readSharedClassMeta(buffer);
+      default:
+        return getClassInfoByTypeId(header);
     }
   }
 
   /**
-   * Reads class info using meta share protocol.
-   * Protocol: LSB=0 means registered type by ID, LSB=1 means meta share reference/definition.
+   * Read class info from buffer using a target class. This is used by java serialization APIs that
+   * pass an expected class for meta share resolution.
    */
-  private ClassInfo readClassInfoWithMetaShare(MemoryBuffer buffer) {
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    assert metaContext != null : SET_META__CONTEXT_MSG;
+  public final ClassInfo readClassInfo(MemoryBuffer buffer, Class<?> targetClass) {
     int header = buffer.readVarUint32Small14();
-    int id = header >>> 1;
-    if ((header & 0b1) == 0) {
-      // Registered type by ID
-      return getClassInfoByTypeId(id);
+    int internalTypeId = header & 0xff;
+    switch (internalTypeId) {
+      case Types.NAMED_ENUM:
+      case Types.NAMED_STRUCT:
+      case Types.NAMED_EXT:
+        if (metaContextShareEnabled) {
+          return readSharedClassMeta(buffer, targetClass);
+        }
+        ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
+        classInfoCache = classInfo;
+        return classInfo;
+      case Types.NAMED_COMPATIBLE_STRUCT:
+      case Types.COMPATIBLE_STRUCT:
+        Preconditions.checkArgument(
+            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
+        return readSharedClassMeta(buffer, targetClass);
+      default:
+        return getClassInfoByTypeId(header);
     }
-    // Meta share reference or definition
-    ClassInfo classInfo = metaContext.readClassInfos.get(id);
-    if (classInfo == null) {
-      classInfo = readSharedClassMetaById(metaContext, id);
-    }
-    return classInfo;
-  }
-
-  /**
-   * Read a ClassDef from meta share context and create ClassInfo.
-   * The ClassDef is looked up from metaContext.readClassDefs by index.
-   */
-  protected final ClassInfo readSharedClassMetaById(MetaContext metaContext, int index) {
-    ClassDef classDef = metaContext.readClassDefs.get(index);
-    Tuple2<ClassDef, ClassInfo> classDefTuple = extRegistry.classIdToDef.get(classDef.getId());
-    ClassInfo classInfo;
-    if (classDefTuple == null || classDefTuple.f1 == null || classDefTuple.f1.serializer == null) {
-      classInfo = buildMetaSharedClassInfo(classDefTuple, classDef);
-    } else {
-      classInfo = classDefTuple.f1;
-    }
-    metaContext.readClassInfos.set(index, classInfo);
-    return classInfo;
-  }
-
-  /**
-   * Write collected ClassDefs to buffer. ClassDefs are collected during serialization
-   * and written at the end of the serialization process.
-   */
-  public final void writeClassDefs(MemoryBuffer buffer) {
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    ObjectArray<ClassDef> writingClassDefs = metaContext.writingClassDefs;
-    final int size = writingClassDefs.size;
-    buffer.writeVarUint32Small7(size);
-    if (buffer.isHeapFullyWriteable()) {
-      for (int i = 0; i < size; i++) {
-        buffer.writeBytes(writingClassDefs.get(i).getEncoded());
-      }
-    } else {
-      for (int i = 0; i < size; i++) {
-        writingClassDefs.get(i).writeClassDef(buffer);
-      }
-    }
-    metaContext.writingClassDefs.size = 0;
-  }
-
-  /**
-   * Read ClassDefs from buffer and populate metaContext.readClassDefs.
-   * Must be called before deserializing objects in meta share mode.
-   */
-  public final void readClassDefs(MemoryBuffer buffer) {
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    assert metaContext != null : SET_META__CONTEXT_MSG;
-    int numClassDefs = buffer.readVarUint32Small7();
-    for (int i = 0; i < numClassDefs; i++) {
-      long id = buffer.readInt64();
-      Tuple2<ClassDef, ClassInfo> tuple2 = extRegistry.classIdToDef.get(id);
-      if (tuple2 != null) {
-        ClassDef.skipClassDef(buffer, id);
-      } else {
-        tuple2 = readClassDefFromBuffer(buffer, id);
-      }
-      metaContext.readClassDefs.add(tuple2.f0);
-      metaContext.readClassInfos.add(tuple2.f1);
-    }
-  }
-
-  private Tuple2<ClassDef, ClassInfo> readClassDefFromBuffer(MemoryBuffer buffer, long header) {
-    ClassDef readClassDef = ClassDef.readClassDef(fory, buffer, header);
-    Tuple2<ClassDef, ClassInfo> tuple2 = extRegistry.classIdToDef.get(readClassDef.getId());
-    if (tuple2 == null) {
-      tuple2 = Tuple2.of(readClassDef, null);
-      extRegistry.classIdToDef.put(readClassDef.getId(), tuple2);
-    }
-    return tuple2;
   }
 
   /**
@@ -506,21 +409,23 @@ public abstract class TypeResolver {
    */
   @CodegenInvoke
   public final ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfo classInfoCache) {
-    // In meta share mode, use the meta share protocol directly
-    if (metaContextShareEnabled) {
-      return readClassInfoWithMetaShare(buffer);
-    }
-
-    // Non-meta share mode: read typeId followed by optional class name bytes
     int header = buffer.readVarUint32Small14();
     int internalTypeId = header & 0xff;
-
-    // Check if this is a named type (needs class name bytes)
-    if (isNamedType(internalTypeId)) {
-      return readClassInfoByCache(buffer, classInfoCache, header);
-    } else {
-      // Lookup by type ID from registry
-      return getClassInfoByTypeId(header);
+    switch (internalTypeId) {
+      case Types.NAMED_ENUM:
+      case Types.NAMED_STRUCT:
+      case Types.NAMED_EXT:
+        if (metaContextShareEnabled) {
+          return readSharedClassMeta(buffer);
+        }
+        return readClassInfoByCache(buffer, classInfoCache, header);
+      case Types.NAMED_COMPATIBLE_STRUCT:
+      case Types.COMPATIBLE_STRUCT:
+        Preconditions.checkArgument(
+            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
+        return readSharedClassMeta(buffer);
+      default:
+        return getClassInfoByTypeId(header);
     }
   }
 
@@ -534,30 +439,24 @@ public abstract class TypeResolver {
    */
   @CodegenInvoke
   public final ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
-    // In meta share mode, use the meta share protocol directly
-    if (metaContextShareEnabled) {
-      return readClassInfoWithMetaShare(buffer);
-    }
-
-    // Non-meta share mode: read typeId followed by optional class name bytes
     int header = buffer.readVarUint32Small14();
     int internalTypeId = header & 0xff;
-
-    // Check if this is a named type (needs class name bytes)
-    if (isNamedType(internalTypeId)) {
-      return readClassInfoFromBytes(buffer, classInfoHolder, header);
-    } else {
-      // Lookup by type ID from registry
-      return getClassInfoByTypeId(header);
+    switch (internalTypeId) {
+      case Types.NAMED_ENUM:
+      case Types.NAMED_STRUCT:
+      case Types.NAMED_EXT:
+        if (metaContextShareEnabled) {
+          return readSharedClassMeta(buffer);
+        }
+        return readClassInfoFromBytes(buffer, classInfoHolder, header);
+      case Types.NAMED_COMPATIBLE_STRUCT:
+      case Types.COMPATIBLE_STRUCT:
+        Preconditions.checkArgument(
+            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
+        return readSharedClassMeta(buffer);
+      default:
+        return getClassInfoByTypeId(header);
     }
-  }
-
-  /** Helper to check if a type ID represents a named type that needs class name bytes. */
-  private boolean isNamedType(int internalTypeId) {
-    return internalTypeId == Types.NAMED_ENUM
-        || internalTypeId == Types.NAMED_STRUCT
-        || internalTypeId == Types.NAMED_EXT
-        || internalTypeId == Types.NAMED_COMPATIBLE_STRUCT;
   }
 
   /**
@@ -650,13 +549,33 @@ public abstract class TypeResolver {
     return classInfo;
   }
 
+  public final ClassInfo readSharedClassMeta(MemoryBuffer buffer, Class<?> targetClass) {
+    ClassInfo classInfo = readSharedClassMeta(buffer);
+    Class<?> readClass = classInfo.getCls();
+    // replace target class if needed
+    if (targetClass != readClass) {
+      Tuple2<Class<?>, Class<?>> key = Tuple2.of(readClass, targetClass);
+      ClassInfo newClassInfo = extRegistry.transformedClassInfo.get(key);
+      if (newClassInfo == null) {
+        // similar to create serializer for `NonexistentMetaShared`
+        newClassInfo =
+            getMetaSharedClassInfo(
+                classInfo.classDef.replaceRootClassTo((ClassResolver) this, targetClass),
+                targetClass);
+        extRegistry.transformedClassInfo.put(key, newClassInfo);
+      }
+      return newClassInfo;
+    }
+    return classInfo;
+  }
+
   /**
    * Load class info from namespace and type name bytes. Subclasses implement this to resolve the
    * class and create/lookup ClassInfo.
    *
-   * <p>Note: This method should NOT create serializers. It's used by both readClassInfo
-   * (which needs serializers) and readClassInternal (which doesn't need serializers).
-   * Use {@link #ensureSerializerForClassInfo} after calling this if a serializer is needed.
+   * <p>Note: This method should NOT create serializers. It's used by both readClassInfo (which
+   * needs serializers) and readClassInternal (which doesn't need serializers). Use {@link
+   * #ensureSerializerForClassInfo} after calling this if a serializer is needed.
    */
   protected abstract ClassInfo loadBytesToClassInfo(
       MetaStringBytes namespaceBytes, MetaStringBytes simpleClassNameBytes);
@@ -678,36 +597,16 @@ public abstract class TypeResolver {
   protected abstract ClassInfo getClassInfoByTypeId(int typeId);
 
   /**
-   * Check if a typeId corresponds to a valid registered class that can be written
-   * using the fast path (typeId << 1) in meta share mode.
+   * Check if a typeId corresponds to a valid registered class that can be written using the fast
+   * path (typeId << 1) in meta share mode.
    *
-   * <p>For ClassResolver, this checks if the typeId has an entry in registeredId2ClassInfo.
-   * For XtypeResolver, this checks if the typeId is a valid internal type or has a registered entry.
+   * <p>For ClassResolver, this checks if the typeId has an entry in registeredId2ClassInfo. For
+   * XtypeResolver, this checks if the typeId is a valid internal type or has a registered entry.
    *
    * @param typeId the type ID to check
    * @return true if this typeId can use the fast path, false if meta share protocol is needed
    */
   protected abstract boolean isValidRegisteredTypeId(int typeId);
-
-  public final ClassInfo readSharedClassMeta(MemoryBuffer buffer, Class<?> targetClass) {
-    ClassInfo classInfo = readSharedClassMeta(buffer);
-    Class<?> readClass = classInfo.getCls();
-    // replace target class if needed
-    if (targetClass != readClass) {
-      Tuple2<Class<?>, Class<?>> key = Tuple2.of(readClass, targetClass);
-      ClassInfo newClassInfo = extRegistry.transformedClassInfo.get(key);
-      if (newClassInfo == null) {
-        // similar to create serializer for `NonexistentMetaShared`
-        newClassInfo =
-            getMetaSharedClassInfo(
-                classInfo.classDef.replaceRootClassTo((ClassResolver) this, targetClass),
-                targetClass);
-        extRegistry.transformedClassInfo.put(key, newClassInfo);
-      }
-      return newClassInfo;
-    }
-    return classInfo;
-  }
 
   final ClassInfo buildMetaSharedClassInfo(
       Tuple2<ClassDef, ClassInfo> classDefTuple, ClassDef classDef) {
@@ -743,14 +642,27 @@ public abstract class TypeResolver {
     }
     Class<?> cls = clz;
     Short classId = extRegistry.registeredClassIdMap.get(cls);
-    ClassInfo classInfo =
-        new ClassInfo(this, cls, null, classId == null ? NO_CLASS_ID : classId);
+    int typeId = NO_CLASS_ID;
+    if (classId != null) {
+      ClassInfo registeredInfo = classInfoMap.get(cls);
+      typeId = registeredInfo == null ? classId : registeredInfo.typeId;
+    } else {
+      ClassInfo cachedInfo = classInfoMap.get(cls);
+      if (cachedInfo != null) {
+        typeId = cachedInfo.typeId;
+      } else if (cls.isEnum()) {
+        typeId = Types.NAMED_ENUM;
+      } else {
+        typeId = metaContextShareEnabled ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT;
+      }
+    }
+    ClassInfo classInfo = new ClassInfo(this, cls, null, typeId);
     classInfo.classDef = classDef;
     if (NonexistentClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       if (cls == NonexistentMetaShared.class) {
         classInfo.setSerializer(this, new NonexistentClassSerializer(fory, classDef));
-        // ensure `NonexistentMetaSharedClass` registered to write fixed-length class def,
-        // so we can rewrite it in `NonexistentClassSerializer`.
+        // Ensure NonexistentMetaShared is registered so writeClassInfo emits a placeholder typeId
+        // that NonexistentClassSerializer can rewrite to the original typeId.
         if (!fory.isCrossLanguage()) {
           Preconditions.checkNotNull(classId);
         }

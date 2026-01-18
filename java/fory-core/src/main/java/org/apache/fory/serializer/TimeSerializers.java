@@ -41,7 +41,6 @@ import java.util.GregorianCalendar;
 import java.util.TimeZone;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.DateTimeUtils;
 

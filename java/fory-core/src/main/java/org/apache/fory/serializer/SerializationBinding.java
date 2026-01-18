@@ -274,7 +274,8 @@ abstract class SerializationBinding {
         } else {
           if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
             // Preserve a dummy ref ID so ObjectSerializer.read() can pop it.
-            // This is needed when global ref tracking is enabled but field ref tracking is disabled.
+            // This is needed when global ref tracking is enabled but field ref tracking is
+            // disabled.
             refResolver.preserveRefId(-1);
             return fory.readNonRef(buffer, fieldInfo.classInfo);
           }
@@ -285,7 +286,8 @@ abstract class SerializationBinding {
         } else {
           if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
             // Preserve a dummy ref ID so ObjectSerializer.read() can pop it.
-            // This is needed when global ref tracking is enabled but field ref tracking is disabled.
+            // This is needed when global ref tracking is enabled but field ref tracking is
+            // disabled.
             refResolver.preserveRefId(-1);
             return fory.readNonRef(buffer, fieldInfo.classInfoHolder);
           }

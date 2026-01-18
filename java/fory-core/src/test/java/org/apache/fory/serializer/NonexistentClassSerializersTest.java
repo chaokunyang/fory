@@ -28,7 +28,6 @@ import java.lang.reflect.Array;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
@@ -369,7 +368,6 @@ public class NonexistentClassSerializersTest extends ForyTestBase {
     byte[] bytes = fory.serialize(pojo);
     assertThrowsCause(RuntimeException.class, () -> fory2.deserialize(bytes));
   }
-
 
   /**
    * Simple test class with primitive types for NonexistentClass serialization testing. Avoids

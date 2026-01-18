@@ -550,7 +550,8 @@ public final class Fory implements BaseFory {
   }
 
   public void xwriteData(MemoryBuffer buffer, ClassInfo classInfo, Object obj) {
-    switch (classInfo.getXtypeId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         buffer.writeBoolean((Boolean) obj);
         break;
@@ -585,7 +586,8 @@ public final class Fory implements BaseFory {
 
   /** Write not null data to buffer. */
   private void writeData(MemoryBuffer buffer, ClassInfo classInfo, Object obj) {
-    switch (classInfo.getTypeId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         buffer.writeBoolean((Boolean) obj);
         break;
@@ -989,7 +991,8 @@ public final class Fory implements BaseFory {
   }
 
   private Object readDataInternal(MemoryBuffer buffer, ClassInfo classInfo) {
-    switch (classInfo.getTypeId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         return buffer.readBoolean();
       case Types.INT8:
@@ -1021,7 +1024,8 @@ public final class Fory implements BaseFory {
   }
 
   private Object xreadDataInternal(MemoryBuffer buffer, ClassInfo classInfo) {
-    switch (classInfo.getTypeId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         return buffer.readBoolean();
       case Types.INT8:
@@ -1124,7 +1128,8 @@ public final class Fory implements BaseFory {
 
   public Object xreadNonRef(MemoryBuffer buffer, ClassInfo classInfo) {
     assert classInfo != null;
-    switch (classInfo.getXtypeId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         return buffer.readBoolean();
       case Types.INT8:
@@ -1236,7 +1241,7 @@ public final class Fory implements BaseFory {
       if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
         ClassInfo classInfo;
         if (shareMeta) {
-          classInfo = classResolver.readSharedClassMeta(buffer, cls);
+          classInfo = classResolver.readClassInfo(buffer, cls);
         } else {
           classInfo = classResolver.getClassInfo(cls);
         }
@@ -1406,7 +1411,8 @@ public final class Fory implements BaseFory {
     }
     Object copy;
     ClassInfo classInfo = classResolver.getOrUpdateClassInfo(obj.getClass());
-    switch (classInfo.getTypeId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
       case Types.INT8:
       case ClassResolver.CHAR_ID:

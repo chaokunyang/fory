@@ -95,8 +95,10 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(descriptors, false));
     List<Descriptor> sortedDescriptors = grouper.getSortedDescriptors();
     if (org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
-      LOG.info("========== {} sorted descriptors for {} ==========",
-          classDef.getFieldCount(), classDef.getClassName());
+      LOG.info(
+          "========== {} sorted descriptors for {} ==========",
+          classDef.getFieldCount(),
+          classDef.getClassName());
       for (Descriptor d : sortedDescriptors) {
         LOG.info(
             "  {} -> {}, ref {}, nullable {}",

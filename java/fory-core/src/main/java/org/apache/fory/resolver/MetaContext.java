@@ -21,8 +21,6 @@ package org.apache.fory.resolver;
 
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.ObjectArray;
-import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.meta.ClassDef;
 
 /**
  * Context for sharing class meta across multiple serialization. Class name, field name and field
@@ -32,17 +30,6 @@ public class MetaContext {
   /** Classes which has sent definitions to peer. */
   public final IdentityObjectIntMap<Class<?>> classMap = new IdentityObjectIntMap<>(1, 0.5f);
 
-  /** Class definitions read from peer. */
-  public final ObjectArray<ClassDef> readClassDefs = new ObjectArray<>();
-
   /** ClassInfos read from peer for reference lookup during deserialization. */
   public final ObjectArray<ClassInfo> readClassInfos = new ObjectArray<>();
-
-  /**
-   * New class definition which needs sending to peer. This will be filled up when there are new
-   * class definition need sending, and will be cleared after writing to buffer.
-   *
-   * @see ClassResolver#writeClassDefs(MemoryBuffer)
-   */
-  public final ObjectArray<ClassDef> writingClassDefs = new ObjectArray<>();
 }

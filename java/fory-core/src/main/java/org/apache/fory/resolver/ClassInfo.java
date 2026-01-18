@@ -108,12 +108,13 @@ public class ClassInfo {
     // - NAMED_ENUM, NAMED_EXT: other named types
     // - REPLACE_STUB_ID: for write replace class in `ClassSerializer`
     // - NO_CLASS_ID: legacy support (should use NAMED_STRUCT instead)
-    boolean isNamedType = typeId == Types.NAMED_STRUCT
-        || typeId == Types.NAMED_COMPATIBLE_STRUCT
-        || typeId == Types.NAMED_ENUM
-        || typeId == Types.NAMED_EXT
-        || typeId == ClassResolver.REPLACE_STUB_ID
-        || typeId == TypeResolver.NO_CLASS_ID;
+    boolean isNamedType =
+        typeId == Types.NAMED_STRUCT
+            || typeId == Types.NAMED_COMPATIBLE_STRUCT
+            || typeId == Types.NAMED_ENUM
+            || typeId == Types.NAMED_EXT
+            || typeId == ClassResolver.REPLACE_STUB_ID
+            || typeId == TypeResolver.NO_CLASS_ID;
     if (cls != null && isNamedType) {
       Tuple2<String, String> tuple2 = Encoders.encodePkgAndClass(cls);
       this.namespaceBytes =

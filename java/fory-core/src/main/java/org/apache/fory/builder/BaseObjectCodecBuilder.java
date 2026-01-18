@@ -120,6 +120,7 @@ import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.DeferedLazySerializer.DeferredLazyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.FinalFieldReplaceResolveSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
@@ -793,7 +794,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         }
         if (serializerClass == LazyInitBeanSerializer.class
             || serializerClass == ObjectSerializer.class
-            || serializerClass == MetaSharedSerializer.class) {
+            || serializerClass == MetaSharedSerializer.class
+            || serializerClass == DeferredLazyObjectSerializer.class) {
           // field init may get jit serializer, which will cause cast exception if not use base
           // type.
           serializerClass = Serializer.class;
@@ -1732,7 +1734,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       boolean nullable) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     if (typeResolver(r -> r.needToWriteRef(typeRef))) {
-      return readRef(buffer, callback, () -> deserializeForNotNull(buffer, typeRef, null));
+      return readRef(
+          buffer, callback, () -> deserializeForNotNullForField(buffer, descriptor, null));
     } else {
       if (typeRef.isPrimitive() && !nullable) {
         // Only skip null check if BOTH: local type is primitive AND sender didn't write null flag

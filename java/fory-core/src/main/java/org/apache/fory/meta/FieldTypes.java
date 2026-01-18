@@ -124,12 +124,14 @@ public class FieldTypes {
     // For xlang: ref tracking is false by default (no shared ownership like Rust's Rc/Arc)
     // For native: use the type's default tracking behavior
     boolean trackingRef = !isXlang && genericType.trackingRef(resolver);
-    // For xlang: nullable is false by default (aligned with all languages).
-    // Exception: Optional types are nullable (like Rust's Option<T>).
+    // For xlang: nullable is false by default for top-level fields.
+    // Nested element types are nullable by default to align with cross-language collection semantics.
+    // Optional types are nullable (like Rust's Option<T>).
     // For native: non-primitive types are nullable by default.
     boolean nullable;
     if (isXlang) {
-      nullable = isOptionalType(rawType);
+      boolean nestedType = field == null;
+      nullable = nestedType || isOptionalType(rawType);
     } else {
       // Primitives are never nullable, non-primitives are nullable by default
       // This applies to both top-level fields and nested types (in arrays, collections, maps)

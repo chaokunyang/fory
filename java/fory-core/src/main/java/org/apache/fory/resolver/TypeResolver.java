@@ -260,7 +260,8 @@ public abstract class TypeResolver {
    *
    * <ul>
    *   <li>NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: namespace + typename bytes (or meta-share if enabled)
-   *   <li>NAMED_COMPATIBLE_STRUCT/COMPATIBLE_STRUCT: always meta-share
+   *   <li>NAMED_COMPATIBLE_STRUCT: namespace + typename bytes (or meta-share if enabled)
+   *   <li>COMPATIBLE_STRUCT: meta-share when enabled, otherwise only type ID
    *   <li>Other types: just the type ID
    * </ul>
    */
@@ -273,6 +274,7 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
           writeSharedClassMeta(buffer, classInfo);
         } else {
@@ -282,11 +284,8 @@ public abstract class TypeResolver {
           metaStringResolver.writeMetaStringBytes(buffer, classInfo.typeNameBytes);
         }
         break;
-      case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
-        Preconditions.checkArgument(
-            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
-        if (classInfo.cls != NonexistentMetaShared.class) {
+        if (metaContextShareEnabled && classInfo.cls != NonexistentMetaShared.class) {
           writeSharedClassMeta(buffer, classInfo);
         }
         break;
@@ -354,17 +353,18 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
           return readSharedClassMeta(buffer);
         }
         ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
         classInfoCache = classInfo;
         return classInfo;
-      case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
-        Preconditions.checkArgument(
-            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
-        return readSharedClassMeta(buffer);
+        if (metaContextShareEnabled) {
+          return readSharedClassMeta(buffer);
+        }
+        return getClassInfoByTypeId(header);
       default:
         return getClassInfoByTypeId(header);
     }
@@ -381,17 +381,18 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
           return readSharedClassMeta(buffer, targetClass);
         }
         ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
         classInfoCache = classInfo;
         return classInfo;
-      case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
-        Preconditions.checkArgument(
-            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
-        return readSharedClassMeta(buffer, targetClass);
+        if (metaContextShareEnabled) {
+          return readSharedClassMeta(buffer, targetClass);
+        }
+        return getClassInfoByTypeId(header);
       default:
         return getClassInfoByTypeId(header);
     }
@@ -414,15 +415,16 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
           return readSharedClassMeta(buffer);
         }
         return readClassInfoByCache(buffer, classInfoCache, header);
-      case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
-        Preconditions.checkArgument(
-            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
-        return readSharedClassMeta(buffer);
+        if (metaContextShareEnabled) {
+          return readSharedClassMeta(buffer);
+        }
+        return getClassInfoByTypeId(header);
       default:
         return getClassInfoByTypeId(header);
     }
@@ -444,15 +446,16 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
           return readSharedClassMeta(buffer);
         }
         return readClassInfoFromBytes(buffer, classInfoHolder, header);
-      case Types.NAMED_COMPATIBLE_STRUCT:
       case Types.COMPATIBLE_STRUCT:
-        Preconditions.checkArgument(
-            metaContextShareEnabled, "Meta share must be enabled for compatible mode");
-        return readSharedClassMeta(buffer);
+        if (metaContextShareEnabled) {
+          return readSharedClassMeta(buffer);
+        }
+        return getClassInfoByTypeId(header);
       default:
         return getClassInfoByTypeId(header);
     }

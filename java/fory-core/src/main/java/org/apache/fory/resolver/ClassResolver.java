@@ -694,6 +694,10 @@ public class ClassResolver extends TypeResolver {
     return null;
   }
 
+  public Class<?> getRegisteredClass(String className) {
+    return extRegistry.registeredClasses.get(className);
+  }
+
   public Class<?> getRegisteredClassByTypeId(int typeId) {
     ClassInfo classInfo = getRegisteredClassInfoByTypeId(typeId);
     return classInfo == null ? null : classInfo.cls;
@@ -719,10 +723,6 @@ public class ClassResolver extends TypeResolver {
       return null;
     }
     return registeredId2ClassInfo[typeId];
-  }
-
-  public Class<?> getRegisteredClass(String className) {
-    return extRegistry.registeredClasses.get(className);
   }
 
   public List<Class<?>> getRegisteredClasses() {

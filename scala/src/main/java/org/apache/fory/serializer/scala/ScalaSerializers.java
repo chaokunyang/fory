@@ -114,6 +114,11 @@ public class ScalaSerializers {
     // Range
     resolver.register("scala.math.Numeric$IntIsIntegral$");
     resolver.register("scala.math.Numeric$LongIsIntegral$");
+    resolver.register(Range.Inclusive.class);
+    resolver.register(Range.Exclusive.class);
+    resolver.register(NumericRange.class);
+    resolver.register(NumericRange.Exclusive.class);
+    resolver.register(NumericRange.Inclusive.class);
     resolver.registerSerializer(Range.Inclusive.class, new RangeSerializer(fory, Range.Inclusive.class));
     resolver.registerSerializer(Range.Exclusive.class, new RangeSerializer(fory, Range.Exclusive.class));
     resolver.registerSerializer(NumericRange.class, new NumericRangeSerializer<>(fory, NumericRange.class));

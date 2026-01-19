@@ -714,8 +714,16 @@ public class ClassResolver extends TypeResolver {
         return null;
       }
       ClassInfo classInfo = userRegisteredId2ClassInfo[userId];
-      if (classInfo != null && (classInfo.typeId & 0xff) != internalTypeId) {
+      if (classInfo == null) {
         return null;
+      }
+      int existingInternalTypeId = classInfo.typeId & 0xff;
+      if (existingInternalTypeId != internalTypeId) {
+        if (classInfo.serializer == null) {
+          classInfo.typeId = typeId;
+        } else {
+          return null;
+        }
       }
       return classInfo;
     }

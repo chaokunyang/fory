@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
 sidebar_position: 70
-id: xlang_troubleshooting
+id: troubleshooting
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -200,25 +200,6 @@ fory = pyfory.Fory(ref_tracking=True)
 
 ## Language Mode Issues
 
-### "Invalid magic number" Error
-
-**Symptom:**
-
-```
-Error: Invalid magic number in header
-```
-
-**Cause:** One side is using Java-native mode instead of xlang mode.
-
-**Solution:** Ensure both sides use xlang mode:
-
-```java
-// Java - must use Language.XLANG
-Fory fory = Fory.builder()
-    .withLanguage(Language.XLANG)
-    .build();
-```
-
 ### Incompatible Types in Xlang Mode
 
 **Symptom:**
@@ -315,7 +296,7 @@ python deserializer.py data.bin
 
 ## See Also
 
-- [Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping) - Cross-language type mapping reference
+- [Type Mapping](../../specification/xlang_type_mapping.md) - Cross-language type mapping reference
 - [Getting Started](getting-started.md) - Setup guide
 - [Java Troubleshooting](../java/troubleshooting.md) - Java-specific issues
 - [Python Troubleshooting](../python/troubleshooting.md) - Python-specific issues

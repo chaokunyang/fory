@@ -24,14 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test struct for compatible mode tests (must be named struct at package level)
-type SetFieldCompatibleTestStruct struct {
-	SetField    Set[string]
-	NullableSet Set[string] `fory:"nullable"`
-	MapField    map[string]bool
-	NullableMap map[string]bool `fory:"nullable"`
-}
-
 func TestUnsignedTypeSerialization(t *testing.T) {
 	type TestStruct struct {
 		U32Var    uint32 `fory:"compress=true"`
@@ -57,7 +49,7 @@ func TestUnsignedTypeSerialization(t *testing.T) {
 		t.Fatalf("Serialize failed: %v", err)
 	}
 
-	var result interface{}
+	var result any
 	err = f.Deserialize(data, &result)
 	if err != nil {
 		t.Fatalf("Deserialize failed: %v", err)
@@ -81,22 +73,21 @@ func TestUnsignedTypeSerialization(t *testing.T) {
 	}
 }
 
-func TestSetField(t *testing.T) {
-	type TestStruct struct {
-		F1 Set[int32]
-	}
-
-	f := New(WithXlang(true), WithCompatible(false))
-	require.Nil(t, f.RegisterStruct(TestStruct{}, 1), "register struct error")
+// Test struct for compatible mode tests (must be named struct at package level)
+type SetFieldsStruct struct {
+	SetField    Set[string]
+	NullableSet Set[string] `fory:"nullable"`
+	MapField    map[string]bool
+	NullableMap map[string]bool `fory:"nullable"`
 }
 
 func TestSetFieldSerializationSchemaConsistent(t *testing.T) {
 	f := New(WithXlang(true), WithCompatible(false))
-	err := f.RegisterStruct(SetFieldCompatibleTestStruct{}, 1001)
+	err := f.RegisterStruct(SetFieldsStruct{}, 1001)
 	require.NoError(t, err, "register struct error")
 
 	// Create test object with Set and Map fields
-	obj := SetFieldCompatibleTestStruct{
+	obj := SetFieldsStruct{
 		SetField:    NewSet[string](),
 		NullableSet: NewSet[string](),
 		MapField:    map[string]bool{"key1": true, "key2": true},
@@ -111,11 +102,11 @@ func TestSetFieldSerializationSchemaConsistent(t *testing.T) {
 	t.Logf("Serialized %d bytes", len(data))
 
 	// Deserialize
-	var result interface{}
+	var result any
 	err = f.Deserialize(data, &result)
 	require.NoError(t, err, "Deserialize failed")
 
-	resultObj := result.(*SetFieldCompatibleTestStruct)
+	resultObj := result.(*SetFieldsStruct)
 
 	// Verify SetField
 	require.Equal(t, 2, len(resultObj.SetField), "SetField length mismatch")
@@ -139,11 +130,11 @@ func TestSetFieldSerializationSchemaConsistent(t *testing.T) {
 
 func TestSetFieldSerializationCompatible(t *testing.T) {
 	f := New(WithXlang(true), WithCompatible(true))
-	err := f.RegisterStruct(SetFieldCompatibleTestStruct{}, 1002)
+	err := f.RegisterStruct(SetFieldsStruct{}, 1002)
 	require.NoError(t, err, "register struct error")
 
 	// Create test object with Set and Map fields
-	obj := SetFieldCompatibleTestStruct{
+	obj := SetFieldsStruct{
 		SetField:    NewSet[string](),
 		NullableSet: NewSet[string](),
 		MapField:    map[string]bool{"key1": true, "key2": true},
@@ -158,11 +149,11 @@ func TestSetFieldSerializationCompatible(t *testing.T) {
 	t.Logf("Serialized %d bytes", len(data))
 
 	// Deserialize
-	var result interface{}
+	var result any
 	err = f.Deserialize(data, &result)
 	require.NoError(t, err, "Deserialize failed")
 
-	resultObj := result.(*SetFieldCompatibleTestStruct)
+	resultObj := result.(*SetFieldsStruct)
 
 	// Verify SetField
 	require.Equal(t, 2, len(resultObj.SetField), "SetField length mismatch")
@@ -220,4 +211,41 @@ func TestSetFieldTypeId(t *testing.T) {
 			require.NotNil(t, field.Serializer, "MapField serializer should not be nil")
 		}
 	}
+}
+
+func TestSkipAnyValueReadsSharedTypeMeta(t *testing.T) {
+	type First struct {
+		ID int
+	}
+	type Second struct {
+		Name string
+	}
+
+	f := New(WithXlang(true), WithCompatible(true))
+	require.NoError(t, f.RegisterStruct(First{}, 2001))
+	require.NoError(t, f.RegisterStruct(Second{}, 2002))
+
+	buf := NewByteBuffer(nil)
+	require.NoError(t, f.SerializeTo(buf, First{ID: 10}))
+	require.NoError(t, f.SerializeTo(buf, Second{Name: "ok"}))
+
+	f.resetReadState()
+	f.readCtx.SetData(buf.Bytes())
+
+	isNull := readHeader(f.readCtx)
+	require.False(t, isNull)
+	SkipAnyValue(f.readCtx, true)
+	require.NoError(t, f.readCtx.CheckError())
+
+	f.resetReadState()
+	isNull = readHeader(f.readCtx)
+	require.False(t, isNull)
+
+	var out any
+	f.readCtx.ReadValue(reflect.ValueOf(&out).Elem(), RefModeTracking, true)
+	require.NoError(t, f.readCtx.CheckError())
+
+	result, ok := out.(*Second)
+	require.True(t, ok)
+	require.Equal(t, "ok", result.Name)
 }

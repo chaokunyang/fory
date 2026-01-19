@@ -62,7 +62,7 @@ class TypeDefDecoder {
     if ((header & REGISTER_BY_NAME_FLAG) != 0) {
       String namespace = readPkgName(buffer);
       String typeName = readTypeName(buffer);
-      if (Utils.debugOutputEnabled()) {
+      if (Utils.DEBUG_OUTPUT_ENABLED) {
         LOG.info("Decode class {} using namespace {}", typeName, namespace);
       }
       ClassInfo userTypeInfo = resolver.getUserTypeInfo(namespace, typeName);
@@ -72,19 +72,19 @@ class TypeDefDecoder {
         classSpec = new ClassSpec(userTypeInfo.getCls());
       }
     } else {
-      int xtypeId = buffer.readVarUint32Small7();
-      ClassInfo userTypeInfo = resolver.getUserTypeInfo(xtypeId);
+      int typeId = buffer.readVarUint32Small7();
+      ClassInfo userTypeInfo = resolver.getUserTypeInfo(typeId);
       if (userTypeInfo == null) {
-        classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class, xtypeId);
+        classSpec = new ClassSpec(NonexistentClass.NonexistentMetaShared.class, typeId);
       } else {
-        classSpec = new ClassSpec(userTypeInfo.getCls(), xtypeId);
+        classSpec = new ClassSpec(userTypeInfo.getCls(), typeId);
       }
     }
     List<FieldInfo> classFields =
         readFieldsInfo(buffer, resolver, classSpec.entireClassName, numFields);
     boolean hasFieldsMeta = (id & HAS_FIELDS_META_FLAG) != 0;
     ClassDef classDef = new ClassDef(classSpec, classFields, hasFieldsMeta, id, decoded.f1);
-    if (Utils.debugOutputEnabled()) {
+    if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info("[Java TypeDef DECODED] " + classDef);
       // Compute and print diff with local TypeDef
       Class<?> cls = classSpec.type;

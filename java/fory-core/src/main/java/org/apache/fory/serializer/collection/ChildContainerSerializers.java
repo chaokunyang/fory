@@ -42,6 +42,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.FieldGroups;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -151,7 +152,7 @@ public class ChildContainerSerializers {
 
     public Collection newCollection(MemoryBuffer buffer) {
       Collection collection = super.newCollection(buffer);
-      readAndSetFields(buffer, collection, slotsSerializers);
+      readAndSetFields(fory, buffer, collection, slotsSerializers);
       return collection;
     }
 
@@ -213,7 +214,7 @@ public class ChildContainerSerializers {
     @Override
     public Map newMap(MemoryBuffer buffer) {
       Map map = super.newMap(buffer);
-      readAndSetFields(buffer, map, slotsSerializers);
+      readAndSetFields(fory, buffer, map, slotsSerializers);
       return map;
     }
 
@@ -254,13 +255,42 @@ public class ChildContainerSerializers {
   }
 
   private static void readAndSetFields(
-      MemoryBuffer buffer, Object collection, Serializer[] slotsSerializers) {
+      Fory fory, MemoryBuffer buffer, Object collection, Serializer[] slotsSerializers) {
     for (Serializer slotsSerializer : slotsSerializers) {
       if (slotsSerializer instanceof MetaSharedLayerSerializer) {
-        ((MetaSharedLayerSerializer) slotsSerializer).readAndSetFields(buffer, collection);
+        MetaSharedLayerSerializer metaSerializer = (MetaSharedLayerSerializer) slotsSerializer;
+        // Read layer class meta first if meta share is enabled
+        // This corresponds to writeLayerClassMeta() in MetaSharedLayerSerializer.write()
+        if (fory.getConfig().isMetaShareEnabled()) {
+          readAndSkipLayerClassMeta(fory, buffer);
+        }
+        metaSerializer.readAndSetFields(buffer, collection);
       } else {
         ((ObjectSerializer) slotsSerializer).readAndSetFields(buffer, collection);
       }
     }
+  }
+
+  /**
+   * Read and skip the layer class meta from buffer. This is used to skip over the class definition
+   * that was written by MetaSharedLayerSerializer.writeLayerClassMeta(). For
+   * ChildContainerSerializers, we use the same serializer on both write and read sides, so we just
+   * need to skip the meta without actually parsing it.
+   */
+  private static void readAndSkipLayerClassMeta(Fory fory, MemoryBuffer buffer) {
+    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
+    if (metaContext == null) {
+      return;
+    }
+    int indexMarker = buffer.readVarUint32Small14();
+    boolean isRef = (indexMarker & 1) == 1;
+    int index = indexMarker >>> 1;
+    if (isRef) {
+      // Reference to previously read type - nothing more to read
+      return;
+    }
+    // New type - need to read and skip the ClassDef bytes
+    long id = buffer.readInt64();
+    ClassDef.skipClassDef(buffer, id);
   }
 }

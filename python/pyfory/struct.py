@@ -20,6 +20,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import enum
+import inspect
 import itertools
 import logging
 import os
@@ -86,6 +87,9 @@ from pyfory import (
 
 logger = logging.getLogger(__name__)
 
+# Time types that are not dynamic by default in native mode
+_time_types = {datetime.date, datetime.datetime, datetime.timedelta}
+
 
 @dataclasses.dataclass
 class FieldInfo:
@@ -100,6 +104,7 @@ class FieldInfo:
     tag_id: int  # -1 = use field name, >=0 = use tag ID
     nullable: bool  # Effective nullable flag (considers Optional[T])
     ref: bool  # Field-level ref setting (for hash computation)
+    dynamic: bool  # Whether type info is written for this field
 
     # Runtime flags (combines field metadata with global Fory config)
     runtime_ref_tracking: bool  # Actual ref tracking: field.ref AND fory.ref_tracking
@@ -108,6 +113,18 @@ class FieldInfo:
     type_id: int  # Fory TypeId
     serializer: Serializer  # Field serializer
     unwrapped_type: type  # Type with Optional unwrapped
+
+
+def _is_abstract_type(type_hint: type) -> bool:
+    """Check if a type is abstract (has abstract methods or is ABC subclass)."""
+    if type_hint is None:
+        return False
+    try:
+        # Check if it's an abstract class using inspect.isabstract
+        return inspect.isabstract(type_hint)
+    except TypeError:
+        # Not a class (e.g., generic type)
+        return False
 
 
 def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bool = False) -> ForyFieldMeta:
@@ -124,6 +141,11 @@ def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bo
     For ref, defaults to False to preserve original serialization behavior.
     Non-nullable complex fields use xwrite_no_ref (no ref header in buffer).
     Users can explicitly set ref=True in pyfory.field() to enable ref tracking.
+
+    For dynamic, defaults to None (auto-detect):
+    - Abstract classes: always True (type info must be written)
+    - Native mode: True for object types, False for numeric/str/time types
+    - Xlang mode: False for concrete types
     """
     unwrapped_type, is_optional = unwrap_optional(type_hint)
     if xlang:
@@ -135,7 +157,8 @@ def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bo
     # Default ref=False to preserve original serialization behavior where non-nullable
     # fields use xwrite_no_ref. Users can explicitly set ref=True in pyfory.field()
     # to enable per-field ref tracking when fory.ref_tracking is enabled.
-    return ForyFieldMeta(id=-1, nullable=nullable, ref=False, ignore=False)
+    # Default dynamic=None for auto-detection based on type and mode
+    return ForyFieldMeta(id=-1, nullable=nullable, ref=False, ignore=False, dynamic=None)
 
 
 def _extract_field_infos(
@@ -166,7 +189,7 @@ def _extract_field_infos(
 
     # Collect fields from class hierarchy (parent first, child last)
     # Child fields override parent fields with same name
-    all_fields: dict[str, dataclasses.Field] = {}
+    all_fields: Dict[str, dataclasses.Field] = {}
     for klass in clz.__mro__[::-1]:  # Reverse MRO: base classes first
         if dataclasses.is_dataclass(klass) and klass is not clz:
             for f in dataclasses.fields(klass):
@@ -176,8 +199,8 @@ def _extract_field_infos(
         all_fields[f.name] = f
 
     # Extract field metas and filter ignored fields
-    field_metas: dict[str, ForyFieldMeta] = {}
-    active_fields: list[tuple[str, dataclasses.Field]] = []
+    field_metas: Dict[str, ForyFieldMeta] = {}
+    active_fields: List[tuple] = []
 
     # Check if fory has field_nullable global setting
     global_field_nullable = getattr(fory, "field_nullable", False)
@@ -199,7 +222,7 @@ def _extract_field_infos(
     validate_field_metas(clz, field_metas, type_hints)
 
     # Build FieldInfo list
-    field_infos: list[FieldInfo] = []
+    field_infos: List[FieldInfo] = []
     visitor = StructFieldSerializerVisitor(fory)
     global_ref_tracking = fory.ref_tracking
 
@@ -219,6 +242,27 @@ def _extract_field_infos(
         # Compute runtime ref tracking: field.ref AND global config
         runtime_ref = meta.ref and global_ref_tracking
 
+        # Compute effective dynamic based on type and mode
+        # - Abstract classes: always True (type info must be written)
+        # - If explicitly set (not None): use that value
+        # - Native mode: True for object types, False for numeric/str/time types
+        # - Xlang mode: False for concrete types
+        is_abstract = _is_abstract_type(unwrapped_type)
+        if is_abstract:
+            # Abstract classes always need type info
+            effective_dynamic = True
+        elif meta.dynamic is not None:
+            # Explicit configuration takes precedence
+            effective_dynamic = meta.dynamic
+        elif xlang:
+            # Xlang mode: False for concrete types
+            effective_dynamic = False
+        else:
+            # Native mode: False for numeric/str/time types, True for other object types
+            # Check if the type is a primitive, string, or time type
+            is_non_dynamic_type = is_primitive_type(unwrapped_type) or unwrapped_type in (str, bytes) or unwrapped_type in _time_types
+            effective_dynamic = not is_non_dynamic_type
+
         # Infer serializer
         serializer = infer_field(field_name, unwrapped_type, visitor, types_path=[])
 
@@ -235,6 +279,7 @@ def _extract_field_infos(
             tag_id=meta.id,
             nullable=effective_nullable,
             ref=meta.ref,
+            dynamic=effective_dynamic,
             runtime_ref_tracking=runtime_ref,
             type_id=type_id,
             serializer=serializer,
@@ -281,6 +326,7 @@ class DataClassSerializer(Serializer):
             self._serializers = serializers
             self._nullable_fields = nullable_fields or {}
             self._ref_fields = {}
+            self._dynamic_fields = {}  # Default to empty, will use mode defaults
             self._field_infos = []
             self._field_metas = {}
         else:
@@ -294,11 +340,13 @@ class DataClassSerializer(Serializer):
                 self._serializers = [fi.serializer for fi in self._field_infos]
                 self._nullable_fields = {fi.name: fi.nullable for fi in self._field_infos}
                 self._ref_fields = {fi.name: fi.runtime_ref_tracking for fi in self._field_infos}
+                self._dynamic_fields = {fi.name: fi.dynamic for fi in self._field_infos}
             else:
                 # Fallback for non-dataclass types
                 self._field_names = field_names or self._get_field_names(clz)
                 self._nullable_fields = nullable_fields or {}
                 self._ref_fields = {}
+                self._dynamic_fields = {}  # Empty dict, will use mode defaults
 
                 if self._field_names and not self._nullable_fields:
                     for field_name in self._field_names:
@@ -454,7 +502,7 @@ class DataClassSerializer(Serializer):
         else:
             return None  # Complex type, needs ref handling
 
-    def _write_non_nullable_field(self, buffer, field_value, serializer):
+    def _write_non_nullable_field(self, buffer, field_value, serializer, typeinfo=None):
         """Write a non-nullable field value at runtime."""
         if isinstance(serializer, BooleanSerializer):
             buffer.write_bool(field_value)
@@ -473,7 +521,7 @@ class DataClassSerializer(Serializer):
         elif isinstance(serializer, StringSerializer):
             buffer.write_string(field_value)
         else:
-            self.fory.write_ref_pyobject(buffer, field_value)
+            self.fory.write_ref_pyobject(buffer, field_value, typeinfo=typeinfo)
 
     def _read_non_nullable_field(self, buffer, serializer):
         """Read a non-nullable field value at runtime."""
@@ -496,7 +544,7 @@ class DataClassSerializer(Serializer):
         else:
             return self.fory.read_ref_pyobject(buffer)
 
-    def _write_nullable_field(self, buffer, field_value, serializer):
+    def _write_nullable_field(self, buffer, field_value, serializer, typeinfo=None):
         """Write a nullable field value at runtime."""
         if field_value is None:
             buffer.write_int8(NULL_FLAG)
@@ -505,7 +553,7 @@ class DataClassSerializer(Serializer):
             if isinstance(serializer, StringSerializer):
                 buffer.write_string(field_value)
             else:
-                self.fory.write_ref_pyobject(buffer, field_value)
+                self.fory.write_ref_pyobject(buffer, field_value, typeinfo=typeinfo)
 
     def _read_nullable_field(self, buffer, serializer):
         """Read a nullable field value at runtime."""
@@ -551,6 +599,11 @@ class DataClassSerializer(Serializer):
                 stmts.append(f"{field_value} = {value}.{field_name}")
 
             is_nullable = self._nullable_fields.get(field_name, False)
+            is_dynamic = self._dynamic_fields.get(field_name, False)
+            # For dynamic=False, get typeinfo for declared type to use its serializer
+            typeinfo_var = f"typeinfo{index}"
+            if not is_dynamic and serializer is not None:
+                context[typeinfo_var] = self.fory.type_resolver.get_typeinfo(serializer.type_)
             if is_nullable:
                 # Use gen_write_nullable_basic_stmts for nullable basic types
                 if isinstance(serializer, BooleanSerializer):
@@ -563,11 +616,17 @@ class DataClassSerializer(Serializer):
                     stmts.extend(gen_write_nullable_basic_stmts(buffer, field_value, str))
                 else:
                     # For complex types, use write_ref_pyobject
-                    stmts.append(f"{fory}.write_ref_pyobject({buffer}, {field_value})")
+                    # dynamic=True or serializer is None: pass None to use actual type
+                    # dynamic=False: pass typeinfo to use declared type
+                    typeinfo_arg = "None" if is_dynamic or serializer is None else typeinfo_var
+                    stmts.append(f"{fory}.write_ref_pyobject({buffer}, {field_value}, typeinfo={typeinfo_arg})")
             else:
                 stmt = self._get_write_stmt_for_codegen(serializer, buffer, field_value)
                 if stmt is None:
-                    stmt = f"{fory}.write_ref_pyobject({buffer}, {field_value})"
+                    # dynamic=True or serializer is None: pass None to use actual type
+                    # dynamic=False: pass typeinfo to use declared type
+                    typeinfo_arg = "None" if is_dynamic or serializer is None else typeinfo_var
+                    stmt = f"{fory}.write_ref_pyobject({buffer}, {field_value}, typeinfo={typeinfo_arg})"
                 stmts.append(stmt)
 
         self._write_method_code, func = compile_function(
@@ -722,6 +781,7 @@ class DataClassSerializer(Serializer):
                     stmts.append(f"{field_value} = getattr({value}, '{field_name}', None)")
                 else:
                     stmts.append(f"{field_value} = {value}.{field_name}")
+            is_dynamic = self._dynamic_fields.get(field_name, False)
             if is_nullable:
                 if isinstance(serializer, StringSerializer):
                     stmts.extend(
@@ -734,12 +794,19 @@ class DataClassSerializer(Serializer):
                         ]
                     )
                 else:
-                    stmts.append(f"{fory}.xwrite_ref({buffer}, {field_value}, serializer={serializer_var})")
+                    # dynamic=True: don't pass serializer, write actual type info
+                    # dynamic=False: pass serializer, use declared type
+                    serializer_arg = "None" if is_dynamic else serializer_var
+                    stmts.append(f"{fory}.xwrite_ref({buffer}, {field_value}, serializer={serializer_arg})")
             else:
                 stmt = self._get_write_stmt_for_codegen(serializer, buffer, field_value)
                 if stmt is None:
                     # For non-nullable complex types, use xwrite_no_ref
-                    stmt = f"{fory}.xwrite_no_ref({buffer}, {field_value}, serializer={serializer_var})"
+                    # dynamic=True: don't pass serializer, write actual type info
+                    if is_dynamic:
+                        stmt = f"{fory}.xwrite_no_ref({buffer}, {field_value})"
+                    else:
+                        stmt = f"{fory}.xwrite_no_ref({buffer}, {field_value}, serializer={serializer_var})"
                 # In compatible mode, handle None for non-nullable fields (schema evolution)
                 # Write zero/default value when field is None due to missing from remote schema
                 if self.fory.compatible:
@@ -821,6 +888,7 @@ class DataClassSerializer(Serializer):
             field_value = f"field_value{index}"
             is_nullable = self._nullable_fields.get(field_name, False)
 
+            is_dynamic = self._dynamic_fields.get(field_name, False)
             if is_nullable:
                 if isinstance(serializer, StringSerializer):
                     stmts.extend(
@@ -832,12 +900,19 @@ class DataClassSerializer(Serializer):
                         ]
                     )
                 else:
-                    stmts.append(f"{field_value} = {fory}.xread_ref({buffer}, serializer={serializer_var})")
+                    # dynamic=True: don't pass serializer, read type info from buffer
+                    # dynamic=False: pass serializer, use declared type
+                    serializer_arg = "None" if is_dynamic else serializer_var
+                    stmts.append(f"{field_value} = {fory}.xread_ref({buffer}, serializer={serializer_arg})")
             else:
                 stmt = self._get_read_stmt_for_codegen(serializer, buffer, field_value)
                 if stmt is None:
                     # For non-nullable complex types, use xread_no_ref
-                    stmt = f"{field_value} = {fory}.xread_no_ref({buffer}, serializer={serializer_var})"
+                    # dynamic=True: don't pass serializer, read type info from buffer
+                    if is_dynamic:
+                        stmt = f"{field_value} = {fory}.xread_no_ref({buffer})"
+                    else:
+                        stmt = f"{field_value} = {fory}.xread_no_ref({buffer}, serializer={serializer_var})"
                 stmts.append(stmt)
 
             if field_name not in current_class_field_names:
@@ -887,11 +962,16 @@ class DataClassSerializer(Serializer):
             field_value = getattr(value, field_name)
             serializer = self._serializers[index]
             is_nullable = self._nullable_fields.get(field_name, False)
+            is_dynamic = self._dynamic_fields.get(field_name, False)
+            # For dynamic=False, get typeinfo for declared type
+            typeinfo = None
+            if not is_dynamic and serializer is not None:
+                typeinfo = self.fory.type_resolver.get_typeinfo(serializer.type_)
 
             if is_nullable:
-                self._write_nullable_field(buffer, field_value, serializer)
+                self._write_nullable_field(buffer, field_value, serializer, typeinfo)
             else:
-                self._write_non_nullable_field(buffer, field_value, serializer)
+                self._write_non_nullable_field(buffer, field_value, serializer, typeinfo)
 
     def read(self, buffer):
         """Read dataclass instance from buffer in Python native format."""
@@ -934,13 +1014,19 @@ class DataClassSerializer(Serializer):
             field_value = getattr(value, field_name)
             serializer = self._serializers[index]
             is_nullable = self._nullable_fields.get(field_name, False)
+            is_dynamic = self._dynamic_fields.get(field_name, False)
             if is_nullable:
                 if field_value is None:
                     buffer.write_int8(-3)
                 else:
-                    self.fory.xwrite_ref(buffer, field_value, serializer=serializer)
+                    # dynamic=True: don't pass serializer, write actual type info
+                    # dynamic=False: pass serializer, use declared type
+                    self.fory.xwrite_ref(buffer, field_value, serializer=None if is_dynamic else serializer)
             else:
-                serializer.xwrite(buffer, field_value)
+                if is_dynamic:
+                    self.fory.xwrite_no_ref(buffer, field_value)
+                else:
+                    self.fory.xwrite_no_ref(buffer, field_value, serializer=serializer)
 
     def xread(self, buffer):
         """Read dataclass instance from buffer in cross-language format.
@@ -965,15 +1051,21 @@ class DataClassSerializer(Serializer):
         for index, field_name in enumerate(self._field_names):
             serializer = self._serializers[index]
             is_nullable = self._nullable_fields.get(field_name, False)
+            is_dynamic = self._dynamic_fields.get(field_name, False)
             if is_nullable:
                 ref_id = buffer.read_int8()
                 if ref_id == -3:
                     field_value = None
                 else:
                     buffer.reader_index -= 1
-                    field_value = self.fory.xread_ref(buffer, serializer=serializer)
+                    # dynamic=True: don't pass serializer, read type info from buffer
+                    # dynamic=False: pass serializer, use declared type
+                    field_value = self.fory.xread_ref(buffer, serializer=None if is_dynamic else serializer)
             else:
-                field_value = serializer.xread(buffer)
+                if is_dynamic:
+                    field_value = self.fory.xread_no_ref(buffer)
+                else:
+                    field_value = self.fory.xread_no_ref(buffer, serializer=serializer)
             if field_name in current_class_field_names:
                 setattr(obj, field_name, field_value)
                 read_field_names.add(field_name)
@@ -1096,7 +1188,6 @@ class StructFieldSerializerVisitor(TypeVisitor):
 
 
 _UNKNOWN_TYPE_ID = -1
-_time_types = {datetime.date, datetime.datetime, datetime.timedelta}
 
 
 def _sort_fields(type_resolver, field_names, serializers, nullable_map=None):
@@ -1142,6 +1233,9 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
             TypeId.ENUM,
             TypeId.NAMED_ENUM,
         }:
+            container = other_types
+        elif type_id >= TypeId.BOUND:
+            # Native mode user-registered types have type_id >= BOUND
             container = other_types
         else:
             assert TypeId.UNKNOWN < type_id < TypeId.BOUND, (type_id,)

@@ -485,10 +485,6 @@ public:
     if (header.is_null) {
       return Unexpected(Error::invalid_data("Cannot deserialize null object"));
     }
-    if (header.is_little_endian != is_little_endian_system()) {
-      return Unexpected(
-          Error::unsupported("Cross-endian deserialization not yet supported"));
-    }
 
     read_ctx_->attach(buffer);
     ReadContextGuard guard(*read_ctx_);
@@ -526,10 +522,6 @@ public:
     if (header.is_null) {
       return Unexpected(Error::invalid_data("Cannot deserialize null object"));
     }
-    if (header.is_little_endian != is_little_endian_system()) {
-      return Unexpected(
-          Error::unsupported("Cross-endian deserialization not yet supported"));
-    }
 
     read_ctx_->attach(buffer);
     ReadContextGuard guard(*read_ctx_);
@@ -557,7 +549,7 @@ private:
   explicit Fory(const Config &config, std::shared_ptr<TypeResolver> resolver)
       : BaseFory(config, std::move(resolver)), finalized_(false),
         precomputed_header_(compute_header(config.xlang)),
-        header_length_(config.xlang ? 4 : 3) {}
+        header_length_(config.xlang ? 2 : 1) {}
 
   /// Constructor for ThreadSafeFory pool - resolver is already finalized.
   struct PreFinalized {};
@@ -565,7 +557,7 @@ private:
                 PreFinalized)
       : BaseFory(config, std::move(resolver)), finalized_(false),
         precomputed_header_(compute_header(config.xlang)),
-        header_length_(config.xlang ? 4 : 3) {
+        header_length_(config.xlang ? 2 : 1) {
     // Pre-finalized, immediately create contexts
     ensure_finalized();
   }
@@ -589,43 +581,33 @@ private:
   }
 
   /// Compute the precomputed header value.
-  static uint32_t compute_header(bool xlang) {
-    uint32_t header = 0;
-    // Magic number (2 bytes, little endian)
-    header |= (MAGIC_NUMBER & 0xFFFF);
-    // Flags byte at position 2
+  static uint16_t compute_header(bool xlang) {
+    uint16_t header = 0;
+    // Flags byte at position 0
     uint8_t flags = 0;
-    if (is_little_endian_system()) {
-      flags |= (1 << 1); // bit 1: endian flag
-    }
     if (xlang) {
-      flags |= (1 << 2); // bit 2: xlang flag
+      flags |= (1 << 1); // bit 1: xlang flag
     }
-    header |= (static_cast<uint32_t>(flags) << 16);
-    // Language byte at position 3 (only used if xlang)
-    header |= (static_cast<uint32_t>(Language::CPP) << 24);
+    header |= flags;
+    // Language byte at position 1 (only used if xlang)
+    header |= (static_cast<uint16_t>(Language::CPP) << 8);
     return header;
   }
 
   /// Core serialization implementation.
+  /// TypeMeta is written inline using streaming protocol (no deferred writing).
   template <typename T>
   Result<size_t, Error> serialize_impl(const T &obj, Buffer &buffer) {
     size_t start_pos = buffer.writer_index();
 
-    // Write precomputed header (4 bytes), then adjust index if not xlang
-    buffer.Grow(4);
-    buffer.UnsafePut<uint32_t>(buffer.writer_index(), precomputed_header_);
+    // Write precomputed header (2 bytes), then adjust index if not xlang
+    buffer.Grow(2);
+    buffer.UnsafePut<uint16_t>(buffer.writer_index(), precomputed_header_);
     buffer.IncreaseWriterIndex(header_length_);
-
-    // Reserve space for meta offset in compatible mode
-    size_t meta_start_offset = 0;
-    if (write_ctx_->is_compatible()) {
-      meta_start_offset = buffer.writer_index();
-      buffer.WriteInt32(-1); // Placeholder for meta offset (fixed 4 bytes)
-    }
 
     // Top-level serialization: use Tracking if ref tracking is enabled,
     // otherwise NullOnly for nullable handling
+    // TypeMeta is written inline during serialization (streaming protocol)
     const RefMode top_level_ref_mode =
         write_ctx_->track_ref() ? RefMode::Tracking : RefMode::NullOnly;
     Serializer<T>::write(obj, *write_ctx_, top_level_ref_mode, true);
@@ -634,32 +616,15 @@ private:
       return Unexpected(write_ctx_->take_error());
     }
 
-    // Write collected TypeMetas at the end in compatible mode
-    if (write_ctx_->is_compatible() && !write_ctx_->meta_empty()) {
-      write_ctx_->write_meta(meta_start_offset);
-    }
-
     return buffer.writer_index() - start_pos;
   }
 
   /// Core deserialization implementation.
+  /// TypeMeta is read inline using streaming protocol.
   template <typename T> Result<T, Error> deserialize_impl(Buffer &buffer) {
-    // Load TypeMetas at the beginning in compatible mode
-    size_t bytes_to_skip = 0;
-    if (read_ctx_->is_compatible()) {
-      Error error;
-      int32_t meta_offset = buffer.ReadInt32(error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
-      }
-      if (meta_offset != -1) {
-        FORY_TRY(meta_size, read_ctx_->load_type_meta(meta_offset));
-        bytes_to_skip = meta_size;
-      }
-    }
-
     // Top-level deserialization: use Tracking if ref tracking is enabled,
     // otherwise NullOnly for nullable handling
+    // TypeMeta is read inline during deserialization (streaming protocol)
     const RefMode top_level_ref_mode =
         read_ctx_->track_ref() ? RefMode::Tracking : RefMode::NullOnly;
     T result = Serializer<T>::read(*read_ctx_, top_level_ref_mode, true);
@@ -669,14 +634,11 @@ private:
     }
 
     read_ctx_->ref_reader().resolve_callbacks();
-    if (bytes_to_skip > 0) {
-      buffer.IncreaseReaderIndex(static_cast<uint32_t>(bytes_to_skip));
-    }
     return result;
   }
 
   bool finalized_;
-  uint32_t precomputed_header_;
+  uint16_t precomputed_header_;
   uint8_t header_length_;
   std::optional<WriteContext> write_ctx_;
   std::optional<ReadContext> read_ctx_;

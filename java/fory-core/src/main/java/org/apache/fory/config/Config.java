@@ -36,7 +36,6 @@ public class Config implements Serializable {
   private final String name;
   private final Language language;
   private final boolean trackingRef;
-  private final boolean basicTypesRefIgnored;
   private final boolean stringRefIgnored;
   private final boolean timeRefIgnored;
   private final boolean copyRef;
@@ -67,15 +66,11 @@ public class Config implements Serializable {
   private final int bufferSizeLimitBytes;
   private final int maxDepth;
   private final float mapRefLoadFactor;
-  boolean foryDebugOutputEnabled =
-      "1".equals(System.getenv("ENABLE_FORY_DEBUG_OUTPUT"))
-          || "true".equals(System.getenv("ENABLE_FORY_DEBUG_OUTPUT"));
 
   public Config(ForyBuilder builder) {
     name = builder.name;
     language = builder.language;
     trackingRef = builder.trackingRef;
-    basicTypesRefIgnored = !trackingRef || builder.basicTypesRefIgnored;
     stringRefIgnored = !trackingRef || builder.stringRefIgnored;
     timeRefIgnored = !trackingRef || builder.timeRefIgnored;
     copyRef = builder.copyRef;
@@ -137,10 +132,6 @@ public class Config implements Serializable {
    */
   public boolean copyRef() {
     return copyRef;
-  }
-
-  public boolean isBasicTypesRefIgnored() {
-    return basicTypesRefIgnored;
   }
 
   public boolean isStringRefIgnored() {
@@ -299,10 +290,6 @@ public class Config implements Serializable {
     return scalaOptimizationEnabled;
   }
 
-  public boolean isForyDebugOutputEnabled() {
-    return foryDebugOutputEnabled;
-  }
-
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -315,7 +302,6 @@ public class Config implements Serializable {
     return name == config.name
         && trackingRef == config.trackingRef
         && mapRefLoadFactor == config.mapRefLoadFactor
-        && basicTypesRefIgnored == config.basicTypesRefIgnored
         && stringRefIgnored == config.stringRefIgnored
         && timeRefIgnored == config.timeRefIgnored
         && copyRef == config.copyRef
@@ -351,7 +337,6 @@ public class Config implements Serializable {
         language,
         mapRefLoadFactor,
         trackingRef,
-        basicTypesRefIgnored,
         stringRefIgnored,
         timeRefIgnored,
         copyRef,

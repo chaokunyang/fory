@@ -394,9 +394,8 @@ fn rust_compatible_variant_write_branches(
                     quote! {
                         Self::#ident { #(#field_idents),* } => {
                             context.writer.write_varuint32((#tag_value << 2) | 0b10);
-                            // Push named variant meta
-                            let meta_index = context.push_meta(std::any::TypeId::of::<#meta_type_ident>())? as u32;
-                            context.writer.write_varuint32(meta_index);
+                            // Write type meta inline using streaming protocol
+                            context.write_type_meta(std::any::TypeId::of::<#meta_type_ident>())?;
                             // Write fields same as struct
                             #(#write_fields)*
                         }
@@ -809,9 +808,8 @@ fn rust_compatible_variant_read_branches(
                                 return Ok(#default_value);
                             }
                             // Named variant should have variant_type == 0b10
-                            // Read named variant meta (peer wrote this because variant_type == 0b10)
-                            let meta_index = context.reader.read_varuint32()? as usize;
-                            let type_info = context.get_meta(meta_index)?.clone();
+                            // Read type meta inline using streaming protocol
+                            let type_info = context.read_type_meta()?;
                             // Use gen_read_compatible logic
                             #compatible_read_body
                         }

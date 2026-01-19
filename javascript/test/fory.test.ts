@@ -20,42 +20,32 @@
 import Fory, { TypeInfo, Type } from '../packages/fory/index';
 import { describe, expect, test } from '@jest/globals';
 import { fromUint8Array } from '../packages/fory/lib/platformBuffer';
-import { MAGIC_NUMBER } from '../packages/fory/lib/type';
-
-const high = MAGIC_NUMBER >> 8;
-const low = MAGIC_NUMBER & 0xff;
 
 describe('fory', () => {
     test('should deserialize null work', () => {
         const fory = new Fory();
 
-        expect(fory.deserialize(new Uint8Array([low, high, 1]))).toBe(null)
-    });
-
-    test('should deserialize big endian work', () => {
-        const fory = new Fory();
-        try {
-            fory.deserialize(new Uint8Array([low, high, 0]))
-            throw new Error('unreachable code')
-        } catch (error) {
-            expect(error.message).toBe('big endian is not supported now');
-        }
+        expect(fory.deserialize(new Uint8Array([1]))).toBe(null)
     });
 
     test('should deserialize xlang disable work', () => {
         const fory = new Fory();
         try {
-            fory.deserialize(new Uint8Array([low, high, 2]))
+            // bit 0 = null flag, bit 1 = xlang flag, bit 2 = oob flag
+            // value 0 means xlang is disabled
+            fory.deserialize(new Uint8Array([0]))
             throw new Error('unreachable code')
         } catch (error) {
             expect(error.message).toBe('support crosslanguage mode only');
         }
     });
 
-    test('should deserialize xlang disable work', () => {
+    test('should deserialize oob mode work', () => {
         const fory = new Fory();
         try {
-            fory.deserialize(new Uint8Array([low, high, 14]))
+            // bit 0 = null flag, bit 1 = xlang flag, bit 2 = oob flag
+            // value 6 = xlang (2) + oob (4) = 6
+            fory.deserialize(new Uint8Array([6]))
             throw new Error('unreachable code')
         } catch (error) {
             expect(error.message).toBe('outofband mode is not supported now');

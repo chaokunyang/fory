@@ -180,7 +180,7 @@ func TestDynamicSliceDemoXlang(t *testing.T) {
 	// Create test data with simpler types to avoid reflection issues
 	// Use int64 for interface values since fory deserializes integers to int64 for cross-language compatibility
 	codegenInstance := &DynamicSliceDemo{
-		DynamicSlice: []interface{}{
+		DynamicSlice: []any{
 			"first",
 			int64(200), // Testing mixed types in dynamic slice
 			"third",
@@ -189,11 +189,11 @@ func TestDynamicSliceDemoXlang(t *testing.T) {
 
 	// Define equivalent struct using reflection
 	type ReflectDynamicStruct struct {
-		DynamicSlice []interface{} `json:"dynamic_slice"`
+		DynamicSlice []any `json:"dynamic_slice"`
 	}
 
 	reflectInstance := &ReflectDynamicStruct{
-		DynamicSlice: []interface{}{
+		DynamicSlice: []any{
 			"first",
 			int64(200), // Testing mixed types in dynamic slice
 			"third",

@@ -26,6 +26,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.FieldAccessor;
@@ -33,8 +35,8 @@ import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
-import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -47,6 +49,7 @@ import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
 
 public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
+  private static final Logger LOG = LoggerFactory.getLogger(AbstractObjectSerializer.class);
   protected final RefResolver refResolver;
   protected final ClassResolver classResolver;
   protected final TypeResolver typeResolver;
@@ -68,93 +71,67 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     this.objectCreator = objectCreator;
   }
 
-  static void writeOtherFieldValue(
+  /**
+   * Write field value to buffer by reading from the object via fieldAccessor. Handles primitive
+   * types, unsigned/compressed numbers, and common types like String with optimized fast paths.
+   *
+   * <p>This method reads the field value from the object using the fieldAccessor in fieldInfo, then
+   * writes it to the buffer. It is the write counterpart of {@link
+   * #readBuildInFieldValue(SerializationBinding, SerializationFieldInfo, MemoryBuffer, Object)}.
+   *
+   * @param binding the serialization binding for write operations
+   * @param fieldInfo the field metadata including type, nullability info, and field accessor
+   * @param buffer the buffer to write to
+   * @param obj the object to read the field value from
+   */
+  static void writeBuildInField(
       SerializationBinding binding,
-      MemoryBuffer buffer,
       SerializationFieldInfo fieldInfo,
-      Object fieldValue) {
-    if (fieldInfo.useDeclaredTypeInfo) {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          binding.writeNonRef(buffer, fieldValue, fieldInfo.serializer);
-          break;
-        case NULL_ONLY:
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            binding.writeNonRef(buffer, fieldValue, fieldInfo.serializer);
-          }
-          break;
-        case TRACKING:
-          binding.writeRef(buffer, fieldValue, fieldInfo.serializer);
-          break;
-        default:
-          throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
-      }
-    } else {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          binding.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-          break;
-        case NULL_ONLY:
-          if (fieldValue == null) {
-            buffer.writeByte(Fory.NULL_FLAG);
-          } else {
-            buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            binding.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-          }
-          break;
-        case TRACKING:
-          binding.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
-          break;
-        default:
-          throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
-      }
+      MemoryBuffer buffer,
+      Object obj) {
+    // Handle primitive fields with direct memory access
+    if (fieldInfo.isPrimitiveField) {
+      writePrimitiveFieldValue(buffer, obj, fieldInfo.fieldAccessor, fieldInfo.dispatchId);
+      return;
     }
+    // Handle non-primitive fields based on refMode
+    Object fieldValue = fieldInfo.fieldAccessor.getObject(obj);
+    writeBuildInFieldValue(binding, fieldInfo, buffer, fieldValue);
   }
 
-  static void writeContainerFieldValue(
+  /**
+   * Write field value to buffer. Handles primitive types, unsigned/compressed numbers, and common
+   * types like String with optimized fast paths.
+   *
+   * <p>This method is the write counterpart of {@link #readBuildInFieldValue(SerializationBinding,
+   * SerializationFieldInfo, MemoryBuffer)}.
+   *
+   * @param binding the serialization binding for write operations
+   * @param fieldInfo the field metadata including type and nullability info
+   * @param buffer the buffer to write to
+   * @param fieldValue the value to write
+   */
+  static void writeBuildInFieldValue(
       SerializationBinding binding,
-      RefResolver refResolver,
-      TypeResolver typeResolver,
-      Generics generics,
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer,
       Object fieldValue) {
-    switch (fieldInfo.refMode) {
-      case NONE:
-        generics.pushGenericType(fieldInfo.genericType);
-        binding.writeContainerFieldValue(
-            buffer,
-            fieldValue,
-            typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder));
-        generics.popGenericType();
-        break;
-      case NULL_ONLY:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          generics.pushGenericType(fieldInfo.genericType);
-          binding.writeContainerFieldValue(
-              buffer,
-              fieldValue,
-              typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder));
-          generics.popGenericType();
-        }
-        break;
-      case TRACKING:
-        if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
-          ClassInfo classInfo =
-              typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder);
-          generics.pushGenericType(fieldInfo.genericType);
-          binding.writeContainerFieldValue(buffer, fieldValue, classInfo);
-          generics.popGenericType();
-        }
-        break;
-      default:
-        throw new IllegalStateException("Unexpected refMode: " + fieldInfo.refMode);
+    RefMode refMode = fieldInfo.refMode;
+    // Handle non-primitive fields based on refMode
+    if (refMode == RefMode.NONE) {
+      // No null flag - write value directly
+      writeNotPrimitiveFieldValue(binding, buffer, fieldValue, fieldInfo);
+    } else if (refMode == RefMode.NULL_ONLY) {
+      // Write null flag, then value if not null
+      if (fieldValue == null) {
+        buffer.writeByte(Fory.NULL_FLAG);
+        return;
+      }
+      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+      writeNotPrimitiveFieldValue(binding, buffer, fieldValue, fieldInfo);
+    } else {
+      // RefMode.TRACKING - use binding for reference tracking
+      binding.writeField(fieldInfo, buffer, fieldValue);
     }
   }
 
@@ -167,53 +144,53 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * @param dispatchId the class ID of the primitive type
    * @return true if dispatchId is not a primitive type and needs further write handling
    */
-  static boolean writePrimitiveFieldValue(
+  private static boolean writePrimitiveFieldValue(
       MemoryBuffer buffer, Object targetObject, long fieldOffset, int dispatchId) {
     switch (dispatchId) {
-      case DispatchId.PRIMITIVE_BOOL:
+      case DispatchId.BOOL:
         buffer.writeBoolean(Platform.getBoolean(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
         buffer.writeByte(Platform.getByte(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_CHAR:
+      case DispatchId.CHAR:
         buffer.writeChar(Platform.getChar(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
         buffer.writeInt16(Platform.getShort(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_UINT32:
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
         buffer.writeInt32(Platform.getInt(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_VARINT32:
+      case DispatchId.VARINT32:
         buffer.writeVarInt32(Platform.getInt(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_VAR_UINT32:
+      case DispatchId.VAR_UINT32:
         buffer.writeVarUint32(Platform.getInt(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_FLOAT32:
+      case DispatchId.FLOAT32:
         buffer.writeFloat32(Platform.getFloat(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
         buffer.writeInt64(Platform.getLong(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_VARINT64:
+      case DispatchId.VARINT64:
         buffer.writeVarInt64(Platform.getLong(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
+      case DispatchId.TAGGED_INT64:
         buffer.writeTaggedInt64(Platform.getLong(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_VAR_UINT64:
+      case DispatchId.VAR_UINT64:
         buffer.writeVarUint64(Platform.getLong(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+      case DispatchId.TAGGED_UINT64:
         buffer.writeTaggedUint64(Platform.getLong(targetObject, fieldOffset));
         return false;
-      case DispatchId.PRIMITIVE_FLOAT64:
+      case DispatchId.FLOAT64:
         buffer.writeFloat64(Platform.getDouble(targetObject, fieldOffset));
         return false;
       default:
@@ -236,51 +213,52 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     if (fieldOffset != -1) {
       return writePrimitiveFieldValue(buffer, targetObject, fieldOffset, dispatchId);
     }
+    // graalvm use GeneratedAccessor, which will be this code path.
     switch (dispatchId) {
-      case DispatchId.PRIMITIVE_BOOL:
+      case DispatchId.BOOL:
         buffer.writeBoolean((Boolean) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
         buffer.writeByte((Byte) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_CHAR:
+      case DispatchId.CHAR:
         buffer.writeChar((Character) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
         buffer.writeInt16((Short) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_UINT32:
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
         buffer.writeInt32((Integer) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_VARINT32:
+      case DispatchId.VARINT32:
         buffer.writeVarInt32((Integer) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_VAR_UINT32:
+      case DispatchId.VAR_UINT32:
         buffer.writeVarUint32((Integer) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_FLOAT32:
+      case DispatchId.FLOAT32:
         buffer.writeFloat32((Float) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
         buffer.writeInt64((Long) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_VARINT64:
+      case DispatchId.VARINT64:
         buffer.writeVarInt64((Long) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
+      case DispatchId.TAGGED_INT64:
         buffer.writeTaggedInt64((Long) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_VAR_UINT64:
+      case DispatchId.VAR_UINT64:
         buffer.writeVarUint64((Long) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+      case DispatchId.TAGGED_UINT64:
         buffer.writeTaggedUint64((Long) fieldAccessor.get(targetObject));
         return false;
-      case DispatchId.PRIMITIVE_FLOAT64:
+      case DispatchId.FLOAT64:
         buffer.writeFloat64((Double) fieldAccessor.get(targetObject));
         return false;
       default:
@@ -290,330 +268,94 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
 
   /**
    * Write field value to buffer. This method handle the situation which all fields are not null.
-   *
-   * @return true if field value isn't written by this function.
    */
-  static boolean writeBasicObjectFieldValue(
-      Fory fory, MemoryBuffer buffer, Object fieldValue, int dispatchId) {
+  static void writeNotPrimitiveFieldValue(
+      SerializationBinding binding,
+      MemoryBuffer buffer,
+      Object fieldValue,
+      SerializationFieldInfo fieldInfo) {
     if (fieldValue == null) {
       throw new IllegalArgumentException(
           "Non-nullable field has null value. In xlang mode, fields are non-nullable by default. "
               + "Use @ForyField(nullable=true) to allow null values.");
     }
-    if (!fory.isBasicTypesRefIgnored()) {
-      return true; // let common path handle this.
-    }
     // add time types serialization here.
-    switch (dispatchId) {
+    switch (fieldInfo.dispatchId) {
       case DispatchId.STRING: // fastpath for string.
-        String stringValue = (String) (fieldValue);
-        if (fory.getStringSerializer().needToWriteRef()) {
-          fory.writeJavaStringRef(buffer, stringValue);
-        } else {
-          fory.writeString(buffer, stringValue);
-        }
-        return false;
+        binding.fory.writeString(buffer, (String) fieldValue);
+        return;
       case DispatchId.BOOL:
         buffer.writeBoolean((Boolean) fieldValue);
-        return false;
+        return;
       case DispatchId.INT8:
       case DispatchId.UINT8:
         buffer.writeByte((Byte) fieldValue);
-        return false;
+        return;
       case DispatchId.CHAR:
         buffer.writeChar((Character) fieldValue);
-        return false;
+        return;
       case DispatchId.INT16:
       case DispatchId.UINT16:
         buffer.writeInt16((Short) fieldValue);
-        return false;
+        return;
       case DispatchId.INT32:
       case DispatchId.UINT32:
         buffer.writeInt32((Integer) fieldValue);
-        return false;
+        return;
       case DispatchId.VARINT32:
         buffer.writeVarInt32((Integer) fieldValue);
-        return false;
+        return;
       case DispatchId.VAR_UINT32:
         buffer.writeVarUint32((Integer) fieldValue);
-        return false;
+        return;
       case DispatchId.INT64:
       case DispatchId.UINT64:
         buffer.writeInt64((Long) fieldValue);
-        return false;
+        return;
       case DispatchId.VARINT64:
         buffer.writeVarInt64((Long) fieldValue);
-        return false;
+        return;
       case DispatchId.TAGGED_INT64:
         buffer.writeTaggedInt64((Long) fieldValue);
-        return false;
+        return;
       case DispatchId.VAR_UINT64:
         buffer.writeVarUint64((Long) fieldValue);
-        return false;
+        return;
       case DispatchId.TAGGED_UINT64:
         buffer.writeTaggedUint64((Long) fieldValue);
-        return false;
+        return;
       case DispatchId.FLOAT32:
         buffer.writeFloat32((Float) fieldValue);
-        return false;
+        return;
       case DispatchId.FLOAT64:
         buffer.writeFloat64((Double) fieldValue);
-        return false;
+        return;
       default:
-        return true;
+        binding.writeField(fieldInfo, RefMode.NONE, buffer, fieldValue);
     }
   }
 
-  /**
-   * Write a nullable boxed primitive or String field value to buffer. Writes null flag before value
-   * if the field is null.
-   *
-   * @param fory the fory instance for compression and ref tracking settings
-   * @param buffer the buffer to write to
-   * @param fieldValue the field value to write (may be null)
-   * @param dispatchId the class ID of the boxed type
-   * @return true if dispatchId is not a basic type or ref tracking is enabled, needing further
-   *     write handling
-   */
-  static boolean writeBasicNullableObjectFieldValue(
-      Fory fory, MemoryBuffer buffer, Object fieldValue, int dispatchId) {
-    if (!fory.isBasicTypesRefIgnored()) {
-      return true; // let common path handle this.
-    }
-    // add time types serialization here.
-    switch (dispatchId) {
-      case DispatchId.STRING: // fastpath for string.
-        fory.writeJavaStringRef(buffer, (String) (fieldValue));
-        return false;
-      case DispatchId.BOOL:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeBoolean((Boolean) (fieldValue));
-        }
-        return false;
-      case DispatchId.INT8:
-      case DispatchId.UINT8:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeByte((Byte) (fieldValue));
-        }
-        return false;
-      case DispatchId.CHAR:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeChar((Character) (fieldValue));
-        }
-        return false;
-      case DispatchId.INT16:
-      case DispatchId.UINT16:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeInt16((Short) (fieldValue));
-        }
-        return false;
-      case DispatchId.INT32:
-      case DispatchId.UINT32:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeInt32((Integer) (fieldValue));
-        }
-        return false;
-      case DispatchId.VARINT32:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeVarInt32((Integer) (fieldValue));
-        }
-        return false;
-      case DispatchId.VAR_UINT32:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeVarUint32((Integer) (fieldValue));
-        }
-        return false;
-      case DispatchId.FLOAT32:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeFloat32((Float) (fieldValue));
-        }
-        return false;
-      case DispatchId.INT64:
-      case DispatchId.UINT64:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeInt64((Long) fieldValue);
-        }
-        return false;
-      case DispatchId.VARINT64:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeVarInt64((Long) fieldValue);
-        }
-        return false;
-      case DispatchId.TAGGED_INT64:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeTaggedInt64((Long) fieldValue);
-        }
-        return false;
-      case DispatchId.VAR_UINT64:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeVarUint64((Long) fieldValue);
-        }
-        return false;
-      case DispatchId.TAGGED_UINT64:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeTaggedUint64((Long) fieldValue);
-        }
-        return false;
-      case DispatchId.FLOAT64:
-        if (fieldValue == null) {
-          buffer.writeByte(Fory.NULL_FLAG);
-        } else {
-          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-          buffer.writeFloat64((Double) (fieldValue));
-        }
-        return false;
-      default:
-        return true;
-    }
-  }
-
-  /**
-   * Read final object field value. Note that primitive field value can't be read by this method,
-   * because primitive field doesn't write null flag.
-   */
-  static Object readFinalObjectFieldValue(
+  static void writeContainerFieldValue(
       SerializationBinding binding,
       RefResolver refResolver,
-      TypeResolver typeResolver,
+      Generics generics,
       SerializationFieldInfo fieldInfo,
-      MemoryBuffer buffer) {
-    Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
-    binding.incReadDepth();
-    Object fieldValue;
-    if (fieldInfo.useDeclaredTypeInfo) {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          fieldValue = binding.read(buffer, serializer);
-          break;
-        case NULL_ONLY:
-          fieldValue = binding.readNullable(buffer, serializer);
-          break;
-        case TRACKING:
-          // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
-          // consistent with jit serializer.
-          fieldValue = binding.readRef(buffer, serializer);
-          break;
-        default:
-          throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
+      MemoryBuffer buffer,
+      Object fieldValue) {
+    if (fieldInfo.refMode == RefMode.TRACKING) {
+      if (refResolver.writeRefOrNull(buffer, fieldValue)) {
+        return;
       }
-    } else {
-      switch (fieldInfo.refMode) {
-        case NONE:
-          typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
-          fieldValue = serializer.read(buffer);
-          break;
-        case NULL_ONLY:
-          {
-            byte headFlag = buffer.readByte();
-            if (headFlag == Fory.NULL_FLAG) {
-              binding.decDepth();
-              return null;
-            }
-            typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
-            fieldValue = serializer.read(buffer);
-          }
-          break;
-        case TRACKING:
-          {
-            int nextReadRefId = refResolver.tryPreserveRefId(buffer);
-            if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-              typeResolver.readClassInfo(buffer, fieldInfo.classInfo);
-              fieldValue = serializer.read(buffer);
-              refResolver.setReadObject(nextReadRefId, fieldValue);
-            } else {
-              fieldValue = refResolver.getReadObject();
-            }
-          }
-          break;
-        default:
-          throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
+    } else if (fieldInfo.refMode == RefMode.NULL_ONLY) {
+      if (fieldValue == null) {
+        buffer.writeByte(Fory.NULL_FLAG);
+        return;
       }
+      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
     }
-    binding.decDepth();
-    return fieldValue;
-  }
-
-  /**
-   * Read a non-container field value that is not a final type. Handles enum types, reference
-   * tracking, and nullable fields according to xlang serialization protocol.
-   *
-   * @param binding the serialization binding for read operations
-   * @param fieldInfo the field metadata including type info and nullability
-   * @param buffer the buffer to read from
-   * @return the deserialized field value, or null if the field is nullable and was null
-   */
-  static Object readOtherFieldValue(
-      SerializationBinding binding, SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    // Note: Enum has special handling for xlang compatibility - no type info for enum fields
-    if (fieldInfo.genericType.getCls().isEnum()) {
-      // Only read null flag when the field is nullable (for xlang compatibility)
-      if (fieldInfo.nullable && buffer.readByte() == Fory.NULL_FLAG) {
-        return null;
-      }
-      return fieldInfo.genericType.getSerializer(binding.typeResolver).read(buffer);
-    }
-    Object fieldValue;
-    switch (fieldInfo.refMode) {
-      case NONE:
-        binding.preserveRefId(-1);
-        fieldValue = binding.readNonRef(buffer, fieldInfo);
-        break;
-      case NULL_ONLY:
-        {
-          binding.preserveRefId(-1);
-          byte headFlag = buffer.readByte();
-          if (headFlag == Fory.NULL_FLAG) {
-            return null;
-          }
-          fieldValue = binding.readNonRef(buffer, fieldInfo);
-        }
-        break;
-      case TRACKING:
-        fieldValue = binding.readRef(buffer, fieldInfo);
-        break;
-      default:
-        throw new IllegalStateException("Unknown refMode: " + fieldInfo.refMode);
-    }
-    return fieldValue;
+    generics.pushGenericType(fieldInfo.genericType);
+    binding.writeContainerFieldValue(fieldInfo, buffer, fieldValue);
+    generics.popGenericType();
   }
 
   /**
@@ -663,66 +405,186 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   /**
+   * Read field value from buffer and return it. Handles primitive types, unsigned/compressed
+   * numbers, and common types like String with optimized fast paths.
+   *
+   * <p>This method is similar to {@link #readBuildInFieldValue(SerializationBinding,
+   * SerializationFieldInfo, MemoryBuffer, Object)}, but returns the field value instead of setting
+   * it into the target object. Useful for record types where field values need to be collected into
+   * an array before constructing the object.
+   *
+   * <p>The refMode determines how to read the value from buffer: - RefMode.NONE: read directly
+   * without null flag - RefMode.NULL_ONLY: read null flag first, then value if not null -
+   * RefMode.TRACKING: use reference tracking
+   *
+   * @param binding the serialization binding for read operations
+   * @param fieldInfo the field metadata including type and nullability info
+   * @param buffer the buffer to read from
+   * @return the deserialized field value, or null if the field is nullable and was null
+   * @see #readBuildInFieldValue(SerializationBinding, SerializationFieldInfo, MemoryBuffer, Object)
+   */
+  static Object readBuildInFieldValue(
+      SerializationBinding binding, SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    int dispatchId = fieldInfo.dispatchId;
+    RefMode refMode = fieldInfo.refMode;
+    // Use refMode to determine if there's a null flag prefix in the stream
+    if (refMode == RefMode.NONE) {
+      // No null flag in stream - read directly
+      return readNotNullBuildInFieldValue(binding, buffer, fieldInfo, dispatchId);
+    } else if (refMode == RefMode.NULL_ONLY) {
+      // Read null flag from buffer
+      if (buffer.readByte() == Fory.NULL_FLAG) {
+        return null;
+      }
+      return readNotNullBuildInFieldValue(binding, buffer, fieldInfo, dispatchId);
+    }
+    // Fall back to binding.read for complex types or TRACKING mode
+    return binding.readField(fieldInfo, buffer);
+  }
+
+  /**
+   * Handle all numeric fields read include unsigned and compressed numbers. It also include
+   * fastpath for common type such as String.
+   */
+  static void readBuildInFieldValue(
+      SerializationBinding binding,
+      SerializationFieldInfo fieldInfo,
+      MemoryBuffer buffer,
+      Object targetObject) {
+    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+    int dispatchId = fieldInfo.dispatchId;
+    if (fieldInfo.refMode == RefMode.NONE) {
+      if (fieldInfo.isPrimitiveField) {
+        readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
+      } else {
+        readNotPrimitiveFieldValue(binding, buffer, targetObject, fieldInfo, dispatchId);
+      }
+    } else if (fieldInfo.refMode == RefMode.NULL_ONLY) {
+      if (buffer.readByte() == Fory.NULL_FLAG) {
+        return;
+      }
+      if (fieldInfo.isPrimitiveField) {
+        readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
+      } else {
+        readNotPrimitiveFieldValue(binding, buffer, targetObject, fieldInfo, dispatchId);
+      }
+    } else {
+      Object fieldValue = binding.readField(fieldInfo, buffer);
+      fieldAccessor.putObject(targetObject, fieldValue);
+    }
+  }
+
+  /**
+   * Read a non-nullable basic object value from buffer and return it. Handles PRIMITIVE_*, and
+   * STRING dispatch IDs with optimized fast paths.
+   */
+  private static Object readNotNullBuildInFieldValue(
+      SerializationBinding binding,
+      MemoryBuffer buffer,
+      SerializationFieldInfo fieldInfo,
+      int dispatchId) {
+    switch (dispatchId) {
+      case DispatchId.BOOL:
+        return buffer.readBoolean();
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        return buffer.readByte();
+      case DispatchId.CHAR:
+        return buffer.readChar();
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        return buffer.readInt16();
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
+        return buffer.readInt32();
+      case DispatchId.VARINT32:
+        return buffer.readVarInt32();
+      case DispatchId.VAR_UINT32:
+        return buffer.readVarUint32();
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        return buffer.readInt64();
+      case DispatchId.VARINT64:
+        return buffer.readVarInt64();
+      case DispatchId.TAGGED_INT64:
+        return buffer.readTaggedInt64();
+      case DispatchId.VAR_UINT64:
+        return buffer.readVarUint64();
+      case DispatchId.TAGGED_UINT64:
+        return buffer.readTaggedUint64();
+      case DispatchId.FLOAT32:
+        return buffer.readFloat32();
+      case DispatchId.FLOAT64:
+        return buffer.readFloat64();
+      case DispatchId.STRING:
+        return binding.fory.readJavaString(buffer);
+      default:
+        return binding.readField(fieldInfo, RefMode.NONE, buffer);
+    }
+  }
+
+  /**
    * Read a primitive value from buffer and set it to field referenced by <code>fieldAccessor</code>
    * of <code>targetObject</code>.
-   *
-   * @return true if <code>classId</code> is not a primitive type id.
    */
-  static boolean readPrimitiveFieldValue(
+  private static void readPrimitiveFieldValue(
       MemoryBuffer buffer, Object targetObject, FieldAccessor fieldAccessor, int dispatchId) {
     long fieldOffset = fieldAccessor.getFieldOffset();
     if (fieldOffset != -1) {
-      return readPrimitiveFieldValue(buffer, targetObject, fieldOffset, dispatchId);
+      readPrimitiveFieldValue(buffer, targetObject, fieldOffset, dispatchId);
+      return;
     }
+    // graalvm use GeneratedAccessor, which will be this code path.
+    // we still need `PRIMITIVE` cases since peer may send
     switch (dispatchId) {
-      case DispatchId.PRIMITIVE_BOOL:
+      case DispatchId.BOOL:
         fieldAccessor.set(targetObject, buffer.readBoolean());
-        return false;
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
+        return;
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
         fieldAccessor.set(targetObject, buffer.readByte());
-        return false;
-      case DispatchId.PRIMITIVE_CHAR:
+        return;
+      case DispatchId.CHAR:
         fieldAccessor.set(targetObject, buffer.readChar());
-        return false;
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
+        return;
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
         fieldAccessor.set(targetObject, buffer.readInt16());
-        return false;
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_UINT32:
+        return;
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
         fieldAccessor.set(targetObject, buffer.readInt32());
-        return false;
-      case DispatchId.PRIMITIVE_VARINT32:
+        return;
+      case DispatchId.VARINT32:
         fieldAccessor.set(targetObject, buffer.readVarInt32());
-        return false;
-      case DispatchId.PRIMITIVE_VAR_UINT32:
+        return;
+      case DispatchId.VAR_UINT32:
         fieldAccessor.set(targetObject, buffer.readVarUint32());
-        return false;
-      case DispatchId.PRIMITIVE_FLOAT32:
+        return;
+      case DispatchId.FLOAT32:
         fieldAccessor.set(targetObject, buffer.readFloat32());
-        return false;
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
+        return;
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
         fieldAccessor.set(targetObject, buffer.readInt64());
-        return false;
-      case DispatchId.PRIMITIVE_VARINT64:
+        return;
+      case DispatchId.VARINT64:
         fieldAccessor.set(targetObject, buffer.readVarInt64());
-        return false;
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        return;
+      case DispatchId.TAGGED_INT64:
         fieldAccessor.set(targetObject, buffer.readTaggedInt64());
-        return false;
-      case DispatchId.PRIMITIVE_VAR_UINT64:
+        return;
+      case DispatchId.VAR_UINT64:
         fieldAccessor.set(targetObject, buffer.readVarUint64());
-        return false;
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        return;
+      case DispatchId.TAGGED_UINT64:
         fieldAccessor.set(targetObject, buffer.readTaggedUint64());
-        return false;
-      case DispatchId.PRIMITIVE_FLOAT64:
+        return;
+      case DispatchId.FLOAT64:
         fieldAccessor.set(targetObject, buffer.readFloat64());
-        return false;
+        return;
       default:
-        return true;
+        throw new IllegalArgumentException("Unsupported dispatch id " + dispatchId);
     }
   }
 
@@ -733,305 +595,126 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * @param targetObject the object to set the field value on
    * @param fieldOffset the memory offset of the field
    * @param dispatchId the dispatch ID of the primitive type
-   * @return true if classId is not a primitive type and needs further read handling
    */
-  private static boolean readPrimitiveFieldValue(
+  private static void readPrimitiveFieldValue(
       MemoryBuffer buffer, Object targetObject, long fieldOffset, int dispatchId) {
     switch (dispatchId) {
-      case DispatchId.PRIMITIVE_BOOL:
+      case DispatchId.BOOL:
         Platform.putBoolean(targetObject, fieldOffset, buffer.readBoolean());
-        return false;
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
+        return;
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
         Platform.putByte(targetObject, fieldOffset, buffer.readByte());
-        return false;
-      case DispatchId.PRIMITIVE_CHAR:
+        return;
+      case DispatchId.CHAR:
         Platform.putChar(targetObject, fieldOffset, buffer.readChar());
-        return false;
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
+        return;
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
         Platform.putShort(targetObject, fieldOffset, buffer.readInt16());
-        return false;
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_UINT32:
+        return;
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
         Platform.putInt(targetObject, fieldOffset, buffer.readInt32());
-        return false;
-      case DispatchId.PRIMITIVE_VARINT32:
+        return;
+      case DispatchId.VARINT32:
         Platform.putInt(targetObject, fieldOffset, buffer.readVarInt32());
-        return false;
-      case DispatchId.PRIMITIVE_VAR_UINT32:
+        return;
+      case DispatchId.VAR_UINT32:
         Platform.putInt(targetObject, fieldOffset, buffer.readVarUint32());
-        return false;
-      case DispatchId.PRIMITIVE_FLOAT32:
+        return;
+      case DispatchId.FLOAT32:
         Platform.putFloat(targetObject, fieldOffset, buffer.readFloat32());
-        return false;
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
+        return;
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
         Platform.putLong(targetObject, fieldOffset, buffer.readInt64());
-        return false;
-      case DispatchId.PRIMITIVE_VARINT64:
+        return;
+      case DispatchId.VARINT64:
         Platform.putLong(targetObject, fieldOffset, buffer.readVarInt64());
-        return false;
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        return;
+      case DispatchId.TAGGED_INT64:
         Platform.putLong(targetObject, fieldOffset, buffer.readTaggedInt64());
-        return false;
-      case DispatchId.PRIMITIVE_VAR_UINT64:
+        return;
+      case DispatchId.VAR_UINT64:
         Platform.putLong(targetObject, fieldOffset, buffer.readVarUint64());
-        return false;
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        return;
+      case DispatchId.TAGGED_UINT64:
         Platform.putLong(targetObject, fieldOffset, buffer.readTaggedUint64());
-        return false;
-      case DispatchId.PRIMITIVE_FLOAT64:
+        return;
+      case DispatchId.FLOAT64:
         Platform.putDouble(targetObject, fieldOffset, buffer.readFloat64());
-        return false;
+        return;
       default:
-        return true;
+        throw new IllegalArgumentException("Unsupported dispatch id " + dispatchId);
     }
   }
 
   /**
-   * Read a nullable primitive field value from buffer. Reads the null flag first and returns early
-   * if null.
-   *
-   * @param buffer the buffer to read from
-   * @param targetObject the object to set the field value on
-   * @param fieldAccessor the accessor to set the field value
-   * @param dispatchId the class ID of the primitive type
-   * @return true if dispatchId is not a primitive type and needs further read handling; false if
-   *     value was null or successfully read
+   * Read field value from buffer and set it on the target object. This method handles PRIMITIVE_*
+   * and NOTNULL_BOXED_* dispatch IDs where null values are not allowed.
    */
-  static boolean readPrimitiveNullableFieldValue(
-      MemoryBuffer buffer, Object targetObject, FieldAccessor fieldAccessor, int dispatchId) {
-    if (buffer.readByte() == Fory.NULL_FLAG) {
-      return false;
-    }
-    return readPrimitiveFieldValue(buffer, targetObject, fieldAccessor, dispatchId);
-  }
-
-  /**
-   * read field value from buffer. This method handle the situation which all fields are not null.
-   *
-   * @return true if field value isn't read by this function.
-   */
-  static boolean readBasicObjectFieldValue(
-      Fory fory,
+  private static void readNotPrimitiveFieldValue(
+      SerializationBinding binding,
       MemoryBuffer buffer,
       Object targetObject,
-      FieldAccessor fieldAccessor,
+      SerializationFieldInfo fieldInfo,
       int dispatchId) {
-    if (!fory.isBasicTypesRefIgnored()) {
-      return true; // let common path handle this.
-    }
-    // add time types serialization here.
-    // Handle both primitive and nullable dispatchIds for schema compatible mode
-    // where Java field is boxed but ClassDef says non-nullable (primitive encoding)
+    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
     switch (dispatchId) {
-      case DispatchId.STRING: // fastpath for string.
-        if (fory.getStringSerializer().needToWriteRef()) {
-          fieldAccessor.putObject(targetObject, fory.readJavaStringRef(buffer));
-        } else {
-          fieldAccessor.putObject(targetObject, fory.readString(buffer));
-        }
-        return false;
-      case DispatchId.PRIMITIVE_BOOL:
       case DispatchId.BOOL:
         fieldAccessor.putObject(targetObject, buffer.readBoolean());
-        return false;
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
+        return;
       case DispatchId.INT8:
       case DispatchId.UINT8:
         fieldAccessor.putObject(targetObject, buffer.readByte());
-        return false;
-      case DispatchId.PRIMITIVE_CHAR:
+        return;
       case DispatchId.CHAR:
         fieldAccessor.putObject(targetObject, buffer.readChar());
-        return false;
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
+        return;
       case DispatchId.INT16:
       case DispatchId.UINT16:
         fieldAccessor.putObject(targetObject, buffer.readInt16());
-        return false;
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_UINT32:
+        return;
       case DispatchId.INT32:
       case DispatchId.UINT32:
         fieldAccessor.putObject(targetObject, buffer.readInt32());
-        return false;
-      case DispatchId.PRIMITIVE_VARINT32:
+        return;
       case DispatchId.VARINT32:
         fieldAccessor.putObject(targetObject, buffer.readVarInt32());
-        return false;
-      case DispatchId.PRIMITIVE_VAR_UINT32:
+        return;
       case DispatchId.VAR_UINT32:
         fieldAccessor.putObject(targetObject, buffer.readVarUint32());
-        return false;
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
+        return;
       case DispatchId.INT64:
       case DispatchId.UINT64:
         fieldAccessor.putObject(targetObject, buffer.readInt64());
-        return false;
-      case DispatchId.PRIMITIVE_VARINT64:
+        return;
       case DispatchId.VARINT64:
         fieldAccessor.putObject(targetObject, buffer.readVarInt64());
-        return false;
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
+        return;
       case DispatchId.TAGGED_INT64:
         fieldAccessor.putObject(targetObject, buffer.readTaggedInt64());
-        return false;
-      case DispatchId.PRIMITIVE_VAR_UINT64:
+        return;
       case DispatchId.VAR_UINT64:
         fieldAccessor.putObject(targetObject, buffer.readVarUint64());
-        return false;
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+        return;
       case DispatchId.TAGGED_UINT64:
         fieldAccessor.putObject(targetObject, buffer.readTaggedUint64());
-        return false;
-      case DispatchId.PRIMITIVE_FLOAT32:
+        return;
       case DispatchId.FLOAT32:
         fieldAccessor.putObject(targetObject, buffer.readFloat32());
-        return false;
-      case DispatchId.PRIMITIVE_FLOAT64:
+        return;
       case DispatchId.FLOAT64:
         fieldAccessor.putObject(targetObject, buffer.readFloat64());
-        return false;
+        return;
+      case DispatchId.STRING:
+        fieldAccessor.putObject(targetObject, binding.fory.readJavaString(buffer));
+        return;
       default:
-        return true;
-    }
-  }
-
-  /**
-   * Read a nullable boxed primitive or String field value from buffer and set it on the target
-   * object. Reads the null flag before value for nullable types.
-   *
-   * @param fory the fory instance for compression and ref tracking settings
-   * @param buffer the buffer to read from
-   * @param targetObject the object to set the field value on
-   * @param fieldAccessor the accessor to set the field value
-   * @param dispatchId the class ID of the boxed type
-   * @return true if dispatchId is not a basic type or ref tracking is enabled, needing further read
-   *     handling
-   */
-  static boolean readBasicNullableObjectFieldValue(
-      Fory fory,
-      MemoryBuffer buffer,
-      Object targetObject,
-      FieldAccessor fieldAccessor,
-      int dispatchId) {
-    if (!fory.isBasicTypesRefIgnored()) {
-      return true; // let common path handle this.
-    }
-    // add time types serialization here.
-    switch (dispatchId) {
-      case DispatchId.STRING: // fastpath for string.
-        fieldAccessor.putObject(targetObject, fory.readJavaStringRef(buffer));
-        return false;
-      case DispatchId.BOOL:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readBoolean());
-        }
-        return false;
-      case DispatchId.INT8:
-      case DispatchId.UINT8:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readByte());
-        }
-        return false;
-      case DispatchId.CHAR:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readChar());
-        }
-        return false;
-      case DispatchId.INT16:
-      case DispatchId.UINT16:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readInt16());
-        }
-        return false;
-      case DispatchId.INT32:
-      case DispatchId.UINT32:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readInt32());
-        }
-        return false;
-      case DispatchId.VARINT32:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readVarInt32());
-        }
-        return false;
-      case DispatchId.VAR_UINT32:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readVarUint32());
-        }
-        return false;
-      case DispatchId.INT64:
-      case DispatchId.UINT64:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readInt64());
-        }
-        return false;
-      case DispatchId.VARINT64:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readVarInt64());
-        }
-        return false;
-      case DispatchId.TAGGED_INT64:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readTaggedInt64());
-        }
-        return false;
-      case DispatchId.VAR_UINT64:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readVarUint64());
-        }
-        return false;
-      case DispatchId.TAGGED_UINT64:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readTaggedUint64());
-        }
-        return false;
-      case DispatchId.FLOAT32:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readFloat32());
-        }
-        return false;
-      case DispatchId.FLOAT64:
-        if (buffer.readByte() == Fory.NULL_FLAG) {
-          fieldAccessor.putObject(targetObject, null);
-        } else {
-          fieldAccessor.putObject(targetObject, buffer.readFloat64());
-        }
-        return false;
-      default:
-        return true;
+        // Use RefMode.NONE because null flag was already handled by caller
+        Object fieldValue = binding.readField(fieldInfo, RefMode.NONE, buffer);
+        fieldAccessor.putObject(targetObject, fieldValue);
     }
   }
 
@@ -1075,7 +758,11 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       long fieldOffset = fieldAccessor.getFieldOffset();
       if (fieldOffset != -1) {
-        fieldValues[i] = copyField(originObj, fieldOffset, fieldInfo.dispatchId);
+        if (fieldInfo.isPrimitiveField) {
+          fieldValues[i] = copyPrimitiveField(originObj, fieldOffset, fieldInfo.dispatchId);
+        } else {
+          fieldValues[i] = copyNotPrimitiveField(originObj, fieldOffset, fieldInfo.dispatchId);
+        }
       } else {
         // field in record class has offset -1
         Object fieldValue = fieldAccessor.get(originObj);
@@ -1100,97 +787,121 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       long fieldOffset = fieldAccessor.getFieldOffset();
       // record class won't go to this path;
       assert fieldOffset != -1;
-      switch (fieldInfo.dispatchId) {
-        case DispatchId.PRIMITIVE_BOOL:
-          Platform.putBoolean(newObj, fieldOffset, Platform.getBoolean(originObj, fieldOffset));
-          break;
-        case DispatchId.PRIMITIVE_INT8:
-        case DispatchId.PRIMITIVE_UINT8:
-          Platform.putByte(newObj, fieldOffset, Platform.getByte(originObj, fieldOffset));
-          break;
-        case DispatchId.PRIMITIVE_CHAR:
-          Platform.putChar(newObj, fieldOffset, Platform.getChar(originObj, fieldOffset));
-          break;
-        case DispatchId.PRIMITIVE_INT16:
-        case DispatchId.PRIMITIVE_UINT16:
-          Platform.putShort(newObj, fieldOffset, Platform.getShort(originObj, fieldOffset));
-          break;
-        case DispatchId.PRIMITIVE_INT32:
-        case DispatchId.PRIMITIVE_VARINT32:
-        case DispatchId.PRIMITIVE_UINT32:
-        case DispatchId.PRIMITIVE_VAR_UINT32:
-          Platform.putInt(newObj, fieldOffset, Platform.getInt(originObj, fieldOffset));
-          break;
-        case DispatchId.PRIMITIVE_INT64:
-        case DispatchId.PRIMITIVE_VARINT64:
-        case DispatchId.PRIMITIVE_TAGGED_INT64:
-        case DispatchId.PRIMITIVE_UINT64:
-        case DispatchId.PRIMITIVE_VAR_UINT64:
-        case DispatchId.PRIMITIVE_TAGGED_UINT64:
-          Platform.putLong(newObj, fieldOffset, Platform.getLong(originObj, fieldOffset));
-          break;
-        case DispatchId.PRIMITIVE_FLOAT32:
-          Platform.putFloat(newObj, fieldOffset, Platform.getFloat(originObj, fieldOffset));
-          break;
-        case DispatchId.PRIMITIVE_FLOAT64:
-          Platform.putDouble(newObj, fieldOffset, Platform.getDouble(originObj, fieldOffset));
-          break;
-        case DispatchId.BOOL:
-        case DispatchId.INT8:
-        case DispatchId.UINT8:
-        case DispatchId.CHAR:
-        case DispatchId.INT16:
-        case DispatchId.UINT16:
-        case DispatchId.INT32:
-        case DispatchId.VARINT32:
-        case DispatchId.UINT32:
-        case DispatchId.VAR_UINT32:
-        case DispatchId.INT64:
-        case DispatchId.VARINT64:
-        case DispatchId.TAGGED_INT64:
-        case DispatchId.UINT64:
-        case DispatchId.VAR_UINT64:
-        case DispatchId.TAGGED_UINT64:
-        case DispatchId.FLOAT32:
-        case DispatchId.FLOAT64:
-        case DispatchId.STRING:
-          Platform.putObject(newObj, fieldOffset, Platform.getObject(originObj, fieldOffset));
-          break;
-        default:
-          Platform.putObject(
-              newObj, fieldOffset, fory.copyObject(Platform.getObject(originObj, fieldOffset)));
+      if (fieldInfo.isPrimitiveField) {
+        copySetPrimitiveField(originObj, newObj, fieldOffset, fieldInfo.dispatchId);
+      } else {
+        copySetNotPrimitiveField(fory, originObj, newObj, fieldOffset, fieldInfo.dispatchId);
       }
     }
   }
 
-  private Object copyField(Object targetObject, long fieldOffset, int typeId) {
+  private static void copySetPrimitiveField(
+      Object originObj, Object newObj, long fieldOffset, int typeId) {
     switch (typeId) {
-      case DispatchId.PRIMITIVE_BOOL:
+      case DispatchId.BOOL:
+        Platform.putBoolean(newObj, fieldOffset, Platform.getBoolean(originObj, fieldOffset));
+        break;
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        Platform.putByte(newObj, fieldOffset, Platform.getByte(originObj, fieldOffset));
+        break;
+      case DispatchId.CHAR:
+        Platform.putChar(newObj, fieldOffset, Platform.getChar(originObj, fieldOffset));
+        break;
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        Platform.putShort(newObj, fieldOffset, Platform.getShort(originObj, fieldOffset));
+        break;
+      case DispatchId.INT32:
+      case DispatchId.VARINT32:
+      case DispatchId.UINT32:
+      case DispatchId.VAR_UINT32:
+        Platform.putInt(newObj, fieldOffset, Platform.getInt(originObj, fieldOffset));
+        break;
+      case DispatchId.INT64:
+      case DispatchId.VARINT64:
+      case DispatchId.TAGGED_INT64:
+      case DispatchId.UINT64:
+      case DispatchId.VAR_UINT64:
+      case DispatchId.TAGGED_UINT64:
+        Platform.putLong(newObj, fieldOffset, Platform.getLong(originObj, fieldOffset));
+        break;
+      case DispatchId.FLOAT32:
+        Platform.putFloat(newObj, fieldOffset, Platform.getFloat(originObj, fieldOffset));
+        break;
+      case DispatchId.FLOAT64:
+        Platform.putDouble(newObj, fieldOffset, Platform.getDouble(originObj, fieldOffset));
+        break;
+      default:
+        throw new RuntimeException("Unknown primitive type: " + typeId);
+    }
+  }
+
+  private static void copySetNotPrimitiveField(
+      Fory fory, Object originObj, Object newObj, long fieldOffset, int typeId) {
+    switch (typeId) {
+      case DispatchId.BOOL:
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+      case DispatchId.CHAR:
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+      case DispatchId.INT32:
+      case DispatchId.VARINT32:
+      case DispatchId.UINT32:
+      case DispatchId.VAR_UINT32:
+      case DispatchId.INT64:
+      case DispatchId.VARINT64:
+      case DispatchId.TAGGED_INT64:
+      case DispatchId.UINT64:
+      case DispatchId.VAR_UINT64:
+      case DispatchId.TAGGED_UINT64:
+      case DispatchId.FLOAT32:
+      case DispatchId.FLOAT64:
+      case DispatchId.STRING:
+        Platform.putObject(newObj, fieldOffset, Platform.getObject(originObj, fieldOffset));
+        break;
+      default:
+        Platform.putObject(
+            newObj, fieldOffset, fory.copyObject(Platform.getObject(originObj, fieldOffset)));
+    }
+  }
+
+  private Object copyPrimitiveField(Object targetObject, long fieldOffset, int typeId) {
+    switch (typeId) {
+      case DispatchId.BOOL:
         return Platform.getBoolean(targetObject, fieldOffset);
-      case DispatchId.PRIMITIVE_INT8:
-      case DispatchId.PRIMITIVE_UINT8:
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
         return Platform.getByte(targetObject, fieldOffset);
-      case DispatchId.PRIMITIVE_CHAR:
+      case DispatchId.CHAR:
         return Platform.getChar(targetObject, fieldOffset);
-      case DispatchId.PRIMITIVE_INT16:
-      case DispatchId.PRIMITIVE_UINT16:
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
         return Platform.getShort(targetObject, fieldOffset);
-      case DispatchId.PRIMITIVE_INT32:
-      case DispatchId.PRIMITIVE_VARINT32:
-      case DispatchId.PRIMITIVE_UINT32:
-      case DispatchId.PRIMITIVE_VAR_UINT32:
+      case DispatchId.INT32:
+      case DispatchId.VARINT32:
+      case DispatchId.UINT32:
+      case DispatchId.VAR_UINT32:
         return Platform.getInt(targetObject, fieldOffset);
-      case DispatchId.PRIMITIVE_FLOAT32:
+      case DispatchId.FLOAT32:
         return Platform.getFloat(targetObject, fieldOffset);
-      case DispatchId.PRIMITIVE_INT64:
-      case DispatchId.PRIMITIVE_VARINT64:
-      case DispatchId.PRIMITIVE_TAGGED_INT64:
-      case DispatchId.PRIMITIVE_UINT64:
-      case DispatchId.PRIMITIVE_VAR_UINT64:
-      case DispatchId.PRIMITIVE_TAGGED_UINT64:
+      case DispatchId.INT64:
+      case DispatchId.VARINT64:
+      case DispatchId.TAGGED_INT64:
+      case DispatchId.UINT64:
+      case DispatchId.VAR_UINT64:
+      case DispatchId.TAGGED_UINT64:
         return Platform.getLong(targetObject, fieldOffset);
-      case DispatchId.PRIMITIVE_FLOAT64:
+      case DispatchId.FLOAT64:
         return Platform.getDouble(targetObject, fieldOffset);
+      default:
+        throw new RuntimeException("Unknown primitive type: " + typeId);
+    }
+  }
+
+  private Object copyNotPrimitiveField(Object targetObject, long fieldOffset, int typeId) {
+    switch (typeId) {
       case DispatchId.BOOL:
       case DispatchId.INT8:
       case DispatchId.UINT8:

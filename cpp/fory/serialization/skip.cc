@@ -226,13 +226,8 @@ void skip_struct(ReadContext &ctx, const FieldType &field_type) {
   if (remote_tid == TypeId::COMPATIBLE_STRUCT ||
       remote_tid == TypeId::NAMED_COMPATIBLE_STRUCT ||
       remote_tid == TypeId::NAMED_STRUCT) {
-    // These types write meta_index after type_id
-    uint32_t meta_index = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return;
-    }
-
-    auto type_info_res = ctx.get_type_info_by_index(meta_index);
+    // These types write TypeMeta inline using streaming protocol
+    auto type_info_res = ctx.read_type_meta();
     if (FORY_PREDICT_FALSE(!type_info_res.ok())) {
       ctx.set_error(std::move(type_info_res).error());
       return;
@@ -298,13 +293,9 @@ void skip_ext(ReadContext &ctx, const FieldType &field_type) {
   const TypeInfo *type_info = nullptr;
 
   if (remote_tid == TypeId::NAMED_EXT) {
-    // Named ext: also read meta_index
-    uint32_t meta_index = ctx.read_varuint32(ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return;
-    }
-
-    auto type_info_res = ctx.get_type_info_by_index(meta_index);
+    // Named ext in compatible mode: read TypeMeta inline using streaming
+    // protocol
+    auto type_info_res = ctx.read_type_meta();
     if (FORY_PREDICT_FALSE(!type_info_res.ok())) {
       ctx.set_error(std::move(type_info_res).error());
       return;

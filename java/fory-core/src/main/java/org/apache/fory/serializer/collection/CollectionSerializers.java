@@ -58,6 +58,7 @@ import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -1001,7 +1002,7 @@ public class CollectionSerializers {
   // TODO Support ArraySubListSerializer, SubListSerializer
 
   public static void registerDefaultSerializers(Fory fory) {
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(ArrayList.class, new ArrayListSerializer(fory));
     Class arrayAsListClass = Arrays.asList(1, 2).getClass();
     resolver.registerInternalSerializer(

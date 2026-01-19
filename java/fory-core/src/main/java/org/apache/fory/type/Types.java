@@ -275,8 +275,10 @@ public class Types {
       case INT16:
         return INT16_ARRAY;
       case INT32:
+      case VARINT32:
         return INT32_ARRAY;
       case INT64:
+      case VARINT64:
         return INT64_ARRAY;
       case UINT8:
         return UINT8_ARRAY;
@@ -349,7 +351,7 @@ public class Types {
     }
     ClassInfo classInfo = fory._getTypeResolver().getClassInfo(clz, false);
     if (classInfo != null) {
-      return fory.isCrossLanguage() ? classInfo.getXtypeId() : classInfo.getClassId();
+      return classInfo.getTypeId();
     }
     return Types.UNKNOWN;
   }

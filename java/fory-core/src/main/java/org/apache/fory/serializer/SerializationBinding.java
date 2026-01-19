@@ -28,6 +28,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
@@ -79,9 +80,23 @@ abstract class SerializationBinding {
       MemoryBuffer buffer, Object obj, Serializer serializer, boolean nullable);
 
   abstract void writeContainerFieldValue(
-      MemoryBuffer buffer, Object fieldValue, ClassInfo classInfo);
+      SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue);
+
+  public final void writeField(
+      SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+    writeField(fieldInfo, fieldInfo.refMode, buffer, fieldValue);
+  }
+
+  abstract void writeField(
+      SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer, Object fieldValue);
 
   abstract void write(MemoryBuffer buffer, Serializer serializer, Object value);
+
+  public final Object readField(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
+    return readField(fieldInfo, fieldInfo.refMode, buffer);
+  }
+
+  abstract Object readField(SerializationFieldInfo fieldInfo, RefMode mode, MemoryBuffer buffer);
 
   abstract Object read(MemoryBuffer buffer, Serializer serializer);
 
@@ -100,6 +115,8 @@ abstract class SerializationBinding {
   abstract Object readNonRef(MemoryBuffer buffer, SerializationFieldInfo field);
 
   abstract Object readNullable(MemoryBuffer buffer, Serializer<Object> serializer);
+
+  abstract Object readNullable(MemoryBuffer buffer, SerializationFieldInfo field);
 
   abstract Object readNullable(
       MemoryBuffer buffer, Serializer<Object> serializer, boolean nullable);
@@ -202,6 +219,14 @@ abstract class SerializationBinding {
     }
 
     @Override
+    public Object readNullable(MemoryBuffer buffer, SerializationFieldInfo field) {
+      if (field.useDeclaredTypeInfo) {
+        return fory.readNullable(buffer, field.classInfo.getSerializer());
+      }
+      return fory.readNullable(buffer, field.classInfoHolder);
+    }
+
+    @Override
     public Object readNullable(MemoryBuffer buffer, Serializer<Object> serializer) {
       return fory.readNullable(buffer, serializer);
     }
@@ -239,6 +264,36 @@ abstract class SerializationBinding {
     @Override
     public void write(MemoryBuffer buffer, Serializer serializer, Object value) {
       serializer.write(buffer, value);
+    }
+
+    @Override
+    Object readField(SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer) {
+      if (fieldInfo.useDeclaredTypeInfo) {
+        if (refMode == RefMode.TRACKING) {
+          return fory.readRef(buffer, fieldInfo.classInfo);
+        } else {
+          if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
+            // Preserve a dummy ref ID so ObjectSerializer.read() can pop it.
+            // This is needed when global ref tracking is enabled but field ref tracking is
+            // disabled.
+            refResolver.preserveRefId(-1);
+            return fory.readNonRef(buffer, fieldInfo.classInfo);
+          }
+        }
+      } else {
+        if (refMode == RefMode.TRACKING) {
+          return fory.readRef(buffer, fieldInfo.classInfoHolder);
+        } else {
+          if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
+            // Preserve a dummy ref ID so ObjectSerializer.read() can pop it.
+            // This is needed when global ref tracking is enabled but field ref tracking is
+            // disabled.
+            refResolver.preserveRefId(-1);
+            return fory.readNonRef(buffer, fieldInfo.classInfoHolder);
+          }
+        }
+      }
+      return null;
     }
 
     @Override
@@ -323,8 +378,51 @@ abstract class SerializationBinding {
 
     @Override
     public void writeContainerFieldValue(
-        MemoryBuffer buffer, Object fieldValue, ClassInfo classInfo) {
-      fory.writeNonRef(buffer, fieldValue, classInfo);
+        SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+      if (fieldInfo.useDeclaredTypeInfo) {
+        ClassInfo classInfo =
+            typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder);
+        fory.writeNonRef(buffer, fieldValue, classInfo);
+      } else {
+        fory.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+      }
+    }
+
+    @Override
+    void writeField(
+        SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer, Object fieldValue) {
+      if (fieldInfo.useDeclaredTypeInfo) {
+        Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
+        if (refMode == RefMode.TRACKING) {
+          if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
+            serializer.write(buffer, fieldValue);
+          }
+        } else if (refMode == RefMode.NULL_ONLY) {
+          if (fieldValue == null) {
+            buffer.writeByte(Fory.NULL_FLAG);
+            return;
+          }
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          serializer.write(buffer, fieldValue);
+        } else {
+          // RefMode.NONE - write value directly without null flag
+          serializer.write(buffer, fieldValue);
+        }
+      } else {
+        if (refMode == RefMode.TRACKING) {
+          fory.writeRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        } else if (refMode == RefMode.NULL_ONLY) {
+          if (fieldValue == null) {
+            buffer.writeByte(Fory.NULL_FLAG);
+            return;
+          }
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          fory.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        } else {
+          // RefMode.NONE - write value directly without null flag
+          fory.writeNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        }
+      }
     }
   }
 
@@ -334,6 +432,43 @@ abstract class SerializationBinding {
     XlangSerializationBinding(Fory fory) {
       super(fory);
       xtypeResolver = fory.getXtypeResolver();
+    }
+
+    @Override
+    void writeField(
+        SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer, Object fieldValue) {
+      if (fieldInfo.useDeclaredTypeInfo) {
+        Serializer<Object> serializer = fieldInfo.classInfo.getSerializer();
+        if (refMode == RefMode.TRACKING) {
+          if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
+            serializer.xwrite(buffer, fieldValue);
+          }
+        } else if (refMode == RefMode.NULL_ONLY) {
+          if (fieldValue == null) {
+            buffer.writeByte(Fory.NULL_FLAG);
+            return;
+          }
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          serializer.xwrite(buffer, fieldValue);
+        } else {
+          // RefMode.NONE: not nullable, no ref tracking - just write value directly
+          serializer.xwrite(buffer, fieldValue);
+        }
+      } else {
+        if (refMode == RefMode.TRACKING) {
+          fory.xwriteRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        } else if (refMode == RefMode.NULL_ONLY) {
+          if (fieldValue == null) {
+            buffer.writeByte(Fory.NULL_FLAG);
+            return;
+          }
+          buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+          fory.xwriteNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        } else {
+          // RefMode.NONE: not nullable, no ref tracking - just write value directly
+          fory.xwriteNonRef(buffer, fieldValue, fieldInfo.classInfoHolder);
+        }
+      }
     }
 
     @Override
@@ -424,6 +559,14 @@ abstract class SerializationBinding {
     }
 
     @Override
+    public Object readNullable(MemoryBuffer buffer, SerializationFieldInfo field) {
+      if (field.useDeclaredTypeInfo) {
+        return fory.xreadNullable(buffer, field.classInfo.getSerializer());
+      }
+      return fory.xreadNullable(buffer, field.classInfoHolder);
+    }
+
+    @Override
     public Object readNullable(MemoryBuffer buffer, Serializer<Object> serializer) {
       return fory.xreadNullable(buffer, serializer);
     }
@@ -458,6 +601,28 @@ abstract class SerializationBinding {
     @Override
     public void write(MemoryBuffer buffer, Serializer serializer, Object value) {
       serializer.xwrite(buffer, value);
+    }
+
+    @Override
+    Object readField(SerializationFieldInfo fieldInfo, RefMode refMode, MemoryBuffer buffer) {
+      if (fieldInfo.useDeclaredTypeInfo) {
+        if (refMode == RefMode.TRACKING) {
+          return fory.xreadRef(buffer, fieldInfo.classInfo);
+        } else {
+          if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
+            return fory.xreadNonRef(buffer, fieldInfo.classInfo);
+          }
+        }
+      } else {
+        if (refMode == RefMode.TRACKING) {
+          return fory.xreadRef(buffer, fieldInfo.classInfoHolder);
+        } else {
+          if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
+            return fory.xreadNonRef(buffer, fieldInfo.classInfoHolder);
+          }
+        }
+      }
+      return null;
     }
 
     @Override
@@ -542,7 +707,10 @@ abstract class SerializationBinding {
 
     @Override
     public void writeContainerFieldValue(
-        MemoryBuffer buffer, Object fieldValue, ClassInfo classInfo) {
+        SerializationFieldInfo fieldInfo, MemoryBuffer buffer, Object fieldValue) {
+      assert fieldInfo.useDeclaredTypeInfo;
+      ClassInfo classInfo =
+          typeResolver.getClassInfo(fieldValue.getClass(), fieldInfo.classInfoHolder);
       fory.xwriteData(buffer, classInfo, fieldValue);
     }
   }

@@ -1491,7 +1491,7 @@ pub(crate) fn determine_field_ref_mode(field: &syn::Field) -> FieldRefMode {
 /// - List/Set/Map fields: skip type info
 /// - Struct fields: WRITE type info
 /// - Ext fields: WRITE type info
-/// - Enum fields: skip type info (enum is morphic)
+/// - Enum fields: skip type info (enum is dynamic)
 ///
 /// Returns true if type info should be skipped, false if it should be written.
 pub(crate) fn should_skip_type_info_for_field(ty: &Type) -> bool {

@@ -1,7 +1,7 @@
 ---
 title: Getting Started
 sidebar_position: 10
-id: xlang_getting_started
+id: getting_started
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -287,6 +287,6 @@ print(f"Name: {person.name}, Age: {person.age}")
 
 ## Next Steps
 
-- [Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping) - Cross-language type mapping reference
+- [Type Mapping](../../specification/xlang_type_mapping.md) - Cross-language type mapping reference
 - [Serialization](serialization.md) - Detailed serialization examples
 - [Troubleshooting](troubleshooting.md) - Common issues and solutions

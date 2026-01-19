@@ -154,7 +154,7 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 		fieldType := field.Type
 
 		var fieldSerializer Serializer
-		// For interface{} fields, don't get a serializer - use WriteValue/ReadValue instead
+		// For any fields, don't get a serializer - use WriteValue/ReadValue instead
 		// which will handle polymorphic types dynamically
 		if fieldType.Kind() != reflect.Interface {
 			// Get serializer for all non-interface field types
@@ -372,7 +372,7 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) error {
 	type_ := s.type_
 	if type_ == nil {
-		// Type is not known - we'll create an interface{} placeholder
+		// Type is not known - we'll create an any placeholder
 		// This happens when deserializing unknown types in compatible mode
 		// For now, we'll create fields that discard all data
 		var fields []FieldInfo
@@ -381,7 +381,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
 			remoteType := remoteTypeInfo.Type
 			if remoteType == nil {
-				remoteType = reflect.TypeOf((*interface{})(nil)).Elem()
+				remoteType = reflect.TypeOf((*any)(nil)).Elem()
 			}
 			// Get TypeId from FieldType's TypeId method
 			fieldTypeId := def.fieldType.TypeId()
@@ -480,8 +480,8 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
 		remoteType := remoteTypeInfo.Type
 		// Track if type lookup failed - we'll need to skip such fields
-		// Note: DynamicFieldType.getTypeInfoWithResolver returns interface{} (not nil) when lookup fails
-		emptyInterfaceType := reflect.TypeOf((*interface{})(nil)).Elem()
+		// Note: DynamicFieldType.getTypeInfoWithResolver returns any (not nil) when lookup fails
+		emptyInterfaceType := reflect.TypeOf((*any)(nil)).Elem()
 		typeLookupFailed := remoteType == nil || remoteType == emptyInterfaceType
 		if remoteType == nil {
 			remoteType = emptyInterfaceType
@@ -543,7 +543,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				_, isEnumField = fieldSerializer.(*enumSerializer)
 			}
 			if isPolymorphicField && localType.Kind() == reflect.Interface {
-				// For polymorphic (UNKNOWN) fields with interface{} local type,
+				// For polymorphic (UNKNOWN) fields with any local type,
 				// allow reading - the actual type will be determined at runtime
 				shouldRead = true
 				fieldType = localType
@@ -684,9 +684,9 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		var dispatchId DispatchId
 		localKind := fieldType.Kind()
 		localIsPtr := localKind == reflect.Ptr
-		localIsNumeric := isNumericKind(localKind) || (localIsPtr && isNumericKind(fieldType.Elem().Kind()))
+		localIsPrimitive := isPrimitiveDispatchKind(localKind) || (localIsPtr && isPrimitiveDispatchKind(fieldType.Elem().Kind()))
 
-		if localIsNumeric {
+		if localIsPrimitive {
 			if localIsPtr {
 				if def.nullable {
 					// Local is *T, remote is nullable - use nullable DispatchId
@@ -2350,14 +2350,10 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 	buf := ctx.Buffer()
 	ptr := unsafe.Pointer(value.UnsafeAddr())
 	err := ctx.Err()
-	for i := range s.fields {
-		field := &s.fields[i]
+	readField := func(field *FieldInfo) {
 		if field.Meta.FieldIndex < 0 {
 			s.skipField(ctx, field)
-			if ctx.HasError() {
-				return
-			}
-			continue
+			return
 		}
 
 		// Fast path for fixed-size primitive types (no ref flag from remote schema)
@@ -2433,7 +2429,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 				*v = buf.ReadFloat64(err)
 				*(**float64)(fieldPtr) = v
 			}
-			continue
+			return
 		}
 
 		// Fast path for varint primitive types (no ref flag from remote schema)
@@ -2491,7 +2487,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 				*v = uint(buf.ReadVaruint64(err))
 				*(**uint)(fieldPtr) = v
 			}
-			continue
+			return
 		}
 
 		// Get field value for nullable primitives and non-primitives
@@ -2503,7 +2499,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			refFlag := buf.ReadInt8(err)
 			if refFlag == NullFlag {
 				// Leave pointer as nil (or zero for non-pointer local types)
-				continue
+				return
 			}
 			// Read fixed-size value based on dispatch ID
 			// Handle both pointer and non-pointer local field types (schema evolution)
@@ -2586,7 +2582,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 					fieldValue.SetFloat(v)
 				}
 			}
-			continue
+			return
 		}
 
 		// Handle nullable varint primitives (read ref flag + varint)
@@ -2594,7 +2590,7 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			refFlag := buf.ReadInt8(err)
 			if refFlag == NullFlag {
 				// Leave pointer as nil (or zero for non-pointer local types)
-				continue
+				return
 			}
 			// Read varint value based on dispatch ID
 			// Handle both pointer and non-pointer local field types (schema evolution)
@@ -2656,11 +2652,11 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 					fieldValue.SetUint(uint64(v))
 				}
 			}
-			continue
+			return
 		}
 		if isEnumField(field) {
 			readEnumField(ctx, field, fieldValue)
-			continue
+			return
 		}
 
 		// Slow path for non-primitives (all need ref flag per xlang spec)
@@ -2669,6 +2665,28 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 			field.Serializer.Read(ctx, field.RefMode, field.Meta.WriteType, field.Meta.HasGenerics, fieldValue)
 		} else {
 			ctx.ReadValue(fieldValue, RefModeTracking, true)
+		}
+	}
+
+	for i := range s.fieldGroup.FixedFields {
+		field := &s.fieldGroup.FixedFields[i]
+		readField(field)
+		if ctx.HasError() {
+			return
+		}
+	}
+	for i := range s.fieldGroup.VarintFields {
+		field := &s.fieldGroup.VarintFields[i]
+		readField(field)
+		if ctx.HasError() {
+			return
+		}
+	}
+	for i := range s.fieldGroup.RemainingFields {
+		field := &s.fieldGroup.RemainingFields[i]
+		readField(field)
+		if ctx.HasError() {
+			return
 		}
 	}
 }

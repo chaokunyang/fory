@@ -1,7 +1,7 @@
 ---
 title: Zero-Copy Serialization
 sidebar_position: 50
-id: xlang_zero_copy
+id: zero_copy
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -118,7 +118,7 @@ func main() {
   fory := forygo.NewFory()
 
   // Data with large arrays
-  list := []interface{}{
+  list := []any{
     "str",
     make([]byte, 1000), // Large byte array
   }
@@ -139,7 +139,7 @@ func main() {
   }
 
   // Deserialize with buffers
-  var newList []interface{}
+  var newList []any
   if err := fory.Deserialize(buf, &newList, buffers); err != nil {
     panic(err)
   }

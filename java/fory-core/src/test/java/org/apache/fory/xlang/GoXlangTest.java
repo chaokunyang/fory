@@ -151,9 +151,18 @@ public class GoXlangTest extends XlangTestBase {
     super.testInteger(enableCodegen);
   }
 
-  @Test(dataProvider = "enableCodegen")
-  public void testItem(boolean enableCodegen) throws java.io.IOException {
-    super.testItem(enableCodegen);
+  // this test failed more frequently when refactor, create two separate tests
+  // to make debug more easy
+  @Test
+  public void testItemEnableCodegen() throws java.io.IOException {
+    super.testItem(true);
+  }
+
+  // this test failed more frequently when refactor, create two separate tests
+  // to make debug more easy
+  @Test
+  public void testItemDisableCodegen() throws java.io.IOException {
+    super.testItem(false);
   }
 
   @Test(dataProvider = "enableCodegen")
@@ -316,10 +325,14 @@ public class GoXlangTest extends XlangTestBase {
     super.testNullableFieldSchemaConsistentNull(enableCodegen);
   }
 
-  @Override
-  @Test(dataProvider = "enableCodegen")
-  public void testNullableFieldCompatibleNotNull(boolean enableCodegen) throws java.io.IOException {
-    super.testNullableFieldCompatibleNotNull(enableCodegen);
+  @Test
+  public void testNullableFieldCompatibleNotNullEnableCodegen() throws java.io.IOException {
+    super.testNullableFieldCompatibleNotNull(true);
+  }
+
+  @Test
+  public void testNullableFieldCompatibleNotNullDisableCodegen() throws java.io.IOException {
+    super.testNullableFieldCompatibleNotNull(false);
   }
 
   @Override

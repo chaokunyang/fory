@@ -69,6 +69,9 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   // Make offset compatible with graalvm native image.
   private static final long STRING_VALUE_FIELD_OFFSET;
+  private static final boolean STRING_HAS_COUNT_OFFSET;
+  private static final long STRING_COUNT_FIELD_OFFSET;
+  private static final long STRING_OFFSET_FIELD_OFFSET;
 
   private static class Offset {
     // Make offset compatible with graalvm native image.
@@ -97,13 +100,22 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     } catch (NoSuchFieldException e) {
       throw new RuntimeException(e);
     }
-    // String length field for android.
-    Preconditions.checkArgument(
-        ReflectionUtils.getFieldNullable(String.class, "count") == null,
-        "Current jdk not supported");
-    Preconditions.checkArgument(
-        ReflectionUtils.getFieldNullable(String.class, "offset") == null,
-        "Current jdk not supported");
+    Field countField = ReflectionUtils.getFieldNullable(String.class, "count");
+    Field offsetField = ReflectionUtils.getFieldNullable(String.class, "offset");
+    if (countField != null || offsetField != null) {
+      Preconditions.checkArgument(
+          countField != null && offsetField != null, "Current jdk not supported");
+      Preconditions.checkArgument(
+          countField.getType() == int.class && offsetField.getType() == int.class,
+          "Current jdk not supported");
+      STRING_HAS_COUNT_OFFSET = true;
+      STRING_COUNT_FIELD_OFFSET = Platform.objectFieldOffset(countField);
+      STRING_OFFSET_FIELD_OFFSET = Platform.objectFieldOffset(offsetField);
+    } else {
+      STRING_HAS_COUNT_OFFSET = false;
+      STRING_COUNT_FIELD_OFFSET = -1;
+      STRING_OFFSET_FIELD_OFFSET = -1;
+    }
   }
 
   private final boolean compressString;
@@ -160,10 +172,18 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       if (!STRING_VALUE_FIELD_IS_CHARS) {
         throw new UnsupportedOperationException();
       }
-      if (compressString) {
-        return new Invoke(strSerializer, "writeCompressedCharsString", buffer, str);
+      if (STRING_HAS_COUNT_OFFSET) {
+        if (compressString) {
+          return new Invoke(strSerializer, "writeCompressedCharsStringWithOffset", buffer, str);
+        } else {
+          return new Invoke(strSerializer, "writeCharsStringWithOffset", buffer, str);
+        }
       } else {
-        return new Invoke(strSerializer, "writeCharsString", buffer, str);
+        if (compressString) {
+          return new Invoke(strSerializer, "writeCompressedCharsString", buffer, str);
+        } else {
+          return new Invoke(strSerializer, "writeCharsString", buffer, str);
+        }
       }
     }
   }
@@ -196,7 +216,12 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     long header = buffer.readVarUint36Small();
     byte coder = (byte) (header & 0b11);
     int numBytes = (int) (header >>> 2);
-    byte[] bytes = readBytesUnCompressedUTF16(buffer, numBytes);
+    byte[] bytes;
+    if (!Platform.IS_LITTLE_ENDIAN && coder == UTF16) {
+      bytes = readBytesUTF16BE(buffer, numBytes);
+    } else {
+      bytes = readBytesUnCompressedUTF16(buffer, numBytes);
+    }
     if (coder != UTF8) {
       return newBytesStringZeroCopy(coder, bytes);
     } else {
@@ -236,8 +261,16 @@ public final class StringSerializer extends ImmutableSerializer<String> {
         data = readBytesUTF8(buffer, numBytes);
       }
       return newBytesStringZeroCopy(UTF16, data);
-    } else if (coder == LATIN1 || coder == UTF16) {
+    } else if (coder == LATIN1) {
       return newBytesStringZeroCopy(coder, readBytesUnCompressedUTF16(buffer, numBytes));
+    } else if (coder == UTF16) {
+      byte[] bytes;
+      if (Platform.IS_LITTLE_ENDIAN) {
+        bytes = readBytesUnCompressedUTF16(buffer, numBytes);
+      } else {
+        bytes = readBytesUTF16BE(buffer, numBytes);
+      }
+      return newBytesStringZeroCopy(coder, bytes);
     } else {
       throw new RuntimeException("Unknown coder type " + coder);
     }
@@ -331,7 +364,19 @@ public final class StringSerializer extends ImmutableSerializer<String> {
         writeBytesString(buffer, value);
       }
     } else {
-      assert STRING_VALUE_FIELD_IS_CHARS;
+      writeJava8String(buffer, value);
+    }
+  }
+
+  private void writeJava8String(MemoryBuffer buffer, String value) {
+    assert STRING_VALUE_FIELD_IS_CHARS;
+    if (STRING_HAS_COUNT_OFFSET) {
+      if (compressString) {
+        writeCompressedCharsStringWithOffset(buffer, value);
+      } else {
+        writeCharsStringWithOffset(buffer, value);
+      }
+    } else {
       if (compressString) {
         writeCompressedCharsString(buffer, value);
       } else {
@@ -391,6 +436,25 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   @CodegenInvoke
+  public void writeCompressedCharsStringWithOffset(MemoryBuffer buffer, String value) {
+    final char[] chars = (char[]) Platform.getObject(value, STRING_VALUE_FIELD_OFFSET);
+    final int offset = Platform.getInt(value, STRING_OFFSET_FIELD_OFFSET);
+    final int count = Platform.getInt(value, STRING_COUNT_FIELD_OFFSET);
+    final byte coder = SlicedStringUtil.bestCoder(chars, offset, count);
+    if (coder == LATIN1) {
+      SlicedStringUtil.writeCharsLatin1WithOffset(this, buffer, chars, offset, count);
+    } else if (coder == UTF8) {
+      if (writeNumUtf16BytesForUtf8Encoding) {
+        SlicedStringUtil.writeCharsUTF8PerfOptimizedWithOffset(this, buffer, chars, offset, count);
+      } else {
+        SlicedStringUtil.writeCharsUTF8WithOffset(this, buffer, chars, offset, count);
+      }
+    } else {
+      SlicedStringUtil.writeCharsUTF16WithOffset(this, buffer, chars, offset, count);
+    }
+  }
+
+  @CodegenInvoke
   public static void writeBytesString(MemoryBuffer buffer, String value) {
     byte[] bytes = (byte[]) Platform.getObject(value, STRING_VALUE_FIELD_OFFSET);
     byte coder = Platform.getByte(value, Offset.STRING_CODER_FIELD_OFFSET);
@@ -398,6 +462,10 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   public static void writeBytesString(MemoryBuffer buffer, byte coder, byte[] bytes) {
+    if (!Platform.IS_LITTLE_ENDIAN && coder == UTF16) {
+      writeBytesStringUTF16BE(buffer, bytes);
+      return;
+    }
     int bytesLen = bytes.length;
     long header = ((long) bytesLen << 2) | coder;
     int writerIndex = buffer.writerIndex();
@@ -430,6 +498,18 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       writeCharsLatin1(buffer, chars, chars.length);
     } else {
       writeCharsUTF16(buffer, chars, chars.length);
+    }
+  }
+
+  @CodegenInvoke
+  public void writeCharsStringWithOffset(MemoryBuffer buffer, String value) {
+    final char[] chars = (char[]) Platform.getObject(value, STRING_VALUE_FIELD_OFFSET);
+    final int offset = Platform.getInt(value, STRING_OFFSET_FIELD_OFFSET);
+    final int count = Platform.getInt(value, STRING_COUNT_FIELD_OFFSET);
+    if (SlicedStringUtil.isLatin(chars, offset, count)) {
+      SlicedStringUtil.writeCharsLatin1WithOffset(this, buffer, chars, offset, count);
+    } else {
+      SlicedStringUtil.writeCharsUTF16WithOffset(this, buffer, chars, offset, count);
     }
   }
 
@@ -507,37 +587,14 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   public char[] readCharsUTF16(MemoryBuffer buffer, int numBytes) {
-    char[] chars = new char[numBytes >> 1];
     if (Platform.IS_LITTLE_ENDIAN) {
+      char[] chars = new char[numBytes >> 1];
       // FIXME JDK11 utf16 string uses little-endian order.
       buffer.readChars(chars, Platform.CHAR_ARRAY_OFFSET, numBytes);
+      return chars;
     } else {
-      buffer.checkReadableBytes(numBytes);
-      final byte[] targetArray = buffer.getHeapMemory();
-      if (targetArray != null) {
-        int charIndex = 0;
-        for (int i = buffer._unsafeHeapReaderIndex(), end = i + numBytes; i < end; i += 2) {
-          char c =
-              (char)
-                  ((targetArray[i] & 0xff << StringUTF16.HI_BYTE_SHIFT)
-                      | ((targetArray[i + 1] & 0xff) << StringUTF16.LO_BYTE_SHIFT));
-          chars[charIndex++] = c;
-        }
-        buffer._increaseReaderIndexUnsafe(numBytes);
-      } else {
-        final byte[] tmpArray = getByteArray(numBytes);
-        buffer.readBytes(tmpArray, 0, numBytes);
-        int charIndex = 0;
-        for (int i = 0; i < numBytes; i += 2) {
-          char c =
-              (char)
-                  ((tmpArray[i] & 0xff << StringUTF16.HI_BYTE_SHIFT)
-                      | ((tmpArray[i + 1] & 0xff) << StringUTF16.LO_BYTE_SHIFT));
-          chars[charIndex++] = c;
-        }
-      }
+      return readCharsUTF16BE(buffer, numBytes);
     }
-    return chars;
   }
 
   public String readCharsUTF8(MemoryBuffer buffer, int numBytes) {
@@ -623,11 +680,15 @@ public final class StringSerializer extends ImmutableSerializer<String> {
             Platform.BYTE_ARRAY_OFFSET + arrIndex,
             numBytes);
       } else {
-        heapWriteCharsUTF16BE(chars, arrIndex, numBytes, targetArray);
+        writeCharsUTF16BEToHeap(chars, arrIndex, numBytes, targetArray);
       }
     } else {
       writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
-      writerIndex = offHeapWriteCharsUTF16(buffer, chars, writerIndex, numBytes);
+      if (Platform.IS_LITTLE_ENDIAN) {
+        writerIndex = offHeapWriteCharsUTF16(buffer, chars, writerIndex, numBytes);
+      } else {
+        writerIndex = offHeapWriteCharsUTF16BE(buffer, chars, writerIndex, numBytes);
+      }
     }
     buffer._unsafeWriterIndex(writerIndex);
   }
@@ -909,14 +970,14 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     }
   }
 
-  private static void heapWriteCharsUTF16BE(
+  private static void writeCharsUTF16BEToHeap(
       char[] chars, int arrIndex, int numBytes, byte[] targetArray) {
     // Write to heap memory then copy is 250% faster than unsafe write to direct memory.
     int charIndex = 0;
     for (int i = arrIndex, end = i + numBytes; i < end; i += 2) {
       char c = chars[charIndex++];
-      targetArray[i] = (byte) (c >> StringUTF16.HI_BYTE_SHIFT);
-      targetArray[i + 1] = (byte) (c >> StringUTF16.LO_BYTE_SHIFT);
+      targetArray[i] = (byte) c;
+      targetArray[i + 1] = (byte) (c >>> 8);
     }
   }
 
@@ -932,6 +993,86 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     buffer.put(writerIndex, tmpArray, 0, numBytes);
     writerIndex += numBytes;
     return writerIndex;
+  }
+
+  private int offHeapWriteCharsUTF16BE(
+      MemoryBuffer buffer, char[] chars, int writerIndex, int numBytes) {
+    byte[] tmpArray = getByteArray(numBytes);
+    int charIndex = 0;
+    for (int i = 0; i < numBytes; i += 2) {
+      char c = chars[charIndex++];
+      tmpArray[i] = (byte) c;
+      tmpArray[i + 1] = (byte) (c >>> 8);
+    }
+    buffer.put(writerIndex, tmpArray, 0, numBytes);
+    writerIndex += numBytes;
+    return writerIndex;
+  }
+
+  private char[] readCharsUTF16BE(MemoryBuffer buffer, int numBytes) {
+    buffer.checkReadableBytes(numBytes);
+    final byte[] targetArray = buffer.getHeapMemory();
+    char[] chars = new char[numBytes >> 1];
+    if (targetArray != null) {
+      int charIndex = 0;
+      for (int i = buffer._unsafeHeapReaderIndex(), end = i + numBytes; i < end; i += 2) {
+        int lo = targetArray[i] & 0xff;
+        int hi = targetArray[i + 1] & 0xff;
+        chars[charIndex++] = (char) (lo | (hi << 8));
+      }
+      buffer._increaseReaderIndexUnsafe(numBytes);
+    } else {
+      final byte[] tmpArray = getByteArray(numBytes);
+      buffer.readBytes(tmpArray, 0, numBytes);
+      int charIndex = 0;
+      for (int i = 0; i < numBytes; i += 2) {
+        int lo = tmpArray[i] & 0xff;
+        int hi = tmpArray[i + 1] & 0xff;
+        chars[charIndex++] = (char) (lo | (hi << 8));
+      }
+    }
+    return chars;
+  }
+
+  private byte[] readBytesUTF16BE(MemoryBuffer buffer, int numBytes) {
+    byte[] bytes = readBytesUnCompressedUTF16(buffer, numBytes);
+    swapUTF16BytesInPlace(bytes);
+    return bytes;
+  }
+
+  private static void swapUTF16BytesInPlace(byte[] bytes) {
+    for (int i = 0; i < bytes.length; i += 2) {
+      byte tmp = bytes[i];
+      bytes[i] = bytes[i + 1];
+      bytes[i + 1] = tmp;
+    }
+  }
+
+  private static void writeBytesStringUTF16BE(MemoryBuffer buffer, byte[] bytes) {
+    int bytesLen = bytes.length;
+    long header = ((long) bytesLen << 2) | UTF16;
+    int writerIndex = buffer.writerIndex();
+    buffer.ensure(writerIndex + 9 + bytesLen);
+    final byte[] targetArray = buffer.getHeapMemory();
+    if (targetArray != null) {
+      final int targetIndex = buffer._unsafeHeapWriterIndex();
+      int arrIndex = targetIndex;
+      arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
+      writerIndex += arrIndex - targetIndex;
+      for (int i = 0; i < bytesLen; i += 2) {
+        targetArray[arrIndex + i] = bytes[i + 1];
+        targetArray[arrIndex + i + 1] = bytes[i];
+      }
+    } else {
+      writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
+      byte[] tmpArray = new byte[bytesLen];
+      for (int i = 0; i < bytesLen; i += 2) {
+        tmpArray[i] = bytes[i + 1];
+        tmpArray[i + 1] = bytes[i];
+      }
+      buffer.put(writerIndex, tmpArray, 0, bytesLen);
+    }
+    buffer._unsafeWriterIndex(writerIndex + bytesLen);
   }
 
   private static byte bestCoder(char[] chars) {
@@ -1040,7 +1181,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     return charArray;
   }
 
-  private byte[] getByteArray(int numElements) {
+  byte[] getByteArray(int numElements) {
     byte[] byteArray = this.byteArray;
     if (byteArray.length < numElements) {
       byteArray = new byte[numElements];

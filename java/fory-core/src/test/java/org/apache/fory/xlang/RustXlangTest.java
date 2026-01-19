@@ -121,9 +121,14 @@ public class RustXlangTest extends XlangTestBase {
     super.testSimpleStruct(enableCodegen);
   }
 
-  @Test(dataProvider = "enableCodegen")
-  public void testSimpleNamedStruct(boolean enableCodegen) throws java.io.IOException {
-    super.testSimpleNamedStruct(enableCodegen);
+  @Test
+  public void testSimpleNamedStructCodegenEnabled() throws java.io.IOException {
+    super.testSimpleNamedStruct(false);
+  }
+
+  @Test
+  public void testSimpleNamedStructCodegenDisabled() throws java.io.IOException {
+    super.testSimpleNamedStruct(false);
   }
 
   @Test(dataProvider = "enableCodegen")

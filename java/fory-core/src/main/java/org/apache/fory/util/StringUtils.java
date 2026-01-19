@@ -252,6 +252,10 @@ public class StringUtils {
   }
 
   // example: "variableName" -> "variable_name"
+  public static String toSnakeCase(String lowerCamel) {
+    return lowerCamelToLowerUnderscore(lowerCamel);
+  }
+
   public static String lowerCamelToLowerUnderscore(String lowerCamel) {
     StringBuilder builder = new StringBuilder();
     int length = lowerCamel.length();

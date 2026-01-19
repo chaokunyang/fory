@@ -75,7 +75,7 @@ public abstract class Serializer<T> {
     this.type = type;
     this.isJava = !fory.isCrossLanguage();
     if (fory.trackingRef()) {
-      needToWriteRef = !TypeUtils.isBoxed(TypeUtils.wrap(type)) || !fory.isBasicTypesRefIgnored();
+      needToWriteRef = !TypeUtils.isBoxed(TypeUtils.wrap(type)) || false;
     } else {
       needToWriteRef = false;
     }
@@ -88,7 +88,7 @@ public abstract class Serializer<T> {
     this.type = type;
     this.isJava = !fory.isCrossLanguage();
     if (fory.trackingRef()) {
-      needToWriteRef = !TypeUtils.isBoxed(TypeUtils.wrap(type)) || !fory.isBasicTypesRefIgnored();
+      needToWriteRef = !TypeUtils.isBoxed(TypeUtils.wrap(type)) || false;
     } else {
       needToWriteRef = false;
     }

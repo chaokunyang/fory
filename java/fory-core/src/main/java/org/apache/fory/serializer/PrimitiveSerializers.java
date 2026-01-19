@@ -27,7 +27,7 @@ import org.apache.fory.codegen.Expression.Invoke;
 import org.apache.fory.config.LongEncoding;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
-import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 
 /** Serializers for java primitive types. */
@@ -36,7 +36,7 @@ public class PrimitiveSerializers {
   public static final class BooleanSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Boolean> {
     public BooleanSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, !(cls.isPrimitive() || fory.isBasicTypesRefIgnored()), true);
+      super(fory, (Class) cls, false, true);
     }
 
     @Override
@@ -53,7 +53,7 @@ public class PrimitiveSerializers {
   public static final class ByteSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Byte> {
     public ByteSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, !(cls.isPrimitive() || fory.isBasicTypesRefIgnored()), true);
+      super(fory, (Class) cls, false, true);
     }
 
     @Override
@@ -105,7 +105,7 @@ public class PrimitiveSerializers {
 
   public static final class CharSerializer extends ImmutableSerializer<Character> {
     public CharSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, !(cls.isPrimitive() || fory.isBasicTypesRefIgnored()));
+      super(fory, (Class) cls, false);
     }
 
     @Override
@@ -122,7 +122,7 @@ public class PrimitiveSerializers {
   public static final class ShortSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Short> {
     public ShortSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, !(cls.isPrimitive() || fory.isBasicTypesRefIgnored()), true);
+      super(fory, (Class) cls, false, true);
     }
 
     @Override
@@ -141,7 +141,7 @@ public class PrimitiveSerializers {
     private final boolean compressNumber;
 
     public IntSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, !(cls.isPrimitive() || fory.isBasicTypesRefIgnored()), true);
+      super(fory, (Class) cls, false, true);
       compressNumber = fory.compressInt();
     }
 
@@ -180,7 +180,7 @@ public class PrimitiveSerializers {
     private final LongEncoding longEncoding;
 
     public LongSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, !(cls.isPrimitive() || fory.isBasicTypesRefIgnored()), true);
+      super(fory, (Class) cls, false, true);
       longEncoding = fory.longEncoding();
     }
 
@@ -261,7 +261,7 @@ public class PrimitiveSerializers {
   public static final class FloatSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Float> {
     public FloatSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, !(cls.isPrimitive() || fory.isBasicTypesRefIgnored()), true);
+      super(fory, (Class) cls, false, true);
     }
 
     @Override
@@ -278,7 +278,7 @@ public class PrimitiveSerializers {
   public static final class DoubleSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Double> {
     public DoubleSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, !(cls.isPrimitive() || fory.isBasicTypesRefIgnored()), true);
+      super(fory, (Class) cls, false, true);
     }
 
     @Override
@@ -294,7 +294,7 @@ public class PrimitiveSerializers {
 
   public static void registerDefaultSerializers(Fory fory) {
     // primitive types will be boxed.
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(boolean.class, new BooleanSerializer(fory, boolean.class));
     resolver.registerInternalSerializer(byte.class, new ByteSerializer(fory, byte.class));
     resolver.registerInternalSerializer(short.class, new ShortSerializer(fory, short.class));

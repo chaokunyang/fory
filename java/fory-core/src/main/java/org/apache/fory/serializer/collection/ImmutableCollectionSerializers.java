@@ -32,7 +32,7 @@ import java.util.Set;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
-import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Serializers for jdk9+ java.util.ImmutableCollections. */
@@ -260,7 +260,7 @@ public class ImmutableCollectionSerializers {
   }
 
   public static void registerSerializers(Fory fory) {
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(List12, new ImmutableListSerializer(fory, List12));
     resolver.registerInternalSerializer(ListN, new ImmutableListSerializer(fory, ListN));
     resolver.registerInternalSerializer(SubList, new ImmutableListSerializer(fory, SubList));

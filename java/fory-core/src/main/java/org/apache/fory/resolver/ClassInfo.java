@@ -29,7 +29,7 @@ import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.MetaString.Encoding;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.util.Preconditions;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.function.Functions;
 
 /**
@@ -42,11 +42,12 @@ public class ClassInfo {
   final MetaStringBytes namespaceBytes;
   final MetaStringBytes typeNameBytes;
   final boolean isDynamicGeneratedClass;
-  int xtypeId;
+  // Unified type ID for both native and xlang modes.
+  // - Types 0-30: Shared internal types (Types.BOOL, Types.STRING, etc.)
+  // - Types 31-255: Native-only internal types (VOID_ID, CHAR_ID, etc.)
+  // - Types 256+: User-registered types encoded as (userTypeId << 8) | internalTypeId
+  int typeId;
   Serializer<?> serializer;
-  // use primitive to avoid boxing
-  // class id must be less than Integer.MAX_VALUE/2 since we use bit 0 as class id flag.
-  short classId;
   ClassDef classDef;
   boolean needToWriteClassDef;
 
@@ -57,27 +58,35 @@ public class ClassInfo {
       MetaStringBytes typeNameBytes,
       boolean isDynamicGeneratedClass,
       Serializer<?> serializer,
-      short classId,
-      int xtypeId) {
+      int typeId) {
     this.cls = cls;
     this.fullNameBytes = fullNameBytes;
     this.namespaceBytes = namespaceBytes;
     this.typeNameBytes = typeNameBytes;
     this.isDynamicGeneratedClass = isDynamicGeneratedClass;
-    this.xtypeId = xtypeId;
+    this.typeId = typeId;
     this.serializer = serializer;
-    this.classId = classId;
-    if (cls != null && classId == TypeResolver.NO_CLASS_ID) {
-      Preconditions.checkArgument(typeNameBytes != null);
-    }
   }
 
-  ClassInfo(
-      TypeResolver classResolver,
-      Class<?> cls,
-      Serializer<?> serializer,
-      short classId,
-      short xtypeId) {
+  /**
+   * Creates a ClassInfo for deserialization with a ClassDef. Used when reading class meta from
+   * stream where the ClassDef specifies the field layout.
+   *
+   * @param cls the class
+   * @param classDef the class definition from stream
+   */
+  public ClassInfo(Class<?> cls, ClassDef classDef) {
+    this.cls = cls;
+    this.classDef = classDef;
+    this.fullNameBytes = null;
+    this.namespaceBytes = null;
+    this.typeNameBytes = null;
+    this.isDynamicGeneratedClass = false;
+    this.serializer = null;
+    this.typeId = classDef == null ? Types.UNKNOWN : classDef.getClassSpec().typeId;
+  }
+
+  ClassInfo(TypeResolver classResolver, Class<?> cls, Serializer<?> serializer, int typeId) {
     this.cls = cls;
     this.serializer = serializer;
     needToWriteClassDef = serializer != null && classResolver.needToWriteClassDef(serializer);
@@ -89,12 +98,18 @@ public class ClassInfo {
     } else {
       this.fullNameBytes = null;
     }
-    // When `classId == ClassResolver.REPLACE_STUB_ID` was established,
-    // means only classes are serialized, not the instance. If we
-    // serialize such class only, we need to write classname bytes.
-    if (cls != null
-        && (classId == ClassResolver.NO_CLASS_ID || classId == ClassResolver.REPLACE_STUB_ID)) {
-      // REPLACE_STUB_ID for write replace class in `ClassSerializer`.
+    // When typeId indicates a named type, we need to create classname bytes for serialization.
+    // - NAMED_STRUCT: unregistered struct classes
+    // - NAMED_COMPATIBLE_STRUCT: unregistered classes in compatible mode
+    // - NAMED_ENUM, NAMED_EXT: other named types
+    // - REPLACE_STUB_ID: for write replace class in `ClassSerializer`
+    boolean isNamedType =
+        typeId == Types.NAMED_STRUCT
+            || typeId == Types.NAMED_COMPATIBLE_STRUCT
+            || typeId == Types.NAMED_ENUM
+            || typeId == Types.NAMED_EXT
+            || typeId == ClassResolver.REPLACE_STUB_ID;
+    if (cls != null && isNamedType) {
       Tuple2<String, String> tuple2 = Encoders.encodePkgAndClass(cls);
       this.namespaceBytes =
           metaStringResolver.getOrCreateMetaStringBytes(Encoders.encodePackage(tuple2.f0));
@@ -104,17 +119,16 @@ public class ClassInfo {
       this.namespaceBytes = null;
       this.typeNameBytes = null;
     }
-    this.xtypeId = xtypeId;
-    this.classId = classId;
+    this.typeId = typeId;
     if (cls != null) {
       boolean isLambda = Functions.isLambda(cls);
-      boolean isProxy = classId != ClassResolver.REPLACE_STUB_ID && ReflectionUtils.isJdkProxy(cls);
+      boolean isProxy = typeId != ClassResolver.REPLACE_STUB_ID && ReflectionUtils.isJdkProxy(cls);
       this.isDynamicGeneratedClass = isLambda || isProxy;
       if (isLambda) {
-        this.classId = ClassResolver.LAMBDA_STUB_ID;
+        this.typeId = ClassResolver.LAMBDA_STUB_ID;
       }
       if (isProxy) {
-        this.classId = ClassResolver.JDK_PROXY_STUB_ID;
+        this.typeId = ClassResolver.JDK_PROXY_STUB_ID;
       }
     } else {
       this.isDynamicGeneratedClass = false;
@@ -125,12 +139,29 @@ public class ClassInfo {
     return cls;
   }
 
-  public short getClassId() {
-    return classId;
+  public ClassDef getClassDef() {
+    return classDef;
   }
 
-  public int getXtypeId() {
-    return xtypeId;
+  void setClassDef(ClassDef classDef) {
+    this.classDef = classDef;
+  }
+
+  /**
+   * Returns the unified type ID for this class.
+   *
+   * <p>Type ID encoding:
+   *
+   * <ul>
+   *   <li>0-30: Shared internal types (Types.BOOL, Types.STRING, etc.)
+   *   <li>31-255: Native-only internal types (VOID_ID, CHAR_ID, etc.)
+   *   <li>256+: User-registered types encoded as (userTypeId << 8) | internalTypeId
+   * </ul>
+   *
+   * @return the unified type ID
+   */
+  public int getTypeId() {
+    return typeId;
   }
 
   @SuppressWarnings("unchecked")
@@ -166,8 +197,8 @@ public class ClassInfo {
         + isDynamicGeneratedClass
         + ", serializer="
         + serializer
-        + ", classId="
-        + classId
+        + ", typeId="
+        + typeId
         + '}';
   }
 }

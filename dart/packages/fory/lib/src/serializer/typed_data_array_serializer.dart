@@ -20,6 +20,8 @@
 import 'dart:typed_data';
 import 'package:fory/src/const/obj_type.dart';
 import 'package:fory/src/dev_annotation/optimize.dart';
+import 'package:fory/src/memory/byte_reader.dart';
+import 'package:fory/src/memory/byte_writer.dart';
 import 'package:fory/src/serializer/array_serializer.dart';
 import 'package:fory/src/serializer/serializer_cache.dart';
 
@@ -49,8 +51,8 @@ final class Uint8ListSerializer extends NumericArraySerializer<int> {
 
   @inline
   @override
-  TypedDataList<int> readToList(Uint8List copiedMem) {
-    // need copy
+  TypedDataList<int> readToList(Uint8List copiedMem, ByteReader br) {
+    // Single-byte type, no endian conversion needed
     return copiedMem;
   }
 
@@ -81,8 +83,8 @@ final class Int8ListSerializer extends NumericArraySerializer<int> {
   const Int8ListSerializer(bool writeRef) : super(ObjType.INT8_ARRAY, writeRef);
 
   @override
-  TypedDataList<int> readToList(Uint8List copiedMem) {
-    // need copy
+  TypedDataList<int> readToList(Uint8List copiedMem, ByteReader br) {
+    // Single-byte type, no endian conversion needed
     Int8List list = copiedMem.buffer.asInt8List();
     return list;
   }
@@ -114,10 +116,26 @@ final class Int16ListSerializer extends NumericArraySerializer<int> {
   const Int16ListSerializer(bool writeRef) : super(ObjType.INT16_ARRAY, writeRef);
 
   @override
-  TypedDataList<int> readToList(Uint8List copiedMem) {
-    // need copy
+  TypedDataList<int> readToList(Uint8List copiedMem, ByteReader br) {
+    // Fast path: direct memory interpretation (only called on little-endian)
     Int16List list = copiedMem.buffer.asInt16List();
     return list;
+  }
+
+  @override
+  TypedDataList<int> readToListBigEndian(int length, ByteReader br) {
+    Int16List list = Int16List(length);
+    for (int i = 0; i < length; i++) {
+      list[i] = br.readInt16();
+    }
+    return list;
+  }
+
+  @override
+  void writeListBigEndian(ByteWriter bw, TypedDataList<int> v) {
+    for (int i = 0; i < v.length; i++) {
+      bw.writeInt16(v[i]);
+    }
   }
 
   @override
@@ -147,10 +165,26 @@ final class Int32ListSerializer extends NumericArraySerializer<int> {
   const Int32ListSerializer(bool writeRef) : super(ObjType.INT32_ARRAY, writeRef);
 
   @override
-  TypedDataList<int> readToList(Uint8List copiedMem) {
-    // need copy
+  TypedDataList<int> readToList(Uint8List copiedMem, ByteReader br) {
+    // Fast path: direct memory interpretation (only called on little-endian)
     Int32List list = copiedMem.buffer.asInt32List();
     return list;
+  }
+
+  @override
+  TypedDataList<int> readToListBigEndian(int length, ByteReader br) {
+    Int32List list = Int32List(length);
+    for (int i = 0; i < length; i++) {
+      list[i] = br.readInt32();
+    }
+    return list;
+  }
+
+  @override
+  void writeListBigEndian(ByteWriter bw, TypedDataList<int> v) {
+    for (int i = 0; i < v.length; i++) {
+      bw.writeInt32(v[i]);
+    }
   }
 
   @override
@@ -198,10 +232,26 @@ final class Int64ListSerializer extends NumericArraySerializer<int> {
   const Int64ListSerializer(bool writeRef) : super(ObjType.INT64_ARRAY, writeRef);
 
   @override
-  TypedDataList<int> readToList(Uint8List copiedMem) {
-    // need copy
+  TypedDataList<int> readToList(Uint8List copiedMem, ByteReader br) {
+    // Fast path: direct memory interpretation (only called on little-endian)
     Int64List list = copiedMem.buffer.asInt64List();
     return list;
+  }
+
+  @override
+  TypedDataList<int> readToListBigEndian(int length, ByteReader br) {
+    Int64List list = Int64List(length);
+    for (int i = 0; i < length; i++) {
+      list[i] = br.readInt64();
+    }
+    return list;
+  }
+
+  @override
+  void writeListBigEndian(ByteWriter bw, TypedDataList<int> v) {
+    for (int i = 0; i < v.length; i++) {
+      bw.writeInt64(v[i]);
+    }
   }
 
   @override
@@ -214,11 +264,28 @@ final class Float32ListSerializer extends NumericArraySerializer<double> {
   const Float32ListSerializer(bool writeRef) : super(ObjType.FLOAT32_ARRAY, writeRef);
 
   @override
-  TypedDataList<double> readToList(Uint8List copiedMem) {
-    // need copy
+  TypedDataList<double> readToList(Uint8List copiedMem, ByteReader br) {
+    // Fast path: direct memory interpretation (only called on little-endian)
     Float32List list = copiedMem.buffer.asFloat32List();
     return list;
   }
+
+  @override
+  TypedDataList<double> readToListBigEndian(int length, ByteReader br) {
+    Float32List list = Float32List(length);
+    for (int i = 0; i < length; i++) {
+      list[i] = br.readFloat32();
+    }
+    return list;
+  }
+
+  @override
+  void writeListBigEndian(ByteWriter bw, TypedDataList<double> v) {
+    for (int i = 0; i < v.length; i++) {
+      bw.writeFloat32(v[i]);
+    }
+  }
+
   @override
   int get bytesPerNum => 4;
 }
@@ -246,10 +313,26 @@ final class Float64ListSerializer extends NumericArraySerializer<double> {
   const Float64ListSerializer(bool writeRef) : super(ObjType.FLOAT64_ARRAY, writeRef);
 
   @override
-  TypedDataList<double> readToList(Uint8List copiedMem) {
-    // need copy
+  TypedDataList<double> readToList(Uint8List copiedMem, ByteReader br) {
+    // Fast path: direct memory interpretation (only called on little-endian)
     Float64List list = copiedMem.buffer.asFloat64List();
     return list;
+  }
+
+  @override
+  TypedDataList<double> readToListBigEndian(int length, ByteReader br) {
+    Float64List list = Float64List(length);
+    for (int i = 0; i < length; i++) {
+      list[i] = br.readFloat64();
+    }
+    return list;
+  }
+
+  @override
+  void writeListBigEndian(ByteWriter bw, TypedDataList<double> v) {
+    for (int i = 0; i < v.length; i++) {
+      bw.writeFloat64(v[i]);
+    }
   }
 
   @override

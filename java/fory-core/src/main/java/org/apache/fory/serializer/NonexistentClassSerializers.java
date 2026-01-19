@@ -19,7 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import static org.apache.fory.serializer.AbstractObjectSerializer.writeOtherFieldValue;
 import static org.apache.fory.serializer.SerializationUtils.getTypeResolver;
 
 import java.util.ArrayList;
@@ -33,8 +32,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassDef;
-import org.apache.fory.resolver.ClassInfo;
-import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.MetaStringResolver;
@@ -45,9 +42,10 @@ import org.apache.fory.serializer.NonexistentClass.NonexistentEnum;
 import org.apache.fory.serializer.Serializers.CrossLanguageCompatibleSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Generics;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.Utils;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class NonexistentClassSerializers {
@@ -68,91 +66,123 @@ public final class NonexistentClassSerializers {
   }
 
   public static final class NonexistentClassSerializer extends Serializer {
+    private static final int NONEXISTENT_META_SHARED_ID_SIZE =
+        computeVarUint32Size(ClassResolver.NONEXISTENT_META_SHARED_ID);
     private final ClassDef classDef;
-    private final ClassInfoHolder classInfoHolder;
     private final LongMap<ClassFieldsInfo> fieldsInfoMap;
     private final SerializationBinding binding;
 
     public NonexistentClassSerializer(Fory fory, ClassDef classDef) {
       super(fory, NonexistentClass.NonexistentMetaShared.class);
       this.classDef = classDef;
-      classInfoHolder = fory.getClassResolver().nilClassInfoHolder();
       fieldsInfoMap = new LongMap<>();
       binding = SerializationBinding.createBinding(fory);
       Preconditions.checkArgument(fory.getConfig().isMetaShareEnabled());
+      if (Utils.DEBUG_OUTPUT_ENABLED && classDef != null) {
+        LOG.info(
+            "========== NonexistentClassSerializer ClassDef for {} ==========", type.getName());
+        LOG.info("ClassDef fieldsInfo count: {}", classDef.getFieldCount());
+        for (int i = 0; i < classDef.getFieldsInfo().size(); i++) {
+          LOG.info("  [{}] {}", i, classDef.getFieldsInfo().get(i));
+        }
+      }
     }
 
     /**
      * Multiple un existed class will correspond to this `NonexistentMetaSharedClass`. When querying
      * classinfo by `class`, it may dispatch to same `NonexistentClassSerializer`, so we can't use
      * `classDef` in this serializer, but use `classDef` in `NonexistentMetaSharedClass` instead.
+     *
+     * <p>NonexistentMetaShared is registered with a fixed internal typeId for dispatch. This
+     * serializer rewinds that placeholder typeId and writes the original class's typeId, then
+     * writes the shared ClassDef inline using the stream meta protocol.
      */
     private void writeClassDef(MemoryBuffer buffer, NonexistentClass.NonexistentMetaShared value) {
-      // Register NotFoundClass ahead to skip write meta shared info,
-      // then revert written class id to write class info here,
-      // since it's the only place to hold class def for not found class.
-      buffer.increaseWriterIndex(-2);
       MetaContext metaContext = fory.getSerializationContext().getMetaContext();
       IdentityObjectIntMap classMap = metaContext.classMap;
       int newId = classMap.size;
       // class not exist, use class def id for identity.
       int id = classMap.putOrGet(value.classDef.getId(), newId);
       if (id >= 0) {
-        buffer.writeVarUint32(id << 1 | 0b1);
+        // Reference to previously written type: (index << 1) | 1, LSB=1
+        buffer.writeVarUint32((id << 1) | 1);
       } else {
-        buffer.writeVarUint32(newId << 1 | 0b1);
-        metaContext.writingClassDefs.add(value.classDef);
+        // New type: index << 1, LSB=0, followed by ClassDef bytes inline
+        buffer.writeVarUint32(newId << 1);
+        buffer.writeBytes(value.classDef.getEncoded());
       }
+    }
+
+    private static int computeVarUint32Size(int value) {
+      if ((value & ~0x7f) == 0) {
+        return 1;
+      }
+      if ((value & ~0x3fff) == 0) {
+        return 2;
+      }
+      if ((value & ~0x1fffff) == 0) {
+        return 3;
+      }
+      if ((value & ~0xfffffff) == 0) {
+        return 4;
+      }
+      return 5;
+    }
+
+    private int resolveTypeId(ClassDef classDef) {
+      if (classDef.getClassSpec().isEnum) {
+        if (classDef.isNamed()) {
+          return Types.NAMED_ENUM;
+        }
+        return (classDef.getUserTypeId() << 8) | Types.ENUM;
+      }
+      if (classDef.isNamed()) {
+        return classDef.isCompatible() ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT;
+      }
+      int internalTypeId = classDef.isCompatible() ? Types.COMPATIBLE_STRUCT : Types.STRUCT;
+      return (classDef.getUserTypeId() << 8) | internalTypeId;
     }
 
     @Override
     public void write(MemoryBuffer buffer, Object v) {
       NonexistentClass.NonexistentMetaShared value = (NonexistentClass.NonexistentMetaShared) v;
+      int typeId = resolveTypeId(value.classDef);
+      int typeIdSize = computeVarUint32Size(typeId);
+      if (typeIdSize == NONEXISTENT_META_SHARED_ID_SIZE) {
+        buffer.increaseWriterIndex(-NONEXISTENT_META_SHARED_ID_SIZE);
+        buffer.writeVarUint32Small7(typeId);
+      } else {
+        int originalWriterIndex = buffer.writerIndex();
+        int placeholderStart = originalWriterIndex - NONEXISTENT_META_SHARED_ID_SIZE;
+        int payloadStart = placeholderStart + NONEXISTENT_META_SHARED_ID_SIZE;
+        int payloadLength = originalWriterIndex - payloadStart;
+        byte[] payload = buffer.getBytes(payloadStart, payloadLength);
+        buffer.writerIndex(placeholderStart);
+        buffer.writeVarUint32Small7(typeId);
+        buffer.writeBytes(payload);
+      }
       writeClassDef(buffer, value);
       ClassDef classDef = value.classDef;
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(classDef);
       Fory fory = this.fory;
       RefResolver refResolver = fory.getRefResolver();
-      ClassResolver classResolver = fory.getClassResolver();
       if (fory.checkClassVersion()) {
         buffer.writeInt32(fieldsInfo.classVersionHash);
       }
       // write order: primitive,boxed,final,other,collection,map
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
-        ClassInfo classInfo = fieldInfo.classInfo;
-        if (fory.getConfig().isForyDebugOutputEnabled()) {
-          LOG.info(
-              "NonexistentClassSerializer.write: field={}, dispatchId={}, isPrimitive={}, value={}, serializer={}",
-              fieldInfo.qualifiedFieldName,
-              fieldInfo.dispatchId,
-              DispatchId.isPrimitive(fieldInfo.dispatchId),
-              fieldValue,
-              classInfo != null ? classInfo.getSerializer() : null);
-        }
-        if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
-          // Use dispatch-based write to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
-          Serializers.writePrimitiveValue(buffer, fieldValue, fieldInfo.dispatchId);
-        } else {
-          if (fieldInfo.useDeclaredTypeInfo) {
-            // whether tracking ref is recorded in `fieldInfo.serializer`, so it's still
-            // consistent with jit serializer.
-            Serializer<Object> serializer = classInfo.getSerializer();
-            binding.writeRef(buffer, fieldValue, serializer);
-          } else {
-            binding.writeRef(buffer, fieldValue, classInfo);
-          }
-        }
+        AbstractObjectSerializer.writeBuildInFieldValue(binding, fieldInfo, buffer, fieldValue);
       }
       Generics generics = fory.getGenerics();
       for (SerializationFieldInfo fieldInfo : fieldsInfo.containerFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
         AbstractObjectSerializer.writeContainerFieldValue(
-            binding, refResolver, classResolver, generics, fieldInfo, buffer, fieldValue);
+            binding, refResolver, generics, fieldInfo, buffer, fieldValue);
       }
       for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
-        writeOtherFieldValue(binding, buffer, fieldInfo, fieldValue);
+        binding.writeField(fieldInfo, buffer, fieldValue);
       }
     }
 
@@ -183,37 +213,23 @@ public final class NonexistentClassSerializers {
           new NonexistentClass.NonexistentMetaShared(classDef);
       Fory fory = this.fory;
       RefResolver refResolver = fory.getRefResolver();
-      ClassResolver classResolver = fory.getClassResolver();
       refResolver.reference(obj);
       List<MapEntry> entries = new ArrayList<>();
       // read order: primitive,boxed,final,other,collection,map
-      ClassFieldsInfo fieldsInfo = getClassFieldsInfo(classDef);
-      for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
-        Object fieldValue;
-        if (fieldInfo.classInfo == null) {
-          // TODO(chaokunyang) support registered serializer in peer with ref tracking disabled.
-          fieldValue = fory.readRef(buffer, classInfoHolder);
-        } else {
-          if (DispatchId.isPrimitive(fieldInfo.dispatchId)) {
-            // Use dispatch-based read to ensure correct encoding (e.g., VARINT64 vs FIXED_INT64)
-            fieldValue = Serializers.readPrimitiveValue(fory, buffer, fieldInfo.dispatchId);
-          } else {
-            fieldValue =
-                AbstractObjectSerializer.readFinalObjectFieldValue(
-                    binding, refResolver, classResolver, fieldInfo, buffer);
-          }
-        }
+      ClassFieldsInfo allFieldsInfo = getClassFieldsInfo(classDef);
+      for (SerializationFieldInfo fieldInfo : allFieldsInfo.buildInFields) {
+        Object fieldValue =
+            AbstractObjectSerializer.readBuildInFieldValue(binding, fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       Generics generics = fory.getGenerics();
-      for (SerializationFieldInfo fieldInfo : fieldsInfo.containerFields) {
+      for (SerializationFieldInfo fieldInfo : allFieldsInfo.containerFields) {
         Object fieldValue =
             AbstractObjectSerializer.readContainerFieldValue(binding, generics, fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
-      for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
-        Object fieldValue =
-            AbstractObjectSerializer.readOtherFieldValue(binding, fieldInfo, buffer);
+      for (SerializationFieldInfo fieldInfo : allFieldsInfo.otherFields) {
+        Object fieldValue = binding.readField(fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       obj.setEntries(entries);

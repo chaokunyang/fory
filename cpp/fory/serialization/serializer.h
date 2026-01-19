@@ -60,9 +60,6 @@ namespace serialization {
 // Protocol Constants
 // ============================================================================
 
-/// Fory protocol magic number (0x62d4)
-constexpr uint16_t MAGIC_NUMBER = 0x62d4;
-
 /// Language identifiers
 /// Must match Java's Language enum ordinal values
 enum class Language : uint8_t {
@@ -90,9 +87,7 @@ inline bool is_little_endian_system() {
 
 /// Fory header information
 struct HeaderInfo {
-  uint16_t magic;
   bool is_null;
-  bool is_little_endian;
   bool is_xlang;
   bool is_oob;
   Language language;
@@ -104,34 +99,25 @@ struct HeaderInfo {
 /// @param buffer Input buffer
 /// @return Header information or error
 inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
-  // Check minimum header size (3 bytes: magic + flags)
-  if (buffer.reader_index() + 3 > buffer.size()) {
+  // Check minimum header size (1 byte: flags)
+  if (buffer.reader_index() + 1 > buffer.size()) {
     return Unexpected(
-        Error::buffer_out_of_bound(buffer.reader_index(), 3, buffer.size()));
+        Error::buffer_out_of_bound(buffer.reader_index(), 1, buffer.size()));
   }
 
   HeaderInfo info;
   uint32_t start_pos = buffer.reader_index();
 
-  // Read magic number
-  info.magic = buffer.Get<uint16_t>(start_pos);
-  if (info.magic != MAGIC_NUMBER) {
-    return Unexpected(
-        Error::invalid_data("Invalid magic number: expected 0x62d4, got 0x" +
-                            std::to_string(info.magic)));
-  }
-
   // Read flags byte
-  uint8_t flags = buffer.GetByteAs<uint8_t>(start_pos + 2);
+  uint8_t flags = buffer.GetByteAs<uint8_t>(start_pos);
   info.is_null = (flags & (1 << 0)) != 0;
-  info.is_little_endian = (flags & (1 << 1)) != 0;
-  info.is_xlang = (flags & (1 << 2)) != 0;
-  info.is_oob = (flags & (1 << 3)) != 0;
+  info.is_xlang = (flags & (1 << 1)) != 0;
+  info.is_oob = (flags & (1 << 2)) != 0;
 
-  // Update reader index (3 bytes consumed: magic + flags)
-  buffer.IncreaseReaderIndex(3);
+  // Update reader index (1 byte consumed: flags)
+  buffer.IncreaseReaderIndex(1);
 
-  // Java writes a language byte after header in xlang mode - read and ignore it
+  // Language byte after header in xlang mode
   if (info.is_xlang) {
     Error error;
     uint8_t lang_byte = buffer.ReadUint8(error);

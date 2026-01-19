@@ -593,6 +593,17 @@ func isNumericKind(kind reflect.Kind) bool {
 	}
 }
 
+func isPrimitiveDispatchKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
 // getDispatchIdFromTypeId converts a TypeId to a DispatchId based on nullability.
 // This follows Java's DispatchId.xlangTypeIdToDispatchId pattern.
 func getDispatchIdFromTypeId(typeId TypeId, nullable bool) DispatchId {

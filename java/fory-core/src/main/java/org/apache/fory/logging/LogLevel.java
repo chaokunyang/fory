@@ -34,7 +34,7 @@ public class LogLevel {
   public static final int DEFAULT_LEVEL;
 
   static {
-    if (Utils.debugOutputEnabled()) {
+    if (Utils.DEBUG_OUTPUT_ENABLED) {
       DEFAULT_LEVEL = DEBUG_LEVEL;
     } else {
       DEFAULT_LEVEL = INFO_LEVEL;

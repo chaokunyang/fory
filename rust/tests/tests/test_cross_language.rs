@@ -389,7 +389,7 @@ fn test_simple_struct() {
 
 #[test]
 #[ignore]
-fn test_simple_named_struct() {
+fn test_named_simple_struct() {
     let data_file_path = get_data_file();
     let bytes = fs::read(&data_file_path).unwrap();
     let mut fory = Fory::default().compatible(true).xlang(true);

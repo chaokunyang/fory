@@ -1,7 +1,7 @@
 ---
 title: Cross-Language Serialization
 sidebar_position: 10
-id: python_cross_language
+id: cross_language
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -128,8 +128,8 @@ The binary protocol and API are similar to `pyfory`'s python-native mode, but Py
 
 ## See Also
 
-- [Cross-Language Serialization Specification](https://fory.apache.org/docs/next/specification/fory_xlang_serialization_spec)
-- [Type Mapping Reference](https://fory.apache.org/docs/next/specification/xlang_type_mapping)
+- [Cross-Language Serialization Specification](../../specification/xlang_serialization_spec.md)
+- [Type Mapping Reference](../../specification/xlang_type_mapping.md)
 - [Java Cross-Language Guide](../java/cross-language.md)
 - [Rust Cross-Language Guide](../rust/cross-language.md)
 

@@ -142,6 +142,13 @@ export enum InternalSerializerType {
   INT64,
   VARINT64,
   TAGGED_INT64,
+  UINT8,
+  UINT16,
+  UINT32,
+  VAR_UINT32,
+  UINT64,
+  VAR_UINT64,
+  TAGGED_UINT64,
   FLOAT16,
   FLOAT32,
   FLOAT64,
@@ -173,9 +180,8 @@ export enum InternalSerializerType {
 
 export enum ConfigFlags {
   isNullFlag = 1 << 0,
-  isLittleEndianFlag = 2,
-  isCrossLanguageFlag = 4,
-  isOutOfBandFlag = 8,
+  isCrossLanguageFlag = 1 << 1,
+  isOutOfBandFlag = 1 << 2,
 }
 
 // read, write
@@ -240,8 +246,6 @@ export enum Language {
   RUST = 6,
   DART = 7,
 }
-
-export const MAGIC_NUMBER = 0x62D4;
 
 export interface WithForyClsInfo {
   structTypeInfo: StructTypeInfo;

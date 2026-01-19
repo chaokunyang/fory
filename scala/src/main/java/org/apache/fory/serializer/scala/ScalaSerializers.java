@@ -114,13 +114,18 @@ public class ScalaSerializers {
     // Range
     resolver.register("scala.math.Numeric$IntIsIntegral$");
     resolver.register("scala.math.Numeric$LongIsIntegral$");
-    resolver.registerSerializer(Range.Inclusive.class, new RangeSerializer(fory, Range.Inclusive.class));
-    resolver.registerSerializer(Range.Exclusive.class, new RangeSerializer(fory, Range.Exclusive.class));
-    resolver.registerSerializer(NumericRange.class, new NumericRangeSerializer<>(fory, NumericRange.class));
-    resolver.registerSerializer(NumericRange.Exclusive.class,
-      new NumericRangeSerializer<>(fory, NumericRange.Exclusive.class));
-    resolver.registerSerializer(NumericRange.Inclusive.class,
-      new NumericRangeSerializer<>(fory, NumericRange.Inclusive.class));
+    resolver.registerSerializerAndType(
+        Range.Inclusive.class, new RangeSerializer(fory, Range.Inclusive.class));
+    resolver.registerSerializerAndType(
+        Range.Exclusive.class, new RangeSerializer(fory, Range.Exclusive.class));
+    resolver.registerSerializerAndType(
+        NumericRange.class, new NumericRangeSerializer<>(fory, NumericRange.class));
+    resolver.registerSerializerAndType(
+        NumericRange.Exclusive.class,
+        new NumericRangeSerializer<>(fory, NumericRange.Exclusive.class));
+    resolver.registerSerializerAndType(
+        NumericRange.Inclusive.class,
+        new NumericRangeSerializer<>(fory, NumericRange.Inclusive.class));
 
     resolver.register(scala.collection.generic.SerializeEnd$.class);
     resolver.register(scala.collection.generic.DefaultSerializationProxy.class);

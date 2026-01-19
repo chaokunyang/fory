@@ -23,11 +23,8 @@ use crate::resolver::context::{ContextCache, ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::ForyDefault;
 use crate::serializer::{Serializer, StructSerializer};
-use crate::types::config_flags::IS_NULL_FLAG;
-use crate::types::{
-    config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_LITTLE_ENDIAN_FLAG},
-    Language, RefMode, MAGIC_NUMBER, SIZE_OF_REF_AND_TYPE,
-};
+use crate::types::config_flags::{IS_CROSS_LANGUAGE_FLAG, IS_NULL_FLAG};
+use crate::types::{Language, RefMode, SIZE_OF_REF_AND_TYPE};
 use std::cell::UnsafeCell;
 use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -613,11 +610,7 @@ impl Fory {
     ) -> Result<(), Error> {
         let is_none = record.fory_is_none();
         self.write_head::<T>(is_none, &mut context.writer);
-        let meta_start_offset = context.writer.len();
         if !is_none {
-            if context.is_compatible() {
-                context.writer.write_i32(-1);
-            };
             // Use RefMode based on config:
             // - If track_ref is enabled, use RefMode::Tracking for the root object
             // - Otherwise, use RefMode::NullOnly which writes NOT_NULL_VALUE_FLAG
@@ -626,10 +619,8 @@ impl Fory {
             } else {
                 RefMode::NullOnly
             };
+            // TypeMeta is written inline during serialization (streaming protocol)
             <T as Serializer>::fory_write(record, context, ref_mode, true, false)?;
-            if context.is_compatible() && !context.empty() {
-                context.write_meta(meta_start_offset);
-            }
         }
         Ok(())
     }
@@ -833,13 +824,7 @@ impl Fory {
     pub fn write_head<T: Serializer>(&self, is_none: bool, writer: &mut Writer) {
         const HEAD_SIZE: usize = 10;
         writer.reserve(T::fory_reserved_space() + SIZE_OF_REF_AND_TYPE + HEAD_SIZE);
-        if self.config.xlang {
-            writer.write_u16(MAGIC_NUMBER);
-        }
-        #[cfg(target_endian = "big")]
-        let mut bitmap = 0;
-        #[cfg(target_endian = "little")]
-        let mut bitmap = IS_LITTLE_ENDIAN_FLAG;
+        let mut bitmap: u8 = 0;
         if self.config.xlang {
             bitmap |= IS_CROSS_LANGUAGE_FLAG;
         }
@@ -1006,13 +991,6 @@ impl Fory {
         if is_none {
             return Ok(T::fory_default());
         }
-        let mut bytes_to_skip = 0;
-        if context.is_compatible() {
-            let meta_offset = context.reader.read_i32()?;
-            if meta_offset != -1 {
-                bytes_to_skip = context.load_type_meta(meta_offset as usize)?;
-            }
-        }
         // Use RefMode based on config:
         // - If track_ref is enabled, use RefMode::Tracking for the root object
         // - Otherwise, use RefMode::NullOnly
@@ -1021,40 +999,19 @@ impl Fory {
         } else {
             RefMode::NullOnly
         };
+        // TypeMeta is read inline during deserialization (streaming protocol)
         let result = <T as Serializer>::fory_read(context, ref_mode, true);
-        if bytes_to_skip > 0 {
-            context.reader.skip(bytes_to_skip)?;
-        }
         context.ref_reader.resolve_callbacks();
         result
     }
 
     #[inline(always)]
     fn read_head(&self, reader: &mut Reader) -> Result<bool, Error> {
-        if self.config.xlang {
-            let magic_numer = reader.read_u16()?;
-            ensure!(
-                magic_numer == MAGIC_NUMBER,
-                Error::invalid_data(format!(
-                    "The fory xlang serialization must start with magic number {:X}. \
-                    Please check whether the serialization is based on the xlang protocol \
-                    and the data didn't corrupt.",
-                    MAGIC_NUMBER
-                ))
-            )
-        }
         let bitmap = reader.read_u8()?;
         let peer_is_xlang = (bitmap & IS_CROSS_LANGUAGE_FLAG) != 0;
         ensure!(
             self.config.xlang == peer_is_xlang,
             Error::invalid_data("header bitmap mismatch at xlang bit")
-        );
-        let is_little_endian = (bitmap & IS_LITTLE_ENDIAN_FLAG) != 0;
-        ensure!(
-            is_little_endian,
-            Error::invalid_data(
-                "Big endian is not supported for now, please ensure peer machine is little endian."
-            )
         );
         let is_none = (bitmap & IS_NULL_FLAG) != 0;
         if is_none {

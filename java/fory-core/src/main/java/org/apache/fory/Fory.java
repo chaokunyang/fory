@@ -22,7 +22,6 @@ package org.apache.fory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -54,7 +53,6 @@ import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MapRefResolver;
-import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.MetaStringResolver;
 import org.apache.fory.resolver.NoRefResolver;
 import org.apache.fory.resolver.RefResolver;
@@ -99,12 +97,8 @@ public final class Fory implements BaseFory {
   public static final byte REF_VALUE_FLAG = 0;
   public static final byte NOT_SUPPORT_XLANG = 0;
   private static final byte isNilFlag = 1;
-  private static final byte isLittleEndianFlag = 1 << 1;
-  private static final byte isCrossLanguageFlag = 1 << 2;
-  private static final byte isOutOfBandFlag = 1 << 3;
-  private static final boolean isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
-  private static final byte BITMAP = isLittleEndian ? isLittleEndianFlag : 0;
-  private static final short MAGIC_NUMBER = 0x62D4;
+  private static final byte isCrossLanguageFlag = 1 << 1;
+  private static final byte isOutOfBandFlag = 1 << 2;
 
   private final Config config;
   private final boolean refTracking;
@@ -133,7 +127,6 @@ public final class Fory implements BaseFory {
   private int copyDepth;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
-  private int classDefEndOffset;
 
   public Fory(ForyBuilder builder, ClassLoader classLoader) {
     // Avoid set classLoader in `ForyBuilder`, which won't be clear when
@@ -171,7 +164,6 @@ public final class Fory implements BaseFory {
     arrayListSerializer = new ArrayListSerializer(this);
     hashMapSerializer = new HashMapSerializer(this);
     originToCopyMap = new IdentityMap<>();
-    classDefEndOffset = -1;
     LOG.info("Created new fory {}", this);
   }
 
@@ -247,6 +239,23 @@ public final class Fory implements BaseFory {
   }
 
   @Override
+  public <T> void registerSerializerAndType(
+      Class<T> type, Class<? extends Serializer> serializerClass) {
+    _getTypeResolver().registerSerializerAndType(type, serializerClass);
+  }
+
+  @Override
+  public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
+    _getTypeResolver().registerSerializerAndType(type, serializer);
+  }
+
+  @Override
+  public void registerSerializerAndType(
+      Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
+    _getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(this));
+  }
+
+  @Override
   public void setSerializerFactory(SerializerFactory serializerFactory) {
     classResolver.setSerializerFactory(serializerFactory);
   }
@@ -298,10 +307,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj, BufferCallback callback) {
-    if (crossLanguage) {
-      buffer.writeInt16(MAGIC_NUMBER);
-    }
-    byte bitmap = BITMAP;
+    byte bitmap = 0;
     if (crossLanguage) {
       bitmap |= isCrossLanguageFlag;
     }
@@ -393,37 +399,17 @@ public final class Fory implements BaseFory {
   }
 
   private void write(MemoryBuffer buffer, Object obj) {
-    int startOffset = buffer.writerIndex();
-    boolean shareMeta = config.isMetaShareEnabled();
-    if (shareMeta) {
-      buffer.writeInt32(-1); // preserve 4-byte for meta start offsets.
-    }
     // reduce caller stack
     if (!refResolver.writeRefOrNull(buffer, obj)) {
       ClassInfo classInfo = classResolver.getOrUpdateClassInfo(obj.getClass());
       classResolver.writeClassInfo(buffer, classInfo);
       writeData(buffer, classInfo, obj);
     }
-    MetaContext metaContext = serializationContext.getMetaContext();
-    if (shareMeta && metaContext != null && !metaContext.writingClassDefs.isEmpty()) {
-      buffer.putInt32(startOffset, buffer.writerIndex() - startOffset - 4);
-      classResolver.writeClassDefs(buffer);
-    }
   }
 
   private void xwrite(MemoryBuffer buffer, Object obj) {
     buffer.writeByte((byte) Language.JAVA.ordinal());
-    int startOffset = buffer.writerIndex();
-    boolean shareMeta = config.isMetaShareEnabled();
-    if (shareMeta) {
-      buffer.writeInt32(-1); // preserve 4-byte for meta start offsets.
-    }
     xwriteRef(buffer, obj);
-    MetaContext metaContext = serializationContext.getMetaContext();
-    if (shareMeta && metaContext != null && !metaContext.writingClassDefs.isEmpty()) {
-      buffer.putInt32(startOffset, buffer.writerIndex() - startOffset - 4);
-      classResolver.writeClassDefs(buffer);
-    }
   }
 
   /** Serialize a nullable referencable object to <code>buffer</code>. */
@@ -502,6 +488,12 @@ public final class Fory implements BaseFory {
     depth--;
   }
 
+  public void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfoHolder holder) {
+    ClassInfo classInfo = classResolver.getClassInfo(obj.getClass(), holder);
+    classResolver.writeClassInfo(buffer, classInfo);
+    writeData(buffer, classInfo, obj);
+  }
+
   public void writeNonRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo) {
     classResolver.writeClassInfo(buffer, classInfo);
     Serializer serializer = classInfo.getSerializer();
@@ -556,6 +548,12 @@ public final class Fory implements BaseFory {
     xwriteData(buffer, classInfo, obj);
   }
 
+  public void xwriteNonRef(MemoryBuffer buffer, Object obj, ClassInfoHolder holder) {
+    ClassInfo classInfo = xtypeResolver.getClassInfo(obj.getClass(), holder);
+    xtypeResolver.writeClassInfo(buffer, obj);
+    xwriteData(buffer, classInfo, obj);
+  }
+
   public void xwriteNonRef(MemoryBuffer buffer, Object obj, ClassInfo classInfo) {
     xtypeResolver.writeClassInfo(buffer, classInfo);
     xwriteData(buffer, classInfo, obj);
@@ -569,7 +567,8 @@ public final class Fory implements BaseFory {
   }
 
   public void xwriteData(MemoryBuffer buffer, ClassInfo classInfo, Object obj) {
-    switch (classInfo.getXtypeId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         buffer.writeBoolean((Boolean) obj);
         break;
@@ -604,7 +603,8 @@ public final class Fory implements BaseFory {
 
   /** Write not null data to buffer. */
   private void writeData(MemoryBuffer buffer, ClassInfo classInfo, Object obj) {
-    switch (classInfo.getClassId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         buffer.writeBoolean((Boolean) obj);
         break;
@@ -831,21 +831,10 @@ public final class Fory implements BaseFory {
         throwDepthDeserializationException();
       }
       depth = 0;
-      if (crossLanguage) {
-        short magicNumber = buffer.readInt16();
-        assert magicNumber == MAGIC_NUMBER
-            : String.format(
-                "The fory xlang serialization must start with magic number 0x%x. Please "
-                    + "check whether the serialization is based on the xlang protocol and the data didn't corrupt.",
-                MAGIC_NUMBER);
-      }
       byte bitmap = buffer.readByte();
       if ((bitmap & isNilFlag) == isNilFlag) {
         return null;
       }
-      Preconditions.checkArgument(
-          Fory.isLittleEndian,
-          "Non-Little-Endian format detected. Only Little-Endian is supported.");
       boolean isTargetXLang = (bitmap & isCrossLanguageFlag) == isCrossLanguageFlag;
       if (isTargetXLang) {
         peerLanguage = Language.values()[buffer.readByte()];
@@ -865,9 +854,6 @@ public final class Fory implements BaseFory {
             "outOfBandBuffers should be null when the serialized stream is "
                 + "produced with bufferCallback null.");
       }
-      if (shareMeta) {
-        readClassDefs(buffer);
-      }
       Object obj;
       if (isTargetXLang) {
         obj = xreadRef(buffer);
@@ -878,9 +864,6 @@ public final class Fory implements BaseFory {
     } catch (Throwable t) {
       throw ExceptionUtils.handleReadFailed(this, t);
     } finally {
-      if (classDefEndOffset != -1) {
-        buffer.readerIndex(classDefEndOffset);
-      }
       resetRead();
       jitContext.unlock();
     }
@@ -919,6 +902,19 @@ public final class Fory implements BaseFory {
     if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
       // ref value or not-null value
       Object o = readDataInternal(buffer, classResolver.readClassInfo(buffer));
+      refResolver.setReadObject(nextReadRefId, o);
+      return o;
+    } else {
+      return refResolver.getReadObject();
+    }
+  }
+
+  public Object readRef(MemoryBuffer buffer, ClassInfo classInfo) {
+    RefResolver refResolver = this.refResolver;
+    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+    if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
+      // ref value or not-null value
+      Object o = readDataInternal(buffer, classInfo);
       refResolver.setReadObject(nextReadRefId, o);
       return o;
     } else {
@@ -1012,7 +1008,8 @@ public final class Fory implements BaseFory {
   }
 
   private Object readDataInternal(MemoryBuffer buffer, ClassInfo classInfo) {
-    switch (classInfo.getClassId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         return buffer.readBoolean();
       case Types.INT8:
@@ -1043,6 +1040,39 @@ public final class Fory implements BaseFory {
     }
   }
 
+  private Object xreadDataInternal(MemoryBuffer buffer, ClassInfo classInfo) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
+      case Types.BOOL:
+        return buffer.readBoolean();
+      case Types.INT8:
+        return buffer.readByte();
+      case ClassResolver.CHAR_ID:
+        return buffer.readChar();
+      case Types.INT16:
+        return buffer.readInt16();
+      case Types.INT32:
+        if (compressInt) {
+          return buffer.readVarInt32();
+        } else {
+          return buffer.readInt32();
+        }
+      case Types.FLOAT32:
+        return buffer.readFloat32();
+      case Types.INT64:
+        return LongSerializer.readInt64(buffer, longEncoding);
+      case Types.FLOAT64:
+        return buffer.readFloat64();
+      case Types.STRING:
+        return stringSerializer.readJavaString(buffer);
+      default:
+        incReadDepth();
+        Object read = classInfo.getSerializer().xread(buffer);
+        depth--;
+        return read;
+    }
+  }
+
   public Object xreadRef(MemoryBuffer buffer) {
     RefResolver refResolver = this.refResolver;
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
@@ -1055,12 +1085,25 @@ public final class Fory implements BaseFory {
     }
   }
 
+  public Object xreadRef(MemoryBuffer buffer, ClassInfo classInfo) {
+    RefResolver refResolver = this.refResolver;
+    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+    if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
+      // ref value or not-null value
+      Object o = xreadDataInternal(buffer, classInfo);
+      refResolver.setReadObject(nextReadRefId, o);
+      return o;
+    } else {
+      return refResolver.getReadObject();
+    }
+  }
+
   public Object xreadRef(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
     RefResolver refResolver = this.refResolver;
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
     if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
       // ref value or not-null value
-      Object o = readDataInternal(buffer, xtypeResolver.readClassInfo(buffer, classInfoHolder));
+      Object o = xreadDataInternal(buffer, xtypeResolver.readClassInfo(buffer, classInfoHolder));
       refResolver.setReadObject(nextReadRefId, o);
       return o;
     } else {
@@ -1102,7 +1145,8 @@ public final class Fory implements BaseFory {
 
   public Object xreadNonRef(MemoryBuffer buffer, ClassInfo classInfo) {
     assert classInfo != null;
-    switch (classInfo.getXtypeId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
         return buffer.readBoolean();
       case Types.INT8:
@@ -1136,6 +1180,11 @@ public final class Fory implements BaseFory {
     return xreadNonRef(buffer, classInfo);
   }
 
+  public Object xreadNullable(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
+    ClassInfo classInfo = xtypeResolver.readClassInfo(buffer, classInfoHolder);
+    return xreadNullable(buffer, classInfo.getSerializer());
+  }
+
   public Object xreadNullable(MemoryBuffer buffer, Serializer<Object> serializer) {
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.NULL_FLAG) {
@@ -1163,17 +1212,10 @@ public final class Fory implements BaseFory {
         throwDepthSerializationException();
       }
       if (config.isMetaShareEnabled()) {
-        int startOffset = buffer.writerIndex();
-        buffer.writeInt32(-1); // preserve 4-byte for meta start offsets.
         if (!refResolver.writeRefOrNull(buffer, obj)) {
           ClassInfo classInfo = classResolver.getOrUpdateClassInfo(obj.getClass());
           classResolver.writeClassInfo(buffer, classInfo);
           writeData(buffer, classInfo, obj);
-          MetaContext metaContext = serializationContext.getMetaContext();
-          if (metaContext != null && !metaContext.writingClassDefs.isEmpty()) {
-            buffer.putInt32(startOffset, buffer.writerIndex() - startOffset - 4);
-            classResolver.writeClassDefs(buffer);
-          }
         }
       } else {
         if (!refResolver.writeRefOrNull(buffer, obj)) {
@@ -1211,15 +1253,12 @@ public final class Fory implements BaseFory {
       if (depth > 0) {
         throwDepthDeserializationException();
       }
-      if (shareMeta) {
-        readClassDefs(buffer);
-      }
       T obj;
       int nextReadRefId = refResolver.tryPreserveRefId(buffer);
       if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
         ClassInfo classInfo;
         if (shareMeta) {
-          classInfo = classResolver.readSharedClassMeta(buffer, cls);
+          classInfo = classResolver.readClassInfo(buffer, cls);
         } else {
           classInfo = classResolver.getClassInfo(cls);
         }
@@ -1231,9 +1270,6 @@ public final class Fory implements BaseFory {
     } catch (Throwable t) {
       throw ExceptionUtils.handleReadFailed(this, t);
     } finally {
-      if (classDefEndOffset != -1) {
-        buffer.readerIndex(classDefEndOffset);
-      }
       resetRead();
       jitContext.unlock();
     }
@@ -1334,16 +1370,10 @@ public final class Fory implements BaseFory {
       if (depth > 0) {
         throwDepthDeserializationException();
       }
-      if (shareMeta) {
-        readClassDefs(buffer);
-      }
       return readRef(buffer);
     } catch (Throwable t) {
       throw ExceptionUtils.handleReadFailed(this, t);
     } finally {
-      if (classDefEndOffset != -1) {
-        buffer.readerIndex(classDefEndOffset);
-      }
       resetRead();
       jitContext.unlock();
     }
@@ -1398,7 +1428,8 @@ public final class Fory implements BaseFory {
     }
     Object copy;
     ClassInfo classInfo = classResolver.getOrUpdateClassInfo(obj.getClass());
-    switch (classInfo.getClassId()) {
+    int internalTypeId = classInfo.getTypeId() & 0xff;
+    switch (internalTypeId) {
       case Types.BOOL:
       case Types.INT8:
       case ClassResolver.CHAR_ID:
@@ -1542,18 +1573,6 @@ public final class Fory implements BaseFory {
     }
   }
 
-  private void readClassDefs(MemoryBuffer buffer) {
-    int relativeClassDefOffset = buffer.readInt32();
-    if (relativeClassDefOffset == -1) {
-      return;
-    }
-    int readerIndex = buffer.readerIndex();
-    buffer.readerIndex(readerIndex + relativeClassDefOffset);
-    classResolver.readClassDefs(buffer);
-    classDefEndOffset = buffer.readerIndex();
-    buffer.readerIndex(readerIndex);
-  }
-
   public void reset() {
     resetWrite();
     resetRead();
@@ -1575,7 +1594,6 @@ public final class Fory implements BaseFory {
     metaStringResolver.resetRead();
     serializationContext.resetRead();
     peerOutOfBandEnabled = false;
-    classDefEndOffset = -1;
     depth = 0;
   }
 
@@ -1722,10 +1740,6 @@ public final class Fory implements BaseFory {
 
   public boolean isStringRefIgnored() {
     return config.isStringRefIgnored();
-  }
-
-  public boolean isBasicTypesRefIgnored() {
-    return config.isBasicTypesRefIgnored();
   }
 
   public boolean checkClassVersion() {

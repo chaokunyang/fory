@@ -15,8 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from __future__ import annotations
-
 """
 Field metadata support for Fory serialization.
 
@@ -37,7 +35,7 @@ Example:
 
 import dataclasses
 from dataclasses import MISSING
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional
 
 
 # Key used to store Fory metadata in field.metadata
@@ -54,12 +52,17 @@ class ForyFieldMeta:
         nullable: Whether null flag is written. Default False.
         ref: Whether reference tracking is enabled for this field. Default False.
         ignore: Whether to ignore this field during serialization. Default False.
+        dynamic: Whether type info is written for this field. None means auto-detect.
+            - None (default): Auto-detect based on type (abstract=True, concrete=mode-dependent)
+            - True: Always write type info (support runtime subtypes)
+            - False: Never write type info (use declared type's serializer)
     """
 
     id: int
     nullable: bool = False
     ref: bool = False
     ignore: bool = False
+    dynamic: Optional[bool] = None
 
     def uses_tag_id(self) -> bool:
         """Returns True if this field uses tag ID encoding (id >= 0)."""
@@ -72,6 +75,7 @@ def field(
     nullable: bool = False,
     ref: bool = False,
     ignore: bool = False,
+    dynamic: Optional[bool] = None,
     # Standard dataclass.field() options (passthrough)
     default: Any = MISSING,
     default_factory: Optional[Callable[[], Any]] = MISSING,
@@ -109,6 +113,14 @@ def field(
             - False (default): Field is serialized
             - True: Field is excluded from serialization
 
+        dynamic: Whether to write type info for this field.
+            - None (default): Auto-detect based on type and mode
+              - Abstract classes: always True (type info must be written)
+              - Native mode: True for all types
+              - Xlang mode: False for concrete types
+            - True: Always write type info (support runtime subtypes)
+            - False: Never write type info (use declared type's serializer)
+
         default, default_factory, init, repr, hash, compare, metadata:
             Standard dataclass.field() parameters, passed through.
 
@@ -125,6 +137,7 @@ def field(
             friends: List["User"] = pyfory.field(2, ref=True, default_factory=list)
             nickname: Optional[str] = pyfory.field(nullable=True)          # Use field name
             _cache: dict = pyfory.field(ignore=True, default_factory=dict) # Use field name
+            shape: Shape = pyfory.field(3, dynamic=True)                   # Force type info
     """
     # Validate id
     if not isinstance(id, int):
@@ -138,6 +151,7 @@ def field(
         nullable=nullable,
         ref=ref,
         ignore=ignore,
+        dynamic=dynamic,
     )
 
     # Merge with user-provided metadata
@@ -174,8 +188,8 @@ def extract_field_meta(dataclass_field: dataclasses.Field) -> Optional[ForyField
 
 def validate_field_metas(
     cls: type,
-    field_metas: dict[str, ForyFieldMeta],
-    type_hints: dict[str, type],
+    field_metas: Dict[str, ForyFieldMeta],
+    type_hints: Dict[str, type],
 ) -> None:
     """
     Validate field metadata for a dataclass.
@@ -195,7 +209,7 @@ def validate_field_metas(
     from pyfory.type_util import is_optional_type
 
     # Check tag ID uniqueness
-    tag_ids_seen: dict[int, str] = {}
+    tag_ids_seen: Dict[int, str] = {}
     for field_name, meta in field_metas.items():
         if meta.id >= 0:
             if meta.id in tag_ids_seen:

@@ -27,7 +27,7 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ObjectSerializer;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -64,7 +64,7 @@ public class SubListSerializers {
   }
 
   public static void registerSerializers(Fory fory, boolean preserveView) {
-    ClassResolver classResolver = fory.getClassResolver();
+    TypeResolver classResolver = fory._getTypeResolver();
     // java.util.ImmutableCollections$SubList is already registered in
     // ImmutableCollectionSerializers
     for (Class<?> cls :

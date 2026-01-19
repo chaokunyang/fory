@@ -34,7 +34,7 @@ public class UByteSerializer(
   Serializers.CrossLanguageCompatibleSerializer<UByte>(
     fory,
     UByte::class.java,
-    fory.isBasicTypesRefIgnored,
+    false,
     true
   ) {
 
@@ -58,7 +58,7 @@ public class UShortSerializer(
   Serializers.CrossLanguageCompatibleSerializer<UShort>(
     fory,
     UShort::class.java,
-    fory.isBasicTypesRefIgnored,
+    false,
     true
   ) {
   override fun write(buffer: MemoryBuffer, value: UShort) {
@@ -81,7 +81,7 @@ public class UIntSerializer(
   Serializers.CrossLanguageCompatibleSerializer<UInt>(
     fory,
     UInt::class.java,
-    fory.isBasicTypesRefIgnored,
+    false,
     true
   ) {
 
@@ -105,7 +105,7 @@ public class ULongSerializer(
   Serializers.CrossLanguageCompatibleSerializer<ULong>(
     fory,
     ULong::class.java,
-    fory.isBasicTypesRefIgnored,
+    false,
     true
   ) {
   override fun write(buffer: MemoryBuffer, value: ULong) {

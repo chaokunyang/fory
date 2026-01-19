@@ -213,22 +213,12 @@ impl<'a> WriteContext<'a> {
         self.track_ref
     }
 
+    /// Write type meta inline using streaming protocol.
+    /// Writes index marker with LSB indicating new type or reference.
     #[inline(always)]
-    pub fn empty(&mut self) -> bool {
-        self.meta_resolver.empty()
-    }
-
-    #[inline(always)]
-    pub fn push_meta(&mut self, type_id: std::any::TypeId) -> Result<usize, Error> {
-        self.meta_resolver.push(type_id, &self.type_resolver)
-    }
-
-    #[inline(always)]
-    pub fn write_meta(&mut self, offset: usize) {
-        let len = self.writer.len();
-        self.writer
-            .set_bytes(offset, &((len - offset - 4) as u32).to_le_bytes());
-        self.meta_resolver.to_bytes(&mut self.writer);
+    pub fn write_type_meta(&mut self, type_id: std::any::TypeId) -> Result<(), Error> {
+        self.meta_resolver
+            .write_type_meta(&mut self.writer, type_id, &self.type_resolver)
     }
 
     pub fn write_any_typeinfo(
@@ -251,18 +241,21 @@ impl<'a> WriteContext<'a> {
         // should be compiled to jump table generation
         match fory_type_id & 0xff {
             types::NAMED_COMPATIBLE_STRUCT | types::COMPATIBLE_STRUCT => {
-                let meta_index =
-                    self.meta_resolver
-                        .push(concrete_type_id, &self.type_resolver)? as u32;
-                self.writer.write_varuint32(meta_index);
+                // Write type meta inline using streaming protocol
+                self.meta_resolver.write_type_meta(
+                    &mut self.writer,
+                    concrete_type_id,
+                    &self.type_resolver,
+                )?;
             }
             types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT => {
                 if self.is_share_meta() {
-                    let meta_index = self
-                        .meta_resolver
-                        .push(concrete_type_id, &self.type_resolver)?
-                        as u32;
-                    self.writer.write_varuint32(meta_index);
+                    // Write type meta inline using streaming protocol
+                    self.meta_resolver.write_type_meta(
+                        &mut self.writer,
+                        concrete_type_id,
+                        &self.type_resolver,
+                    )?;
                 } else {
                     self.write_meta_string_bytes(namespace)?;
                     self.write_meta_string_bytes(type_name)?;
@@ -410,12 +403,12 @@ impl<'a> ReadContext<'a> {
         self.get_type_info_by_index(type_index)
     }
 
+    /// Read type meta inline using streaming protocol.
+    /// Returns the TypeInfo for this type.
     #[inline(always)]
-    pub fn load_type_meta(&mut self, offset: usize) -> Result<usize, Error> {
-        self.meta_resolver.load(
-            &self.type_resolver,
-            &mut Reader::new(&self.reader.slice_after_cursor()[offset..]),
-        )
+    pub fn read_type_meta(&mut self) -> Result<Rc<TypeInfo>, Error> {
+        self.meta_resolver
+            .read_type_meta(&mut self.reader, &self.type_resolver)
     }
 
     pub fn read_any_typeinfo(&mut self) -> Result<Rc<TypeInfo>, Error> {
@@ -423,15 +416,13 @@ impl<'a> ReadContext<'a> {
         // should be compiled to jump table generation
         match fory_type_id & 0xff {
             types::NAMED_COMPATIBLE_STRUCT | types::COMPATIBLE_STRUCT => {
-                let meta_index = self.reader.read_varuint32()? as usize;
-                let type_info = self.get_type_info_by_index(meta_index)?.clone();
-                Ok(type_info)
+                // Read type meta inline using streaming protocol
+                self.read_type_meta()
             }
             types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT => {
                 if self.is_share_meta() {
-                    let meta_index = self.reader.read_varuint32()? as usize;
-                    let type_info = self.get_type_info_by_index(meta_index)?.clone();
-                    Ok(type_info)
+                    // Read type meta inline using streaming protocol
+                    self.read_type_meta()
                 } else {
                     let namespace = self.read_meta_string()?.to_owned();
                     let type_name = self.read_meta_string()?.to_owned();

@@ -32,12 +32,26 @@ import org.apache.fory.util.record.RecordUtils;
 
 /**
  * A utility class to group class fields into groups.
- * <li>primitive fields
- * <li>boxed primitive fields
- * <li>final fields
- * <li>collection fields
- * <li>map fields
- * <li>other fields
+ *
+ * <ul>
+ *   <li>primitive fields
+ *   <li>boxed primitive fields
+ *   <li>final fields
+ *   <li>collection fields
+ *   <li>map fields
+ *   <li>other fields
+ * </ul>
+ *
+ * <p><b>IMPORTANT:</b> Resorting fields is mandatory in cross-language (xlang) serialization. The
+ * Fory protocol specification requires that both serialization peers (e.g., Java, Rust, Go, Python)
+ * use exactly the same sorting algorithm to determine field order. The in-flight byte order of
+ * fields is not guaranteed to match any particular peer's original declaration order. Instead, each
+ * peer must independently sort fields using the same algorithm to ensure consistent
+ * serialization/deserialization.
+ *
+ * <p>The sorting groups fields by type category (primitives, boxed, collections, maps, etc.) and
+ * then sorts by field name within each category. Both reader and writer must apply this sorting to
+ * produce identical field ordering.
  */
 public class DescriptorGrouper {
 

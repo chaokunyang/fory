@@ -25,7 +25,7 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 
 /**
  * Serializers for {@link Optional}, {@link OptionalInt}, {@link OptionalLong} and {@link
@@ -131,7 +131,7 @@ public final class OptionalSerializers {
   }
 
   public static void registerDefaultSerializers(Fory fory) {
-    ClassResolver resolver = fory.getClassResolver();
+    TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(Optional.class, new OptionalSerializer(fory));
     resolver.registerInternalSerializer(OptionalInt.class, new OptionalIntSerializer(fory));
     resolver.registerInternalSerializer(OptionalLong.class, new OptionalLongSerializer(fory));

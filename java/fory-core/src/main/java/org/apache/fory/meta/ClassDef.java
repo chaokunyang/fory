@@ -45,6 +45,8 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.Types;
+import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 
 /**
@@ -160,6 +162,28 @@ public class ClassDef implements Serializable {
 
   public byte[] getEncoded() {
     return encoded;
+  }
+
+  public int getFieldCount() {
+    return fieldsInfo.size();
+  }
+
+  public boolean isNamed() {
+    return classSpec.typeId < 0 || Types.isNamedType(classSpec.typeId & 0xff);
+  }
+
+  public boolean isCompatible() {
+    if (classSpec.typeId < 0) {
+      return false;
+    }
+    int internalTypeId = classSpec.typeId & 0xff;
+    return internalTypeId == Types.COMPATIBLE_STRUCT
+        || internalTypeId == Types.NAMED_COMPATIBLE_STRUCT;
+  }
+
+  public int getUserTypeId() {
+    Preconditions.checkArgument(!isNamed(), "Named types don't have user type id");
+    return classSpec.typeId >>> 8;
   }
 
   @Override

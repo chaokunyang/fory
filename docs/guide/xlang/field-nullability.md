@@ -1,7 +1,7 @@
 ---
 title: Field Nullability
 sidebar_position: 40
-id: xlang_field_nullability
+id: field_nullability
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -247,5 +247,5 @@ Schema B: { name: String (nullable) }
 
 - [Reference Tracking](field-reference-tracking.md) - Shared and circular reference handling
 - [Serialization](serialization.md) - Basic cross-language serialization
-- [Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping) - Cross-language type mapping reference
-- [Xlang Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) - Binary protocol details
+- [Type Mapping](../../specification/xlang_type_mapping.md) - Cross-language type mapping reference
+- [Xlang Specification](../../specification/xlang_serialization_spec.md) - Binary protocol details

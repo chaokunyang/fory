@@ -1,7 +1,7 @@
 ---
 title: Serialization
 sidebar_position: 30
-id: xlang_serialization
+id: serialization
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -79,19 +79,19 @@ import forygo "github.com/apache/fory/go/fory"
 import "fmt"
 
 func main() {
-  list := []interface{}{true, false, "str", -1.1, 1, make([]int32, 10), make([]float64, 20)}
+  list := []any{true, false, "str", -1.1, 1, make([]int32, 10), make([]float64, 20)}
   fory := forygo.NewFory()
   bytes, err := fory.Marshal(list)
   if err != nil {
     panic(err)
   }
-  var newValue interface{}
+  var newValue any
   // bytes can be deserialized by other languages
   if err := fory.Unmarshal(bytes, &newValue); err != nil {
     panic(err)
   }
   fmt.Println(newValue)
-  dict := map[string]interface{}{
+  dict := map[string]any{
     "k1": "v1",
     "k2": list,
     "k3": -1,
@@ -271,9 +271,9 @@ import "fmt"
 
 func main() {
   type SomeClass1 struct {
-    F1  interface{}
+    F1  any
     F2  string
-    F3  []interface{}
+    F3  []any
     F4  map[int8]int32
     F5  int8
     F6  int16
@@ -286,7 +286,7 @@ func main() {
   }
 
   type SomeClass2 struct {
-    F1 interface{}
+    F1 any
     F2 map[int8]int32
   }
   fory := forygo.NewFory()
@@ -302,7 +302,7 @@ func main() {
   obj := &SomeClass1{}
   obj.F1 = obj1
   obj.F2 = "abc"
-  obj.F3 = []interface{}{"abc", "abc"}
+  obj.F3 = []any{"abc", "abc"}
   f4 := map[int8]int32{1: 2}
   obj.F4 = f4
   obj.F5 = fory.MaxInt8
@@ -317,7 +317,7 @@ func main() {
   if err != nil {
     panic(err)
   }
-  var newValue interface{}
+  var newValue any
   // bytes can be deserialized by other languages
   if err := fory.Unmarshal(bytes, &newValue); err != nil {
     panic(err)
@@ -493,7 +493,7 @@ func main() {
   if err != nil {
     panic(err)
   }
-  var newValue interface{}
+  var newValue any
   // bytes can be deserialized by other languages
   if err := fory.Unmarshal(bytes, &newValue); err != nil {
     panic(err)
@@ -537,6 +537,6 @@ Circular references cannot be implemented in Rust due to ownership restrictions.
 ## See Also
 
 - [Zero-Copy Serialization](zero-copy.md) - Out-of-band serialization for large data
-- [Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping) - Cross-language type mapping reference
+- [Type Mapping](../../specification/xlang_type_mapping.md) - Cross-language type mapping reference
 - [Getting Started](getting-started.md) - Installation and setup
-- [Xlang Serialization Specification](https://fory.apache.org/docs/next/specification/fory_xlang_serialization_spec) - Binary protocol details
+- [Xlang Serialization Specification](../../specification/xlang_serialization_spec.md) - Binary protocol details

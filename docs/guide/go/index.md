@@ -1,7 +1,7 @@
 ---
-title: Overview
+title: Go Serialization Guide
 sidebar_position: 0
-id: go_index
+id: index
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -34,6 +34,8 @@ Apache Fory Go is a high-performance, cross-language serialization library for G
 ## Quick Start
 
 ### Installation
+
+**Requirements**: Go 1.24 or later
 
 ```bash
 go get github.com/apache/fory/go/fory
@@ -157,6 +159,6 @@ See [Cross-Language Serialization](cross-language.md) for type mapping and compa
 
 ## Related Resources
 
-- [Xlang Serialization Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec)
-- [Cross-Language Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping)
+- [Xlang Serialization Specification](../../specification/xlang_serialization_spec.md)
+- [Cross-Language Type Mapping](../../specification/xlang_type_mapping.md)
 - [GitHub Repository](https://github.com/apache/fory)

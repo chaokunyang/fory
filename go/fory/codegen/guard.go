@@ -94,6 +94,18 @@ func formatFieldType(field FieldInfo) string {
 // formatGoType converts a Go type to its string representation
 func formatGoType(t types.Type) string {
 	switch type_ := t.(type) {
+	case *types.Alias:
+		// Handle alias types like 'any' (alias for interface{})
+		// Check if it's the 'any' alias specifically
+		if type_.Obj().Name() == "any" {
+			return "any"
+		}
+		// For other aliases, use the alias name if it's from universe scope,
+		// otherwise format the underlying type
+		if type_.Obj().Pkg() == nil {
+			return type_.Obj().Name()
+		}
+		return formatGoType(types.Unalias(t))
 	case *types.Basic:
 		return type_.Name()
 	case *types.Pointer:
@@ -124,7 +136,7 @@ func formatGoType(t types.Type) string {
 		return obj.Name()
 	case *types.Interface:
 		if type_.Empty() {
-			return "interface{}"
+			return "any"
 		}
 		// For non-empty interfaces, we need to format method signatures
 		var methods []string

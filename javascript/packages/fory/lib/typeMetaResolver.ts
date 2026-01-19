@@ -71,12 +71,15 @@ export class TypeMetaResolver {
 
   writeTypeMeta(typeInfo: StructTypeInfo, writer: BinaryWriter, bytes: Uint8Array) {
     if (typeInfo.dynamicTypeId !== -1) {
-      writer.varUInt32(((this.dynamicTypeId + 1) << 1) | 1);
+      // Reference to previously written type: (index << 1) | 1, LSB=1
+      writer.varUInt32((typeInfo.dynamicTypeId << 1) | 1);
     } else {
-      typeInfo.dynamicTypeId = this.dynamicTypeId;
+      // New type: index << 1, LSB=0, followed by TypeMeta bytes inline
+      const index = this.dynamicTypeId;
+      typeInfo.dynamicTypeId = index;
       this.dynamicTypeId += 1;
       this.disposeTypeInfo.push(typeInfo);
-      writer.varUInt32(bytes.byteLength << 1);
+      writer.varUInt32(index << 1);
       writer.buffer(bytes);
     }
   }
@@ -87,5 +90,6 @@ export class TypeMetaResolver {
     });
     this.disposeTypeInfo = [];
     this.dynamicTypeId = 0;
+    this.typeMeta = [];
   }
 }

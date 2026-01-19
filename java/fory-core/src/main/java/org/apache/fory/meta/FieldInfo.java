@@ -30,6 +30,7 @@ import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.Types;
+import org.apache.fory.util.StringUtils;
 
 /**
  * FieldInfo contains all necessary info of a field to execute serialization/deserialization logic.
@@ -46,7 +47,7 @@ public final class FieldInfo implements Serializable {
   /** Field ID for schema evolution, -1 means no field ID (use field name). */
   final short fieldId;
 
-  FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType) {
+  public FieldInfo(String definedClass, String fieldName, FieldTypes.FieldType fieldType) {
     this(definedClass, fieldName, fieldType, (short) -1);
   }
 
@@ -92,8 +93,8 @@ public final class FieldInfo implements Serializable {
     TypeRef<?> typeRef = fieldType.toTypeToken(resolver, declared);
     String typeName = fieldType.getTypeName(resolver, typeRef);
     if (fieldType instanceof FieldTypes.RegisteredFieldType) {
-      if (!Types.isPrimitiveType(fieldType.xtypeId)) {
-        typeName = String.valueOf(((FieldTypes.RegisteredFieldType) fieldType).getClassId());
+      if (!Types.isPrimitiveType(fieldType.typeId)) {
+        typeName = String.valueOf(((FieldTypes.RegisteredFieldType) fieldType).getTypeId());
       }
     }
     // Get nullable and trackingRef from remote FieldType - these are what the remote peer
@@ -129,8 +130,14 @@ public final class FieldInfo implements Serializable {
       boolean typeMismatch = !typeRef.equals(declared);
       if (typeMismatch) {
         if (!declared.getRawType().isAssignableFrom(rawType)) {
-          // boxed/primitive are handled automatically
-          if (!declared.unwrap().isPrimitive() || !typeRef.unwrap().isPrimitive()) {
+          // Check if both are primitives (or boxed primitives) of the same underlying type
+          // For example: Integer <-> int is OK, but Long -> int is NOT OK
+          Class<?> declaredPrimitive = declared.unwrap().getRawType();
+          Class<?> remotePrimitive = typeRef.unwrap().getRawType();
+          boolean bothPrimitives = declaredPrimitive.isPrimitive() && remotePrimitive.isPrimitive();
+          boolean samePrimitiveType = bothPrimitives && declaredPrimitive.equals(remotePrimitive);
+          // Set field to null if types are incompatible (not the same primitive type)
+          if (!samePrimitiveType) {
             builder.field(null);
           }
         }
@@ -178,7 +185,7 @@ public final class FieldInfo implements Serializable {
   public String toString() {
     return "FieldInfo{"
         + "fieldName='"
-        + fieldName
+        + StringUtils.lowerCamelToLowerUnderscore(fieldName)
         + '\''
         + ", definedClass='"
         + definedClass

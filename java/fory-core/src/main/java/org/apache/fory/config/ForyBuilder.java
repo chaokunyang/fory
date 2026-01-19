@@ -62,7 +62,6 @@ public final class ForyBuilder {
   Language language = Language.JAVA;
   boolean trackingRef = false;
   boolean copyRef = false;
-  boolean basicTypesRefIgnored = true;
   boolean stringRefIgnored = true;
   boolean timeRefIgnored = true;
   ClassLoader classLoader;
@@ -123,12 +122,6 @@ public final class ForyBuilder {
    */
   public ForyBuilder withRefCopy(boolean copyRef) {
     this.copyRef = copyRef;
-    return this;
-  }
-
-  /** Whether ignore basic types shared reference. */
-  public ForyBuilder ignoreBasicTypesRef(boolean ignoreBasicTypesRef) {
-    this.basicTypesRefIgnored = ignoreBasicTypesRef;
     return this;
   }
 

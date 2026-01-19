@@ -1,7 +1,7 @@
 ---
 title: Field Configuration
 sidebar_position: 5
-id: cpp_field_configuration
+id: field_configuration
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -125,6 +125,35 @@ FORY_STRUCT(Graph, name, left, right);
 
 **Valid for:** `std::shared_ptr<T>` only (requires shared ownership)
 
+### fory::dynamic\<V\>
+
+Controls whether type info is written for polymorphic smart pointer fields:
+
+- `fory::dynamic<true>`: Force type info to be written (enable runtime subtype support)
+- `fory::dynamic<false>`: Skip type info (use declared type directly, no dynamic dispatch)
+
+By default, Fory auto-detects polymorphism via `std::is_polymorphic<T>`. Use this tag to override:
+
+```cpp
+// Base class with virtual methods (detected as polymorphic by default)
+struct Animal {
+  virtual ~Animal() = default;
+  virtual std::string speak() const = 0;
+};
+
+struct Zoo {
+  // Auto: type info written because Animal has virtual methods
+  fory::field<std::shared_ptr<Animal>, 0, fory::nullable> animal;
+
+  // Force non-dynamic: skip type info even though Animal has virtual methods
+  // Use when you know the runtime type will always be exactly as declared
+  fory::field<std::shared_ptr<Animal>, 1, fory::nullable, fory::dynamic<false>> fixed_animal;
+};
+FORY_STRUCT(Zoo, animal, fixed_animal);
+```
+
+**Valid for:** `std::shared_ptr<T>`, `std::unique_ptr<T>`
+
 ### Combining Tags
 
 Multiple tags can be combined for shared pointers:
@@ -136,12 +165,12 @@ fory::field<std::shared_ptr<Node>, 0, fory::nullable, fory::ref> link;
 
 ## Type Rules
 
-| Type                 | Allowed Options   | Nullability                        |
-| -------------------- | ----------------- | ---------------------------------- |
-| Primitives, strings  | None              | Use `std::optional<T>` if nullable |
-| `std::optional<T>`   | None              | Inherently nullable                |
-| `std::shared_ptr<T>` | `nullable`, `ref` | Non-null by default                |
-| `std::unique_ptr<T>` | `nullable`        | Non-null by default                |
+| Type                 | Allowed Options                 | Nullability                        |
+| -------------------- | ------------------------------- | ---------------------------------- |
+| Primitives, strings  | None                            | Use `std::optional<T>` if nullable |
+| `std::optional<T>`   | None                            | Inherently nullable                |
+| `std::shared_ptr<T>` | `nullable`, `ref`, `dynamic<V>` | Non-null by default                |
+| `std::unique_ptr<T>` | `nullable`, `dynamic<V>`        | Non-null by default                |
 
 ## Complete Example
 
@@ -316,7 +345,8 @@ fory::F(0)                    // Create with field ID 0
     .varint()                 // Use variable-length encoding
     .fixed()                  // Use fixed-size encoding
     .tagged()                 // Use tagged encoding
-    .monomorphic()            // Mark as monomorphic type
+    .dynamic(false)           // Skip type info (no dynamic dispatch)
+    .dynamic(true)            // Force type info (enable dynamic dispatch)
     .compress(false)          // Disable compression
 ```
 
@@ -475,15 +505,16 @@ FORY_FIELD_CONFIG(DataV2,
 
 ### FORY_FIELD_CONFIG Options Reference
 
-| Method           | Description                                 | Valid For                  |
-| ---------------- | ------------------------------------------- | -------------------------- |
-| `.nullable()`    | Mark field as nullable                      | Smart pointers, primitives |
-| `.ref()`         | Enable reference tracking                   | `std::shared_ptr` only     |
-| `.monomorphic()` | Mark pointer as always pointing to one type | Smart pointers             |
-| `.varint()`      | Use variable-length encoding                | `uint32_t`, `uint64_t`     |
-| `.fixed()`       | Use fixed-size encoding                     | `uint32_t`, `uint64_t`     |
-| `.tagged()`      | Use tagged hybrid encoding                  | `uint64_t` only            |
-| `.compress(v)`   | Enable/disable field compression            | All types                  |
+| Method            | Description                                      | Valid For                  |
+| ----------------- | ------------------------------------------------ | -------------------------- |
+| `.nullable()`     | Mark field as nullable                           | Smart pointers, primitives |
+| `.ref()`          | Enable reference tracking                        | `std::shared_ptr` only     |
+| `.dynamic(true)`  | Force type info to be written (dynamic dispatch) | Smart pointers             |
+| `.dynamic(false)` | Skip type info (use declared type directly)      | Smart pointers             |
+| `.varint()`       | Use variable-length encoding                     | `uint32_t`, `uint64_t`     |
+| `.fixed()`        | Use fixed-size encoding                          | `uint32_t`, `uint64_t`     |
+| `.tagged()`       | Use tagged hybrid encoding                       | `uint64_t` only            |
+| `.compress(v)`    | Enable/disable field compression                 | All types                  |
 
 ### Comparing Field Configuration Macros
 
@@ -495,6 +526,44 @@ FORY_FIELD_CONFIG(DataV2,
 | **Compile-time verify** | Yes                   | Limited           | Yes (member pointers)     |
 | **Cross-lang compat**   | Limited               | Limited           | Full                      |
 | **Recommended for**     | Simple structs        | Third-party types | Complex/xlang structs     |
+
+## Default Values
+
+- **Nullable**: Only `std::optional<T>` is nullable by default; all other types (including `std::shared_ptr`) are non-nullable
+- **Ref tracking**: Disabled by default for all types (including `std::shared_ptr`)
+
+You **need to configure fields** when:
+
+- A field can be null (use `std::optional<T>` or mark with `nullable()`)
+- A field needs reference tracking for shared/circular objects (use `ref()`)
+- Integer types need specific encoding for cross-language compatibility
+- You want to reduce metadata size (use field IDs)
+
+```cpp
+// Xlang mode: explicit configuration required
+struct User {
+    std::string name;                              // Non-nullable by default
+    std::optional<std::string> email;              // Nullable (std::optional)
+    std::shared_ptr<User> friend_ptr;              // Ref tracking by default
+};
+
+FORY_STRUCT(User, name, email, friend_ptr);
+
+FORY_FIELD_CONFIG(User,
+    (name, fory::F(0)),
+    (email, fory::F(1)),                           // nullable implicit for optional
+    (friend_ptr, fory::F(2).nullable().ref())      // explicit nullable + ref
+);
+```
+
+### Default Values Summary
+
+| Type                 | Default Nullable | Default Ref Tracking |
+| -------------------- | ---------------- | -------------------- |
+| Primitives, `string` | `false`          | `false`              |
+| `std::optional<T>`   | `true`           | `false`              |
+| `std::shared_ptr<T>` | `false`          | `true`               |
+| `std::unique_ptr<T>` | `false`          | `false`              |
 
 ## Related Topics
 

@@ -76,13 +76,14 @@ public class ClassDefEncoder {
     descriptorGrouper
         .getBuildInDescriptors()
         .forEach(descriptor -> fields.add(descriptor.getField()));
-    descriptorGrouper
-        .getOtherDescriptors()
-        .forEach(descriptor -> fields.add(descriptor.getField()));
+    // Order must match ObjectSerializer serialization order: buildIn, container, other
     descriptorGrouper
         .getCollectionDescriptors()
         .forEach(descriptor -> fields.add(descriptor.getField()));
     descriptorGrouper.getMapDescriptors().forEach(descriptor -> fields.add(descriptor.getField()));
+    descriptorGrouper
+        .getOtherDescriptors()
+        .forEach(descriptor -> fields.add(descriptor.getField()));
     return fields;
   }
 
@@ -136,7 +137,7 @@ public class ClassDefEncoder {
         classResolver, type, buildFieldsInfo(classResolver, fields), hasFieldsMeta);
   }
 
-  static ClassDef buildClassDefWithFieldInfos(
+  public static ClassDef buildClassDefWithFieldInfos(
       ClassResolver classResolver,
       Class<?> type,
       List<FieldInfo> fieldInfos,
@@ -146,12 +147,10 @@ public class ClassDefEncoder {
     classLayers.values().forEach(fieldInfos::addAll);
     MemoryBuffer encodeClassDef = encodeClassDef(classResolver, type, classLayers, hasFieldsMeta);
     byte[] classDefBytes = encodeClassDef.getBytes(0, encodeClassDef.writerIndex());
+    int typeId = classResolver.getTypeIdForClassDef(type);
+    ClassSpec classSpec = new ClassSpec(type, typeId);
     return new ClassDef(
-        Encoders.buildClassSpec(type),
-        fieldInfos,
-        hasFieldsMeta,
-        encodeClassDef.getInt64(0),
-        classDefBytes);
+        classSpec, fieldInfos, hasFieldsMeta, encodeClassDef.getInt64(0), classDefBytes);
   }
 
   // see spec documentation: docs/specification/java_serialization_spec.md
@@ -179,7 +178,7 @@ public class ClassDefEncoder {
       if (classResolver.isRegisteredById(currentType)) {
         currentClassHeader |= 1;
         classDefBuf.writeVarUint32Small7(currentClassHeader);
-        classDefBuf.writeVarUint32Small7(classResolver.getRegisteredClassId(currentType));
+        classDefBuf.writeVarUint32Small7(classResolver.getTypeIdForClassDef(currentType));
       } else {
         classDefBuf.writeVarUint32Small7(currentClassHeader);
         String ns, typename;

@@ -60,7 +60,7 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 			serializer := ctx.TypeResolver().getSerializerByTypeID(wroteTypeID)
 			if serializer != nil {
 				// Use the serializer to read and discard the value
-				var dummy interface{}
+				var dummy any
 				dummyVal := reflect.ValueOf(&dummy).Elem()
 				serializer.Read(ctx, RefModeNone, false, false, dummyVal)
 				return
@@ -75,7 +75,7 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID, err)
 			if typeInfo.Serializer != nil {
 				// Use the serializer to read and discard the value
-				var dummy interface{}
+				var dummy any
 				dummyVal := reflect.ValueOf(&dummy).Elem()
 				typeInfo.Serializer.Read(ctx, RefModeNone, false, false, dummyVal)
 				return
@@ -155,33 +155,10 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 			nullable:  true,
 		}
 	case COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT, STRUCT, NAMED_STRUCT:
-		// For struct types, read meta_index to get type_info
-		if ctx.TypeResolver().metaShareEnabled() {
-			metaIndex := ctx.buffer.ReadVaruint32(err)
-			if ctx.HasError() {
-				return
-			}
-			context := ctx.TypeResolver().fory.MetaContext()
-			if context == nil || int(metaIndex) >= len(context.readTypeInfos) {
-				ctx.SetError(DeserializationErrorf("invalid meta index %d", metaIndex))
-				return
-			}
-			typeInfo = context.readTypeInfos[metaIndex]
-		} else {
-			// Without share_meta, read namespace and type_name
-			nsBytes, nsErr := ctx.TypeResolver().metaStringResolver.ReadMetaStringBytes(ctx.buffer, err)
-			if nsErr != nil {
-				ctx.SetError(FromError(nsErr))
-				return
-			}
-			typeNameBytes, tnErr := ctx.TypeResolver().metaStringResolver.ReadMetaStringBytes(ctx.buffer, err)
-			if tnErr != nil {
-				ctx.SetError(FromError(tnErr))
-				return
-			}
-			// We don't have the actual type registered, so we'll have to skip fields blindly
-			_ = nsBytes
-			_ = typeNameBytes
+		// Read type info using the shared meta reader when enabled.
+		typeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, err)
+		if ctx.HasError() {
+			return
 		}
 		fieldDef = FieldDef{
 			fieldType: NewSimpleFieldType(TypeId(typeID)),
@@ -461,9 +438,6 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 // skipStruct skips a struct value using TypeInfo
 // Uses context error state for deferred error checking.
 func skipStruct(ctx *ReadContext, info *TypeInfo) {
-	err := ctx.Err()
-	// Read struct hash (4 bytes)
-	_ = ctx.buffer.ReadInt32(err)
 	if ctx.HasError() {
 		return
 	}
@@ -555,7 +529,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 			if serializer != nil {
 				// Use the serializer to read and discard the value
 				// Create a dummy value to read into
-				var dummy interface{}
+				var dummy any
 				dummyVal := reflect.ValueOf(&dummy).Elem()
 				serializer.Read(ctx, RefModeNone, false, false, dummyVal)
 				return

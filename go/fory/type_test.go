@@ -39,7 +39,7 @@ func TestTypeResolver(t *testing.T) {
 		{reflect.TypeOf((*int)(nil)), "*int"},
 		{reflect.TypeOf((*[10]int)(nil)), "*[10]int"},
 		{reflect.TypeOf((*[10]int)(nil)).Elem(), "[10]int"},
-		{reflect.TypeOf((*[]map[string][]map[string]*interface{})(nil)).Elem(),
+		{reflect.TypeOf((*[]map[string][]map[string]*any)(nil)).Elem(),
 			"[]map[string][]map[string]*interface {}"},
 		{reflect.TypeOf((*A)(nil)), "*@example.A"},
 		{reflect.TypeOf((*A)(nil)).Elem(), "@example.A"},

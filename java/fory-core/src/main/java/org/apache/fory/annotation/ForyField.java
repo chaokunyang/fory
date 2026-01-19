@@ -29,7 +29,7 @@ import java.lang.annotation.Target;
 public @interface ForyField {
 
   /** Controls polymorphism behavior for struct fields in cross-language serialization. */
-  enum Morphic {
+  enum Dynamic {
     /**
      * Auto-detect based on declared type (default).
      *
@@ -42,10 +42,10 @@ public @interface ForyField {
     AUTO,
 
     /** Treat as final/sealed - no type info written, uses declared type's serializer directly. */
-    FINAL,
+    FALSE,
 
     /** Treat as polymorphic - type info written to support subtypes at runtime. */
-    POLYMORPHIC
+    TRUE
   }
 
   /**
@@ -80,13 +80,13 @@ public @interface ForyField {
    * Controls polymorphism behavior for this field in cross-language serialization.
    *
    * <ul>
-   *   <li>{@link Morphic#AUTO} (default): Interface/abstract types are polymorphic, concrete types
-   *       are final
-   *   <li>{@link Morphic#FINAL}: No type info written, uses declared type's serializer
-   *   <li>{@link Morphic#POLYMORPHIC}: Type info written to support runtime subtypes
+   *   <li>{@link Dynamic#AUTO} (default): Interface/abstract types are dynamic(polymorphic),
+   *       concrete types are not dynamic
+   *   <li>{@link Dynamic#FALSE}: No type info written, uses declared type's serializer
+   *   <li>{@link Dynamic#TRUE}: Type info written to support runtime subtypes
    * </ul>
    *
    * <p>Default: AUTO (concrete struct types are final, interface/abstract are polymorphic)
    */
-  Morphic morphic() default Morphic.AUTO;
+  Dynamic dynamic() default Dynamic.AUTO;
 }

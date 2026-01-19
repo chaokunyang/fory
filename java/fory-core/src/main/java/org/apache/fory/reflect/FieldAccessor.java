@@ -83,7 +83,9 @@ public abstract class FieldAccessor {
   }
 
   public final void putObject(Object targetObject, Object object) {
-    if (fieldOffset != -1) {
+    // For primitive fields, we must use set() which calls the correct Platform.putXxx method.
+    // Platform.putObject writes object references, not primitive values.
+    if (fieldOffset != -1 && !field.getType().isPrimitive()) {
       Platform.putObject(targetObject, fieldOffset, object);
     } else {
       set(targetObject, object);
@@ -91,7 +93,9 @@ public abstract class FieldAccessor {
   }
 
   public final Object getObject(Object targetObject) {
-    if (fieldOffset != -1) {
+    // For primitive fields, we must use get() which calls the correct Platform.getXxx method
+    // and returns the boxed value. Platform.getObject interprets primitive bytes as object refs.
+    if (fieldOffset != -1 && !field.getType().isPrimitive()) {
       return Platform.getObject(targetObject, fieldOffset);
     } else {
       return get(targetObject);
@@ -497,14 +501,14 @@ public abstract class FieldAccessor {
     }
   }
 
-  static class GeneratedAccessor extends FieldAccessor {
+  static final class GeneratedAccessor extends FieldAccessor {
     private static final ClassValueCache<ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>>>
         cache = ClassValueCache.newClassKeyCache(8);
 
     private final MethodHandle getter;
     private final MethodHandle setter;
 
-    protected GeneratedAccessor(Field field) {
+    GeneratedAccessor(Field field) {
       super(field, -1);
       ConcurrentMap<String, Tuple2<MethodHandle, MethodHandle>> map =
           cache.get(field.getDeclaringClass(), ConcurrentHashMap::new);

@@ -1,7 +1,7 @@
 ---
-title: Struct Tags
+title: Field Configuration
 sidebar_position: 60
-id: go_struct_tags
+id: struct_tags
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -281,6 +281,44 @@ f := fory.New()
 err := f.RegisterStruct(BadStruct{}, 1)
 // Error: ErrKindInvalidTag
 ```
+
+## Native Mode vs Xlang Mode
+
+Field configuration behaves differently depending on the serialization mode:
+
+**Native Mode**:
+
+- **Nullable**: Pointer, slice, map, and interface types are nullable by default
+- **Ref tracking**: Disabled by default (`ref` tag not set)
+
+**Xlang Mode**:
+
+- **Nullable**: Only pointer types are nullable by default (slices and maps are NOT nullable)
+- **Ref tracking**: Disabled by default (`ref` tag not set)
+
+You **need to configure fields** when:
+
+- A field can be nil (use pointer types like `*string`, `*int32`)
+- A field needs reference tracking for shared/circular objects (use `fory:"ref"`)
+- You want to reduce metadata size (use field IDs with `fory:"id=N"`)
+
+```go
+// Xlang mode: explicit configuration required
+type User struct {
+    ID    int64   `fory:"id=0"`
+    Name  string  `fory:"id=1"`
+    Email *string `fory:"id=2"`           // Pointer type for nullable
+    Friend *User  `fory:"id=3,ref"`       // Must declare ref for shared objects
+}
+```
+
+### Default Values Summary
+
+| Option     | Default | How to Enable            |
+| ---------- | ------- | ------------------------ |
+| `nullable` | `false` | Use pointer types (`*T`) |
+| `ref`      | `false` | Add `fory:"ref"` tag     |
+| `id`       | `-1`    | Add `fory:"id=N"` tag    |
 
 ## Best Practices
 

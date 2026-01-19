@@ -32,7 +32,6 @@ import java.io.ObjectStreamField;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.lang.invoke.MethodHandles;
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -41,12 +40,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
+import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.logging.Logger;
@@ -54,10 +53,17 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassDef;
+import org.apache.fory.meta.ClassDefEncoder;
+import org.apache.fory.meta.FieldInfo;
+import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.resolver.ClassInfo;
+import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
@@ -80,6 +86,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   private static final Logger LOG = LoggerFactory.getLogger(ObjectStreamSerializer.class);
 
   private final SlotInfo[] slotsInfos;
+  // Instance-level cache: ClassDef ID -> ClassInfo (shared across all slots)
+  private final LongMap<ClassInfo> classDefIdToClassInfo = new LongMap<>(4, 0.4f);
 
   /**
    * Interface for slot information used in ObjectStreamSerializer. This allows both full SlotsInfo
@@ -91,6 +99,27 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     StreamClassInfo getStreamClassInfo();
 
     MetaSharedLayerSerializerBase getSlotsSerializer();
+
+    /**
+     * Read the layer ClassDef from buffer (if meta share enabled) and return the appropriate
+     * serializer. When meta share is enabled, reads the ClassDef from buffer, caches the serializer
+     * by ClassDef ID, and returns it. When meta share is disabled, returns the default slots
+     * serializer. Also stores the returned serializer for later retrieval via {@link
+     * #getCurrentReadSerializer()}.
+     *
+     * @param fory the Fory instance
+     * @param buffer the memory buffer to read ClassDef from
+     * @return the serializer to use for reading
+     */
+    MetaSharedLayerSerializerBase getReadSerializer(Fory fory, MemoryBuffer buffer);
+
+    /**
+     * Get the current read serializer (last returned by {@link #getReadSerializer}). This is used
+     * by defaultReadObject() to get the serializer without reading from buffer again.
+     *
+     * @return the current read serializer
+     */
+    MetaSharedLayerSerializerBase getCurrentReadSerializer();
 
     ForyObjectOutputStream getObjectOutputStream();
 
@@ -182,10 +211,16 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         // create a classinfo to avoid null class bytes when class id is a
         // replacement id.
         classResolver.writeClassInternal(buffer, slotsInfo.getCls());
+        // Write layer class meta first (if meta share enabled)
+        MetaSharedLayerSerializerBase serializer = slotsInfo.getSlotsSerializer();
+        if (fory.getConfig().isMetaShareEnabled()) {
+          serializer.writeLayerClassMeta(buffer);
+        }
         StreamClassInfo streamClassInfo = slotsInfo.getStreamClassInfo();
         Method writeObjectMethod = streamClassInfo.writeObjectMethod;
         if (writeObjectMethod == null) {
-          slotsInfo.getSlotsSerializer().write(buffer, value);
+          // No custom writeObject - write fields directly
+          serializer.writeFieldsOnly(buffer, value);
         } else {
           ForyObjectOutputStream objectOutputStream = slotsInfo.getObjectOutputStream();
           Object oldObject = objectOutputStream.targetObject;
@@ -221,36 +256,67 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     fory.getRefResolver().reference(obj);
     int numClasses = buffer.readInt16();
     int slotIndex = 0;
+
     try {
       TreeMap<Integer, ObjectInputValidation> callbacks = new TreeMap<>(Collections.reverseOrder());
       for (int i = 0; i < numClasses; i++) {
         Class<?> currentClass = classResolver.readClassInternal(buffer);
-        SlotInfo slotsInfo = slotsInfos[slotIndex++];
-        StreamClassInfo streamClassInfo = slotsInfo.getStreamClassInfo();
-        while (currentClass != slotsInfo.getCls()) {
-          // the receiver's version extends classes that are not extended by the sender's version.
-          Method readObjectNoData = streamClassInfo.readObjectNoData;
-          if (readObjectNoData != null) {
-            if (streamClassInfo.readObjectNoDataFunc != null) {
-              streamClassInfo.readObjectNoDataFunc.accept(obj);
-            } else {
-              readObjectNoData.invoke(obj);
+
+        // Find the matching local slot for sender's class
+        SlotInfo matchedSlot = null;
+        while (slotIndex < slotsInfos.length) {
+          SlotInfo candidateSlot = slotsInfos[slotIndex];
+          if (currentClass == candidateSlot.getCls()) {
+            // Found matching slot
+            matchedSlot = candidateSlot;
+            slotIndex++;
+            break;
+          } else if (currentClass.isAssignableFrom(candidateSlot.getCls())) {
+            // Sender's class is an ancestor of candidate's class but they don't match.
+            // This means sender has a layer (currentClass) that receiver doesn't have.
+            // We'll skip sender's data for this layer below.
+            break;
+          } else {
+            // Receiver has an extra layer that sender doesn't have - call readObjectNoData
+            StreamClassInfo streamClassInfo = candidateSlot.getStreamClassInfo();
+            Method readObjectNoData = streamClassInfo.readObjectNoData;
+            if (readObjectNoData != null) {
+              if (streamClassInfo.readObjectNoDataFunc != null) {
+                streamClassInfo.readObjectNoDataFunc.accept(obj);
+              } else {
+                readObjectNoData.invoke(obj);
+              }
             }
+            slotIndex++;
           }
-          slotsInfo = slotsInfos[slotIndex++];
         }
+
+        if (matchedSlot == null) {
+          // Sender has a layer that receiver doesn't have - read ClassDef and skip the data
+          skipUnknownLayerData(buffer, currentClass);
+          continue;
+        }
+
+        // Read data for the matched layer - getReadSerializer reads ClassDef from buffer
+        // This must be called exactly once per layer to read the ClassDef
+        matchedSlot.getReadSerializer(fory, buffer);
+
+        StreamClassInfo streamClassInfo = matchedSlot.getStreamClassInfo();
         Method readObjectMethod = streamClassInfo.readObjectMethod;
+
         if (readObjectMethod == null) {
-          slotsInfo.getSlotsSerializer().readAndSetFields(buffer, obj);
+          // For standard field serialization - use getCurrentReadSerializer()
+          matchedSlot.getCurrentReadSerializer().readAndSetFields(buffer, obj);
         } else {
-          ForyObjectInputStream objectInputStream = slotsInfo.getObjectInputStream();
+          // For custom readObject, it handles its own format
+          ForyObjectInputStream objectInputStream = matchedSlot.getObjectInputStream();
           MemoryBuffer oldBuffer = objectInputStream.buffer;
           Object oldObject = objectInputStream.targetObject;
           ForyObjectInputStream.GetFieldImpl oldGetField = objectInputStream.getField;
           ForyObjectInputStream.GetFieldImpl getField =
-              (ForyObjectInputStream.GetFieldImpl) slotsInfo.getFieldPool().popOrNull();
+              (ForyObjectInputStream.GetFieldImpl) matchedSlot.getFieldPool().popOrNull();
           if (getField == null) {
-            getField = new ForyObjectInputStream.GetFieldImpl(slotsInfo);
+            getField = new ForyObjectInputStream.GetFieldImpl(matchedSlot);
           }
           boolean fieldsRead = objectInputStream.fieldsRead;
           try {
@@ -269,12 +335,27 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
             objectInputStream.buffer = oldBuffer;
             objectInputStream.targetObject = oldObject;
             objectInputStream.getField = oldGetField;
-            slotsInfo.getFieldPool().add(getField);
+            matchedSlot.getFieldPool().add(getField);
             objectInputStream.callbacks = null;
             Arrays.fill(getField.vals, ForyObjectInputStream.NO_VALUE_STUB);
           }
         }
       }
+
+      // Handle any remaining receiver-only layers at the end
+      while (slotIndex < slotsInfos.length) {
+        SlotInfo remainingSlot = slotsInfos[slotIndex++];
+        StreamClassInfo streamClassInfo = remainingSlot.getStreamClassInfo();
+        Method readObjectNoData = streamClassInfo.readObjectNoData;
+        if (readObjectNoData != null) {
+          if (streamClassInfo.readObjectNoDataFunc != null) {
+            streamClassInfo.readObjectNoDataFunc.accept(obj);
+          } else {
+            readObjectNoData.invoke(obj);
+          }
+        }
+      }
+
       for (ObjectInputValidation validation : callbacks.values()) {
         validation.validateObject();
       }
@@ -282,6 +363,69 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       throwSerializationException(type, e);
     }
     return obj;
+  }
+
+  /**
+   * Skip data for a layer that exists in sender but not in receiver. This is needed for schema
+   * evolution when sender's class hierarchy has layers that receiver doesn't have.
+   *
+   * @param buffer the memory buffer to read from
+   * @param senderClass the class from sender that receiver doesn't have
+   */
+  private void skipUnknownLayerData(MemoryBuffer buffer, Class<?> senderClass) {
+    // For layers without custom writeObject, we can skip using a serializer created from the
+    // ClassDef. Note: For layers with custom writeObject, the sender would have that class
+    // locally, and we'd have a matching slot. This method is only called when sender has a
+    // layer the receiver doesn't have.
+
+    if (!fory.getConfig().isMetaShareEnabled()) {
+      throw new UnsupportedOperationException(
+          "Cannot skip unknown layer data without meta share enabled for class: "
+              + senderClass.getName()
+              + ". Schema evolution with removed parent classes requires meta share.");
+    }
+
+    // Read ClassInfo from buffer (maintains index alignment with readClassInfos)
+    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
+    if (metaContext == null) {
+      throw new IllegalStateException("MetaContext is null but meta share is enabled");
+    }
+    int indexMarker = buffer.readVarUint32Small14();
+    boolean isRef = (indexMarker & 1) == 1;
+    int index = indexMarker >>> 1;
+    ClassInfo classInfo;
+    if (isRef) {
+      // Reference to previously read ClassInfo
+      classInfo = metaContext.readClassInfos.get(index);
+    } else {
+      // New ClassDef in stream - read ID first to check cache
+      long classDefId = buffer.readInt64();
+      classInfo = classDefIdToClassInfo.get(classDefId);
+      if (classInfo != null) {
+        // Already cached - skip the ClassDef bytes, reuse existing ClassInfo
+        ClassDef.skipClassDef(buffer, classDefId);
+      } else {
+        // Not cached - read full ClassDef and create ClassInfo
+        ClassDef classDef = ClassDef.readClassDef(fory, buffer, classDefId);
+        classInfo = new ClassInfo(senderClass, classDef);
+        classDefIdToClassInfo.put(classDefId, classInfo);
+      }
+      metaContext.readClassInfos.add(classInfo);
+    }
+
+    // Get or create serializer from ClassInfo to skip the fields
+    MetaSharedLayerSerializerBase skipSerializer =
+        (MetaSharedLayerSerializerBase) classInfo.getSerializer();
+    if (skipSerializer == null) {
+      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, senderClass, 0);
+      MetaSharedLayerSerializer<?> newSerializer =
+          new MetaSharedLayerSerializer(
+              fory, senderClass, classInfo.getClassDef(), layerMarkerClass);
+      classInfo.setSerializer(newSerializer);
+      skipSerializer = newSerializer;
+    }
+    SerializationBinding binding = SerializationBinding.createBinding(fory);
+    ((MetaSharedLayerSerializer<?>) skipSerializer).skipFields(buffer, binding);
   }
 
   private static void throwUnsupportedEncodingException(Class<?> cls)
@@ -328,6 +472,68 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         }
       }
     }
+  }
+
+  /**
+   * Build a list of FieldInfo from ObjectStreamClass fields (serialPersistentFields). This creates
+   * FieldInfo objects that represent the serialization contract defined by the class, which may
+   * differ from the actual class fields when serialPersistentFields is defined.
+   *
+   * @param fory the Fory instance
+   * @param objectStreamClass the ObjectStreamClass for the type
+   * @param type the class type
+   * @return list of FieldInfo representing the serialization fields
+   */
+  private static List<FieldInfo> buildFieldInfoFromObjectStreamClass(
+      Fory fory, ObjectStreamClass objectStreamClass, Class<?> type) {
+    ObjectStreamField[] streamFields = objectStreamClass.getFields();
+    List<FieldInfo> fieldInfos = new ArrayList<>(streamFields.length);
+    String className = type.getName();
+
+    for (ObjectStreamField streamField : streamFields) {
+      Class<?> fieldType = streamField.getType();
+      String fieldName = streamField.getName();
+
+      // Build FieldType based on the field's declared type
+      FieldTypes.FieldType fieldTypeInfo = buildFieldTypeFromClass(fory, fieldType);
+
+      fieldInfos.add(new FieldInfo(className, fieldName, fieldTypeInfo));
+    }
+    return fieldInfos;
+  }
+
+  /**
+   * Build a FieldType from a Class. This is a simplified version of FieldTypes.buildFieldType that
+   * works with Class instead of Field, used for ObjectStreamField which only provides type info.
+   */
+  private static FieldTypes.FieldType buildFieldTypeFromClass(Fory fory, Class<?> fieldType) {
+    // For primitives, use RegisteredFieldType
+    if (fieldType.isPrimitive()) {
+      int typeId = Types.getTypeId(fory, fieldType);
+      return new FieldTypes.RegisteredFieldType(false, false, typeId);
+    }
+
+    // For boxed primitives
+    Class<?> unwrapped = TypeUtils.unwrap(fieldType);
+    if (unwrapped.isPrimitive()) {
+      int typeId = Types.getTypeId(fory, unwrapped);
+      return new FieldTypes.RegisteredFieldType(true, true, typeId);
+    }
+
+    // For registered types
+    if (fory.getClassResolver().isRegisteredById(fieldType)) {
+      int typeId = fory.getClassResolver().getTypeIdForClassDef(fieldType);
+      return new FieldTypes.RegisteredFieldType(true, true, typeId);
+    }
+
+    // For enums
+    if (fieldType.isEnum()) {
+      return new FieldTypes.EnumFieldType(true, -1);
+    }
+
+    // For arrays, collections, maps - use ObjectFieldType as a fallback
+    // The actual type handling will be done during serialization
+    return new FieldTypes.ObjectFieldType(-1, true, true);
   }
 
   /**
@@ -398,7 +604,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    * all the details of serializing and deserializing a single class in the class hierarchy using
    * Java's ObjectInputStream/ObjectOutputStream protocol.
    */
-  private static class SlotsInfo implements SlotInfo {
+  private class SlotsInfo implements SlotInfo {
     private final Class<?> cls;
     private final StreamClassInfo streamClassInfo;
     // mark non-final for async-jit to update it to jit-serializer.
@@ -409,22 +615,35 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final ForyObjectOutputStream objectOutputStream;
     private final ForyObjectInputStream objectInputStream;
     private final ObjectArray getFieldPool;
+    // Current read serializer (set by getReadSerializer, used by getCurrentReadSerializer)
+    private MetaSharedLayerSerializerBase currentReadSerializer;
 
     public SlotsInfo(Fory fory, Class<?> type) {
       this.cls = type;
       ObjectStreamClass objectStreamClass = safeObjectStreamClassLookup(type);
       streamClassInfo = STREAM_CLASS_INFO_CACHE.get(type);
 
-      // Build single-layer ClassDef (resolveParent=false)
-      ClassDef layerClassDef = fory.getClassResolver().getTypeDef(type, false);
+      // Build ClassDef from ObjectStreamClass fields (handles serialPersistentFields).
+      // This ensures the serializer uses the same field layout as defined by
+      // serialPersistentFields (if present) rather than actual class fields.
+      ClassDef layerClassDef;
+      if (objectStreamClass != null) {
+        List<FieldInfo> fieldInfos =
+            buildFieldInfoFromObjectStreamClass(fory, objectStreamClass, type);
+        layerClassDef =
+            ClassDefEncoder.buildClassDefWithFieldInfos(
+                fory.getClassResolver(), type, fieldInfos, true);
+      } else {
+        // Fallback when ObjectStreamClass is not available (e.g., GraalVM native image)
+        layerClassDef = fory.getClassResolver().getTypeDef(type, false);
+      }
       // Generate marker class for this layer. Use 0 as layer index since each class
       // has its own SlotsInfo, and the (class, 0) pair is unique for each class.
       Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
 
       // Create interpreter-mode serializer first
-      MetaSharedLayerSerializer interpreterSerializer =
+      this.slotsSerializer =
           new MetaSharedLayerSerializer(fory, type, layerClassDef, layerMarkerClass);
-      this.slotsSerializer = interpreterSerializer;
 
       // Register JIT callback to replace with JIT serializer when ready
       if (fory.getConfig().isCodeGenEnabled()) {
@@ -437,7 +656,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
                         type, fory, layerClassDef, layerMarkerClass),
                 c ->
                     thisInfo.slotsSerializer =
-                        (MetaSharedLayerSerializerBase) Serializers.newSerializer(fory, type, c));
+                        (MetaSharedLayerSerializerBase)
+                            Serializers.newSerializer(fory, type, (Class<? extends Serializer>) c));
       }
 
       // In GraalVM, ensure serializers are generated for all field types at build time
@@ -446,36 +666,16 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         ensureFieldSerializersGenerated(fory, layerClassDef, type);
       }
 
+      // Build fieldIndexMap and putFieldTypes from serializer's field order.
+      // This ensures putFields/writeFields API uses the same order as the serializer
+      // (buildIn, container, other groups), not ObjectStreamClass order.
       fieldIndexMap = new ObjectIntMap<>(4, 0.4f);
-      // Build field list from ObjectStreamClass or class fields
-      List<PutFieldInfo> putFieldInfos = new ArrayList<>();
-      if (objectStreamClass != null) {
-        for (ObjectStreamField serialField : objectStreamClass.getFields()) {
-          putFieldInfos.add(new PutFieldInfo(serialField.getName(), serialField.getType(), type));
-        }
-      } else {
-        // Fallback when ObjectStreamClass is not available
-        Collection<Descriptor> descriptors =
-            layerClassDef.getDescriptors(fory.getClassResolver(), type);
-        for (Descriptor descriptor : descriptors) {
-          Field field = descriptor.getField();
-          if (field != null) {
-            putFieldInfos.add(new PutFieldInfo(field.getName(), field.getType(), type));
-          }
-        }
-      }
-
       if (streamClassInfo != null
           && (streamClassInfo.writeObjectMethod != null
               || streamClassInfo.readObjectMethod != null)) {
-        this.numPutFields = putFieldInfos.size();
+        this.numPutFields = slotsSerializer.getNumFields();
         this.putFieldTypes = new Class<?>[numPutFields];
-        AtomicInteger idx = new AtomicInteger(0);
-        for (PutFieldInfo fieldInfo : putFieldInfos) {
-          int index = idx.getAndIncrement();
-          fieldIndexMap.put(fieldInfo.name, index);
-          putFieldTypes[index] = fieldInfo.type;
-        }
+        slotsSerializer.populateFieldInfo(fieldIndexMap, putFieldTypes);
       } else {
         this.numPutFields = 0;
         this.putFieldTypes = null;
@@ -550,21 +750,74 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public MetaSharedLayerSerializerBase getReadSerializer(Fory fory, MemoryBuffer buffer) {
+      MetaSharedLayerSerializerBase result;
+      if (!fory.getConfig().isMetaShareEnabled()) {
+        // Meta share not enabled - use the default slots serializer
+        result = slotsSerializer;
+      } else {
+        // Read ClassInfo from buffer (creates new or returns existing)
+        ClassInfo classInfo = readLayerClassInfo(fory, buffer);
+        if (classInfo == null) {
+          result = slotsSerializer;
+        } else {
+          // Get or create serializer from ClassInfo
+          Serializer<?> serializer = classInfo.getSerializer();
+          if (serializer != null) {
+            result = (MetaSharedLayerSerializerBase) serializer;
+          } else {
+            // Create a new serializer based on the ClassDef from stream
+            Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, cls, 0);
+            MetaSharedLayerSerializer<?> newSerializer =
+                new MetaSharedLayerSerializer(fory, cls, classInfo.getClassDef(), layerMarkerClass);
+            classInfo.setSerializer(newSerializer);
+            result = newSerializer;
+          }
+        }
+      }
+      // Store for getCurrentReadSerializer()
+      this.currentReadSerializer = result;
+      return result;
+    }
+
+    @Override
+    public MetaSharedLayerSerializerBase getCurrentReadSerializer() {
+      return currentReadSerializer;
+    }
+
+    private ClassInfo readLayerClassInfo(Fory fory, MemoryBuffer buffer) {
+      MetaContext metaContext = fory.getSerializationContext().getMetaContext();
+      if (metaContext == null) {
+        return null;
+      }
+      int indexMarker = buffer.readVarUint32Small14();
+      boolean isRef = (indexMarker & 1) == 1;
+      int index = indexMarker >>> 1;
+      if (isRef) {
+        // Reference to previously read ClassInfo
+        return metaContext.readClassInfos.get(index);
+      } else {
+        // New ClassDef in stream - read ID first to check cache
+        long classDefId = buffer.readInt64();
+        ClassInfo classInfo = classDefIdToClassInfo.get(classDefId);
+        if (classInfo != null) {
+          // Already cached - skip the ClassDef bytes, reuse existing ClassInfo
+          ClassDef.skipClassDef(buffer, classDefId);
+        } else {
+          // Not cached - read full ClassDef and create ClassInfo
+          ClassDef classDef = ClassDef.readClassDef(fory, buffer, classDefId);
+          classInfo = new ClassInfo(cls, classDef);
+          classDefIdToClassInfo.put(classDefId, classInfo);
+        }
+        metaContext.readClassInfos.add(classInfo);
+        return classInfo;
+      }
+    }
+
+    @Override
     public String toString() {
       return "SlotsInfo{" + "cls=" + cls + '}';
-    }
-  }
-
-  /** Simple field info for putFields/writeFields support. */
-  private static class PutFieldInfo {
-    final String name;
-    final Class<?> type;
-    final Class<?> declaringClass;
-
-    PutFieldInfo(String name, Class<?> type, Class<?> declaringClass) {
-      this.name = name;
-      this.type = type;
-      this.declaringClass = declaringClass;
     }
   }
 
@@ -703,14 +956,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       if (curPut == null) {
         throw new NotActiveException("no current PutField object");
       }
-      // Write field values directly by their types
-      Class<?>[] fieldTypes = slotsInfo.getPutFieldTypes();
-      Object[] vals = curPut.vals;
-      for (int i = 0; i < vals.length; i++) {
-        Class<?> fieldType = fieldTypes[i];
-        Object value = vals[i];
-        writePutFieldValue(buffer, fieldType, value);
-      }
+      // Write field values using MetaShare serialization
+      slotsInfo.getSlotsSerializer().writeFieldValues(buffer, curPut.vals);
       Arrays.fill(curPut.vals, null);
       putFieldsCache.add(curPut);
       this.curPut = null;
@@ -719,7 +966,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     private void writePutFieldValue(MemoryBuffer buffer, Class<?> fieldType, Object value) {
       if (fieldType == boolean.class) {
-        buffer.writeBoolean(value == null ? false : (Boolean) value);
+        buffer.writeBoolean(value != null && (Boolean) value);
       } else if (fieldType == byte.class) {
         buffer.writeByte(value == null ? (byte) 0 : (Byte) value);
       } else if (fieldType == char.class) {
@@ -745,28 +992,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     @Override
-    public void defaultWriteObject() throws IOException, NotActiveException {
+    public void defaultWriteObject() throws IOException {
       if (fieldsWritten) {
         throw new NotActiveException("not in writeObject invocation or fields already written");
       }
-      // Write field values in the same format as writeFields (for compatibility with readFields)
-      Class<?>[] fieldTypes = slotsInfo.getPutFieldTypes();
-      if (fieldTypes != null && fieldTypes.length > 0) {
-        // Write using putField format (for compatibility with readFields)
-        ObjectIntMap<String> fieldIndexMap = slotsInfo.getFieldIndexMap();
-        MetaSharedLayerSerializerBase slotsSerializer = slotsInfo.getSlotsSerializer();
-        Object[] vals =
-            slotsSerializer.getFieldValuesForPutFields(
-                targetObject, fieldIndexMap, fieldTypes.length);
-        for (int i = 0; i < vals.length; i++) {
-          Class<?> fieldType = fieldTypes[i];
-          Object value = vals[i];
-          writePutFieldValue(buffer, fieldType, value);
-        }
-      } else {
-        // No custom writeObject/readObject, use normal serialization
-        slotsInfo.getSlotsSerializer().write(buffer, targetObject);
-      }
+      // Write fields using MetaShare serialization (layer meta already written by write())
+      slotsInfo.getSlotsSerializer().writeFieldsOnly(buffer, targetObject);
       fieldsWritten = true;
     }
 
@@ -1068,12 +1299,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       if (fieldsRead) {
         throw new NotActiveException("not in readObject invocation or fields already read");
       }
-      // Read field values directly by their types
-      Class<?>[] fieldTypes = slotsInfo.getPutFieldTypes();
-      Object[] vals = getField.vals;
-      for (int i = 0; i < vals.length; i++) {
-        vals[i] = readPutFieldValue(buffer, fieldTypes[i]);
-      }
+      // Read field values using MetaShare serialization
+      Object[] vals = slotsInfo.getCurrentReadSerializer().readFieldValues(buffer);
+      System.arraycopy(vals, 0, getField.vals, 0, vals.length);
       fieldsRead = true;
       return getField;
     }
@@ -1106,26 +1334,13 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     @Override
+    @SuppressWarnings("rawtypes")
     public void defaultReadObject() throws IOException, ClassNotFoundException {
       if (fieldsRead) {
         throw new NotActiveException("not in readObject invocation or fields already read");
       }
-      // Read field values in the same format as writeFields, but set to actual class fields
-      Class<?>[] fieldTypes = slotsInfo.getPutFieldTypes();
-      if (fieldTypes != null && fieldTypes.length > 0) {
-        // Read using putField format (for compatibility with writeFields)
-        ObjectIntMap<String> fieldIndexMap = slotsInfo.getFieldIndexMap();
-        Object[] vals = new Object[fieldTypes.length];
-        for (int i = 0; i < vals.length; i++) {
-          vals[i] = readPutFieldValue(buffer, fieldTypes[i]);
-        }
-        // Now set matching fields on the target object
-        MetaSharedLayerSerializerBase slotsSerializer = slotsInfo.getSlotsSerializer();
-        slotsSerializer.setFieldValuesFromPutFields(targetObject, fieldIndexMap, vals);
-      } else {
-        // No custom writeObject/readObject, use normal serialization
-        slotsInfo.getSlotsSerializer().readAndSetFields(buffer, targetObject);
-      }
+      // Read fields using MetaShare serialization (layer meta already read by getReadSerializer())
+      slotsInfo.getCurrentReadSerializer().readAndSetFields(buffer, targetObject);
       fieldsRead = true;
     }
 

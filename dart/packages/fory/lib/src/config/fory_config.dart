@@ -21,7 +21,6 @@ import 'package:fory/src/config/config.dart';
 
 class ForyConfig extends Config{
   final int  _configId;
-  //final bool _isLittleEndian;
   final bool _refTracking;
   final bool _basicTypesRefIgnored;
   final bool _timeRefIgnored;
@@ -29,7 +28,6 @@ class ForyConfig extends Config{
 
   ForyConfig.onlyForManager(
     this._configId, {
-    bool isLittleEndian = true,
     bool refTracking = true,
     bool basicTypesRefIgnored = true,
     bool timeRefIgnored = true,
@@ -42,11 +40,9 @@ class ForyConfig extends Config{
   {
     // some checking works
     // assert(_xlangMode == true, 'currently only support xlang mode');
-    //assert(_isLittleEndian == true, 'Non-Little-Endian format detected. Only Little-Endian is supported.');
   }
 
   //getters
-  //bool get isLittleEndian => _isLittleEndian;
   bool get refTracking => _refTracking;
   int get configId => _configId;
   bool get basicTypesRefIgnored => _basicTypesRefIgnored;

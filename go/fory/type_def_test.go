@@ -58,7 +58,7 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 	tests := []struct {
 		name       string
 		tagName    string
-		testStruct interface{}
+		testStruct any
 	}{
 		{
 			name:    "SimpleStruct with basic fields",

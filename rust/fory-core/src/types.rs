@@ -474,9 +474,8 @@ pub fn compute_field_hash(hash: u32, id: i16) -> u32 {
 
 pub mod config_flags {
     pub const IS_NULL_FLAG: u8 = 1 << 0;
-    pub const IS_LITTLE_ENDIAN_FLAG: u8 = 2;
-    pub const IS_CROSS_LANGUAGE_FLAG: u8 = 4;
-    pub const IS_OUT_OF_BAND_FLAG: u8 = 8;
+    pub const IS_CROSS_LANGUAGE_FLAG: u8 = 1 << 1;
+    pub const IS_OUT_OF_BAND_FLAG: u8 = 1 << 2;
 }
 
 #[derive(Debug, PartialEq)]
@@ -521,8 +520,6 @@ impl TryFrom<u8> for Language {
 
 // every object start with i8 i16 reference flag and type flag
 pub const SIZE_OF_REF_AND_TYPE: usize = mem::size_of::<i8>() + mem::size_of::<i16>();
-
-pub const MAGIC_NUMBER: u16 = 0x62d4;
 
 /// Formats a combined type ID into a human-readable string.
 ///

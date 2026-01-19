@@ -44,10 +44,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.util.Preconditions;
 import org.testng.Assert;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 public class ObjectStreamSerializerTest extends ForyTestBase {
@@ -445,4 +447,836 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   // TODO(chaokunyang) add `readObjectNoData` test for class inheritance change.
   // @Test
   public void testReadObjectNoData() {}
+
+  // ==================== Schema Evolution Tests ====================
+
+  @DataProvider
+  public static Object[][] compatibleModeProvider() {
+    return new Object[][] {{CompatibleMode.COMPATIBLE}, {CompatibleMode.SCHEMA_CONSISTENT}};
+  }
+
+  // ==================== Layer Count Evolution Tests ====================
+
+  /** Base class for layer count tests - single layer. */
+  @EqualsAndHashCode
+  public static class SingleLayerClass implements Serializable {
+    private String name;
+    private int value;
+
+    public SingleLayerClass() {}
+
+    public SingleLayerClass(String name, int value) {
+      this.name = name;
+      this.value = value;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  /** Two-layer class hierarchy - parent. */
+  @EqualsAndHashCode
+  public static class TwoLayerParent implements Serializable {
+    protected String parentName;
+    protected int parentValue;
+
+    public TwoLayerParent() {}
+
+    public TwoLayerParent(String parentName, int parentValue) {
+      this.parentName = parentName;
+      this.parentValue = parentValue;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  /** Two-layer class hierarchy - child. */
+  @EqualsAndHashCode(callSuper = true)
+  public static class TwoLayerChild extends TwoLayerParent {
+    private String childName;
+    private double childValue;
+
+    public TwoLayerChild() {}
+
+    public TwoLayerChild(String parentName, int parentValue, String childName, double childValue) {
+      super(parentName, parentValue);
+      this.childName = childName;
+      this.childValue = childValue;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  /** Three-layer class hierarchy - grandchild. */
+  @EqualsAndHashCode(callSuper = true)
+  public static class ThreeLayerGrandchild extends TwoLayerChild {
+    private String grandchildName;
+    private long grandchildValue;
+
+    public ThreeLayerGrandchild() {}
+
+    public ThreeLayerGrandchild(
+        String parentName,
+        int parentValue,
+        String childName,
+        double childValue,
+        String grandchildName,
+        long grandchildValue) {
+      super(parentName, parentValue, childName, childValue);
+      this.grandchildName = grandchildName;
+      this.grandchildValue = grandchildValue;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  @Test(dataProvider = "javaFory")
+  public void testSingleLayerSerialization(Fory fory) {
+    fory.registerSerializer(
+        SingleLayerClass.class, new ObjectStreamSerializer(fory, SingleLayerClass.class));
+    SingleLayerClass obj = new SingleLayerClass("test", 42);
+    serDeCheckSerializer(fory, obj, "ObjectStreamSerializer");
+  }
+
+  @Test(dataProvider = "javaFory")
+  public void testTwoLayerSerialization(Fory fory) {
+    fory.registerSerializer(
+        TwoLayerChild.class, new ObjectStreamSerializer(fory, TwoLayerChild.class));
+    TwoLayerChild obj = new TwoLayerChild("parent", 10, "child", 3.14);
+    serDeCheckSerializer(fory, obj, "ObjectStreamSerializer");
+  }
+
+  @Test(dataProvider = "javaFory")
+  public void testThreeLayerSerialization(Fory fory) {
+    fory.registerSerializer(
+        ThreeLayerGrandchild.class, new ObjectStreamSerializer(fory, ThreeLayerGrandchild.class));
+    ThreeLayerGrandchild obj =
+        new ThreeLayerGrandchild("parent", 10, "child", 3.14, "grandchild", 100L);
+    serDeCheckSerializer(fory, obj, "ObjectStreamSerializer");
+  }
+
+  // ==================== Field Schema Evolution Tests ====================
+
+  /** Class with fields that may evolve - version 1. */
+  @EqualsAndHashCode
+  public static class FieldEvolutionV1 implements Serializable {
+    private String name;
+    private int oldField;
+
+    public FieldEvolutionV1() {}
+
+    public FieldEvolutionV1(String name, int oldField) {
+      this.name = name;
+      this.oldField = oldField;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  /** Class with additional fields - version 2 (reader has more fields). */
+  @EqualsAndHashCode
+  public static class FieldEvolutionV2 implements Serializable {
+    private String name;
+    private int oldField;
+    private String newField; // Added field
+    private double extraField; // Added field
+
+    public FieldEvolutionV2() {}
+
+    public FieldEvolutionV2(String name, int oldField, String newField, double extraField) {
+      this.name = name;
+      this.oldField = oldField;
+      this.newField = newField;
+      this.extraField = extraField;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  @Test(dataProvider = "javaFory")
+  public void testFieldEvolutionSameSchema(Fory fory) {
+    fory.registerSerializer(
+        FieldEvolutionV1.class, new ObjectStreamSerializer(fory, FieldEvolutionV1.class));
+    FieldEvolutionV1 obj = new FieldEvolutionV1("test", 42);
+    serDeCheckSerializer(fory, obj, "ObjectStreamSerializer");
+  }
+
+  // ==================== PutFields/DefaultReadObject Tests ====================
+
+  /** Class that uses putFields for writing. */
+  @EqualsAndHashCode
+  public static class PutFieldsWriter implements Serializable {
+    private String actualField;
+    private int actualValue;
+
+    // Define serialPersistentFields to control serialization format
+    private static final ObjectStreamField[] serialPersistentFields = {
+      new ObjectStreamField("serializedName", String.class),
+      new ObjectStreamField("serializedValue", Integer.TYPE)
+    };
+
+    public PutFieldsWriter() {}
+
+    public PutFieldsWriter(String actualField, int actualValue) {
+      this.actualField = actualField;
+      this.actualValue = actualValue;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      ObjectOutputStream.PutField fields = s.putFields();
+      fields.put("serializedName", actualField);
+      fields.put("serializedValue", actualValue);
+      s.writeFields();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      // Using defaultReadObject - expects fields named in serialPersistentFields
+      s.defaultReadObject();
+    }
+  }
+
+  /** Class that uses defaultWriteObject and getFields for reading. */
+  @EqualsAndHashCode
+  public static class DefaultWriteGetFieldsReader implements Serializable {
+    private String name;
+    private int value;
+    private transient String computed;
+
+    public DefaultWriteGetFieldsReader() {}
+
+    public DefaultWriteGetFieldsReader(String name, int value) {
+      this.name = name;
+      this.value = value;
+      this.computed = name + ":" + value;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      ObjectInputStream.GetField fields = s.readFields();
+      name = (String) fields.get("name", null);
+      value = fields.get("value", 0);
+      computed = name + ":" + value;
+    }
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testPutFieldsWithDefaultReadObject(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(
+        PutFieldsWriter.class, new ObjectStreamSerializer(fory, PutFieldsWriter.class));
+
+    PutFieldsWriter obj = new PutFieldsWriter("testName", 123);
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    // Deserialize - defaultReadObject should handle the putFields format
+    buffer.readerIndex(0);
+    PutFieldsWriter result = (PutFieldsWriter) fory.deserialize(buffer);
+    // Note: actualField/actualValue won't be populated directly since
+    // serialPersistentFields maps to different names
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testDefaultWriteObjectWithGetFields(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(
+        DefaultWriteGetFieldsReader.class,
+        new ObjectStreamSerializer(fory, DefaultWriteGetFieldsReader.class));
+
+    DefaultWriteGetFieldsReader obj = new DefaultWriteGetFieldsReader("test", 42);
+    assertEquals(obj.computed, "test:42");
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    buffer.readerIndex(0);
+    DefaultWriteGetFieldsReader result = (DefaultWriteGetFieldsReader) fory.deserialize(buffer);
+    assertEquals(result.name, "test");
+    assertEquals(result.value, 42);
+    assertEquals(result.computed, "test:42");
+  }
+
+  // ==================== SerialPersistentFields Inconsistency Tests ====================
+
+  /** Writer class with specific serialPersistentFields. */
+  @EqualsAndHashCode
+  public static class SerialFieldsWriter implements Serializable {
+    private String data;
+    private int number;
+
+    // Define custom serialPersistentFields
+    private static final ObjectStreamField[] serialPersistentFields = {
+      new ObjectStreamField("customData", String.class),
+      new ObjectStreamField("customNumber", Integer.TYPE),
+      new ObjectStreamField("extraField", Long.TYPE) // Extra field not in actual class
+    };
+
+    public SerialFieldsWriter() {}
+
+    public SerialFieldsWriter(String data, int number) {
+      this.data = data;
+      this.number = number;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      ObjectOutputStream.PutField fields = s.putFields();
+      fields.put("customData", data);
+      fields.put("customNumber", number);
+      fields.put("extraField", 999L);
+      s.writeFields();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      ObjectInputStream.GetField fields = s.readFields();
+      data = (String) fields.get("customData", null);
+      number = fields.get("customNumber", 0);
+      // extraField is read but not stored
+    }
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testSerialPersistentFieldsInconsistentWithReader(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(
+        SerialFieldsWriter.class, new ObjectStreamSerializer(fory, SerialFieldsWriter.class));
+
+    SerialFieldsWriter obj = new SerialFieldsWriter("testData", 42);
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    buffer.readerIndex(0);
+    SerialFieldsWriter result = (SerialFieldsWriter) fory.deserialize(buffer);
+    assertEquals(result.data, "testData");
+    assertEquals(result.number, 42);
+  }
+
+  /** Class that writes with defaultWriteObject but has serialPersistentFields defined. */
+  @EqualsAndHashCode
+  public static class MixedSerializationClass implements Serializable {
+    private String name;
+    private int value;
+
+    // serialPersistentFields different from actual fields
+    private static final ObjectStreamField[] serialPersistentFields = {
+      new ObjectStreamField("name", String.class),
+      new ObjectStreamField("value", Integer.TYPE),
+      new ObjectStreamField("nonExistentField", Double.TYPE)
+    };
+
+    public MixedSerializationClass() {}
+
+    public MixedSerializationClass(String name, int value) {
+      this.name = name;
+      this.value = value;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      ObjectOutputStream.PutField fields = s.putFields();
+      fields.put("name", name);
+      fields.put("value", value);
+      fields.put("nonExistentField", 3.14);
+      s.writeFields();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      ObjectInputStream.GetField fields = s.readFields();
+      name = (String) fields.get("name", null);
+      value = fields.get("value", 0);
+      // nonExistentField is ignored
+    }
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testMixedSerialization(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(
+        MixedSerializationClass.class,
+        new ObjectStreamSerializer(fory, MixedSerializationClass.class));
+
+    MixedSerializationClass obj = new MixedSerializationClass("test", 42);
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    buffer.readerIndex(0);
+    MixedSerializationClass result = (MixedSerializationClass) fory.deserialize(buffer);
+    assertEquals(result.name, "test");
+    assertEquals(result.value, 42);
+  }
+
+  // ==================== Complex Hierarchy Schema Evolution Tests ====================
+
+  /** Parent class with putFields writer. */
+  public static class HierarchyParentPutFields implements Serializable {
+    protected String parentData;
+
+    private static final ObjectStreamField[] serialPersistentFields = {
+      new ObjectStreamField("parentData", String.class),
+      new ObjectStreamField("extraParentField", Integer.TYPE)
+    };
+
+    public HierarchyParentPutFields() {}
+
+    public HierarchyParentPutFields(String parentData) {
+      this.parentData = parentData;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      ObjectOutputStream.PutField fields = s.putFields();
+      fields.put("parentData", parentData);
+      fields.put("extraParentField", 100);
+      s.writeFields();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      ObjectInputStream.GetField fields = s.readFields();
+      parentData = (String) fields.get("parentData", null);
+    }
+  }
+
+  /** Child class with defaultWriteObject. */
+  @EqualsAndHashCode(callSuper = false)
+  public static class HierarchyChildDefault extends HierarchyParentPutFields {
+    private String childData;
+    private int childValue;
+
+    public HierarchyChildDefault() {}
+
+    public HierarchyChildDefault(String parentData, String childData, int childValue) {
+      super(parentData);
+      this.childData = childData;
+      this.childValue = childValue;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      HierarchyChildDefault that = (HierarchyChildDefault) o;
+      return childValue == that.childValue
+          && java.util.Objects.equals(parentData, that.parentData)
+          && java.util.Objects.equals(childData, that.childData);
+    }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(parentData, childData, childValue);
+    }
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testHierarchyMixedSerialization(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(
+        HierarchyChildDefault.class, new ObjectStreamSerializer(fory, HierarchyChildDefault.class));
+
+    HierarchyChildDefault obj = new HierarchyChildDefault("parent", "child", 42);
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    buffer.readerIndex(0);
+    HierarchyChildDefault result = (HierarchyChildDefault) fory.deserialize(buffer);
+    assertEquals(result.parentData, "parent");
+    assertEquals(result.childData, "child");
+    assertEquals(result.childValue, 42);
+  }
+
+  // ==================== Cross-Fory Instance Schema Tests ====================
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testCrossForyInstanceSerialization(CompatibleMode compatible) {
+    // Writer Fory instance
+    Fory writerFory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    writerFory.registerSerializer(
+        MixedSerializationClass.class,
+        new ObjectStreamSerializer(writerFory, MixedSerializationClass.class));
+
+    // Reader Fory instance (separate instance)
+    Fory readerFory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    readerFory.registerSerializer(
+        MixedSerializationClass.class,
+        new ObjectStreamSerializer(readerFory, MixedSerializationClass.class));
+
+    // Serialize with writer
+    MixedSerializationClass obj = new MixedSerializationClass("crossTest", 99);
+    byte[] bytes = writerFory.serialize(obj);
+
+    // Deserialize with reader
+    MixedSerializationClass result = (MixedSerializationClass) readerFory.deserialize(bytes);
+    assertEquals(result.name, "crossTest");
+    assertEquals(result.value, 99);
+  }
+
+  // ==================== Default Value Tests ====================
+
+  /** Class to test default values when fields are missing. */
+  @EqualsAndHashCode
+  public static class DefaultValueClass implements Serializable {
+    private String stringField;
+    private int intField;
+    private boolean boolField;
+    private double doubleField;
+    private Object objectField;
+
+    public DefaultValueClass() {}
+
+    public DefaultValueClass(
+        String stringField,
+        int intField,
+        boolean boolField,
+        double doubleField,
+        Object objectField) {
+      this.stringField = stringField;
+      this.intField = intField;
+      this.boolField = boolField;
+      this.doubleField = doubleField;
+      this.objectField = objectField;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      ObjectInputStream.GetField fields = s.readFields();
+      stringField = (String) fields.get("stringField", "defaultString");
+      intField = fields.get("intField", -1);
+      boolField = fields.get("boolField", true);
+      doubleField = fields.get("doubleField", 99.9);
+      objectField = fields.get("objectField", "defaultObject");
+    }
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testDefaultValues(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(
+        DefaultValueClass.class, new ObjectStreamSerializer(fory, DefaultValueClass.class));
+
+    DefaultValueClass obj = new DefaultValueClass("test", 42, false, 3.14, "objValue");
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    buffer.readerIndex(0);
+    DefaultValueClass result = (DefaultValueClass) fory.deserialize(buffer);
+    assertEquals(result.stringField, "test");
+    assertEquals(result.intField, 42);
+    assertEquals(result.boolField, false);
+    assertEquals(result.doubleField, 3.14, 0.001);
+    assertEquals(result.objectField, "objValue");
+  }
+
+  // ==================== Nested Object Tests ====================
+
+  /** Nested serializable class. */
+  @EqualsAndHashCode
+  public static class NestedClass implements Serializable {
+    private String nestedValue;
+
+    public NestedClass() {}
+
+    public NestedClass(String nestedValue) {
+      this.nestedValue = nestedValue;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  /** Container class with nested objects. */
+  @EqualsAndHashCode
+  public static class ContainerClass implements Serializable {
+    private String containerName;
+    private NestedClass nested;
+    private List<NestedClass> nestedList;
+
+    public ContainerClass() {}
+
+    public ContainerClass(String containerName, NestedClass nested, List<NestedClass> nestedList) {
+      this.containerName = containerName;
+      this.nested = nested;
+      this.nestedList = nestedList;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testNestedObjectSerialization(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(NestedClass.class, new ObjectStreamSerializer(fory, NestedClass.class));
+    fory.registerSerializer(
+        ContainerClass.class, new ObjectStreamSerializer(fory, ContainerClass.class));
+
+    NestedClass nested = new NestedClass("nestedValue");
+    List<NestedClass> nestedList = new ArrayList<>();
+    nestedList.add(new NestedClass("list1"));
+    nestedList.add(new NestedClass("list2"));
+    ContainerClass obj = new ContainerClass("container", nested, nestedList);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
+    fory.serialize(buffer, obj);
+
+    buffer.readerIndex(0);
+    ContainerClass result = (ContainerClass) fory.deserialize(buffer);
+    assertEquals(result.containerName, "container");
+    assertEquals(result.nested.nestedValue, "nestedValue");
+    assertEquals(result.nestedList.size(), 2);
+    assertEquals(result.nestedList.get(0).nestedValue, "list1");
+    assertEquals(result.nestedList.get(1).nestedValue, "list2");
+  }
+
+  // ==================== Circular Reference in Custom Serialization ====================
+
+  /** Class with potential circular reference. */
+  public static class CircularRefClass implements Serializable {
+    private String name;
+    private CircularRefClass reference;
+
+    public CircularRefClass() {}
+
+    public CircularRefClass(String name) {
+      this.name = name;
+    }
+
+    public void setReference(CircularRefClass reference) {
+      this.reference = reference;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testCircularReferenceInCustomSerialization(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(
+        CircularRefClass.class, new ObjectStreamSerializer(fory, CircularRefClass.class));
+
+    CircularRefClass obj1 = new CircularRefClass("obj1");
+    CircularRefClass obj2 = new CircularRefClass("obj2");
+    obj1.setReference(obj2);
+    obj2.setReference(obj1); // Circular reference
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
+    fory.serialize(buffer, obj1);
+
+    buffer.readerIndex(0);
+    CircularRefClass result = (CircularRefClass) fory.deserialize(buffer);
+    assertEquals(result.name, "obj1");
+    assertEquals(result.reference.name, "obj2");
+    assertSame(result.reference.reference, result); // Verify circular reference preserved
+  }
+
+  // ==================== All Primitive Types Test ====================
+
+  /** Class with all primitive types using putFields/getFields. */
+  @EqualsAndHashCode
+  public static class AllPrimitivesClass implements Serializable {
+    private byte byteVal;
+    private short shortVal;
+    private int intVal;
+    private long longVal;
+    private float floatVal;
+    private double doubleVal;
+    private char charVal;
+    private boolean boolVal;
+
+    public AllPrimitivesClass() {}
+
+    public AllPrimitivesClass(
+        byte byteVal,
+        short shortVal,
+        int intVal,
+        long longVal,
+        float floatVal,
+        double doubleVal,
+        char charVal,
+        boolean boolVal) {
+      this.byteVal = byteVal;
+      this.shortVal = shortVal;
+      this.intVal = intVal;
+      this.longVal = longVal;
+      this.floatVal = floatVal;
+      this.doubleVal = doubleVal;
+      this.charVal = charVal;
+      this.boolVal = boolVal;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      ObjectOutputStream.PutField fields = s.putFields();
+      fields.put("byteVal", byteVal);
+      fields.put("shortVal", shortVal);
+      fields.put("intVal", intVal);
+      fields.put("longVal", longVal);
+      fields.put("floatVal", floatVal);
+      fields.put("doubleVal", doubleVal);
+      fields.put("charVal", charVal);
+      fields.put("boolVal", boolVal);
+      s.writeFields();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      ObjectInputStream.GetField fields = s.readFields();
+      byteVal = fields.get("byteVal", (byte) 0);
+      shortVal = fields.get("shortVal", (short) 0);
+      intVal = fields.get("intVal", 0);
+      longVal = fields.get("longVal", 0L);
+      floatVal = fields.get("floatVal", 0.0f);
+      doubleVal = fields.get("doubleVal", 0.0);
+      charVal = fields.get("charVal", '\0');
+      boolVal = fields.get("boolVal", false);
+    }
+  }
+
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testAllPrimitiveTypes(CompatibleMode compatible) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .build();
+    fory.registerSerializer(
+        AllPrimitivesClass.class, new ObjectStreamSerializer(fory, AllPrimitivesClass.class));
+
+    AllPrimitivesClass obj =
+        new AllPrimitivesClass((byte) 1, (short) 2, 3, 4L, 5.5f, 6.6, 'A', true);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    fory.serialize(buffer, obj);
+
+    buffer.readerIndex(0);
+    AllPrimitivesClass result = (AllPrimitivesClass) fory.deserialize(buffer);
+    assertEquals(result.byteVal, (byte) 1);
+    assertEquals(result.shortVal, (short) 2);
+    assertEquals(result.intVal, 3);
+    assertEquals(result.longVal, 4L);
+    assertEquals(result.floatVal, 5.5f, 0.001f);
+    assertEquals(result.doubleVal, 6.6, 0.001);
+    assertEquals(result.charVal, 'A');
+    assertEquals(result.boolVal, true);
+  }
 }

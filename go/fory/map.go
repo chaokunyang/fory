@@ -296,9 +296,9 @@ func (s mapSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// Initialize map
 	if value.IsNil() {
 		mapType := type_
-		// For interface{} maps without declared types, use map[interface{}]interface{}
+		// For any maps without declared types, use map[any]any
 		if !s.hasGenerics && type_.Key().Kind() == reflect.Interface && type_.Elem().Kind() == reflect.Interface {
-			iface := reflect.TypeOf((*interface{})(nil)).Elem()
+			iface := reflect.TypeOf((*any)(nil)).Elem()
 			mapType = reflect.MapOf(iface, iface)
 		}
 		value.Set(reflect.MakeMap(mapType))

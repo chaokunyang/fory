@@ -279,11 +279,11 @@ public class Descriptor {
    *
    * @return the morphic setting from @ForyField annotation, or AUTO if not specified
    */
-  public ForyField.Morphic getMorphic() {
+  public ForyField.Dynamic getMorphic() {
     if (foryField != null) {
-      return foryField.morphic();
+      return foryField.dynamic();
     }
-    return ForyField.Morphic.AUTO;
+    return ForyField.Dynamic.AUTO;
   }
 
   public Annotation getTypeAnnotation() {

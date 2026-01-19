@@ -15,7 +15,7 @@ Apache Fory™ Java Benchmark contains benchmarks for:
 
 > Part of benchmark data is based on [Kryo benchmark](https://github.com/EsotericSoftware/kryo/tree/master/benchmarks).
 > Kryo benchmark suite is based on [Kryo benchmark](https://github.com/EsotericSoftware/kryo/tree/master/benchmarks).
-> The msgpack's official provides [msgpack-jackson](https://github.com/msgpack/msgpack-java/tree/main/msgpack-jackson) lib, but the performance is relatively poor. So, generate a basic [manually written code](https://github.com/apache/fory/tree/main/java/benchmark/src/main/java/org/apache/fory/benchmark/util/MsgpackUtil.java) using qwen3(LLM). Then modify it.
+> The msgpack's official provides [msgpack-jackson](https://github.com/msgpack/msgpack-java/tree/main/msgpack-jackson) lib, but the performance is relatively poor. So, generate a basic [manually written code](https://github.com/apache/fory/tree/main/benchmarks/java_benchmarkk/src/main/java/org/apache/fory/benchmark/util/MsgpackUtil.java) using qwen3(LLM). Then modify it.
 
 ## How to run
 
@@ -25,7 +25,7 @@ as an optional feature. So Apache Fory™ make it as an optional dependency and 
 
 ```bash
 # Install fory
-cd ../java && mvn install -DskipTests -Dcheckstyle.skip -Dlicense.skip -Dmaven.javadoc.skip && cd -
+cd ../../java && mvn install -DskipTests -Dcheckstyle.skip -Dlicense.skip -Dmaven.javadoc.skip && cd -
 
 # build benchmark jar
 # use `-Pjmh` to download jmh dependencies, we mark it as optional
@@ -33,7 +33,7 @@ cd ../java && mvn install -DskipTests -Dcheckstyle.skip -Dlicense.skip -Dmaven.j
 mvn package -Pjmh
 # run benchmark
 nohup java -jar target/benchmarks.jar -f 5 -wi 3 -i 5 -t 1 -w 3s -r 5s -rf csv >bench.log 2>&1 &
-java -jar target/benchmarks.jar "org.apache.fory.*\.deserialize$" -f 1 -wi 1 -i 3 -t 1 -w 2s -r 2s -rf csv -p objectType=MEDIA_CONTENT -p bufferType=array -p references=false
+java -jar target/benchmarks.jar "org.apache.fory.*UserTypeSerializeSuite.*" -f 1 -wi 1 -i 1 -t 1 -w 2s -r 2s -rf csv -p objectType=MEDIA_CONTENT -p bufferType=array -p references=false
 ```
 
 Generate Protobuf/Flatbuffers code manually:

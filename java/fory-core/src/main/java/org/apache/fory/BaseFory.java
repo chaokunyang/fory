@@ -138,6 +138,38 @@ public interface BaseFory {
    */
   void registerSerializer(Class<?> type, Function<Fory, Serializer<?>> serializerCreator);
 
+  /**
+   * Register a class (if not already registered) and then register its serializer class.
+   *
+   * <p><b>NOTE</b>: The registration order is important. If registration order is inconsistent, the
+   * allocated ID will be different, and the deserialization will failed !!!
+   *
+   * @param type class needed to be serialized/deserialized.
+   * @param serializerClass serializer class can be created with {@link Serializers#newSerializer}.
+   * @param <T> type of class.
+   */
+  <T> void registerSerializerAndType(Class<T> type, Class<? extends Serializer> serializerClass);
+
+  /**
+   * Register a class (if not already registered) and then register its serializer instance.
+   *
+   * <p><b>NOTE</b>: The registration order is important. If registration order is inconsistent, the
+   * allocated ID will be different, and the deserialization will failed !!!
+   */
+  void registerSerializerAndType(Class<?> type, Serializer<?> serializer);
+
+  /**
+   * Register a class (if not already registered) and then register a serializer created by
+   * serializerCreator when fory created.
+   *
+   * <p><b>NOTE</b>: The registration order is important. If registration order is inconsistent, the
+   * allocated ID will be different, and the deserialization will failed !!!
+   *
+   * @param type class needed to be serialized/deserialized.
+   * @param serializerCreator serializer creator with param {@link Fory}
+   */
+  void registerSerializerAndType(Class<?> type, Function<Fory, Serializer<?>> serializerCreator);
+
   void setSerializerFactory(SerializerFactory serializerFactory);
 
   /**

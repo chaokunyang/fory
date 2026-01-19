@@ -20,6 +20,7 @@
 #pragma once
 
 #include "fory/serialization/serializer.h"
+#include "fory/util/bit_util.h"
 #include <array>
 
 namespace fory {
@@ -91,12 +92,23 @@ struct Serializer<
     constexpr size_t max_size = 8 + N * sizeof(T);
     buffer.Grow(static_cast<uint32_t>(max_size));
     uint32_t writer_index = buffer.writer_index();
-    // Write array length
-    writer_index += buffer.PutVarUint32(writer_index, static_cast<uint32_t>(N));
+    // Write array length in bytes
+    writer_index +=
+        buffer.PutVarUint32(writer_index, static_cast<uint32_t>(N * sizeof(T)));
 
-    // Write raw binary data
+    // Write data
     if constexpr (N > 0) {
-      buffer.UnsafePut(writer_index, arr.data(), N * sizeof(T));
+      if constexpr (FORY_LITTLE_ENDIAN || sizeof(T) == 1) {
+        // Fast path: direct memory copy on little-endian or for single-byte
+        // types
+        buffer.UnsafePut(writer_index, arr.data(), N * sizeof(T));
+      } else {
+        // Slow path: element-by-element write on big-endian machines
+        for (size_t i = 0; i < N; ++i) {
+          T value = util::ToLittleEndian(arr[i]);
+          buffer.UnsafePut(writer_index + i * sizeof(T), &value, sizeof(T));
+        }
+      }
     }
     buffer.WriterIndex(writer_index + N * sizeof(T));
   }
@@ -127,12 +139,13 @@ struct Serializer<
   }
 
   static inline std::array<T, N> read_data(ReadContext &ctx) {
-    // Read array length
-    uint32_t length = ctx.read_varuint32(ctx.error());
+    // Read array length in bytes
+    uint32_t size_bytes = ctx.read_varuint32(ctx.error());
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return std::array<T, N>();
     }
 
+    uint32_t length = size_bytes / sizeof(T);
     if (length != N) {
       ctx.set_error(Error::invalid_data("Array size mismatch: expected " +
                                         std::to_string(N) + " but got " +
@@ -142,7 +155,21 @@ struct Serializer<
 
     std::array<T, N> arr;
     if constexpr (N > 0) {
-      ctx.read_bytes(arr.data(), N * sizeof(T), ctx.error());
+      if constexpr (FORY_LITTLE_ENDIAN || sizeof(T) == 1) {
+        // Fast path: direct memory copy on little-endian or for single-byte
+        // types
+        ctx.read_bytes(arr.data(), N * sizeof(T), ctx.error());
+      } else {
+        // Slow path: element-by-element read on big-endian machines
+        for (size_t i = 0; i < N; ++i) {
+          T value;
+          ctx.read_bytes(&value, sizeof(T), ctx.error());
+          if (FORY_PREDICT_FALSE(ctx.has_error())) {
+            return arr;
+          }
+          arr[i] = util::ToLittleEndian(value); // ToLittleEndian swaps on BE
+        }
+      }
     }
     return arr;
   }

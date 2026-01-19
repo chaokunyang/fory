@@ -2,7 +2,11 @@
 
 Fory is a blazingly fast multi-language serialization framework powered by just-in-time compilation and zero-copy.
 
+For comprehensive documentation, see the [Fory Go Guide](https://fory.apache.org/docs/guide/go/).
+
 ## Installation
+
+**Requirements**: Go 1.24 or later
 
 ```bash
 go get github.com/apache/fory/go/fory
@@ -49,93 +53,6 @@ func main() {
     fmt.Printf("Deserialized: %+v\n", result)
 }
 ```
-
-## Supported Types
-
-### Basic Data Types
-
-- `bool`
-- `int8`, `int16`, `int32`, `int64`, `int`
-- `uint8` (byte), `uint16`, `uint32`, `uint64`
-- `float32`, `float64`
-- `string`
-
-### Collection Types
-
-- `[]bool`, `[]int16`, `[]int32`, `[]int64`
-- `[]float32`, `[]float64`
-- `[]string`
-- `[]interface{}` (dynamic slice)
-- `map[string]string`, `map[int]int`, `map[string]int`, and more
-
-### Time Types
-
-- `time.Time`
-- `time.Duration`
-
-## Configuration Options
-
-Fory Go supports configuration through functional options:
-
-```go
-// Enable reference tracking for circular references
-f := fory.New(fory.WithTrackRef(true))
-
-// Enable compatible mode for schema evolution
-f := fory.New(fory.WithCompatible(true))
-
-// Set maximum nesting depth
-f := fory.New(fory.WithMaxDepth(20))
-
-// Combine multiple options
-f := fory.New(
-    fory.WithTrackRef(true),
-    fory.WithCompatible(true),
-)
-```
-
-## Cross-Language Serialization
-
-Fory Go enables seamless data exchange with Java, Python, C++, Rust, and JavaScript:
-
-```go
-// Go
-f := fory.New()
-f.RegisterNamedStruct(User{}, "example.User")
-data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
-// 'data' can be deserialized by Java, Python, etc.
-```
-
-## Thread Safety
-
-The default Fory instance is not thread-safe. For concurrent use:
-
-```go
-import "github.com/apache/fory/go/fory/threadsafe"
-
-f := threadsafe.New()
-
-// Safe for concurrent use
-go func() { f.Serialize(value1) }()
-go func() { f.Serialize(value2) }()
-```
-
-## Documentation
-
-For comprehensive documentation, see the [Fory Go Guide](https://fory.apache.org/docs/guide/go/).
-
-Topics covered:
-
-- [Configuration](https://fory.apache.org/docs/guide/go/configuration) - Options and settings
-- [Basic Serialization](https://fory.apache.org/docs/guide/go/basic-serialization) - Core APIs and usage patterns
-- [Type Registration](https://fory.apache.org/docs/guide/go/type-registration) - Registering types for serialization
-- [Supported Types](https://fory.apache.org/docs/guide/go/supported-types) - Complete type support reference
-- [References](https://fory.apache.org/docs/guide/go/references) - Circular references and shared objects
-- [Schema Evolution](https://fory.apache.org/docs/guide/go/schema-evolution) - Forward/backward compatibility
-- [Cross-Language](https://fory.apache.org/docs/guide/go/cross-language) - Multi-language serialization
-- [Code Generation](https://fory.apache.org/docs/guide/go/codegen) - Experimental AOT code generation
-- [Thread Safety](https://fory.apache.org/docs/guide/go/thread-safety) - Concurrent usage patterns
-- [Troubleshooting](https://fory.apache.org/docs/guide/go/troubleshooting) - Common issues and solutions
 
 ## How to Test
 

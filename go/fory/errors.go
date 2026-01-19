@@ -155,7 +155,7 @@ func SerializationError(msg string) Error {
 }
 
 // SerializationErrorf creates a formatted serialization error
-func SerializationErrorf(format string, args ...interface{}) Error {
+func SerializationErrorf(format string, args ...any) Error {
 	return Error{
 		kind:    ErrKindSerializationFailed,
 		message: fmt.Sprintf(format, args...),
@@ -171,7 +171,7 @@ func DeserializationError(msg string) Error {
 }
 
 // DeserializationErrorf creates a formatted deserialization error
-func DeserializationErrorf(format string, args ...interface{}) Error {
+func DeserializationErrorf(format string, args ...any) Error {
 	return Error{
 		kind:    ErrKindDeserializationFailed,
 		message: fmt.Sprintf(format, args...),
@@ -211,7 +211,7 @@ func InvalidTagError(msg string) Error {
 }
 
 // InvalidTagErrorf creates a formatted invalid fory struct tag error
-func InvalidTagErrorf(format string, args ...interface{}) Error {
+func InvalidTagErrorf(format string, args ...any) Error {
 	return Error{
 		kind:    ErrKindInvalidTag,
 		message: fmt.Sprintf(format, args...),

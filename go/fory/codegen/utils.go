@@ -58,6 +58,9 @@ func toSnakeCase(s string) string {
 
 // isSupportedFieldType checks if a field type is supported
 func isSupportedFieldType(t types.Type) bool {
+	// Unwrap alias types (e.g., 'any' is an alias for 'interface{}')
+	t = types.Unalias(t)
+
 	// Handle pointer types
 	if ptr, ok := t.(*types.Pointer); ok {
 		t = ptr.Elem()
@@ -90,7 +93,7 @@ func isSupportedFieldType(t types.Type) bool {
 
 	// Check interface types
 	if iface, ok := t.(*types.Interface); ok {
-		// Support empty interface{} for dynamic types
+		// Support empty any for dynamic types
 		if iface.Empty() {
 			return true
 		}
@@ -111,6 +114,9 @@ func isSupportedFieldType(t types.Type) bool {
 
 // isPrimitiveType checks if a type is considered primitive in Fory
 func isPrimitiveType(t types.Type) bool {
+	// Unwrap alias types
+	t = types.Unalias(t)
+
 	// Handle pointer types
 	if ptr, ok := t.(*types.Pointer); ok {
 		t = ptr.Elem()
@@ -134,6 +140,9 @@ func isPrimitiveType(t types.Type) bool {
 
 // getTypeID returns the Fory TypeID for a given type
 func getTypeID(t types.Type) string {
+	// Unwrap alias types
+	t = types.Unalias(t)
+
 	// Handle pointer types
 	if ptr, ok := t.(*types.Pointer); ok {
 		t = ptr.Elem()
@@ -177,7 +186,7 @@ func getTypeID(t types.Type) string {
 	// Check interface types
 	if iface, ok := t.(*types.Interface); ok {
 		if iface.Empty() {
-			return "INTERFACE" // Use a placeholder for empty interface{}
+			return "INTERFACE" // Use a placeholder for empty any
 		}
 	}
 
@@ -231,6 +240,9 @@ func getTypeID(t types.Type) string {
 
 // getPrimitiveSize returns the byte size of a primitive type
 func getPrimitiveSize(t types.Type) int {
+	// Unwrap alias types
+	t = types.Unalias(t)
+
 	// Handle pointer types
 	if ptr, ok := t.(*types.Pointer); ok {
 		t = ptr.Elem()

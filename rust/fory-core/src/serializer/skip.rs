@@ -91,9 +91,8 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
             None,
         ),
         types::COMPATIBLE_STRUCT | types::NAMED_COMPATIBLE_STRUCT => {
-            // For compatible struct types, read meta_index to get type_info
-            let meta_index = context.reader.read_varuint32()? as usize;
-            let type_info = context.get_type_info_by_index(meta_index)?.clone();
+            // For compatible struct types, read type meta inline using streaming protocol
+            let type_info = context.read_type_meta()?;
             (
                 FieldType {
                     type_id,
@@ -105,10 +104,9 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
             )
         }
         types::STRUCT | types::NAMED_STRUCT => {
-            // For non-compatible struct types with share_meta enabled, read meta_index
+            // For non-compatible struct types with share_meta enabled, read type meta inline
             if context.is_share_meta() {
-                let meta_index = context.reader.read_varuint32()? as usize;
-                let type_info = context.get_type_info_by_index(meta_index)?.clone();
+                let type_info = context.read_type_meta()?;
                 (
                     FieldType {
                         type_id,
@@ -310,14 +308,16 @@ fn skip_struct(
     type_id_num: u32,
     type_info: &Option<Rc<crate::TypeInfo>>,
 ) -> Result<(), Error> {
+    let type_info_rc: Option<Rc<crate::TypeInfo>>;
     let type_info_value = if type_info.is_none() {
         let remote_type_id = context.reader.read_varuint32()?;
         ensure!(
             type_id_num == remote_type_id,
             Error::type_mismatch(type_id_num, remote_type_id)
         );
-        let meta_index = context.reader.read_varuint32()?;
-        context.get_type_info_by_index(meta_index as usize)?
+        // Read type meta inline using streaming protocol
+        type_info_rc = Some(context.read_type_meta()?);
+        type_info_rc.as_ref().unwrap()
     } else {
         type_info.as_ref().unwrap()
     };
@@ -355,14 +355,16 @@ fn skip_ext(
     type_id_num: u32,
     type_info: &Option<Rc<crate::TypeInfo>>,
 ) -> Result<(), Error> {
+    let type_info_rc: Option<Rc<crate::TypeInfo>>;
     let type_info_value = if type_info.is_none() {
         let remote_type_id = context.reader.read_varuint32()?;
         ensure!(
             type_id_num == remote_type_id,
             Error::type_mismatch(type_id_num, remote_type_id)
         );
-        let meta_index = context.reader.read_varuint32()?;
-        context.get_type_info_by_index(meta_index as usize)?
+        // Read type meta inline using streaming protocol
+        type_info_rc = Some(context.read_type_meta()?);
+        type_info_rc.as_ref().unwrap()
     } else {
         type_info.as_ref().unwrap()
     };
@@ -376,8 +378,8 @@ fn skip_ext(
 
 fn skip_user_struct(context: &mut ReadContext, _type_id_num: u32) -> Result<(), Error> {
     let remote_type_id = context.reader.read_varuint32()?;
-    let meta_index = context.reader.read_varuint32()?;
-    let type_info = context.get_type_info_by_index(meta_index as usize)?;
+    // Read type meta inline using streaming protocol
+    let type_info = context.read_type_meta()?;
     let type_meta = type_info.get_type_meta();
     ensure!(
         type_meta.get_type_id() == remote_type_id,
@@ -791,9 +793,8 @@ pub fn skip_enum_variant(
                 let type_id = type_info.as_ref().unwrap().get_type_id();
                 skip_struct(context, type_id, type_info)
             } else {
-                // If no type_info provided, read it from the stream
-                let meta_index = context.reader.read_varuint32()?;
-                let type_info_rc = context.get_type_info_by_index(meta_index as usize)?.clone();
+                // If no type_info provided, read it inline using streaming protocol
+                let type_info_rc = context.read_type_meta()?;
                 let type_id = type_info_rc.get_type_id();
                 let type_info_opt = Some(type_info_rc);
                 skip_struct(context, type_id, &type_info_opt)

@@ -55,7 +55,7 @@ func writeFile(path string, data []byte) {
 	}
 }
 
-func assertEqual(expected, actual interface{}, name string) {
+func assertEqual(expected, actual any, name string) {
 	if expected != actual {
 		panic(fmt.Sprintf("%s: expected %v, got %v", name, expected, actual))
 	}
@@ -64,7 +64,7 @@ func assertEqual(expected, actual interface{}, name string) {
 // getStructValue extracts the struct value from either a struct or a pointer to struct.
 // This handles the case where deserialization may return either type depending on
 // reference tracking settings.
-func getOneStringFieldStruct(obj interface{}) OneStringFieldStruct {
+func getOneStringFieldStruct(obj any) OneStringFieldStruct {
 	switch v := obj.(type) {
 	case OneStringFieldStruct:
 		return v
@@ -75,7 +75,7 @@ func getOneStringFieldStruct(obj interface{}) OneStringFieldStruct {
 	}
 }
 
-func getTwoStringFieldStruct(obj interface{}) TwoStringFieldStruct {
+func getTwoStringFieldStruct(obj any) TwoStringFieldStruct {
 	switch v := obj.(type) {
 	case TwoStringFieldStruct:
 		return v
@@ -86,7 +86,7 @@ func getTwoStringFieldStruct(obj interface{}) TwoStringFieldStruct {
 	}
 }
 
-func getOneEnumFieldStruct(obj interface{}) OneEnumFieldStruct {
+func getOneEnumFieldStruct(obj any) OneEnumFieldStruct {
 	switch v := obj.(type) {
 	case OneEnumFieldStruct:
 		return v
@@ -97,7 +97,7 @@ func getOneEnumFieldStruct(obj interface{}) OneEnumFieldStruct {
 	}
 }
 
-func getTwoEnumFieldStruct(obj interface{}) TwoEnumFieldStruct {
+func getTwoEnumFieldStruct(obj any) TwoEnumFieldStruct {
 	switch v := obj.(type) {
 	case TwoEnumFieldStruct:
 		return v
@@ -108,7 +108,7 @@ func getTwoEnumFieldStruct(obj interface{}) TwoEnumFieldStruct {
 	}
 }
 
-func getNullableComprehensiveSchemaConsistent(obj interface{}) NullableComprehensiveSchemaConsistent {
+func getNullableComprehensiveSchemaConsistent(obj any) NullableComprehensiveSchemaConsistent {
 	switch v := obj.(type) {
 	case NullableComprehensiveSchemaConsistent:
 		return v
@@ -119,7 +119,7 @@ func getNullableComprehensiveSchemaConsistent(obj interface{}) NullableComprehen
 	}
 }
 
-func getNullableComprehensiveCompatible(obj interface{}) NullableComprehensiveCompatible {
+func getNullableComprehensiveCompatible(obj any) NullableComprehensiveCompatible {
 	switch v := obj.(type) {
 	case NullableComprehensiveCompatible:
 		return v
@@ -130,7 +130,7 @@ func getNullableComprehensiveCompatible(obj interface{}) NullableComprehensiveCo
 	}
 }
 
-func getUnsignedSchemaConsistent(obj interface{}) UnsignedSchemaConsistent {
+func getUnsignedSchemaConsistent(obj any) UnsignedSchemaConsistent {
 	switch v := obj.(type) {
 	case UnsignedSchemaConsistent:
 		return v
@@ -141,7 +141,7 @@ func getUnsignedSchemaConsistent(obj interface{}) UnsignedSchemaConsistent {
 	}
 }
 
-func getUnsignedSchemaCompatible(obj interface{}) UnsignedSchemaCompatible {
+func getUnsignedSchemaCompatible(obj any) UnsignedSchemaCompatible {
 	switch v := obj.(type) {
 	case UnsignedSchemaCompatible:
 		return v
@@ -152,7 +152,7 @@ func getUnsignedSchemaCompatible(obj interface{}) UnsignedSchemaCompatible {
 	}
 }
 
-func getUnsignedSchemaConsistentSimple(obj interface{}) UnsignedSchemaConsistentSimple {
+func getUnsignedSchemaConsistentSimple(obj any) UnsignedSchemaConsistentSimple {
 	switch v := obj.(type) {
 	case UnsignedSchemaConsistentSimple:
 		return v
@@ -634,10 +634,10 @@ func testCrossLanguageSerializer() {
 	// Use numeric ID 101 to match Java's fory.register(Color.class, 101)
 	f.RegisterEnum(Color(0), 101)
 
-	vals := make([]interface{}, 0)
+	vals := make([]any, 0)
 	buf := fory.NewByteBuffer(data)
 	for buf.ReaderIndex() < len(data) {
-		var val interface{}
+		var val any
 		err := f.DeserializeWithCallbackBuffers(buf, &val, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize at index %d: %v", len(vals), err))
@@ -709,10 +709,10 @@ func testList() {
 	f.RegisterStruct(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
-	lists := make([]interface{}, 4)
+	lists := make([]any, 4)
 
 	for i := 0; i < 4; i++ {
-		var obj interface{}
+		var obj any
 		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize list %d: %v", i, err))
@@ -741,10 +741,10 @@ func testMap() {
 	f.RegisterStruct(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
-	maps := make([]interface{}, 2)
+	maps := make([]any, 2)
 
 	for i := 0; i < 2; i++ {
-		var obj interface{}
+		var obj any
 		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize map %d: %v", i, err))
@@ -846,10 +846,10 @@ func testItem() {
 	f.RegisterStruct(Item{}, 102)
 
 	buf := fory.NewByteBuffer(data)
-	items := make([]interface{}, 3)
+	items := make([]any, 3)
 
 	for i := 0; i < 3; i++ {
-		var obj interface{}
+		var obj any
 		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize item %d: %v", i, err))
@@ -878,10 +878,10 @@ func testColor() {
 	f.RegisterEnum(Color(0), 101)
 
 	buf := fory.NewByteBuffer(data)
-	colors := make([]interface{}, 4)
+	colors := make([]any, 4)
 
 	for i := 0; i < 4; i++ {
-		var obj interface{}
+		var obj any
 		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize color %d: %v", i, err))
@@ -1033,10 +1033,10 @@ func testConsistentNamed() {
 	f.RegisterNamedExtension(MyExt{}, "my_ext", &MyExtSerializer{})
 
 	buf := fory.NewByteBuffer(data)
-	values := make([]interface{}, 9)
+	values := make([]any, 9)
 
 	for i := 0; i < 9; i++ {
-		var obj interface{}
+		var obj any
 		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		fmt.Printf("Deserialized value %d: %+v\n", i, obj)
 		if err != nil {
@@ -1090,10 +1090,10 @@ func testPolymorphicList() {
 	f.RegisterStruct(AnimalListHolder{}, 304)
 
 	buf := fory.NewByteBuffer(data)
-	values := make([]interface{}, 2)
+	values := make([]any, 2)
 
 	for i := 0; i < 2; i++ {
-		var obj interface{}
+		var obj any
 		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		fmt.Printf("Deserialized: %v", obj)
 		if err != nil {
@@ -1125,10 +1125,10 @@ func testPolymorphicMap() {
 	f.RegisterStruct(AnimalMapHolder{}, 305)
 
 	buf := fory.NewByteBuffer(data)
-	values := make([]interface{}, 2)
+	values := make([]any, 2)
 
 	for i := 0; i < 2; i++ {
-		var obj interface{}
+		var obj any
 		err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 		if err != nil {
 			panic(fmt.Sprintf("Failed to deserialize value %d: %v", i, err))
@@ -1179,7 +1179,7 @@ func testOneFieldStructCompatible() {
 	}
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1218,7 +1218,7 @@ func testOneFieldStructSchema() {
 	f.RegisterStruct(OneFieldStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1250,7 +1250,7 @@ func testOneStringFieldSchemaConsistent() {
 	f.RegisterStruct(OneStringFieldStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1277,7 +1277,7 @@ func testOneStringFieldCompatible() {
 	f.RegisterStruct(OneStringFieldStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1304,7 +1304,7 @@ func testTwoStringFieldCompatible() {
 	f.RegisterStruct(TwoStringFieldStruct{}, 201)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1331,7 +1331,7 @@ func testSchemaEvolutionCompatible() {
 	f.RegisterStruct(EmptyStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize as EmptyStruct: %v", err))
@@ -1356,7 +1356,7 @@ func testSchemaEvolutionCompatibleReverse() {
 	f.RegisterStruct(TwoStringFieldStruct{}, 200)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize as TwoStringFieldStruct: %v", err))
@@ -1386,7 +1386,7 @@ func testOneEnumFieldSchemaConsistent() {
 	f.RegisterStruct(OneEnumFieldStruct{}, 211)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1414,7 +1414,7 @@ func testOneEnumFieldCompatible() {
 	f.RegisterStruct(OneEnumFieldStruct{}, 211)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1442,7 +1442,7 @@ func testTwoEnumFieldCompatible() {
 	f.RegisterStruct(TwoEnumFieldStruct{}, 212)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1474,7 +1474,7 @@ func testEnumSchemaEvolutionCompatible() {
 	f.RegisterStruct(EmptyStruct{}, 211)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize as EmptyStruct: %v", err))
@@ -1500,7 +1500,7 @@ func testEnumSchemaEvolutionCompatibleReverse() {
 	f.RegisterStruct(TwoEnumFieldStruct{}, 211)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize as TwoEnumFieldStruct: %v", err))
@@ -1536,7 +1536,7 @@ func testNullableFieldSchemaConsistentNotNull() {
 	f.RegisterStruct(NullableComprehensiveSchemaConsistent{}, 401)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1614,7 +1614,7 @@ func testNullableFieldSchemaConsistentNull() {
 	f.RegisterStruct(NullableComprehensiveSchemaConsistent{}, 401)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1693,7 +1693,7 @@ func testNullableFieldCompatibleNotNull() {
 	f.RegisterStruct(NullableComprehensiveCompatible{}, 402)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1799,7 +1799,7 @@ func testNullableFieldCompatibleNull() {
 	f.RegisterStruct(NullableComprehensiveCompatible{}, 402)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -1925,7 +1925,7 @@ type RefOuterCompatible struct {
 	Inner2 *RefInnerCompatible `fory:"ref,nullable"`
 }
 
-func getRefOuterSchemaConsistent(obj interface{}) RefOuterSchemaConsistent {
+func getRefOuterSchemaConsistent(obj any) RefOuterSchemaConsistent {
 	switch v := obj.(type) {
 	case RefOuterSchemaConsistent:
 		return v
@@ -1936,7 +1936,7 @@ func getRefOuterSchemaConsistent(obj interface{}) RefOuterSchemaConsistent {
 	}
 }
 
-func getRefOuterCompatible(obj interface{}) RefOuterCompatible {
+func getRefOuterCompatible(obj any) RefOuterCompatible {
 	switch v := obj.(type) {
 	case RefOuterCompatible:
 		return v
@@ -1960,7 +1960,7 @@ type CircularRefStruct struct {
 	SelfRef *CircularRefStruct `fory:"ref,nullable"`
 }
 
-func getCircularRefStruct(obj interface{}) *CircularRefStruct {
+func getCircularRefStruct(obj any) *CircularRefStruct {
 	switch v := obj.(type) {
 	case CircularRefStruct:
 		return &v
@@ -1984,7 +1984,7 @@ func testRefSchemaConsistent() {
 	f.RegisterStruct(RefOuterSchemaConsistent{}, 502)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -2032,7 +2032,7 @@ func testRefCompatible() {
 	f.RegisterStruct(RefOuterCompatible{}, 504)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -2083,7 +2083,7 @@ func testCircularRefSchemaConsistent() {
 	f.RegisterStruct(CircularRefStruct{}, 601)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -2120,7 +2120,7 @@ func testCircularRefCompatible() {
 	f.RegisterStruct(CircularRefStruct{}, 602)
 
 	buf := fory.NewByteBuffer(data)
-	var obj interface{}
+	var obj any
 	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -2220,7 +2220,7 @@ func testUnsignedSchemaConsistentSimple() {
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
 	f.RegisterStruct(UnsignedSchemaConsistentSimple{}, 1)
 
-	var obj interface{}
+	var obj any
 	err := f.Deserialize(data, &obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -2252,7 +2252,7 @@ func testUnsignedSchemaConsistent() {
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
 	f.RegisterStruct(UnsignedSchemaConsistent{}, 501)
 
-	var obj interface{}
+	var obj any
 	err := f.Deserialize(data, &obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))
@@ -2310,7 +2310,7 @@ func testUnsignedSchemaCompatible() {
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterStruct(UnsignedSchemaCompatible{}, 502)
 
-	var obj interface{}
+	var obj any
 	err := f.Deserialize(data, &obj)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to deserialize: %v", err))

@@ -25,7 +25,6 @@ import 'package:fory/src/memory/byte_reader.dart';
 import 'package:fory/src/memory/byte_writer.dart';
 
 typedef HeaderBrief = ({
-  bool isLittleEndian,
   bool isXLang,
   Language peerLang,
   bool oobEnabled,
@@ -38,18 +37,10 @@ final class ForyHeaderSerializer {
   ForyHeaderSerializer._();
 
   HeaderBrief? read(ByteReader br, ForyConfig conf) {
-    int magicNumber = br.readUint16();
-    // Note: In AOT mode, assert will be removed, do not put code that affects subsequent logic in assert
-    assert(magicNumber == ForyHeaderConst.magicNumber, 'no magic number detected');
     int bitmap = br.readInt8();
     // header: nullFlag
     if ((bitmap & ForyHeaderConst.nullFlag) != 0){
       return null;
-    }
-    // header: endian
-    bool isLittleEndian = (bitmap & ForyHeaderConst.littleEndianFlag) != 0;
-    if (!isLittleEndian){
-      throw ArgumentError('Non-Little-Endian format detected. Only Little-Endian is supported.');
     }
     // header: xlang
     bool isXLang = (bitmap & ForyHeaderConst.crossLanguageFlag) != 0;
@@ -69,7 +60,6 @@ final class ForyHeaderSerializer {
     //   );
     // }
     return (
-      isLittleEndian: isLittleEndian,
       isXLang: isXLang,
       peerLang: Language.values[peerLangInd],
       oobEnabled: oobEnabled,
@@ -77,9 +67,7 @@ final class ForyHeaderSerializer {
   }
 
   void write(ByteWriter bd, bool objNull, ForyConfig conf) {
-    bd.writeInt16(ForyHeaderConst.magicNumber);
-    int bitmap = ForyHeaderConst.littleEndianFlag;
-    bitmap |= ForyHeaderConst.crossLanguageFlag;
+    int bitmap = ForyHeaderConst.crossLanguageFlag;
     if (objNull){
       bitmap |= ForyHeaderConst.nullFlag;
     }

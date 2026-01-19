@@ -14,6 +14,8 @@ While working on Fory, please remember:
 - **Cross-Language Consistency**: Maintain consistency across language implementations while respecting language-specific idioms.
 - **Graalvm Support using fory codegen**: For graalvm, please use `fory codegen` to generate the serializer when building graalvm native image, do not use graallvm reflect-related configuration unless for JDK `proxy`.
 - **Xlang Type System**: Java `native mode(xlang=false)` shares same type systems between type id from `Types.BOOL~Types.STRING` with `xlang mode(xlang=true)`, but for other types, java `native mode` has different type ids.
+- **Remote git repository**: `git@github.com:apache/fory.git` is remote repository, do not use other remote repository when you want to check code under `main` branch.
+- **Contributor git repository**: A contributor should fork the `git@github.com:apache/fory.git` repo, and git push the code changes into their forked repo, then create a pull request from the branch in their forked repo into `git@github.com:apache/fory.git`.
 
 ## Build and Development Commands
 
@@ -295,9 +297,6 @@ it_dir=$(pwd)
 # Run graalvm tests
 cd $it_dir/graalvm_tests && mvn -T16 -DskipTests=true -Pnative package && target/main
 
-# Run latest_jdk_tests
-cd $it_dir/latest_jdk_tests && mvn -T16 test
-
 # Run JDK compatibility tests
 cd $it_dir/jdk_compatibility_tests && mvn -T16 test
 
@@ -498,7 +497,6 @@ Fory rust provides macro-based serialization and deserialization. Fory rust cons
   - Note that fory use codegen to support graalvm instead of reflection, fory don't use `reflect-config.json` for
     serialization, this is the core advantage of compared to graalvm JDK serialization.
 - **jdk_compatibility_tests**: test suite for fory serialization compatibility between multiple JDK versions
-- **latest_jdk_tests**: test suite for `jdk17+` versions
 
 ## Key Development Guidelines
 

@@ -31,8 +31,10 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.meta.ClassDef;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.type.Descriptor;
 import org.apache.fory.util.unsafe._JDKAccess;
 import org.testng.SkipException;
 
@@ -330,5 +332,31 @@ public class TestUtils {
     Set<String> commonFields = new HashSet<>(fieldMap1.keySet());
     commonFields.retainAll(fieldMap2.keySet());
     return Tuple3.of(commonFields, fieldMap1, fieldMap2);
+  }
+
+  /**
+   * Convert an object to a Map using Fory's field descriptors. The map uses qualified field names
+   * (className.fieldName) as keys to match NonexistentClass format.
+   *
+   * @param fory the Fory instance
+   * @param obj the object to convert
+   * @return a map of qualified field names to field values
+   */
+  public static Map<String, Object> objectToMap(Fory fory, Object obj) {
+    Class<?> cls = obj.getClass();
+    ClassDef classDef = fory.getClassResolver().getTypeDef(cls, true);
+    List<Descriptor> descriptors = classDef.getDescriptors(fory._getTypeResolver(), cls);
+    Map<String, Object> result = new LinkedHashMap<>();
+    for (Descriptor descriptor : descriptors) {
+      Field field = descriptor.getField();
+      if (field != null) {
+        FieldAccessor accessor = FieldAccessor.createAccessor(field);
+        Object value = accessor.get(obj);
+        // Use qualified field name format: className.fieldName
+        String qualifiedName = descriptor.getDeclaringClass() + "." + descriptor.getName();
+        result.put(qualifiedName, value);
+      }
+    }
+    return result;
   }
 }

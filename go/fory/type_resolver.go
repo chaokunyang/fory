@@ -52,7 +52,7 @@ const (
 )
 
 var (
-	interfaceType = reflect.TypeOf((*interface{})(nil)).Elem()
+	interfaceType = reflect.TypeOf((*any)(nil)).Elem()
 	stringType    = reflect.TypeOf((*string)(nil)).Elem()
 	// Make compilation support tinygo
 	stringPtrType = reflect.TypeOf((*string)(nil))
@@ -68,8 +68,8 @@ var (
 	uintSliceType        = reflect.TypeOf((*[]uint)(nil)).Elem()
 	float32SliceType     = reflect.TypeOf((*[]float32)(nil)).Elem()
 	float64SliceType     = reflect.TypeOf((*[]float64)(nil)).Elem()
-	interfaceSliceType   = reflect.TypeOf((*[]interface{})(nil)).Elem()
-	interfaceMapType     = reflect.TypeOf((*map[interface{}]interface{})(nil)).Elem()
+	interfaceSliceType   = reflect.TypeOf((*[]any)(nil)).Elem()
+	interfaceMapType     = reflect.TypeOf((*map[any]any)(nil)).Elem()
 	stringStringMapType  = reflect.TypeOf((*map[string]string)(nil)).Elem()
 	stringInt64MapType   = reflect.TypeOf((*map[string]int64)(nil)).Elem()
 	stringIntMapType     = reflect.TypeOf((*map[string]int)(nil)).Elem()
@@ -106,7 +106,7 @@ var generatedSerializerFactories = struct {
 }
 
 // RegisterSerializerFactory registers a factory function for a generated serializer
-func RegisterSerializerFactory(type_ interface{}, factory func() Serializer) {
+func RegisterSerializerFactory(type_ any, factory func() Serializer) {
 	reflectType := reflect.TypeOf(type_)
 	if reflectType.Kind() == reflect.Ptr {
 		reflectType = reflectType.Elem()
@@ -317,7 +317,7 @@ func (r *TypeResolver) initialize() {
 		{stringType, STRING, stringSerializer{}},
 		{stringPtrType, STRING, ptrToStringSerializer{}},
 		// Register interface types first so typeIDToTypeInfo maps to generic types
-		// that can hold any element type when deserializing into interface{}
+		// that can hold any element type when deserializing into any
 		{interfaceSliceType, LIST, sliceDynSerializer{}},
 		{interfaceMapType, MAP, mapSerializer{}},
 		// stringSliceType uses dedicated stringSliceSerializer for optimized serialization
@@ -808,11 +808,6 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 	}
 
 	var internal = false
-
-	// Early return if type registration is required but not allowed
-	if !create {
-		fmt.Errorf("type %v not registered and create=false", value.Type())
-	}
 	type_ := value.Type()
 	// Get package path and type name for registration
 	var typeName string
@@ -935,7 +930,7 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 	   Named structs need both value and pointer types registered using the negative ID system
 	   to assign the correct typeID.
 	   Multidimensional slices should use typeID = 21 for recursive serialization; on
-	   deserialization, users receive []interface{} and must apply conversion function.
+	   deserialization, users receive []any and must apply conversion function.
 	   Array types aren’t tracked separately in fory-go’s type system; semantically,
 	   arrays reuse their corresponding slice serializer/deserializer. We serialize arrays
 	   via their slice metadata and convert back to arrays by conversion function.
@@ -1129,7 +1124,7 @@ func (r *TypeResolver) registerType(
 		   the serializer for typeID 23.
 		   Overwriting here would replace info.Type with incorrect data,
 		   causing map deserialization to load the wrong type.
-		   Therefore, we always keep the initial record for map[interface{}]interface{}.
+		   Therefore, we always keep the initial record for map[any]any.
 		   For standalone maps, we use this generic type loader.
 		   For maps inside named structs, the map serializer
 		   will be supplied with the correct element type at serialization time.
@@ -1190,12 +1185,14 @@ func (r *TypeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo *TypeInf
 	typ := typeInfo.Type
 
 	if index, exists := context.typeMap[typ]; exists {
-		buffer.WriteVaruint32(index)
+		// Reference to previously written type: (index << 1) | 1, LSB=1
+		buffer.WriteVaruint32((index << 1) | 1)
 		return
 	}
 
+	// New type: index << 1, LSB=0, followed by TypeDef bytes inline
 	newIndex := uint32(len(context.typeMap))
-	buffer.WriteVaruint32(newIndex)
+	buffer.WriteVaruint32(newIndex << 1)
 	context.typeMap[typ] = newIndex
 
 	// Only build TypeDef for struct types - enums don't have field definitions
@@ -1209,7 +1206,8 @@ func (r *TypeResolver) writeSharedTypeMeta(buffer *ByteBuffer, typeInfo *TypeInf
 			err.SetError(typeDefErr)
 			return
 		}
-		context.writingTypeDefs = append(context.writingTypeDefs, typeDef)
+		// Write TypeDef bytes inline
+		typeDef.writeTypeDef(buffer, err)
 	}
 }
 
@@ -1241,72 +1239,60 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 		err.SetError(fmt.Errorf("MetaContext is nil - ensure compatible mode is enabled"))
 		return nil
 	}
-	index := int32(buffer.ReadVaruint32(err)) // shared meta index id (unsigned)
-	if index < 0 || index >= int32(len(context.readTypeInfos)) {
-		err.SetError(fmt.Errorf("TypeInfo not found for index %d (have %d type infos)", index, len(context.readTypeInfos)))
-		return nil
-	}
-	info := context.readTypeInfos[index]
 
-	// Validate that we got a valid TypeInfo
-	if info.Serializer == nil {
-		err.SetError(fmt.Errorf("TypeInfo at index %d has nil Serializer (type=%v, typeID=%d)", index, info.Type, info.TypeID))
+	// Read index marker using streaming protocol
+	indexMarker := buffer.ReadVaruint32(err)
+	if err.HasError() {
 		return nil
 	}
 
-	return info
-}
+	isRef := (indexMarker & 1) == 1
+	index := int32(indexMarker >> 1)
 
-func (r *TypeResolver) writeTypeDefs(buffer *ByteBuffer, err *Error) {
-	context := r.fory.MetaContext()
-	if context == nil {
-		buffer.WriteVaruint32Small7(0)
-		return
-	}
-	sz := len(context.writingTypeDefs)
-	buffer.WriteVaruint32Small7(uint32(sz))
-	for _, typeDef := range context.writingTypeDefs {
-		typeDef.writeTypeDef(buffer, err)
-	}
-	context.writingTypeDefs = nil
-}
+	if isRef {
+		// Reference to previously read type
+		if index < 0 || index >= int32(len(context.readTypeInfos)) {
+			err.SetError(fmt.Errorf("TypeInfo not found for index %d (have %d type infos)", index, len(context.readTypeInfos)))
+			return nil
+		}
+		info := context.readTypeInfos[index]
 
-func (r *TypeResolver) readTypeDefs(buffer *ByteBuffer, err *Error) {
-	numTypeDefs := int(buffer.ReadVaruint32Small7(err))
-	if numTypeDefs == 0 {
-		return
-	}
-	context := r.fory.MetaContext()
-	if context == nil {
-		err.SetError(fmt.Errorf("MetaContext is nil but type definitions are present"))
-		return
-	}
-	for i := 0; i < numTypeDefs; i++ {
-		id := buffer.ReadInt64(err)
-		var td *TypeDef
-		if existingTd, exists := r.defIdToTypeDef[id]; exists {
-			skipTypeDef(buffer, id, err)
-			td = existingTd
-		} else {
-			newTd := readTypeDef(r.fory, buffer, id, err)
-			r.defIdToTypeDef[id] = newTd
-			td = newTd
-			// Note: We do NOT store remote TypeDef in typeToTypeDef.
-			// typeToTypeDef is used for WRITING and must contain locally-built TypeDefs.
-			// Remote TypeDefs have different field ordering/IDs based on the remote's struct.
-			// defIdToTypeDef caches remote TypeDefs by header hash to avoid re-parsing.
+		// Validate that we got a valid TypeInfo
+		if info.Serializer == nil {
+			err.SetError(fmt.Errorf("TypeInfo at index %d has nil Serializer (type=%v, typeID=%d)", index, info.Type, info.TypeID))
+			return nil
 		}
-		typeInfo, typeInfoErr := td.buildTypeInfoWithResolver(r)
-		if typeInfoErr != nil {
-			err.SetError(typeInfoErr)
-			return
-		}
-		context.readTypeInfos = append(context.readTypeInfos, &typeInfo)
-		// Note: We intentionally do NOT update the original serializer's fieldDefs here.
-		// When serializing, Go should use its own struct definition (via initFieldsFromContext),
-		// not the remote TypeDef's field list. This is important for schema evolution
-		// where Go's struct may have different fields than the remote.
+
+		return info
 	}
+
+	// New type - read TypeDef inline
+	id := buffer.ReadInt64(err)
+	if err.HasError() {
+		return nil
+	}
+
+	var td *TypeDef
+	if existingTd, exists := r.defIdToTypeDef[id]; exists {
+		skipTypeDef(buffer, id, err)
+		td = existingTd
+	} else {
+		newTd := readTypeDef(r.fory, buffer, id, err)
+		if err.HasError() {
+			return nil
+		}
+		r.defIdToTypeDef[id] = newTd
+		td = newTd
+	}
+
+	typeInfo, typeInfoErr := td.buildTypeInfoWithResolver(r)
+	if typeInfoErr != nil {
+		err.SetError(typeInfoErr)
+		return nil
+	}
+
+	context.readTypeInfos = append(context.readTypeInfos, &typeInfo)
+	return &typeInfo
 }
 
 func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s Serializer, err error) {
@@ -2160,9 +2146,8 @@ var ErrTypeMismatch = errors.New("fory: type ID mismatch")
 
 // MetaContext holds metadata for schema evolution and type sharing
 type MetaContext struct {
-	typeMap               map[reflect.Type]uint32
-	writingTypeDefs       []*TypeDef
-	readTypeInfos         []*TypeInfo
+	typeMap               map[reflect.Type]uint32 // For writing: tracks written types
+	readTypeInfos         []*TypeInfo             // For reading: types read inline
 	scopedMetaShareEnable bool
 }
 
@@ -2174,6 +2159,5 @@ func (m *MetaContext) IsScopedMetaShareEnabled() bool {
 // Reset clears the meta context for reuse
 func (m *MetaContext) Reset() {
 	m.typeMap = make(map[reflect.Type]uint32)
-	m.writingTypeDefs = nil
 	m.readTypeInfos = nil
 }

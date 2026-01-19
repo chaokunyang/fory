@@ -72,8 +72,10 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: surefire-reports-${{ matrix.java-version }}
-          path: "**/target/surefire-reports/**"
+          name: test-reports-${{ matrix.java-version }}
+          path: |
+            **/target/surefire-reports/**
+            **/hs_err*.log
 
   openj9:
     name: Openj9 Java CI
@@ -322,6 +324,7 @@ jobs:
       - name: Run Rust Xlang Test
         env:
           FORY_RUST_JAVA_CI: "1"
+          ENABLE_FORY_DEBUG_OUTPUT: "1"
         run: |
           cd java
           mvn -T16 --no-transfer-progress clean install -DskipTests
@@ -408,6 +411,7 @@ jobs:
       - name: Run CPP Xlang Test
         env:
           FORY_CPP_JAVA_CI: "1"
+          ENABLE_FORY_DEBUG_OUTPUT: "1"
         run: |
           cd java
           mvn -T16 --no-transfer-progress clean install -DskipTests
@@ -529,6 +533,7 @@ jobs:
       - name: Run Python Xlang Test
         env:
           FORY_PYTHON_JAVA_CI: "1"
+          ENABLE_FORY_DEBUG_OUTPUT: "1"
         run: |
           cd java
           mvn -T16 --no-transfer-progress clean install -DskipTests
@@ -597,6 +602,7 @@ jobs:
       - name: Run Go Xlang Test
         env:
           FORY_GO_JAVA_CI: "1"
+          ENABLE_FORY_DEBUG_OUTPUT: "1"
         run: |
           cd java
           mvn -T16 --no-transfer-progress clean install -DskipTests

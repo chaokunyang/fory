@@ -50,11 +50,17 @@ struct not_null {};
 /// tracking).
 struct ref {};
 
-/// Tag to mark a polymorphic shared_ptr/unique_ptr field as monomorphic.
-/// Use this when the field type has virtual methods but you know the actual
-/// runtime type will always be exactly T (not a derived type).
-/// This avoids dynamic type dispatch overhead during serialization.
-struct monomorphic {};
+/// Template tag to control dynamic type dispatch for smart pointer fields.
+/// - `dynamic<true>`: Force type info to be written (enable runtime subtype
+/// support)
+/// - `dynamic<false>`: Skip type info (use declared type directly)
+///
+/// By default, Fory auto-detects polymorphism via `std::is_polymorphic<T>`.
+/// Use this tag to override the default behavior.
+///
+/// Example:
+///   fory::field<std::shared_ptr<Base>, 0, fory::dynamic<false>> ptr;
+template <bool V> struct dynamic : std::bool_constant<V> {};
 
 namespace detail {
 
@@ -97,17 +103,46 @@ inline constexpr bool is_smart_ptr_v = is_shared_ptr_v<T> || is_unique_ptr_v<T>;
 template <typename Tag, typename... Options>
 inline constexpr bool has_option_v = (std::is_same_v<Tag, Options> || ...);
 
+/// Check if a type is a dynamic<V> tag
+template <typename T> struct is_dynamic_tag : std::false_type {};
+template <bool V> struct is_dynamic_tag<dynamic<V>> : std::true_type {};
+template <typename T>
+inline constexpr bool is_dynamic_tag_v = is_dynamic_tag<T>::value;
+
+/// Check if any dynamic<V> tag is present in Options pack
+template <typename... Options>
+inline constexpr bool has_dynamic_option_v = (is_dynamic_tag_v<Options> || ...);
+
+/// Extract the dynamic value from Options pack (default = -1 for AUTO)
+/// Returns: 1 for dynamic<true>, 0 for dynamic<false>, -1 for AUTO (not
+/// specified)
+template <typename... Options> struct get_dynamic_value {
+  static constexpr int value = -1; // AUTO
+};
+template <bool V, typename... Rest>
+struct get_dynamic_value<dynamic<V>, Rest...> {
+  static constexpr int value = V ? 1 : 0;
+};
+template <typename First, typename... Rest>
+struct get_dynamic_value<First, Rest...> {
+  static constexpr int value = get_dynamic_value<Rest...>::value;
+};
+template <typename... Options>
+inline constexpr int get_dynamic_value_v = get_dynamic_value<Options...>::value;
+
 // ============================================================================
 // Field Tag Entry for FORY_FIELD_TAGS Macro
 // ============================================================================
 
 /// Compile-time field tag metadata entry
-template <int16_t Id, bool Nullable, bool Ref, bool Monomorphic = false>
+/// Dynamic: -1 = AUTO (use std::is_polymorphic), 0 = FALSE (not dynamic), 1 =
+/// TRUE (dynamic)
+template <int16_t Id, bool Nullable, bool Ref, int Dynamic = -1>
 struct FieldTagEntry {
   static constexpr int16_t id = Id;
   static constexpr bool is_nullable = Nullable;
   static constexpr bool track_ref = Ref;
-  static constexpr bool is_monomorphic = Monomorphic;
+  static constexpr int dynamic_value = Dynamic;
 };
 
 /// Default: no field tags defined for type T
@@ -139,12 +174,12 @@ enum class Encoding {
 /// Compile-time field metadata with fluent builder API.
 /// Supports both:
 ///   - Simple: F(0) - just field ID
-///   - Full:   F(0).nullable().varint().compress(false)
+///   - Full:   F(0).nullable().varint().compress(false).dynamic(false)
 struct FieldMeta {
   int16_t id_ = -1;
   bool nullable_ = false;
   bool ref_ = false;
-  bool monomorphic_ = false;
+  int dynamic_ = -1; // -1 = AUTO, 0 = FALSE, 1 = TRUE
   Encoding encoding_ = Encoding::Default;
   bool compress_ = true;
 
@@ -164,9 +199,10 @@ struct FieldMeta {
     c.ref_ = v;
     return c;
   }
-  constexpr FieldMeta monomorphic(bool v = true) const {
+  /// Set dynamic type dispatch: true = write type info, false = skip type info
+  constexpr FieldMeta dynamic(bool v) const {
     auto c = *this;
-    c.monomorphic_ = v;
+    c.dynamic_ = v ? 1 : 0;
     return c;
   }
   constexpr FieldMeta encoding(Encoding v) const {
@@ -213,14 +249,14 @@ template <typename T> constexpr auto normalize_config(T &&v) {
   }
 }
 
-/// Apply old-style tag to FieldMeta (for backward compatibility)
+/// Apply tag to FieldMeta
 constexpr FieldMeta apply_tag(FieldMeta m, nullable) { return m.nullable(); }
 constexpr FieldMeta apply_tag(FieldMeta m, not_null) {
   return m.nullable(false);
 }
 constexpr FieldMeta apply_tag(FieldMeta m, ref) { return m.ref(); }
-constexpr FieldMeta apply_tag(FieldMeta m, monomorphic) {
-  return m.monomorphic();
+template <bool V> constexpr FieldMeta apply_tag(FieldMeta m, dynamic<V>) {
+  return m.dynamic(V);
 }
 
 /// Fold multiple tags onto a base config
@@ -265,7 +301,7 @@ struct GetFieldConfigEntry {
   static constexpr int16_t id = -1;
   static constexpr bool nullable = false;
   static constexpr bool ref = false;
-  static constexpr bool monomorphic = false;
+  static constexpr int dynamic_value = -1; // AUTO
   static constexpr bool compress = true;
 };
 
@@ -284,7 +320,7 @@ public:
   static constexpr int16_t id = get_entry().meta.id_;
   static constexpr bool nullable = get_entry().meta.nullable_;
   static constexpr bool ref = get_entry().meta.ref_;
-  static constexpr bool monomorphic = get_entry().meta.monomorphic_;
+  static constexpr int dynamic_value = get_entry().meta.dynamic_;
   static constexpr bool compress = get_entry().meta.compress_;
 };
 
@@ -341,10 +377,10 @@ template <typename T, int16_t Id, typename... Options> class field {
                 "fory::ref is only valid for shared_ptr "
                 "(reference tracking requires shared ownership).");
 
-  // Validate: monomorphic only for smart pointers
-  static_assert(!detail::has_option_v<monomorphic, Options...> ||
+  // Validate: dynamic<V> only for smart pointers
+  static_assert(!detail::has_dynamic_option_v<Options...> ||
                     detail::is_smart_ptr_v<T>,
-                "fory::monomorphic is only valid for shared_ptr/unique_ptr.");
+                "fory::dynamic<V> is only valid for shared_ptr/unique_ptr.");
 
   // Validate: no options for optional (inherently nullable)
   static_assert(!detail::is_optional_v<T> || sizeof...(Options) == 0,
@@ -372,12 +408,11 @@ public:
   static constexpr bool track_ref =
       detail::is_shared_ptr_v<T> && detail::has_option_v<ref, Options...>;
 
-  /// Monomorphic serialization is enabled if:
-  /// - It's std::shared_ptr or std::unique_ptr with fory::monomorphic option
-  /// - When true, the serializer will not use dynamic type dispatch
-  static constexpr bool is_monomorphic =
-      detail::is_smart_ptr_v<T> &&
-      detail::has_option_v<monomorphic, Options...>;
+  /// Dynamic type dispatch control:
+  /// - -1 (AUTO): Use std::is_polymorphic<T> to decide
+  /// - 0 (FALSE): Skip type info, use declared type directly
+  /// - 1 (TRUE): Write type info, enable runtime subtype support
+  static constexpr int dynamic_value = detail::get_dynamic_value_v<Options...>;
 
   T value{};
 
@@ -499,18 +534,18 @@ struct field_track_ref<field<T, Id, Options...>> {
 template <typename T>
 inline constexpr bool field_track_ref_v = field_track_ref<T>::value;
 
-/// Get is_monomorphic from field type
-template <typename T> struct field_is_monomorphic {
-  static constexpr bool value = false;
+/// Get dynamic_value from field type (-1 = AUTO, 0 = FALSE, 1 = TRUE)
+template <typename T> struct field_dynamic_value {
+  static constexpr int value = -1; // AUTO
 };
 
 template <typename T, int16_t Id, typename... Options>
-struct field_is_monomorphic<field<T, Id, Options...>> {
-  static constexpr bool value = field<T, Id, Options...>::is_monomorphic;
+struct field_dynamic_value<field<T, Id, Options...>> {
+  static constexpr int value = field<T, Id, Options...>::dynamic_value;
 };
 
 template <typename T>
-inline constexpr bool field_is_monomorphic_v = field_is_monomorphic<T>::value;
+inline constexpr int field_dynamic_value_v = field_dynamic_value<T>::value;
 
 // ============================================================================
 // FORY_FIELD_TAGS Macro Support
@@ -520,7 +555,7 @@ namespace detail {
 
 // Helper to parse field tag entry from macro arguments
 // Supports: (field, id), (field, id, nullable), (field, id, ref),
-//           (field, id, nullable, ref), (field, id, monomorphic), etc.
+//           (field, id, nullable, ref), (field, id, dynamic<false>), etc.
 template <typename FieldType, int16_t Id, typename... Options>
 struct ParseFieldTagEntry {
   static constexpr bool is_nullable =
@@ -530,8 +565,7 @@ struct ParseFieldTagEntry {
   static constexpr bool track_ref =
       is_shared_ptr_v<FieldType> && has_option_v<ref, Options...>;
 
-  static constexpr bool is_monomorphic =
-      is_smart_ptr_v<FieldType> && has_option_v<monomorphic, Options...>;
+  static constexpr int dynamic_value = get_dynamic_value_v<Options...>;
 
   // Compile-time validation
   static_assert(!has_option_v<nullable, Options...> ||
@@ -541,11 +575,10 @@ struct ParseFieldTagEntry {
   static_assert(!has_option_v<ref, Options...> || is_shared_ptr_v<FieldType>,
                 "fory::ref is only valid for shared_ptr");
 
-  static_assert(!has_option_v<monomorphic, Options...> ||
-                    is_smart_ptr_v<FieldType>,
-                "fory::monomorphic is only valid for shared_ptr/unique_ptr");
+  static_assert(!has_dynamic_option_v<Options...> || is_smart_ptr_v<FieldType>,
+                "fory::dynamic<V> is only valid for shared_ptr/unique_ptr");
 
-  using type = FieldTagEntry<Id, is_nullable, track_ref, is_monomorphic>;
+  using type = FieldTagEntry<Id, is_nullable, track_ref, dynamic_value>;
 };
 
 /// Get field tag entry by index from ForyFieldTagsImpl
@@ -553,7 +586,7 @@ template <typename T, size_t Index, typename = void> struct GetFieldTagEntry {
   static constexpr int16_t id = -1;
   static constexpr bool is_nullable = false;
   static constexpr bool track_ref = false;
-  static constexpr bool is_monomorphic = false;
+  static constexpr int dynamic_value = -1; // AUTO
 };
 
 template <typename T, size_t Index>
@@ -566,7 +599,7 @@ struct GetFieldTagEntry<
   static constexpr int16_t id = Entry::id;
   static constexpr bool is_nullable = Entry::is_nullable;
   static constexpr bool track_ref = Entry::track_ref;
-  static constexpr bool is_monomorphic = Entry::is_monomorphic;
+  static constexpr int dynamic_value = Entry::dynamic_value;
 };
 
 } // namespace detail

@@ -15,6 +15,7 @@ While working on Fory, please remember:
 - **Graalvm Support using fory codegen**: For graalvm, please use `fory codegen` to generate the serializer when building graalvm native image, do not use graallvm reflect-related configuration unless for JDK `proxy`.
 - **Xlang Type System**: Java `native mode(xlang=false)` shares same type systems between type id from `Types.BOOL~Types.STRING` with `xlang mode(xlang=true)`, but for other types, java `native mode` has different type ids.
 - **Remote git repository**: `git@github.com:apache/fory.git` is remote repository, do not use other remote repository when you want to check code under `main` branch.
+- **Contributor git repository**: A contributor should fork the `git@github.com:apache/fory.git` repo, and git push the code changes into their forked repo, then create a  pull request from the branch in their forked repo into `git@github.com:apache/fory.git`.
 
 ## Build and Development Commands
 

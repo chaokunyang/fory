@@ -195,6 +195,34 @@ public abstract class TypeResolver {
   public abstract void registerInternalSerializer(Class<?> type, Serializer<?> serializer);
 
   /**
+   * Registers a type (if not already registered) and then registers the serializer class.
+   *
+   * @param type the class to register
+   * @param serializerClass the serializer class (will be instantiated by Fory)
+   * @param <T> type of class
+   */
+  public <T> void registerSerializerAndType(
+      Class<T> type, Class<? extends Serializer> serializerClass) {
+    if (!isRegistered(type)) {
+      register(type);
+    }
+    registerSerializer(type, serializerClass);
+  }
+
+  /**
+   * Registers a type (if not already registered) and then registers the serializer instance.
+   *
+   * @param type the class to register
+   * @param serializer the serializer instance to use
+   */
+  public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
+    if (!isRegistered(type)) {
+      register(type);
+    }
+    registerSerializer(type, serializer);
+  }
+
+  /**
    * Whether to track reference for this type. If false, reference tracing of subclasses may be
    * ignored too.
    */

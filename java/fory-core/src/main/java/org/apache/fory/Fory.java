@@ -239,6 +239,23 @@ public final class Fory implements BaseFory {
   }
 
   @Override
+  public <T> void registerSerializerAndType(
+      Class<T> type, Class<? extends Serializer> serializerClass) {
+    _getTypeResolver().registerSerializerAndType(type, serializerClass);
+  }
+
+  @Override
+  public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
+    _getTypeResolver().registerSerializerAndType(type, serializer);
+  }
+
+  @Override
+  public void registerSerializerAndType(
+      Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
+    _getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(this));
+  }
+
+  @Override
   public void setSerializerFactory(SerializerFactory serializerFactory) {
     classResolver.setSerializerFactory(serializerFactory);
   }

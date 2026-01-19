@@ -115,7 +115,7 @@ public abstract class TypeResolver {
   ClassInfo[] typeIdToClassInfo = new ClassInfo[] {};
   // Map for user-registered type ids, keyed by user id.
   final LongMap<ClassInfo> userTypeIdToClassInfo =
-      new LongMap<>(estimatedNumRegistered, TYPE_ID_MAP_LOAD_FACTOR);
+      new LongMap<>(4, TYPE_ID_MAP_LOAD_FACTOR);
   // Cache for readClassInfo(MemoryBuffer) - persists between calls to avoid reloading
   // dynamically created classes that can't be found by Class.forName
   private ClassInfo classInfoCache;

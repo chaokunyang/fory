@@ -155,33 +155,10 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 			nullable:  true,
 		}
 	case COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT, STRUCT, NAMED_STRUCT:
-		// For struct types, read meta_index to get type_info
-		if ctx.TypeResolver().metaShareEnabled() {
-			metaIndex := ctx.buffer.ReadVaruint32(err)
-			if ctx.HasError() {
-				return
-			}
-			context := ctx.TypeResolver().fory.MetaContext()
-			if context == nil || int(metaIndex) >= len(context.readTypeInfos) {
-				ctx.SetError(DeserializationErrorf("invalid meta index %d", metaIndex))
-				return
-			}
-			typeInfo = context.readTypeInfos[metaIndex]
-		} else {
-			// Without share_meta, read namespace and type_name
-			nsBytes, nsErr := ctx.TypeResolver().metaStringResolver.ReadMetaStringBytes(ctx.buffer, err)
-			if nsErr != nil {
-				ctx.SetError(FromError(nsErr))
-				return
-			}
-			typeNameBytes, tnErr := ctx.TypeResolver().metaStringResolver.ReadMetaStringBytes(ctx.buffer, err)
-			if tnErr != nil {
-				ctx.SetError(FromError(tnErr))
-				return
-			}
-			// We don't have the actual type registered, so we'll have to skip fields blindly
-			_ = nsBytes
-			_ = typeNameBytes
+		// Read type info using the shared meta reader when enabled.
+		typeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, err)
+		if ctx.HasError() {
+			return
 		}
 		fieldDef = FieldDef{
 			fieldType: NewSimpleFieldType(TypeId(typeID)),

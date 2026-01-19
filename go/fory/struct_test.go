@@ -212,3 +212,40 @@ func TestSetFieldTypeId(t *testing.T) {
 		}
 	}
 }
+
+func TestSkipAnyValueReadsSharedTypeMeta(t *testing.T) {
+	type First struct {
+		ID int
+	}
+	type Second struct {
+		Name string
+	}
+
+	f := New(WithXlang(true), WithCompatible(true))
+	require.NoError(t, f.RegisterStruct(First{}, 2001))
+	require.NoError(t, f.RegisterStruct(Second{}, 2002))
+
+	buf := NewByteBuffer(nil)
+	require.NoError(t, f.SerializeTo(buf, First{ID: 10}))
+	require.NoError(t, f.SerializeTo(buf, Second{Name: "ok"}))
+
+	f.resetReadState()
+	f.readCtx.SetData(buf.Bytes())
+
+	isNull := readHeader(f.readCtx)
+	require.False(t, isNull)
+	SkipAnyValue(f.readCtx, true)
+	require.NoError(t, f.readCtx.CheckError())
+
+	f.resetReadState()
+	isNull = readHeader(f.readCtx)
+	require.False(t, isNull)
+
+	var out any
+	f.readCtx.ReadValue(reflect.ValueOf(&out).Elem(), RefModeTracking, true)
+	require.NoError(t, f.readCtx.CheckError())
+
+	result, ok := out.(*Second)
+	require.True(t, ok)
+	require.Equal(t, "ok", result.Name)
+}

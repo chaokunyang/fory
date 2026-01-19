@@ -1226,14 +1226,65 @@ fields in Fory order. The type meta before the value is written according to the
 
 #### Field order
 
-Fory uses `DescriptorGrouper` to build a deterministic order:
+Field order must be deterministic and identical across languages. This section defines the
+language-neutral ordering algorithm; implementations must follow the rules here rather than any
+language-specific helper classes.
 
-- primitive/boxed/built-in fields first
-- collections and maps next
-- other user-defined fields last
+##### Step 1: Field identifier
 
-Within each group, descriptors are sorted by a stable comparator (type ID and name). The exact
-ordering is implementation-defined but stable within a release.
+For every field, compute a stable identifier used for ordering:
+
+- If a tag ID is configured (e.g., `@ForyField(id=...)`), use the tag ID as a decimal string.
+- Otherwise, use the field name converted to `snake_case`.
+
+Tag IDs must be unique within a type; duplicate tag IDs are invalid.
+
+##### Step 2: Group assignment
+
+Assign each field to exactly one group in the following order:
+
+1. **Primitive (non-nullable)**: primitive or boxed numeric/boolean types with `nullable=false`.
+2. **Primitive (nullable)**: primitive or boxed numeric/boolean types with `nullable=true`.
+3. **Built-in (non-container)**: internal type IDs that are not user-defined and not UNKNOWN,
+   excluding collections and maps (for example: STRING, TIME types, UNION, primitive arrays).
+4. **Collection**: list/set/object-array fields. Non-primitive arrays are treated as LIST for
+   ordering purposes.
+5. **Map**: map fields.
+6. **Other**: user-defined enum/struct/ext and UNKNOWN types.
+
+##### Step 3: Intra-group ordering
+
+Within each group, apply the following sort keys in order until a difference is found:
+
+**Primitive groups (1 and 2):**
+
+1. **Compression category**: fixed-size numeric and boolean types first, then compressed numeric
+   types (`VARINT32`, `VAR_UINT32`, `VARINT64`, `VAR_UINT64`, `TAGGED_INT64`, `TAGGED_UINT64`).
+2. **Primitive size** (descending): 8-byte > 4-byte > 2-byte > 1-byte.
+3. **Internal type ID** (descending) as a tie-breaker for equal sizes.
+4. **Field identifier** (lexicographic ascending).
+
+**Built-in / Collection / Map groups (3-5):**
+
+1. **Internal type ID** (ascending).
+2. **Field identifier** (lexicographic ascending).
+
+**Other group (6):**
+
+1. **Field identifier** (lexicographic ascending).
+
+If two fields still compare equal after the rules above, preserve a deterministic order by
+comparing declaring class name and then the original field name. This tie-breaker should be
+reachable only in invalid schemas (e.g., duplicate tag IDs).
+
+##### Notes
+
+- The ordering above is used for serialization order and TypeDef field lists. Schema hashes use
+  the field identifier ordering described in the schema hash section.
+- Collection/map normalization is required so peers with different concrete types (e.g.,
+  `List` vs `Collection`) still agree on ordering.
+- The compressed numeric rule is critical for cross-language consistency: compressed integer
+  fields are always placed after all fixed-width integer fields.
 
 #### Schema consistent (meta share disabled)
 
@@ -1433,7 +1484,7 @@ Meta strings are required for enum and struct serialization (encoding field name
     - [ ] Generate type IDs: `(user_id << 8) | internal_type_id`
 
 14. **Field Ordering**
-    - [ ] Implement DescriptorGrouper ordering (primitive/boxed/built-in, collections/maps, other)
+    - [ ] Implement the spec-defined grouping and ordering (primitive/boxed/built-in, collections/maps, other)
     - [ ] Use a stable comparator within each group (type ID and name)
     - [ ] Use tag ID or snake_case field name as field identifier for fingerprints
 

@@ -86,7 +86,8 @@ final class SlicedStringUtil {
       writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
       if (Platform.IS_LITTLE_ENDIAN) {
         writerIndex =
-            offHeapWriteCharsUTF16WithOffset(serializer, buffer, chars, offset, writerIndex, numBytes);
+            offHeapWriteCharsUTF16WithOffset(
+                serializer, buffer, chars, offset, writerIndex, numBytes);
       } else {
         writerIndex =
             offHeapWriteCharsUTF16BEWithOffset(

@@ -66,8 +66,7 @@ public class StringEncodingUtils {
   }
 
   /** A fast convert algorithm to convert an utf16 char array slice into an utf8 byte array. */
-  public static int convertUTF16ToUTF8(
-      char[] src, int offset, int len, byte[] dst, int dp) {
+  public static int convertUTF16ToUTF8(char[] src, int offset, int len, byte[] dst, int dp) {
     int end = offset + len;
     for (int charOffset = offset, arrayOffset = Platform.CHAR_ARRAY_OFFSET + (offset << 1);
         charOffset < end; ) {

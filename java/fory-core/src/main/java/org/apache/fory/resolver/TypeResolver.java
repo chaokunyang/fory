@@ -1108,9 +1108,6 @@ public abstract class TypeResolver {
         // Use explicit annotation value
         return foryField.nullable();
       }
-      if (TypeUtils.isBoxed(rawType)) {
-        return true;
-      }
       // Default for xlang: false for all non-primitives, except Optional types
       return TypeUtils.isOptionalType(rawType);
     }

@@ -69,6 +69,9 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   // Make offset compatible with graalvm native image.
   private static final long STRING_VALUE_FIELD_OFFSET;
+  private static final boolean STRING_HAS_COUNT_OFFSET;
+  private static final long STRING_COUNT_FIELD_OFFSET;
+  private static final long STRING_OFFSET_FIELD_OFFSET;
 
   private static class Offset {
     // Make offset compatible with graalvm native image.
@@ -97,13 +100,22 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     } catch (NoSuchFieldException e) {
       throw new RuntimeException(e);
     }
-    // String length field for android.
-    Preconditions.checkArgument(
-        ReflectionUtils.getFieldNullable(String.class, "count") == null,
-        "Current jdk not supported");
-    Preconditions.checkArgument(
-        ReflectionUtils.getFieldNullable(String.class, "offset") == null,
-        "Current jdk not supported");
+    Field countField = ReflectionUtils.getFieldNullable(String.class, "count");
+    Field offsetField = ReflectionUtils.getFieldNullable(String.class, "offset");
+    if (countField != null || offsetField != null) {
+      Preconditions.checkArgument(
+          countField != null && offsetField != null, "Current jdk not supported");
+      Preconditions.checkArgument(
+          countField.getType() == int.class && offsetField.getType() == int.class,
+          "Current jdk not supported");
+      STRING_HAS_COUNT_OFFSET = true;
+      STRING_COUNT_FIELD_OFFSET = Platform.objectFieldOffset(countField);
+      STRING_OFFSET_FIELD_OFFSET = Platform.objectFieldOffset(offsetField);
+    } else {
+      STRING_HAS_COUNT_OFFSET = false;
+      STRING_COUNT_FIELD_OFFSET = -1;
+      STRING_OFFSET_FIELD_OFFSET = -1;
+    }
   }
 
   private final boolean compressString;
@@ -160,10 +172,18 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       if (!STRING_VALUE_FIELD_IS_CHARS) {
         throw new UnsupportedOperationException();
       }
-      if (compressString) {
-        return new Invoke(strSerializer, "writeCompressedCharsString", buffer, str);
+      if (STRING_HAS_COUNT_OFFSET) {
+        if (compressString) {
+          return new Invoke(strSerializer, "writeCompressedCharsStringWithOffset", buffer, str);
+        } else {
+          return new Invoke(strSerializer, "writeCharsStringWithOffset", buffer, str);
+        }
       } else {
-        return new Invoke(strSerializer, "writeCharsString", buffer, str);
+        if (compressString) {
+          return new Invoke(strSerializer, "writeCompressedCharsString", buffer, str);
+        } else {
+          return new Invoke(strSerializer, "writeCharsString", buffer, str);
+        }
       }
     }
   }
@@ -344,7 +364,19 @@ public final class StringSerializer extends ImmutableSerializer<String> {
         writeBytesString(buffer, value);
       }
     } else {
-      assert STRING_VALUE_FIELD_IS_CHARS;
+      writeJava8String(buffer, value);
+    }
+  }
+
+  private void writeJava8String(MemoryBuffer buffer, String value) {
+    assert STRING_VALUE_FIELD_IS_CHARS;
+    if (STRING_HAS_COUNT_OFFSET) {
+      if (compressString) {
+        writeCompressedCharsStringWithOffset(buffer, value);
+      } else {
+        writeCharsStringWithOffset(buffer, value);
+      }
+    } else {
       if (compressString) {
         writeCompressedCharsString(buffer, value);
       } else {
@@ -404,6 +436,25 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   @CodegenInvoke
+  public void writeCompressedCharsStringWithOffset(MemoryBuffer buffer, String value) {
+    final char[] chars = (char[]) Platform.getObject(value, STRING_VALUE_FIELD_OFFSET);
+    final int offset = Platform.getInt(value, STRING_OFFSET_FIELD_OFFSET);
+    final int count = Platform.getInt(value, STRING_COUNT_FIELD_OFFSET);
+    final byte coder = SlicedStringUtil.bestCoder(chars, offset, count);
+    if (coder == LATIN1) {
+      SlicedStringUtil.writeCharsLatin1WithOffset(this, buffer, chars, offset, count);
+    } else if (coder == UTF8) {
+      if (writeNumUtf16BytesForUtf8Encoding) {
+        SlicedStringUtil.writeCharsUTF8PerfOptimizedWithOffset(this, buffer, chars, offset, count);
+      } else {
+        SlicedStringUtil.writeCharsUTF8WithOffset(this, buffer, chars, offset, count);
+      }
+    } else {
+      SlicedStringUtil.writeCharsUTF16WithOffset(this, buffer, chars, offset, count);
+    }
+  }
+
+  @CodegenInvoke
   public static void writeBytesString(MemoryBuffer buffer, String value) {
     byte[] bytes = (byte[]) Platform.getObject(value, STRING_VALUE_FIELD_OFFSET);
     byte coder = Platform.getByte(value, Offset.STRING_CODER_FIELD_OFFSET);
@@ -447,6 +498,18 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       writeCharsLatin1(buffer, chars, chars.length);
     } else {
       writeCharsUTF16(buffer, chars, chars.length);
+    }
+  }
+
+  @CodegenInvoke
+  public void writeCharsStringWithOffset(MemoryBuffer buffer, String value) {
+    final char[] chars = (char[]) Platform.getObject(value, STRING_VALUE_FIELD_OFFSET);
+    final int offset = Platform.getInt(value, STRING_OFFSET_FIELD_OFFSET);
+    final int count = Platform.getInt(value, STRING_COUNT_FIELD_OFFSET);
+    if (SlicedStringUtil.isLatin(chars, offset, count)) {
+      SlicedStringUtil.writeCharsLatin1WithOffset(this, buffer, chars, offset, count);
+    } else {
+      SlicedStringUtil.writeCharsUTF16WithOffset(this, buffer, chars, offset, count);
     }
   }
 
@@ -1118,7 +1181,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     return charArray;
   }
 
-  private byte[] getByteArray(int numElements) {
+  byte[] getByteArray(int numElements) {
     byte[] byteArray = this.byteArray;
     if (byteArray.length < numElements) {
       byteArray = new byte[numElements];

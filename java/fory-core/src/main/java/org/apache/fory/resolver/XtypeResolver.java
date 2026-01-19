@@ -54,7 +54,6 @@ import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
@@ -125,9 +124,6 @@ public class XtypeResolver extends TypeResolver {
   private final boolean shareMeta;
   private int xtypeIdGenerator = 64;
 
-  // Use ClassInfo[] or LongMap?
-  // ClassInfo[] is faster, but we can't have bigger type id.
-  private final LongMap<ClassInfo> xtypeIdToClassMap = new LongMap<>(8, loadFactor);
   private final Set<Integer> registeredTypeIds = new HashSet<>();
   private final Generics generics;
 
@@ -152,7 +148,7 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   public void register(Class<?> type) {
-    while (registeredTypeIds.contains(xtypeIdGenerator)) {
+    while (containsUserTypeId(xtypeIdGenerator)) {
       xtypeIdGenerator++;
     }
     register(type, xtypeIdGenerator++);
@@ -164,6 +160,8 @@ public class XtypeResolver extends TypeResolver {
     // ClassInfo[] has length of max type id. If the type id is too big, Fory will waste many
     // memory. We can relax this limit in the future.
     Preconditions.checkArgument(userTypeId < MAX_TYPE_ID, "Too big type id %s", userTypeId);
+    Preconditions.checkArgument(
+        !containsUserTypeId(userTypeId), "Type id %s has been registered", userTypeId);
     ClassInfo classInfo = classInfoMap.get(type);
     if (type.isArray()) {
       buildClassInfo(type);
@@ -288,7 +286,14 @@ public class XtypeResolver extends TypeResolver {
     }
     classInfoMap.put(type, classInfo);
     registeredTypeIds.add(xtypeId);
-    xtypeIdToClassMap.put(xtypeId, classInfo);
+    int internalTypeId = xtypeId & 0xff;
+    if (Types.isUserDefinedType((byte) internalTypeId) && !Types.isNamedType(internalTypeId)) {
+      putUserTypeInfo(xtypeId >>> 8, classInfo);
+    } else if (!Types.isNamedType(internalTypeId)) {
+      if (getInternalTypeInfoByTypeId(xtypeId) == null) {
+        putInternalTypeInfo(xtypeId, classInfo);
+      }
+    }
   }
 
   /**
@@ -356,8 +361,7 @@ public class XtypeResolver extends TypeResolver {
     int oldTypeId = classInfo.typeId;
     int foryId = oldTypeId & 0xff;
 
-    if (oldTypeId != 0 && xtypeIdToClassMap.get(oldTypeId) == classInfo) {
-      xtypeIdToClassMap.remove(oldTypeId);
+    if (oldTypeId != 0) {
       registeredTypeIds.remove(oldTypeId);
     }
 
@@ -375,7 +379,6 @@ public class XtypeResolver extends TypeResolver {
 
     int newTypeId = classInfo.typeId;
     if (newTypeId != 0) {
-      xtypeIdToClassMap.put(newTypeId, classInfo);
       registeredTypeIds.add(newTypeId);
     }
   }
@@ -582,7 +585,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   public ClassInfo getXtypeInfo(int typeId) {
-    return xtypeIdToClassMap.get(typeId);
+    return getInternalTypeInfoByTypeId(typeId);
   }
 
   public ClassInfo getUserTypeInfo(String namespace, String typeName) {
@@ -591,8 +594,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   public ClassInfo getUserTypeInfo(int userTypeId) {
-    Preconditions.checkArgument((userTypeId & 0xff) < Types.BOUND);
-    return xtypeIdToClassMap.get(userTypeId);
+    return getUserTypeInfoByTypeId(userTypeId);
   }
 
   // buildGenericType methods are inherited from TypeResolver
@@ -834,8 +836,8 @@ public class XtypeResolver extends TypeResolver {
   private void registerType(int xtypeId, Class<?> type, Serializer<?> serializer) {
     ClassInfo classInfo = newClassInfo(type, serializer, (short) xtypeId);
     classInfoMap.put(type, classInfo);
-    if (!xtypeIdToClassMap.containsKey(xtypeId)) {
-      xtypeIdToClassMap.put(xtypeId, classInfo);
+    if (getInternalTypeInfoByTypeId(xtypeId) == null) {
+      putInternalTypeInfo(xtypeId, classInfo);
     }
   }
 
@@ -857,7 +859,7 @@ public class XtypeResolver extends TypeResolver {
       ClassInfo classInfo = newClassInfo(cls, serializer, (short) Types.UNION);
       classInfoMap.put(cls, classInfo);
     }
-    xtypeIdToClassMap.put(Types.UNION, classInfoMap.get(org.apache.fory.type.union.Union.class));
+    putInternalTypeInfo(Types.UNION, classInfoMap.get(org.apache.fory.type.union.Union.class));
   }
 
   public ClassInfo writeClassInfo(MemoryBuffer buffer, Object obj) {
@@ -899,44 +901,25 @@ public class XtypeResolver extends TypeResolver {
   // nilClassInfo and nilClassInfoHolder are inherited from TypeResolver
 
   @Override
-  protected ClassInfo getClassInfoByTypeId(int typeId) {
-    int internalTypeId = typeId & 0xff;
-    switch (internalTypeId) {
-      case Types.LIST:
-        return getListClassInfo();
-      case Types.TIMESTAMP:
-        return getGenericClassInfo();
-      default:
-        ClassInfo classInfo = xtypeIdToClassMap.get(typeId);
-        if (classInfo == null) {
-          throwUnexpectTypeIdException(typeId);
-        }
-        return classInfo;
-    }
-  }
-
-  private void throwUnexpectTypeIdException(long xtypeId) {
-    throw new IllegalStateException(String.format("Type id %s not registered", xtypeId));
-  }
-
-  private ClassInfo getListClassInfo() {
+  protected ClassInfo getListClassInfo() {
     fory.incReadDepth();
     GenericType genericType = generics.nextGenericType();
     fory.decDepth();
     if (genericType != null) {
       return getOrBuildClassInfo(genericType.getCls());
     }
-    return xtypeIdToClassMap.get(Types.LIST);
+    return requireInternalTypeInfoByTypeId(Types.LIST);
   }
 
-  private ClassInfo getGenericClassInfo() {
+  @Override
+  protected ClassInfo getTimestampClassInfo() {
     fory.incReadDepth();
     GenericType genericType = generics.nextGenericType();
     fory.decDepth();
     if (genericType != null) {
       return getOrBuildClassInfo(genericType.getCls());
     }
-    return xtypeIdToClassMap.get(Types.TIMESTAMP);
+    return requireInternalTypeInfoByTypeId(Types.TIMESTAMP);
   }
 
   private ClassInfo getOrBuildClassInfo(Class<?> cls) {

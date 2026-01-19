@@ -102,6 +102,7 @@ public abstract class TypeResolver {
       "Meta context must be set before serialization, "
           + "please set meta context by SerializationContext.setMetaContext";
   private static final GenericType OBJECT_GENERIC_TYPE = GenericType.build(Object.class);
+  private static final float TYPE_ID_MAP_LOAD_FACTOR = 0.5f;
 
   final Fory fory;
   final boolean metaContextShareEnabled;
@@ -110,6 +111,11 @@ public abstract class TypeResolver {
   final IdentityMap<Class<?>, ClassInfo> classInfoMap = new IdentityMap<>(64, foryMapLoadFactor);
   final ExtRegistry extRegistry;
   final Map<Class<?>, ClassDef> classDefMap = new HashMap<>();
+  // Map for internal type ids (non-user-defined).
+  ClassInfo[] typeIdToClassInfo = new ClassInfo[] {};
+  // Map for user-registered type ids, keyed by user id.
+  final LongMap<ClassInfo> userTypeIdToClassInfo =
+      new LongMap<>(estimatedNumRegistered, TYPE_ID_MAP_LOAD_FACTOR);
   // Cache for readClassInfo(MemoryBuffer) - persists between calls to avoid reloading
   // dynamically created classes that can't be found by Class.forName
   private ClassInfo classInfoCache;
@@ -376,26 +382,9 @@ public abstract class TypeResolver {
    */
   public final ClassInfo readClassInfo(MemoryBuffer buffer) {
     int header = buffer.readVarUint32Small14();
-    int internalTypeId = header & 0xff;
-    switch (internalTypeId) {
-      case Types.NAMED_ENUM:
-      case Types.NAMED_STRUCT:
-      case Types.NAMED_EXT:
-      case Types.NAMED_COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          return readSharedClassMeta(buffer);
-        }
-        ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
-        classInfoCache = classInfo;
-        return classInfo;
-      case Types.COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          return readSharedClassMeta(buffer);
-        }
-        return getClassInfoByTypeId(header);
-      default:
-        return getClassInfoByTypeId(header);
-    }
+    ClassInfo classInfo = readClassInfoByHeader(buffer, header, classInfoCache, null, null);
+    classInfoCache = classInfo;
+    return classInfo;
   }
 
   /**
@@ -404,26 +393,9 @@ public abstract class TypeResolver {
    */
   public final ClassInfo readClassInfo(MemoryBuffer buffer, Class<?> targetClass) {
     int header = buffer.readVarUint32Small14();
-    int internalTypeId = header & 0xff;
-    switch (internalTypeId) {
-      case Types.NAMED_ENUM:
-      case Types.NAMED_STRUCT:
-      case Types.NAMED_EXT:
-      case Types.NAMED_COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          return readSharedClassMeta(buffer, targetClass);
-        }
-        ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
-        classInfoCache = classInfo;
-        return classInfo;
-      case Types.COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          return readSharedClassMeta(buffer, targetClass);
-        }
-        return getClassInfoByTypeId(header);
-      default:
-        return getClassInfoByTypeId(header);
-    }
+    ClassInfo classInfo = readClassInfoByHeader(buffer, header, classInfoCache, null, targetClass);
+    classInfoCache = classInfo;
+    return classInfo;
   }
 
   /**
@@ -438,24 +410,7 @@ public abstract class TypeResolver {
   @CodegenInvoke
   public final ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfo classInfoCache) {
     int header = buffer.readVarUint32Small14();
-    int internalTypeId = header & 0xff;
-    switch (internalTypeId) {
-      case Types.NAMED_ENUM:
-      case Types.NAMED_STRUCT:
-      case Types.NAMED_EXT:
-      case Types.NAMED_COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          return readSharedClassMeta(buffer);
-        }
-        return readClassInfoByCache(buffer, classInfoCache, header);
-      case Types.COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          return readSharedClassMeta(buffer);
-        }
-        return getClassInfoByTypeId(header);
-      default:
-        return getClassInfoByTypeId(header);
-    }
+    return readClassInfoByHeader(buffer, header, classInfoCache, null, null);
   }
 
   /**
@@ -469,6 +424,15 @@ public abstract class TypeResolver {
   @CodegenInvoke
   public final ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
     int header = buffer.readVarUint32Small14();
+    return readClassInfoByHeader(buffer, header, classInfoHolder.classInfo, classInfoHolder, null);
+  }
+
+  private ClassInfo readClassInfoByHeader(
+      MemoryBuffer buffer,
+      int header,
+      ClassInfo classInfoCache,
+      ClassInfoHolder classInfoHolder,
+      Class<?> targetClass) {
     int internalTypeId = header & 0xff;
     switch (internalTypeId) {
       case Types.NAMED_ENUM:
@@ -476,16 +440,31 @@ public abstract class TypeResolver {
       case Types.NAMED_EXT:
       case Types.NAMED_COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
-          return readSharedClassMeta(buffer);
+          return targetClass == null
+              ? readSharedClassMeta(buffer)
+              : readSharedClassMeta(buffer, targetClass);
         }
-        return readClassInfoFromBytes(buffer, classInfoHolder, header);
+        if (classInfoHolder != null) {
+          return readClassInfoFromBytes(buffer, classInfoHolder, header);
+        }
+        return readClassInfoFromBytes(buffer, classInfoCache, header);
       case Types.COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
-          return readSharedClassMeta(buffer);
+          return targetClass == null
+              ? readSharedClassMeta(buffer)
+              : readSharedClassMeta(buffer, targetClass);
         }
-        return getClassInfoByTypeId(header);
+        return ensureSerializerForClassInfo(requireUserTypeInfoByTypeId(header));
+      case Types.ENUM:
+      case Types.STRUCT:
+      case Types.EXT:
+        return ensureSerializerForClassInfo(requireUserTypeInfoByTypeId(header));
+      case Types.LIST:
+        return ensureSerializerForClassInfo(getListClassInfo());
+      case Types.TIMESTAMP:
+        return ensureSerializerForClassInfo(getTimestampClassInfo());
       default:
-        return getClassInfoByTypeId(header);
+        return ensureSerializerForClassInfo(requireInternalTypeInfoByTypeId(header));
     }
   }
 
@@ -619,12 +598,65 @@ public abstract class TypeResolver {
    */
   protected abstract ClassInfo ensureSerializerForClassInfo(ClassInfo classInfo);
 
-  /**
-   * Get ClassInfo by type ID from the registry. For internal types (0-255), returns the
-   * pre-registered ClassInfo. For user types, decodes the type ID and looks up in the appropriate
-   * registry.
-   */
-  protected abstract ClassInfo getClassInfoByTypeId(int typeId);
+  protected ClassInfo getListClassInfo() {
+    return requireInternalTypeInfoByTypeId(Types.LIST);
+  }
+
+  protected ClassInfo getTimestampClassInfo() {
+    return requireInternalTypeInfoByTypeId(Types.TIMESTAMP);
+  }
+
+  protected final ClassInfo getInternalTypeInfoByTypeId(int typeId) {
+    if (typeId < 0 || typeId >= typeIdToClassInfo.length) {
+      return null;
+    }
+    return typeIdToClassInfo[typeId];
+  }
+
+  protected final ClassInfo getUserTypeInfoByTypeId(int typeId) {
+    int userId = typeId >>> 8;
+    ClassInfo classInfo = userTypeIdToClassInfo.get(userId);
+    if (classInfo == null) {
+      return null;
+    }
+    if ((classInfo.typeId & 0xff) != (typeId & 0xff)) {
+      return null;
+    }
+    return classInfo;
+  }
+
+  protected final ClassInfo requireUserTypeInfoByTypeId(int typeId) {
+    ClassInfo classInfo = getUserTypeInfoByTypeId(typeId);
+    if (classInfo == null) {
+      throw new IllegalStateException(String.format("Type id %s not registered", typeId));
+    }
+    return classInfo;
+  }
+
+  protected final ClassInfo requireInternalTypeInfoByTypeId(int typeId) {
+    ClassInfo classInfo = getInternalTypeInfoByTypeId(typeId);
+    if (classInfo == null) {
+      throw new IllegalStateException(String.format("Type id %s not registered", typeId));
+    }
+    return classInfo;
+  }
+
+  protected final void putInternalTypeInfo(int typeId, ClassInfo classInfo) {
+    if (typeIdToClassInfo.length <= typeId) {
+      ClassInfo[] tmp = new ClassInfo[(typeId + 1) * 2];
+      System.arraycopy(typeIdToClassInfo, 0, tmp, 0, typeIdToClassInfo.length);
+      typeIdToClassInfo = tmp;
+    }
+    typeIdToClassInfo[typeId] = classInfo;
+  }
+
+  protected final void putUserTypeInfo(int userId, ClassInfo classInfo) {
+    userTypeIdToClassInfo.put(userId, classInfo);
+  }
+
+  protected final boolean containsUserTypeId(int userId) {
+    return userTypeIdToClassInfo.containsKey(userId);
+  }
 
   final ClassInfo buildMetaSharedClassInfo(
       Tuple2<ClassDef, ClassInfo> classDefTuple, ClassDef classDef) {

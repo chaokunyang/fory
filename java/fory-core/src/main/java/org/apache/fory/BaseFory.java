@@ -168,8 +168,7 @@ public interface BaseFory {
    * @param type class needed to be serialized/deserialized.
    * @param serializerCreator serializer creator with param {@link Fory}
    */
-  void registerSerializerAndType(
-      Class<?> type, Function<Fory, Serializer<?>> serializerCreator);
+  void registerSerializerAndType(Class<?> type, Function<Fory, Serializer<?>> serializerCreator);
 
   void setSerializerFactory(SerializerFactory serializerFactory);
 

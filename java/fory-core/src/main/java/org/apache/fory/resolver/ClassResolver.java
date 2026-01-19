@@ -811,9 +811,7 @@ public class ClassResolver extends TypeResolver {
     if (Types.isUserDefinedType((byte) internalTypeId)) {
       return false;
     }
-    return classId > 0
-        && classId < typeIdToClassInfo.length
-        && typeIdToClassInfo[classId] != null;
+    return classId > 0 && classId < typeIdToClassInfo.length && typeIdToClassInfo[classId] != null;
   }
 
   /** Returns true if <code>cls</code> is fory inner registered class. */
@@ -1400,8 +1398,7 @@ public class ClassResolver extends TypeResolver {
 
   private ClassInfo getOrUpdateClassInfo(short classId) {
     ClassInfo classInfo = classInfoCache;
-    ClassInfo internalInfo =
-        classId < typeIdToClassInfo.length ? typeIdToClassInfo[classId] : null;
+    ClassInfo internalInfo = classId < typeIdToClassInfo.length ? typeIdToClassInfo[classId] : null;
     Preconditions.checkArgument(
         internalInfo != null, "Internal class id %s is not registered", classId);
     if (classInfo != internalInfo) {

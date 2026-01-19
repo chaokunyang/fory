@@ -619,8 +619,14 @@ public abstract class TypeResolver {
     if (classInfo == null) {
       return null;
     }
-    if ((classInfo.typeId & 0xff) != (typeId & 0xff)) {
-      return null;
+    int internalTypeId = typeId & 0xff;
+    int registeredInternalTypeId = classInfo.typeId & 0xff;
+    if (registeredInternalTypeId != internalTypeId) {
+      if (classInfo.serializer == null) {
+        classInfo.typeId = typeId;
+      } else {
+        return null;
+      }
     }
     return classInfo;
   }

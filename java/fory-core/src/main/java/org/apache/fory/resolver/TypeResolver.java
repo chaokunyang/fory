@@ -382,7 +382,43 @@ public abstract class TypeResolver {
    */
   public final ClassInfo readClassInfo(MemoryBuffer buffer) {
     int header = buffer.readVarUint32Small14();
-    ClassInfo classInfo = readClassInfoByHeader(buffer, header, classInfoCache, null, null);
+    int internalTypeId = header & 0xff;
+    ClassInfo classInfo;
+    switch (internalTypeId) {
+      case Types.NAMED_ENUM:
+      case Types.NAMED_STRUCT:
+      case Types.NAMED_EXT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
+        if (metaContextShareEnabled) {
+          classInfo = readSharedClassMeta(buffer);
+        } else {
+          classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
+        }
+        break;
+      case Types.COMPATIBLE_STRUCT:
+        if (metaContextShareEnabled) {
+          classInfo = readSharedClassMeta(buffer);
+        } else {
+          classInfo = requireUserTypeInfoByTypeId(header);
+        }
+        break;
+      case Types.ENUM:
+      case Types.STRUCT:
+      case Types.EXT:
+        classInfo = requireUserTypeInfoByTypeId(header);
+        break;
+      case Types.LIST:
+        classInfo = getListClassInfo();
+        break;
+      case Types.TIMESTAMP:
+        classInfo = getTimestampClassInfo();
+        break;
+      default:
+        classInfo = requireInternalTypeInfoByTypeId(header);
+    }
+    if (classInfo.serializer == null) {
+      classInfo = ensureSerializerForClassInfo(classInfo);
+    }
     classInfoCache = classInfo;
     return classInfo;
   }
@@ -393,7 +429,43 @@ public abstract class TypeResolver {
    */
   public final ClassInfo readClassInfo(MemoryBuffer buffer, Class<?> targetClass) {
     int header = buffer.readVarUint32Small14();
-    ClassInfo classInfo = readClassInfoByHeader(buffer, header, classInfoCache, null, targetClass);
+    int internalTypeId = header & 0xff;
+    ClassInfo classInfo;
+    switch (internalTypeId) {
+      case Types.NAMED_ENUM:
+      case Types.NAMED_STRUCT:
+      case Types.NAMED_EXT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
+        if (metaContextShareEnabled) {
+          classInfo = readSharedClassMeta(buffer, targetClass);
+        } else {
+          classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
+        }
+        break;
+      case Types.COMPATIBLE_STRUCT:
+        if (metaContextShareEnabled) {
+          classInfo = readSharedClassMeta(buffer, targetClass);
+        } else {
+          classInfo = requireUserTypeInfoByTypeId(header);
+        }
+        break;
+      case Types.ENUM:
+      case Types.STRUCT:
+      case Types.EXT:
+        classInfo = requireUserTypeInfoByTypeId(header);
+        break;
+      case Types.LIST:
+        classInfo = getListClassInfo();
+        break;
+      case Types.TIMESTAMP:
+        classInfo = getTimestampClassInfo();
+        break;
+      default:
+        classInfo = requireInternalTypeInfoByTypeId(header);
+    }
+    if (classInfo.serializer == null) {
+      classInfo = ensureSerializerForClassInfo(classInfo);
+    }
     classInfoCache = classInfo;
     return classInfo;
   }
@@ -410,7 +482,44 @@ public abstract class TypeResolver {
   @CodegenInvoke
   public final ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfo classInfoCache) {
     int header = buffer.readVarUint32Small14();
-    return readClassInfoByHeader(buffer, header, classInfoCache, null, null);
+    int internalTypeId = header & 0xff;
+    ClassInfo classInfo;
+    switch (internalTypeId) {
+      case Types.NAMED_ENUM:
+      case Types.NAMED_STRUCT:
+      case Types.NAMED_EXT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
+        if (metaContextShareEnabled) {
+          classInfo = readSharedClassMeta(buffer);
+        } else {
+          classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
+        }
+        break;
+      case Types.COMPATIBLE_STRUCT:
+        if (metaContextShareEnabled) {
+          classInfo = readSharedClassMeta(buffer);
+        } else {
+          classInfo = requireUserTypeInfoByTypeId(header);
+        }
+        break;
+      case Types.ENUM:
+      case Types.STRUCT:
+      case Types.EXT:
+        classInfo = requireUserTypeInfoByTypeId(header);
+        break;
+      case Types.LIST:
+        classInfo = getListClassInfo();
+        break;
+      case Types.TIMESTAMP:
+        classInfo = getTimestampClassInfo();
+        break;
+      default:
+        classInfo = requireInternalTypeInfoByTypeId(header);
+    }
+    if (classInfo.serializer == null) {
+      classInfo = ensureSerializerForClassInfo(classInfo);
+    }
+    return classInfo;
   }
 
   /**
@@ -424,48 +533,49 @@ public abstract class TypeResolver {
   @CodegenInvoke
   public final ClassInfo readClassInfo(MemoryBuffer buffer, ClassInfoHolder classInfoHolder) {
     int header = buffer.readVarUint32Small14();
-    return readClassInfoByHeader(buffer, header, classInfoHolder.classInfo, classInfoHolder, null);
-  }
-
-  private ClassInfo readClassInfoByHeader(
-      MemoryBuffer buffer,
-      int header,
-      ClassInfo classInfoCache,
-      ClassInfoHolder classInfoHolder,
-      Class<?> targetClass) {
     int internalTypeId = header & 0xff;
+    ClassInfo classInfo;
+    boolean updateCache = false;
     switch (internalTypeId) {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
       case Types.NAMED_COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
-          return targetClass == null
-              ? readSharedClassMeta(buffer)
-              : readSharedClassMeta(buffer, targetClass);
+          classInfo = readSharedClassMeta(buffer);
+        } else {
+          classInfo = readClassInfoFromBytes(buffer, classInfoHolder.classInfo, header);
+          updateCache = true;
         }
-        if (classInfoHolder != null) {
-          return readClassInfoFromBytes(buffer, classInfoHolder, header);
-        }
-        return readClassInfoFromBytes(buffer, classInfoCache, header);
+        break;
       case Types.COMPATIBLE_STRUCT:
         if (metaContextShareEnabled) {
-          return targetClass == null
-              ? readSharedClassMeta(buffer)
-              : readSharedClassMeta(buffer, targetClass);
+          classInfo = readSharedClassMeta(buffer);
+        } else {
+          classInfo = requireUserTypeInfoByTypeId(header);
         }
-        return ensureSerializerForClassInfo(requireUserTypeInfoByTypeId(header));
+        break;
       case Types.ENUM:
       case Types.STRUCT:
       case Types.EXT:
-        return ensureSerializerForClassInfo(requireUserTypeInfoByTypeId(header));
+        classInfo = requireUserTypeInfoByTypeId(header);
+        break;
       case Types.LIST:
-        return ensureSerializerForClassInfo(getListClassInfo());
+        classInfo = getListClassInfo();
+        break;
       case Types.TIMESTAMP:
-        return ensureSerializerForClassInfo(getTimestampClassInfo());
+        classInfo = getTimestampClassInfo();
+        break;
       default:
-        return ensureSerializerForClassInfo(requireInternalTypeInfoByTypeId(header));
+        classInfo = requireInternalTypeInfoByTypeId(header);
     }
+    if (classInfo.serializer == null) {
+      classInfo = ensureSerializerForClassInfo(classInfo);
+    }
+    if (updateCache) {
+      classInfoHolder.classInfo = classInfo;
+    }
+    return classInfo;
   }
 
   /**
@@ -475,14 +585,6 @@ public abstract class TypeResolver {
   protected final ClassInfo readClassInfoByCache(
       MemoryBuffer buffer, ClassInfo classInfoCache, int header) {
     return readClassInfoFromBytes(buffer, classInfoCache, header);
-  }
-
-  /** Read class info and update the ClassInfoHolder's cache. */
-  protected final ClassInfo readClassInfoFromBytes(
-      MemoryBuffer buffer, ClassInfoHolder classInfoHolder, int header) {
-    ClassInfo classInfo = readClassInfoFromBytes(buffer, classInfoHolder.classInfo, header);
-    classInfoHolder.classInfo = classInfo;
-    return classInfo;
   }
 
   /**
@@ -514,9 +616,8 @@ public abstract class TypeResolver {
       simpleClassNameBytes = metaStringResolver.readMetaStringBytes(buffer);
     }
 
-    // Load class info from bytes (subclass-specific) and ensure serializer is set
-    ClassInfo classInfo = loadBytesToClassInfo(namespaceBytes, simpleClassNameBytes);
-    return ensureSerializerForClassInfo(classInfo);
+    // Load class info from bytes (subclass-specific).
+    return loadBytesToClassInfo(namespaceBytes, simpleClassNameBytes);
   }
 
   /**

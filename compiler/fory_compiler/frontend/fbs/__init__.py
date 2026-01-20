@@ -27,7 +27,9 @@ class FBSFrontend(BaseFrontend):
     extensions = [".fbs"]
 
     def parse(self, source: str, filename: str = "<input>") -> Schema:
-        raise FrontendError("FlatBuffers frontend is not implemented yet", filename, 1, 1)
+        raise FrontendError(
+            "FlatBuffers frontend is not implemented yet", filename, 1, 1
+        )
 
 
 __all__ = ["FBSFrontend"]

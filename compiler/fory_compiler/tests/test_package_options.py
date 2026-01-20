@@ -1279,9 +1279,7 @@ class TestFdlOptions:
             warnings.simplefilter("always")
             parser.parse()
             assert len(w) == 1
-            assert "ignoring unknown type option 'unknown_opt'" in str(
-                w[0].message
-            )
+            assert "ignoring unknown type option 'unknown_opt'" in str(w[0].message)
 
     def test_unknown_field_option_warns(self):
         """Test that unknown field options produce a warning."""
@@ -1300,9 +1298,7 @@ class TestFdlOptions:
             warnings.simplefilter("always")
             parser.parse()
             assert len(w) == 1
-            assert "ignoring unknown field option 'unknown_opt'" in str(
-                w[0].message
-            )
+            assert "ignoring unknown field option 'unknown_opt'" in str(w[0].message)
 
     def test_message_use_record_for_java_option(self):
         """Test message-level use_record_for_java option."""

@@ -260,7 +260,9 @@ class Parser:
             label = "repeated"
         elif self.match(TokenType.REQUIRED):
             token = self.previous()
-            raise ParseError("proto2 required fields are not supported", token.line, token.column)
+            raise ParseError(
+                "proto2 required fields are not supported", token.line, token.column
+            )
 
         if self.check(TokenType.MAP):
             field_type = self.parse_map_type()

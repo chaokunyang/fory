@@ -70,7 +70,8 @@ class SchemaValidator:
         for enum in self.schema.enums:
             if enum.name in names:
                 self._error(
-                    f"Duplicate type name: {enum.name}", enum.location or names[enum.name]
+                    f"Duplicate type name: {enum.name}",
+                    enum.location or names[enum.name],
                 )
             names.setdefault(enum.name, enum.location)
         for message in self.schema.messages:

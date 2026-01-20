@@ -142,7 +142,9 @@ class ProtoTranslator:
 
         type_id, options = self._translate_type_options(proto_msg.options)
         fields = [self._translate_field(f) for f in proto_msg.fields]
-        nested_messages = [self._translate_message(m) for m in proto_msg.nested_messages]
+        nested_messages = [
+            self._translate_message(m) for m in proto_msg.nested_messages
+        ]
         nested_enums = [self._translate_enum(e) for e in proto_msg.nested_enums]
         return Message(
             name=proto_msg.name,
@@ -168,7 +170,8 @@ class ProtoTranslator:
 
         if proto_field.label == "repeated":
             field_type = ListType(
-                field_type, location=self._location(proto_field.line, proto_field.column)
+                field_type,
+                location=self._location(proto_field.line, proto_field.column),
             )
         optional = proto_field.label == "optional" or nullable
 
@@ -211,7 +214,9 @@ class ProtoTranslator:
             )
         return NamedType(cleaned, location=self._location(line, column))
 
-    def _translate_type_options(self, options: Dict[str, object]) -> Tuple[Optional[int], Dict[str, object]]:
+    def _translate_type_options(
+        self, options: Dict[str, object]
+    ) -> Tuple[Optional[int], Dict[str, object]]:
         type_id = None
         translated: Dict[str, object] = {}
         for name, value in options.items():

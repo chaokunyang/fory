@@ -2394,18 +2394,15 @@ template <typename T> constexpr size_t fixed_primitive_size() {
                        std::is_same_v<T, uint16_t>) {
     return 2;
   } else if constexpr (std::is_same_v<T, uint32_t> ||
-                           std::is_same_v<T, int32_t> ||
-                           std::is_same_v<T, int> || std::is_same_v < T,
-                       float)) {
+                       std::is_same_v<T, int32_t> || std::is_same_v<T, int> ||
+                       std::is_same_v<T, float>) {
     return 4;
-  }
-  else if constexpr (std::is_same_v<T, uint64_t> ||
-                         std::is_same_v<T, int64_t> ||
-                         std::is_same_v<T, long long> || std::is_same_v < T,
-                     double)) {
+  } else if constexpr (std::is_same_v<T, uint64_t> ||
+                       std::is_same_v<T, int64_t> ||
+                       std::is_same_v<T, long long> ||
+                       std::is_same_v<T, double>) {
     return 8;
-  }
-  else {
+  } else {
     return 0; // Not a fixed-size primitive
   }
 }

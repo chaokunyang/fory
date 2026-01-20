@@ -77,7 +77,9 @@ class FDLEmitter:
         lines: List[str] = []
 
         header_opts = self._collect_type_options(enum.type_id, enum.options)
-        lines.append(f"{indent}enum {enum.name}{self._emit_inline_options(header_opts)} {{")
+        lines.append(
+            f"{indent}enum {enum.name}{self._emit_inline_options(header_opts)} {{"
+        )
 
         for value in enum.values:
             lines.append(f"{indent}{self.indent}{self._emit_enum_value(value)}")
@@ -174,7 +176,7 @@ class FDLEmitter:
         if isinstance(value, bool):
             return "true" if value else "false"
         if isinstance(value, str):
-            return f"\"{value}\""
+            return f'"{value}"'
         return str(value)
 
     def _collect_type_options(

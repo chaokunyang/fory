@@ -319,9 +319,7 @@ class CppGenerator(BaseGenerator):
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
             struct_macros.append(f"FORY_STRUCT({qualified_name}, {field_names});")
             field_config_macros.append(
-                self.generate_field_config_macro(
-                    message, qualified_name, parent_stack
-                )
+                self.generate_field_config_macro(message, qualified_name, parent_stack)
             )
         else:
             struct_macros.append(f"FORY_STRUCT({qualified_name});")

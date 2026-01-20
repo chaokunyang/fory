@@ -241,7 +241,7 @@ public class IdlRoundTripTest {
     types.setVarint64Value(-987654321L);
     types.setTaggedInt64Value(123456789L);
     types.setUint8Value((short) 200);
-    types.setUint16Value(60000);
+    types.setUint16Value((short) 60000);
     types.setUint32Value(1234567890);
     types.setVarUint32Value(1234567890);
     types.setUint64Value(9876543210L);

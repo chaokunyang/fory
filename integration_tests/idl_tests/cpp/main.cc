@@ -116,10 +116,9 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   types.float64_value = 3.5;
 
   FORY_TRY(primitive_bytes, fory.serialize(types));
-  FORY_TRY(
-      primitive_roundtrip,
-      fory.deserialize<addressbook::PrimitiveTypes>(primitive_bytes.data(),
-                                                    primitive_bytes.size()));
+  FORY_TRY(primitive_roundtrip,
+           fory.deserialize<addressbook::PrimitiveTypes>(
+               primitive_bytes.data(), primitive_bytes.size()));
 
   if (!(primitive_roundtrip == types)) {
     return fory::Unexpected(

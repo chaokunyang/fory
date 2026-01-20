@@ -520,11 +520,13 @@ template <typename T>
 inline constexpr bool is_unsigned_integer_v = is_unsigned_integer<T>::value;
 
 // Helper to check if a type is signed integer (encoding-configurable)
-template <typename T> struct is_signed_integer : std::false_type {};
-template <> struct is_signed_integer<int32_t> : std::true_type {};
-template <> struct is_signed_integer<int64_t> : std::true_type {};
-template <> struct is_signed_integer<int> : std::true_type {};
-template <> struct is_signed_integer<long long> : std::true_type {};
+template <typename T>
+struct is_signed_integer
+    : std::integral_constant<bool, std::is_integral_v<decay_t<T>> &&
+                                       std::is_signed_v<decay_t<T>> &&
+                                       (sizeof(decay_t<T>) == 4 ||
+                                        sizeof(decay_t<T>) == 8) &&
+                                       !std::is_same_v<decay_t<T>, bool>> {};
 template <typename T>
 inline constexpr bool is_signed_integer_v = is_signed_integer<T>::value;
 
@@ -635,7 +637,8 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
       field_type.type_id = unsigned_tid;
     }
 
-    // Override type_id for signed types based on encoding from FORY_FIELD_CONFIG
+    // Override type_id for signed types based on encoding from
+    // FORY_FIELD_CONFIG
     constexpr uint32_t signed_tid =
         compute_signed_type_id<UnwrappedFieldType, T, Index>();
     if constexpr (signed_tid != 0 && is_signed_integer_v<InnerType>) {

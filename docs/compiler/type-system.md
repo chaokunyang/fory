@@ -309,12 +309,12 @@ repeated User users = 2;
 
 **List modifiers:**
 
-| FDL                        | Java                                            | Python                | Go                      | Rust                  | C++                                       |
-| -------------------------- | ----------------------------------------------- | --------------------- | ----------------------- | --------------------- | ----------------------------------------- |
-| `optional repeated string` | `List<String>` + `@ForyField(nullable = true)`  | `Optional[List[str]]` | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` |
-| `repeated optional string` | `List<String>` (nullable elements)              | `List[Optional[str]]` | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` |
-| `ref repeated User`        | `List<User>` + `@ForyField(trackingRef = true)` | `List[User]`          | `[]User` + `ref`        | `Arc<Vec<User>>`\*    | `std::shared_ptr<std::vector<User>>`      |
-| `repeated ref User`        | `List<User>`                                    | `List[User]`          | `[]*User` + `ref=false` | `Vec<Arc<User>>`\*    | `std::vector<std::shared_ptr<User>>`      |
+| FDL                        | Java                                           | Python                                  | Go                      | Rust                  | C++                                       |
+| -------------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- |
+| `optional repeated string` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` |
+| `repeated optional string` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` |
+| `ref repeated User`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`\*    | `std::shared_ptr<std::vector<User>>`      |
+| `repeated ref User`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`\*    | `std::vector<std::shared_ptr<User>>`      |
 
 \*Use `[(fory).thread_safe_pointer = false]` to generate `Rc` instead of `Arc` in Rust.
 
@@ -396,7 +396,7 @@ message TreeNode {
 | ---------- | -------- | ------ | ---------------------- | ----------- | ----------------------- |
 | `ref User` | `User`\* | `User` | `*User` + `fory:"ref"` | `Arc<User>` | `std::shared_ptr<User>` |
 
-\*Java uses `@ForyField(trackingRef = true)` annotation.
+\*Java uses `@ForyField(ref = true)` annotation.
 
 Rust uses `Arc` by default; set `[(fory).thread_safe_pointer = false]` to use `Rc`.
 

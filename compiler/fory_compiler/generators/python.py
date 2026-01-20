@@ -228,8 +228,23 @@ class PythonGenerator(BaseGenerator):
         )
         field_name = self.to_snake_case(field.name)
         default = self.get_default_value(field.field_type, field.optional)
+        default_expr = default
+        trailing_comment = ""
+        if " # " in default:
+            default_expr, comment = default.split(" # ", 1)
+            trailing_comment = f"  # {comment}"
 
-        lines.append(f"{field_name}: {python_type} = {default}")
+        if field.ref:
+            field_args = []
+            if field.optional:
+                field_args.append("nullable=True")
+            field_args.append("ref=True")
+            field_args.append(f"default={default_expr}")
+            field_default = f"pyfory.field({', '.join(field_args)}){trailing_comment}"
+        else:
+            field_default = f"{default_expr}{trailing_comment}"
+
+        lines.append(f"{field_name}: {python_type} = {field_default}")
 
         return lines
 
@@ -280,7 +295,9 @@ class PythonGenerator(BaseGenerator):
             return list_type
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False, False, parent_stack)
+            key_type = self.generate_type(
+                field_type.key_type, False, False, parent_stack
+            )
             value_type = self.generate_type(
                 field_type.value_type, False, False, parent_stack
             )

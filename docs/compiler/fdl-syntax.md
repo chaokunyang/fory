@@ -744,13 +744,13 @@ message Node {
 
 **Generated Code:**
 
-| Language | Without `ref`  | With `ref`                                        |
-| -------- | -------------- | ------------------------------------------------- |
-| Java     | `Node parent`  | `Node parent` with `@ForyField(trackingRef=true)` |
-| Python   | `parent: Node` | `parent: Node` (runtime tracking)                 |
-| Go       | `Parent Node`  | `Parent *Node` with `fory:"ref"`                  |
-| Rust     | `parent: Node` | `parent: Arc<Node>`                               |
-| C++      | `Node parent`  | `std::shared_ptr<Node> parent`                    |
+| Language | Without `ref`  | With `ref`                                |
+| -------- | -------------- | ----------------------------------------- |
+| Java     | `Node parent`  | `Node parent` with `@ForyField(ref=true)` |
+| Python   | `parent: Node` | `parent: Node = pyfory.field(ref=True)`   |
+| Go       | `Parent Node`  | `Parent *Node` with `fory:"ref"`          |
+| Rust     | `parent: Node` | `parent: Arc<Node>`                       |
+| C++      | `Node parent`  | `std::shared_ptr<Node> parent`            |
 
 #### `repeated`
 

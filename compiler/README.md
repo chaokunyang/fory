@@ -308,7 +308,7 @@ Generates POJOs with:
 
 ```java
 public class Cat {
-    @ForyField(trackingRef = true)
+    @ForyField(ref = true)
     private Dog friend;
 
     @ForyField(nullable = true)

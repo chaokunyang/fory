@@ -252,7 +252,7 @@ import org.apache.fory.annotation.ForyField;
 public class Order {
     private String id;
 
-    @ForyField(trackingRef = true)
+    @ForyField(ref = true)
     private User customer;
 
     private List<String> items;
@@ -673,10 +673,10 @@ int main() {
 
 ### Java Annotations
 
-| Annotation                       | Purpose                    |
-| -------------------------------- | -------------------------- |
-| `@ForyField(nullable = true)`    | Marks field as nullable    |
-| `@ForyField(trackingRef = true)` | Enables reference tracking |
+| Annotation                    | Purpose                    |
+| ----------------------------- | -------------------------- |
+| `@ForyField(nullable = true)` | Marks field as nullable    |
+| `@ForyField(ref = true)`      | Enables reference tracking |
 
 ### Python Type Hints
 

@@ -416,7 +416,7 @@ class JavaGenerator(BaseGenerator):
         if field.optional:
             annotations.append("nullable = true")
         if field.ref:
-            annotations.append("trackingRef = true")
+            annotations.append("ref = true")
 
         if annotations:
             lines.append(f"@ForyField({', '.join(annotations)})")

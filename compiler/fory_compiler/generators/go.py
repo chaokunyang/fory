@@ -255,12 +255,16 @@ class GoGenerator(BaseGenerator):
         # Build fory tag
         tags = []
         is_list = isinstance(field.field_type, ListType)
+        is_map = isinstance(field.field_type, MapType)
+        is_collection = is_list or is_map
         nullable_tag: Optional[bool] = None
         ref_tag: Optional[bool] = None
 
         if field.optional:
             nullable_tag = True
-        elif is_list and (field.ref or field.element_optional or field.element_ref):
+        elif is_collection and (
+            field.ref or (is_list and (field.element_optional or field.element_ref))
+        ):
             nullable_tag = False
 
         if field.ref:

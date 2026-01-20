@@ -60,6 +60,10 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	book := buildAddressBook()
 	runLocalRoundTrip(t, f, book)
 	runFileRoundTrip(t, f, book)
+
+	types := buildPrimitiveTypes()
+	runLocalPrimitiveRoundTrip(t, f, types)
+	runFilePrimitiveRoundTrip(t, f, types)
 }
 
 func runLocalRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
@@ -94,6 +98,72 @@ func runFileRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
 	}
 	if !reflect.DeepEqual(book, decoded) {
 		t.Fatalf("peer payload mismatch: %#v != %#v", book, decoded)
+	}
+
+	out, err := f.Serialize(decoded)
+	if err != nil {
+		t.Fatalf("serialize peer payload: %v", err)
+	}
+	if err := os.WriteFile(dataFile, out, 0o644); err != nil {
+		t.Fatalf("write data file: %v", err)
+	}
+}
+
+func buildPrimitiveTypes() PrimitiveTypes {
+	return PrimitiveTypes{
+		BoolValue:         true,
+		Int8Value:         12,
+		Int16Value:        1234,
+		Int32Value:        -123456,
+		Varint32Value:     -12345,
+		Int64Value:        -123456789,
+		Varint64Value:     -987654321,
+		TaggedInt64Value:  123456789,
+		Uint8Value:        200,
+		Uint16Value:       60000,
+		Uint32Value:       1234567890,
+		VarUint32Value:    1234567890,
+		Uint64Value:       9876543210,
+		VarUint64Value:    12345678901,
+		TaggedUint64Value: 2222222222,
+		Float16Value:      1.5,
+		Float32Value:      2.5,
+		Float64Value:      3.5,
+	}
+}
+
+func runLocalPrimitiveRoundTrip(t *testing.T, f *fory.Fory, types PrimitiveTypes) {
+	data, err := f.Serialize(types)
+	if err != nil {
+		t.Fatalf("serialize: %v", err)
+	}
+
+	var out PrimitiveTypes
+	if err := f.Deserialize(data, &out); err != nil {
+		t.Fatalf("deserialize: %v", err)
+	}
+
+	if !reflect.DeepEqual(types, out) {
+		t.Fatalf("roundtrip mismatch: %#v != %#v", types, out)
+	}
+}
+
+func runFilePrimitiveRoundTrip(t *testing.T, f *fory.Fory, types PrimitiveTypes) {
+	dataFile := os.Getenv("DATA_FILE_PRIMITIVES")
+	if dataFile == "" {
+		return
+	}
+	payload, err := os.ReadFile(dataFile)
+	if err != nil {
+		t.Fatalf("read data file: %v", err)
+	}
+
+	var decoded PrimitiveTypes
+	if err := f.Deserialize(payload, &decoded); err != nil {
+		t.Fatalf("deserialize peer payload: %v", err)
+	}
+	if !reflect.DeepEqual(types, decoded) {
+		t.Fatalf("peer payload mismatch: %#v != %#v", types, decoded)
 	}
 
 	out, err := f.Serialize(decoded)

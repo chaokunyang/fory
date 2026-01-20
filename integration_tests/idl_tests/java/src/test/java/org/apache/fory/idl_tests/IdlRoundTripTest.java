@@ -24,6 +24,7 @@ import addressbook.AddressbookForyRegistration;
 import addressbook.Person;
 import addressbook.Person.PhoneNumber;
 import addressbook.Person.PhoneType;
+import addressbook.PrimitiveTypes;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -61,13 +62,40 @@ public class IdlRoundTripTest {
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
 
-      PeerCommand command = buildPeerCommand(peer, dataFile);
+      PeerCommand command = buildPeerCommand(peer, dataFile, "DATA_FILE");
       runPeer(command, peer);
 
       byte[] peerBytes = Files.readAllBytes(dataFile);
       Object roundTrip = fory.deserialize(peerBytes);
       Assert.assertTrue(roundTrip instanceof AddressBook);
       Assert.assertEquals(roundTrip, book);
+    }
+  }
+
+  @Test
+  public void testPrimitiveTypesRoundTrip() throws Exception {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
+    AddressbookForyRegistration.register(fory);
+
+    PrimitiveTypes types = buildPrimitiveTypes();
+    byte[] bytes = fory.serialize(types);
+    Object decoded = fory.deserialize(bytes);
+
+    Assert.assertTrue(decoded instanceof PrimitiveTypes);
+    Assert.assertEquals(decoded, types);
+
+    for (String peer : resolvePeers()) {
+      Path dataFile = Files.createTempFile("idl-primitive-" + peer + "-", ".bin");
+      dataFile.toFile().deleteOnExit();
+      Files.write(dataFile, bytes);
+
+      PeerCommand command = buildPeerCommand(peer, dataFile, "DATA_FILE_PRIMITIVES");
+      runPeer(command, peer);
+
+      byte[] peerBytes = Files.readAllBytes(dataFile);
+      Object roundTrip = fory.deserialize(peerBytes);
+      Assert.assertTrue(roundTrip instanceof PrimitiveTypes);
+      Assert.assertEquals(roundTrip, types);
     }
   }
 
@@ -87,13 +115,13 @@ public class IdlRoundTripTest {
     return peers;
   }
 
-  private PeerCommand buildPeerCommand(String peer, Path dataFile) {
+  private PeerCommand buildPeerCommand(String peer, Path dataFile, String dataEnvVar) {
     Path repoRoot = repoRoot();
     Path idlRoot = repoRoot.resolve("integration_tests").resolve("idl_tests");
     Path workDir = idlRoot;
     List<String> command;
     PeerCommand peerCommand = new PeerCommand();
-    peerCommand.environment.put("DATA_FILE", dataFile.toAbsolutePath().toString());
+    peerCommand.environment.put(dataEnvVar, dataFile.toAbsolutePath().toString());
 
     switch (peer) {
       case "python":
@@ -200,6 +228,29 @@ public class IdlRoundTripTest {
     book.setPeopleByName(peopleByName);
 
     return book;
+  }
+
+  private PrimitiveTypes buildPrimitiveTypes() {
+    PrimitiveTypes types = new PrimitiveTypes();
+    types.setBoolValue(true);
+    types.setInt8Value((byte) 12);
+    types.setInt16Value((short) 1234);
+    types.setInt32Value(-123456);
+    types.setVarint32Value(-12345);
+    types.setInt64Value(-123456789L);
+    types.setVarint64Value(-987654321L);
+    types.setTaggedInt64Value(123456789L);
+    types.setUint8Value((short) 200);
+    types.setUint16Value(60000);
+    types.setUint32Value(1234567890);
+    types.setVarUint32Value(1234567890);
+    types.setUint64Value(9876543210L);
+    types.setVarUint64Value(12345678901L);
+    types.setTaggedUint64Value(2222222222L);
+    types.setFloat16Value(1.5f);
+    types.setFloat32Value(2.5f);
+    types.setFloat64Value(3.5d);
+    return types;
   }
 
   private static final class PeerCommand {

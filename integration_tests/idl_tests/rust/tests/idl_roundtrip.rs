@@ -51,6 +51,29 @@ fn build_address_book() -> AddressBook {
     }
 }
 
+fn build_primitive_types() -> addressbook::PrimitiveTypes {
+    addressbook::PrimitiveTypes {
+        bool_value: true,
+        int8_value: 12,
+        int16_value: 1234,
+        int32_value: -123456,
+        varint32_value: -12345,
+        int64_value: -123456789,
+        varint64_value: -987654321,
+        tagged_int64_value: 123456789,
+        uint8_value: 200,
+        uint16_value: 60000,
+        uint32_value: 1234567890,
+        var_uint32_value: 1234567890,
+        uint64_value: 9876543210,
+        var_uint64_value: 12345678901,
+        tagged_uint64_value: 2222222222,
+        float16_value: 1.5,
+        float32_value: 2.5,
+        float64_value: 3.5,
+    }
+}
+
 #[test]
 fn test_address_book_roundtrip() {
     let mut fory = Fory::default().xlang(true);
@@ -71,4 +94,20 @@ fn test_address_book_roundtrip() {
     assert_eq!(book, peer_book);
     let encoded = fory.serialize(&peer_book).expect("serialize peer payload");
     fs::write(data_file, encoded).expect("write data file");
+
+    let types = build_primitive_types();
+    let bytes = fory.serialize(&types).expect("serialize");
+    let roundtrip: addressbook::PrimitiveTypes = fory.deserialize(&bytes).expect("deserialize");
+    assert_eq!(types, roundtrip);
+
+    let primitive_file = match env::var("DATA_FILE_PRIMITIVES") {
+        Ok(path) => path,
+        Err(_) => return,
+    };
+    let payload = fs::read(&primitive_file).expect("read data file");
+    let peer_types: addressbook::PrimitiveTypes =
+        fory.deserialize(&payload).expect("deserialize peer payload");
+    assert_eq!(types, peer_types);
+    let encoded = fory.serialize(&peer_types).expect("serialize peer payload");
+    fs::write(primitive_file, encoded).expect("write data file");
 }

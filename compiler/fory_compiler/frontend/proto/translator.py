@@ -32,6 +32,7 @@ from fory_compiler.ir.ast import (
     Enum,
     EnumValue,
     Field,
+    FieldType,
     Import,
     PrimitiveType,
     NamedType,
@@ -47,16 +48,21 @@ class ProtoTranslator:
 
     TYPE_MAPPING: Dict[str, PrimitiveKind] = {
         "bool": PrimitiveKind.BOOL,
+        "int8": PrimitiveKind.INT8,
+        "int16": PrimitiveKind.INT16,
         "int32": PrimitiveKind.VAR_UINT32,
         "int64": PrimitiveKind.VAR_UINT64,
         "sint32": PrimitiveKind.VARINT32,
         "sint64": PrimitiveKind.VARINT64,
+        "uint8": PrimitiveKind.UINT8,
+        "uint16": PrimitiveKind.UINT16,
         "uint32": PrimitiveKind.VAR_UINT32,
         "uint64": PrimitiveKind.VAR_UINT64,
         "fixed32": PrimitiveKind.UINT32,
         "fixed64": PrimitiveKind.UINT64,
         "sfixed32": PrimitiveKind.INT32,
         "sfixed64": PrimitiveKind.INT64,
+        "float16": PrimitiveKind.FLOAT16,
         "float": PrimitiveKind.FLOAT32,
         "double": PrimitiveKind.FLOAT64,
         "string": PrimitiveKind.STRING,
@@ -66,6 +72,11 @@ class ProtoTranslator:
     WELL_KNOWN_TYPES: Dict[str, PrimitiveKind] = {
         "google.protobuf.Timestamp": PrimitiveKind.TIMESTAMP,
         "google.protobuf.Duration": PrimitiveKind.DURATION,
+    }
+
+    TYPE_OVERRIDES: Dict[str, PrimitiveKind] = {
+        "tagged_int64": PrimitiveKind.TAGGED_INT64,
+        "tagged_uint64": PrimitiveKind.TAGGED_UINT64,
     }
 
     def __init__(self, proto_schema: ProtoSchema):
@@ -147,12 +158,18 @@ class ProtoTranslator:
 
     def _translate_field(self, proto_field: ProtoField) -> Field:
         field_type = self._translate_field_type(proto_field.field_type)
+        ref, nullable, options, type_override = self._translate_field_options(
+            proto_field.options
+        )
+        if type_override is not None:
+            field_type = self._apply_type_override(
+                field_type, type_override, proto_field.line, proto_field.column
+            )
+
         if proto_field.label == "repeated":
             field_type = ListType(
                 field_type, location=self._location(proto_field.line, proto_field.column)
             )
-
-        ref, nullable, options = self._translate_field_options(proto_field.options)
         optional = proto_field.label == "optional" or nullable
 
         return Field(
@@ -206,10 +223,11 @@ class ProtoTranslator:
 
     def _translate_field_options(
         self, options: Dict[str, object]
-    ) -> Tuple[bool, bool, Dict[str, object]]:
+    ) -> Tuple[bool, bool, Dict[str, object], Optional[PrimitiveKind]]:
         ref = False
         nullable = False
         translated: Dict[str, object] = {}
+        type_override: Optional[PrimitiveKind] = None
         for name, value in options.items():
             if name == "fory.ref" and value:
                 ref = True
@@ -218,6 +236,24 @@ class ProtoTranslator:
                 translated["tracking_ref"] = True
             elif name == "fory.nullable" and value:
                 nullable = True
+            elif name == "fory.type":
+                if not isinstance(value, str):
+                    raise ValueError("fory.type must be a string")
+                override = self.TYPE_OVERRIDES.get(value)
+                if override is None:
+                    raise ValueError(f"Unsupported fory.type override '{value}'")
+                type_override = override
             elif name.startswith("fory."):
                 translated[name.removeprefix("fory.")] = value
-        return ref, nullable, translated
+        return ref, nullable, translated, type_override
+
+    def _apply_type_override(
+        self,
+        field_type: FieldType,
+        override: PrimitiveKind,
+        line: int,
+        column: int,
+    ) -> FieldType:
+        if isinstance(field_type, PrimitiveType):
+            return PrimitiveType(override, location=self._location(line, column))
+        raise ValueError("fory.type overrides are only supported for primitive fields")

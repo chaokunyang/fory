@@ -95,6 +95,37 @@ fory::Result<void, fory::Error> RunRoundTrip() {
         fory::Error::invalid("addressbook roundtrip mismatch"));
   }
 
+  addressbook::PrimitiveTypes types;
+  types.bool_value = true;
+  types.int8_value = 12;
+  types.int16_value = 1234;
+  types.int32_value = -123456;
+  types.varint32_value = -12345;
+  types.int64_value = -123456789;
+  types.varint64_value = -987654321;
+  types.tagged_int64_value = 123456789;
+  types.uint8_value = 200;
+  types.uint16_value = 60000;
+  types.uint32_value = 1234567890;
+  types.var_uint32_value = 1234567890;
+  types.uint64_value = 9876543210ULL;
+  types.var_uint64_value = 12345678901ULL;
+  types.tagged_uint64_value = 2222222222ULL;
+  types.float16_value = 1.5F;
+  types.float32_value = 2.5F;
+  types.float64_value = 3.5;
+
+  FORY_TRY(primitive_bytes, fory.serialize(types));
+  FORY_TRY(
+      primitive_roundtrip,
+      fory.deserialize<addressbook::PrimitiveTypes>(primitive_bytes.data(),
+                                                    primitive_bytes.size()));
+
+  if (!(primitive_roundtrip == types)) {
+    return fory::Unexpected(
+        fory::Error::invalid("primitive types roundtrip mismatch"));
+  }
+
   const char *data_file = std::getenv("DATA_FILE");
   if (data_file != nullptr && data_file[0] != '\0') {
     FORY_TRY(payload, ReadFile(data_file));
@@ -105,6 +136,19 @@ fory::Result<void, fory::Error> RunRoundTrip() {
     }
     FORY_TRY(peer_bytes, fory.serialize(peer_book));
     FORY_RETURN_IF_ERROR(WriteFile(data_file, peer_bytes));
+  }
+
+  const char *primitive_file = std::getenv("DATA_FILE_PRIMITIVES");
+  if (primitive_file != nullptr && primitive_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(primitive_file));
+    FORY_TRY(peer_types, fory.deserialize<addressbook::PrimitiveTypes>(
+                             payload.data(), payload.size()));
+    if (!(peer_types == types)) {
+      return fory::Unexpected(
+          fory::Error::invalid("peer primitive payload mismatch"));
+    }
+    FORY_TRY(peer_bytes, fory.serialize(peer_types));
+    FORY_RETURN_IF_ERROR(WriteFile(primitive_file, peer_bytes));
   }
 
   return fory::Result<void, fory::Error>();

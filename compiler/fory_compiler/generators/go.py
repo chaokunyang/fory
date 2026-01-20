@@ -375,13 +375,14 @@ class GoGenerator(BaseGenerator):
         if not isinstance(field_type, PrimitiveType):
             return None
         kind = field_type.kind
-        if kind in (
-            PrimitiveKind.INT32,
-            PrimitiveKind.INT64,
-            PrimitiveKind.UINT32,
-            PrimitiveKind.UINT64,
-        ):
+        if kind in (PrimitiveKind.INT32, PrimitiveKind.UINT32):
+            return "compress=false"
+        if kind in (PrimitiveKind.VARINT32, PrimitiveKind.VAR_UINT32):
+            return "compress=true"
+        if kind in (PrimitiveKind.INT64, PrimitiveKind.UINT64):
             return "encoding=fixed"
+        if kind in (PrimitiveKind.VARINT64, PrimitiveKind.VAR_UINT64):
+            return "encoding=varint"
         if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
             return "encoding=tagged"
         return None

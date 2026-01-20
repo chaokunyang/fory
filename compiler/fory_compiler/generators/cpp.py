@@ -17,7 +17,7 @@
 
 """C++ code generator."""
 
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
@@ -86,24 +86,19 @@ class CppGenerator(BaseGenerator):
             return self.package.replace(".", "::")
         return ""
 
-    def get_namespace_prefix(self) -> str:
-        """Get the namespace prefix for fully qualified names."""
-        namespace = self.get_namespace()
-        return f"{namespace}::" if namespace else ""
-
-    def get_fully_qualified_type_name(
+    def get_macro_type_name(
         self,
         type_name: str,
         parent_stack: List[Message],
+        type_aliases: Dict[str, str],
     ) -> str:
-        """Get fully qualified type name including namespace."""
+        """Get a macro-safe type name and record alias for nested types."""
         qualified_name = self.get_qualified_type_name(type_name, parent_stack)
-        namespace_prefix = self.get_namespace_prefix()
-        return (
-            f"{namespace_prefix}{qualified_name}"
-            if namespace_prefix
-            else qualified_name
-        )
+        if "::" in qualified_name:
+            alias = f"ForyType_{qualified_name.replace('::', '_')}"
+            type_aliases.setdefault(alias, qualified_name)
+            return alias
+        return qualified_name
 
     def generate_header(self) -> GeneratedFile:
         """Generate a C++ header file with all types."""
@@ -112,6 +107,7 @@ class CppGenerator(BaseGenerator):
         enum_macros: List[str] = []
         struct_macros: List[str] = []
         field_config_macros: List[str] = []
+        type_aliases: Dict[str, str] = {}
 
         # Collect includes (including from nested types)
         includes.add("<cstdint>")
@@ -141,7 +137,6 @@ class CppGenerator(BaseGenerator):
 
         # Namespace
         namespace = self.get_namespace()
-        namespace_prefix = f"{namespace}::" if namespace else ""
         if namespace:
             lines.append(f"namespace {namespace} {{")
             lines.append("")
@@ -154,7 +149,7 @@ class CppGenerator(BaseGenerator):
         # Generate enums (top-level)
         for enum in self.schema.enums:
             lines.extend(self.generate_enum_definition(enum))
-            enum_macros.append(self.generate_enum_macro(enum, [], namespace_prefix))
+            enum_macros.append(self.generate_enum_macro(enum, []))
             lines.append("")
 
         # Generate messages (with nested enums/messages defined inside classes)
@@ -166,14 +161,15 @@ class CppGenerator(BaseGenerator):
                     struct_macros,
                     enum_macros,
                     field_config_macros,
+                    type_aliases,
                     "",
                 )
             )
             lines.append("")
 
-        # Close namespace for type definitions
-        if namespace:
-            lines.append(f"}} // namespace {namespace}")
+        if type_aliases:
+            for alias, target in sorted(type_aliases.items()):
+                lines.append(f"using {alias} = {target};")
             lines.append("")
 
         if struct_macros:
@@ -186,10 +182,6 @@ class CppGenerator(BaseGenerator):
 
         if enum_macros:
             lines.extend(enum_macros)
-            lines.append("")
-
-        if namespace:
-            lines.append(f"namespace {namespace} {{")
             lines.append("")
 
         # Generate registration function (after FORY_STRUCT/FORY_ENUM)
@@ -249,13 +241,10 @@ class CppGenerator(BaseGenerator):
         self,
         enum: Enum,
         parent_stack: List[Message],
-        namespace_prefix: str,
     ) -> str:
         """Generate a FORY_ENUM macro line for an enum."""
         value_names = ", ".join(self.get_enum_value_names(enum))
         qualified_name = self.get_qualified_type_name(enum.name, parent_stack)
-        if namespace_prefix:
-            qualified_name = f"{namespace_prefix}{qualified_name}"
         return f"FORY_ENUM({qualified_name}, {value_names});"
 
     def generate_message_definition(
@@ -265,6 +254,7 @@ class CppGenerator(BaseGenerator):
         struct_macros: List[str],
         enum_macros: List[str],
         field_config_macros: List[str],
+        type_aliases: Dict[str, str],
         indent: str,
     ) -> List[str]:
         """Generate a C++ class definition with nested types."""
@@ -282,7 +272,7 @@ class CppGenerator(BaseGenerator):
             lines.append("")
             enum_macros.append(
                 self.generate_enum_macro(
-                    nested_enum, lineage, self.get_namespace_prefix()
+                    nested_enum, lineage
                 )
             )
 
@@ -294,6 +284,7 @@ class CppGenerator(BaseGenerator):
                     struct_macros,
                     enum_macros,
                     field_config_macros,
+                    type_aliases,
                     body_indent,
                 )
             )
@@ -328,7 +319,9 @@ class CppGenerator(BaseGenerator):
 
         lines.append(f"{indent}}};")
 
-        macro_type_name = self.get_fully_qualified_type_name(message.name, parent_stack)
+        macro_type_name = self.get_macro_type_name(
+            message.name, parent_stack, type_aliases
+        )
         if message.fields:
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
             struct_macros.append(f"FORY_STRUCT({macro_type_name}, {field_names});")

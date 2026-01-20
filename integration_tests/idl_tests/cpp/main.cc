@@ -57,8 +57,11 @@ fory::Result<void, fory::Error> WriteFile(const std::string &path,
 }
 
 fory::Result<void, fory::Error> RunRoundTrip() {
-  auto fory =
-      fory::serialization::Fory::builder().xlang(true).track_ref(false).build();
+  auto fory = fory::serialization::Fory::builder()
+                  .xlang(true)
+                  .check_struct_version(true)
+                  .track_ref(false)
+                  .build();
 
   addressbook::RegisterTypes(fory);
 

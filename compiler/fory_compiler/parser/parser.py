@@ -49,6 +49,7 @@ KNOWN_FILE_OPTIONS: Set[str] = {
 KNOWN_FORY_FILE_OPTIONS: Set[str] = {
     "use_record_for_java_message",
     "polymorphism",
+    "go_nested_type_style",
 }
 
 # Known field-level options (standard protobuf options)

@@ -1391,5 +1391,72 @@ class TestForyExtensionOptions:
         assert user.options.get("fory.use_record_for_java") is True
 
 
+class TestGoNestedTypeStyle:
+    """Tests for Go nested type naming style."""
+
+    def test_default_concat_style(self):
+        source = """
+        package demo;
+        message Outer {
+            message Inner {
+                string name = 1;
+            }
+            repeated Inner items = 1;
+        }
+        """
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        generator = GoGenerator(schema, GeneratorOptions(output_dir=Path("/tmp")))
+        files = generator.generate()
+        go_file = files[0]
+
+        assert "type OuterInner struct" in go_file.content
+        assert "Items []OuterInner" in go_file.content
+
+    def test_underscore_style_option(self):
+        source = """
+        package demo;
+        option (fory).go_nested_type_style = "underscore";
+        message Outer {
+            message Inner {
+                string name = 1;
+            }
+            repeated Inner items = 1;
+        }
+        """
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        generator = GoGenerator(schema, GeneratorOptions(output_dir=Path("/tmp")))
+        files = generator.generate()
+        go_file = files[0]
+
+        assert "type Outer_Inner struct" in go_file.content
+        assert "Items []Outer_Inner" in go_file.content
+
+    def test_concat_collision_detection(self):
+        source = """
+        package demo;
+        message Outer {
+            message Inner {
+                string name = 1;
+            }
+        }
+        message OuterInner {
+            string name = 1;
+        }
+        """
+        lexer = Lexer(source)
+        parser = Parser(lexer.tokenize())
+        schema = parser.parse()
+
+        generator = GoGenerator(schema, GeneratorOptions(output_dir=Path("/tmp")))
+        with pytest.raises(ValueError, match="Go type name collision"):
+            generator.generate()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

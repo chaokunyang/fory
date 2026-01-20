@@ -17,7 +17,7 @@
 
 """Go code generator."""
 
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
@@ -69,6 +69,67 @@ class GoGenerator(BaseGenerator):
 
         return (None, "generated")
 
+    def get_nested_type_style(self) -> str:
+        """Get the nested type naming style for Go."""
+        style = self.options.go_nested_type_style or self.schema.get_option(
+            "fory.go_nested_type_style"
+        )
+        if style is None:
+            return "concat"
+        style = str(style).strip().lower()
+        if style not in ("concat", "underscore"):
+            raise ValueError(
+                f"Invalid go_nested_type_style: {style}. Use 'concat' or 'underscore'."
+            )
+        return style
+
+    def get_type_name(self, name: str, parent_stack: Optional[List[Message]]) -> str:
+        """Build a Go type name for a nested or top-level type."""
+        parts = [parent.name for parent in parent_stack or []] + [name]
+        if len(parts) == 1:
+            return parts[0]
+        if self.get_nested_type_style() == "underscore":
+            return "_".join(parts)
+        return "".join(parts)
+
+    def get_registration_type_name(
+        self, name: str, parent_stack: Optional[List[Message]]
+    ) -> str:
+        """Build a dot-qualified name for registration."""
+        parts = [parent.name for parent in parent_stack or []] + [name]
+        if len(parts) == 1:
+            return parts[0]
+        return ".".join(parts)
+
+    def validate_type_names(self) -> None:
+        """Detect Go type name collisions for nested types."""
+        name_map: Dict[str, List[str]] = {}
+
+        def add_name(go_name: str, qualified: str) -> None:
+            name_map.setdefault(go_name, []).append(qualified)
+
+        for enum in self.schema.enums:
+            add_name(enum.name, enum.name)
+
+        def visit_message(message: Message, parents: List[Message]) -> None:
+            qualified = ".".join([p.name for p in parents] + [message.name])
+            add_name(self.get_type_name(message.name, parents), qualified)
+            for nested_enum in message.nested_enums:
+                enum_qualified = f"{qualified}.{nested_enum.name}"
+                add_name(self.get_type_name(nested_enum.name, parents + [message]), enum_qualified)
+            for nested_msg in message.nested_messages:
+                visit_message(nested_msg, parents + [message])
+
+        for message in self.schema.messages:
+            visit_message(message, [])
+
+        duplicates = {name: types for name, types in name_map.items() if len(types) > 1}
+        if duplicates:
+            details = ", ".join(
+                f"{name}: {', '.join(types)}" for name, types in sorted(duplicates.items())
+            )
+            raise ValueError(f"Go type name collision detected: {details}")
+
     # Mapping from FDL primitive types to Go types
     PRIMITIVE_MAP = {
         PrimitiveKind.BOOL: "bool",
@@ -87,6 +148,8 @@ class GoGenerator(BaseGenerator):
     def generate(self) -> List[GeneratedFile]:
         """Generate Go files for the schema."""
         files = []
+
+        self.validate_type_names()
 
         # Generate a single Go file with all types
         files.append(self.generate_file())
@@ -133,7 +196,7 @@ class GoGenerator(BaseGenerator):
 
         # Generate enums (top-level)
         for enum in self.schema.enums:
-            lines.extend(self.generate_enum(enum, ""))
+            lines.extend(self.generate_enum(enum))
             lines.append("")
 
         # Generate messages (including nested as flat types with qualified names)
@@ -156,12 +219,15 @@ class GoGenerator(BaseGenerator):
         for nested_msg in message.nested_messages:
             self.collect_message_imports(nested_msg, imports)
 
-    def generate_enum(self, enum: Enum, parent_name: str = "") -> List[str]:
+    def generate_enum(
+        self,
+        enum: Enum,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
         """Generate a Go enum (using type alias and constants)."""
         lines = []
 
-        # For nested enums, use Parent_Child naming
-        type_name = f"{parent_name}_{enum.name}" if parent_name else enum.name
+        type_name = self.get_type_name(enum.name, parent_stack)
 
         # Type definition
         lines.append(f"type {type_name} int32")
@@ -187,9 +253,7 @@ class GoGenerator(BaseGenerator):
         """Generate a Go struct."""
         lines = []
 
-        # For nested messages, use Parent_Child naming
-        prefix = "_".join(parent.name for parent in parent_stack or [])
-        type_name = f"{prefix}_{message.name}" if prefix else message.name
+        type_name = self.get_type_name(message.name, parent_stack)
         lineage = (parent_stack or []) + [message]
 
         lines.append(f"type {type_name} struct {{")
@@ -212,14 +276,11 @@ class GoGenerator(BaseGenerator):
         """Generate a Go struct and all its nested types (flattened)."""
         lines = []
 
-        # Current message's type name
-        prefix = "_".join(parent.name for parent in parent_stack or [])
-        type_name = f"{prefix}_{message.name}" if prefix else message.name
         lineage = (parent_stack or []) + [message]
 
         # First, generate all nested enums
         for nested_enum in message.nested_enums:
-            lines.extend(self.generate_enum(nested_enum, type_name))
+            lines.extend(self.generate_enum(nested_enum, lineage))
             lines.append("")
 
         # Then, generate all nested messages (recursively)
@@ -351,15 +412,22 @@ class GoGenerator(BaseGenerator):
     ) -> str:
         """Resolve nested type names to flattened Go identifiers."""
         if "." in type_name:
-            return type_name.replace(".", "_")
+            parts = type_name.split(".")
+            if len(parts) == 1:
+                return parts[0]
+            if self.get_nested_type_style() == "underscore":
+                return "_".join(parts)
+            return "".join(parts)
         if not parent_stack:
             return type_name
 
         for i in range(len(parent_stack) - 1, -1, -1):
             message = parent_stack[i]
             if message.get_nested_type(type_name) is not None:
-                prefix = "_".join(parent.name for parent in parent_stack[: i + 1])
-                return f"{prefix}_{type_name}"
+                return self.get_type_name(
+                    type_name,
+                    parent_stack[: i + 1],
+                )
 
         return type_name
 
@@ -384,11 +452,11 @@ class GoGenerator(BaseGenerator):
 
         # Register enums (top-level)
         for enum in self.schema.enums:
-            self.generate_enum_registration(lines, enum, "")
+            self.generate_enum_registration(lines, enum, None)
 
         # Register messages (including nested types)
         for message in self.schema.messages:
-            self.generate_message_registration(lines, message, "")
+            self.generate_message_registration(lines, message, None)
 
         lines.append("\treturn nil")
         lines.append("}")
@@ -396,14 +464,18 @@ class GoGenerator(BaseGenerator):
         return lines
 
     def generate_enum_registration(
-        self, lines: List[str], enum: Enum, parent_name: str
+        self,
+        lines: List[str],
+        enum: Enum,
+        parent_stack: Optional[List[Message]],
     ):
         """Generate registration code for an enum."""
-        type_name = f"{parent_name}_{enum.name}" if parent_name else enum.name
+        code_name = self.get_type_name(enum.name, parent_stack)
+        type_name = self.get_registration_type_name(enum.name, parent_stack)
 
         if enum.type_id is not None:
             lines.append(
-                f"\tif err := f.RegisterEnum({type_name}(0), {enum.type_id}); err != nil {{"
+                f"\tif err := f.RegisterEnum({code_name}(0), {enum.type_id}); err != nil {{"
             )
             lines.append("\t\treturn err")
             lines.append("\t}")
@@ -411,29 +483,35 @@ class GoGenerator(BaseGenerator):
             # Use FDL package for namespace (consistent across languages)
             ns = self.schema.package or "default"
             lines.append(
-                f'\tif err := f.RegisterNamedEnum({type_name}(0), "{ns}.{type_name}"); err != nil {{'
+                f'\tif err := f.RegisterNamedEnum({code_name}(0), "{ns}.{type_name}"); err != nil {{'
             )
             lines.append("\t\treturn err")
             lines.append("\t}")
 
     def generate_message_registration(
-        self, lines: List[str], message: Message, parent_name: str
+        self,
+        lines: List[str],
+        message: Message,
+        parent_stack: Optional[List[Message]],
     ):
         """Generate registration code for a message and its nested types."""
-        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+        code_name = self.get_type_name(message.name, parent_stack)
+        type_name = self.get_registration_type_name(message.name, parent_stack)
 
         # Register nested enums first
         for nested_enum in message.nested_enums:
-            self.generate_enum_registration(lines, nested_enum, type_name)
+            self.generate_enum_registration(lines, nested_enum, (parent_stack or []) + [message])
 
         # Register nested messages recursively
         for nested_msg in message.nested_messages:
-            self.generate_message_registration(lines, nested_msg, type_name)
+            self.generate_message_registration(
+                lines, nested_msg, (parent_stack or []) + [message]
+            )
 
         # Register this message
         if message.type_id is not None:
             lines.append(
-                f"\tif err := f.RegisterStruct({type_name}{{}}, {message.type_id}); err != nil {{"
+                f"\tif err := f.RegisterStruct({code_name}{{}}, {message.type_id}); err != nil {{"
             )
             lines.append("\t\treturn err")
             lines.append("\t}")
@@ -441,7 +519,7 @@ class GoGenerator(BaseGenerator):
             # Use FDL package for namespace (consistent across languages)
             ns = self.schema.package or "default"
             lines.append(
-                f'\tif err := f.RegisterNamedStruct({type_name}{{}}, "{ns}.{type_name}"); err != nil {{'
+                f'\tif err := f.RegisterNamedStruct({code_name}{{}}, "{ns}.{type_name}"); err != nil {{'
             )
             lines.append("\t\treturn err")
             lines.append("\t}")

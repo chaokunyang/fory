@@ -142,7 +142,7 @@ message Order [id=201] {
 }
 ```
 
-FDL uses flat type definitions rather than nested types for simplicity.
+FDL supports nested types, but generators may flatten them for languages where nested types are not idiomatic.
 
 ### Imports
 

@@ -65,13 +65,13 @@ fory::Result<void, fory::Error> RunRoundTrip() {
 
   addressbook::RegisterTypes(fory);
 
-  addressbook::Person_PhoneNumber mobile;
+  addressbook::Person::PhoneNumber mobile;
   mobile.number = "555-0100";
-  mobile.phone_type = addressbook::Person_PhoneType::MOBILE;
+  mobile.phone_type = addressbook::Person::PhoneType::MOBILE;
 
-  addressbook::Person_PhoneNumber work;
+  addressbook::Person::PhoneNumber work;
   work.number = "555-0111";
-  work.phone_type = addressbook::Person_PhoneType::WORK;
+  work.phone_type = addressbook::Person::PhoneType::WORK;
 
   addressbook::Person person;
   person.name = "Alice";

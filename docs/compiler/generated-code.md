@@ -117,30 +117,38 @@ class SearchResponse:
         url: str = ""
         title: str = ""
 
-    results: List[Result] = None
+    results: List[Result] = field(default_factory=list)
 ```
 
-### Go - Flattened with Underscore
+### Go - Concatenated
 
 ```go
-type SearchResponse_Result struct {
+type SearchResponseResult struct {
     Url   string
     Title string
 }
 
 type SearchResponse struct {
-    Results []SearchResponse_Result
+    Results []SearchResponseResult
 }
 ```
 
-### Rust - Flattened with Underscore
+**Note:** Set `option (fory).go_nested_type_style = "underscore";` to generate `SearchResponse_Result` instead.
+
+### Rust - Nested Module with Aliases
 
 ```rust
-#[derive(ForyObject)]
-pub struct SearchResponse_Result {
-    pub url: String,
-    pub title: String,
+pub mod search_response {
+    use super::*;
+
+    #[derive(ForyObject)]
+    pub struct Result {
+        pub url: String,
+        pub title: String,
+    }
 }
+
+pub use self::search_response::Result as SearchResponse_Result;
 
 #[derive(ForyObject)]
 pub struct SearchResponse {
@@ -148,30 +156,33 @@ pub struct SearchResponse {
 }
 ```
 
-### C++ - Flattened with Underscore
+### C++ - Nested Classes
 
 ```cpp
-struct SearchResponse_Result {
-    std::string url;
-    std::string title;
-};
-FORY_STRUCT(SearchResponse_Result, url, title);
+class SearchResponse final {
+  public:
+    class Result final {
+      public:
+        std::string url;
+        std::string title;
+    };
 
-struct SearchResponse {
-    std::vector<SearchResponse_Result> results;
+    std::vector<Result> results;
 };
+
+FORY_STRUCT(SearchResponse::Result, url, title);
 FORY_STRUCT(SearchResponse, results);
 ```
 
 **Summary:**
 
-| Language | Approach                  | Syntax Example          |
-| -------- | ------------------------- | ----------------------- |
-| Java     | Static inner classes      | `SearchResponse.Result` |
-| Python   | Nested dataclasses        | `SearchResponse.Result` |
-| Go       | Flattened with underscore | `SearchResponse_Result` |
-| Rust     | Flattened with underscore | `SearchResponse_Result` |
-| C++      | Flattened with underscore | `SearchResponse_Result` |
+| Language | Approach                       | Syntax Example                                            |
+| -------- | ------------------------------ | --------------------------------------------------------- |
+| Java     | Static inner classes           | `SearchResponse.Result`                                   |
+| Python   | Nested dataclasses             | `SearchResponse.Result`                                   |
+| Go       | Concatenated (configurable)    | `SearchResponseResult`                                    |
+| Rust     | Nested module + alias reexport | `search_response::Result` (alias `SearchResponse_Result`) |
+| C++      | Nested classes                 | `SearchResponse::Result`                                  |
 
 ## Java
 

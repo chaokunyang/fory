@@ -730,7 +730,7 @@ class JavaGenerator(BaseGenerator):
         """Generate registration code for an enum."""
         # In Java, nested class references use OuterClass.InnerClass
         class_ref = f"{parent_path}.{enum.name}" if parent_path else enum.name
-        type_name = class_ref.replace(".", "_") if parent_path else enum.name
+        type_name = class_ref if parent_path else enum.name
 
         if enum.type_id is not None:
             lines.append(f"        fory.register({class_ref}.class, {enum.type_id});")
@@ -747,7 +747,7 @@ class JavaGenerator(BaseGenerator):
         """Generate registration code for a message and its nested types."""
         # In Java, nested class references use OuterClass.InnerClass
         class_ref = f"{parent_path}.{message.name}" if parent_path else message.name
-        type_name = class_ref.replace(".", "_") if parent_path else message.name
+        type_name = class_ref if parent_path else message.name
 
         if message.type_id is not None:
             lines.append(

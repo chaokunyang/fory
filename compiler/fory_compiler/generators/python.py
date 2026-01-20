@@ -101,7 +101,7 @@ class PythonGenerator(BaseGenerator):
         imports: Set[str] = set()
 
         # Collect all imports
-        imports.add("from dataclasses import dataclass")
+        imports.add("from dataclasses import dataclass, field")
         imports.add("from enum import IntEnum")
         imports.add("from typing import Dict, List, Optional")
         imports.add("import pyfory")
@@ -227,6 +227,7 @@ class PythonGenerator(BaseGenerator):
             parent_stack,
         )
         field_name = self.to_snake_case(field.name)
+        default_factory = self.get_default_factory(field)
         default = self.get_default_value(field.field_type, field.optional)
         default_expr = default
         trailing_comment = ""
@@ -239,14 +240,40 @@ class PythonGenerator(BaseGenerator):
             if field.optional:
                 field_args.append("nullable=True")
             field_args.append("ref=True")
-            field_args.append(f"default={default_expr}")
+            if default_factory is not None:
+                field_args.append(f"default_factory={default_factory}")
+            else:
+                field_args.append(f"default={default_expr}")
             field_default = f"pyfory.field({', '.join(field_args)}){trailing_comment}"
         else:
-            field_default = f"{default_expr}{trailing_comment}"
+            if default_factory is not None:
+                field_default = f"field(default_factory={default_factory})"
+            else:
+                field_default = f"{default_expr}{trailing_comment}"
 
         lines.append(f"{field_name}: {python_type} = {field_default}")
 
         return lines
+
+    def uses_numpy_array(self, field_type: ListType, element_optional: bool) -> bool:
+        """Return True if a list should be represented as a numpy array."""
+        if not isinstance(field_type.element_type, PrimitiveType):
+            return False
+        return (
+            field_type.element_type.kind in self.NUMPY_DTYPE_MAP and not element_optional
+        )
+
+    def get_default_factory(self, field: Field) -> Optional[str]:
+        """Get default factory name for list/map fields."""
+        if field.optional:
+            return None
+        if isinstance(field.field_type, ListType):
+            if self.uses_numpy_array(field.field_type, field.element_optional):
+                return None
+            return "list"
+        if isinstance(field.field_type, MapType):
+            return "dict"
+        return None
 
     def generate_type(
         self,
@@ -406,7 +433,7 @@ class PythonGenerator(BaseGenerator):
         """Generate registration code for an enum."""
         # In Python, nested class references use Outer.Inner syntax
         class_ref = f"{parent_path}.{enum.name}" if parent_path else enum.name
-        type_name = class_ref.replace(".", "_") if parent_path else enum.name
+        type_name = class_ref if parent_path else enum.name
 
         if enum.type_id is not None:
             lines.append(f"    fory.register_type({class_ref}, type_id={enum.type_id})")
@@ -422,7 +449,7 @@ class PythonGenerator(BaseGenerator):
         """Generate registration code for a message and its nested types."""
         # In Python, nested class references use Outer.Inner syntax
         class_ref = f"{parent_path}.{message.name}" if parent_path else message.name
-        type_name = class_ref.replace(".", "_") if parent_path else message.name
+        type_name = class_ref if parent_path else message.name
 
         if message.type_id is not None:
             lines.append(

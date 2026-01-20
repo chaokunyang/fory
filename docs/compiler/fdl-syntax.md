@@ -266,10 +266,11 @@ option (fory).polymorphism = true;
 
 **Available File Options:**
 
-| Option                        | Type | Description                              |
-| ----------------------------- | ---- | ---------------------------------------- |
-| `use_record_for_java_message` | bool | Generate Java records instead of classes |
-| `polymorphism`                | bool | Enable polymorphism for all types        |
+| Option                        | Type   | Description                                               |
+| ----------------------------- | ------ | --------------------------------------------------------- |
+| `use_record_for_java_message` | bool   | Generate Java records instead of classes                  |
+| `polymorphism`                | bool   | Enable polymorphism for all types                         |
+| `go_nested_type_style`        | string | Go nested type naming: `concat` (default) or `underscore` |
 
 See the [Fory Extension Options](#fory-extension-options) section for complete documentation of message, enum, and field options.
 
@@ -653,15 +654,15 @@ message OtherMessage {
 
 ### Language-Specific Generation
 
-| Language | Nested Type Generation                                 |
-| -------- | ------------------------------------------------------ |
-| Java     | Static inner classes (`SearchResponse.Result`)         |
-| Python   | Nested classes within dataclass                        |
-| Go       | Flat structs with underscore (`SearchResponse_Result`) |
-| Rust     | Flat structs with underscore (`SearchResponse_Result`) |
-| C++      | Flat structs with underscore (`SearchResponse_Result`) |
+| Language | Nested Type Generation                                                        |
+| -------- | ----------------------------------------------------------------------------- |
+| Java     | Static inner classes (`SearchResponse.Result`)                                |
+| Python   | Nested classes within dataclass                                               |
+| Go       | Flat structs with concatenation (`SearchResponseResult`, configurable to `_`) |
+| Rust     | Nested modules (`search_response::Result`) with alias exports                 |
+| C++      | Nested classes (`SearchResponse::Result`)                                     |
 
-**Note:** For Go, Rust, and C++, nested types are flattened to top-level types with qualified names using underscores because these languages don't have true nested type support or it's not idiomatic.
+**Note:** Go defaults to concatenated nested names; set `option (fory).go_nested_type_style = "underscore";` to preserve underscore names. Rust emits nested modules and `pub use` aliases for flattened names.
 
 ### Nested Type Rules
 

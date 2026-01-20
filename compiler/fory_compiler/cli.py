@@ -256,6 +256,14 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Generate Rust code in DST_DIR",
     )
 
+    compile_parser.add_argument(
+        "--go_nested_type_style",
+        type=str,
+        default=None,
+        choices=["concat", "underscore"],
+        help="Go nested type naming style: concat (default) or underscore",
+    )
+
     return parser.parse_args(args)
 
 
@@ -281,6 +289,7 @@ def compile_file(
     lang_output_dirs: Dict[str, Path],
     package_override: Optional[str] = None,
     import_paths: Optional[List[Path]] = None,
+    go_nested_type_style: Optional[str] = None,
 ) -> bool:
     """Compile a single FDL file with import resolution.
 
@@ -321,6 +330,7 @@ def compile_file(
         options = GeneratorOptions(
             output_dir=lang_output,
             package_override=package_override,
+            go_nested_type_style=go_nested_type_style,
         )
 
         generator_class = GENERATORS[lang]
@@ -401,7 +411,13 @@ def cmd_compile(args: argparse.Namespace) -> int:
             success = False
             continue
 
-        if not compile_file(file_path, lang_output_dirs, args.package, import_paths):
+        if not compile_file(
+            file_path,
+            lang_output_dirs,
+            args.package,
+            import_paths,
+            args.go_nested_type_style,
+        ):
             success = False
 
     return 0 if success else 1

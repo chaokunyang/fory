@@ -10,12 +10,12 @@
 
 Define cross-language data structures with FDL and generate native code for multiple languages.
 
-- [FDL Overview](schema/index.md) - Introduction and quick start
-- [FDL Syntax Reference](schema/fdl-syntax.md) - Complete language syntax
-- [Type System](schema/type-system.md) - Primitive types, collections, and mappings
-- [Compiler Guide](schema/compiler-guide.md) - CLI usage and build integration
-- [Generated Code](schema/generated-code.md) - Output format for each language
-- [Protocol Buffers vs FDL](schema/proto-vs-fdl.md) - Feature comparison and migration
+- [FDL Overview](compiler/index.md) - Introduction and quick start
+- [FDL Syntax Reference](compiler/fdl-syntax.md) - Complete language syntax
+- [Type System](compiler/type-system.md) - Primitive types, collections, and mappings
+- [Compiler Guide](compiler/compiler-guide.md) - CLI usage and build integration
+- [Generated Code](compiler/generated-code.md) - Output format for each language
+- [Protocol Buffers vs FDL](compiler/proto-vs-fdl.md) - Feature comparison and migration
 
 ## Serialization Format
 

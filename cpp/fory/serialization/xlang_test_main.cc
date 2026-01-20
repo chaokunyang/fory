@@ -182,12 +182,12 @@ struct MyWrapper {
 FORY_STRUCT(MyWrapper, color, my_struct, my_ext);
 
 struct EmptyWrapper {
-  bool placeholder = false;
   bool operator==(const EmptyWrapper &other) const {
-    return placeholder == other.placeholder;
+    (void)other;
+    return true;
   }
 };
-FORY_STRUCT(EmptyWrapper, placeholder);
+FORY_STRUCT(EmptyWrapper);
 
 struct VersionCheckStruct {
   int32_t f1;

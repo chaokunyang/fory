@@ -102,11 +102,36 @@ struct SerializationMeta<
 /// Main struct registration macro.
 /// TypeIndex uses the fallback (type_fallback_hash based on PRETTY_FUNCTION)
 /// which provides unique type identification without namespace issues.
-#define FORY_STRUCT(Type, ...)                                                 \
+#define FORY_STRUCT_TYPE_ONLY(Type)                                            \
+  static_assert(std::is_class_v<Type>, "it must be a class type");             \
+  template <typename> struct ForyFieldInfoImpl;                                \
+  template <> struct ForyFieldInfoImpl<Type> {                                 \
+    static inline constexpr size_t Size = 0;                                   \
+    static inline constexpr std::string_view Name = #Type;                     \
+    static inline constexpr std::array<std::string_view, Size> Names = {};     \
+    static inline constexpr auto Ptrs = std::tuple{};                          \
+  };                                                                           \
+  static_assert(                                                               \
+      fory::meta::IsValidFieldInfo<ForyFieldInfoImpl<Type>>(),                 \
+      "duplicated fields in FORY_FIELD_INFO arguments are detected");          \
+  inline constexpr auto ForyFieldInfo(const Type &) noexcept {                 \
+    return ForyFieldInfoImpl<Type>{};                                          \
+  }                                                                            \
+  inline constexpr std::true_type ForyStructMarker(const Type &) noexcept {    \
+    return {};                                                                 \
+  }
+
+#define FORY_STRUCT_WITH_FIELDS(Type, ...)                                     \
   FORY_FIELD_INFO(Type, __VA_ARGS__)                                           \
   inline constexpr std::true_type ForyStructMarker(const Type &) noexcept {    \
     return {};                                                                 \
   }
+
+#define FORY_STRUCT_1(Type, ...) FORY_STRUCT_TYPE_ONLY(Type)
+#define FORY_STRUCT_0(Type, ...) FORY_STRUCT_WITH_FIELDS(Type, __VA_ARGS__)
+
+#define FORY_STRUCT(Type, ...)                                                 \
+  FORY_PP_CONCAT(FORY_STRUCT_, FORY_PP_IS_EMPTY(__VA_ARGS__))(Type, __VA_ARGS__)
 
 namespace detail {
 

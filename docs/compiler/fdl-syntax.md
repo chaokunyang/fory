@@ -684,16 +684,22 @@ field_type field_name = field_number;
 ### With Modifiers
 
 ```proto
-optional ref repeated field_type field_name = field_number;
+optional repeated string tags = 1;  // Nullable list
+repeated optional string tags = 2;  // Elements may be null
+ref repeated Node nodes = 3;        // Collection tracked as a reference
+repeated ref Node nodes = 4;        // Elements tracked as references
 ```
 
 **Grammar:**
 
 ```
 field_def    := [modifiers] field_type IDENTIFIER '=' INTEGER ';'
-modifiers    := ['optional'] ['ref'] ['repeated']
+modifiers    := { 'optional' | 'ref' } ['repeated' { 'optional' | 'ref' }]
 field_type   := primitive_type | named_type | map_type
 ```
+
+Modifiers before `repeated` apply to the field/collection. Modifiers after
+`repeated` apply to list elements.
 
 ### Field Modifiers
 
@@ -742,8 +748,8 @@ message Node {
 | -------- | -------------- | ------------------------------------------------- |
 | Java     | `Node parent`  | `Node parent` with `@ForyField(trackingRef=true)` |
 | Python   | `parent: Node` | `parent: Node` (runtime tracking)                 |
-| Go       | `Parent Node`  | `Parent *Node` with `fory:"trackRef"`             |
-| Rust     | `parent: Node` | `parent: Rc<Node>`                                |
+| Go       | `Parent Node`  | `Parent *Node` with `fory:"ref"`                  |
+| Rust     | `parent: Node` | `parent: Arc<Node>`                               |
 | C++      | `Node parent`  | `std::shared_ptr<Node> parent`                    |
 
 #### `repeated`
@@ -774,12 +780,15 @@ Modifiers can be combined:
 ```proto
 message Example {
     optional repeated string tags = 1;  // Nullable list
-    repeated ref Node nodes = 2;        // List of tracked references
-    optional ref User owner = 3;        // Nullable tracked reference
+    repeated optional string aliases = 2; // Elements may be null
+    ref repeated Node nodes = 3;          // Collection tracked as a reference
+    repeated ref Node children = 4;       // Elements tracked as references
+    optional ref User owner = 5;          // Nullable tracked reference
 }
 ```
 
-**Order:** `optional` must come before `ref`, which must come before `repeated`.
+Modifiers before `repeated` apply to the field/collection. Modifiers after
+`repeated` apply to elements.
 
 ## Type System
 
@@ -1052,13 +1061,24 @@ message Example {
 }
 ```
 
-| Option       | Type | Description                                 |
-| ------------ | ---- | ------------------------------------------- |
-| `ref`        | bool | Enable reference tracking (sets ref flag)   |
-| `nullable`   | bool | Mark field as nullable (sets optional flag) |
-| `deprecated` | bool | Mark this field as deprecated               |
+| Option                | Type | Description                                               |
+| --------------------- | ---- | --------------------------------------------------------- |
+| `ref`                 | bool | Enable reference tracking (sets ref flag)                 |
+| `nullable`            | bool | Mark field as nullable (sets optional flag)               |
+| `deprecated`          | bool | Mark this field as deprecated                             |
+| `thread_safe_pointer` | bool | Rust only: use `Arc` (true) or `Rc` (false) for ref types |
 
 **Note:** `[(fory).ref = true]` is equivalent to using the `ref` modifier: `ref MyType friend = 1;`
+Field-level options always apply to the field/collection; use modifiers after
+`repeated` to control element behavior.
+
+To use `Rc` instead of `Arc` in Rust for a specific field:
+
+```proto
+message Graph {
+    ref Node root = 1 [(fory).thread_safe_pointer = false];
+}
+```
 
 ### Combining Standard and Fory Options
 
@@ -1146,7 +1166,7 @@ reserved_stmt := 'reserved' reserved_items ';'
 reserved_items := reserved_item (',' reserved_item)*
 reserved_item := INTEGER | INTEGER 'to' INTEGER | INTEGER 'to' 'max' | STRING
 
-modifiers    := ['optional'] ['ref'] ['repeated']
+modifiers    := { 'optional' | 'ref' } ['repeated' { 'optional' | 'ref' }]
 
 field_type   := primitive_type | named_type | map_type
 primitive_type := 'bool' | 'int8' | 'int16' | 'int32' | 'int64'

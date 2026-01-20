@@ -71,6 +71,7 @@ KNOWN_FORY_FIELD_OPTIONS: Set[str] = {
     "ref",
     "nullable",
     "deprecated",
+    "thread_safe_pointer",
 }
 
 # Known type-level options for inline syntax: [id=100, deprecated=true]
@@ -647,10 +648,32 @@ class Parser:
         """
         start = self.current()
 
-        # Parse modifiers
-        optional = self.match(TokenType.OPTIONAL)
-        ref = self.match(TokenType.REF)
-        repeated = self.match(TokenType.REPEATED)
+        # Parse modifiers (optional/ref before repeated apply to the collection/field,
+        # optional/ref after repeated apply to elements)
+        optional = False
+        ref = False
+        element_optional = False
+        element_ref = False
+        repeated = False
+        while True:
+            if self.match(TokenType.OPTIONAL):
+                if repeated:
+                    element_optional = True
+                else:
+                    optional = True
+                continue
+            if self.match(TokenType.REF):
+                if repeated:
+                    element_ref = True
+                else:
+                    ref = True
+                continue
+            if self.match(TokenType.REPEATED):
+                if repeated:
+                    raise self.error("Repeated modifier specified more than once")
+                repeated = True
+                continue
+            break
 
         # Parse type
         field_type = self.parse_type()
@@ -697,6 +720,8 @@ class Parser:
             number=number,
             optional=optional,
             ref=ref,
+            element_optional=element_optional,
+            element_ref=element_ref,
             options=field_options,
             line=start.line,
             column=start.column,

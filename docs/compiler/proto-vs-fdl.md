@@ -169,11 +169,12 @@ FDL's killer feature is first-class reference tracking:
 message TreeNode [id=300] {
     string value = 1;
     ref TreeNode parent = 2;
-    repeated ref TreeNode children = 3;
+    repeated ref TreeNode children = 3; // Element refs
+    ref repeated TreeNode path = 4;     // Collection ref
 }
 
 message Graph [id=301] {
-    repeated ref Node nodes = 1;  // Shared references preserved
+    repeated ref Node nodes = 1;  // Shared references preserved (elements)
 }
 ```
 

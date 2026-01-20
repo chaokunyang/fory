@@ -244,6 +244,8 @@ class GoGenerator(BaseGenerator):
             field.field_type,
             field.optional,
             field.ref,
+            field.element_optional,
+            field.element_ref,
             parent_stack,
         )
         field_name = self.to_pascal_case(
@@ -252,10 +254,29 @@ class GoGenerator(BaseGenerator):
 
         # Build fory tag
         tags = []
+        is_list = isinstance(field.field_type, ListType)
+        nullable_tag: Optional[bool] = None
+        ref_tag: Optional[bool] = None
+
         if field.optional:
-            tags.append("nullable")
+            nullable_tag = True
+        elif is_list and (field.ref or field.element_optional or field.element_ref):
+            nullable_tag = False
+
         if field.ref:
-            tags.append("trackRef")
+            ref_tag = True
+        elif is_list and field.element_ref:
+            ref_tag = False
+
+        if nullable_tag is True:
+            tags.append("nullable")
+        elif nullable_tag is False:
+            tags.append("nullable=false")
+
+        if ref_tag is True:
+            tags.append("ref")
+        elif ref_tag is False:
+            tags.append("ref=false")
 
         if tags:
             tag_str = ",".join(tags)
@@ -270,6 +291,8 @@ class GoGenerator(BaseGenerator):
         field_type: FieldType,
         nullable: bool = False,
         ref: bool = False,
+        element_optional: bool = False,
+        element_ref: bool = False,
         parent_stack: Optional[List[Message]] = None,
     ) -> str:
         """Generate Go type string."""
@@ -287,16 +310,31 @@ class GoGenerator(BaseGenerator):
 
         elif isinstance(field_type, ListType):
             element_type = self.generate_type(
-                field_type.element_type, False, False, parent_stack
+                field_type.element_type,
+                element_optional,
+                element_ref,
+                False,
+                False,
+                parent_stack,
             )
             return f"[]{element_type}"
 
         elif isinstance(field_type, MapType):
             key_type = self.generate_type(
-                field_type.key_type, False, False, parent_stack
+                field_type.key_type,
+                False,
+                False,
+                False,
+                False,
+                parent_stack,
             )
             value_type = self.generate_type(
-                field_type.value_type, False, False, parent_stack
+                field_type.value_type,
+                False,
+                False,
+                False,
+                False,
+                parent_stack,
             )
             return f"map[{key_type}]{value_type}"
 

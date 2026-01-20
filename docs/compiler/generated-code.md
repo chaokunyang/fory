@@ -409,7 +409,7 @@ type User struct {
 
 type Order struct {
     Id         string
-    Customer   *User `fory:"trackRef"`
+    Customer   *User `fory:"ref"`
     Items      []string
     Quantities map[string]int32
     Status     Status
@@ -486,7 +486,7 @@ func main() {
 
 use fory::{Fory, ForyObject};
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(ForyObject, Debug, Clone, PartialEq, Default)]
 #[repr(i32)]
@@ -509,7 +509,7 @@ pub struct User {
 #[derive(ForyObject, Debug, Clone, PartialEq, Default)]
 pub struct Order {
     pub id: String,
-    pub customer: Rc<User>,
+    pub customer: Arc<User>,
     pub items: Vec<String>,
     pub quantities: HashMap<String, i32>,
     pub status: Status,
@@ -523,19 +523,22 @@ pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {
 }
 ```
 
+**Note:** Rust uses `Arc` by default for `ref` fields. Set
+`[(fory).thread_safe_pointer = false]` to generate `Rc` instead.
+
 ### Usage
 
 ```rust
 use demo::{User, Order, Status, register_types};
 use fory::Fory;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::collections::HashMap;
 
 fn main() -> Result<(), fory::Error> {
     let mut fory = Fory::default();
     register_types(&mut fory)?;
 
-    let user = Rc::new(User {
+    let user = Arc::new(User {
         id: "u123".to_string(),
         name: "Alice".to_string(),
         email: Some("alice@example.com".to_string()),
@@ -689,7 +692,7 @@ int main() {
 | Tag               | Purpose                    |
 | ----------------- | -------------------------- |
 | `fory:"nullable"` | Marks field as nullable    |
-| `fory:"trackRef"` | Enables reference tracking |
+| `fory:"ref"`      | Enables reference tracking |
 
 ### Rust Attributes
 
@@ -702,10 +705,10 @@ int main() {
 
 ### C++ Macros
 
-| Macro                      | Purpose                 |
-| -------------------------- | ----------------------- |
-| `FORY_STRUCT(T, fields..)` | Registers struct fields |
-| `FORY_ENUM(T, values..)`   | Registers enum values   |
+| Macro                        | Purpose                 |
+| ---------------------------- | ----------------------- |
+| `FORY_STRUCT(T[, fields..])` | Registers struct fields |
+| `FORY_ENUM(T, values..)`     | Registers enum values   |
 
 ## Name-Based Registration
 

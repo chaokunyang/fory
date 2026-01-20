@@ -345,7 +345,7 @@ Generates structs with:
 
 ```go
 type Cat struct {
-    Friend *Dog              `fory:"trackRef"`
+    Friend *Dog              `fory:"ref"`
     Name   *string           `fory:"nullable"`
     Tags   []string
 }
@@ -362,7 +362,7 @@ Generates structs with:
 ```rust
 #[derive(ForyObject, Debug, Clone, PartialEq, Default)]
 pub struct Cat {
-    pub friend: Rc<Dog>,
+    pub friend: Arc<Dog>,
     #[fory(nullable = true)]
     pub name: Option<String>,
     pub tags: Vec<String>,

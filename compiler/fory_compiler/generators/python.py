@@ -145,7 +145,7 @@ class PythonGenerator(BaseGenerator):
     def collect_message_imports(self, message: Message, imports: Set[str]):
         """Collect imports for a message and its nested types recursively."""
         for field in message.fields:
-            self.collect_imports(field.field_type, imports)
+            self.collect_field_imports(field, imports)
         for nested_msg in message.nested_messages:
             self.collect_message_imports(nested_msg, imports)
 
@@ -223,6 +223,7 @@ class PythonGenerator(BaseGenerator):
         python_type = self.generate_type(
             field.field_type,
             field.optional,
+            field.element_optional,
             parent_stack,
         )
         field_name = self.to_snake_case(field.name)
@@ -236,6 +237,7 @@ class PythonGenerator(BaseGenerator):
         self,
         field_type: FieldType,
         nullable: bool = False,
+        element_optional: bool = False,
         parent_stack: Optional[List[Message]] = None,
     ) -> str:
         """Generate Python type hint."""
@@ -254,19 +256,38 @@ class PythonGenerator(BaseGenerator):
         elif isinstance(field_type, ListType):
             # Use numpy array for numeric primitive types
             if isinstance(field_type.element_type, PrimitiveType):
-                if field_type.element_type.kind in self.NUMPY_DTYPE_MAP:
-                    return "np.ndarray"
-            element_type = self.generate_type(
-                field_type.element_type,
-                False,
-                parent_stack,
-            )
-            return f"List[{element_type}]"
+                if (
+                    field_type.element_type.kind in self.NUMPY_DTYPE_MAP
+                    and not element_optional
+                ):
+                    list_type = "np.ndarray"
+                else:
+                    element_type = self.generate_type(
+                        field_type.element_type,
+                        element_optional,
+                        parent_stack,
+                    )
+                    list_type = f"List[{element_type}]"
+            else:
+                element_type = self.generate_type(
+                    field_type.element_type,
+                    element_optional,
+                    parent_stack,
+                )
+                list_type = f"List[{element_type}]"
+            if nullable:
+                return f"Optional[{list_type}]"
+            return list_type
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False, parent_stack)
-            value_type = self.generate_type(field_type.value_type, False, parent_stack)
-            return f"Dict[{key_type}, {value_type}]"
+            key_type = self.generate_type(field_type.key_type, False, False, parent_stack)
+            value_type = self.generate_type(
+                field_type.value_type, False, False, parent_stack
+            )
+            map_type = f"Dict[{key_type}, {value_type}]"
+            if nullable:
+                return f"Optional[{map_type}]"
+            return map_type
 
         return "object"
 
@@ -311,7 +332,12 @@ class PythonGenerator(BaseGenerator):
 
         return "None"
 
-    def collect_imports(self, field_type: FieldType, imports: Set[str]):
+    def collect_imports(
+        self,
+        field_type: FieldType,
+        imports: Set[str],
+        element_optional: bool = False,
+    ):
         """Collect required imports for a field type."""
         if isinstance(field_type, PrimitiveType):
             if field_type.kind in (PrimitiveKind.DATE, PrimitiveKind.TIMESTAMP):
@@ -320,7 +346,10 @@ class PythonGenerator(BaseGenerator):
         elif isinstance(field_type, ListType):
             # Add numpy import for numeric primitive arrays
             if isinstance(field_type.element_type, PrimitiveType):
-                if field_type.element_type.kind in self.NUMPY_DTYPE_MAP:
+                if (
+                    field_type.element_type.kind in self.NUMPY_DTYPE_MAP
+                    and not element_optional
+                ):
                     imports.add("import numpy as np")
                     return
             self.collect_imports(field_type.element_type, imports)
@@ -328,6 +357,10 @@ class PythonGenerator(BaseGenerator):
         elif isinstance(field_type, MapType):
             self.collect_imports(field_type.key_type, imports)
             self.collect_imports(field_type.value_type, imports)
+
+    def collect_field_imports(self, field: Field, imports: Set[str]):
+        """Collect imports for a field, including list modifiers."""
+        self.collect_imports(field.field_type, imports, field.element_optional)
 
     def generate_registration(self) -> List[str]:
         """Generate the Fory registration function."""

@@ -214,11 +214,15 @@ class RustGenerator(BaseGenerator):
         if field.optional:
             lines.append("#[fory(nullable = true)]")
 
+        pointer_type = self.get_pointer_type(field)
         rust_type = self.generate_type(
             field.field_type,
-            field.optional,
-            field.ref,
-            parent_stack,
+            nullable=field.optional,
+            ref=field.ref,
+            element_optional=field.element_optional,
+            element_ref=field.element_ref,
+            parent_stack=parent_stack,
+            pointer_type=pointer_type,
         )
         field_name = self.to_snake_case(field.name)
 
@@ -231,7 +235,10 @@ class RustGenerator(BaseGenerator):
         field_type: FieldType,
         nullable: bool = False,
         ref: bool = False,
+        element_optional: bool = False,
+        element_ref: bool = False,
         parent_stack: Optional[List[Message]] = None,
+        pointer_type: str = "Arc",
     ) -> str:
         """Generate Rust type string."""
         if isinstance(field_type, PrimitiveType):
@@ -243,25 +250,47 @@ class RustGenerator(BaseGenerator):
         elif isinstance(field_type, NamedType):
             type_name = self.resolve_nested_type_name(field_type.name, parent_stack)
             if ref:
-                return f"Rc<{type_name}>"
+                type_name = f"{pointer_type}<{type_name}>"
             if nullable:
-                return f"Option<{type_name}>"
+                type_name = f"Option<{type_name}>"
             return type_name
 
         elif isinstance(field_type, ListType):
             element_type = self.generate_type(
-                field_type.element_type, False, False, parent_stack
+                field_type.element_type,
+                nullable=element_optional,
+                ref=element_ref,
+                parent_stack=parent_stack,
+                pointer_type=pointer_type,
             )
-            return f"Vec<{element_type}>"
+            list_type = f"Vec<{element_type}>"
+            if ref:
+                list_type = f"{pointer_type}<{list_type}>"
+            if nullable:
+                list_type = f"Option<{list_type}>"
+            return list_type
 
         elif isinstance(field_type, MapType):
             key_type = self.generate_type(
-                field_type.key_type, False, False, parent_stack
+                field_type.key_type,
+                nullable=False,
+                ref=False,
+                parent_stack=parent_stack,
+                pointer_type=pointer_type,
             )
             value_type = self.generate_type(
-                field_type.value_type, False, False, parent_stack
+                field_type.value_type,
+                nullable=False,
+                ref=False,
+                parent_stack=parent_stack,
+                pointer_type=pointer_type,
             )
-            return f"HashMap<{key_type}, {value_type}>"
+            map_type = f"HashMap<{key_type}, {value_type}>"
+            if ref:
+                map_type = f"{pointer_type}<{map_type}>"
+            if nullable:
+                map_type = f"Option<{map_type}>"
+            return map_type
 
         return "()"
 
@@ -303,9 +332,20 @@ class RustGenerator(BaseGenerator):
 
     def collect_uses_for_field(self, field: Field, uses: Set[str]):
         """Collect uses for a field, including ref tracking."""
-        if field.ref:
-            uses.add("use std::rc::Rc")
+        pointer_type = self.get_pointer_type(field)
+        if field.ref or field.element_ref:
+            if pointer_type == "Rc":
+                uses.add("use std::rc::Rc")
+            else:
+                uses.add("use std::sync::Arc")
         self.collect_uses(field.field_type, uses)
+
+    def get_pointer_type(self, field: Field) -> str:
+        """Determine pointer type for ref tracking based on field options."""
+        thread_safe = field.options.get("fory.thread_safe_pointer")
+        if thread_safe is False:
+            return "Rc"
+        return "Arc"
 
     def generate_registration(self) -> List[str]:
         """Generate the Fory registration function."""

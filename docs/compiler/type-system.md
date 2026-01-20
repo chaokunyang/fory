@@ -307,6 +307,17 @@ repeated User users = 2;
 | `repeated int32`  | `List<Integer>` | `List[int]`  | `[]int32`  | `Vec<i32>`    | `std::vector<int32_t>`     |
 | `repeated User`   | `List<User>`    | `List[User]` | `[]User`   | `Vec<User>`   | `std::vector<User>`        |
 
+**List modifiers:**
+
+| FDL                        | Java                                            | Python                | Go                      | Rust                  | C++                                       |
+| -------------------------- | ----------------------------------------------- | --------------------- | ----------------------- | --------------------- | ----------------------------------------- |
+| `optional repeated string` | `List<String>` + `@ForyField(nullable = true)`  | `Optional[List[str]]` | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` |
+| `repeated optional string` | `List<String>` (nullable elements)              | `List[Optional[str]]` | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` |
+| `ref repeated User`        | `List<User>` + `@ForyField(trackingRef = true)` | `List[User]`          | `[]User` + `ref`        | `Arc<Vec<User>>`\*    | `std::shared_ptr<std::vector<User>>`      |
+| `repeated ref User`        | `List<User>`                                    | `List[User]`          | `[]*User` + `ref=false` | `Vec<Arc<User>>`\*    | `std::vector<std::shared_ptr<User>>`      |
+
+\*Use `[(fory).thread_safe_pointer = false]` to generate `Rc` instead of `Arc` in Rust.
+
 ### Map
 
 Maps with typed keys and values:
@@ -381,11 +392,13 @@ message TreeNode {
 
 **Language Mapping:**
 
-| FDL        | Java     | Python | Go      | Rust       | C++                     |
-| ---------- | -------- | ------ | ------- | ---------- | ----------------------- |
-| `ref User` | `User`\* | `User` | `*User` | `Rc<User>` | `std::shared_ptr<User>` |
+| FDL        | Java     | Python | Go                     | Rust        | C++                     |
+| ---------- | -------- | ------ | ---------------------- | ----------- | ----------------------- |
+| `ref User` | `User`\* | `User` | `*User` + `fory:"ref"` | `Arc<User>` | `std::shared_ptr<User>` |
 
 \*Java uses `@ForyField(trackingRef = true)` annotation.
+
+Rust uses `Arc` by default; set `[(fory).thread_safe_pointer = false]` to use `Rc`.
 
 ## Type Compatibility Matrix
 

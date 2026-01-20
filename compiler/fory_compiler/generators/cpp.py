@@ -165,7 +165,14 @@ class CppGenerator(BaseGenerator):
     def collect_message_includes(self, message: Message, includes: Set[str]):
         """Collect includes for a message and its nested types recursively."""
         for field in message.fields:
-            self.collect_includes(field.field_type, field.optional, field.ref, includes)
+            self.collect_includes(
+                field.field_type,
+                field.optional,
+                field.ref,
+                includes,
+                field.element_optional,
+                field.element_ref,
+            )
         for nested_msg in message.nested_messages:
             self.collect_message_includes(nested_msg, includes)
 
@@ -236,6 +243,8 @@ class CppGenerator(BaseGenerator):
                 field.field_type,
                 field.optional,
                 field.ref,
+                field.element_optional,
+                field.element_ref,
                 lineage,
             )
             field_name = self.to_snake_case(field.name)
@@ -258,8 +267,11 @@ class CppGenerator(BaseGenerator):
         lines.append("};")
 
         # FORY_STRUCT macro (must stay in type namespace for ADL)
-        field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
-        lines.append(f"FORY_STRUCT({type_name}, {field_names});")
+        if message.fields:
+            field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
+            lines.append(f"FORY_STRUCT({type_name}, {field_names});")
+        else:
+            lines.append(f"FORY_STRUCT({type_name});")
 
         return lines
 
@@ -309,6 +321,8 @@ class CppGenerator(BaseGenerator):
         field_type: FieldType,
         nullable: bool = False,
         ref: bool = False,
+        element_optional: bool = False,
+        element_ref: bool = False,
         parent_stack: Optional[List[Message]] = None,
     ) -> str:
         """Generate C++ type string."""
@@ -321,25 +335,40 @@ class CppGenerator(BaseGenerator):
         elif isinstance(field_type, NamedType):
             type_name = self.resolve_nested_type_name(field_type.name, parent_stack)
             if ref:
-                return f"std::shared_ptr<{type_name}>"
+                type_name = f"std::shared_ptr<{type_name}>"
             if nullable:
-                return f"std::optional<{type_name}>"
+                type_name = f"std::optional<{type_name}>"
             return type_name
 
         elif isinstance(field_type, ListType):
             element_type = self.generate_type(
-                field_type.element_type, False, False, parent_stack
+                field_type.element_type,
+                element_optional,
+                element_ref,
+                False,
+                False,
+                parent_stack,
             )
-            return f"std::vector<{element_type}>"
+            list_type = f"std::vector<{element_type}>"
+            if ref:
+                list_type = f"std::shared_ptr<{list_type}>"
+            if nullable:
+                list_type = f"std::optional<{list_type}>"
+            return list_type
 
         elif isinstance(field_type, MapType):
             key_type = self.generate_type(
-                field_type.key_type, False, False, parent_stack
+                field_type.key_type, False, False, False, False, parent_stack
             )
             value_type = self.generate_type(
-                field_type.value_type, False, False, parent_stack
+                field_type.value_type, False, False, False, False, parent_stack
             )
-            return f"std::map<{key_type}, {value_type}>"
+            map_type = f"std::map<{key_type}, {value_type}>"
+            if ref:
+                map_type = f"std::shared_ptr<{map_type}>"
+            if nullable:
+                map_type = f"std::optional<{map_type}>"
+            return map_type
 
         return "void*"
 
@@ -363,7 +392,13 @@ class CppGenerator(BaseGenerator):
         return type_name
 
     def collect_includes(
-        self, field_type: FieldType, nullable: bool, ref: bool, includes: Set[str]
+        self,
+        field_type: FieldType,
+        nullable: bool,
+        ref: bool,
+        includes: Set[str],
+        element_optional: bool = False,
+        element_ref: bool = False,
     ):
         """Collect required includes for a field type."""
         if nullable:
@@ -381,7 +416,12 @@ class CppGenerator(BaseGenerator):
 
         elif isinstance(field_type, ListType):
             includes.add("<vector>")
-            self.collect_includes(field_type.element_type, False, False, includes)
+            self.collect_includes(
+                field_type.element_type,
+                element_optional,
+                element_ref,
+                includes,
+            )
 
         elif isinstance(field_type, MapType):
             includes.add("<map>")

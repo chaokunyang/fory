@@ -108,6 +108,8 @@ class Field:
     number: int
     optional: bool = False
     ref: bool = False
+    element_optional: bool = False
+    element_ref: bool = False
     options: dict = field(default_factory=dict)
     line: int = 0
     column: int = 0
@@ -118,6 +120,10 @@ class Field:
             modifiers.append("optional")
         if self.ref:
             modifiers.append("ref")
+        if self.element_optional:
+            modifiers.append("element_optional")
+        if self.element_ref:
+            modifiers.append("element_ref")
         mod_str = " ".join(modifiers) + " " if modifiers else ""
         opts_str = f" [{self.options}]" if self.options else ""
         return (

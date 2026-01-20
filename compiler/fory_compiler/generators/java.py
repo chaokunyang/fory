@@ -322,7 +322,7 @@ class JavaGenerator(BaseGenerator):
     def collect_message_imports(self, message: Message, imports: Set[str]):
         """Collect imports for a message and all its nested types recursively."""
         for field in message.fields:
-            self.collect_imports(field.field_type, imports)
+            self.collect_field_imports(field, imports)
             if field.optional or field.ref:
                 imports.add("org.apache.fory.annotation.ForyField")
 
@@ -422,7 +422,12 @@ class JavaGenerator(BaseGenerator):
             lines.append(f"@ForyField({', '.join(annotations)})")
 
         # Field type
-        java_type = self.generate_type(field.field_type, field.optional)
+        java_type = self.generate_type(
+            field.field_type,
+            field.optional,
+            field.element_optional,
+            field.element_ref,
+        )
 
         lines.append(f"private {java_type} {self.to_camel_case(field.name)};")
         lines.append("")
@@ -432,7 +437,12 @@ class JavaGenerator(BaseGenerator):
     def generate_getter_setter(self, field: Field) -> List[str]:
         """Generate getter and setter for a field."""
         lines = []
-        java_type = self.generate_type(field.field_type, field.optional)
+        java_type = self.generate_type(
+            field.field_type,
+            field.optional,
+            field.element_optional,
+            field.element_ref,
+        )
         field_name = self.to_camel_case(field.name)
         pascal_name = self.to_pascal_case(field.name)
 
@@ -450,7 +460,13 @@ class JavaGenerator(BaseGenerator):
 
         return lines
 
-    def generate_type(self, field_type: FieldType, nullable: bool = False) -> str:
+    def generate_type(
+        self,
+        field_type: FieldType,
+        nullable: bool = False,
+        element_optional: bool = False,
+        element_ref: bool = False,
+    ) -> str:
         """Generate Java type string."""
         if isinstance(field_type, PrimitiveType):
             if nullable and field_type.kind in self.BOXED_MAP:
@@ -463,7 +479,11 @@ class JavaGenerator(BaseGenerator):
         elif isinstance(field_type, ListType):
             # Use primitive arrays for numeric types
             if isinstance(field_type.element_type, PrimitiveType):
-                if field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP:
+                if (
+                    field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP
+                    and not element_optional
+                    and not element_ref
+                ):
                     return self.PRIMITIVE_ARRAY_MAP[field_type.element_type.kind]
             element_type = self.generate_type(field_type.element_type, True)
             return f"List<{element_type}>"
@@ -475,7 +495,13 @@ class JavaGenerator(BaseGenerator):
 
         return "Object"
 
-    def collect_imports(self, field_type: FieldType, imports: Set[str]):
+    def collect_type_imports(
+        self,
+        field_type: FieldType,
+        imports: Set[str],
+        element_optional: bool = False,
+        element_ref: bool = False,
+    ):
         """Collect required imports for a field type."""
         if isinstance(field_type, PrimitiveType):
             if field_type.kind == PrimitiveKind.DATE:
@@ -486,15 +512,28 @@ class JavaGenerator(BaseGenerator):
         elif isinstance(field_type, ListType):
             # Primitive arrays don't need List import
             if isinstance(field_type.element_type, PrimitiveType):
-                if field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP:
+                if (
+                    field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP
+                    and not element_optional
+                    and not element_ref
+                ):
                     return  # No import needed for primitive arrays
             imports.add("java.util.List")
-            self.collect_imports(field_type.element_type, imports)
+            self.collect_type_imports(field_type.element_type, imports)
 
         elif isinstance(field_type, MapType):
             imports.add("java.util.Map")
-            self.collect_imports(field_type.key_type, imports)
-            self.collect_imports(field_type.value_type, imports)
+            self.collect_type_imports(field_type.key_type, imports)
+            self.collect_type_imports(field_type.value_type, imports)
+
+    def collect_field_imports(self, field: Field, imports: Set[str]):
+        """Collect imports for a field, including list modifiers."""
+        self.collect_type_imports(
+            field.field_type,
+            imports,
+            field.element_optional,
+            field.element_ref,
+        )
 
     def has_array_field(self, message: Message) -> bool:
         """Check if message has any array fields (byte[] or primitive arrays)."""
@@ -502,10 +541,8 @@ class JavaGenerator(BaseGenerator):
             if isinstance(field.field_type, PrimitiveType):
                 if field.field_type.kind == PrimitiveKind.BYTES:
                     return True
-            elif isinstance(field.field_type, ListType):
-                if isinstance(field.field_type.element_type, PrimitiveType):
-                    if field.field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP:
-                        return True
+            elif self.is_primitive_array_field(field):
+                return True
         return False
 
     def is_primitive_array_field(self, field: Field) -> bool:
@@ -514,7 +551,11 @@ class JavaGenerator(BaseGenerator):
             return field.field_type.kind == PrimitiveKind.BYTES
         if isinstance(field.field_type, ListType):
             if isinstance(field.field_type.element_type, PrimitiveType):
-                return field.field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP
+                return (
+                    field.field_type.element_type.kind in self.PRIMITIVE_ARRAY_MAP
+                    and not field.element_optional
+                    and not field.element_ref
+                )
         return False
 
     def generate_equals_method(self, message: Message) -> List[str]:

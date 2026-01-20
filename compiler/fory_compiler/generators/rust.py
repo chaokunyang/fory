@@ -21,7 +21,6 @@ from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
-    Schema,
     Message,
     Enum,
     Field,
@@ -250,12 +249,18 @@ class RustGenerator(BaseGenerator):
             return type_name
 
         elif isinstance(field_type, ListType):
-            element_type = self.generate_type(field_type.element_type, False, False, parent_stack)
+            element_type = self.generate_type(
+                field_type.element_type, False, False, parent_stack
+            )
             return f"Vec<{element_type}>"
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False, False, parent_stack)
-            value_type = self.generate_type(field_type.value_type, False, False, parent_stack)
+            key_type = self.generate_type(
+                field_type.key_type, False, False, parent_stack
+            )
+            value_type = self.generate_type(
+                field_type.value_type, False, False, parent_stack
+            )
             return f"HashMap<{key_type}, {value_type}>"
 
         return "()"
@@ -306,7 +311,9 @@ class RustGenerator(BaseGenerator):
         """Generate the Fory registration function."""
         lines = []
 
-        lines.append("pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {")
+        lines.append(
+            "pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {"
+        )
 
         # Register enums (top-level)
         for enum in self.schema.enums:
@@ -321,7 +328,9 @@ class RustGenerator(BaseGenerator):
 
         return lines
 
-    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_name: str):
+    def generate_enum_registration(
+        self, lines: List[str], enum: Enum, parent_name: str
+    ):
         """Generate registration code for an enum."""
         type_name = f"{parent_name}_{enum.name}" if parent_name else enum.name
 
@@ -329,9 +338,13 @@ class RustGenerator(BaseGenerator):
             lines.append(f"    fory.register::<{type_name}>({enum.type_id})?;")
         else:
             ns = self.package or "default"
-            lines.append(f'    fory.register_by_namespace::<{type_name}>("{ns}", "{type_name}")?;')
+            lines.append(
+                f'    fory.register_by_namespace::<{type_name}>("{ns}", "{type_name}")?;'
+            )
 
-    def generate_message_registration(self, lines: List[str], message: Message, parent_name: str):
+    def generate_message_registration(
+        self, lines: List[str], message: Message, parent_name: str
+    ):
         """Generate registration code for a message and its nested types."""
         type_name = f"{parent_name}_{message.name}" if parent_name else message.name
 
@@ -348,4 +361,6 @@ class RustGenerator(BaseGenerator):
             lines.append(f"    fory.register::<{type_name}>({message.type_id})?;")
         else:
             ns = self.package or "default"
-            lines.append(f'    fory.register_by_namespace::<{type_name}>("{ns}", "{type_name}")?;')
+            lines.append(
+                f'    fory.register_by_namespace::<{type_name}>("{ns}", "{type_name}")?;'
+            )

@@ -31,6 +31,7 @@ from fory_compiler.generators import GENERATORS
 
 class ImportError(Exception):
     """Error during import resolution."""
+
     pass
 
 
@@ -137,7 +138,9 @@ def resolve_imports(
             )
 
         # Recursively resolve the imported file
-        imported_schema = resolve_imports(import_path, import_paths, visited.copy(), cache)
+        imported_schema = resolve_imports(
+            import_path, import_paths, visited.copy(), cache
+        )
 
         # Collect types from imported schema
         imported_enums.extend(imported_schema.enums)
@@ -261,10 +264,10 @@ def get_languages(lang_arg: str) -> List[str]:
     if lang_arg == "all":
         return list(GENERATORS.keys())
 
-    languages = [l.strip().lower() for l in lang_arg.split(",")]
+    languages = [lang.strip().lower() for lang in lang_arg.split(",")]
 
     # Validate languages
-    invalid = [l for l in languages if l not in GENERATORS]
+    invalid = [lang for lang in languages if lang not in GENERATORS]
     if invalid:
         print(f"Error: Unknown language(s): {', '.join(invalid)}", file=sys.stderr)
         print(f"Available: {', '.join(GENERATORS.keys())}", file=sys.stderr)
@@ -366,7 +369,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
         return 1
 
     # Validate that all languages are supported
-    invalid = [l for l in lang_output_dirs.keys() if l not in GENERATORS]
+    invalid = [lang for lang in lang_output_dirs.keys() if lang not in GENERATORS]
     if invalid:
         print(f"Error: Unknown language(s): {', '.join(invalid)}", file=sys.stderr)
         print(f"Available: {', '.join(GENERATORS.keys())}", file=sys.stderr)
@@ -382,7 +385,9 @@ def cmd_compile(args: argparse.Namespace) -> int:
                 continue
             resolved = Path(part).resolve()
             if not resolved.is_dir():
-                print(f"Warning: Import path is not a directory: {part}", file=sys.stderr)
+                print(
+                    f"Warning: Import path is not a directory: {part}", file=sys.stderr
+                )
             import_paths.append(resolved)
 
     # Create output directories

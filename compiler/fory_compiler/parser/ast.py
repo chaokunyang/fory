@@ -120,7 +120,9 @@ class Field:
             modifiers.append("ref")
         mod_str = " ".join(modifiers) + " " if modifiers else ""
         opts_str = f" [{self.options}]" if self.options else ""
-        return f"Field({mod_str}{self.field_type} {self.name} = {self.number}{opts_str})"
+        return (
+            f"Field({mod_str}{self.field_type} {self.name} = {self.number}{opts_str})"
+        )
 
 
 @dataclass
@@ -165,9 +167,13 @@ class Message:
         id_str = f" [id={self.type_id}]" if self.type_id is not None else ""
         nested_str = ""
         if self.nested_messages or self.nested_enums:
-            nested_str = f", nested={len(self.nested_messages)}msg+{len(self.nested_enums)}enum"
+            nested_str = (
+                f", nested={len(self.nested_messages)}msg+{len(self.nested_enums)}enum"
+            )
         opts_str = f", options={len(self.options)}" if self.options else ""
-        return f"Message({self.name}{id_str}, fields={self.fields}{nested_str}{opts_str})"
+        return (
+            f"Message({self.name}{id_str}, fields={self.fields}{nested_str}{opts_str})"
+        )
 
     def get_nested_type(self, name: str) -> Optional[Union["Message", "Enum"]]:
         """Look up a nested type by name."""
@@ -205,7 +211,9 @@ class Schema:
     imports: List[Import] = field(default_factory=list)
     enums: List[Enum] = field(default_factory=list)
     messages: List[Message] = field(default_factory=list)
-    options: dict = field(default_factory=dict)  # File-level options (java_package, go_package, etc.)
+    options: dict = field(
+        default_factory=dict
+    )  # File-level options (java_package, go_package, etc.)
 
     def __repr__(self) -> str:
         opts = f", options={len(self.options)}" if self.options else ""
@@ -298,11 +306,15 @@ class Schema:
             nested_names = set()
             for nested_enum in message.nested_enums:
                 if nested_enum.name in nested_names:
-                    errors.append(f"Duplicate nested type name in {full_name}: {nested_enum.name}")
+                    errors.append(
+                        f"Duplicate nested type name in {full_name}: {nested_enum.name}"
+                    )
                 nested_names.add(nested_enum.name)
             for nested_msg in message.nested_messages:
                 if nested_msg.name in nested_names:
-                    errors.append(f"Duplicate nested type name in {full_name}: {nested_msg.name}")
+                    errors.append(
+                        f"Duplicate nested type name in {full_name}: {nested_msg.name}"
+                    )
                 nested_names.add(nested_msg.name)
 
             # Check for duplicate field numbers and names
@@ -316,9 +328,7 @@ class Schema:
                     )
                 field_numbers[f.number] = f.name
                 if f.name in field_names:
-                    errors.append(
-                        f"Duplicate field name in {full_name}: {f.name}"
-                    )
+                    errors.append(f"Duplicate field name in {full_name}: {f.name}")
                 field_names.add(f.name)
 
             # Validate nested enums
@@ -341,9 +351,7 @@ class Schema:
                     )
                 value_numbers[v.value] = v.name
                 if v.name in value_names:
-                    errors.append(
-                        f"Duplicate enum value name in {full_name}: {v.name}"
-                    )
+                    errors.append(f"Duplicate enum value name in {full_name}: {v.name}")
                 value_names.add(v.name)
 
         # Validate all top-level enums

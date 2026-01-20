@@ -20,9 +20,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-from fory_compiler.parser.ast import Schema, Message, Enum, Field, FieldType
+from fory_compiler.parser.ast import Schema, FieldType
 
 
 @dataclass
@@ -172,7 +172,7 @@ class BaseGenerator(ABC):
             return value_name
 
         # Get the remainder after stripping prefix
-        remainder = value_name[len(prefix):]
+        remainder = value_name[len(prefix) :]
 
         # Check if remainder is a valid identifier (starts with letter)
         if not remainder or not remainder[0].isalpha():
@@ -200,4 +200,6 @@ class BaseGenerator(ABC):
             "specific language governing permissions and limitations",
             "under the License.",
         ]
-        return "\n".join(f"{comment_prefix} {line}" if line else comment_prefix for line in lines)
+        return "\n".join(
+            f"{comment_prefix} {line}" if line else comment_prefix for line in lines
+        )

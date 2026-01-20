@@ -21,7 +21,6 @@ from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
-    Schema,
     Message,
     Enum,
     Field,
@@ -194,7 +193,11 @@ class PythonGenerator(BaseGenerator):
             lines.append("")
 
         # Generate fields
-        if not message.fields and not message.nested_enums and not message.nested_messages:
+        if (
+            not message.fields
+            and not message.nested_enums
+            and not message.nested_messages
+        ):
             lines.append(f"{ind}    pass")
             return lines
 
@@ -347,7 +350,9 @@ class PythonGenerator(BaseGenerator):
 
         return lines
 
-    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_path: str):
+    def generate_enum_registration(
+        self, lines: List[str], enum: Enum, parent_path: str
+    ):
         """Generate registration code for an enum."""
         # In Python, nested class references use Outer.Inner syntax
         class_ref = f"{parent_path}.{enum.name}" if parent_path else enum.name
@@ -357,19 +362,27 @@ class PythonGenerator(BaseGenerator):
             lines.append(f"    fory.register_type({class_ref}, type_id={enum.type_id})")
         else:
             ns = self.package or "default"
-            lines.append(f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")')
+            lines.append(
+                f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")'
+            )
 
-    def generate_message_registration(self, lines: List[str], message: Message, parent_path: str):
+    def generate_message_registration(
+        self, lines: List[str], message: Message, parent_path: str
+    ):
         """Generate registration code for a message and its nested types."""
         # In Python, nested class references use Outer.Inner syntax
         class_ref = f"{parent_path}.{message.name}" if parent_path else message.name
         type_name = class_ref.replace(".", "_") if parent_path else message.name
 
         if message.type_id is not None:
-            lines.append(f"    fory.register_type({class_ref}, type_id={message.type_id})")
+            lines.append(
+                f"    fory.register_type({class_ref}, type_id={message.type_id})"
+            )
         else:
             ns = self.package or "default"
-            lines.append(f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")')
+            lines.append(
+                f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")'
+            )
 
         # Register nested enums
         for nested_enum in message.nested_enums:

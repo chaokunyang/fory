@@ -246,7 +246,9 @@ class Lexer:
                 else:
                     result.append(escape_ch)
             elif ch == "\n":
-                raise LexerError("Unterminated string (newline in string)", start_line, start_col)
+                raise LexerError(
+                    "Unterminated string (newline in string)", start_line, start_col
+                )
             else:
                 result.append(self.advance())
 

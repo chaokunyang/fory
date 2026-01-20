@@ -21,7 +21,6 @@ from typing import List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
-    Schema,
     Message,
     Enum,
     Field,
@@ -128,7 +127,7 @@ class GoGenerator(BaseGenerator):
         if imports:
             lines.append("import (")
             for imp in sorted(imports):
-                lines.append(f'\t{imp}')
+                lines.append(f"\t{imp}")
             lines.append(")")
             lines.append("")
 
@@ -247,7 +246,9 @@ class GoGenerator(BaseGenerator):
             field.ref,
             parent_stack,
         )
-        field_name = self.to_pascal_case(field.name)  # Go uses PascalCase for exported fields
+        field_name = self.to_pascal_case(
+            field.name
+        )  # Go uses PascalCase for exported fields
 
         # Build fory tag
         tags = []
@@ -285,12 +286,18 @@ class GoGenerator(BaseGenerator):
             return type_name
 
         elif isinstance(field_type, ListType):
-            element_type = self.generate_type(field_type.element_type, False, False, parent_stack)
+            element_type = self.generate_type(
+                field_type.element_type, False, False, parent_stack
+            )
             return f"[]{element_type}"
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False, False, parent_stack)
-            value_type = self.generate_type(field_type.value_type, False, False, parent_stack)
+            key_type = self.generate_type(
+                field_type.key_type, False, False, parent_stack
+            )
+            value_type = self.generate_type(
+                field_type.value_type, False, False, parent_stack
+            )
             return f"map[{key_type}]{value_type}"
 
         return "interface{}"
@@ -346,12 +353,16 @@ class GoGenerator(BaseGenerator):
 
         return lines
 
-    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_name: str):
+    def generate_enum_registration(
+        self, lines: List[str], enum: Enum, parent_name: str
+    ):
         """Generate registration code for an enum."""
         type_name = f"{parent_name}_{enum.name}" if parent_name else enum.name
 
         if enum.type_id is not None:
-            lines.append(f"\tif err := f.RegisterEnum({type_name}(0), {enum.type_id}); err != nil {{")
+            lines.append(
+                f"\tif err := f.RegisterEnum({type_name}(0), {enum.type_id}); err != nil {{"
+            )
             lines.append("\t\treturn err")
             lines.append("\t}")
         else:
@@ -363,7 +374,9 @@ class GoGenerator(BaseGenerator):
             lines.append("\t\treturn err")
             lines.append("\t}")
 
-    def generate_message_registration(self, lines: List[str], message: Message, parent_name: str):
+    def generate_message_registration(
+        self, lines: List[str], message: Message, parent_name: str
+    ):
         """Generate registration code for a message and its nested types."""
         type_name = f"{parent_name}_{message.name}" if parent_name else message.name
 
@@ -377,7 +390,9 @@ class GoGenerator(BaseGenerator):
 
         # Register this message
         if message.type_id is not None:
-            lines.append(f"\tif err := f.RegisterStruct({type_name}{{}}, {message.type_id}); err != nil {{")
+            lines.append(
+                f"\tif err := f.RegisterStruct({type_name}{{}}, {message.type_id}); err != nil {{"
+            )
             lines.append("\t\treturn err")
             lines.append("\t}")
         else:

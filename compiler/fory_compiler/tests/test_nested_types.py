@@ -29,7 +29,7 @@ class TestNestedMessageParsing:
 
     def test_simple_nested_message(self):
         """Test parsing a simple nested message."""
-        source = '''
+        source = """
         message SearchResponse {
             message Result {
                 string url = 1;
@@ -37,7 +37,7 @@ class TestNestedMessageParsing:
             }
             repeated Result results = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -52,7 +52,7 @@ class TestNestedMessageParsing:
 
     def test_nested_enum(self):
         """Test parsing a nested enum."""
-        source = '''
+        source = """
         message Outer {
             enum Status {
                 UNKNOWN = 0;
@@ -61,7 +61,7 @@ class TestNestedMessageParsing:
             }
             Status status = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -75,7 +75,7 @@ class TestNestedMessageParsing:
 
     def test_deeply_nested_message(self):
         """Test parsing deeply nested messages."""
-        source = '''
+        source = """
         message Outer {
             message Middle {
                 message Inner {
@@ -85,7 +85,7 @@ class TestNestedMessageParsing:
             }
             Middle middle = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -99,7 +99,7 @@ class TestNestedMessageParsing:
 
     def test_mixed_nested_types(self):
         """Test parsing messages with both nested messages and enums."""
-        source = '''
+        source = """
         message Container {
             enum Type {
                 TYPE_UNKNOWN = 0;
@@ -113,7 +113,7 @@ class TestNestedMessageParsing:
             repeated Item items = 1;
             Type default_type = 2;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -130,7 +130,7 @@ class TestQualifiedTypeNames:
 
     def test_qualified_type_in_field(self):
         """Test using qualified type names in field definitions."""
-        source = '''
+        source = """
         message SearchResponse {
             message Result {
                 string url = 1;
@@ -139,7 +139,7 @@ class TestQualifiedTypeNames:
         message SearchRequest {
             SearchResponse.Result cached_result = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -152,7 +152,7 @@ class TestQualifiedTypeNames:
 
     def test_qualified_type_in_list(self):
         """Test using qualified type names in list fields."""
-        source = '''
+        source = """
         message Outer {
             message Inner {
                 string value = 1;
@@ -161,7 +161,7 @@ class TestQualifiedTypeNames:
         message Container {
             repeated Outer.Inner items = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -178,14 +178,14 @@ class TestNestedTypeValidation:
 
     def test_valid_nested_type_reference(self):
         """Test that references to nested types are valid."""
-        source = '''
+        source = """
         message SearchResponse {
             message Result {
                 string url = 1;
             }
             repeated Result results = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -195,7 +195,7 @@ class TestNestedTypeValidation:
 
     def test_valid_qualified_type_reference(self):
         """Test that qualified type references are valid."""
-        source = '''
+        source = """
         message SearchResponse {
             message Result {
                 string url = 1;
@@ -204,7 +204,7 @@ class TestNestedTypeValidation:
         message Collector {
             SearchResponse.Result best_result = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -214,7 +214,7 @@ class TestNestedTypeValidation:
 
     def test_duplicate_nested_type_names(self):
         """Test that duplicate nested type names are detected."""
-        source = '''
+        source = """
         message Container {
             message Inner {
                 string a = 1;
@@ -223,7 +223,7 @@ class TestNestedTypeValidation:
                 string b = 1;
             }
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -234,13 +234,13 @@ class TestNestedTypeValidation:
 
     def test_duplicate_type_ids_in_nested(self):
         """Test that duplicate type IDs in nested types are detected."""
-        source = '''
+        source = """
         message Outer [id=100] {
             message Inner [id=100] {
                 string value = 1;
             }
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -251,11 +251,11 @@ class TestNestedTypeValidation:
 
     def test_unknown_nested_type(self):
         """Test that references to unknown nested types are detected."""
-        source = '''
+        source = """
         message Container {
             NonExistent.Type field = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -270,13 +270,13 @@ class TestSchemaTypeLookup:
 
     def test_get_nested_type_by_qualified_name(self):
         """Test looking up nested types by qualified name."""
-        source = '''
+        source = """
         message SearchResponse {
             message Result {
                 string url = 1;
             }
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -293,7 +293,7 @@ class TestSchemaTypeLookup:
 
     def test_get_deeply_nested_type(self):
         """Test looking up deeply nested types."""
-        source = '''
+        source = """
         message A {
             message B {
                 message C {
@@ -301,7 +301,7 @@ class TestSchemaTypeLookup:
                 }
             }
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -312,7 +312,7 @@ class TestSchemaTypeLookup:
 
     def test_get_all_types_includes_nested(self):
         """Test that get_all_types includes nested types."""
-        source = '''
+        source = """
         message Outer {
             enum Status {
                 UNKNOWN = 0;
@@ -323,7 +323,7 @@ class TestSchemaTypeLookup:
                 }
             }
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()

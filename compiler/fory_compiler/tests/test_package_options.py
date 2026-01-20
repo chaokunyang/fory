@@ -32,12 +32,12 @@ class TestDottedPackageName:
 
     def test_simple_package(self):
         """Test parsing a simple package name."""
-        source = '''
+        source = """
         package foo;
         message Bar {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -46,12 +46,12 @@ class TestDottedPackageName:
 
     def test_dotted_package(self):
         """Test parsing a dotted package name."""
-        source = '''
+        source = """
         package foo.bar;
         message Baz {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -60,12 +60,12 @@ class TestDottedPackageName:
 
     def test_deeply_dotted_package(self):
         """Test parsing a deeply nested package name."""
-        source = '''
+        source = """
         package com.example.payment.v1;
         message Payment {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -78,17 +78,18 @@ class TestUnknownOptionWarning:
 
     def test_unknown_option_warns(self):
         """Test that unknown options produce a warning."""
-        source = '''
+        source = """
         package myapp;
         option unknown_option = "value";
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             schema = parser.parse()
@@ -102,42 +103,44 @@ class TestUnknownOptionWarning:
 
     def test_known_option_no_warning(self):
         """Test that known options don't produce warnings."""
-        source = '''
+        source = """
         package myapp;
         option java_package = "com.example";
         option go_package = "github.com/example";
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have no warnings
             assert len(w) == 0
 
     def test_multiple_unknown_options_warn(self):
         """Test that multiple unknown options each produce a warning."""
-        source = '''
+        source = """
         package myapp;
         option foo = "bar";
         option baz = 123;
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have two warnings
             assert len(w) == 2
@@ -150,13 +153,13 @@ class TestFileOptions:
 
     def test_java_package_option(self):
         """Test parsing java_package option."""
-        source = '''
+        source = """
         package payment;
         option java_package = "com.mycorp.payment.v1";
         message Payment {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -166,46 +169,51 @@ class TestFileOptions:
 
     def test_go_package_option(self):
         """Test parsing go_package option."""
-        source = '''
+        source = """
         package payment;
         option go_package = "github.com/mycorp/apis/gen/payment/v1;paymentv1";
         message Payment {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
 
         assert schema.package == "payment"
-        assert schema.get_option("go_package") == "github.com/mycorp/apis/gen/payment/v1;paymentv1"
+        assert (
+            schema.get_option("go_package")
+            == "github.com/mycorp/apis/gen/payment/v1;paymentv1"
+        )
 
     def test_multiple_options(self):
         """Test parsing multiple file-level options."""
-        source = '''
+        source = """
         package payment;
         option java_package = "com.mycorp.payment.v1";
         option go_package = "github.com/mycorp/payment/v1;paymentv1";
         message Payment {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
 
         assert schema.get_option("java_package") == "com.mycorp.payment.v1"
-        assert schema.get_option("go_package") == "github.com/mycorp/payment/v1;paymentv1"
+        assert (
+            schema.get_option("go_package") == "github.com/mycorp/payment/v1;paymentv1"
+        )
 
     def test_option_with_boolean_value(self):
         """Test parsing option with boolean value."""
-        source = '''
+        source = """
         package test;
         option deprecated = true;
         message Foo {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -214,13 +222,13 @@ class TestFileOptions:
 
     def test_option_with_integer_value(self):
         """Test parsing option with integer value."""
-        source = '''
+        source = """
         package test;
         option version = 1;
         message Foo {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -233,7 +241,7 @@ class TestQualifiedTypeNames:
 
     def test_qualified_type_in_field(self):
         """Test using qualified type names in field definitions."""
-        source = '''
+        source = """
         package myapp;
         message SearchResponse {
             message Result {
@@ -243,7 +251,7 @@ class TestQualifiedTypeNames:
         message SearchRequest {
             SearchResponse.Result cached_result = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -259,13 +267,13 @@ class TestJavaPackageGeneration:
 
     def test_java_package_option_used(self):
         """Test that java_package option is used in generated Java code."""
-        source = '''
+        source = """
         package payment;
         option java_package = "com.mycorp.payment.v1";
         message Payment {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -282,12 +290,12 @@ class TestJavaPackageGeneration:
 
     def test_java_package_fallback_to_fdl_package(self):
         """Test fallback to FDL package when java_package is not specified."""
-        source = '''
+        source = """
         package com.example.models;
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -307,13 +315,13 @@ class TestGoPackageGeneration:
 
     def test_go_package_with_semicolon(self):
         """Test go_package option with explicit package name."""
-        source = '''
+        source = """
         package payment;
         option go_package = "github.com/mycorp/apis/gen/payment/v1;paymentv1";
         message Payment {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -331,13 +339,13 @@ class TestGoPackageGeneration:
 
     def test_go_package_without_semicolon(self):
         """Test go_package option without explicit package name."""
-        source = '''
+        source = """
         package payment;
         option go_package = "github.com/mycorp/apis/payment/v1";
         message Payment {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -351,12 +359,12 @@ class TestGoPackageGeneration:
 
     def test_go_package_fallback_to_fdl_package(self):
         """Test fallback to FDL package when go_package is not specified."""
-        source = '''
+        source = """
         package com.example.models;
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -374,13 +382,13 @@ class TestNamespaceConsistency:
 
     def test_java_uses_fdl_package_for_namespace(self):
         """Test that Java uses FDL package for type namespace, not java_package."""
-        source = '''
+        source = """
         package myapp.models;
         option java_package = "com.mycorp.generated.models";
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -396,13 +404,13 @@ class TestNamespaceConsistency:
 
     def test_go_uses_fdl_package_for_namespace(self):
         """Test that Go uses FDL package for type namespace, not go_package."""
-        source = '''
+        source = """
         package myapp.models;
         option go_package = "github.com/mycorp/generated;genmodels";
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -422,7 +430,7 @@ class TestJavaOuterClassname:
 
     def test_outer_classname_generates_single_file(self):
         """Test that java_outer_classname generates all types in a single file."""
-        source = '''
+        source = """
         package myapp;
         option java_outer_classname = "DescriptorProtos";
 
@@ -440,7 +448,7 @@ class TestJavaOuterClassname:
             string id = 1;
             User customer = 2;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -467,14 +475,14 @@ class TestJavaOuterClassname:
 
     def test_outer_classname_registration_uses_prefix(self):
         """Test that registration uses outer class as prefix."""
-        source = '''
+        source = """
         package myapp;
         option java_outer_classname = "DescriptorProtos";
 
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -491,7 +499,7 @@ class TestJavaOuterClassname:
 
     def test_outer_classname_with_nested_types(self):
         """Test java_outer_classname with nested types."""
-        source = '''
+        source = """
         package myapp;
         option java_outer_classname = "Protos";
 
@@ -501,7 +509,7 @@ class TestJavaOuterClassname:
             }
             Inner item = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -519,7 +527,7 @@ class TestJavaOuterClassname:
 
     def test_outer_classname_with_java_package(self):
         """Test java_outer_classname combined with java_package."""
-        source = '''
+        source = """
         package myapp;
         option java_package = "com.example.proto";
         option java_outer_classname = "MyProtos";
@@ -527,7 +535,7 @@ class TestJavaOuterClassname:
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -546,7 +554,7 @@ class TestJavaOuterClassname:
 
     def test_without_outer_classname_generates_separate_files(self):
         """Test that without java_outer_classname, separate files are generated."""
-        source = '''
+        source = """
         package myapp;
 
         enum Status {
@@ -556,7 +564,7 @@ class TestJavaOuterClassname:
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -578,7 +586,7 @@ class TestJavaMultipleFiles:
 
     def test_multiple_files_true_generates_separate_files(self):
         """Test that java_multiple_files = true generates separate files."""
-        source = '''
+        source = """
         package myapp;
         option java_multiple_files = true;
 
@@ -594,7 +602,7 @@ class TestJavaMultipleFiles:
         message Order {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -613,7 +621,7 @@ class TestJavaMultipleFiles:
 
     def test_multiple_files_false_with_outer_class_generates_single_file(self):
         """Test that java_multiple_files = false with outer class generates single file."""
-        source = '''
+        source = """
         package myapp;
         option java_outer_classname = "MyProtos";
         option java_multiple_files = false;
@@ -625,7 +633,7 @@ class TestJavaMultipleFiles:
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -644,7 +652,7 @@ class TestJavaMultipleFiles:
 
     def test_multiple_files_true_overrides_outer_classname(self):
         """Test that java_multiple_files = true overrides java_outer_classname."""
-        source = '''
+        source = """
         package myapp;
         option java_outer_classname = "MyProtos";
         option java_multiple_files = true;
@@ -656,7 +664,7 @@ class TestJavaMultipleFiles:
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -675,14 +683,14 @@ class TestJavaMultipleFiles:
 
     def test_multiple_files_default_is_false(self):
         """Test that java_multiple_files defaults to false when outer_classname is set."""
-        source = '''
+        source = """
         package myapp;
         option java_outer_classname = "MyProtos";
 
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -699,7 +707,7 @@ class TestJavaMultipleFiles:
 
     def test_multiple_files_with_java_package(self):
         """Test java_multiple_files combined with java_package."""
-        source = '''
+        source = """
         package myapp;
         option java_package = "com.example.generated";
         option java_multiple_files = true;
@@ -711,7 +719,7 @@ class TestJavaMultipleFiles:
         message Order {
             string id = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -732,12 +740,12 @@ class TestTypeOptions:
 
     def test_message_with_id_option(self):
         """Test parsing a message with id option."""
-        source = '''
+        source = """
         package myapp;
         message User [id=100] {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -749,13 +757,13 @@ class TestTypeOptions:
 
     def test_enum_with_id_option(self):
         """Test parsing an enum with id option."""
-        source = '''
+        source = """
         package myapp;
         enum Status [id=200] {
             UNKNOWN = 0;
             ACTIVE = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -767,12 +775,12 @@ class TestTypeOptions:
 
     def test_type_with_multiple_options(self):
         """Test parsing a type with multiple options."""
-        source = '''
+        source = """
         package myapp;
         message User [id=100, deprecated=true] {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -783,12 +791,12 @@ class TestTypeOptions:
 
     def test_type_without_options(self):
         """Test parsing a type without options (namespace-based)."""
-        source = '''
+        source = """
         package myapp;
         message Config {
             string key = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -799,16 +807,17 @@ class TestTypeOptions:
 
     def test_unknown_type_option_warns(self):
         """Test that unknown type options produce a warning."""
-        source = '''
+        source = """
         package myapp;
         message User [id=100, unknown_opt=true] {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             schema = parser.parse()
@@ -823,26 +832,27 @@ class TestTypeOptions:
 
     def test_known_type_options_no_warning(self):
         """Test that known type options don't produce warnings."""
-        source = '''
+        source = """
         package myapp;
         message User [id=100, deprecated=true] {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have no warnings
             assert len(w) == 0
 
     def test_nested_type_with_id(self):
         """Test parsing nested types with id options."""
-        source = '''
+        source = """
         package myapp;
         message Outer [id=100] {
             message Inner [id=101] {
@@ -850,7 +860,7 @@ class TestTypeOptions:
             }
             Inner item = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -866,13 +876,13 @@ class TestFieldOptions:
 
     def test_field_with_deprecated_option(self):
         """Test parsing a field with deprecated option."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string name = 1;
             int32 old_field = 2 [deprecated = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -885,12 +895,12 @@ class TestFieldOptions:
 
     def test_field_with_json_name_option(self):
         """Test parsing a field with json_name option."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string first_name = 1 [json_name = "firstName"];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -902,12 +912,12 @@ class TestFieldOptions:
 
     def test_field_with_multiple_options(self):
         """Test parsing a field with multiple options."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string old_name = 1 [deprecated = true, json_name = "oldName"];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -919,12 +929,12 @@ class TestFieldOptions:
 
     def test_field_with_integer_option_value(self):
         """Test parsing a field with integer option value."""
-        source = '''
+        source = """
         package myapp;
         message User {
             int32 version = 1 [packed = 1];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -935,12 +945,12 @@ class TestFieldOptions:
 
     def test_field_with_false_option_value(self):
         """Test parsing a field with false option value."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string name = 1 [deprecated = false];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -951,19 +961,20 @@ class TestFieldOptions:
 
     def test_unknown_field_option_warns(self):
         """Test that unknown field options produce a warning."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string name = 1 [unknown_option = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have one warning
             assert len(w) == 1
@@ -972,39 +983,41 @@ class TestFieldOptions:
 
     def test_known_field_option_no_warning(self):
         """Test that known field options don't produce warnings."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string name = 1 [deprecated = true];
             string email = 2 [json_name = "emailAddress"];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have no warnings
             assert len(w) == 0
 
     def test_multiple_unknown_field_options_warn(self):
         """Test that multiple unknown field options each produce a warning."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string name = 1 [foo = "bar", baz = 123];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have two warnings
             assert len(w) == 2
@@ -1013,12 +1026,12 @@ class TestFieldOptions:
 
     def test_field_options_on_repeated_field(self):
         """Test parsing field options on a repeated field."""
-        source = '''
+        source = """
         package myapp;
         message User {
             repeated string tags = 1 [packed = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1030,12 +1043,12 @@ class TestFieldOptions:
 
     def test_field_options_on_optional_field(self):
         """Test parsing field options on an optional field."""
-        source = '''
+        source = """
         package myapp;
         message User {
             optional string nickname = 1 [deprecated = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1048,12 +1061,12 @@ class TestFieldOptions:
 
     def test_field_options_on_map_field(self):
         """Test parsing field options on a map field."""
-        source = '''
+        source = """
         package myapp;
         message User {
             map<string, int32> scores = 1 [deprecated = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1069,13 +1082,13 @@ class TestForyExtensionOptions:
 
     def test_file_level_fory_option(self):
         """Test parsing file-level Fory extension option."""
-        source = '''
+        source = """
         package myapp;
         option (fory).use_record_for_java_message = true;
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1084,14 +1097,14 @@ class TestForyExtensionOptions:
 
     def test_multiple_file_level_fory_options(self):
         """Test parsing multiple file-level Fory extension options."""
-        source = '''
+        source = """
         package myapp;
         option (fory).use_record_for_java_message = true;
         option (fory).polymorphism = false;
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1101,14 +1114,14 @@ class TestForyExtensionOptions:
 
     def test_message_level_fory_option(self):
         """Test parsing message-level Fory extension option."""
-        source = '''
+        source = """
         package myapp;
         message User {
             option (fory).id = 100;
             option (fory).evolving = false;
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1120,13 +1133,13 @@ class TestForyExtensionOptions:
 
     def test_message_fory_id_sets_type_id(self):
         """Test that option (fory).id sets message type_id."""
-        source = '''
+        source = """
         package myapp;
         message User {
             option (fory).id = 200;
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1136,14 +1149,14 @@ class TestForyExtensionOptions:
 
     def test_enum_level_fory_option(self):
         """Test parsing enum-level Fory extension option."""
-        source = '''
+        source = """
         package myapp;
         enum Status {
             option (fory).id = 300;
             UNKNOWN = 0;
             ACTIVE = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1154,12 +1167,12 @@ class TestForyExtensionOptions:
 
     def test_field_level_fory_option(self):
         """Test parsing field-level Fory extension option."""
-        source = '''
+        source = """
         package myapp;
         message User {
             MyType friend = 1 [(fory).ref = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1171,12 +1184,12 @@ class TestForyExtensionOptions:
 
     def test_field_fory_nullable_sets_optional(self):
         """Test that (fory).nullable sets optional flag."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string nickname = 1 [(fory).nullable = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1188,12 +1201,12 @@ class TestForyExtensionOptions:
 
     def test_field_multiple_fory_options(self):
         """Test parsing multiple Fory extension options on a field."""
-        source = '''
+        source = """
         package myapp;
         message User {
             MyType friend = 1 [(fory).ref = true, (fory).nullable = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1207,14 +1220,14 @@ class TestForyExtensionOptions:
 
     def test_mixed_standard_and_fory_options(self):
         """Test mixing standard and Fory extension options."""
-        source = '''
+        source = """
         package myapp;
         option java_package = "com.example";
         option (fory).use_record_for_java_message = true;
         message User {
             string name = 1 [deprecated = true, (fory).nullable = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1230,17 +1243,18 @@ class TestForyExtensionOptions:
 
     def test_unknown_fory_file_option_warns(self):
         """Test that unknown Fory file options produce a warning."""
-        source = '''
+        source = """
         package myapp;
         option (fory).unknown_option = true;
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             schema = parser.parse()
@@ -1254,61 +1268,68 @@ class TestForyExtensionOptions:
 
     def test_unknown_fory_message_option_warns(self):
         """Test that unknown Fory message options produce a warning."""
-        source = '''
+        source = """
         package myapp;
         message User {
             option (fory).unknown_opt = true;
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have one warning
             assert len(w) == 1
-            assert "ignoring unknown fory message option 'unknown_opt'" in str(w[0].message)
+            assert "ignoring unknown fory message option 'unknown_opt'" in str(
+                w[0].message
+            )
 
     def test_unknown_fory_field_option_warns(self):
         """Test that unknown Fory field options produce a warning."""
-        source = '''
+        source = """
         package myapp;
         message User {
             string name = 1 [(fory).unknown_opt = true];
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have one warning
             assert len(w) == 1
-            assert "ignoring unknown fory field option 'unknown_opt'" in str(w[0].message)
+            assert "ignoring unknown fory field option 'unknown_opt'" in str(
+                w[0].message
+            )
 
     def test_unknown_extension_warns(self):
         """Test that unknown extension names produce a warning."""
-        source = '''
+        source = """
         package myapp;
         option (custom).my_option = true;
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
 
         import warnings
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            schema = parser.parse()
+            parser.parse()
 
             # Should have one warning
             assert len(w) == 1
@@ -1316,13 +1337,13 @@ class TestForyExtensionOptions:
 
     def test_inline_and_body_options_merge(self):
         """Test that inline [id=100] and body option (fory).evolving merge."""
-        source = '''
+        source = """
         package myapp;
         message User [id=100] {
             option (fory).evolving = false;
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1334,13 +1355,13 @@ class TestForyExtensionOptions:
 
     def test_body_option_overrides_inline_id(self):
         """Test that body option (fory).id overrides inline [id=...]."""
-        source = '''
+        source = """
         package myapp;
         message User [id=100] {
             option (fory).id = 200;
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -1355,13 +1376,13 @@ class TestForyExtensionOptions:
 
     def test_message_use_record_for_java_option(self):
         """Test message-level (fory).use_record_for_java option."""
-        source = '''
+        source = """
         package myapp;
         message User {
             option (fory).use_record_for_java = true;
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()

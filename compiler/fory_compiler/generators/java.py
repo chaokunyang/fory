@@ -21,7 +21,6 @@ from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
-    Schema,
     Message,
     Enum,
     Field,
@@ -363,7 +362,6 @@ class JavaGenerator(BaseGenerator):
     def generate_nested_message(self, message: Message, indent: int = 1) -> List[str]:
         """Generate a nested message as a static inner class."""
         lines = []
-        ind = "    " * indent
 
         # Class declaration
         lines.append(f"public static class {message.name} {{")
@@ -525,7 +523,7 @@ class JavaGenerator(BaseGenerator):
         lines.append("@Override")
         lines.append("public boolean equals(Object o) {")
         lines.append("    if (this == o) return true;")
-        lines.append(f"    if (o == null || getClass() != o.getClass()) return false;")
+        lines.append("    if (o == null || getClass() != o.getClass()) return false;")
         lines.append(f"    {message.name} that = ({message.name}) o;")
 
         if not message.fields:
@@ -535,20 +533,39 @@ class JavaGenerator(BaseGenerator):
             for field in message.fields:
                 field_name = self.to_camel_case(field.name)
                 if self.is_primitive_array_field(field):
-                    comparisons.append(f"Arrays.equals({field_name}, that.{field_name})")
+                    comparisons.append(
+                        f"Arrays.equals({field_name}, that.{field_name})"
+                    )
                 elif isinstance(field.field_type, PrimitiveType):
                     kind = field.field_type.kind
                     if kind in (PrimitiveKind.FLOAT32,):
-                        comparisons.append(f"Float.compare({field_name}, that.{field_name}) == 0")
+                        comparisons.append(
+                            f"Float.compare({field_name}, that.{field_name}) == 0"
+                        )
                     elif kind in (PrimitiveKind.FLOAT64,):
-                        comparisons.append(f"Double.compare({field_name}, that.{field_name}) == 0")
-                    elif kind in (PrimitiveKind.BOOL, PrimitiveKind.INT8, PrimitiveKind.INT16,
-                                  PrimitiveKind.INT32, PrimitiveKind.INT64) and not field.optional:
+                        comparisons.append(
+                            f"Double.compare({field_name}, that.{field_name}) == 0"
+                        )
+                    elif (
+                        kind
+                        in (
+                            PrimitiveKind.BOOL,
+                            PrimitiveKind.INT8,
+                            PrimitiveKind.INT16,
+                            PrimitiveKind.INT32,
+                            PrimitiveKind.INT64,
+                        )
+                        and not field.optional
+                    ):
                         comparisons.append(f"{field_name} == that.{field_name}")
                     else:
-                        comparisons.append(f"Objects.equals({field_name}, that.{field_name})")
+                        comparisons.append(
+                            f"Objects.equals({field_name}, that.{field_name})"
+                        )
                 else:
-                    comparisons.append(f"Objects.equals({field_name}, that.{field_name})")
+                    comparisons.append(
+                        f"Objects.equals({field_name}, that.{field_name})"
+                    )
 
             if len(comparisons) == 1:
                 lines.append(f"    return {comparisons[0]};")
@@ -591,9 +608,13 @@ class JavaGenerator(BaseGenerator):
                 if len(array_fields) == 1:
                     lines.append(f"    return Arrays.hashCode({array_fields[0]});")
                 else:
-                    lines.append(f"    int result = Arrays.hashCode({array_fields[0]});")
+                    lines.append(
+                        f"    int result = Arrays.hashCode({array_fields[0]});"
+                    )
                     for arr in array_fields[1:]:
-                        lines.append(f"    result = 31 * result + Arrays.hashCode({arr});")
+                        lines.append(
+                            f"    result = 31 * result + Arrays.hashCode({arr});"
+                        )
                     lines.append("    return result;")
             else:
                 lines.append(f"    return Objects.hash({', '.join(hash_args)});")
@@ -602,7 +623,9 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         return lines
 
-    def generate_registration_file(self, outer_classname: Optional[str] = None) -> GeneratedFile:
+    def generate_registration_file(
+        self, outer_classname: Optional[str] = None
+    ) -> GeneratedFile:
         """Generate the Fory registration helper class.
 
         Args:
@@ -660,7 +683,9 @@ class JavaGenerator(BaseGenerator):
 
         return GeneratedFile(path=path, content="\n".join(lines))
 
-    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_path: str):
+    def generate_enum_registration(
+        self, lines: List[str], enum: Enum, parent_path: str
+    ):
         """Generate registration code for an enum."""
         # In Java, nested class references use OuterClass.InnerClass
         class_ref = f"{parent_path}.{enum.name}" if parent_path else enum.name
@@ -671,20 +696,28 @@ class JavaGenerator(BaseGenerator):
         else:
             # Use FDL package for namespace (consistent across languages)
             ns = self.schema.package or "default"
-            lines.append(f'        fory.register({class_ref}.class, "{ns}", "{type_name}");')
+            lines.append(
+                f'        fory.register({class_ref}.class, "{ns}", "{type_name}");'
+            )
 
-    def generate_message_registration(self, lines: List[str], message: Message, parent_path: str):
+    def generate_message_registration(
+        self, lines: List[str], message: Message, parent_path: str
+    ):
         """Generate registration code for a message and its nested types."""
         # In Java, nested class references use OuterClass.InnerClass
         class_ref = f"{parent_path}.{message.name}" if parent_path else message.name
         type_name = class_ref.replace(".", "_") if parent_path else message.name
 
         if message.type_id is not None:
-            lines.append(f"        fory.register({class_ref}.class, {message.type_id});")
+            lines.append(
+                f"        fory.register({class_ref}.class, {message.type_id});"
+            )
         else:
             # Use FDL package for namespace (consistent across languages)
             ns = self.schema.package or "default"
-            lines.append(f'        fory.register({class_ref}.class, "{ns}", "{type_name}");')
+            lines.append(
+                f'        fory.register({class_ref}.class, "{ns}", "{type_name}");'
+            )
 
         # Register nested enums
         for nested_enum in message.nested_enums:

@@ -19,7 +19,6 @@
 
 import pytest
 import tempfile
-import os
 from pathlib import Path
 
 from fory_compiler.parser.lexer import Lexer, TokenType
@@ -78,13 +77,13 @@ class TestParserImport:
 
     def test_parse_single_import(self):
         """Test parsing a single import statement."""
-        source = '''
+        source = """
         import "common.fdl";
 
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -94,7 +93,7 @@ class TestParserImport:
 
     def test_parse_multiple_imports(self):
         """Test parsing multiple import statements."""
-        source = '''
+        source = """
         import "common.fdl";
         import "types/address.fdl";
         import "types/contact.fdl";
@@ -102,7 +101,7 @@ class TestParserImport:
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -114,14 +113,14 @@ class TestParserImport:
 
     def test_imports_after_package(self):
         """Test imports can appear after package declaration."""
-        source = '''
+        source = """
         package myapp;
         import "common.fdl";
 
         message User {
             string name = 1;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
@@ -141,18 +140,18 @@ class TestImportResolution:
 
             # Create common.fdl
             common_fdl = tmpdir / "common.fdl"
-            common_fdl.write_text('''
+            common_fdl.write_text("""
             package common;
 
             message Address [id=100] {
                 string street = 1;
                 string city = 2;
             }
-            ''')
+            """)
 
             # Create main.fdl that imports common.fdl
             main_fdl = tmpdir / "main.fdl"
-            main_fdl.write_text('''
+            main_fdl.write_text("""
             package main;
             import "common.fdl";
 
@@ -160,7 +159,7 @@ class TestImportResolution:
                 string name = 1;
                 Address address = 2;
             }
-            ''')
+            """)
 
             # Resolve imports
             schema = resolve_imports(main_fdl)
@@ -178,29 +177,29 @@ class TestImportResolution:
 
             # Create base.fdl
             base_fdl = tmpdir / "base.fdl"
-            base_fdl.write_text('''
+            base_fdl.write_text("""
             package base;
 
             enum Status [id=100] {
                 ACTIVE = 0;
                 INACTIVE = 1;
             }
-            ''')
+            """)
 
             # Create common.fdl that imports base.fdl
             common_fdl = tmpdir / "common.fdl"
-            common_fdl.write_text('''
+            common_fdl.write_text("""
             package common;
             import "base.fdl";
 
             message BaseEntity [id=101] {
                 Status status = 1;
             }
-            ''')
+            """)
 
             # Create main.fdl that imports common.fdl
             main_fdl = tmpdir / "main.fdl"
-            main_fdl.write_text('''
+            main_fdl.write_text("""
             package main;
             import "common.fdl";
 
@@ -208,7 +207,7 @@ class TestImportResolution:
                 string name = 1;
                 Status status = 2;
             }
-            ''')
+            """)
 
             # Resolve imports
             schema = resolve_imports(main_fdl)
@@ -229,24 +228,24 @@ class TestImportResolution:
 
             # Create types/address.fdl
             address_fdl = types_dir / "address.fdl"
-            address_fdl.write_text('''
+            address_fdl.write_text("""
             package types;
 
             message Address [id=100] {
                 string street = 1;
             }
-            ''')
+            """)
 
             # Create main.fdl
             main_fdl = tmpdir / "main.fdl"
-            main_fdl.write_text('''
+            main_fdl.write_text("""
             package main;
             import "types/address.fdl";
 
             message User [id=101] {
                 Address home = 1;
             }
-            ''')
+            """)
 
             # Resolve imports
             schema = resolve_imports(main_fdl)
@@ -263,25 +262,25 @@ class TestImportResolution:
 
             # Create a.fdl that imports b.fdl
             a_fdl = tmpdir / "a.fdl"
-            a_fdl.write_text('''
+            a_fdl.write_text("""
             package a;
             import "b.fdl";
 
             message A [id=100] {
                 string name = 1;
             }
-            ''')
+            """)
 
             # Create b.fdl that imports a.fdl (circular!)
             b_fdl = tmpdir / "b.fdl"
-            b_fdl.write_text('''
+            b_fdl.write_text("""
             package b;
             import "a.fdl";
 
             message B [id=101] {
                 string name = 1;
             }
-            ''')
+            """)
 
             # Should raise ImportError
             with pytest.raises(ImportError) as exc_info:
@@ -296,14 +295,14 @@ class TestImportResolution:
 
             # Create main.fdl that imports non-existent file
             main_fdl = tmpdir / "main.fdl"
-            main_fdl.write_text('''
+            main_fdl.write_text("""
             package main;
             import "nonexistent.fdl";
 
             message User [id=100] {
                 string name = 1;
             }
-            ''')
+            """)
 
             # Should raise ImportError
             with pytest.raises(ImportError) as exc_info:
@@ -318,39 +317,39 @@ class TestImportResolution:
 
             # Create d.fdl (base)
             d_fdl = tmpdir / "d.fdl"
-            d_fdl.write_text('''
+            d_fdl.write_text("""
             package d;
 
             message Base [id=100] {
                 string id = 1;
             }
-            ''')
+            """)
 
             # Create b.fdl (imports d)
             b_fdl = tmpdir / "b.fdl"
-            b_fdl.write_text('''
+            b_fdl.write_text("""
             package b;
             import "d.fdl";
 
             message B [id=101] {
                 Base base = 1;
             }
-            ''')
+            """)
 
             # Create c.fdl (imports d)
             c_fdl = tmpdir / "c.fdl"
-            c_fdl.write_text('''
+            c_fdl.write_text("""
             package c;
             import "d.fdl";
 
             message C [id=102] {
                 Base base = 1;
             }
-            ''')
+            """)
 
             # Create a.fdl (imports b and c)
             a_fdl = tmpdir / "a.fdl"
-            a_fdl.write_text('''
+            a_fdl.write_text("""
             package a;
             import "b.fdl";
             import "c.fdl";
@@ -359,7 +358,7 @@ class TestImportResolution:
                 B b = 1;
                 C c = 2;
             }
-            ''')
+            """)
 
             # Resolve imports - should handle diamond without error
             schema = resolve_imports(a_fdl)
@@ -383,24 +382,24 @@ class TestImportResolution:
 
             # Create common/types.fdl
             types_fdl = common_dir / "types.fdl"
-            types_fdl.write_text('''
+            types_fdl.write_text("""
             package common;
 
             message CommonType [id=100] {
                 string value = 1;
             }
-            ''')
+            """)
 
             # Create src/main.fdl with relative path
             main_fdl = src_dir / "main.fdl"
-            main_fdl.write_text('''
+            main_fdl.write_text("""
             package src;
             import "../common/types.fdl";
 
             message User [id=101] {
                 CommonType data = 1;
             }
-            ''')
+            """)
 
             # Resolve imports
             schema = resolve_imports(main_fdl)
@@ -421,17 +420,17 @@ class TestValidationWithImports:
 
             # Create common.fdl
             common_fdl = tmpdir / "common.fdl"
-            common_fdl.write_text('''
+            common_fdl.write_text("""
             package common;
 
             message Address [id=100] {
                 string street = 1;
             }
-            ''')
+            """)
 
             # Create main.fdl that uses Address
             main_fdl = tmpdir / "main.fdl"
-            main_fdl.write_text('''
+            main_fdl.write_text("""
             package main;
             import "common.fdl";
 
@@ -439,7 +438,7 @@ class TestValidationWithImports:
                 string name = 1;
                 Address address = 2;
             }
-            ''')
+            """)
 
             schema = resolve_imports(main_fdl)
             errors = schema.validate()
@@ -449,14 +448,14 @@ class TestValidationWithImports:
 
     def test_invalid_type_reference_without_import(self):
         """Test that missing types are detected."""
-        source = '''
+        source = """
         package main;
 
         message User [id=100] {
             string name = 1;
             Address address = 2;
         }
-        '''
+        """
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()

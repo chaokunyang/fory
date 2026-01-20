@@ -149,6 +149,7 @@ format_java() {
           mvn -T10 --no-transfer-progress spotless:apply
         popd
       done
+      cd "$ROOT"
     else
       echo "Maven not installed, skip java check"
     fi

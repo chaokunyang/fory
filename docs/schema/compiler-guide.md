@@ -19,8 +19,6 @@ license: |
   limitations under the License.
 ---
 
-# FDL Compiler Guide
-
 This guide covers installation, usage, and integration of the FDL compiler.
 
 ## Installation
@@ -125,6 +123,7 @@ fory compile schema.fdl --java_out=./gen/java -I proto/ -I common/
 ```
 
 When using `--{lang}_out` options:
+
 - Only the specified languages are generated (not all languages)
 - Files are placed directly in the specified directory (not in a `{lang}/` subdirectory)
 - This is compatible with protoc-style workflows

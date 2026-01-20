@@ -19,8 +19,6 @@ license: |
   limitations under the License.
 ---
 
-# FDL Syntax Reference
-
 This document provides a complete reference for the Fory Definition Language (FDL) syntax.
 
 ## File Structure
@@ -1016,13 +1014,13 @@ message MyMessage {
 }
 ```
 
-| Option                | Type   | Description                                |
-| --------------------- | ------ | ------------------------------------------ |
-| `id`                  | int    | Type ID for serialization (sets type_id)   |
+| Option                | Type   | Description                                                                         |
+| --------------------- | ------ | ----------------------------------------------------------------------------------- |
+| `id`                  | int    | Type ID for serialization (sets type_id)                                            |
 | `evolving`            | bool   | Schema evolution support (default: true). When false, schema is fixed like a struct |
-| `use_record_for_java` | bool   | Generate Java record for this message      |
-| `deprecated`          | bool   | Mark this message as deprecated            |
-| `namespace`           | string | Custom namespace for type registration     |
+| `use_record_for_java` | bool   | Generate Java record for this message                                               |
+| `deprecated`          | bool   | Mark this message as deprecated                                                     |
+| `namespace`           | string | Custom namespace for type registration                                              |
 
 **Note:** `option (fory).id = 100` is equivalent to the inline syntax `message MyMessage [id=100]`.
 
@@ -1037,10 +1035,10 @@ enum Status {
 }
 ```
 
-| Option       | Type | Description                             |
-| ------------ | ---- | --------------------------------------- |
-| `id`         | int  | Type ID for serialization (sets type_id)|
-| `deprecated` | bool | Mark this enum as deprecated            |
+| Option       | Type | Description                              |
+| ------------ | ---- | ---------------------------------------- |
+| `id`         | int  | Type ID for serialization (sets type_id) |
+| `deprecated` | bool | Mark this enum as deprecated             |
 
 ### Field-Level Fory Options
 
@@ -1054,11 +1052,11 @@ message Example {
 }
 ```
 
-| Option        | Type   | Description                                |
-| ------------- | ------ | ------------------------------------------ |
-| `ref`         | bool   | Enable reference tracking (sets ref flag)  |
-| `nullable`    | bool   | Mark field as nullable (sets optional flag)|
-| `deprecated`  | bool   | Mark this field as deprecated              |
+| Option       | Type | Description                                 |
+| ------------ | ---- | ------------------------------------------- |
+| `ref`        | bool | Enable reference tracking (sets ref flag)   |
+| `nullable`   | bool | Mark field as nullable (sets optional flag) |
+| `deprecated` | bool | Mark this field as deprecated               |
 
 **Note:** `[(fory).ref = true]` is equivalent to using the `ref` modifier: `ref MyType friend = 1;`
 

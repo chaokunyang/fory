@@ -19,8 +19,6 @@ license: |
   limitations under the License.
 ---
 
-# Fory Definition Language (FDL)
-
 Fory Definition Language (FDL) is a schema definition language for Apache Fory that enables type-safe cross-language serialization. Define your data structures once and generate native code for Java, Python, Go, Rust, and C++.
 
 ## Overview

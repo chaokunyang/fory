@@ -19,8 +19,6 @@ license: |
   limitations under the License.
 ---
 
-# Protocol Buffers vs FDL
-
 This document compares Google's Protocol Buffers (protobuf) with Fory Definition Language (FDL), helping you understand when to use each and how to migrate between them.
 
 ## Overview

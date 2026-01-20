@@ -19,8 +19,6 @@ license: |
   limitations under the License.
 ---
 
-# FDL Type System
-
 This document describes the FDL type system and how types map to each target language.
 
 ## Overview

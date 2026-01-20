@@ -17,8 +17,11 @@
 
 from __future__ import annotations
 
-import pyfory
+import os
+from pathlib import Path
+
 import addressbook
+import pyfory
 
 
 def build_address_book() -> "addressbook.AddressBook":
@@ -47,14 +50,31 @@ def build_address_book() -> "addressbook.AddressBook":
     )
 
 
+def local_roundtrip(fory: pyfory.Fory, book: "addressbook.AddressBook") -> None:
+    data = fory.serialize(book)
+    decoded = fory.deserialize(data)
+    assert isinstance(decoded, addressbook.AddressBook)
+    assert decoded == book
+
+
+def file_roundtrip(fory: pyfory.Fory, book: "addressbook.AddressBook") -> None:
+    data_file = os.environ.get("DATA_FILE")
+    if not data_file:
+        return
+    payload = Path(data_file).read_bytes()
+    decoded = fory.deserialize(payload)
+    assert isinstance(decoded, addressbook.AddressBook)
+    assert decoded == book
+    Path(data_file).write_bytes(fory.serialize(decoded))
+
+
 def main() -> int:
     fory = pyfory.Fory(xlang=True)
     addressbook.register_addressbook_types(fory)
 
     book = build_address_book()
-    data = fory.serialize(book)
-    roundtrip = fory.deserialize(data)
-    assert roundtrip == book
+    local_roundtrip(fory, book)
+    file_roundtrip(fory, book)
     return 0
 
 

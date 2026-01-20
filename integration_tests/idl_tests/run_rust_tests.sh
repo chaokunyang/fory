@@ -25,3 +25,5 @@ python "${SCRIPT_DIR}/generate_idl.py" --lang rust
 
 cd "${SCRIPT_DIR}/rust"
 cargo test
+
+IDL_PEER_LANG=rust "${SCRIPT_DIR}/run_java_tests.sh"

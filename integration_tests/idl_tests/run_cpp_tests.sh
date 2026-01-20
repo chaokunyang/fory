@@ -24,3 +24,5 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python "${SCRIPT_DIR}/generate_idl.py" --lang cpp
 
 "${SCRIPT_DIR}/cpp/run.sh"
+
+IDL_PEER_LANG=cpp "${SCRIPT_DIR}/run_java_tests.sh"

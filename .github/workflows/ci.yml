@@ -625,34 +625,6 @@ jobs:
       - name: Run Go IDL Tests
         run: ./integration_tests/idl_tests/run_go_tests.sh
 
-  java_xlang:
-    name: Java Xlang IDL Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.11
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
-          distribution: "temurin"
-      - name: Cache Maven local repository
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      - name: Build Java Dependencies
-        run: |
-          cd java
-          mvn -T16 --no-transfer-progress clean install -DskipTests
-      - name: Run Java IDL Tests
-        run: ./integration_tests/idl_tests/run_java_tests.sh
-
   lint:
     name: Code Style Check
     runs-on: ubuntu-latest

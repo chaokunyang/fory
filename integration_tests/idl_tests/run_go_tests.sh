@@ -25,3 +25,5 @@ python "${SCRIPT_DIR}/generate_idl.py" --lang go
 
 cd "${SCRIPT_DIR}/go"
 go test ./...
+
+IDL_PEER_LANG=go "${SCRIPT_DIR}/run_java_tests.sh"

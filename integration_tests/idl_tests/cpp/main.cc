@@ -17,6 +17,8 @@
  * under the License.
  */
 
+#include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <string>
@@ -26,6 +28,33 @@
 #include "fory/serialization/fory.h"
 
 namespace {
+
+fory::Result<std::vector<uint8_t>, fory::Error>
+ReadFile(const std::string &path) {
+  std::ifstream input(path, std::ios::binary);
+  if (FORY_PREDICT_FALSE(!input)) {
+    return fory::Unexpected(
+        fory::Error::invalid("failed to open data file for reading"));
+  }
+  std::vector<uint8_t> data((std::istreambuf_iterator<char>(input)),
+                            std::istreambuf_iterator<char>());
+  return data;
+}
+
+fory::Result<void, fory::Error> WriteFile(const std::string &path,
+                                          const std::vector<uint8_t> &data) {
+  std::ofstream output(path, std::ios::binary | std::ios::trunc);
+  if (FORY_PREDICT_FALSE(!output)) {
+    return fory::Unexpected(
+        fory::Error::invalid("failed to open data file for writing"));
+  }
+  output.write(reinterpret_cast<const char *>(data.data()),
+               static_cast<std::streamsize>(data.size()));
+  if (FORY_PREDICT_FALSE(!output)) {
+    return fory::Unexpected(fory::Error::invalid("failed to write data file"));
+  }
+  return fory::Result<void, fory::Error>();
+}
 
 fory::Result<void, fory::Error> RunRoundTrip() {
   auto fory =
@@ -61,6 +90,18 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   if (!(roundtrip == book)) {
     return fory::Unexpected(
         fory::Error::invalid("addressbook roundtrip mismatch"));
+  }
+
+  const char *data_file = std::getenv("DATA_FILE");
+  if (data_file != nullptr && data_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(data_file));
+    FORY_TRY(peer_book, fory.deserialize<addressbook::AddressBook>(
+                            payload.data(), payload.size()));
+    if (!(peer_book == book)) {
+      return fory::Unexpected(fory::Error::invalid("peer payload mismatch"));
+    }
+    FORY_TRY(peer_bytes, fory.serialize(peer_book));
+    FORY_TRY(ignore, WriteFile(data_file, peer_bytes));
   }
 
   return fory::Result<void, fory::Error>();

@@ -16,6 +16,7 @@
 // under the License.
 
 use std::collections::HashMap;
+use std::{env, fs};
 
 use fory::Fory;
 use idl_tests::addressbook::{
@@ -58,4 +59,14 @@ fn test_address_book_roundtrip() {
     let roundtrip: AddressBook = fory.deserialize(&bytes).expect("deserialize");
 
     assert_eq!(book, roundtrip);
+
+    let data_file = match env::var("DATA_FILE") {
+        Ok(path) => path,
+        Err(_) => return,
+    };
+    let payload = fs::read(&data_file).expect("read data file");
+    let peer_book: AddressBook = fory.deserialize(&payload).expect("deserialize peer payload");
+    assert_eq!(book, peer_book);
+    let encoded = fory.serialize(&peer_book).expect("serialize peer payload");
+    fs::write(data_file, encoded).expect("write data file");
 }

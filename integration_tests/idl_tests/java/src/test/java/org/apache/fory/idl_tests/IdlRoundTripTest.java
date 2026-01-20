@@ -24,11 +24,19 @@ import addressbook.AddressbookForyRegistration;
 import addressbook.Person;
 import addressbook.Person.PhoneNumber;
 import addressbook.Person.PhoneType;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.config.Language;
 import org.testng.Assert;
@@ -37,7 +45,7 @@ import org.testng.annotations.Test;
 public class IdlRoundTripTest {
 
   @Test
-  public void testAddressBookRoundTrip() {
+  public void testAddressBookRoundTrip() throws Exception {
     Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
     AddressbookForyRegistration.register(fory);
 
@@ -47,6 +55,111 @@ public class IdlRoundTripTest {
 
     Assert.assertTrue(decoded instanceof AddressBook);
     Assert.assertEquals(decoded, book);
+
+    for (String peer : resolvePeers()) {
+      Path dataFile = Files.createTempFile("idl-" + peer + "-", ".bin");
+      dataFile.toFile().deleteOnExit();
+      Files.write(dataFile, bytes);
+
+      PeerCommand command = buildPeerCommand(peer, dataFile);
+      runPeer(command, peer);
+
+      byte[] peerBytes = Files.readAllBytes(dataFile);
+      Object roundTrip = fory.deserialize(peerBytes);
+      Assert.assertTrue(roundTrip instanceof AddressBook);
+      Assert.assertEquals(roundTrip, book);
+    }
+  }
+
+  private List<String> resolvePeers() {
+    String peerEnv = System.getenv("IDL_PEER_LANG");
+    if (peerEnv == null || peerEnv.trim().isEmpty()) {
+      return Collections.emptyList();
+    }
+    List<String> peers =
+        Arrays.stream(peerEnv.split(","))
+            .map(String::trim)
+            .filter(value -> !value.isEmpty())
+            .collect(Collectors.toList());
+    if (peers.contains("all")) {
+      return Arrays.asList("python", "go", "rust", "cpp");
+    }
+    return peers;
+  }
+
+  private PeerCommand buildPeerCommand(String peer, Path dataFile) {
+    Path repoRoot = repoRoot();
+    Path idlRoot = repoRoot.resolve("integration_tests").resolve("idl_tests");
+    Path workDir = idlRoot;
+    List<String> command;
+    PeerCommand peerCommand = new PeerCommand();
+    peerCommand.environment.put("DATA_FILE", dataFile.toAbsolutePath().toString());
+
+    switch (peer) {
+      case "python":
+        command = Arrays.asList("python", "-m", "idl_tests.roundtrip");
+        String pythonPath =
+            idlRoot.resolve("python").resolve("src")
+                + File.pathSeparator
+                + repoRoot.resolve("python");
+        String existingPythonPath = System.getenv("PYTHONPATH");
+        if (existingPythonPath != null && !existingPythonPath.isEmpty()) {
+          pythonPath = pythonPath + File.pathSeparator + existingPythonPath;
+        }
+        peerCommand.environment.put("PYTHONPATH", pythonPath);
+        peerCommand.environment.put("ENABLE_FORY_CYTHON_SERIALIZATION", "0");
+        break;
+      case "go":
+        workDir = idlRoot.resolve("go");
+        command = Arrays.asList("go", "test", "-run", "TestAddressBookRoundTrip", "-v");
+        break;
+      case "rust":
+        workDir = idlRoot.resolve("rust");
+        command = Arrays.asList("cargo", "test", "--test", "idl_roundtrip");
+        break;
+      case "cpp":
+        command = Collections.singletonList("./cpp/run.sh");
+        break;
+      default:
+        throw new IllegalArgumentException("Unknown peer language: " + peer);
+    }
+
+    peerCommand.command = command;
+    peerCommand.workDir = workDir;
+    return peerCommand;
+  }
+
+  private void runPeer(PeerCommand command, String peer) throws IOException, InterruptedException {
+    ProcessBuilder builder = new ProcessBuilder(command.command);
+    builder.directory(command.workDir.toFile());
+    builder.environment().putAll(command.environment);
+
+    Process process = builder.start();
+    boolean finished = process.waitFor(180, TimeUnit.SECONDS);
+    if (!finished) {
+      process.destroyForcibly();
+      Assert.fail("Peer process timed out for " + peer);
+    }
+
+    int exitCode = process.exitValue();
+    String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+    if (exitCode != 0) {
+      Assert.fail(
+          "Peer process failed for "
+              + peer
+              + " with exit code "
+              + exitCode
+              + "\nstdout:\n"
+              + stdout
+              + "\nstderr:\n"
+              + stderr);
+    }
+  }
+
+  private Path repoRoot() {
+    Path moduleDir = java.nio.file.Paths.get("").toAbsolutePath();
+    return moduleDir.getParent().getParent().getParent();
   }
 
   private AddressBook buildAddressBook() {
@@ -87,5 +200,11 @@ public class IdlRoundTripTest {
     book.setPeopleByName(peopleByName);
 
     return book;
+  }
+
+  private static final class PeerCommand {
+    private List<String> command;
+    private Path workDir;
+    private final Map<String, String> environment = new HashMap<>();
   }
 }

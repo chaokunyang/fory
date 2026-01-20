@@ -27,3 +27,5 @@ python "${SCRIPT_DIR}/generate_idl.py" --lang python
 PYTHONPATH="${SCRIPT_DIR}/python/src:${ROOT_DIR}/python:${PYTHONPATH:-}" \
   ENABLE_FORY_CYTHON_SERIALIZATION=0 \
   python -m idl_tests.roundtrip
+
+IDL_PEER_LANG=python "${SCRIPT_DIR}/run_java_tests.sh"

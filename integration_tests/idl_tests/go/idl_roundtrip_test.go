@@ -18,6 +18,7 @@
 package addressbook
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -57,6 +58,11 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	}
 
 	book := buildAddressBook()
+	runLocalRoundTrip(t, f, book)
+	runFileRoundTrip(t, f, book)
+}
+
+func runLocalRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
 	data, err := f.Serialize(book)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
@@ -69,5 +75,32 @@ func TestAddressBookRoundTrip(t *testing.T) {
 
 	if !reflect.DeepEqual(book, out) {
 		t.Fatalf("roundtrip mismatch: %#v != %#v", book, out)
+	}
+}
+
+func runFileRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
+	dataFile := os.Getenv("DATA_FILE")
+	if dataFile == "" {
+		return
+	}
+	payload, err := os.ReadFile(dataFile)
+	if err != nil {
+		t.Fatalf("read data file: %v", err)
+	}
+
+	var decoded AddressBook
+	if err := f.Deserialize(payload, &decoded); err != nil {
+		t.Fatalf("deserialize peer payload: %v", err)
+	}
+	if !reflect.DeepEqual(book, decoded) {
+		t.Fatalf("peer payload mismatch: %#v != %#v", book, decoded)
+	}
+
+	out, err := f.Serialize(decoded)
+	if err != nil {
+		t.Fatalf("serialize peer payload: %v", err)
+	}
+	if err := os.WriteFile(dataFile, out, 0o644); err != nil {
+		t.Fatalf("write data file: %v", err)
 	}
 }

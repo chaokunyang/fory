@@ -91,6 +91,20 @@ class CppGenerator(BaseGenerator):
         namespace = self.get_namespace()
         return f"{namespace}::" if namespace else ""
 
+    def get_fully_qualified_type_name(
+        self,
+        type_name: str,
+        parent_stack: List[Message],
+    ) -> str:
+        """Get fully qualified type name including namespace."""
+        qualified_name = self.get_qualified_type_name(type_name, parent_stack)
+        namespace_prefix = self.get_namespace_prefix()
+        return (
+            f"{namespace_prefix}{qualified_name}"
+            if namespace_prefix
+            else qualified_name
+        )
+
     def generate_header(self) -> GeneratedFile:
         """Generate a C++ header file with all types."""
         lines = []
@@ -157,17 +171,17 @@ class CppGenerator(BaseGenerator):
             )
             lines.append("")
 
+        # Close namespace for type definitions
+        if namespace:
+            lines.append(f"}} // namespace {namespace}")
+            lines.append("")
+
         if struct_macros:
             lines.extend(struct_macros)
             lines.append("")
 
         if field_config_macros:
             lines.extend(field_config_macros)
-            lines.append("")
-
-        # Close namespace for type definitions and FORY_STRUCT
-        if namespace:
-            lines.append(f"}} // namespace {namespace}")
             lines.append("")
 
         if enum_macros:
@@ -314,15 +328,15 @@ class CppGenerator(BaseGenerator):
 
         lines.append(f"{indent}}};")
 
-        qualified_name = self.get_qualified_type_name(message.name, parent_stack)
+        macro_type_name = self.get_fully_qualified_type_name(message.name, parent_stack)
         if message.fields:
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
-            struct_macros.append(f"FORY_STRUCT({qualified_name}, {field_names});")
+            struct_macros.append(f"FORY_STRUCT({macro_type_name}, {field_names});")
             field_config_macros.append(
-                self.generate_field_config_macro(message, qualified_name, parent_stack)
+                self.generate_field_config_macro(message, macro_type_name)
             )
         else:
-            struct_macros.append(f"FORY_STRUCT({qualified_name});")
+            struct_macros.append(f"FORY_STRUCT({macro_type_name});")
 
         return lines
 
@@ -330,7 +344,6 @@ class CppGenerator(BaseGenerator):
         self,
         message: Message,
         qualified_name: str,
-        parent_stack: List[Message],
     ) -> str:
         """Generate FORY_FIELD_CONFIG macro for a message."""
         entries = []

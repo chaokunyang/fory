@@ -17,7 +17,7 @@
 
 """Rust code generator."""
 
-from typing import List, Set
+from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
@@ -97,7 +97,7 @@ class RustGenerator(BaseGenerator):
 
         # Generate messages (including nested as flat types with qualified names)
         for message in self.schema.messages:
-            lines.extend(self.generate_message_with_nested(message, ""))
+            lines.extend(self.generate_message_with_nested(message))
 
         # Generate registration function
         lines.extend(self.generate_registration())
@@ -143,12 +143,17 @@ class RustGenerator(BaseGenerator):
 
         return lines
 
-    def generate_message(self, message: Message, parent_name: str = "") -> List[str]:
+    def generate_message(
+        self,
+        message: Message,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
         """Generate a Rust struct."""
         lines = []
 
         # For nested messages, use Parent_Child naming
-        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+        prefix = "_".join(parent.name for parent in parent_stack or [])
+        type_name = f"{prefix}_{message.name}" if prefix else message.name
 
         # Derive macros
         lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
@@ -160,8 +165,9 @@ class RustGenerator(BaseGenerator):
         lines.append(f"pub struct {type_name} {{")
 
         # Fields
+        lineage = (parent_stack or []) + [message]
         for field in message.fields:
-            field_lines = self.generate_field(field, parent_name)
+            field_lines = self.generate_field(field, lineage)
             for line in field_lines:
                 lines.append(f"    {line}")
 
@@ -169,12 +175,18 @@ class RustGenerator(BaseGenerator):
 
         return lines
 
-    def generate_message_with_nested(self, message: Message, parent_name: str = "") -> List[str]:
+    def generate_message_with_nested(
+        self,
+        message: Message,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
         """Generate a Rust struct and all its nested types (flattened)."""
         lines = []
 
         # Current message's type name
-        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+        prefix = "_".join(parent.name for parent in parent_stack or [])
+        type_name = f"{prefix}_{message.name}" if prefix else message.name
+        lineage = (parent_stack or []) + [message]
 
         # First, generate all nested enums
         for nested_enum in message.nested_enums:
@@ -183,15 +195,19 @@ class RustGenerator(BaseGenerator):
 
         # Then, generate all nested messages (recursively)
         for nested_msg in message.nested_messages:
-            lines.extend(self.generate_message_with_nested(nested_msg, type_name))
+            lines.extend(self.generate_message_with_nested(nested_msg, lineage))
 
         # Finally, generate this message
-        lines.extend(self.generate_message(message, parent_name))
+        lines.extend(self.generate_message(message, parent_stack))
         lines.append("")
 
         return lines
 
-    def generate_field(self, field: Field, parent_name: str = "") -> List[str]:
+    def generate_field(
+        self,
+        field: Field,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
         """Generate a struct field."""
         lines = []
 
@@ -199,14 +215,25 @@ class RustGenerator(BaseGenerator):
         if field.optional:
             lines.append("#[fory(nullable = true)]")
 
-        rust_type = self.generate_type(field.field_type, field.optional, field.ref, parent_name)
+        rust_type = self.generate_type(
+            field.field_type,
+            field.optional,
+            field.ref,
+            parent_stack,
+        )
         field_name = self.to_snake_case(field.name)
 
         lines.append(f"pub {field_name}: {rust_type},")
 
         return lines
 
-    def generate_type(self, field_type: FieldType, nullable: bool = False, ref: bool = False, parent_name: str = "") -> str:
+    def generate_type(
+        self,
+        field_type: FieldType,
+        nullable: bool = False,
+        ref: bool = False,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
         """Generate Rust type string."""
         if isinstance(field_type, PrimitiveType):
             base_type = self.PRIMITIVE_MAP[field_type.kind]
@@ -215,11 +242,7 @@ class RustGenerator(BaseGenerator):
             return base_type
 
         elif isinstance(field_type, NamedType):
-            # Convert qualified names (Parent.Child) to Rust-style (Parent_Child)
-            type_name = field_type.name.replace(".", "_")
-            # If it's a simple name and we have a parent context, it might be a nested type
-            if "." not in field_type.name and parent_name:
-                type_name = f"{parent_name}_{type_name}"
+            type_name = self.resolve_nested_type_name(field_type.name, parent_stack)
             if ref:
                 return f"Rc<{type_name}>"
             if nullable:
@@ -227,15 +250,34 @@ class RustGenerator(BaseGenerator):
             return type_name
 
         elif isinstance(field_type, ListType):
-            element_type = self.generate_type(field_type.element_type, False, False, parent_name)
+            element_type = self.generate_type(field_type.element_type, False, False, parent_stack)
             return f"Vec<{element_type}>"
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False, False, parent_name)
-            value_type = self.generate_type(field_type.value_type, False, False, parent_name)
+            key_type = self.generate_type(field_type.key_type, False, False, parent_stack)
+            value_type = self.generate_type(field_type.value_type, False, False, parent_stack)
             return f"HashMap<{key_type}, {value_type}>"
 
         return "()"
+
+    def resolve_nested_type_name(
+        self,
+        type_name: str,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
+        """Resolve nested type names to flattened Rust identifiers."""
+        if "." in type_name:
+            return type_name.replace(".", "_")
+        if not parent_stack:
+            return type_name
+
+        for i in range(len(parent_stack) - 1, -1, -1):
+            message = parent_stack[i]
+            if message.get_nested_type(type_name) is not None:
+                prefix = "_".join(parent.name for parent in parent_stack[: i + 1])
+                return f"{prefix}_{type_name}"
+
+        return type_name
 
     def collect_uses(self, field_type: FieldType, uses: Set[str]):
         """Collect required use statements for a field type."""

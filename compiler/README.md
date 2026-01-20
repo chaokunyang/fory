@@ -185,19 +185,19 @@ message Config { ... }  // Registered as "package.Config"
 
 ### Primitive Types
 
-| FDL Type    | Java        | Python               | Go          | Rust                    | C++                    |
-| ----------- | ----------- | -------------------- | ----------- | ----------------------- | ---------------------- |
-| `bool`      | `boolean`   | `bool`               | `bool`      | `bool`                  | `bool`                 |
-| `int8`      | `byte`      | `pyfory.Int8Type`    | `int8`      | `i8`                    | `int8_t`               |
-| `int16`     | `short`     | `pyfory.Int16Type`   | `int16`     | `i16`                   | `int16_t`              |
-| `int32`     | `int`       | `pyfory.Int32Type`   | `int32`     | `i32`                   | `int32_t`              |
-| `int64`     | `long`      | `int`                | `int64`     | `i64`                   | `int64_t`              |
-| `float32`   | `float`     | `pyfory.Float32Type` | `float32`   | `f32`                   | `float`                |
-| `float64`   | `double`    | `float`              | `float64`   | `f64`                   | `double`               |
-| `string`    | `String`    | `str`                | `string`    | `String`                | `std::string`          |
-| `bytes`     | `byte[]`    | `bytes`              | `[]byte`    | `Vec<u8>`               | `std::vector<uint8_t>` |
-| `date`      | `LocalDate` | `datetime.date`      | `time.Time` | `chrono::NaiveDate`     | `fory::LocalDate`      |
-| `timestamp` | `Instant`   | `datetime.datetime`  | `time.Time` | `chrono::NaiveDateTime` | `fory::Timestamp`      |
+| FDL Type    | Java        | Python              | Go          | Rust                    | C++                    |
+| ----------- | ----------- | ------------------- | ----------- | ----------------------- | ---------------------- |
+| `bool`      | `boolean`   | `bool`              | `bool`      | `bool`                  | `bool`                 |
+| `int8`      | `byte`      | `pyfory.int8`       | `int8`      | `i8`                    | `int8_t`               |
+| `int16`     | `short`     | `pyfory.int16`      | `int16`     | `i16`                   | `int16_t`              |
+| `int32`     | `int`       | `pyfory.int32`      | `int32`     | `i32`                   | `int32_t`              |
+| `int64`     | `long`      | `pyfory.int64`      | `int64`     | `i64`                   | `int64_t`              |
+| `float32`   | `float`     | `pyfory.float32`    | `float32`   | `f32`                   | `float`                |
+| `float64`   | `double`    | `pyfory.float64`    | `float64`   | `f64`                   | `double`               |
+| `string`    | `String`    | `str`               | `string`    | `String`                | `std::string`          |
+| `bytes`     | `byte[]`    | `bytes`             | `[]byte`    | `Vec<u8>`               | `std::vector<uint8_t>` |
+| `date`      | `LocalDate` | `datetime.date`     | `time.Time` | `chrono::NaiveDate`     | `fory::LocalDate`      |
+| `timestamp` | `Instant`   | `datetime.datetime` | `time.Time` | `chrono::NaiveDateTime` | `fory::Timestamp`      |
 
 ### Collection Types
 

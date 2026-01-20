@@ -341,7 +341,7 @@ class User:
     id: str = ""
     name: str = ""
     email: Optional[str] = None
-    age: pyfory.Int32Type = 0
+    age: pyfory.int32 = 0
 
 
 @dataclass
@@ -349,7 +349,7 @@ class Order:
     id: str = ""
     customer: Optional[User] = None
     items: List[str] = None
-    quantities: Dict[str, pyfory.Int32Type] = None
+    quantities: Dict[str, pyfory.int32] = None
     status: Status = None
 
 
@@ -679,12 +679,12 @@ int main() {
 
 ### Python Type Hints
 
-| Hint               | Purpose             |
-| ------------------ | ------------------- |
-| `Optional[T]`      | Nullable field      |
-| `List[T]`          | Repeated field      |
-| `Dict[K, V]`       | Map field           |
-| `pyfory.Int32Type` | Fixed-width integer |
+| Hint           | Purpose             |
+| -------------- | ------------------- |
+| `Optional[T]`  | Nullable field      |
+| `List[T]`      | Repeated field      |
+| `Dict[K, V]`   | Map field           |
+| `pyfory.int32` | Fixed-width integer |
 
 ### Go Struct Tags
 

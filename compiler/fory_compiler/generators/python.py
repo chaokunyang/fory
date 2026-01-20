@@ -17,7 +17,7 @@
 
 """Python code generator."""
 
-from typing import List, Set
+from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
@@ -43,12 +43,12 @@ class PythonGenerator(BaseGenerator):
     # Mapping from FDL primitive types to Python types
     PRIMITIVE_MAP = {
         PrimitiveKind.BOOL: "bool",
-        PrimitiveKind.INT8: "pyfory.Int8Type",
-        PrimitiveKind.INT16: "pyfory.Int16Type",
-        PrimitiveKind.INT32: "pyfory.Int32Type",
-        PrimitiveKind.INT64: "int",
-        PrimitiveKind.FLOAT32: "pyfory.Float32Type",
-        PrimitiveKind.FLOAT64: "float",
+        PrimitiveKind.INT8: "pyfory.int8",
+        PrimitiveKind.INT16: "pyfory.int16",
+        PrimitiveKind.INT32: "pyfory.int32",
+        PrimitiveKind.INT64: "pyfory.int64",
+        PrimitiveKind.FLOAT32: "pyfory.float32",
+        PrimitiveKind.FLOAT64: "pyfory.float64",
         PrimitiveKind.STRING: "str",
         PrimitiveKind.BYTES: "bytes",
         PrimitiveKind.DATE: "datetime.date",
@@ -113,6 +113,8 @@ class PythonGenerator(BaseGenerator):
         # License header
         lines.append(self.get_license_header("#"))
         lines.append("")
+        lines.append("from __future__ import annotations")
+        lines.append("")
 
         # Imports
         for imp in sorted(imports):
@@ -161,10 +163,16 @@ class PythonGenerator(BaseGenerator):
 
         return lines
 
-    def generate_message(self, message: Message, indent: int = 0) -> List[str]:
+    def generate_message(
+        self,
+        message: Message,
+        indent: int = 0,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
         """Generate a Python dataclass with nested types."""
         lines = []
         ind = "    " * indent
+        lineage = (parent_stack or []) + [message]
 
         lines.append(f"{ind}@dataclass")
         lines.append(f"{ind}class {message.name}:")
@@ -177,7 +185,11 @@ class PythonGenerator(BaseGenerator):
 
         # Generate nested messages
         for nested_msg in message.nested_messages:
-            for line in self.generate_message(nested_msg, indent=indent + 1):
+            for line in self.generate_message(
+                nested_msg,
+                indent=indent + 1,
+                parent_stack=lineage,
+            ):
                 lines.append(line)
             lines.append("")
 
@@ -187,7 +199,7 @@ class PythonGenerator(BaseGenerator):
             return lines
 
         for field in message.fields:
-            field_lines = self.generate_field(field)
+            field_lines = self.generate_field(field, lineage)
             for line in field_lines:
                 lines.append(f"{ind}    {line}")
 
@@ -197,11 +209,19 @@ class PythonGenerator(BaseGenerator):
 
         return lines
 
-    def generate_field(self, field: Field) -> List[str]:
+    def generate_field(
+        self,
+        field: Field,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
         """Generate a dataclass field."""
         lines = []
 
-        python_type = self.generate_type(field.field_type, field.optional)
+        python_type = self.generate_type(
+            field.field_type,
+            field.optional,
+            parent_stack,
+        )
         field_name = self.to_snake_case(field.name)
         default = self.get_default_value(field.field_type, field.optional)
 
@@ -209,7 +229,12 @@ class PythonGenerator(BaseGenerator):
 
         return lines
 
-    def generate_type(self, field_type: FieldType, nullable: bool = False) -> str:
+    def generate_type(
+        self,
+        field_type: FieldType,
+        nullable: bool = False,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
         """Generate Python type hint."""
         if isinstance(field_type, PrimitiveType):
             base_type = self.PRIMITIVE_MAP[field_type.kind]
@@ -218,24 +243,46 @@ class PythonGenerator(BaseGenerator):
             return base_type
 
         elif isinstance(field_type, NamedType):
+            type_name = self.resolve_nested_type_name(field_type.name, parent_stack)
             if nullable:
-                return f"Optional[{field_type.name}]"
-            return field_type.name
+                return f"Optional[{type_name}]"
+            return type_name
 
         elif isinstance(field_type, ListType):
             # Use numpy array for numeric primitive types
             if isinstance(field_type.element_type, PrimitiveType):
                 if field_type.element_type.kind in self.NUMPY_DTYPE_MAP:
                     return "np.ndarray"
-            element_type = self.generate_type(field_type.element_type, False)
+            element_type = self.generate_type(
+                field_type.element_type,
+                False,
+                parent_stack,
+            )
             return f"List[{element_type}]"
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False)
-            value_type = self.generate_type(field_type.value_type, False)
+            key_type = self.generate_type(field_type.key_type, False, parent_stack)
+            value_type = self.generate_type(field_type.value_type, False, parent_stack)
             return f"Dict[{key_type}, {value_type}]"
 
         return "object"
+
+    def resolve_nested_type_name(
+        self,
+        type_name: str,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
+        """Resolve nested type names to fully-qualified references."""
+        if "." in type_name or not parent_stack:
+            return type_name
+
+        for i in range(len(parent_stack) - 1, -1, -1):
+            message = parent_stack[i]
+            if message.get_nested_type(type_name) is not None:
+                prefix = ".".join(parent.name for parent in parent_stack[: i + 1])
+                return f"{prefix}.{type_name}"
+
+        return type_name
 
     def get_default_value(self, field_type: FieldType, nullable: bool = False) -> str:
         """Get default value for a field."""

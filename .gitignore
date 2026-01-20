@@ -37,6 +37,13 @@ bazel-fory/
 bazel-fory/**
 **/generated
 java/**/generated
+
+# IDL compiler integration test outputs
+integration_tests/idl_tests/cpp/generated/
+integration_tests/idl_tests/go/addressbook*.go
+integration_tests/idl_tests/java/src/main/java/addressbook/
+integration_tests/idl_tests/python/src/addressbook.py
+integration_tests/idl_tests/rust/src/addressbook.rs
 javascript/**/dist/
 javascript/**/node_modules/
 javascript/**/build

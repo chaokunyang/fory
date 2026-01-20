@@ -62,12 +62,12 @@ FDL provides fixed-width signed integers:
 
 **Language Mapping:**
 
-| FDL     | Java    | Python             | Go      | Rust  | C++       |
-| ------- | ------- | ------------------ | ------- | ----- | --------- |
-| `int8`  | `byte`  | `pyfory.Int8Type`  | `int8`  | `i8`  | `int8_t`  |
-| `int16` | `short` | `pyfory.Int16Type` | `int16` | `i16` | `int16_t` |
-| `int32` | `int`   | `pyfory.Int32Type` | `int32` | `i32` | `int32_t` |
-| `int64` | `long`  | `int`              | `int64` | `i64` | `int64_t` |
+| FDL     | Java    | Python         | Go      | Rust  | C++       |
+| ------- | ------- | -------------- | ------- | ----- | --------- |
+| `int8`  | `byte`  | `pyfory.int8`  | `int8`  | `i8`  | `int8_t`  |
+| `int16` | `short` | `pyfory.int16` | `int16` | `i16` | `int16_t` |
+| `int32` | `int`   | `pyfory.int32` | `int32` | `i32` | `int32_t` |
+| `int64` | `long`  | `pyfory.int64` | `int64` | `i64` | `int64_t` |
 
 **Examples:**
 
@@ -85,13 +85,13 @@ message Counters {
 Python's native `int` is arbitrary precision, so FDL uses type wrappers for fixed-width integers:
 
 ```python
-from pyfory import Int8Type, Int16Type, Int32Type
+from pyfory import int8, int16, int32
 
 @dataclass
 class Counters:
-    tiny: Int8Type
-    small: Int16Type
-    medium: Int32Type
+    tiny: int8
+    small: int16
+    medium: int32
     large: int  # int64 maps to native int
 ```
 
@@ -104,10 +104,10 @@ class Counters:
 
 **Language Mapping:**
 
-| FDL       | Java     | Python               | Go        | Rust  | C++      |
-| --------- | -------- | -------------------- | --------- | ----- | -------- |
-| `float32` | `float`  | `pyfory.Float32Type` | `float32` | `f32` | `float`  |
-| `float64` | `double` | `float`              | `float64` | `f64` | `double` |
+| FDL       | Java     | Python           | Go        | Rust  | C++      |
+| --------- | -------- | ---------------- | --------- | ----- | -------- |
+| `float32` | `float`  | `pyfory.float32` | `float32` | `f32` | `float`  |
+| `float64` | `double` | `pyfory.float64` | `float64` | `f64` | `double` |
 
 **Example:**
 

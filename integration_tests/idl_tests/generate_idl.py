@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+import argparse
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+IDL_DIR = Path(__file__).resolve().parent
+SCHEMA = IDL_DIR / "proto" / "addressbook.fdl"
+
+LANG_OUTPUTS = {
+    "java": REPO_ROOT / "integration_tests/idl_tests/java/src/main/java",
+    "python": REPO_ROOT / "integration_tests/idl_tests/python/src",
+    "cpp": REPO_ROOT / "integration_tests/idl_tests/cpp/generated",
+    "go": REPO_ROOT / "integration_tests/idl_tests/go",
+    "rust": REPO_ROOT / "integration_tests/idl_tests/rust/src",
+}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate IDL test code")
+    parser.add_argument(
+        "--lang",
+        default="all",
+        help="Comma-separated list of languages to generate (default: all)",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    langs_arg = args.lang.strip()
+    if langs_arg == "all":
+        langs = sorted(LANG_OUTPUTS.keys())
+    else:
+        langs = [lang.strip() for lang in langs_arg.split(",") if lang.strip()]
+
+    unknown = [lang for lang in langs if lang not in LANG_OUTPUTS]
+    if unknown:
+        print(f"Unknown languages: {', '.join(unknown)}", file=sys.stderr)
+        return 2
+
+    for lang in langs:
+        LANG_OUTPUTS[lang].mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "fory_compiler",
+        "compile",
+        str(SCHEMA),
+    ]
+
+    for lang in langs:
+        out_dir = LANG_OUTPUTS[lang]
+        cmd.append(f"--{lang}_out={out_dir}")
+
+    env = os.environ.copy()
+    compiler_path = str(REPO_ROOT / "compiler")
+    env["PYTHONPATH"] = compiler_path + os.pathsep + env.get("PYTHONPATH", "")
+
+    subprocess.check_call(cmd, env=env)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

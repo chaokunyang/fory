@@ -355,15 +355,21 @@ class Schema:
             validate_message(message)
 
         # Check that referenced types exist (supports qualified names and nested type lookup)
-        def check_type_ref(field_type: FieldType, context: str, enclosing_message: Optional[Message] = None):
+        def check_type_ref(
+            field_type: FieldType,
+            context: str,
+            enclosing_messages: Optional[List[Message]] = None,
+        ):
             if isinstance(field_type, NamedType):
                 type_name = field_type.name
                 found = False
 
-                # First, try to find as a nested type in the enclosing message
-                if enclosing_message is not None and "." not in type_name:
-                    if enclosing_message.get_nested_type(type_name) is not None:
-                        found = True
+                # First, try to find as a nested type in any enclosing message
+                if enclosing_messages and "." not in type_name:
+                    for message in reversed(enclosing_messages):
+                        if message.get_nested_type(type_name) is not None:
+                            found = True
+                            break
 
                 # Then, try to find as a top-level or qualified type
                 if not found and self.get_type(type_name) is not None:
@@ -372,17 +378,22 @@ class Schema:
                 if not found:
                     errors.append(f"Unknown type '{type_name}' in {context}")
             elif isinstance(field_type, ListType):
-                check_type_ref(field_type.element_type, context, enclosing_message)
+                check_type_ref(field_type.element_type, context, enclosing_messages)
             elif isinstance(field_type, MapType):
-                check_type_ref(field_type.key_type, context, enclosing_message)
-                check_type_ref(field_type.value_type, context, enclosing_message)
+                check_type_ref(field_type.key_type, context, enclosing_messages)
+                check_type_ref(field_type.value_type, context, enclosing_messages)
 
-        def check_message_refs(message: Message, parent_path: str = ""):
+        def check_message_refs(
+            message: Message,
+            parent_path: str = "",
+            enclosing_messages: Optional[List[Message]] = None,
+        ):
             full_name = f"{parent_path}.{message.name}" if parent_path else message.name
+            lineage = (enclosing_messages or []) + [message]
             for f in message.fields:
-                check_type_ref(f.field_type, f"{full_name}.{f.name}", message)
+                check_type_ref(f.field_type, f"{full_name}.{f.name}", lineage)
             for nested_msg in message.nested_messages:
-                check_message_refs(nested_msg, full_name)
+                check_message_refs(nested_msg, full_name, lineage)
 
         for message in self.messages:
             check_message_refs(message)

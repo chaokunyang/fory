@@ -17,7 +17,7 @@
 
 """C++ code generator."""
 
-from typing import List, Set
+from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.parser.ast import (
@@ -109,6 +109,7 @@ class CppGenerator(BaseGenerator):
 
         # Namespace
         namespace = self.get_namespace()
+        namespace_prefix = f"{namespace}::" if namespace else ""
         if namespace:
             lines.append(f"namespace {namespace} {{")
             lines.append("")
@@ -118,20 +119,34 @@ class CppGenerator(BaseGenerator):
         if self.schema.messages:
             lines.append("")
 
+        macro_lines: List[str] = []
+
         # Generate enums (top-level)
         for enum in self.schema.enums:
-            lines.extend(self.generate_enum(enum, ""))
+            lines.extend(self.generate_enum(enum, "", macro_lines, namespace_prefix))
             lines.append("")
 
         # Generate messages (including nested as flat types with qualified names)
         for message in self.schema.messages:
-            lines.extend(self.generate_message_with_nested(message, ""))
+            lines.extend(self.generate_message_with_nested(message, None, macro_lines, namespace_prefix))
 
-        # Generate registration function
+        # Close namespace for type definitions
+        if namespace:
+            lines.append(f"}} // namespace {namespace}")
+            lines.append("")
+
+        if macro_lines:
+            lines.extend(macro_lines)
+            lines.append("")
+
+        if namespace:
+            lines.append(f"namespace {namespace} {{")
+            lines.append("")
+
+        # Generate registration function (after FORY_STRUCT/FORY_ENUM)
         lines.extend(self.generate_registration())
         lines.append("")
 
-        # Close namespace
         if namespace:
             lines.append(f"}} // namespace {namespace}")
             lines.append("")
@@ -164,7 +179,13 @@ class CppGenerator(BaseGenerator):
         for nested_msg in message.nested_messages:
             self._generate_forward_decl_recursive(lines, nested_msg, type_name)
 
-    def generate_enum(self, enum: Enum, parent_name: str = "") -> List[str]:
+    def generate_enum(
+        self,
+        enum: Enum,
+        parent_name: str = "",
+        macro_lines: Optional[List[str]] = None,
+        namespace_prefix: str = "",
+    ) -> List[str]:
         """Generate a C++ enum class."""
         lines = []
 
@@ -180,24 +201,37 @@ class CppGenerator(BaseGenerator):
             lines.append(f"    {stripped_name} = {value.value},")
         lines.append("};")
 
-        # FORY_ENUM macro
+        # FORY_ENUM macro (outside namespace, if needed)
         value_names = ", ".join(stripped_names)
-        lines.append(f"FORY_ENUM({type_name}, {value_names});")
+        if macro_lines is not None:
+            qualified_name = f"{namespace_prefix}{type_name}" if namespace_prefix else type_name
+            macro_lines.append(f"FORY_ENUM({qualified_name}, {value_names});")
 
         return lines
 
-    def generate_message(self, message: Message, parent_name: str = "") -> List[str]:
+    def generate_message(
+        self,
+        message: Message,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
         """Generate a C++ struct."""
         lines = []
 
         # For nested messages, use Parent_Child naming
-        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+        prefix = "_".join(parent.name for parent in parent_stack or [])
+        type_name = f"{prefix}_{message.name}" if prefix else message.name
+        lineage = (parent_stack or []) + [message]
 
         lines.append(f"struct {type_name} {{")
 
         # Fields
         for field in message.fields:
-            cpp_type = self.generate_type(field.field_type, field.optional, field.ref, parent_name)
+            cpp_type = self.generate_type(
+                field.field_type,
+                field.optional,
+                field.ref,
+                lineage,
+            )
             field_name = self.to_snake_case(field.name)
             lines.append(f"    {cpp_type} {field_name};")
 
@@ -217,35 +251,56 @@ class CppGenerator(BaseGenerator):
 
         lines.append("};")
 
-        # FORY_STRUCT macro
+        # FORY_STRUCT macro (must stay in type namespace for ADL)
         field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
         lines.append(f"FORY_STRUCT({type_name}, {field_names});")
 
         return lines
 
-    def generate_message_with_nested(self, message: Message, parent_name: str = "") -> List[str]:
+    def generate_message_with_nested(
+        self,
+        message: Message,
+        parent_stack: Optional[List[Message]] = None,
+        macro_lines: Optional[List[str]] = None,
+        namespace_prefix: str = "",
+    ) -> List[str]:
         """Generate a C++ struct and all its nested types (flattened)."""
         lines = []
 
         # Current message's type name
-        type_name = f"{parent_name}_{message.name}" if parent_name else message.name
+        prefix = "_".join(parent.name for parent in parent_stack or [])
+        type_name = f"{prefix}_{message.name}" if prefix else message.name
+        lineage = (parent_stack or []) + [message]
 
         # First, generate all nested enums
         for nested_enum in message.nested_enums:
-            lines.extend(self.generate_enum(nested_enum, type_name))
+            lines.extend(self.generate_enum(nested_enum, type_name, macro_lines, namespace_prefix))
             lines.append("")
 
         # Then, generate all nested messages (recursively)
         for nested_msg in message.nested_messages:
-            lines.extend(self.generate_message_with_nested(nested_msg, type_name))
+            lines.extend(
+                self.generate_message_with_nested(
+                    nested_msg,
+                    lineage,
+                    macro_lines,
+                    namespace_prefix,
+                )
+            )
 
         # Finally, generate this message
-        lines.extend(self.generate_message(message, parent_name))
+        lines.extend(self.generate_message(message, parent_stack))
         lines.append("")
 
         return lines
 
-    def generate_type(self, field_type: FieldType, nullable: bool = False, ref: bool = False, parent_name: str = "") -> str:
+    def generate_type(
+        self,
+        field_type: FieldType,
+        nullable: bool = False,
+        ref: bool = False,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
         """Generate C++ type string."""
         if isinstance(field_type, PrimitiveType):
             base_type = self.PRIMITIVE_MAP[field_type.kind]
@@ -254,11 +309,7 @@ class CppGenerator(BaseGenerator):
             return base_type
 
         elif isinstance(field_type, NamedType):
-            # Convert qualified names (Parent.Child) to C++-style (Parent_Child)
-            type_name = field_type.name.replace(".", "_")
-            # If it's a simple name and we have a parent context, it might be a nested type
-            if "." not in field_type.name and parent_name:
-                type_name = f"{parent_name}_{type_name}"
+            type_name = self.resolve_nested_type_name(field_type.name, parent_stack)
             if ref:
                 return f"std::shared_ptr<{type_name}>"
             if nullable:
@@ -266,15 +317,34 @@ class CppGenerator(BaseGenerator):
             return type_name
 
         elif isinstance(field_type, ListType):
-            element_type = self.generate_type(field_type.element_type, False, False, parent_name)
+            element_type = self.generate_type(field_type.element_type, False, False, parent_stack)
             return f"std::vector<{element_type}>"
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, False, False, parent_name)
-            value_type = self.generate_type(field_type.value_type, False, False, parent_name)
+            key_type = self.generate_type(field_type.key_type, False, False, parent_stack)
+            value_type = self.generate_type(field_type.value_type, False, False, parent_stack)
             return f"std::map<{key_type}, {value_type}>"
 
         return "void*"
+
+    def resolve_nested_type_name(
+        self,
+        type_name: str,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
+        """Resolve nested type names to flattened C++ identifiers."""
+        if "." in type_name:
+            return type_name.replace(".", "_")
+        if not parent_stack:
+            return type_name
+
+        for i in range(len(parent_stack) - 1, -1, -1):
+            message = parent_stack[i]
+            if message.get_nested_type(type_name) is not None:
+                prefix = "_".join(parent.name for parent in parent_stack[: i + 1])
+                return f"{prefix}_{type_name}"
+
+        return type_name
 
     def collect_includes(self, field_type: FieldType, nullable: bool, ref: bool, includes: Set[str]):
         """Collect required includes for a field type."""

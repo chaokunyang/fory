@@ -309,6 +309,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -330,6 +334,8 @@ jobs:
           mvn -T16 --no-transfer-progress clean install -DskipTests
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.RustXlangTest
+      - name: Run Rust IDL Tests
+        run: ./integration_tests/idl_tests/run_rust_tests.sh
 
   cpp:
     name: C++ CI
@@ -417,6 +423,8 @@ jobs:
           mvn -T16 --no-transfer-progress clean install -DskipTests
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.CPPXlangTest
+      - name: Run C++ IDL Tests
+        run: ./integration_tests/idl_tests/run_cpp_tests.sh
 
   cpp_examples:
     name: C++ Examples
@@ -542,6 +550,8 @@ jobs:
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.PyCrossLanguageTest
           cd ../fory-format
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.format.CrossLanguageTest
+      - name: Run Python IDL Tests
+        run: ./integration_tests/idl_tests/run_python_tests.sh
 
   go:
     name: Golang CI
@@ -587,6 +597,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -608,6 +622,36 @@ jobs:
           mvn -T16 --no-transfer-progress clean install -DskipTests
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.GoXlangTest
+      - name: Run Go IDL Tests
+        run: ./integration_tests/idl_tests/run_go_tests.sh
+
+  java_xlang:
+    name: Java Xlang IDL Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: "temurin"
+      - name: Cache Maven local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Build Java Dependencies
+        run: |
+          cd java
+          mvn -T16 --no-transfer-progress clean install -DskipTests
+      - name: Run Java IDL Tests
+        run: ./integration_tests/idl_tests/run_java_tests.sh
 
   lint:
     name: Code Style Check

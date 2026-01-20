@@ -75,11 +75,11 @@ class GoGenerator(BaseGenerator):
             "fory.go_nested_type_style"
         )
         if style is None:
-            return "concat"
+            return "underscore"
         style = str(style).strip().lower()
-        if style not in ("concat", "underscore"):
+        if style not in ("camelcase", "underscore"):
             raise ValueError(
-                f"Invalid go_nested_type_style: {style}. Use 'concat' or 'underscore'."
+                f"Invalid go_nested_type_style: {style}. Use 'camelcase' or 'underscore'."
             )
         return style
 

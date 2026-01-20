@@ -260,8 +260,8 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         "--go_nested_type_style",
         type=str,
         default=None,
-        choices=["concat", "underscore"],
-        help="Go nested type naming style: concat (default) or underscore",
+        choices=["camelcase", "underscore"],
+        help="Go nested type naming style: camelcase or underscore (default)",
     )
 
     return parser.parse_args(args)

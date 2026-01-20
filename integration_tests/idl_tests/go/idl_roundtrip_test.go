@@ -26,13 +26,13 @@ import (
 )
 
 func buildAddressBook() AddressBook {
-	mobile := PersonPhoneNumber{
+	mobile := Person_PhoneNumber{
 		Number:    "555-0100",
-		PhoneType: PersonPhoneTypeMobile,
+		PhoneType: Person_PhoneTypeMobile,
 	}
-	work := PersonPhoneNumber{
+	work := Person_PhoneNumber{
 		Number:    "555-0111",
-		PhoneType: PersonPhoneTypeWork,
+		PhoneType: Person_PhoneTypeWork,
 	}
 
 	person := Person{
@@ -42,7 +42,7 @@ func buildAddressBook() AddressBook {
 		Tags:   []string{"friend", "colleague"},
 		Scores: map[string]int32{"math": 100, "science": 98},
 		Salary: 120000.5,
-		Phones: []PersonPhoneNumber{mobile, work},
+		Phones: []Person_PhoneNumber{mobile, work},
 	}
 
 	return AddressBook{

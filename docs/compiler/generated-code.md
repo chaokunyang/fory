@@ -120,20 +120,20 @@ class SearchResponse:
     results: List[Result] = field(default_factory=list)
 ```
 
-### Go - Concatenated
+### Go - Underscore
 
 ```go
-type SearchResponseResult struct {
+type SearchResponse_Result struct {
     Url   string
     Title string
 }
 
 type SearchResponse struct {
-    Results []SearchResponseResult
+    Results []SearchResponse_Result
 }
 ```
 
-**Note:** Set `option (fory).go_nested_type_style = "underscore";` to generate `SearchResponse_Result` instead.
+**Note:** Set `option (fory).go_nested_type_style = "camelcase";` to generate `SearchResponseResult` instead.
 
 ### Rust - Nested Module with Aliases
 
@@ -180,7 +180,7 @@ FORY_STRUCT(SearchResponse, results);
 | -------- | ------------------------------ | --------------------------------------------------------- |
 | Java     | Static inner classes           | `SearchResponse.Result`                                   |
 | Python   | Nested dataclasses             | `SearchResponse.Result`                                   |
-| Go       | Concatenated (configurable)    | `SearchResponseResult`                                    |
+| Go       | Underscore (configurable)      | `SearchResponse_Result`                                   |
 | Rust     | Nested module + alias reexport | `search_response::Result` (alias `SearchResponse_Result`) |
 | C++      | Nested classes                 | `SearchResponse::Result`                                  |
 

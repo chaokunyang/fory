@@ -57,7 +57,7 @@ fory compile [OPTIONS] FILES...
 | `--cpp_out=DST_DIR`                   | Generate C++ code in DST_DIR                          | (none)        |
 | `--go_out=DST_DIR`                    | Generate Go code in DST_DIR                           | (none)        |
 | `--rust_out=DST_DIR`                  | Generate Rust code in DST_DIR                         | (none)        |
-| `--go_nested_type_style`              | Go nested type naming: `concat` or `underscore`       | (none)        |
+| `--go_nested_type_style`              | Go nested type naming: `camelcase` or `underscore`    | (none)        |
 
 ### Examples
 

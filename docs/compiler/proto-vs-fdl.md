@@ -47,7 +47,7 @@ option go_package = "example.com/models";
 
 **FDL:**
 
-```fdl
+```proto
 package example.models;
 ```
 
@@ -68,7 +68,7 @@ enum Status {
 
 **FDL:**
 
-```fdl
+```proto
 enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
@@ -99,7 +99,7 @@ message User {
 
 **FDL:**
 
-```fdl
+```proto
 message User [id=101] {
     string id = 1;
     string name = 2;
@@ -131,7 +131,7 @@ message Order {
 
 **FDL:**
 
-```fdl
+```proto
 message OrderItem [id=200] {
     string product_id = 1;
     int32 quantity = 2;
@@ -165,7 +165,7 @@ FDL's killer feature is first-class reference tracking:
 
 **FDL:**
 
-```fdl
+```proto
 message TreeNode [id=300] {
     string value = 1;
     ref TreeNode parent = 2;
@@ -329,7 +329,7 @@ message Address {
 
 **After (FDL):**
 
-```fdl
+```proto
 package myapp;
 
 message Address [id=100] {
@@ -359,7 +359,7 @@ message Result {
 }
 ```
 
-```fdl
+```proto
 // FDL - Use separate optional fields
 message Result [id=102] {
     optional Success success = 1;
@@ -378,7 +378,7 @@ message Event {
 }
 ```
 
-```fdl
+```proto
 // FDL
 message Event [id=103] {
     timestamp created_at = 1;
@@ -389,7 +389,7 @@ message Event [id=103] {
 
 Assign unique type IDs for cross-language compatibility:
 
-```fdl
+```proto
 // Reserve ranges for different domains
 // 100-199: Common types
 // 200-299: User domain

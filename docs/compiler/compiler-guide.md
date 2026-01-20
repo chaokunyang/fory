@@ -137,7 +137,7 @@ When compiling FDL files with imports, the compiler searches for imported files 
 
 **Same-directory imports work automatically:**
 
-```fdl
+```proto
 // main.fdl
 import "common.fdl";  // Found if common.fdl is in the same directory
 ```
@@ -540,7 +540,7 @@ When modifying schemas:
 3. **Add new fields** - Use new field numbers
 4. **Use `optional`** - For backward compatibility
 
-```fdl
+```proto
 message User [id=100] {
     string id = 1;
     string name = 2;

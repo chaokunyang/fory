@@ -19,13 +19,13 @@ license: |
   limitations under the License.
 ---
 
-Fory Definition Language (FDL) is a schema definition language for Apache Fory that enables type-safe cross-language serialization. Define your data structures once and generate native code for Java, Python, Go, Rust, and C++.
+Fory Definition Language (FDL) is a schema definition language for Apache Fory that enables type-safe cross-language serialization. Define your data structures once and generate native data structure code for Java, Python, Go, Rust, and C++.
 
 ## Overview
 
 FDL provides a simple, intuitive syntax for defining cross-language data structures:
 
-```fdl
+```proto
 package example;
 
 enum Status [id=100] {
@@ -92,7 +92,7 @@ pip install -e .
 
 Create `example.fdl`:
 
-```fdl
+```proto
 package example;
 
 message Person [id=100] {
@@ -157,13 +157,13 @@ FDL supports two registration modes:
 
 **Numeric Type IDs** - Fast and compact:
 
-```fdl
+```proto
 message User [id=100] { ... }  // Registered with ID 100
 ```
 
 **Namespace-based** - Flexible and readable:
 
-```fdl
+```proto
 message Config { ... }  // Registered as "package.Config"
 ```
 
@@ -173,7 +173,7 @@ message Config { ... }  // Registered as "package.Config"
 - **`ref`**: Enable reference tracking for shared/circular references
 - **`repeated`**: Field is a list/array
 
-```fdl
+```proto
 message Example {
     optional string nullable = 1;
     ref Node parent = 2;

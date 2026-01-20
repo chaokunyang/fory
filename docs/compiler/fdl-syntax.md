@@ -29,7 +29,7 @@ An FDL file consists of:
 2. Optional import statements
 3. Type definitions (enums and messages)
 
-```fdl
+```proto
 // Optional package declaration
 package com.example.models;
 
@@ -46,7 +46,7 @@ message Order [id=102] { ... }
 
 FDL supports both single-line and block comments:
 
-```fdl
+```proto
 // This is a single-line comment
 
 /*
@@ -63,7 +63,7 @@ message Example {
 
 The package declaration defines the namespace for all types in the file.
 
-```fdl
+```proto
 package com.example.models;
 ```
 
@@ -90,7 +90,7 @@ Options can be specified at file level to control language-specific code generat
 
 ### Syntax
 
-```fdl
+```proto
 option option_name = value;
 ```
 
@@ -98,7 +98,7 @@ option option_name = value;
 
 Override the Java package for generated code:
 
-```fdl
+```proto
 package payment;
 option java_package = "com.mycorp.payment.v1";
 
@@ -117,7 +117,7 @@ message Payment {
 
 Specify the Go import path and package name:
 
-```fdl
+```proto
 package payment;
 option go_package = "github.com/mycorp/apis/gen/payment/v1;paymentv1";
 
@@ -138,7 +138,7 @@ message Payment {
 
 Generate all types as inner classes of a single outer wrapper class:
 
-```fdl
+```proto
 package payment;
 option java_outer_classname = "DescriptorProtos";
 
@@ -181,7 +181,7 @@ public final class DescriptorProtos {
 
 **Combined with java_package:**
 
-```fdl
+```proto
 package payment;
 option java_package = "com.example.proto";
 option java_outer_classname = "PaymentProtos";
@@ -197,7 +197,7 @@ This generates `com/example/proto/PaymentProtos.java` with all types as inner cl
 
 Control whether types are generated in separate files or as inner classes:
 
-```fdl
+```proto
 package payment;
 option java_outer_classname = "PaymentProtos";
 option java_multiple_files = true;
@@ -227,14 +227,14 @@ message Receipt {
 
 **Example without java_multiple_files (default):**
 
-```fdl
+```proto
 option java_outer_classname = "PaymentProtos";
 // Generates: PaymentProtos.java containing Payment and Receipt as inner classes
 ```
 
 **Example with java_multiple_files = true:**
 
-```fdl
+```proto
 option java_outer_classname = "PaymentProtos";
 option java_multiple_files = true;
 // Generates: Payment.java, Receipt.java (separate files)
@@ -244,7 +244,7 @@ option java_multiple_files = true;
 
 Multiple options can be specified:
 
-```fdl
+```proto
 package payment;
 option java_package = "com.mycorp.payment.v1";
 option go_package = "github.com/mycorp/apis/gen/payment/v1;paymentv1";
@@ -259,7 +259,7 @@ message Payment {
 
 FDL supports protobuf-style extension options for Fory-specific configuration:
 
-```fdl
+```proto
 option (fory).use_record_for_java_message = true;
 option (fory).polymorphism = true;
 ```
@@ -283,7 +283,7 @@ For language-specific packages:
 
 **Example:**
 
-```fdl
+```proto
 package myapp.models;
 option java_package = "com.example.generated";
 ```
@@ -298,7 +298,7 @@ option java_package = "com.example.generated";
 
 Language-specific options only affect where code is generated, not the type namespace used for serialization. This ensures cross-language compatibility:
 
-```fdl
+```proto
 package myapp.models;
 option java_package = "com.mycorp.generated";
 option go_package = "github.com/mycorp/gen;genmodels";
@@ -320,13 +320,13 @@ Import statements allow you to use types defined in other FDL files.
 
 ### Basic Syntax
 
-```fdl
+```proto
 import "path/to/file.fdl";
 ```
 
 ### Multiple Imports
 
-```fdl
+```proto
 import "common/types.fdl";
 import "common/enums.fdl";
 import "models/address.fdl";
@@ -358,7 +358,7 @@ project/
 
 **common/types.fdl:**
 
-```fdl
+```proto
 package common;
 
 enum Status [id=100] {
@@ -376,7 +376,7 @@ message Address [id=101] {
 
 **models/user.fdl:**
 
-```fdl
+```proto
 package models;
 import "../common/types.fdl";
 
@@ -392,7 +392,7 @@ message User [id=200] {
 
 The following protobuf import modifiers are **not supported**:
 
-```fdl
+```proto
 // NOT SUPPORTED - will produce an error
 import public "other.fdl";
 import weak "other.fdl";
@@ -417,7 +417,7 @@ Enums define a set of named integer constants.
 
 ### Basic Syntax
 
-```fdl
+```proto
 enum Status {
     PENDING = 0;
     ACTIVE = 1;
@@ -427,7 +427,7 @@ enum Status {
 
 ### With Type ID
 
-```fdl
+```proto
 enum Status [id=100] {
     PENDING = 0;
     ACTIVE = 1;
@@ -439,7 +439,7 @@ enum Status [id=100] {
 
 Reserve field numbers or names to prevent reuse:
 
-```fdl
+```proto
 enum Status {
     reserved 2, 15, 9 to 11, 40 to max;  // Reserved numbers
     reserved "OLD_STATUS", "DEPRECATED"; // Reserved names
@@ -453,7 +453,7 @@ enum Status {
 
 Options can be specified within enums:
 
-```fdl
+```proto
 enum Status {
     option deprecated = true;  // Allowed
     PENDING = 0;
@@ -469,7 +469,7 @@ enum Status {
 
 When enum values use a protobuf-style prefix (enum name in UPPER_SNAKE_CASE), the compiler automatically strips the prefix for languages with scoped enums:
 
-```fdl
+```proto
 // Input with prefix
 enum DeviceTier {
     DEVICE_TIER_UNKNOWN = 0;
@@ -511,7 +511,7 @@ enum_value   := IDENTIFIER '=' INTEGER ';'
 
 **Example with All Features:**
 
-```fdl
+```proto
 // HTTP status code categories
 enum HttpCategory [id=200] {
     reserved 10 to 20;           // Reserved for future use
@@ -530,7 +530,7 @@ Messages define structured data types with typed fields.
 
 ### Basic Syntax
 
-```fdl
+```proto
 message Person {
     string name = 1;
     int32 age = 2;
@@ -539,7 +539,7 @@ message Person {
 
 ### With Type ID
 
-```fdl
+```proto
 message Person [id=101] {
     string name = 1;
     int32 age = 2;
@@ -550,7 +550,7 @@ message Person [id=101] {
 
 Reserve field numbers or names to prevent reuse after removing fields:
 
-```fdl
+```proto
 message User {
     reserved 2, 15, 9 to 11;       // Reserved field numbers
     reserved "old_field", "temp";  // Reserved field names
@@ -563,7 +563,7 @@ message User {
 
 Options can be specified within messages:
 
-```fdl
+```proto
 message User {
     option deprecated = true;
     string id = 1;
@@ -587,7 +587,7 @@ Messages can contain nested message and enum definitions. This is useful for def
 
 ### Nested Messages
 
-```fdl
+```proto
 message SearchResponse {
     message Result {
         string url = 1;
@@ -600,7 +600,7 @@ message SearchResponse {
 
 ### Nested Enums
 
-```fdl
+```proto
 message Container {
     enum Status {
         STATUS_UNKNOWN = 0;
@@ -615,7 +615,7 @@ message Container {
 
 Nested types can be referenced from other messages using qualified names (Parent.Child):
 
-```fdl
+```proto
 message SearchResponse {
     message Result {
         string url = 1;
@@ -634,7 +634,7 @@ message SearchResultCache {
 
 Nesting can be multiple levels deep:
 
-```fdl
+```proto
 message Outer {
     message Middle {
         message Inner {
@@ -677,13 +677,13 @@ Fields define the properties of a message.
 
 ### Basic Syntax
 
-```fdl
+```proto
 field_type field_name = field_number;
 ```
 
 ### With Modifiers
 
-```fdl
+```proto
 optional ref repeated field_type field_name = field_number;
 ```
 
@@ -701,7 +701,7 @@ field_type   := primitive_type | named_type | map_type
 
 Marks the field as nullable:
 
-```fdl
+```proto
 message User {
     string name = 1;           // Required, non-null
     optional string email = 2; // Nullable
@@ -722,7 +722,7 @@ message User {
 
 Enables reference tracking for shared/circular references:
 
-```fdl
+```proto
 message Node {
     string value = 1;
     ref Node parent = 2;     // Can point to shared object
@@ -750,7 +750,7 @@ message Node {
 
 Marks the field as a list/array:
 
-```fdl
+```proto
 message Document {
     repeated string tags = 1;
     repeated User authors = 2;
@@ -771,7 +771,7 @@ message Document {
 
 Modifiers can be combined:
 
-```fdl
+```proto
 message Example {
     optional repeated string tags = 1;  // Nullable list
     repeated ref Node nodes = 2;        // List of tracked references
@@ -805,7 +805,7 @@ See [Type System](type-system.md) for complete type mappings.
 
 Reference other messages or enums by name:
 
-```fdl
+```proto
 enum Status { ... }
 message User { ... }
 
@@ -819,7 +819,7 @@ message Order {
 
 Maps with typed keys and values:
 
-```fdl
+```proto
 message Config {
     map<string, string> properties = 1;
     map<string, int32> counts = 2;
@@ -838,7 +838,7 @@ message Config {
 
 Each field must have a unique positive integer identifier:
 
-```fdl
+```proto
 message Example {
     string first = 1;
     string second = 2;
@@ -863,7 +863,7 @@ message Example {
 
 Type IDs enable efficient cross-language serialization:
 
-```fdl
+```proto
 enum Color [id=100] { ... }
 message User [id=101] { ... }
 message Order [id=102] { ... }
@@ -871,7 +871,7 @@ message Order [id=102] { ... }
 
 ### With Type ID (Recommended)
 
-```fdl
+```proto
 message User [id=101] { ... }
 message User [id=101, deprecated=true] { ... }  // Multiple options
 ```
@@ -883,7 +883,7 @@ message User [id=101, deprecated=true] { ... }  // Multiple options
 
 ### Without Type ID
 
-```fdl
+```proto
 message Config { ... }
 ```
 
@@ -894,7 +894,7 @@ message Config { ... }
 
 ### ID Assignment Strategy
 
-```fdl
+```proto
 // Enums: 100-199
 enum Status [id=100] { ... }
 enum Priority [id=101] { ... }
@@ -910,7 +910,7 @@ message OrderItem [id=301] { ... }
 
 ## Complete Example
 
-```fdl
+```proto
 // E-commerce domain model
 package com.shop.models;
 
@@ -991,7 +991,7 @@ FDL supports protobuf-style extension options for Fory-specific configuration. T
 
 ### File-Level Fory Options
 
-```fdl
+```proto
 option (fory).use_record_for_java_message = true;
 option (fory).polymorphism = true;
 ```
@@ -1005,7 +1005,7 @@ option (fory).polymorphism = true;
 
 Options can be specified inside the message body:
 
-```fdl
+```proto
 message MyMessage {
     option (fory).id = 100;
     option (fory).evolving = false;
@@ -1026,7 +1026,7 @@ message MyMessage {
 
 ### Enum-Level Fory Options
 
-```fdl
+```proto
 enum Status {
     option (fory).id = 101;
     option (fory).deprecated = true;
@@ -1044,7 +1044,7 @@ enum Status {
 
 Field options are specified in brackets after the field number:
 
-```fdl
+```proto
 message Example {
     MyType friend = 1 [(fory).ref = true];
     string nickname = 2 [(fory).nullable = true];
@@ -1064,7 +1064,7 @@ message Example {
 
 You can combine standard options with Fory extension options:
 
-```fdl
+```proto
 message User {
     option deprecated = true;        // Standard option
     option (fory).evolving = false; // Fory extension option

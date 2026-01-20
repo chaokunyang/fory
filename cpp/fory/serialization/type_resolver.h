@@ -519,6 +519,15 @@ template <> struct is_unsigned_integer<uint64_t> : std::true_type {};
 template <typename T>
 inline constexpr bool is_unsigned_integer_v = is_unsigned_integer<T>::value;
 
+// Helper to check if a type is signed integer (encoding-configurable)
+template <typename T> struct is_signed_integer : std::false_type {};
+template <> struct is_signed_integer<int32_t> : std::true_type {};
+template <> struct is_signed_integer<int64_t> : std::true_type {};
+template <> struct is_signed_integer<int> : std::true_type {};
+template <> struct is_signed_integer<long long> : std::true_type {};
+template <typename T>
+inline constexpr bool is_signed_integer_v = is_signed_integer<T>::value;
+
 // Helper to get inner type of optional, or the type itself
 template <typename T, typename Enable = void> struct unwrap_optional_inner {
   using type = T;
@@ -563,6 +572,30 @@ constexpr uint32_t compute_unsigned_type_id() {
   return 0;
 }
 
+// Helper to compute the correct type_id for signed types based on encoding
+template <typename FieldT, typename StructT, size_t Index>
+constexpr uint32_t compute_signed_type_id() {
+  if constexpr (::fory::detail::has_field_config_v<StructT>) {
+    constexpr auto enc =
+        ::fory::detail::GetFieldConfigEntry<StructT, Index>::encoding;
+    using InnerType = unwrap_optional_inner_t<FieldT>;
+    if constexpr (std::is_same_v<InnerType, int32_t> ||
+                  std::is_same_v<InnerType, int>) {
+      if constexpr (enc == Encoding::Fixed) {
+        return static_cast<uint32_t>(TypeId::INT32);
+      }
+    } else if constexpr (std::is_same_v<InnerType, int64_t> ||
+                         std::is_same_v<InnerType, long long>) {
+      if constexpr (enc == Encoding::Fixed) {
+        return static_cast<uint32_t>(TypeId::INT64);
+      } else if constexpr (enc == Encoding::Tagged) {
+        return static_cast<uint32_t>(TypeId::TAGGED_INT64);
+      }
+    }
+  }
+  return 0;
+}
+
 template <typename T, size_t Index> struct FieldInfoBuilder {
   static FieldInfo build() {
     const auto meta = ForyFieldInfo(T{});
@@ -600,6 +633,13 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
         compute_unsigned_type_id<UnwrappedFieldType, T, Index>();
     if constexpr (unsigned_tid != 0 && is_unsigned_integer_v<InnerType>) {
       field_type.type_id = unsigned_tid;
+    }
+
+    // Override type_id for signed types based on encoding from FORY_FIELD_CONFIG
+    constexpr uint32_t signed_tid =
+        compute_signed_type_id<UnwrappedFieldType, T, Index>();
+    if constexpr (signed_tid != 0 && is_signed_integer_v<InnerType>) {
+      field_type.type_id = signed_tid;
     }
 
     // Override nullable and ref_tracking from field-level metadata

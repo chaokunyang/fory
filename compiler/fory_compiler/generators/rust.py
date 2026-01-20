@@ -20,7 +20,7 @@
 from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
-from fory_compiler.parser.ast import (
+from fory_compiler.ir.ast import (
     Message,
     Enum,
     Field,
@@ -45,7 +45,18 @@ class RustGenerator(BaseGenerator):
         PrimitiveKind.INT8: "i8",
         PrimitiveKind.INT16: "i16",
         PrimitiveKind.INT32: "i32",
+        PrimitiveKind.VARINT32: "i32",
         PrimitiveKind.INT64: "i64",
+        PrimitiveKind.VARINT64: "i64",
+        PrimitiveKind.TAGGED_INT64: "i64",
+        PrimitiveKind.UINT8: "u8",
+        PrimitiveKind.UINT16: "u16",
+        PrimitiveKind.UINT32: "u32",
+        PrimitiveKind.VAR_UINT32: "u32",
+        PrimitiveKind.UINT64: "u64",
+        PrimitiveKind.VAR_UINT64: "u64",
+        PrimitiveKind.TAGGED_UINT64: "u64",
+        PrimitiveKind.FLOAT16: "f32",
         PrimitiveKind.FLOAT32: "f32",
         PrimitiveKind.FLOAT64: "f64",
         PrimitiveKind.STRING: "String",
@@ -284,9 +295,14 @@ class RustGenerator(BaseGenerator):
         """Generate a struct field."""
         lines = []
 
-        # Field attributes
+        attrs = []
         if field.optional:
-            lines.append("#[fory(nullable = true)]")
+            attrs.append("nullable = true")
+        encoding = self.get_encoding_attr(field.field_type)
+        if encoding:
+            attrs.append(encoding)
+        if attrs:
+            lines.append(f"#[fory({', '.join(attrs)})]")
 
         pointer_type = self.get_pointer_type(field)
         rust_type = self.generate_type(
@@ -303,6 +319,22 @@ class RustGenerator(BaseGenerator):
         lines.append(f"pub {field_name}: {rust_type},")
 
         return lines
+
+    def get_encoding_attr(self, field_type: FieldType) -> Optional[str]:
+        """Return an encoding attribute for integer primitives."""
+        if not isinstance(field_type, PrimitiveType):
+            return None
+        kind = field_type.kind
+        if kind in (
+            PrimitiveKind.INT32,
+            PrimitiveKind.INT64,
+            PrimitiveKind.UINT32,
+            PrimitiveKind.UINT64,
+        ):
+            return 'encoding = "fixed"'
+        if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
+            return 'encoding = "tagged"'
+        return None
 
     def generate_type(
         self,
@@ -424,7 +456,7 @@ class RustGenerator(BaseGenerator):
 
     def get_pointer_type(self, field: Field) -> str:
         """Determine pointer type for ref tracking based on field options."""
-        thread_safe = field.options.get("fory.thread_safe_pointer")
+        thread_safe = field.options.get("thread_safe_pointer")
         if thread_safe is False:
             return "Rc"
         return "Arc"

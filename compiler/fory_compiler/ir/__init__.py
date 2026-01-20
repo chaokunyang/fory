@@ -15,38 +15,36 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""FDL parser components."""
+"""Fory compiler intermediate representation (IR)."""
 
-from fory_compiler.parser.lexer import Lexer, Token, TokenType
-from fory_compiler.parser.parser import Parser
-from fory_compiler.parser.ast import (
-    Schema,
-    Message,
-    Enum,
-    Field,
-    EnumValue,
-    Import,
-    FieldType,
+from fory_compiler.ir.ast import (  # noqa: F401
+    SourceLocation,
+    PrimitiveKind,
     PrimitiveType,
     NamedType,
     ListType,
     MapType,
+    Field,
+    EnumValue,
+    Enum,
+    Message,
+    Import,
+    Schema,
 )
+from fory_compiler.ir.validator import validate_schema  # noqa: F401
 
 __all__ = [
-    "Lexer",
-    "Token",
-    "TokenType",
-    "Parser",
-    "Schema",
-    "Message",
-    "Enum",
-    "Field",
-    "EnumValue",
-    "Import",
-    "FieldType",
+    "SourceLocation",
+    "PrimitiveKind",
     "PrimitiveType",
     "NamedType",
     "ListType",
     "MapType",
+    "Field",
+    "EnumValue",
+    "Enum",
+    "Message",
+    "Import",
+    "Schema",
+    "validate_schema",
 ]

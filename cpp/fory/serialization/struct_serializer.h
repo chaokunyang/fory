@@ -181,6 +181,13 @@ FORY_ALWAYS_INLINE uint32_t put_primitive_at(T value, Buffer &buffer,
                        std::is_same_v<T, unsigned long long>) {
     buffer.UnsafePut<uint64_t>(offset, static_cast<uint64_t>(value));
     return 8;
+  } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
+    buffer.UnsafePut<int32_t>(offset, static_cast<int32_t>(value));
+    return 4;
+  } else if constexpr (std::is_same_v<T, int64_t> ||
+                       std::is_same_v<T, long long>) {
+    buffer.UnsafePut<int64_t>(offset, static_cast<int64_t>(value));
+    return 8;
   } else if constexpr (std::is_same_v<T, bool>) {
     buffer.UnsafePutByte(offset, static_cast<uint8_t>(value ? 1 : 0));
     return 1;
@@ -220,9 +227,14 @@ FORY_ALWAYS_INLINE void put_fixed_primitive_at(T value, Buffer &buffer,
   } else if constexpr (std::is_same_v<T, uint32_t> ||
                        std::is_same_v<T, unsigned int>) {
     buffer.UnsafePut<uint32_t>(offset, static_cast<uint32_t>(value));
+  } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
+    buffer.UnsafePut<int32_t>(offset, static_cast<int32_t>(value));
   } else if constexpr (std::is_same_v<T, uint64_t> ||
                        std::is_same_v<T, unsigned long long>) {
     buffer.UnsafePut<uint64_t>(offset, static_cast<uint64_t>(value));
+  } else if constexpr (std::is_same_v<T, int64_t> ||
+                       std::is_same_v<T, long long>) {
+    buffer.UnsafePut<int64_t>(offset, static_cast<int64_t>(value));
   } else if constexpr (std::is_same_v<T, float>) {
     buffer.UnsafePut<float>(offset, value);
   } else if constexpr (std::is_same_v<T, double>) {
@@ -484,8 +496,8 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   /// Check if field at Index uses fixed-size encoding based on C++ type
   /// Fixed types: bool, int8, uint8, int16, uint16, uint32, uint64, float,
-  /// double Note: TypeId::INT32/INT64 can be either signed (varint) or unsigned
-  /// (fixed)
+  /// double. Signed int32/int64 are fixed only when field encoding is
+  /// configured as fixed.
   template <size_t Index> static constexpr bool field_is_fixed_primitive() {
     if constexpr (FieldCount == 0) {
       return false;
@@ -503,6 +515,22 @@ template <typename T> struct CompileTimeFieldHelpers {
             ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
         if constexpr (enc == Encoding::Varint || enc == Encoding::Tagged) {
           return false; // Not fixed-size, uses varint encoding
+        }
+      }
+
+      // Check for encoding override from FORY_FIELD_CONFIG for signed types
+      if constexpr (::fory::detail::has_field_config_v<T> &&
+                    (std::is_same_v<FieldType, int32_t> ||
+                     std::is_same_v<FieldType, int> ||
+                     std::is_same_v<FieldType, int64_t> ||
+                     std::is_same_v<FieldType, long long>)) {
+        constexpr auto enc =
+            ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+        if constexpr (enc == Encoding::Fixed) {
+          return true;
+        }
+        if constexpr (enc == Encoding::Varint || enc == Encoding::Tagged) {
+          return false;
         }
       }
 
@@ -542,6 +570,22 @@ template <typename T> struct CompileTimeFieldHelpers {
         }
       }
 
+      // Check for encoding override from FORY_FIELD_CONFIG for signed types
+      if constexpr (::fory::detail::has_field_config_v<T> &&
+                    (std::is_same_v<FieldType, int32_t> ||
+                     std::is_same_v<FieldType, int> ||
+                     std::is_same_v<FieldType, int64_t> ||
+                     std::is_same_v<FieldType, long long>)) {
+        constexpr auto enc =
+            ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+        if constexpr (enc == Encoding::Fixed) {
+          return false;
+        }
+        if constexpr (enc == Encoding::Varint || enc == Encoding::Tagged) {
+          return true;
+        }
+      }
+
       return std::is_same_v<FieldType, int32_t> ||
              std::is_same_v<FieldType, int> ||
              std::is_same_v<FieldType, int64_t> ||
@@ -564,10 +608,30 @@ template <typename T> struct CompileTimeFieldHelpers {
       } else if constexpr (std::is_same_v<FieldType, int16_t> ||
                            std::is_same_v<FieldType, uint16_t>) {
         return 2;
+      } else if constexpr (std::is_same_v<FieldType, int32_t> ||
+                           std::is_same_v<FieldType, int>) {
+        if constexpr (::fory::detail::has_field_config_v<T>) {
+          constexpr auto enc =
+              ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+          if constexpr (enc == Encoding::Fixed) {
+            return 4;
+          }
+        }
+        return 0;
       } else if constexpr (std::is_same_v<FieldType, uint32_t> ||
                            std::is_same_v<FieldType, unsigned int> ||
                            std::is_same_v<FieldType, float>) {
         return 4;
+      } else if constexpr (std::is_same_v<FieldType, int64_t> ||
+                           std::is_same_v<FieldType, long long>) {
+        if constexpr (::fory::detail::has_field_config_v<T>) {
+          constexpr auto enc =
+              ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+          if constexpr (enc == Encoding::Fixed) {
+            return 8;
+          }
+        }
+        return 0;
       } else if constexpr (std::is_same_v<FieldType, uint64_t> ||
                            std::is_same_v<FieldType, unsigned long long> ||
                            std::is_same_v<FieldType, double>) {
@@ -604,14 +668,18 @@ template <typename T> struct CompileTimeFieldHelpers {
           return 9;
         }
       }
-      // Check for tagged encoding on signed int64 types
+      // Check for encoding override on signed types
       if constexpr (::fory::detail::has_field_config_v<T> &&
-                    (std::is_same_v<FieldType, int64_t> ||
+                    (std::is_same_v<FieldType, int32_t> ||
+                     std::is_same_v<FieldType, int> ||
+                     std::is_same_v<FieldType, int64_t> ||
                      std::is_same_v<FieldType, long long>)) {
         constexpr auto enc =
             ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+        if constexpr (enc == Encoding::Fixed) {
+          return 0;
+        }
         if constexpr (enc == Encoding::Tagged) {
-          // Tagged encoding: 4 bytes for small, 9 bytes for large
           return 9;
         }
       }
@@ -980,6 +1048,8 @@ template <typename T> struct CompileTimeFieldHelpers {
           total += 2;
           break;
         case TypeId::INT32:
+          total += 4; // fixed 4 bytes
+          break;
         case TypeId::VARINT32:
           total += 8; // varint max, but bulk write may write up to 8 bytes
           break;
@@ -987,6 +1057,8 @@ template <typename T> struct CompileTimeFieldHelpers {
           total += 4;
           break;
         case TypeId::INT64:
+          total += 8; // fixed 8 bytes
+          break;
         case TypeId::VARINT64:
         case TypeId::TAGGED_INT64:
           total += 10; // varint max
@@ -1033,13 +1105,14 @@ template <typename T> struct CompileTimeFieldHelpers {
       compute_primitive_field_count();
 
   /// Check if a type_id represents a fixed-size primitive (not varint)
-  /// Includes bool, int8, int16, float16, float32, float64
-  /// Note: INT32/INT64 use varint encoding per basic_serializer.h write/read
+  /// Includes bool, int8, int16, int32, int64, float16, float32, float64
   static constexpr bool is_fixed_size_primitive(uint32_t tid) {
     switch (static_cast<TypeId>(tid)) {
     case TypeId::BOOL:
     case TypeId::INT8:
     case TypeId::INT16:
+    case TypeId::INT32:
+    case TypeId::INT64:
     case TypeId::FLOAT16:
     case TypeId::FLOAT32:
     case TypeId::FLOAT64:
@@ -1050,14 +1123,11 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   /// Check if a type_id represents a varint primitive (int32/int64 types)
-  /// Per basic_serializer.h, INT32/INT64 use zigzag varint encoding
-  /// VARINT32/VARINT64/TAGGED_INT64 also use varint encoding
+  /// VARINT32/VARINT64/TAGGED_INT64 use varint encoding
   static constexpr bool is_varint_primitive(uint32_t tid) {
     switch (static_cast<TypeId>(tid)) {
-    case TypeId::INT32:    // int32_t uses zigzag varint per basic_serializer.h
-    case TypeId::INT64:    // int64_t uses zigzag varint per basic_serializer.h
-    case TypeId::VARINT32: // explicit varint type
-    case TypeId::VARINT64: // explicit varint type
+    case TypeId::VARINT32:     // explicit varint type
+    case TypeId::VARINT64:     // explicit varint type
     case TypeId::TAGGED_INT64: // hybrid int64 encoding
       return true;
     default:
@@ -1068,10 +1138,8 @@ template <typename T> struct CompileTimeFieldHelpers {
   /// Get the max varint size in bytes for a type_id (0 if not varint)
   static constexpr size_t max_varint_bytes(uint32_t tid) {
     switch (static_cast<TypeId>(tid)) {
-    case TypeId::INT32:    // int32_t uses zigzag varint
     case TypeId::VARINT32: // explicit varint
       return 5;            // int32 varint max
-    case TypeId::INT64:    // int64_t uses zigzag varint
     case TypeId::VARINT64: // explicit varint
     case TypeId::TAGGED_INT64:
       return 10; // int64 varint max
@@ -1081,7 +1149,6 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   /// Get the fixed size in bytes for a type_id (0 if not fixed-size)
-  /// Note: INT32/INT64 use varint encoding per basic_serializer.h, not fixed
   static constexpr size_t fixed_size_bytes(uint32_t tid) {
     switch (static_cast<TypeId>(tid)) {
     case TypeId::BOOL:
@@ -1090,8 +1157,12 @@ template <typename T> struct CompileTimeFieldHelpers {
     case TypeId::INT16:
     case TypeId::FLOAT16:
       return 2;
+    case TypeId::INT32:
+      return 4;
     case TypeId::FLOAT32:
       return 4;
+    case TypeId::INT64:
+      return 8;
     case TypeId::FLOAT64:
       return 8;
     default:
@@ -1209,6 +1280,8 @@ template <typename T> struct CompileTimeFieldHelpers {
           total += 2;
           break;
         case TypeId::INT32:
+          total += 4; // fixed 4 bytes
+          break;
         case TypeId::VARINT32:
           total += 5; // varint max for 32-bit
           break;
@@ -1222,6 +1295,8 @@ template <typename T> struct CompileTimeFieldHelpers {
           total += 4;
           break;
         case TypeId::INT64:
+          total += 8; // fixed 8 bytes
+          break;
         case TypeId::VARINT64:
         case TypeId::TAGGED_INT64:
           total += 10; // varint max for 64-bit
@@ -1487,6 +1562,12 @@ void write_single_field(const T &obj, WriteContext &ctx,
       ::fory::detail::has_field_config_v<T> &&
       (std::is_same_v<FieldType, std::optional<uint32_t>> ||
        std::is_same_v<FieldType, std::optional<uint64_t>>);
+  constexpr bool is_encoded_optional_int =
+      ::fory::detail::has_field_config_v<T> &&
+      (std::is_same_v<FieldType, std::optional<int32_t>> ||
+       std::is_same_v<FieldType, std::optional<int64_t>> ||
+       std::is_same_v<FieldType, std::optional<int>> ||
+       std::is_same_v<FieldType, std::optional<long long>>);
 
   if constexpr (is_encoded_optional_uint) {
     constexpr auto enc =
@@ -1520,8 +1601,84 @@ void write_single_field(const T &obj, WriteContext &ctx,
     return;
   }
 
+  if constexpr (is_encoded_optional_int) {
+    constexpr auto enc =
+        ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+    if (!field_value.has_value()) {
+      ctx.write_int8(NULL_FLAG);
+      return;
+    }
+    ctx.write_int8(NOT_NULL_VALUE_FLAG);
+
+    using InnerType = typename std::remove_reference_t<FieldType>::value_type;
+    InnerType value = field_value.value();
+    if constexpr (std::is_same_v<InnerType, int32_t> ||
+                  std::is_same_v<InnerType, int>) {
+      if constexpr (enc == Encoding::Fixed) {
+        ctx.buffer().WriteInt32(static_cast<int32_t>(value));
+      } else {
+        ctx.write_varint32(static_cast<int32_t>(value));
+      }
+    } else if constexpr (std::is_same_v<InnerType, int64_t> ||
+                         std::is_same_v<InnerType, long long>) {
+      if constexpr (enc == Encoding::Fixed) {
+        ctx.buffer().WriteInt64(static_cast<int64_t>(value));
+      } else if constexpr (enc == Encoding::Tagged) {
+        ctx.write_tagged_int64(static_cast<int64_t>(value));
+      } else {
+        ctx.write_varint64(static_cast<int64_t>(value));
+      }
+    }
+    return;
+  }
+
   // Per Rust implementation: primitives are written directly without ref/type
   if constexpr (is_primitive_field && !field_requires_ref) {
+    if constexpr (::fory::detail::has_field_config_v<T> &&
+                  (std::is_same_v<FieldType, uint32_t> ||
+                   std::is_same_v<FieldType, uint64_t> ||
+                   std::is_same_v<FieldType, int32_t> ||
+                   std::is_same_v<FieldType, int> ||
+                   std::is_same_v<FieldType, int64_t> ||
+                   std::is_same_v<FieldType, long long>)) {
+      constexpr auto enc =
+          ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+      if constexpr (std::is_same_v<FieldType, uint32_t>) {
+        if constexpr (enc == Encoding::Varint) {
+          ctx.write_varuint32(field_value);
+        } else {
+          ctx.buffer().WriteInt32(static_cast<int32_t>(field_value));
+        }
+        return;
+      } else if constexpr (std::is_same_v<FieldType, uint64_t>) {
+        if constexpr (enc == Encoding::Varint) {
+          ctx.write_varuint64(field_value);
+        } else if constexpr (enc == Encoding::Tagged) {
+          ctx.write_tagged_uint64(field_value);
+        } else {
+          ctx.buffer().WriteInt64(static_cast<int64_t>(field_value));
+        }
+        return;
+      } else if constexpr (std::is_same_v<FieldType, int32_t> ||
+                           std::is_same_v<FieldType, int>) {
+        if constexpr (enc == Encoding::Fixed) {
+          ctx.buffer().WriteInt32(static_cast<int32_t>(field_value));
+        } else {
+          ctx.write_varint32(static_cast<int32_t>(field_value));
+        }
+        return;
+      } else if constexpr (std::is_same_v<FieldType, int64_t> ||
+                           std::is_same_v<FieldType, long long>) {
+        if constexpr (enc == Encoding::Fixed) {
+          ctx.buffer().WriteInt64(static_cast<int64_t>(field_value));
+        } else if constexpr (enc == Encoding::Tagged) {
+          ctx.write_tagged_int64(static_cast<int64_t>(field_value));
+        } else {
+          ctx.write_varint64(static_cast<int64_t>(field_value));
+        }
+        return;
+      }
+    }
     Serializer<FieldType>::write_data(field_value, ctx);
     return;
   }
@@ -1725,8 +1882,8 @@ FORY_ALWAYS_INLINE FieldType read_primitive_field_direct(ReadContext &ctx,
   static_assert(is_raw_primitive_v<FieldType>,
                 "read_primitive_field_direct only supports raw primitives");
 
-  // Use the actual C++ type, not TypeId, because signed/unsigned types
-  // have different encoding (signed use varint, unsigned use fixed bytes).
+  // Use the actual C++ type, not TypeId, because default encoding differs
+  // between signed (varint) and unsigned (fixed) primitives.
   if constexpr (std::is_same_v<FieldType, bool>) {
     uint8_t v = ctx.read_uint8(error);
     return v != 0;
@@ -1845,7 +2002,11 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
     auto read_value = [&ctx]() -> FieldType {
       if constexpr (::fory::detail::has_field_config_v<T> &&
                     (std::is_same_v<FieldType, uint32_t> ||
-                     std::is_same_v<FieldType, uint64_t>)) {
+                     std::is_same_v<FieldType, uint64_t> ||
+                     std::is_same_v<FieldType, int32_t> ||
+                     std::is_same_v<FieldType, int> ||
+                     std::is_same_v<FieldType, int64_t> ||
+                     std::is_same_v<FieldType, long long>)) {
         constexpr auto enc =
             ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
 #ifdef ENABLE_FORY_DEBUG_OUTPUT
@@ -1871,6 +2032,20 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
           }
           // UINT64: fixed 8-byte
           return ctx.read_uint64(ctx.error());
+        } else if constexpr (std::is_same_v<FieldType, int32_t> ||
+                             std::is_same_v<FieldType, int>) {
+          if constexpr (enc == Encoding::Fixed) {
+            return static_cast<FieldType>(ctx.read_int32(ctx.error()));
+          }
+          return static_cast<FieldType>(ctx.read_varint32(ctx.error()));
+        } else if constexpr (std::is_same_v<FieldType, int64_t> ||
+                             std::is_same_v<FieldType, long long>) {
+          if constexpr (enc == Encoding::Fixed) {
+            return static_cast<FieldType>(ctx.read_int64(ctx.error()));
+          } else if constexpr (enc == Encoding::Tagged) {
+            return static_cast<FieldType>(ctx.read_tagged_int64(ctx.error()));
+          }
+          return static_cast<FieldType>(ctx.read_varint64(ctx.error()));
         }
       }
       // No encoding override, use default type-based reading
@@ -1889,6 +2064,12 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
         ::fory::detail::has_field_config_v<T> &&
         (std::is_same_v<FieldType, std::optional<uint32_t>> ||
          std::is_same_v<FieldType, std::optional<uint64_t>>);
+    constexpr bool is_encoded_optional_int =
+        ::fory::detail::has_field_config_v<T> &&
+        (std::is_same_v<FieldType, std::optional<int32_t>> ||
+         std::is_same_v<FieldType, std::optional<int64_t>> ||
+         std::is_same_v<FieldType, std::optional<int>> ||
+         std::is_same_v<FieldType, std::optional<long long>>);
 
     if constexpr (is_encoded_optional_uint) {
       constexpr auto enc =
@@ -1944,6 +2125,56 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
                   << ", reader_index=" << ctx.buffer().reader_index()
                   << ", has_error=" << ctx.has_error() << std::endl;
 #endif
+      }
+      if constexpr (is_fory_field_v<RawFieldType>) {
+        (obj.*field_ptr).value = std::optional<InnerType>(value);
+      } else {
+        obj.*field_ptr = std::optional<InnerType>(value);
+      }
+    } else if constexpr (is_encoded_optional_int) {
+      constexpr auto enc =
+          ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+#ifdef ENABLE_FORY_DEBUG_OUTPUT
+      std::cerr << "[DEBUG] is_encoded_optional_int: Index=" << Index
+                << ", enc=" << static_cast<int>(enc)
+                << ", reader_index=" << ctx.buffer().reader_index()
+                << std::endl;
+#endif
+      int8_t flag = ctx.read_int8(ctx.error());
+#ifdef ENABLE_FORY_DEBUG_OUTPUT
+      std::cerr << "[DEBUG] After read flag: flag=" << static_cast<int>(flag)
+                << ", reader_index=" << ctx.buffer().reader_index()
+                << std::endl;
+#endif
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return;
+      }
+      if (flag == NULL_FLAG) {
+        if constexpr (is_fory_field_v<RawFieldType>) {
+          (obj.*field_ptr).value = std::nullopt;
+        } else {
+          obj.*field_ptr = std::nullopt;
+        }
+        return;
+      }
+      using InnerType = typename std::remove_reference_t<FieldType>::value_type;
+      InnerType value{};
+      if constexpr (std::is_same_v<InnerType, int32_t> ||
+                    std::is_same_v<InnerType, int>) {
+        if constexpr (enc == Encoding::Fixed) {
+          value = static_cast<InnerType>(ctx.read_int32(ctx.error()));
+        } else {
+          value = static_cast<InnerType>(ctx.read_varint32(ctx.error()));
+        }
+      } else if constexpr (std::is_same_v<InnerType, int64_t> ||
+                           std::is_same_v<InnerType, long long>) {
+        if constexpr (enc == Encoding::Fixed) {
+          value = static_cast<InnerType>(ctx.read_int64(ctx.error()));
+        } else if constexpr (enc == Encoding::Tagged) {
+          value = static_cast<InnerType>(ctx.read_tagged_int64(ctx.error()));
+        } else {
+          value = static_cast<InnerType>(ctx.read_varint64(ctx.error()));
+        }
       }
       if constexpr (is_fory_field_v<RawFieldType>) {
         (obj.*field_ptr).value = std::optional<InnerType>(value);
@@ -2163,12 +2394,18 @@ template <typename T> constexpr size_t fixed_primitive_size() {
                        std::is_same_v<T, uint16_t>) {
     return 2;
   } else if constexpr (std::is_same_v<T, uint32_t> ||
-                       std::is_same_v<T, float>) {
+                           std::is_same_v<T, int32_t> ||
+                           std::is_same_v<T, int> || std::is_same_v < T,
+                       float)) {
     return 4;
-  } else if constexpr (std::is_same_v<T, uint64_t> ||
-                       std::is_same_v<T, double>) {
+  }
+  else if constexpr (std::is_same_v<T, uint64_t> ||
+                         std::is_same_v<T, int64_t> ||
+                         std::is_same_v<T, long long> || std::is_same_v < T,
+                     double)) {
     return 8;
-  } else {
+  }
+  else {
     return 0; // Not a fixed-size primitive
   }
 }

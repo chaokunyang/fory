@@ -220,29 +220,27 @@ message Example {
 }
 ```
 
-### Fory Extension Options
+### Fory Options
 
-FDL supports protobuf-style extension options using the `(fory)` prefix:
+FDL uses plain option keys without a `(fory)` prefix:
 
 **File-level options:**
 
 ```fdl
-option (fory).use_record_for_java_message = true;
-option (fory).polymorphism = true;
+option use_record_for_java_message = true;
+option polymorphism = true;
 ```
 
 **Message/Enum options:**
 
 ```fdl
-message MyMessage {
-    option (fory).id = 100;
-    option (fory).evolving = false;
-    option (fory).use_record_for_java = true;
+message MyMessage [id=100] {
+    option evolving = false;
+    option use_record_for_java = true;
     string name = 1;
 }
 
-enum Status {
-    option (fory).id = 101;
+enum Status [id=101] {
     UNKNOWN = 0;
     ACTIVE = 1;
 }
@@ -252,13 +250,11 @@ enum Status {
 
 ```fdl
 message Example {
-    MyType friend = 1 [(fory).ref = true];
-    string nickname = 2 [(fory).nullable = true];
-    MyType data = 3 [(fory).ref = true, (fory).nullable = true];
+    MyType friend = 1 [ref=true];
+    string nickname = 2 [nullable=true];
+    MyType data = 3 [ref=true, nullable=true];
 }
 ```
-
-See `extension/fory_options.proto` for the complete list of available options.
 
 ## Architecture
 
@@ -267,10 +263,16 @@ fory_compiler/
 ├── __init__.py           # Package exports
 ├── __main__.py           # Module entry point
 ├── cli.py                # Command-line interface
-├── parser/
-│   ├── ast.py            # AST node definitions
-│   ├── lexer.py          # Hand-written tokenizer
-│   └── parser.py         # Recursive descent parser
+├── frontend/
+│   └── fdl/
+│       ├── __init__.py
+│       ├── lexer.py      # Hand-written tokenizer
+│       └── parser.py     # Recursive descent parser
+├── ir/
+│   ├── __init__.py
+│   ├── ast.py            # Canonical Fory IDL AST
+│   ├── validator.py      # Schema validation
+│   └── emitter.py        # Optional FDL emitter
 └── generators/
     ├── base.py           # Base generator class
     ├── java.py           # Java POJO generator
@@ -280,13 +282,13 @@ fory_compiler/
     └── cpp.py            # C++ struct generator
 ```
 
-### Parser
+### FDL Frontend
 
-The parser is a hand-written recursive descent parser that produces an AST:
+The FDL frontend is a hand-written lexer/parser that produces the Fory IDL AST:
 
-- **Lexer** (`lexer.py`): Tokenizes FDL source into tokens (keywords, identifiers, punctuation)
-- **AST** (`ast.py`): Defines node types - `Schema`, `Message`, `Enum`, `Field`, `FieldType`
-- **Parser** (`parser.py`): Builds AST from token stream with validation
+- **Lexer** (`frontend/fdl/lexer.py`): Tokenizes FDL source into tokens
+- **Parser** (`frontend/fdl/parser.py`): Builds the AST from the token stream
+- **AST** (`ir/ast.py`): Canonical node types - `Schema`, `Message`, `Enum`, `Field`, `FieldType`
 
 ### Generators
 

@@ -15,21 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Fory IDL compiler for Apache Fory."""
+"""Frontends for Fory IDL compilation."""
 
-__version__ = "0.1.0"
+from fory_compiler.frontend.base import BaseFrontend, FrontendError
 
-from fory_compiler.ir.ast import Schema, Message, Enum, Field, EnumValue, Import
-from fory_compiler.frontend.fdl import FDLFrontend
-from fory_compiler.frontend.proto import ProtoFrontend
-
-__all__ = [
-    "Schema",
-    "Message",
-    "Enum",
-    "Field",
-    "EnumValue",
-    "Import",
-    "FDLFrontend",
-    "ProtoFrontend",
-]
+__all__ = ["BaseFrontend", "FrontendError"]

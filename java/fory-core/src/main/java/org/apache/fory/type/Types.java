@@ -45,16 +45,16 @@ public class Types {
   /** int32: a 32-bit signed integer. */
   public static final int INT32 = 4;
 
-  /** var32: a 32-bit signed integer which uses fory var_int32 encoding. */
+  /** varint32: a 32-bit signed integer which uses fory var_int32 encoding. */
   public static final int VARINT32 = 5;
 
   /** int64: a 64-bit signed integer. */
   public static final int INT64 = 6;
 
-  /** var64: a 64-bit signed integer which uses fory PVL encoding. */
+  /** varint64: a 64-bit signed integer which uses fory PVL encoding. */
   public static final int VARINT64 = 7;
 
-  /** tagged_int64: a 64-bit signed integer which uses fory hybrid encoding. */
+  /** tagged_int64: a 64-bit signed integer which uses fory tagged encoding. */
   public static final int TAGGED_INT64 = 8;
 
   /** uint8: an 8-bit unsigned integer. */

@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from fory_compiler.parser.ast import Schema, FieldType
+from fory_compiler.ir.ast import Schema, FieldType
 
 
 @dataclass

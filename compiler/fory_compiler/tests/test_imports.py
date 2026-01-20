@@ -21,8 +21,8 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from fory_compiler.parser.lexer import Lexer, TokenType
-from fory_compiler.parser.parser import Parser
+from fory_compiler.frontend.fdl.lexer import Lexer, TokenType
+from fory_compiler.frontend.fdl.parser import Parser
 from fory_compiler.cli import resolve_imports, ImportError
 
 

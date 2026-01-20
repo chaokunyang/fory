@@ -766,58 +766,58 @@ impl<'a> Reader<'a> {
         }
 
         let b1 = self.value_at(self.cursor + 1)? as u64;
-        let mut var64 = (b0 & 0x7F) | ((b1 & 0x7F) << 7);
+        let mut result = (b0 & 0x7F) | ((b1 & 0x7F) << 7);
         if b1 < 0x80 {
             self.move_next(2);
-            return Ok(var64);
+            return Ok(result);
         }
 
         let b2 = self.value_at(self.cursor + 2)? as u64;
-        var64 |= (b2 & 0x7F) << 14;
+        result |= (b2 & 0x7F) << 14;
         if b2 < 0x80 {
             self.move_next(3);
-            return Ok(var64);
+            return Ok(result);
         }
 
         let b3 = self.value_at(self.cursor + 3)? as u64;
-        var64 |= (b3 & 0x7F) << 21;
+        result |= (b3 & 0x7F) << 21;
         if b3 < 0x80 {
             self.move_next(4);
-            return Ok(var64);
+            return Ok(result);
         }
 
         let b4 = self.value_at(self.cursor + 4)? as u64;
-        var64 |= (b4 & 0x7F) << 28;
+        result |= (b4 & 0x7F) << 28;
         if b4 < 0x80 {
             self.move_next(5);
-            return Ok(var64);
+            return Ok(result);
         }
 
         let b5 = self.value_at(self.cursor + 5)? as u64;
-        var64 |= (b5 & 0x7F) << 35;
+        result |= (b5 & 0x7F) << 35;
         if b5 < 0x80 {
             self.move_next(6);
-            return Ok(var64);
+            return Ok(result);
         }
 
         let b6 = self.value_at(self.cursor + 6)? as u64;
-        var64 |= (b6 & 0x7F) << 42;
+        result |= (b6 & 0x7F) << 42;
         if b6 < 0x80 {
             self.move_next(7);
-            return Ok(var64);
+            return Ok(result);
         }
 
         let b7 = self.value_at(self.cursor + 7)? as u64;
-        var64 |= (b7 & 0x7F) << 49;
+        result |= (b7 & 0x7F) << 49;
         if b7 < 0x80 {
             self.move_next(8);
-            return Ok(var64);
+            return Ok(result);
         }
 
         let b8 = self.value_at(self.cursor + 8)? as u64;
-        var64 |= (b8 & 0xFF) << 56;
+        result |= (b8 & 0xFF) << 56;
         self.move_next(9);
-        Ok(var64)
+        Ok(result)
     }
 
     // ============ TAGGED_UINT64 (TypeId = 15) ============

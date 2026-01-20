@@ -20,7 +20,7 @@
 from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
-from fory_compiler.parser.ast import (
+from fory_compiler.ir.ast import (
     Message,
     Enum,
     FieldType,
@@ -44,7 +44,18 @@ class CppGenerator(BaseGenerator):
         PrimitiveKind.INT8: "int8_t",
         PrimitiveKind.INT16: "int16_t",
         PrimitiveKind.INT32: "int32_t",
+        PrimitiveKind.VARINT32: "int32_t",
         PrimitiveKind.INT64: "int64_t",
+        PrimitiveKind.VARINT64: "int64_t",
+        PrimitiveKind.TAGGED_INT64: "int64_t",
+        PrimitiveKind.UINT8: "uint8_t",
+        PrimitiveKind.UINT16: "uint16_t",
+        PrimitiveKind.UINT32: "uint32_t",
+        PrimitiveKind.VAR_UINT32: "uint32_t",
+        PrimitiveKind.UINT64: "uint64_t",
+        PrimitiveKind.VAR_UINT64: "uint64_t",
+        PrimitiveKind.TAGGED_UINT64: "uint64_t",
+        PrimitiveKind.FLOAT16: "float",
         PrimitiveKind.FLOAT32: "float",
         PrimitiveKind.FLOAT64: "double",
         PrimitiveKind.STRING: "std::string",
@@ -85,6 +96,7 @@ class CppGenerator(BaseGenerator):
         includes: Set[str] = set()
         enum_macros: List[str] = []
         struct_macros: List[str] = []
+        field_config_macros: List[str] = []
 
         # Collect includes (including from nested types)
         includes.add("<cstdint>")
@@ -134,13 +146,22 @@ class CppGenerator(BaseGenerator):
         for message in self.schema.messages:
             lines.extend(
                 self.generate_message_definition(
-                    message, [], struct_macros, enum_macros, ""
+                    message,
+                    [],
+                    struct_macros,
+                    enum_macros,
+                    field_config_macros,
+                    "",
                 )
             )
             lines.append("")
 
         if struct_macros:
             lines.extend(struct_macros)
+            lines.append("")
+
+        if field_config_macros:
+            lines.extend(field_config_macros)
             lines.append("")
 
         # Close namespace for type definitions and FORY_STRUCT
@@ -228,6 +249,7 @@ class CppGenerator(BaseGenerator):
         parent_stack: List[Message],
         struct_macros: List[str],
         enum_macros: List[str],
+        field_config_macros: List[str],
         indent: str,
     ) -> List[str]:
         """Generate a C++ class definition with nested types."""
@@ -256,6 +278,7 @@ class CppGenerator(BaseGenerator):
                     lineage,
                     struct_macros,
                     enum_macros,
+                    field_config_macros,
                     body_indent,
                 )
             )
@@ -294,10 +317,66 @@ class CppGenerator(BaseGenerator):
         if message.fields:
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
             struct_macros.append(f"FORY_STRUCT({qualified_name}, {field_names});")
+            field_config_macros.append(
+                self.generate_field_config_macro(
+                    message, qualified_name, parent_stack
+                )
+            )
         else:
             struct_macros.append(f"FORY_STRUCT({qualified_name});")
 
         return lines
+
+    def generate_field_config_macro(
+        self,
+        message: Message,
+        qualified_name: str,
+        parent_stack: List[Message],
+    ) -> str:
+        """Generate FORY_FIELD_CONFIG macro for a message."""
+        entries = []
+        for field in message.fields:
+            field_name = self.to_snake_case(field.name)
+            meta = self.get_field_meta(field)
+            entries.append(f"({field_name}, {meta})")
+        joined = ", ".join(entries)
+        return f"FORY_FIELD_CONFIG({qualified_name}, {joined});"
+
+    def get_field_meta(self, field: Field) -> str:
+        """Build FieldMeta expression for a field."""
+        meta = f"fory::F({field.number})"
+        if field.optional:
+            meta += ".nullable()"
+        if field.ref or field.element_ref or field.options.get("tracking_ref") is True:
+            meta += ".ref()"
+        encoding = self.get_encoding_config(field.field_type)
+        if encoding:
+            meta += encoding
+        return meta
+
+    def get_encoding_config(self, field_type: FieldType) -> str:
+        """Return encoding config for primitive types."""
+        kind = None
+        if isinstance(field_type, PrimitiveType):
+            kind = field_type.kind
+        elif isinstance(field_type, ListType) and isinstance(
+            field_type.element_type, PrimitiveType
+        ):
+            kind = field_type.element_type.kind
+        if kind is None:
+            return ""
+        if kind in (
+            PrimitiveKind.INT32,
+            PrimitiveKind.INT64,
+            PrimitiveKind.UINT32,
+            PrimitiveKind.UINT64,
+        ):
+            return ".fixed()"
+        if kind in (PrimitiveKind.VAR_UINT32, PrimitiveKind.VAR_UINT64):
+            return ".varint()"
+        if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
+            return ".tagged()"
+        return ""
 
     def generate_type(
         self,

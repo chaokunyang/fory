@@ -19,9 +19,9 @@
 
 import pytest
 
-from fory_compiler.parser.lexer import Lexer
-from fory_compiler.parser.parser import Parser
-from fory_compiler.parser.ast import NamedType, ListType
+from fory_compiler.frontend.fdl.lexer import Lexer
+from fory_compiler.frontend.fdl.parser import Parser
+from fory_compiler.ir.ast import NamedType, ListType
 
 
 class TestNestedMessageParsing:

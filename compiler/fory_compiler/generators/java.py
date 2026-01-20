@@ -20,7 +20,7 @@
 from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
-from fory_compiler.parser.ast import (
+from fory_compiler.ir.ast import (
     Message,
     Enum,
     Field,
@@ -77,13 +77,26 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.INT8: "byte",
         PrimitiveKind.INT16: "short",
         PrimitiveKind.INT32: "int",
+        PrimitiveKind.VARINT32: "int",
         PrimitiveKind.INT64: "long",
+        PrimitiveKind.VARINT64: "long",
+        PrimitiveKind.TAGGED_INT64: "long",
+        PrimitiveKind.UINT8: "short",
+        PrimitiveKind.UINT16: "int",
+        PrimitiveKind.UINT32: "long",
+        PrimitiveKind.VAR_UINT32: "long",
+        PrimitiveKind.UINT64: "long",
+        PrimitiveKind.VAR_UINT64: "long",
+        PrimitiveKind.TAGGED_UINT64: "long",
+        PrimitiveKind.FLOAT16: "float",
         PrimitiveKind.FLOAT32: "float",
         PrimitiveKind.FLOAT64: "double",
         PrimitiveKind.STRING: "String",
         PrimitiveKind.BYTES: "byte[]",
         PrimitiveKind.DATE: "java.time.LocalDate",
         PrimitiveKind.TIMESTAMP: "java.time.Instant",
+        PrimitiveKind.DURATION: "java.time.Duration",
+        PrimitiveKind.DECIMAL: "java.math.BigDecimal",
     }
 
     # Boxed versions for nullable primitives
@@ -92,7 +105,18 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.INT8: "Byte",
         PrimitiveKind.INT16: "Short",
         PrimitiveKind.INT32: "Integer",
+        PrimitiveKind.VARINT32: "Integer",
         PrimitiveKind.INT64: "Long",
+        PrimitiveKind.VARINT64: "Long",
+        PrimitiveKind.TAGGED_INT64: "Long",
+        PrimitiveKind.UINT8: "Short",
+        PrimitiveKind.UINT16: "Integer",
+        PrimitiveKind.UINT32: "Long",
+        PrimitiveKind.VAR_UINT32: "Long",
+        PrimitiveKind.UINT64: "Long",
+        PrimitiveKind.VAR_UINT64: "Long",
+        PrimitiveKind.TAGGED_UINT64: "Long",
+        PrimitiveKind.FLOAT16: "Float",
         PrimitiveKind.FLOAT32: "Float",
         PrimitiveKind.FLOAT64: "Double",
     }
@@ -103,7 +127,18 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.INT8: "byte[]",
         PrimitiveKind.INT16: "short[]",
         PrimitiveKind.INT32: "int[]",
+        PrimitiveKind.VARINT32: "int[]",
         PrimitiveKind.INT64: "long[]",
+        PrimitiveKind.VARINT64: "long[]",
+        PrimitiveKind.TAGGED_INT64: "long[]",
+        PrimitiveKind.UINT8: "short[]",
+        PrimitiveKind.UINT16: "int[]",
+        PrimitiveKind.UINT32: "long[]",
+        PrimitiveKind.VAR_UINT32: "long[]",
+        PrimitiveKind.UINT64: "long[]",
+        PrimitiveKind.VAR_UINT64: "long[]",
+        PrimitiveKind.TAGGED_UINT64: "long[]",
+        PrimitiveKind.FLOAT16: "float[]",
         PrimitiveKind.FLOAT32: "float[]",
         PrimitiveKind.FLOAT64: "double[]",
     }
@@ -421,6 +456,10 @@ class JavaGenerator(BaseGenerator):
         if annotations:
             lines.append(f"@ForyField({', '.join(annotations)})")
 
+        int_annotation = self.get_integer_annotation(field.field_type)
+        if int_annotation:
+            lines.append(int_annotation)
+
         # Field type
         java_type = self.generate_type(
             field.field_type,
@@ -534,6 +573,58 @@ class JavaGenerator(BaseGenerator):
             field.element_optional,
             field.element_ref,
         )
+        self.collect_integer_imports(field.field_type, imports)
+
+    def collect_integer_imports(self, field_type: FieldType, imports: Set[str]) -> None:
+        """Collect imports for integer encoding annotations."""
+        if not isinstance(field_type, PrimitiveType):
+            return
+        kind = field_type.kind
+        if kind in (PrimitiveKind.INT32,):
+            imports.add("org.apache.fory.annotation.Int32Type")
+        if kind in (PrimitiveKind.INT64, PrimitiveKind.TAGGED_INT64):
+            imports.add("org.apache.fory.annotation.Int64Type")
+            imports.add("org.apache.fory.config.LongEncoding")
+        if kind in (PrimitiveKind.UINT8,):
+            imports.add("org.apache.fory.annotation.Uint8Type")
+        if kind in (PrimitiveKind.UINT16,):
+            imports.add("org.apache.fory.annotation.Uint16Type")
+        if kind in (PrimitiveKind.UINT32, PrimitiveKind.VAR_UINT32):
+            imports.add("org.apache.fory.annotation.Uint32Type")
+        if kind in (
+            PrimitiveKind.UINT64,
+            PrimitiveKind.VAR_UINT64,
+            PrimitiveKind.TAGGED_UINT64,
+        ):
+            imports.add("org.apache.fory.annotation.Uint64Type")
+            imports.add("org.apache.fory.config.LongEncoding")
+
+    def get_integer_annotation(self, field_type: FieldType) -> Optional[str]:
+        """Return integer encoding annotation for a field type."""
+        if not isinstance(field_type, PrimitiveType):
+            return None
+        kind = field_type.kind
+        if kind == PrimitiveKind.INT32:
+            return "@Int32Type(compress = false)"
+        if kind == PrimitiveKind.INT64:
+            return "@Int64Type(encoding = LongEncoding.FIXED)"
+        if kind == PrimitiveKind.TAGGED_INT64:
+            return "@Int64Type(encoding = LongEncoding.TAGGED)"
+        if kind == PrimitiveKind.UINT8:
+            return "@Uint8Type"
+        if kind == PrimitiveKind.UINT16:
+            return "@Uint16Type"
+        if kind == PrimitiveKind.UINT32:
+            return "@Uint32Type(compress = false)"
+        if kind == PrimitiveKind.VAR_UINT32:
+            return "@Uint32Type(compress = true)"
+        if kind == PrimitiveKind.UINT64:
+            return "@Uint64Type(encoding = LongEncoding.FIXED)"
+        if kind == PrimitiveKind.VAR_UINT64:
+            return "@Uint64Type(encoding = LongEncoding.VARINT)"
+        if kind == PrimitiveKind.TAGGED_UINT64:
+            return "@Uint64Type(encoding = LongEncoding.TAGGED)"
+        return None
 
     def has_array_field(self, message: Message) -> bool:
         """Check if message has any array fields (byte[] or primitive arrays)."""

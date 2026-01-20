@@ -20,7 +20,7 @@
 from typing import Dict, List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
-from fory_compiler.parser.ast import (
+from fory_compiler.ir.ast import (
     Message,
     Enum,
     Field,
@@ -72,7 +72,7 @@ class GoGenerator(BaseGenerator):
     def get_nested_type_style(self) -> str:
         """Get the nested type naming style for Go."""
         style = self.options.go_nested_type_style or self.schema.get_option(
-            "fory.go_nested_type_style"
+            "go_nested_type_style"
         )
         if style is None:
             return "underscore"
@@ -140,7 +140,18 @@ class GoGenerator(BaseGenerator):
         PrimitiveKind.INT8: "int8",
         PrimitiveKind.INT16: "int16",
         PrimitiveKind.INT32: "int32",
+        PrimitiveKind.VARINT32: "int32",
         PrimitiveKind.INT64: "int64",
+        PrimitiveKind.VARINT64: "int64",
+        PrimitiveKind.TAGGED_INT64: "int64",
+        PrimitiveKind.UINT8: "uint8",
+        PrimitiveKind.UINT16: "uint16",
+        PrimitiveKind.UINT32: "uint32",
+        PrimitiveKind.VAR_UINT32: "uint32",
+        PrimitiveKind.UINT64: "uint64",
+        PrimitiveKind.VAR_UINT64: "uint64",
+        PrimitiveKind.TAGGED_UINT64: "uint64",
+        PrimitiveKind.FLOAT16: "float32",
         PrimitiveKind.FLOAT32: "float32",
         PrimitiveKind.FLOAT64: "float64",
         PrimitiveKind.STRING: "string",
@@ -347,6 +358,10 @@ class GoGenerator(BaseGenerator):
         elif ref_tag is False:
             tags.append("ref=false")
 
+        encoding_tag = self.get_encoding_tag(field.field_type)
+        if encoding_tag:
+            tags.append(encoding_tag)
+
         if tags:
             tag_str = ",".join(tags)
             lines.append(f'{field_name} {go_type} `fory:"{tag_str}"`')
@@ -354,6 +369,22 @@ class GoGenerator(BaseGenerator):
             lines.append(f"{field_name} {go_type}")
 
         return lines
+
+    def get_encoding_tag(self, field_type: FieldType) -> Optional[str]:
+        """Return encoding tag for integer primitives."""
+        if not isinstance(field_type, PrimitiveType):
+            return None
+        kind = field_type.kind
+        if kind in (
+            PrimitiveKind.INT32,
+            PrimitiveKind.INT64,
+            PrimitiveKind.UINT32,
+            PrimitiveKind.UINT64,
+        ):
+            return "encoding=fixed"
+        if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
+            return "encoding=tagged"
+        return None
 
     def generate_type(
         self,

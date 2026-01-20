@@ -15,16 +15,18 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""CLI entry point for the FDL compiler."""
+"""CLI entry point for the Fory IDL compiler."""
 
 import argparse
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from fory_compiler.parser.lexer import Lexer, LexerError
-from fory_compiler.parser.parser import Parser, ParseError
-from fory_compiler.parser.ast import Schema
+from fory_compiler.frontend.base import FrontendError
+from fory_compiler.frontend.fdl import FDLFrontend
+from fory_compiler.frontend.proto import ProtoFrontend
+from fory_compiler.ir.ast import Schema
+from fory_compiler.ir.emitter import FDLEmitter
 from fory_compiler.generators.base import GeneratorOptions
 from fory_compiler.generators import GENERATORS
 
@@ -35,13 +37,19 @@ class ImportError(Exception):
     pass
 
 
-def parse_fdl_file(file_path: Path) -> Schema:
-    """Parse a single FDL file and return its schema."""
-    source = file_path.read_text()
-    lexer = Lexer(source, str(file_path))
-    tokens = lexer.tokenize()
-    parser = Parser(tokens)
-    return parser.parse()
+def get_frontend(file_path: Path):
+    """Select the correct frontend for a file."""
+    frontends = [FDLFrontend(), ProtoFrontend()]
+    for frontend in frontends:
+        if frontend.supports_file(file_path):
+            return frontend
+    raise ValueError(f"Unsupported file extension: {file_path.suffix}")
+
+
+def parse_idl_file(file_path: Path) -> Schema:
+    """Parse a single IDL file and return its schema."""
+    frontend = get_frontend(file_path)
+    return frontend.parse_file(file_path)
 
 
 def resolve_import_path(
@@ -117,7 +125,7 @@ def resolve_imports(
     visited.add(file_path)
 
     # Parse the file
-    schema = parse_fdl_file(file_path)
+    schema = parse_idl_file(file_path)
 
     # Process imports
     imported_enums = []
@@ -152,6 +160,9 @@ def resolve_imports(
         imports=schema.imports,
         enums=imported_enums + schema.enums,
         messages=imported_messages + schema.messages,
+        options=schema.options,
+        source_file=schema.source_file,
+        source_format=schema.source_format,
     )
 
     cache[file_path] = merged_schema
@@ -162,7 +173,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         prog="fory",
-        description="FDL (Fory Definition Language) compiler",
+        description="Fory IDL compiler",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -170,7 +181,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     # compile command
     compile_parser = subparsers.add_parser(
         "compile",
-        help="Compile FDL files to language-specific code",
+        help="Compile IDL files (.fdl, .proto) to language-specific code",
     )
 
     compile_parser.add_argument(
@@ -178,7 +189,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         nargs="+",
         type=Path,
         metavar="FILE",
-        help="FDL files to compile",
+        help="IDL files to compile",
     )
 
     compile_parser.add_argument(
@@ -264,6 +275,19 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Go nested type naming style: camelcase or underscore (default)",
     )
 
+    compile_parser.add_argument(
+        "--emit-fdl",
+        action="store_true",
+        help="Emit translated FDL (for non-FDL inputs) for debugging",
+    )
+
+    compile_parser.add_argument(
+        "--emit-fdl-path",
+        type=Path,
+        default=None,
+        help="Write translated FDL to this path (file or directory)",
+    )
+
     return parser.parse_args(args)
 
 
@@ -290,11 +314,13 @@ def compile_file(
     package_override: Optional[str] = None,
     import_paths: Optional[List[Path]] = None,
     go_nested_type_style: Optional[str] = None,
+    emit_fdl: bool = False,
+    emit_fdl_path: Optional[Path] = None,
 ) -> bool:
-    """Compile a single FDL file with import resolution.
+    """Compile a single IDL file with import resolution.
 
     Args:
-        file_path: Path to the FDL file
+        file_path: Path to the IDL file
         lang_output_dirs: Dictionary mapping language name to output directory
         package_override: Optional package name override
         import_paths: List of import search paths
@@ -307,7 +333,7 @@ def compile_file(
     except OSError as e:
         print(f"Error reading {file_path}: {e}", file=sys.stderr)
         return False
-    except (LexerError, ParseError) as e:
+    except (FrontendError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return False
     except ImportError as e:
@@ -317,6 +343,24 @@ def compile_file(
     # Print import info
     if schema.imports:
         print(f"  Resolved {len(schema.imports)} import(s)")
+
+    if emit_fdl:
+        emitter = FDLEmitter(schema)
+        fdl_content = emitter.emit()
+        if emit_fdl_path:
+            target = emit_fdl_path
+            if target.exists() and target.is_dir():
+                target = target / f"{file_path.stem}.fdl"
+            elif str(target).endswith("/") or str(target).endswith("\\"):
+                target.mkdir(parents=True, exist_ok=True)
+                target = target / f"{file_path.stem}.fdl"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(fdl_content)
+            print(f"  Emitted FDL: {target}")
+        else:
+            print("=== Translated FDL ===")
+            print(fdl_content.rstrip())
+            print("======================")
 
     # Validate merged schema
     errors = schema.validate()
@@ -417,6 +461,8 @@ def cmd_compile(args: argparse.Namespace) -> int:
             args.package,
             import_paths,
             args.go_nested_type_style,
+            args.emit_fdl,
+            args.emit_fdl_path,
         ):
             success = False
 

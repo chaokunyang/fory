@@ -116,7 +116,10 @@ class GoGenerator(BaseGenerator):
             add_name(self.get_type_name(message.name, parents), qualified)
             for nested_enum in message.nested_enums:
                 enum_qualified = f"{qualified}.{nested_enum.name}"
-                add_name(self.get_type_name(nested_enum.name, parents + [message]), enum_qualified)
+                add_name(
+                    self.get_type_name(nested_enum.name, parents + [message]),
+                    enum_qualified,
+                )
             for nested_msg in message.nested_messages:
                 visit_message(nested_msg, parents + [message])
 
@@ -126,7 +129,8 @@ class GoGenerator(BaseGenerator):
         duplicates = {name: types for name, types in name_map.items() if len(types) > 1}
         if duplicates:
             details = ", ".join(
-                f"{name}: {', '.join(types)}" for name, types in sorted(duplicates.items())
+                f"{name}: {', '.join(types)}"
+                for name, types in sorted(duplicates.items())
             )
             raise ValueError(f"Go type name collision detected: {details}")
 
@@ -500,7 +504,9 @@ class GoGenerator(BaseGenerator):
 
         # Register nested enums first
         for nested_enum in message.nested_enums:
-            self.generate_enum_registration(lines, nested_enum, (parent_stack or []) + [message])
+            self.generate_enum_registration(
+                lines, nested_enum, (parent_stack or []) + [message]
+            )
 
         # Register nested messages recursively
         for nested_msg in message.nested_messages:

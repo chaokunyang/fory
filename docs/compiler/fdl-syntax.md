@@ -659,10 +659,10 @@ message OtherMessage {
 | Java     | Static inner classes (`SearchResponse.Result`)                                    |
 | Python   | Nested classes within dataclass                                                   |
 | Go       | Flat structs with underscore (`SearchResponse_Result`, configurable to camelcase) |
-| Rust     | Nested modules (`search_response::Result`) with alias exports                     |
+| Rust     | Nested modules (`search_response::Result`)                                        |
 | C++      | Nested classes (`SearchResponse::Result`)                                         |
 
-**Note:** Go defaults to underscore-separated nested names; set `option (fory).go_nested_type_style = "camelcase";` to use concatenated names. Rust emits nested modules and `pub use` aliases for flattened names.
+**Note:** Go defaults to underscore-separated nested names; set `option (fory).go_nested_type_style = "camelcase";` to use concatenated names. Rust emits nested modules for nested types.
 
 ### Nested Type Rules
 

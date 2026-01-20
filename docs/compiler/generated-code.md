@@ -135,7 +135,7 @@ type SearchResponse struct {
 
 **Note:** Set `option (fory).go_nested_type_style = "camelcase";` to generate `SearchResponseResult` instead.
 
-### Rust - Nested Module with Aliases
+### Rust - Nested Module
 
 ```rust
 pub mod search_response {
@@ -148,11 +148,9 @@ pub mod search_response {
     }
 }
 
-pub use self::search_response::Result as SearchResponse_Result;
-
 #[derive(ForyObject)]
 pub struct SearchResponse {
-    pub results: Vec<SearchResponse_Result>,
+    pub results: Vec<search_response::Result>,
 }
 ```
 
@@ -176,13 +174,13 @@ FORY_STRUCT(SearchResponse, results);
 
 **Summary:**
 
-| Language | Approach                       | Syntax Example                                            |
-| -------- | ------------------------------ | --------------------------------------------------------- |
-| Java     | Static inner classes           | `SearchResponse.Result`                                   |
-| Python   | Nested dataclasses             | `SearchResponse.Result`                                   |
-| Go       | Underscore (configurable)      | `SearchResponse_Result`                                   |
-| Rust     | Nested module + alias reexport | `search_response::Result` (alias `SearchResponse_Result`) |
-| C++      | Nested classes                 | `SearchResponse::Result`                                  |
+| Language | Approach                  | Syntax Example            |
+| -------- | ------------------------- | ------------------------- |
+| Java     | Static inner classes      | `SearchResponse.Result`   |
+| Python   | Nested dataclasses        | `SearchResponse.Result`   |
+| Go       | Underscore (configurable) | `SearchResponse_Result`   |
+| Rust     | Nested module             | `search_response::Result` |
+| C++      | Nested classes            | `SearchResponse::Result`  |
 
 ## Java
 

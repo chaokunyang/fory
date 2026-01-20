@@ -260,7 +260,8 @@ class PythonGenerator(BaseGenerator):
         if not isinstance(field_type.element_type, PrimitiveType):
             return False
         return (
-            field_type.element_type.kind in self.NUMPY_DTYPE_MAP and not element_optional
+            field_type.element_type.kind in self.NUMPY_DTYPE_MAP
+            and not element_optional
         )
 
     def get_default_factory(self, field: Field) -> Optional[str]:

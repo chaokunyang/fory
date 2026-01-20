@@ -127,9 +127,7 @@ class CppGenerator(BaseGenerator):
         # Generate enums (top-level)
         for enum in self.schema.enums:
             lines.extend(self.generate_enum_definition(enum))
-            enum_macros.append(
-                self.generate_enum_macro(enum, [], namespace_prefix)
-            )
+            enum_macros.append(self.generate_enum_macro(enum, [], namespace_prefix))
             lines.append("")
 
         # Generate messages (with nested enums/messages defined inside classes)
@@ -246,7 +244,9 @@ class CppGenerator(BaseGenerator):
             lines.extend(self.generate_enum_definition(nested_enum, body_indent))
             lines.append("")
             enum_macros.append(
-                self.generate_enum_macro(nested_enum, lineage, self.get_namespace_prefix())
+                self.generate_enum_macro(
+                    nested_enum, lineage, self.get_namespace_prefix()
+                )
             )
 
         for nested_msg in message.nested_messages:
@@ -275,7 +275,9 @@ class CppGenerator(BaseGenerator):
 
         lines.append("")
 
-        lines.append(f"{body_indent}bool operator==(const {class_name}& other) const {{")
+        lines.append(
+            f"{body_indent}bool operator==(const {class_name}& other) const {{"
+        )
         if message.fields:
             conditions = []
             for field in message.fields:
@@ -460,9 +462,7 @@ class CppGenerator(BaseGenerator):
             lines.append(f"    fory.register_enum<{code_name}>({enum.type_id});")
         else:
             ns = self.package or "default"
-            lines.append(
-                f'    fory.register_enum<{code_name}>("{ns}", "{type_name}");'
-            )
+            lines.append(f'    fory.register_enum<{code_name}>("{ns}", "{type_name}");')
 
     def generate_message_registration(
         self, lines: List[str], message: Message, parent_stack: List[Message]
@@ -473,7 +473,9 @@ class CppGenerator(BaseGenerator):
 
         # Register nested enums first
         for nested_enum in message.nested_enums:
-            self.generate_enum_registration(lines, nested_enum, parent_stack + [message])
+            self.generate_enum_registration(
+                lines, nested_enum, parent_stack + [message]
+            )
 
         # Register nested messages recursively
         for nested_msg in message.nested_messages:

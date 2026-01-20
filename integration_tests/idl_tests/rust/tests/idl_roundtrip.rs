@@ -20,17 +20,19 @@ use std::{env, fs};
 
 use fory::Fory;
 use idl_tests::addressbook::{
-    self, AddressBook, Person, Person_PhoneNumber, Person_PhoneType,
+    self,
+    person::{PhoneNumber, PhoneType},
+    AddressBook, Person,
 };
 
 fn build_address_book() -> AddressBook {
-    let mobile = Person_PhoneNumber {
+    let mobile = PhoneNumber {
         number: "555-0100".to_string(),
-        phone_type: Person_PhoneType::Mobile,
+        phone_type: PhoneType::Mobile,
     };
-    let work = Person_PhoneNumber {
+    let work = PhoneNumber {
         number: "555-0111".to_string(),
-        phone_type: Person_PhoneType::Work,
+        phone_type: PhoneType::Work,
     };
 
     let person = Person {

@@ -101,14 +101,6 @@ class RustGenerator(BaseGenerator):
                 lines.extend(module_lines)
                 lines.append("")
 
-        # Generate aliases for nested types
-        alias_lines: List[str] = []
-        for message in self.schema.messages:
-            alias_lines.extend(self.collect_nested_aliases(message))
-        if alias_lines:
-            lines.extend(alias_lines)
-            lines.append("")
-
         # Generate messages (top-level only)
         for message in self.schema.messages:
             lines.extend(self.generate_message(message))
@@ -130,15 +122,6 @@ class RustGenerator(BaseGenerator):
         for nested_msg in message.nested_messages:
             self.collect_message_uses(nested_msg, uses)
 
-    def get_flattened_type_name(
-        self, name: str, parent_stack: Optional[List[Message]] = None
-    ) -> str:
-        """Build underscore-flattened type name for nested types."""
-        parts = [parent.name for parent in parent_stack or []] + [name]
-        if len(parts) == 1:
-            return parts[0]
-        return "_".join(parts)
-
     def get_registration_type_name(
         self, name: str, parent_stack: Optional[List[Message]] = None
     ) -> str:
@@ -154,6 +137,34 @@ class RustGenerator(BaseGenerator):
             return ""
         return "::".join(self.to_snake_case(parent.name) for parent in parent_stack)
 
+    def get_type_path(self, name: str, parent_stack: Optional[List[Message]]) -> str:
+        """Build a type path for nested types from the root module."""
+        module_path = self.get_module_path(parent_stack)
+        if module_path:
+            return f"{module_path}::{name}"
+        return name
+
+    def build_relative_type_name(
+        self,
+        current_parents: List[str],
+        target_parents: List[str],
+        type_name: str,
+    ) -> str:
+        """Build a type path relative to the current module."""
+        current_parts = [self.to_snake_case(name) for name in current_parents]
+        target_parts = [self.to_snake_case(name) for name in target_parents]
+        common = 0
+        for left, right in zip(current_parts, target_parts):
+            if left != right:
+                break
+            common += 1
+        up = len(current_parts) - common
+        down = target_parts[common:]
+        parts = ["super"] * up + down
+        if parts:
+            return "::".join(parts + [type_name])
+        return type_name
+
     def indent_lines(self, lines: List[str], level: int) -> List[str]:
         """Indent a list of lines by the given level."""
         prefix = self.indent_str * level
@@ -168,7 +179,6 @@ class RustGenerator(BaseGenerator):
         lines = []
 
         type_name = enum.name
-        flat_name = self.get_flattened_type_name(enum.name, parent_stack)
         reg_name = self.get_registration_type_name(enum.name, parent_stack)
 
         # Derive macros
@@ -201,7 +211,6 @@ class RustGenerator(BaseGenerator):
         lines = []
 
         type_name = message.name
-        flat_name = self.get_flattened_type_name(message.name, parent_stack)
         reg_name = self.get_registration_type_name(message.name, parent_stack)
 
         # Derive macros
@@ -265,27 +274,6 @@ class RustGenerator(BaseGenerator):
         if lines[-1] == "":
             lines.pop()
         lines.append(f"{ind}}}")
-        return lines
-
-    def collect_nested_aliases(
-        self,
-        message: Message,
-        parent_stack: Optional[List[Message]] = None,
-    ) -> List[str]:
-        """Collect pub use aliases for nested types."""
-        lines: List[str] = []
-        lineage = (parent_stack or []) + [message]
-        module_path = self.get_module_path(lineage)
-
-        for nested_enum in message.nested_enums:
-            alias = self.get_flattened_type_name(nested_enum.name, lineage)
-            lines.append(f"pub use self::{module_path}::{nested_enum.name} as {alias};")
-
-        for nested_msg in message.nested_messages:
-            alias = self.get_flattened_type_name(nested_msg.name, lineage)
-            lines.append(f"pub use self::{module_path}::{nested_msg.name} as {alias};")
-            lines.extend(self.collect_nested_aliases(nested_msg, lineage))
-
         return lines
 
     def generate_field(
@@ -385,17 +373,24 @@ class RustGenerator(BaseGenerator):
         type_name: str,
         parent_stack: Optional[List[Message]] = None,
     ) -> str:
-        """Resolve nested type names to flattened Rust identifiers."""
+        """Resolve nested type names to module-qualified Rust identifiers."""
+        current_parents = [msg.name for msg in (parent_stack or [])[:-1]]
         if "." in type_name:
-            return type_name.replace(".", "_")
+            parts = type_name.split(".")
+            target_parents = parts[:-1]
+            base_name = parts[-1]
+            return self.build_relative_type_name(
+                current_parents, target_parents, base_name
+            )
         if not parent_stack:
             return type_name
 
         for i in range(len(parent_stack) - 1, -1, -1):
             message = parent_stack[i]
             if message.get_nested_type(type_name) is not None:
-                return self.get_flattened_type_name(
-                    type_name, parent_stack[: i + 1]
+                target_parents = [msg.name for msg in parent_stack[: i + 1]]
+                return self.build_relative_type_name(
+                    current_parents, target_parents, type_name
                 )
 
         return type_name
@@ -462,7 +457,7 @@ class RustGenerator(BaseGenerator):
         parent_stack: Optional[List[Message]],
     ):
         """Generate registration code for an enum."""
-        type_name = self.get_flattened_type_name(enum.name, parent_stack)
+        type_name = self.get_type_path(enum.name, parent_stack)
         reg_name = self.get_registration_type_name(enum.name, parent_stack)
 
         if enum.type_id is not None:
@@ -480,7 +475,7 @@ class RustGenerator(BaseGenerator):
         parent_stack: Optional[List[Message]],
     ):
         """Generate registration code for a message and its nested types."""
-        type_name = self.get_flattened_type_name(message.name, parent_stack)
+        type_name = self.get_type_path(message.name, parent_stack)
         reg_name = self.get_registration_type_name(message.name, parent_stack)
 
         # Register nested enums first

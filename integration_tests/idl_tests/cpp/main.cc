@@ -101,7 +101,7 @@ fory::Result<void, fory::Error> RunRoundTrip() {
       return fory::Unexpected(fory::Error::invalid("peer payload mismatch"));
     }
     FORY_TRY(peer_bytes, fory.serialize(peer_book));
-    FORY_TRY(ignore, WriteFile(data_file, peer_bytes));
+    FORY_RETURN_IF_ERROR(WriteFile(data_file, peer_bytes));
   }
 
   return fory::Result<void, fory::Error>();

@@ -43,9 +43,10 @@ class ParseError(Exception):
 class Parser:
     """Recursive descent parser for proto3."""
 
-    def __init__(self, tokens: List[Token]):
+    def __init__(self, tokens: List[Token], filename: str = "<input>"):
         self.tokens = tokens
         self.pos = 0
+        self.filename = filename
 
     def at_end(self) -> bool:
         return self.current().type == TokenType.EOF
@@ -129,6 +130,7 @@ class Parser:
             enums=enums,
             messages=messages,
             options=options,
+            source_file=self.filename,
         )
 
     def parse_syntax(self) -> str:

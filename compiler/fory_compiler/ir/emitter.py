@@ -30,8 +30,8 @@ from fory_compiler.ir.ast import (
     NamedType,
     ListType,
     MapType,
-    PrimitiveKind,
 )
+from fory_compiler.ir.types import PrimitiveKind
 
 
 class FDLEmitter:
@@ -115,8 +115,13 @@ class FDLEmitter:
             parts.append("optional")
         if field.ref:
             parts.append("ref")
-        if isinstance(field.field_type, ListType):
+        is_list = isinstance(field.field_type, ListType)
+        if is_list:
             parts.append("repeated")
+            if field.element_optional:
+                parts.append("optional")
+            if field.element_ref:
+                parts.append("ref")
         parts.append(self._emit_type(field.field_type))
         parts.append(field.name)
         parts.append("=")

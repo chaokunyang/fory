@@ -25,11 +25,11 @@ from fory_compiler.ir.ast import (
     Enum,
     FieldType,
     PrimitiveType,
-    PrimitiveKind,
     NamedType,
     ListType,
     MapType,
 )
+from fory_compiler.ir.types import PrimitiveKind
 
 
 class CppGenerator(BaseGenerator):

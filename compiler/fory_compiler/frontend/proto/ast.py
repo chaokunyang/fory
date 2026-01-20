@@ -101,3 +101,4 @@ class ProtoSchema:
     enums: List[ProtoEnum] = field(default_factory=list)
     messages: List[ProtoMessage] = field(default_factory=list)
     options: Dict[str, object] = field(default_factory=dict)
+    source_file: Optional[str] = None

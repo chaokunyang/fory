@@ -32,12 +32,10 @@ class FDLFrontend(BaseFrontend):
         try:
             lexer = Lexer(source, filename)
             tokens = lexer.tokenize()
-            parser = Parser(tokens)
+            parser = Parser(tokens, filename)
             schema = parser.parse()
         except (LexerError, ParseError) as exc:
             raise FrontendError(exc.message, filename, exc.line, exc.column) from exc
-        schema.source_file = filename
-        schema.source_format = "fdl"
         return schema
 
 

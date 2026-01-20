@@ -19,7 +19,6 @@
 
 from fory_compiler.ir.ast import (  # noqa: F401
     SourceLocation,
-    PrimitiveKind,
     PrimitiveType,
     NamedType,
     ListType,
@@ -31,11 +30,13 @@ from fory_compiler.ir.ast import (  # noqa: F401
     Import,
     Schema,
 )
-from fory_compiler.ir.validator import validate_schema  # noqa: F401
+from fory_compiler.ir.types import PrimitiveKind, PRIMITIVE_TYPES  # noqa: F401
+from fory_compiler.ir.validator import validate_schema, SchemaValidator  # noqa: F401
 
 __all__ = [
     "SourceLocation",
     "PrimitiveKind",
+    "PRIMITIVE_TYPES",
     "PrimitiveType",
     "NamedType",
     "ListType",
@@ -47,4 +48,5 @@ __all__ = [
     "Import",
     "Schema",
     "validate_schema",
+    "SchemaValidator",
 ]

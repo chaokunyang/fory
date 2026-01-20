@@ -25,6 +25,7 @@ from fory_compiler.frontend.fdl.parser import Parser
 from fory_compiler.generators.java import JavaGenerator
 from fory_compiler.generators.go import GoGenerator
 from fory_compiler.generators.base import GeneratorOptions
+from fory_compiler.ir.validator import SchemaValidator
 
 
 class TestDottedPackageName:
@@ -255,9 +256,10 @@ class TestQualifiedTypeNames:
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
-        errors = schema.validate()
+        validator = SchemaValidator(schema)
+        is_valid = validator.validate()
 
-        assert len(errors) == 0
+        assert is_valid
         request = schema.messages[1]
         assert request.fields[0].field_type.name == "SearchResponse.Result"
 

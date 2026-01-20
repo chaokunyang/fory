@@ -37,8 +37,9 @@ from fory_compiler.ir.ast import (
     NamedType,
     ListType,
     MapType,
-    PrimitiveKind,
+    SourceLocation,
 )
+from fory_compiler.ir.types import PrimitiveKind
 
 
 class ProtoTranslator:
@@ -71,6 +72,14 @@ class ProtoTranslator:
         self.proto_schema = proto_schema
         self.warnings: List[str] = []
 
+    def _location(self, line: int, column: int) -> SourceLocation:
+        return SourceLocation(
+            file=self.proto_schema.source_file or "<input>",
+            line=line,
+            column=column,
+            source_format="proto",
+        )
+
     def translate(self) -> Schema:
         return Schema(
             package=self.proto_schema.package,
@@ -78,6 +87,7 @@ class ProtoTranslator:
             enums=[self._translate_enum(e) for e in self.proto_schema.enums],
             messages=[self._translate_message(m) for m in self.proto_schema.messages],
             options=self._translate_file_options(self.proto_schema.options),
+            source_file=self.proto_schema.source_file,
             source_format="proto",
         )
 
@@ -101,6 +111,7 @@ class ProtoTranslator:
                 value=v.value,
                 line=v.line,
                 column=v.column,
+                location=self._location(v.line, v.column),
             )
             for v in proto_enum.values
         ]
@@ -111,6 +122,7 @@ class ProtoTranslator:
             options=options,
             line=proto_enum.line,
             column=proto_enum.column,
+            location=self._location(proto_enum.line, proto_enum.column),
         )
 
     def _translate_message(self, proto_msg: ProtoMessage) -> Message:
@@ -130,12 +142,15 @@ class ProtoTranslator:
             options=options,
             line=proto_msg.line,
             column=proto_msg.column,
+            location=self._location(proto_msg.line, proto_msg.column),
         )
 
     def _translate_field(self, proto_field: ProtoField) -> Field:
         field_type = self._translate_field_type(proto_field.field_type)
         if proto_field.label == "repeated":
-            field_type = ListType(field_type)
+            field_type = ListType(
+                field_type, location=self._location(proto_field.line, proto_field.column)
+            )
 
         ref, nullable, options = self._translate_field_options(proto_field.options)
         optional = proto_field.label == "optional" or nullable
@@ -149,22 +164,35 @@ class ProtoTranslator:
             options=options,
             line=proto_field.line,
             column=proto_field.column,
+            location=self._location(proto_field.line, proto_field.column),
         )
 
     def _translate_field_type(self, proto_type: ProtoType):
         if proto_type.is_map:
             key_type = self._translate_type_name(proto_type.map_key_type or "")
             value_type = self._translate_type_name(proto_type.map_value_type or "")
-            return MapType(key_type, value_type)
-        return self._translate_type_name(proto_type.name)
+            return MapType(
+                key_type,
+                value_type,
+                location=self._location(proto_type.line, proto_type.column),
+            )
+        return self._translate_type_name(
+            proto_type.name, proto_type.line, proto_type.column
+        )
 
-    def _translate_type_name(self, type_name: str):
+    def _translate_type_name(self, type_name: str, line: int = 0, column: int = 0):
         cleaned = type_name.lstrip(".")
         if cleaned in self.WELL_KNOWN_TYPES:
-            return PrimitiveType(self.WELL_KNOWN_TYPES[cleaned])
+            return PrimitiveType(
+                self.WELL_KNOWN_TYPES[cleaned],
+                location=self._location(line, column),
+            )
         if cleaned in self.TYPE_MAPPING:
-            return PrimitiveType(self.TYPE_MAPPING[cleaned])
-        return NamedType(cleaned)
+            return PrimitiveType(
+                self.TYPE_MAPPING[cleaned],
+                location=self._location(line, column),
+            )
+        return NamedType(cleaned, location=self._location(line, column))
 
     def _translate_type_options(self, options: Dict[str, object]) -> Tuple[Optional[int], Dict[str, object]]:
         type_id = None

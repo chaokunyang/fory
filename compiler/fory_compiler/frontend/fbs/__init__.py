@@ -15,38 +15,19 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Proto frontend."""
-
-import sys
+"""FlatBuffers frontend (placeholder)."""
 
 from fory_compiler.frontend.base import BaseFrontend, FrontendError
-from fory_compiler.frontend.proto.lexer import Lexer, LexerError
-from fory_compiler.frontend.proto.parser import Parser, ParseError
-from fory_compiler.frontend.proto.translator import ProtoTranslator
 from fory_compiler.ir.ast import Schema
 
 
-class ProtoFrontend(BaseFrontend):
-    """Frontend for Protocol Buffers (.proto)."""
+class FBSFrontend(BaseFrontend):
+    """Frontend for FlatBuffers (.fbs)."""
 
-    extensions = [".proto"]
+    extensions = [".fbs"]
 
     def parse(self, source: str, filename: str = "<input>") -> Schema:
-        try:
-            lexer = Lexer(source, filename)
-            tokens = lexer.tokenize()
-            parser = Parser(tokens, filename)
-            proto_schema = parser.parse()
-        except (LexerError, ParseError) as exc:
-            raise FrontendError(exc.message, filename, exc.line, exc.column) from exc
-
-        translator = ProtoTranslator(proto_schema)
-        schema = translator.translate()
-
-        for warning in translator.warnings:
-            print(warning, file=sys.stderr)
-
-        return schema
+        raise FrontendError("FlatBuffers frontend is not implemented yet", filename, 1, 1)
 
 
-__all__ = ["ProtoFrontend", "Lexer", "Parser", "LexerError", "ParseError"]
+__all__ = ["FBSFrontend"]

@@ -24,9 +24,11 @@ from typing import Dict, List, Optional, Set
 
 from fory_compiler.frontend.base import FrontendError
 from fory_compiler.frontend.fdl import FDLFrontend
+from fory_compiler.frontend.fbs import FBSFrontend
 from fory_compiler.frontend.proto import ProtoFrontend
 from fory_compiler.ir.ast import Schema
 from fory_compiler.ir.emitter import FDLEmitter
+from fory_compiler.ir.validator import SchemaValidator
 from fory_compiler.generators.base import GeneratorOptions
 from fory_compiler.generators import GENERATORS
 
@@ -39,7 +41,7 @@ class ImportError(Exception):
 
 def get_frontend(file_path: Path):
     """Select the correct frontend for a file."""
-    frontends = [FDLFrontend(), ProtoFrontend()]
+    frontends = [FDLFrontend(), ProtoFrontend(), FBSFrontend()]
     for frontend in frontends:
         if frontend.supports_file(file_path):
             return frontend
@@ -139,9 +141,11 @@ def resolve_imports(
             # Build helpful error message with search locations
             searched = [str(file_path.parent)]
             searched.extend(str(p) for p in import_paths)
+            line = imp.location.line if imp.location else imp.line
+            column = imp.location.column if imp.location else imp.column
             raise ImportError(
                 f"Import not found: {imp.path}\n"
-                f"  at line {imp.line}, column {imp.column}\n"
+                f"  at line {line}, column {column}\n"
                 f"  Searched in: {', '.join(searched)}"
             )
 
@@ -363,11 +367,13 @@ def compile_file(
             print("======================")
 
     # Validate merged schema
-    errors = schema.validate()
-    if errors:
-        for error in errors:
+    validator = SchemaValidator(schema)
+    if not validator.validate():
+        for error in validator.errors:
             print(f"Error: {error}", file=sys.stderr)
         return False
+    for warning in validator.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
 
     # Generate code for each language
     for lang, lang_output in lang_output_dirs.items():

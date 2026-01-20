@@ -26,11 +26,11 @@ from fory_compiler.ir.ast import (
     Field,
     FieldType,
     PrimitiveType,
-    PrimitiveKind,
     NamedType,
     ListType,
     MapType,
 )
+from fory_compiler.ir.types import PrimitiveKind
 
 
 class RustGenerator(BaseGenerator):

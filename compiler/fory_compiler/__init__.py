@@ -21,6 +21,7 @@ __version__ = "0.1.0"
 
 from fory_compiler.ir.ast import Schema, Message, Enum, Field, EnumValue, Import
 from fory_compiler.frontend.fdl import FDLFrontend
+from fory_compiler.frontend.fbs import FBSFrontend
 from fory_compiler.frontend.proto import ProtoFrontend
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "EnumValue",
     "Import",
     "FDLFrontend",
+    "FBSFrontend",
     "ProtoFrontend",
 ]

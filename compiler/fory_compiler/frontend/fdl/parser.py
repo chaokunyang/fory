@@ -32,8 +32,9 @@ from fory_compiler.ir.ast import (
     NamedType,
     ListType,
     MapType,
-    PRIMITIVE_TYPES,
+    SourceLocation,
 )
+from fory_compiler.ir.types import PRIMITIVE_TYPES
 from fory_compiler.frontend.fdl.lexer import Lexer, Token, TokenType
 
 # Known file-level options
@@ -95,16 +96,18 @@ class ParseError(Exception):
 class Parser:
     """Recursive descent parser for FDL."""
 
-    def __init__(self, tokens: List[Token]):
+    def __init__(self, tokens: List[Token], filename: str = "<input>"):
         self.tokens = tokens
         self.pos = 0
+        self.filename = filename
+        self.source_format = "fdl"
 
     @classmethod
     def from_source(cls, source: str, filename: str = "<input>") -> "Parser":
         """Create a parser from source code."""
         lexer = Lexer(source, filename)
         tokens = lexer.tokenize()
-        return cls(tokens)
+        return cls(tokens, filename)
 
     def at_end(self) -> bool:
         """Check if we've reached the end of tokens."""
@@ -186,7 +189,24 @@ class Parser:
             else:
                 raise self.error(f"Unexpected token: {self.current().value}")
 
-        return Schema(package, imports, enums, messages, options)
+        return Schema(
+            package=package,
+            imports=imports,
+            enums=enums,
+            messages=messages,
+            options=options,
+            source_file=self.filename,
+            source_format=self.source_format,
+        )
+
+    def make_location(self, token: Token) -> SourceLocation:
+        """Create a source location from a token."""
+        return SourceLocation(
+            file=self.filename,
+            line=token.line,
+            column=token.column,
+            source_format=self.source_format,
+        )
 
     def parse_package(self) -> str:
         """Parse a package declaration: package foo.bar;"""
@@ -274,6 +294,7 @@ class Parser:
             path=path_token.value,
             line=start.line,
             column=start.column,
+            location=self.make_location(start),
         )
 
     def parse_enum(self) -> Enum:
@@ -318,6 +339,7 @@ class Parser:
             options=all_options,
             line=start.line,
             column=start.column,
+            location=self.make_location(start),
         )
 
     def parse_reserved(self):
@@ -375,6 +397,7 @@ class Parser:
             value=value,
             line=start.line,
             column=start.column,
+            location=self.make_location(start),
         )
 
     def parse_message(self) -> Message:
@@ -434,6 +457,7 @@ class Parser:
             options=all_options,
             line=start.line,
             column=start.column,
+            location=self.make_location(start),
         )
 
     def parse_field(self) -> Field:
@@ -477,7 +501,7 @@ class Parser:
 
         # Wrap in ListType if repeated
         if repeated:
-            field_type = ListType(field_type)
+            field_type = ListType(field_type, location=self.make_location(start))
 
         # Parse field name
         name = self.consume(TokenType.IDENT, "Expected field name").value
@@ -514,6 +538,7 @@ class Parser:
             options=field_options,
             line=start.line,
             column=start.column,
+            location=self.make_location(start),
         )
 
     def parse_field_options(self, field_name: str) -> dict:
@@ -631,11 +656,13 @@ class Parser:
         if not self.check(TokenType.IDENT):
             raise self.error(f"Expected type name, got {self.current().type.name}")
 
-        type_name = self.consume(TokenType.IDENT).value
+        type_token = self.consume(TokenType.IDENT)
+        type_name = type_token.value
+        type_location = self.make_location(type_token)
 
         # Check if it's a primitive type
         if type_name in PRIMITIVE_TYPES:
-            return PrimitiveType(PRIMITIVE_TYPES[type_name])
+            return PrimitiveType(PRIMITIVE_TYPES[type_name], location=type_location)
 
         # Check for qualified name (e.g., Parent.Child or Outer.Middle.Inner)
         while self.check(TokenType.DOT):
@@ -645,11 +672,11 @@ class Parser:
             type_name += "." + self.consume(TokenType.IDENT).value
 
         # It's a named type (reference to message or enum)
-        return NamedType(type_name)
+        return NamedType(type_name, location=type_location)
 
     def parse_map_type(self) -> MapType:
         """Parse a map type: map<KeyType, ValueType>"""
-        self.consume(TokenType.MAP)
+        start = self.consume(TokenType.MAP)
         self.consume(TokenType.LANGLE, "Expected '<' after 'map'")
 
         key_type = self.parse_type()
@@ -660,7 +687,7 @@ class Parser:
 
         self.consume(TokenType.RANGLE, "Expected '>' after map value type")
 
-        return MapType(key_type, value_type)
+        return MapType(key_type, value_type, location=self.make_location(start))
 
 
 def parse(source: str, filename: str = "<input>") -> Schema:

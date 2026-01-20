@@ -24,6 +24,7 @@ from pathlib import Path
 from fory_compiler.frontend.fdl.lexer import Lexer, TokenType
 from fory_compiler.frontend.fdl.parser import Parser
 from fory_compiler.cli import resolve_imports, ImportError
+from fory_compiler.ir.validator import SchemaValidator
 
 
 class TestLexerImport:
@@ -441,10 +442,11 @@ class TestValidationWithImports:
             """)
 
             schema = resolve_imports(main_fdl)
-            errors = schema.validate()
+            validator = SchemaValidator(schema)
+            is_valid = validator.validate()
 
             # Should have no errors - Address is imported
-            assert len(errors) == 0
+            assert is_valid
 
     def test_invalid_type_reference_without_import(self):
         """Test that missing types are detected."""
@@ -459,11 +461,13 @@ class TestValidationWithImports:
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
-        errors = schema.validate()
+        validator = SchemaValidator(schema)
+        is_valid = validator.validate()
 
         # Should have error - Address is not defined
-        assert len(errors) == 1
-        assert "Unknown type 'Address'" in errors[0]
+        assert not is_valid
+        assert len(validator.errors) == 1
+        assert "Unknown type 'Address'" in validator.errors[0].message
 
 
 if __name__ == "__main__":

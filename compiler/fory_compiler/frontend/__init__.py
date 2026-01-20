@@ -18,5 +18,6 @@
 """Frontends for Fory IDL compilation."""
 
 from fory_compiler.frontend.base import BaseFrontend, FrontendError
+from fory_compiler.frontend.fbs import FBSFrontend
 
-__all__ = ["BaseFrontend", "FrontendError"]
+__all__ = ["BaseFrontend", "FrontendError", "FBSFrontend"]

@@ -22,6 +22,7 @@ import pytest
 from fory_compiler.frontend.fdl.lexer import Lexer
 from fory_compiler.frontend.fdl.parser import Parser
 from fory_compiler.ir.ast import NamedType, ListType
+from fory_compiler.ir.validator import SchemaValidator
 
 
 class TestNestedMessageParsing:
@@ -189,9 +190,10 @@ class TestNestedTypeValidation:
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
-        errors = schema.validate()
+        validator = SchemaValidator(schema)
+        is_valid = validator.validate()
 
-        assert len(errors) == 0
+        assert is_valid
 
     def test_valid_qualified_type_reference(self):
         """Test that qualified type references are valid."""
@@ -208,9 +210,10 @@ class TestNestedTypeValidation:
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
-        errors = schema.validate()
+        validator = SchemaValidator(schema)
+        is_valid = validator.validate()
 
-        assert len(errors) == 0
+        assert is_valid
 
     def test_duplicate_nested_type_names(self):
         """Test that duplicate nested type names are detected."""
@@ -227,10 +230,12 @@ class TestNestedTypeValidation:
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
-        errors = schema.validate()
+        validator = SchemaValidator(schema)
+        is_valid = validator.validate()
 
-        assert len(errors) == 1
-        assert "Duplicate nested type name" in errors[0]
+        assert not is_valid
+        assert len(validator.errors) == 1
+        assert "Duplicate nested type name" in validator.errors[0].message
 
     def test_duplicate_type_ids_in_nested(self):
         """Test that duplicate type IDs in nested types are detected."""
@@ -244,10 +249,12 @@ class TestNestedTypeValidation:
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
-        errors = schema.validate()
+        validator = SchemaValidator(schema)
+        is_valid = validator.validate()
 
-        assert len(errors) == 1
-        assert "Duplicate type ID @100" in errors[0]
+        assert not is_valid
+        assert len(validator.errors) == 1
+        assert "Duplicate type ID @100" in validator.errors[0].message
 
     def test_unknown_nested_type(self):
         """Test that references to unknown nested types are detected."""
@@ -259,10 +266,12 @@ class TestNestedTypeValidation:
         lexer = Lexer(source)
         parser = Parser(lexer.tokenize())
         schema = parser.parse()
-        errors = schema.validate()
+        validator = SchemaValidator(schema)
+        is_valid = validator.validate()
 
-        assert len(errors) == 1
-        assert "Unknown type" in errors[0]
+        assert not is_valid
+        assert len(validator.errors) == 1
+        assert "Unknown type" in validator.errors[0].message
 
 
 class TestSchemaTypeLookup:

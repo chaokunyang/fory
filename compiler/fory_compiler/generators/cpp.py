@@ -376,6 +376,9 @@ class CppGenerator(BaseGenerator):
         encoding = self.get_encoding_config(field.field_type)
         if encoding:
             meta += encoding
+        array_type = self.get_array_type_config(field)
+        if array_type:
+            meta += array_type
         return meta
 
     def get_encoding_config(self, field_type: FieldType) -> str:
@@ -400,6 +403,21 @@ class CppGenerator(BaseGenerator):
             return ".varint()"
         if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
             return ".tagged()"
+        return ""
+
+    def get_array_type_config(self, field: Field) -> str:
+        """Return array type override for int8/uint8 arrays."""
+        if not isinstance(field.field_type, ListType):
+            return ""
+        if field.element_optional or field.element_ref:
+            return ""
+        element_type = field.field_type.element_type
+        if not isinstance(element_type, PrimitiveType):
+            return ""
+        if element_type.kind == PrimitiveKind.INT8:
+            return ".int8_array()"
+        if element_type.kind == PrimitiveKind.UINT8:
+            return ".uint8_array()"
         return ""
 
     def generate_type(

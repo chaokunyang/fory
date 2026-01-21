@@ -372,11 +372,6 @@ func (c *ReadContext) ReadByteSlice(refMode RefMode, readType bool) []byte {
 	if readType {
 		_ = c.buffer.ReadVaruint32Small7(err)
 	}
-	isInBand := c.buffer.ReadBool(err)
-	if !isInBand {
-		c.SetError(DeserializationError("out-of-band byte slice not supported in fast path"))
-		return nil
-	}
 	size := c.buffer.ReadLength(err)
 	return c.buffer.ReadBinary(size, err)
 }

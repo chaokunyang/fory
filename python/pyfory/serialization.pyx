@@ -318,7 +318,7 @@ cdef class MetaStringResolver:
         vector[PyObject *] _c_dynamic_id_to_enum_string_vec
         # hash -> MetaStringBytes
         flat_hash_map[int64_t, PyObject *] _c_hash_to_metastr_bytes
-        flat_hash_map[pair[int64_t, int64_t], PyObject *] _c_hash_to_small_metastring_bytes
+        flat_hash_map[int64_t, PyObject *] _c_hash_to_small_metastring_bytes
         set _enum_str_set
         dict _metastr_to_metastr_bytes
 
@@ -361,14 +361,14 @@ cdef class MetaStringResolver:
                 v1 = buffer.read_int64()
                 v2 = buffer.read_bytes_as_int64(length - 8)
             hashcode = ((v1 * 31 + v2) >> 8 << 8) | encoding
-            enum_str_ptr = self._c_hash_to_small_metastring_bytes[pair[int64_t, int64_t](v1, v2)]
+            enum_str_ptr = self._c_hash_to_small_metastring_bytes[hashcode]
             if enum_str_ptr == NULL:
                 reader_index = buffer.reader_index
                 str_bytes = buffer.get_bytes(reader_index - length, length)
                 enum_str = MetaStringBytes(str_bytes, hashcode=hashcode)
                 self._enum_str_set.add(enum_str)
                 enum_str_ptr = <PyObject *> enum_str
-                self._c_hash_to_small_metastring_bytes[pair[int64_t, int64_t](v1, v2)] = enum_str_ptr
+                self._c_hash_to_small_metastring_bytes[hashcode] = enum_str_ptr
         else:
             hashcode = buffer.read_int64()
             reader_index = buffer.reader_index

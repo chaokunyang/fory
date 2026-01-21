@@ -20,6 +20,7 @@
 #pragma once
 
 #include "fory/meta/preprocessor.h"
+#include "fory/type/type.h"
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -182,6 +183,7 @@ struct FieldMeta {
   int dynamic_ = -1; // -1 = AUTO, 0 = FALSE, 1 = TRUE
   Encoding encoding_ = Encoding::Default;
   bool compress_ = true;
+  int16_t type_id_override_ = -1; // -1 = unset
 
   // Builder methods - each returns a modified copy
   constexpr FieldMeta id(int16_t v) const {
@@ -214,6 +216,15 @@ struct FieldMeta {
     auto c = *this;
     c.compress_ = v;
     return c;
+  }
+  constexpr FieldMeta type_id(TypeId v) const {
+    auto c = *this;
+    c.type_id_override_ = static_cast<int16_t>(v);
+    return c;
+  }
+  constexpr FieldMeta int8_array() const { return type_id(TypeId::INT8_ARRAY); }
+  constexpr FieldMeta uint8_array() const {
+    return type_id(TypeId::UINT8_ARRAY);
   }
 
   // Convenience shortcuts for common encodings
@@ -303,6 +314,7 @@ struct GetFieldConfigEntry {
   static constexpr bool ref = false;
   static constexpr int dynamic_value = -1; // AUTO
   static constexpr bool compress = true;
+  static constexpr int16_t type_id_override = -1;
 };
 
 template <typename T, size_t Index>
@@ -322,6 +334,8 @@ public:
   static constexpr bool ref = get_entry().meta.ref_;
   static constexpr int dynamic_value = get_entry().meta.dynamic_;
   static constexpr bool compress = get_entry().meta.compress_;
+  static constexpr int16_t type_id_override =
+      get_entry().meta.type_id_override_;
 };
 
 } // namespace detail

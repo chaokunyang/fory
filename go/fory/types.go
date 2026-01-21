@@ -211,6 +211,11 @@ func isPrimitiveArrayType(typeID int16) bool {
 		INT16_ARRAY,
 		INT32_ARRAY,
 		INT64_ARRAY,
+		UINT8_ARRAY,
+		UINT16_ARRAY,
+		UINT32_ARRAY,
+		UINT64_ARRAY,
+		FLOAT16_ARRAY,
 		FLOAT32_ARRAY,
 		FLOAT64_ARRAY:
 		return true

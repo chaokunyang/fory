@@ -224,6 +224,10 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 			}
 		}
 
+		if foryTag.TypeIDSet && foryTag.TypeIDValid {
+			fieldTypeId = foryTag.TypeID
+		}
+
 		// Calculate nullable flag for serialization (wire format):
 		// - In xlang mode: Per xlang spec, fields are NON-NULLABLE by default.
 		//   Only pointer types are nullable by default.
@@ -821,12 +825,20 @@ func (s *structSerializer) computeHash() int32 {
 				switch elemKind {
 				case reflect.Int8:
 					typeId = INT8_ARRAY
+				case reflect.Uint8:
+					typeId = UINT8_ARRAY
 				case reflect.Int16:
 					typeId = INT16_ARRAY
+				case reflect.Uint16:
+					typeId = UINT16_ARRAY
 				case reflect.Int32:
 					typeId = INT32_ARRAY
+				case reflect.Uint32:
+					typeId = UINT32_ARRAY
 				case reflect.Int64:
 					typeId = INT64_ARRAY
+				case reflect.Uint64, reflect.Uint:
+					typeId = UINT64_ARRAY
 				case reflect.Float32:
 					typeId = FLOAT32_ARRAY
 				case reflect.Float64:
@@ -835,7 +847,9 @@ func (s *structSerializer) computeHash() int32 {
 					typeId = LIST
 				}
 			} else if field.Meta.Type.Kind() == reflect.Slice {
-				typeId = LIST
+				if !isPrimitiveArrayType(int16(typeId)) && typeId != BINARY {
+					typeId = LIST
+				}
 			} else if field.Meta.Type.Kind() == reflect.Map {
 				// fory.Set[T] is defined as map[T]struct{} - check for struct{} elem type
 				if isSetReflectType(field.Meta.Type) {

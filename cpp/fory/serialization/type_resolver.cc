@@ -130,8 +130,8 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
   // ref_tracking:1bit |
   const bool use_tag_id = field_id >= 0;
   uint8_t encoding_idx = use_tag_id ? 3 : 0; // TAG_ID or UTF8
-  size_t name_size = use_tag_id ? static_cast<size_t>(field_id) + 1
-                                : field_name.size();
+  size_t name_size =
+      use_tag_id ? static_cast<size_t>(field_id) + 1 : field_name.size();
   uint8_t header =
       (std::min(FIELD_NAME_SIZE_THRESHOLD, name_size - 1) << 2) & 0x3C;
 
@@ -719,7 +719,8 @@ bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
 }
 
 // Check if a type ID is a "final" type for field group 2 in field ordering.
-// Final types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL, BINARY.
+// Final types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL, BINARY,
+// ARRAY, and primitive arrays.
 // These are types with fixed serializers that don't need type info written.
 // Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP
 // (23) Note: LIST/SET/MAP are checked separately before this function is
@@ -727,7 +728,10 @@ bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
 bool is_final_type_for_grouping(uint32_t type_id) {
   return type_id == static_cast<uint32_t>(TypeId::STRING) ||
          (type_id >= static_cast<uint32_t>(TypeId::DURATION) &&
-          type_id <= static_cast<uint32_t>(TypeId::BINARY));
+          type_id <= static_cast<uint32_t>(TypeId::BINARY)) ||
+         type_id == static_cast<uint32_t>(TypeId::ARRAY) ||
+         (type_id >= static_cast<uint32_t>(TypeId::BOOL_ARRAY) &&
+          type_id <= static_cast<uint32_t>(TypeId::FLOAT64_ARRAY));
 }
 
 } // anonymous namespace
@@ -1028,12 +1032,10 @@ std::string TypeMeta::compute_struct_fingerprint(
   std::vector<FieldInfo> sorted_fields = field_infos;
   std::sort(sorted_fields.begin(), sorted_fields.end(),
             [](const FieldInfo &a, const FieldInfo &b) {
-              std::string a_id = a.field_id >= 0
-                                     ? std::to_string(a.field_id)
-                                     : ToSnakeCase(a.field_name);
-              std::string b_id = b.field_id >= 0
-                                     ? std::to_string(b.field_id)
-                                     : ToSnakeCase(b.field_name);
+              std::string a_id = a.field_id >= 0 ? std::to_string(a.field_id)
+                                                 : ToSnakeCase(a.field_name);
+              std::string b_id = b.field_id >= 0 ? std::to_string(b.field_id)
+                                                 : ToSnakeCase(b.field_name);
               return a_id < b_id;
             });
 

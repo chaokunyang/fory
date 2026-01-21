@@ -49,6 +49,7 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Ignore;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
+import org.apache.fory.annotation.Int8ArrayType;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.annotation.Uint16ArrayType;
 import org.apache.fory.annotation.Uint16Type;
@@ -687,6 +688,7 @@ public class Descriptor {
     typeAnnotationsTypes.add(Uint16Type.class);
     typeAnnotationsTypes.add(Uint32Type.class);
     typeAnnotationsTypes.add(Uint64Type.class);
+    typeAnnotationsTypes.add(Int8ArrayType.class);
     typeAnnotationsTypes.add(Uint8ArrayType.class);
     typeAnnotationsTypes.add(Uint16ArrayType.class);
     typeAnnotationsTypes.add(Uint32ArrayType.class);

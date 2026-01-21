@@ -363,6 +363,10 @@ class GoGenerator(BaseGenerator):
         if encoding_tag:
             tags.append(encoding_tag)
 
+        array_tag = self.get_array_type_tag(field)
+        if array_tag:
+            tags.append(array_tag)
+
         if tags:
             tag_str = ",".join(tags)
             lines.append(f'{field_name} {go_type} `fory:"{tag_str}"`')
@@ -386,6 +390,21 @@ class GoGenerator(BaseGenerator):
             return "encoding=varint"
         if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
             return "encoding=tagged"
+        return None
+
+    def get_array_type_tag(self, field: Field) -> Optional[str]:
+        """Return type override tag for uint8/int8 arrays."""
+        if not isinstance(field.field_type, ListType):
+            return None
+        if field.element_optional or field.element_ref:
+            return None
+        element_type = field.field_type.element_type
+        if not isinstance(element_type, PrimitiveType):
+            return None
+        if element_type.kind == PrimitiveKind.INT8:
+            return "type=int8_array"
+        if element_type.kind == PrimitiveKind.UINT8:
+            return "type=uint8_array"
         return None
 
     def generate_type(

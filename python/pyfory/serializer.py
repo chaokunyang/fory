@@ -118,6 +118,7 @@ else:
     )
 
 from pyfory.types import (
+    int8_array,
     uint8_array,
     int16_array,
     int32_array,
@@ -128,6 +129,7 @@ from pyfory.types import (
     float32_array,
     float64_array,
     BoolNDArrayType,
+    Int8NDArrayType,
     Uint8NDArrayType,
     Int16NDArrayType,
     Int32NDArrayType,
@@ -231,6 +233,7 @@ class PandasRangeIndexSerializer(Serializer):
 typecode_dict = (
     {
         # bytes use BytesSerializer; array.array uses explicit typecodes.
+        "b": (1, int8_array, TypeId.INT8_ARRAY),
         "B": (1, uint8_array, TypeId.UINT8_ARRAY),
         "h": (2, int16_array, TypeId.INT16_ARRAY),
         "i": (4, int32_array, TypeId.INT32_ARRAY),
@@ -243,6 +246,7 @@ typecode_dict = (
     }
     if not _WINDOWS
     else {
+        "b": (1, int8_array, TypeId.INT8_ARRAY),
         "B": (1, uint8_array, TypeId.UINT8_ARRAY),
         "h": (2, int16_array, TypeId.INT16_ARRAY),
         "l": (4, int32_array, TypeId.INT32_ARRAY),
@@ -257,6 +261,7 @@ typecode_dict = (
 
 typeid_code = (
     {
+        TypeId.INT8_ARRAY: "b",
         TypeId.UINT8_ARRAY: "B",
         TypeId.INT16_ARRAY: "h",
         TypeId.INT32_ARRAY: "i",
@@ -269,6 +274,7 @@ typeid_code = (
     }
     if not _WINDOWS
     else {
+        TypeId.INT8_ARRAY: "b",
         TypeId.UINT8_ARRAY: "B",
         TypeId.INT16_ARRAY: "h",
         TypeId.INT32_ARRAY: "l",
@@ -286,6 +292,7 @@ class PyArraySerializer(XlangCompatibleSerializer):
     typecode_dict = typecode_dict
     typecodearray_type = (
         {
+            "b": int8_array,
             "B": uint8_array,
             "h": int16_array,
             "i": int32_array,
@@ -298,6 +305,7 @@ class PyArraySerializer(XlangCompatibleSerializer):
         }
         if not _WINDOWS
         else {
+            "b": int8_array,
             "B": uint8_array,
             "h": int16_array,
             "l": int32_array,
@@ -414,6 +422,7 @@ if np:
     _np_dtypes_dict = (
         {
             np.dtype(np.bool_): (1, "?", BoolNDArrayType, TypeId.BOOL_ARRAY),
+            np.dtype(np.int8): (1, "b", Int8NDArrayType, TypeId.INT8_ARRAY),
             np.dtype(np.uint8): (1, "B", Uint8NDArrayType, TypeId.UINT8_ARRAY),
             np.dtype(np.int16): (2, "h", Int16NDArrayType, TypeId.INT16_ARRAY),
             np.dtype(np.int32): (4, "i", Int32NDArrayType, TypeId.INT32_ARRAY),
@@ -427,6 +436,7 @@ if np:
         if not _WINDOWS
         else {
             np.dtype(np.bool_): (1, "?", BoolNDArrayType, TypeId.BOOL_ARRAY),
+            np.dtype(np.int8): (1, "b", Int8NDArrayType, TypeId.INT8_ARRAY),
             np.dtype(np.uint8): (1, "B", Uint8NDArrayType, TypeId.UINT8_ARRAY),
             np.dtype(np.int16): (2, "h", Int16NDArrayType, TypeId.INT16_ARRAY),
             np.dtype(np.int32): (4, "l", Int32NDArrayType, TypeId.INT32_ARRAY),
@@ -448,7 +458,7 @@ class Numpy1DArraySerializer(Serializer):
     def __init__(self, fory, ftype, dtype):
         super().__init__(fory, ftype)
         self.dtype = dtype
-        self.itemsize, self.format, self.typecode, self.type_id = _np_dtypes_dict[self.dtype]
+        self.itemsize, self.typecode, _, self.type_id = _np_dtypes_dict[self.dtype]
         self._serializer = ReduceSerializer(fory, np.ndarray)
 
     def xwrite(self, buffer, value):

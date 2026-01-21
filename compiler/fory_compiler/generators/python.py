@@ -68,15 +68,44 @@ class PythonGenerator(BaseGenerator):
     # Numpy dtype strings for primitive arrays
     NUMPY_DTYPE_MAP = {
         PrimitiveKind.BOOL: "np.bool_",
+        PrimitiveKind.INT8: "np.int8",
         PrimitiveKind.INT16: "np.int16",
         PrimitiveKind.INT32: "np.int32",
         PrimitiveKind.VARINT32: "np.int32",
         PrimitiveKind.INT64: "np.int64",
         PrimitiveKind.VARINT64: "np.int64",
         PrimitiveKind.TAGGED_INT64: "np.int64",
+        PrimitiveKind.UINT8: "np.uint8",
+        PrimitiveKind.UINT16: "np.uint16",
+        PrimitiveKind.UINT32: "np.uint32",
+        PrimitiveKind.VAR_UINT32: "np.uint32",
+        PrimitiveKind.UINT64: "np.uint64",
+        PrimitiveKind.VAR_UINT64: "np.uint64",
+        PrimitiveKind.TAGGED_UINT64: "np.uint64",
         PrimitiveKind.FLOAT16: "np.float32",
         PrimitiveKind.FLOAT32: "np.float32",
         PrimitiveKind.FLOAT64: "np.float64",
+    }
+
+    ARRAY_TYPE_HINTS = {
+        PrimitiveKind.BOOL: "pyfory.bool_ndarray",
+        PrimitiveKind.INT8: "pyfory.int8_ndarray",
+        PrimitiveKind.INT16: "pyfory.int16_ndarray",
+        PrimitiveKind.INT32: "pyfory.int32_ndarray",
+        PrimitiveKind.VARINT32: "pyfory.int32_ndarray",
+        PrimitiveKind.INT64: "pyfory.int64_ndarray",
+        PrimitiveKind.VARINT64: "pyfory.int64_ndarray",
+        PrimitiveKind.TAGGED_INT64: "pyfory.int64_ndarray",
+        PrimitiveKind.UINT8: "pyfory.uint8_ndarray",
+        PrimitiveKind.UINT16: "pyfory.uint16_ndarray",
+        PrimitiveKind.UINT32: "pyfory.uint32_ndarray",
+        PrimitiveKind.VAR_UINT32: "pyfory.uint32_ndarray",
+        PrimitiveKind.UINT64: "pyfory.uint64_ndarray",
+        PrimitiveKind.VAR_UINT64: "pyfory.uint64_ndarray",
+        PrimitiveKind.TAGGED_UINT64: "pyfory.uint64_ndarray",
+        PrimitiveKind.FLOAT16: "pyfory.float32_ndarray",
+        PrimitiveKind.FLOAT32: "pyfory.float32_ndarray",
+        PrimitiveKind.FLOAT64: "pyfory.float64_ndarray",
     }
 
     # Default values for primitive types
@@ -289,7 +318,7 @@ class PythonGenerator(BaseGenerator):
         if not isinstance(field_type.element_type, PrimitiveType):
             return False
         return (
-            field_type.element_type.kind in self.NUMPY_DTYPE_MAP
+            field_type.element_type.kind in self.ARRAY_TYPE_HINTS
             and not element_optional
         )
 
@@ -328,11 +357,17 @@ class PythonGenerator(BaseGenerator):
         elif isinstance(field_type, ListType):
             # Use numpy array for numeric primitive types
             if isinstance(field_type.element_type, PrimitiveType):
-                if (
-                    field_type.element_type.kind in self.NUMPY_DTYPE_MAP
-                    and not element_optional
-                ):
-                    list_type = "np.ndarray"
+                if not element_optional:
+                    kind = field_type.element_type.kind
+                    if kind in self.ARRAY_TYPE_HINTS:
+                        list_type = self.ARRAY_TYPE_HINTS[kind]
+                    else:
+                        element_type = self.generate_type(
+                            field_type.element_type,
+                            element_optional,
+                            parent_stack,
+                        )
+                        list_type = f"List[{element_type}]"
                 else:
                     element_type = self.generate_type(
                         field_type.element_type,
@@ -418,10 +453,10 @@ class PythonGenerator(BaseGenerator):
                 imports.add("import datetime")
 
         elif isinstance(field_type, ListType):
-            # Add numpy import for numeric primitive arrays
+            # Add numpy import for primitive arrays
             if isinstance(field_type.element_type, PrimitiveType):
                 if (
-                    field_type.element_type.kind in self.NUMPY_DTYPE_MAP
+                    field_type.element_type.kind in self.ARRAY_TYPE_HINTS
                     and not element_optional
                 ):
                     imports.add("import numpy as np")

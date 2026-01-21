@@ -695,6 +695,9 @@ class TypeResolver:
         typename = type_metabytes.decode(self.typename_decoder)
         # the hash computed between languages may be different.
         typeinfo = self._named_type_to_typeinfo.get((ns, typename))
+        if typeinfo is None and typename:
+            alt_typename = typename[0].upper() + typename[1:]
+            typeinfo = self._named_type_to_typeinfo.get((ns, alt_typename))
         if typeinfo is not None:
             self._ns_type_to_typeinfo[(ns_metabytes, type_metabytes)] = typeinfo
             return typeinfo
@@ -732,6 +735,9 @@ class TypeResolver:
                 ns = ns_metabytes.decode(self.namespace_decoder)
                 typename = type_metabytes.decode(self.typename_decoder)
                 typeinfo = self._named_type_to_typeinfo.get((ns, typename))
+                if typeinfo is None and typename:
+                    alt_typename = typename[0].upper() + typename[1:]
+                    typeinfo = self._named_type_to_typeinfo.get((ns, alt_typename))
                 if typeinfo is not None:
                     self._ns_type_to_typeinfo[(ns_metabytes, type_metabytes)] = typeinfo
                     return typeinfo

@@ -20,6 +20,7 @@
 package org.apache.fory.type;
 
 import java.lang.annotation.Annotation;
+import org.apache.fory.annotation.Int8ArrayType;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Uint16ArrayType;
@@ -85,6 +86,9 @@ public class TypeAnnotationUtils {
         default:
           throw new IllegalArgumentException("Unsupported encoding: " + int64Type.encoding());
       }
+    } else if (typeAnnotation instanceof Int8ArrayType) {
+      checkFieldType(fieldType, "@Int8ArrayType", byte[].class);
+      return Types.INT8_ARRAY;
     } else if (typeAnnotation instanceof Uint8ArrayType) {
       checkFieldType(fieldType, "@Uint8ArrayType", byte[].class);
       return Types.UINT8_ARRAY;

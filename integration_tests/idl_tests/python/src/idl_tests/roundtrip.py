@@ -107,21 +107,35 @@ def build_monster() -> "monster.Monster":
     )
 
 
-def local_roundtrip_monster(fory: pyfory.Fory, monster: "monster.Monster") -> None:
-    data = fory.serialize(monster)
+def assert_monster_equal(decoded: "monster.Monster", expected: "monster.Monster") -> None:
+    assert decoded.pos == expected.pos
+    assert decoded.mana == expected.mana
+    assert decoded.hp == expected.hp
+    assert decoded.name == expected.name
+    assert decoded.friendly == expected.friendly
+    np.testing.assert_array_equal(decoded.inventory, expected.inventory)
+    assert decoded.color == expected.color
+
+
+def local_roundtrip_monster(
+    fory: pyfory.Fory, monster_value: "monster.Monster"
+) -> None:
+    data = fory.serialize(monster_value)
     decoded = fory.deserialize(data)
     assert isinstance(decoded, monster.Monster)
-    assert decoded == monster
+    assert_monster_equal(decoded, monster_value)
 
 
-def file_roundtrip_monster(fory: pyfory.Fory, monster: "monster.Monster") -> None:
+def file_roundtrip_monster(
+    fory: pyfory.Fory, monster_value: "monster.Monster"
+) -> None:
     data_file = os.environ.get("DATA_FILE_FLATBUFFERS_MONSTER")
     if not data_file:
         return
     payload = Path(data_file).read_bytes()
     decoded = fory.deserialize(payload)
     assert isinstance(decoded, monster.Monster)
-    assert decoded == monster
+    assert_monster_equal(decoded, monster_value)
     Path(data_file).write_bytes(fory.serialize(decoded))
 
 
@@ -150,13 +164,25 @@ def build_container() -> "complex_fbs.Container":
     )
 
 
+def assert_container_equal(
+    decoded: "complex_fbs.Container", expected: "complex_fbs.Container"
+) -> None:
+    assert decoded.id == expected.id
+    assert decoded.status == expected.status
+    np.testing.assert_array_equal(decoded.bytes, expected.bytes)
+    np.testing.assert_array_equal(decoded.numbers, expected.numbers)
+    assert decoded.scalars == expected.scalars
+    assert decoded.names == expected.names
+    np.testing.assert_array_equal(decoded.flags, expected.flags)
+
+
 def local_roundtrip_container(
     fory: pyfory.Fory, container: "complex_fbs.Container"
 ) -> None:
     data = fory.serialize(container)
     decoded = fory.deserialize(data)
     assert isinstance(decoded, complex_fbs.Container)
-    assert decoded == container
+    assert_container_equal(decoded, container)
 
 
 def file_roundtrip_container(
@@ -168,7 +194,7 @@ def file_roundtrip_container(
     payload = Path(data_file).read_bytes()
     decoded = fory.deserialize(payload)
     assert isinstance(decoded, complex_fbs.Container)
-    assert decoded == container
+    assert_container_equal(decoded, container)
     Path(data_file).write_bytes(fory.serialize(decoded))
 
 

@@ -631,8 +631,7 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr bool is_nullable =
         compute_is_nullable<ActualFieldType, T, Index, UnwrappedFieldType>();
     constexpr bool track_ref = compute_track_ref<ActualFieldType, T, Index>();
-    constexpr int16_t field_id =
-        compute_field_id<ActualFieldType, T, Index>();
+    constexpr int16_t field_id = compute_field_id<ActualFieldType, T, Index>();
 
     FieldType field_type = FieldTypeBuilder<UnwrappedFieldType>::build(false);
 
@@ -651,6 +650,14 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
         compute_signed_type_id<UnwrappedFieldType, T, Index>();
     if constexpr (signed_tid != 0) {
       field_type.type_id = signed_tid;
+    }
+
+    if constexpr (::fory::detail::has_field_config_v<T>) {
+      constexpr int16_t override_id =
+          ::fory::detail::GetFieldConfigEntry<T, Index>::type_id_override;
+      if constexpr (override_id >= 0) {
+        field_type.type_id = static_cast<uint32_t>(override_id);
+      }
     }
 
     // Override nullable and ref_tracking from field-level metadata

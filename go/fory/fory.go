@@ -814,7 +814,6 @@ func Serialize[T any](f *Fory, value T) ([]byte, error) {
 	case []byte:
 		f.writeCtx.buffer.WriteInt8(NotNullValueFlag)
 		f.writeCtx.WriteTypeId(BINARY)
-		f.writeCtx.buffer.WriteBool(true) // in-band
 		f.writeCtx.buffer.WriteLength(len(val))
 		f.writeCtx.buffer.WriteBinary(val)
 	case []int8:

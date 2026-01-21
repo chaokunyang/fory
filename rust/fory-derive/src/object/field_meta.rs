@@ -24,6 +24,7 @@
 //! - `skip`: Skip this field during serialization
 //! - `compress`: For i32/u32 fields: true (VARINT32/VAR_UINT32) or false (INT32/UINT32 fixed)
 //! - `encoding`: For i32/u32: "varint", "fixed"; for u64: "varint", "fixed", "tagged"
+//! - `type_id`: Explicit type ID override (e.g., "int8_array", "uint8_array")
 //!
 //! Both `compress` and `encoding` are converted to a `type_id` internally. If both are
 //! specified, they must not conflict.
@@ -44,8 +45,8 @@ pub struct ForyFieldMeta {
     pub r#ref: Option<bool>,
     /// Whether to skip this field entirely
     pub skip: bool,
-    /// Explicit type ID for encoding (e.g., INT32 vs VARINT32, UINT32 vs VAR_UINT32, etc.)
-    /// This is set by `compress` or `encoding` attributes.
+    /// Explicit type ID for encoding or array type overrides.
+    /// This is set by `compress`, `encoding`, or `type_id` attributes.
     pub type_id: Option<i16>,
 }
 
@@ -129,6 +130,7 @@ pub fn parse_field_meta(field: &Field) -> syn::Result<ForyFieldMeta> {
     let mut meta = ForyFieldMeta::default();
     let mut compress_encoding: Option<CompressEncoding> = None;
     let mut explicit_encoding: Option<ExplicitEncoding> = None;
+    let mut explicit_type_id: Option<i16> = None;
 
     for attr in &field.attrs {
         if !attr.path().is_ident("fory") {
@@ -172,9 +174,19 @@ pub fn parse_field_meta(field: &Field) -> syn::Result<ForyFieldMeta> {
                         ));
                     }
                 });
+            } else if nested.path.is_ident("type_id") {
+                let lit: syn::LitStr = nested.value()?.parse()?;
+                explicit_type_id = Some(parse_type_id_tag(&lit)?);
             }
             Ok(())
         })?;
+    }
+
+    if explicit_type_id.is_some() && (compress_encoding.is_some() || explicit_encoding.is_some()) {
+        return Err(syn::Error::new_spanned(
+            field,
+            "type_id cannot be combined with compress or encoding attributes",
+        ));
     }
 
     // Validate that compress and encoding don't conflict if both are specified
@@ -209,6 +221,11 @@ pub fn parse_field_meta(field: &Field) -> syn::Result<ForyFieldMeta> {
         }
     }
 
+    if let Some(type_id) = explicit_type_id {
+        meta.type_id = Some(type_id);
+        return Ok(meta);
+    }
+
     // Convert encoding to type_id
     // Priority: explicit_encoding > compress_encoding
     // Note: The actual type_id depends on the field type (i32, u32, u64), but we store
@@ -228,6 +245,18 @@ pub fn parse_field_meta(field: &Field) -> syn::Result<ForyFieldMeta> {
     }
 
     Ok(meta)
+}
+
+fn parse_type_id_tag(lit: &syn::LitStr) -> syn::Result<i16> {
+    let value = lit.value();
+    match value.as_str() {
+        "int8_array" => Ok(TypeId::INT8_ARRAY as i16),
+        "uint8_array" => Ok(TypeId::UINT8_ARRAY as i16),
+        _ => Err(syn::Error::new(
+            lit.span(),
+            "type_id must be \"int8_array\" or \"uint8_array\"",
+        )),
+    }
 }
 
 /// Parse a boolean value or treat standalone flag as true

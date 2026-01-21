@@ -1309,6 +1309,18 @@ fn adjust_type_id_for_encoding(base_type_id: u32, meta: &super::field_meta::Fory
         return base_type_id;
     };
 
+    if explicit_type_id == TypeId::INT8_ARRAY as i16
+        || explicit_type_id == TypeId::UINT8_ARRAY as i16
+    {
+        let explicit = explicit_type_id as u32;
+        if base_type_id == TypeId::BINARY as u32
+            || base_type_id == TypeId::INT8_ARRAY as u32
+            || base_type_id == TypeId::UINT8_ARRAY as u32
+        {
+            return explicit;
+        }
+    }
+
     // Handle i32 fields
     if base_type_id == TypeId::VARINT32 as u32 {
         if explicit_type_id == TypeId::INT32 as i16 {

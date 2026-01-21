@@ -491,6 +491,9 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		if overrideTypeId != 0 {
 			ft = NewSimpleFieldType(overrideTypeId)
 		}
+		if foryTag.TypeIDSet && foryTag.TypeIDValid {
+			ft = NewSimpleFieldType(foryTag.TypeID)
+		}
 
 		// Determine nullable based on mode:
 		// - In xlang mode: Per xlang spec, fields are NON-NULLABLE by default.

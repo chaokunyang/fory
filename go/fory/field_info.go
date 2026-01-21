@@ -797,12 +797,20 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 			return BOOL_ARRAY
 		case reflect.Int8:
 			return INT8_ARRAY
+		case reflect.Uint8:
+			return UINT8_ARRAY
 		case reflect.Int16:
 			return INT16_ARRAY
+		case reflect.Uint16:
+			return UINT16_ARRAY
 		case reflect.Int32:
 			return INT32_ARRAY
+		case reflect.Uint32:
+			return UINT32_ARRAY
 		case reflect.Int64, reflect.Int:
 			return INT64_ARRAY
+		case reflect.Uint64, reflect.Uint:
+			return UINT64_ARRAY
 		case reflect.Float32:
 			return FLOAT32_ARRAY
 		case reflect.Float64:
@@ -819,12 +827,20 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 			return BOOL_ARRAY
 		case reflect.Int8:
 			return INT8_ARRAY
+		case reflect.Uint8:
+			return UINT8_ARRAY
 		case reflect.Int16:
 			return INT16_ARRAY
+		case reflect.Uint16:
+			return UINT16_ARRAY
 		case reflect.Int32:
 			return INT32_ARRAY
+		case reflect.Uint32:
+			return UINT32_ARRAY
 		case reflect.Int64, reflect.Int:
 			return INT64_ARRAY
+		case reflect.Uint64, reflect.Uint:
+			return UINT64_ARRAY
 		case reflect.Float32:
 			return FLOAT32_ARRAY
 		case reflect.Float64:

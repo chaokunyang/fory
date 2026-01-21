@@ -293,6 +293,9 @@ class RustGenerator(BaseGenerator):
         encoding = self.get_encoding_attr(field.field_type)
         if encoding:
             attrs.append(encoding)
+        array_attr = self.get_array_attr(field)
+        if array_attr:
+            attrs.append(array_attr)
         if attrs:
             lines.append(f"#[fory({', '.join(attrs)})]")
 
@@ -326,6 +329,21 @@ class RustGenerator(BaseGenerator):
             return 'encoding = "fixed"'
         if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
             return 'encoding = "tagged"'
+        return None
+
+    def get_array_attr(self, field: Field) -> Optional[str]:
+        """Return type_id attribute for int8/uint8 arrays."""
+        if not isinstance(field.field_type, ListType):
+            return None
+        if field.element_optional or field.element_ref:
+            return None
+        element_type = field.field_type.element_type
+        if not isinstance(element_type, PrimitiveType):
+            return None
+        if element_type.kind == PrimitiveKind.INT8:
+            return 'type_id = "int8_array"'
+        if element_type.kind == PrimitiveKind.UINT8:
+            return 'type_id = "uint8_array"'
         return None
 
     def generate_type(

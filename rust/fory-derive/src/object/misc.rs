@@ -110,6 +110,15 @@ pub fn gen_field_fields_info(source_fields: &[SourceField<'_>]) -> TokenStream {
                 let has_encoding =
                     (inner_ty_str == "i32" || inner_ty_str == "u32" || inner_ty_str == "u64")
                         && meta.type_id.is_some();
+                let has_array_override = matches!(
+                    meta.type_id,
+                    Some(tid)
+                        if tid == fory_core::types::TypeId::INT8_ARRAY as i16
+                            || tid == fory_core::types::TypeId::UINT8_ARRAY as i16
+                ) && (inner_ty_str == "Vec<u8>"
+                    || inner_ty_str == "Vec<i8>"
+                    || inner_ty_str.starts_with("[u8;")
+                    || inner_ty_str.starts_with("[i8;"));
 
                 if has_encoding {
                     // Generate FieldType directly with the correct type ID based on meta.type_id
@@ -143,6 +152,28 @@ pub fn gen_field_fields_info(source_fields: &[SourceField<'_>]) -> TokenStream {
                         _ => unreachable!(),
                     };
 
+                    quote! {
+                        fory_core::meta::FieldInfo::new_with_id(
+                            #field_id,
+                            #name,
+                            fory_core::meta::FieldType {
+                                type_id: #type_id_ts,
+                                nullable: #nullable,
+                                ref_tracking: #ref_tracking,
+                                generics: Vec::new()
+                            }
+                        )
+                    }
+                } else if has_array_override {
+                    let type_id_ts = match meta.type_id {
+                        Some(tid) if tid == fory_core::types::TypeId::INT8_ARRAY as i16 => {
+                            quote! { fory_core::types::TypeId::INT8_ARRAY as u32 }
+                        }
+                        Some(tid) if tid == fory_core::types::TypeId::UINT8_ARRAY as i16 => {
+                            quote! { fory_core::types::TypeId::UINT8_ARRAY as u32 }
+                        }
+                        _ => unreachable!(),
+                    };
                     quote! {
                         fory_core::meta::FieldInfo::new_with_id(
                             #field_id,

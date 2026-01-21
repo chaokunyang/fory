@@ -384,7 +384,6 @@ func (c *WriteContext) WriteByteSlice(value []byte, refMode RefMode, writeTypeIn
 	if writeTypeInfo {
 		c.WriteTypeId(BINARY)
 	}
-	c.buffer.WriteBool(true) // in-band
 	c.buffer.WriteLength(len(value))
 	c.buffer.WriteBinary(value)
 }

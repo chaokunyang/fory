@@ -30,7 +30,7 @@ const (
 
 // ForyTag represents parsed fory struct tag options.
 //
-// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value"` or `fory:"-"`
+// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value,type=name"` or `fory:"-"`
 //
 // Options:
 //   - id: Field tag ID. -1 (default) uses field name, >=0 uses numeric tag ID for compact encoding
@@ -41,6 +41,7 @@ const (
 //   - encoding: For numeric fields:
 //   - int32/uint32: "varint" (default) or "fixed"
 //   - int64/uint64: "varint" (default), "fixed", or "tagged"
+//   - type: Explicit field type override for array types (e.g. "uint8_array", "int8_array")
 //
 // Note: For int32/uint32, use either `compress` or `encoding`, not both.
 //
@@ -67,6 +68,7 @@ type ForyTag struct {
 	HasTag   bool   // Whether field has fory tag at all
 	Compress bool   // For int32/uint32: true=varint, false=fixed (default: true)
 	Encoding string // For int64/uint64: "fixed", "varint", "tagged" (default: "varint")
+	TypeID   TypeId // Explicit type override for array types
 
 	// Track which options were explicitly set (for override logic)
 	NullableSet bool
@@ -74,11 +76,13 @@ type ForyTag struct {
 	IgnoreSet   bool
 	CompressSet bool
 	EncodingSet bool
+	TypeIDSet   bool
+	TypeIDValid bool
 }
 
 // parseForyTag parses a fory struct tag from reflect.StructField.Tag.
 //
-// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value"` or `fory:"-"`
+// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value,type=name"` or `fory:"-"`
 //
 // Supported syntaxes:
 //   - Key-value: `nullable=true`, `ref=false`, `ignore=true`, `id=0`
@@ -95,6 +99,9 @@ func parseForyTag(field reflect.StructField) ForyTag {
 		HasTag:   false,
 		Compress: true,     // default: varint encoding
 		Encoding: "varint", // default: varint encoding
+		TypeID:   UNKNOWN,
+		TypeIDSet: false,
+		TypeIDValid: true,
 	}
 
 	tagValue, ok := field.Tag.Lookup("fory")
@@ -144,6 +151,11 @@ func parseForyTag(field reflect.StructField) ForyTag {
 			case "encoding":
 				tag.Encoding = strings.ToLower(strings.TrimSpace(value))
 				tag.EncodingSet = true
+			case "type":
+				typeID, ok := parseTypeIdTag(value)
+				tag.TypeIDSet = true
+				tag.TypeIDValid = ok
+				tag.TypeID = typeID
 			}
 		} else {
 			// Handle standalone flags (presence means true)
@@ -162,6 +174,17 @@ func parseForyTag(field reflect.StructField) ForyTag {
 	}
 
 	return tag
+}
+
+func parseTypeIdTag(value string) (TypeId, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "int8_array":
+		return INT8_ARRAY, true
+	case "uint8_array":
+		return UINT8_ARRAY, true
+	default:
+		return UNKNOWN, false
+	}
 }
 
 // parseBool parses a boolean value from string.
@@ -210,6 +233,20 @@ func validateForyTags(t reflect.Type) error {
 					tag.ID, existing, field.Name)
 			}
 			tagIDs[tag.ID] = field.Name
+		}
+
+		if tag.TypeIDSet && !tag.TypeIDValid {
+			return InvalidTagErrorf(
+				"invalid fory tag type=%q on field %s: expected int8_array or uint8_array",
+				field.Tag.Get("fory"),
+				field.Name,
+			)
+		}
+		if tag.TypeIDSet && field.Type.Kind() != reflect.Slice && field.Type.Kind() != reflect.Array {
+			return InvalidTagErrorf(
+				"fory tag type override on field %s requires slice or array type",
+				field.Name,
+			)
 		}
 	}
 

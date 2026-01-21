@@ -456,6 +456,10 @@ class JavaGenerator(BaseGenerator):
         if annotations:
             lines.append(f"@ForyField({', '.join(annotations)})")
 
+        array_annotation = self.get_array_annotation(field)
+        if array_annotation:
+            lines.append(array_annotation)
+
         int_annotation = self.get_integer_annotation(field.field_type)
         if int_annotation:
             lines.append(int_annotation)
@@ -574,8 +578,34 @@ class JavaGenerator(BaseGenerator):
             field.element_ref,
         )
         self.collect_integer_imports(field.field_type, imports)
+        self.collect_array_imports(field, imports)
         if field.optional or field.ref or field.tag_id is not None:
             imports.add("org.apache.fory.annotation.ForyField")
+
+    def collect_array_imports(self, field: Field, imports: Set[str]) -> None:
+        """Collect imports for primitive array type annotations."""
+        if not isinstance(field.field_type, ListType):
+            return
+        if field.element_optional or field.element_ref:
+            return
+        element_type = field.field_type.element_type
+        if not isinstance(element_type, PrimitiveType):
+            return
+        kind = element_type.kind
+        if kind == PrimitiveKind.INT8:
+            imports.add("org.apache.fory.annotation.Int8ArrayType")
+        elif kind == PrimitiveKind.UINT8:
+            imports.add("org.apache.fory.annotation.Uint8ArrayType")
+        elif kind == PrimitiveKind.UINT16:
+            imports.add("org.apache.fory.annotation.Uint16ArrayType")
+        elif kind in (PrimitiveKind.UINT32, PrimitiveKind.VAR_UINT32):
+            imports.add("org.apache.fory.annotation.Uint32ArrayType")
+        elif kind in (
+            PrimitiveKind.UINT64,
+            PrimitiveKind.VAR_UINT64,
+            PrimitiveKind.TAGGED_UINT64,
+        ):
+            imports.add("org.apache.fory.annotation.Uint64ArrayType")
 
     def collect_integer_imports(self, field_type: FieldType, imports: Set[str]) -> None:
         """Collect imports for integer encoding annotations."""
@@ -626,6 +656,32 @@ class JavaGenerator(BaseGenerator):
             return "@Uint64Type(encoding = LongEncoding.VARINT)"
         if kind == PrimitiveKind.TAGGED_UINT64:
             return "@Uint64Type(encoding = LongEncoding.TAGGED)"
+        return None
+
+    def get_array_annotation(self, field: Field) -> Optional[str]:
+        """Return array type annotation for primitive list fields."""
+        if not isinstance(field.field_type, ListType):
+            return None
+        if field.element_optional or field.element_ref:
+            return None
+        element_type = field.field_type.element_type
+        if not isinstance(element_type, PrimitiveType):
+            return None
+        kind = element_type.kind
+        if kind == PrimitiveKind.INT8:
+            return "@Int8ArrayType"
+        if kind == PrimitiveKind.UINT8:
+            return "@Uint8ArrayType"
+        if kind == PrimitiveKind.UINT16:
+            return "@Uint16ArrayType"
+        if kind in (PrimitiveKind.UINT32, PrimitiveKind.VAR_UINT32):
+            return "@Uint32ArrayType"
+        if kind in (
+            PrimitiveKind.UINT64,
+            PrimitiveKind.VAR_UINT64,
+            PrimitiveKind.TAGGED_UINT64,
+        ):
+            return "@Uint64ArrayType"
         return None
 
     def has_array_field(self, message: Message) -> bool:

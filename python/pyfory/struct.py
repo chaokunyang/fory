@@ -46,7 +46,7 @@ from pyfory.types import (
     tagged_uint64,
     float32,
     float64,
-    is_py_array_type,
+    is_primitive_array_type,
     is_list_type,
     is_map_type,
     get_primitive_type_size,
@@ -1181,7 +1181,7 @@ class StructFieldSerializerVisitor(TypeVisitor):
     def visit_other(self, field_name, type_, types_path=None):
         if is_subclass(type_, enum.Enum):
             return self.fory.type_resolver.get_serializer(type_)
-        if type_ not in basic_types and not is_py_array_type(type_):
+        if type_ not in basic_types and not is_primitive_array_type(type_):
             return None
         serializer = self.fory.type_resolver.get_serializer(type_)
         return serializer
@@ -1424,7 +1424,7 @@ class StructTypeIdVisitor(TypeVisitor):
     def visit_other(self, field_name, type_, types_path=None):
         if is_subclass(type_, enum.Enum):
             return [self.fory.type_resolver.get_typeinfo(type_).type_id]
-        if type_ not in basic_types and not is_py_array_type(type_):
+        if type_ not in basic_types and not is_primitive_array_type(type_):
             return None, None
         typeinfo = self.fory.type_resolver.get_typeinfo(type_)
         return [typeinfo.type_id]

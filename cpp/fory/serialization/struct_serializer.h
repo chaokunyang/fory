@@ -1101,13 +1101,16 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   /// Check if a type ID is an internal (built-in, final) type for group 2.
   /// Internal types are STRING, DURATION, TIMESTAMP, LOCAL_DATE, DECIMAL,
-  /// BINARY. Java xlang DescriptorGrouper excludes enums from finals (line 897
-  /// in XtypeResolver). Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20),
-  /// LIST (21), SET (22), MAP (23)
+  /// BINARY, ARRAY, and primitive arrays. Java xlang DescriptorGrouper excludes
+  /// enums from finals (line 897 in XtypeResolver). Excludes: ENUM (13-14),
+  /// STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP (23)
   static constexpr bool is_internal_type_id(uint32_t tid) {
     return tid == static_cast<uint32_t>(TypeId::STRING) ||
            (tid >= static_cast<uint32_t>(TypeId::DURATION) &&
-            tid <= static_cast<uint32_t>(TypeId::BINARY));
+            tid <= static_cast<uint32_t>(TypeId::BINARY)) ||
+           tid == static_cast<uint32_t>(TypeId::ARRAY) ||
+           (tid >= static_cast<uint32_t>(TypeId::BOOL_ARRAY) &&
+            tid <= static_cast<uint32_t>(TypeId::FLOAT64_ARRAY));
   }
 
   static constexpr int group_rank(size_t index) {

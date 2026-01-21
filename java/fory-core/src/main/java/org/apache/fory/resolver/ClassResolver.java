@@ -172,7 +172,7 @@ public class ClassResolver extends TypeResolver {
 
   private static final int INTERNAL_ID_LIMIT = 256;
 
-  public static final int NATIVE_START_ID = Types.NAMED_EXT + 1;
+  public static final int NATIVE_START_ID = Types.NONE + 1;
   public static final int VOID_ID = NATIVE_START_ID;
   public static final int CHAR_ID = NATIVE_START_ID + 1;
   // Note: following pre-defined class id should be continuous, since they may be used based range.

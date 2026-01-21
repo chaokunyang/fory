@@ -1,6 +1,6 @@
 ---
 title: Field Configuration
-sidebar_position: 5
+sidebar_position: 7
 id: field_configuration
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more

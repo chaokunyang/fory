@@ -446,9 +446,8 @@ class JavaGenerator(BaseGenerator):
 
         # Generate @ForyField annotation if needed
         annotations = []
-        tag_id = self.get_field_id(field)
-        if tag_id is not None:
-            annotations.append(f"id = {tag_id}")
+        if field.tag_id is not None:
+            annotations.append(f"id = {field.tag_id}")
         if field.optional:
             annotations.append("nullable = true")
         if field.ref:
@@ -575,7 +574,7 @@ class JavaGenerator(BaseGenerator):
             field.element_ref,
         )
         self.collect_integer_imports(field.field_type, imports)
-        if field.optional or field.ref or self.get_field_id(field) is not None:
+        if field.optional or field.ref or field.tag_id is not None:
             imports.add("org.apache.fory.annotation.ForyField")
 
     def collect_integer_imports(self, field_type: FieldType, imports: Set[str]) -> None:

@@ -66,6 +66,8 @@ def test_fbs_type_mapping_and_options():
     assert fields["friendly"].options["priority"] == 1
     assert fields["pos"].number == 0
     assert fields["mana"].number == 1
+    assert fields["pos"].tag_id == 0
+    assert fields["mana"].tag_id == 1
 
     enum_values = {v.name: v.value for v in schema.enums[0].values}
     assert enum_values["Green"] == 1

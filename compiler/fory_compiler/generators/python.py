@@ -260,7 +260,7 @@ class PythonGenerator(BaseGenerator):
             default_expr, comment = default.split(" # ", 1)
             trailing_comment = f"  # {comment}"
 
-        tag_id = self.get_field_id(field)
+        tag_id = field.tag_id
         if tag_id is not None or field.ref:
             field_args = []
             if tag_id is not None:

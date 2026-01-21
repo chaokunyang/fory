@@ -155,6 +155,7 @@ class FbsTranslator:
                     name=field.name,
                     field_type=field_type,
                     number=index,
+                    tag_id=index,
                     options=dict(field.attributes),
                     line=field.line,
                     column=field.column,

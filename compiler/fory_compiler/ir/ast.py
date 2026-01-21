@@ -89,6 +89,7 @@ class Field:
     name: str
     field_type: FieldType
     number: int
+    tag_id: Optional[int] = None
     optional: bool = False
     ref: bool = False
     element_optional: bool = False

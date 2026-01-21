@@ -20,5 +20,7 @@ apache/fory-site@main:
     dest: docs/guide/
   - source: docs/specification/
     dest: docs/specification/
+  - source: docs/compiler/
+    dest: docs/compiler/
   - source: docs/benchmarks/
     dest: static/img/benchmarks/

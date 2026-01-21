@@ -699,9 +699,10 @@ template <typename T> struct CompileTimeFieldHelpers {
   template <size_t Index>
   using UnwrappedFieldType = typename UnwrappedFieldTypeHelper<Index>::type;
 
-  /// Legacy compatibility: returns true if field requires ref metadata
-  /// in the wire format (i.e., is optional/nullable)
-  template <size_t Index> static constexpr bool field_requires_ref_metadata() {
+  /// Returns true if the field's type can hold null (optional/shared_ptr/
+  /// unique_ptr/weak_ptr). This forces ref/null flags in the wire format even
+  /// when field metadata marks it non-nullable.
+  template <size_t Index> static constexpr bool field_type_is_nullable() {
     if constexpr (FieldCount == 0) {
       return false;
     } else {
@@ -709,7 +710,7 @@ template <typename T> struct CompileTimeFieldHelpers {
       using RawFieldType = meta::RemoveMemberPointerCVRefT<PtrT>;
       using FieldType = unwrap_field_t<RawFieldType>;
       // Check the unwrapped type
-      return requires_ref_metadata_v<FieldType>;
+      return is_nullable_v<FieldType>;
     }
   }
 
@@ -877,11 +878,11 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   template <size_t... Indices>
   static constexpr std::array<bool, FieldCount>
-  make_requires_ref_metadata_flags(std::index_sequence<Indices...>) {
+  make_nullable_type_flags(std::index_sequence<Indices...>) {
     if constexpr (FieldCount == 0) {
       return {};
     } else {
-      return {field_requires_ref_metadata<Indices>()...};
+      return {field_type_is_nullable<Indices>()...};
     }
   }
 
@@ -891,11 +892,10 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr std::array<bool, FieldCount> nullable_flags =
       make_nullable_flags(std::make_index_sequence<FieldCount>{});
 
-  /// Flags for fields that require ref metadata encoding (smart pointers,
-  /// optional)
-  static inline constexpr std::array<bool, FieldCount>
-      requires_ref_metadata_flags = make_requires_ref_metadata_flags(
-          std::make_index_sequence<FieldCount>{});
+  /// Flags for fields whose types are nullable wrappers (optional/shared_ptr/
+  /// unique_ptr/weak_ptr), which require ref/null flags in the wire format.
+  static inline constexpr std::array<bool, FieldCount> nullable_type_flags =
+      make_nullable_type_flags(std::make_index_sequence<FieldCount>{});
 
   static inline constexpr std::array<size_t, FieldCount> snake_case_lengths =
       []() constexpr {
@@ -1123,7 +1123,7 @@ template <typename T> struct CompileTimeFieldHelpers {
     } else {
       for (size_t i = 0; i < FieldCount; ++i) {
         if (!is_primitive_type_id(type_ids[i]) || nullable_flags[i] ||
-            requires_ref_metadata_flags[i]) {
+            nullable_type_flags[i]) {
           return false;
         }
       }
@@ -1198,7 +1198,7 @@ template <typename T> struct CompileTimeFieldHelpers {
         size_t original_idx = sorted_indices[i];
         if (is_primitive_type_id(type_ids[original_idx]) &&
             !nullable_flags[original_idx] &&
-            !requires_ref_metadata_flags[original_idx]) {
+            !nullable_type_flags[original_idx]) {
           ++count;
         } else {
           break; // Non-nullable primitives are always first in sorted order
@@ -1644,8 +1644,8 @@ void write_single_field(const T &obj, WriteContext &ctx,
   // Get field metadata from fory::field<> or FORY_FIELD_TAGS or defaults
   constexpr bool is_nullable = Helpers::template field_nullable<Index>();
   constexpr bool track_ref = Helpers::template field_track_ref<Index>();
-  // For backwards compatibility, also check requires_ref_metadata_v
-  constexpr bool field_requires_ref = requires_ref_metadata_v<FieldType>;
+  // Some wrapper types always require ref/null flags in the wire format.
+  constexpr bool field_type_is_nullable = is_nullable_v<FieldType>;
 
   // Special handling for std::optional<uint32_t/uint64_t> with encoding config
   // This must come BEFORE the general primitive check because optional requires
@@ -1725,7 +1725,7 @@ void write_single_field(const T &obj, WriteContext &ctx,
   }
 
   // Per Rust implementation: primitives are written directly without ref/type
-  if constexpr (is_primitive_field && !field_requires_ref) {
+  if constexpr (is_primitive_field && !field_type_is_nullable) {
     if constexpr (::fory::detail::has_field_config_v<T> &&
                   (std::is_same_v<FieldType, uint32_t> ||
                    std::is_same_v<FieldType, uint64_t> ||
@@ -1785,7 +1785,7 @@ void write_single_field(const T &obj, WriteContext &ctx,
   if constexpr (is_collection_field) {
     // Compute RefMode from field metadata
     constexpr RefMode coll_ref_mode =
-        make_ref_mode(is_nullable || field_requires_ref, track_ref);
+        make_ref_mode(is_nullable || field_type_is_nullable, track_ref);
     Serializer<FieldType>::write(field_value, ctx, coll_ref_mode, false, true);
     return;
   }
@@ -1794,7 +1794,7 @@ void write_single_field(const T &obj, WriteContext &ctx,
   // RefMode: based on nullable and track_ref flags
   // Per xlang protocol: non-nullable fields skip ref flag entirely
   constexpr RefMode field_ref_mode =
-      make_ref_mode(is_nullable || field_requires_ref, track_ref);
+      make_ref_mode(is_nullable || field_type_is_nullable, track_ref);
 
   // write_type: determined by field_need_write_type_info logic
   // Enums: false (per Rust util.rs:58-59)
@@ -2031,7 +2031,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // mode, nested structs carry TypeMeta in the stream so that
   // `Serializer<T>::read` can dispatch to `read_compatible` with the correct
   // remote schema.
-  constexpr bool field_requires_ref = requires_ref_metadata_v<FieldType>;
+  constexpr bool field_type_is_nullable = is_nullable_v<FieldType>;
   constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
   // Check if field is a struct type - use type_id to handle shared_ptr<Struct>
   constexpr bool is_struct_field = is_struct_type(field_type_id);
@@ -2072,13 +2072,13 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // RefMode: based on nullable and track_ref flags
   // Per xlang protocol: non-nullable fields skip ref flag entirely
   constexpr RefMode field_ref_mode =
-      make_ref_mode(is_nullable || field_requires_ref, track_ref);
+      make_ref_mode(is_nullable || field_type_is_nullable, track_ref);
 
 #ifdef ENABLE_FORY_DEBUG_OUTPUT
   const auto debug_names = decltype(field_info)::Names;
   std::cerr << "[xlang][field] T=" << typeid(T).name() << ", index=" << Index
             << ", name=" << debug_names[Index]
-            << ", field_requires_ref=" << field_requires_ref
+            << ", field_type_is_nullable=" << field_type_is_nullable
             << ", is_nullable=" << is_nullable
             << ", ref_mode=" << static_cast<int>(field_ref_mode)
             << ", read_type=" << read_type
@@ -2089,7 +2089,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // shared_ptr) that don't need ref metadata, bypass Serializer<T>::read
   // and use direct buffer reads with Error&.
   constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
-  if constexpr (is_raw_prim && is_primitive_field && !field_requires_ref) {
+  if constexpr (is_raw_prim && is_primitive_field && !field_type_is_nullable) {
     auto read_value = [&ctx]() -> FieldType {
       if constexpr (is_configurable_int_v<FieldType>) {
 #ifdef ENABLE_FORY_DEBUG_OUTPUT

@@ -655,6 +655,34 @@ jobs:
       - name: Run Go IDL Tests
         run: ./integration_tests/idl_tests/run_go_tests.sh
 
+  dart:
+    name: Dart CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.6.1'
+      - name: Display Dart version
+        run: dart --version
+      - name: Get dependencies
+        run: |
+          cd dart
+          dart pub get
+      - name: Generate code
+        run: |
+          cd dart/packages/fory-test
+          dart run build_runner build
+      - name: Run tests
+        run: |
+          cd dart
+          dart test
+      - name: Analyze code
+        run: |
+          cd dart
+          dart analyze
+
   lint:
     name: Code Style Check
     runs-on: ubuntu-latest

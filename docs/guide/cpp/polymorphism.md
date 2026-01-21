@@ -164,6 +164,28 @@ FORY_STRUCT(Pet, animal1, animal2, animal3);
 - Performance is critical and you don't need subtype support
 - Working with monomorphic data despite having a polymorphic base class
 
+### Field Configuration Without Wrapper Types
+
+Use `FORY_FIELD_CONFIG` to configure fields without `fory::field<>` wrapper:
+
+```cpp
+struct Zoo {
+  std::shared_ptr<Animal> star;      // Auto-detected as polymorphic
+  std::shared_ptr<Animal> backup;    // Nullable polymorphic field
+  std::shared_ptr<Animal> mascot;    // Non-dynamic (no subtype dispatch)
+};
+FORY_STRUCT(Zoo, star, backup, mascot);
+
+// Configure fields with tag IDs and options
+FORY_FIELD_CONFIG(Zoo,
+    (star, fory::F(0)),                    // Tag ID 0, default options
+    (backup, fory::F(1).nullable()),       // Tag ID 1, allow nullptr
+    (mascot, fory::F(2).dynamic(false))    // Tag ID 2, disable polymorphism
+);
+```
+
+See [Field Configuration](field-configuration.md) for complete details on `fory::nullable`, `fory::ref`, and other field-level options
+
 ## std::unique_ptr Polymorphism
 
 `std::unique_ptr` works the same way as `std::shared_ptr` for polymorphic types:
@@ -222,37 +244,10 @@ assert(dynamic_cast<Cat*>(decoded.animals[1].get()) != nullptr);
 assert(dynamic_cast<Dog*>(decoded.registry["pet1"].get()) != nullptr);
 ```
 
-## Reference Tracking with Polymorphism
+## Reference Tracking
 
-When using `track_ref(true)`, shared objects are serialized once and references are preserved:
-
-```cpp
-struct Node {
-  int32_t value = 0;
-  std::shared_ptr<Node> left;
-  std::shared_ptr<Node> right;
-};
-FORY_STRUCT(Node, value, left, right);
-
-auto fory = Fory::builder().track_ref(true).build();
-fory.register_struct<Node>(100);
-
-// Create shared reference
-auto shared_node = std::make_shared<Node>();
-shared_node->value = 42;
-
-Node root;
-root.value = 1;
-root.left = shared_node;   // Both point to same object
-root.right = shared_node;
-
-auto bytes = fory.serialize(root).value();
-auto decoded = fory.deserialize<Node>(bytes).value();
-
-// Shared reference preserved
-assert(decoded.left == decoded.right);
-assert(decoded.left->value == 42);
-```
+Reference tracking for `std::shared_ptr` works the same with polymorphic types.
+See [Supported Types](supported-types.md) for details and examples.
 
 ## Nested Polymorphism Depth Limit
 
@@ -272,6 +267,7 @@ assert(fory1.config().max_dyn_depth == 5);
 
 // Increase limit for deeper nesting
 auto fory2 = Fory::builder().max_dyn_depth(10).build();
+fory2.register_struct<Container>(1);
 
 // Create deeply nested structure
 auto level3 = std::make_shared<Container>();
@@ -296,6 +292,7 @@ auto decoded = fory2.deserialize<std::shared_ptr<Container>>(bytes).value();
 
 ```cpp
 auto fory_shallow = Fory::builder().max_dyn_depth(2).build();
+fory_shallow.register_struct<Container>(1);
 
 // 3 levels exceeds max_dyn_depth=2
 auto result = fory_shallow.deserialize<std::shared_ptr<Container>>(bytes);
@@ -307,34 +304,24 @@ assert(!result.ok());  // Fails with depth exceeded error
 - **Increase `max_dyn_depth`**: For legitimate deeply nested polymorphic data structures
 - **Decrease `max_dyn_depth`**: For stricter security requirements or shallow data structures
 
-## Nullable Polymorphic Fields
+## Nullability for Polymorphic Fields
 
-By default, smart pointer fields are non-nullable. Use `fory::nullable` to allow `nullptr`:
+By default, `std::shared_ptr<T>` and `std::unique_ptr<T>` fields are treated as
+non-nullable in the schema. To allow `nullptr`, wrap the field with
+`fory::field<>` (or `FORY_FIELD_TAGS`) and opt in with `fory::nullable`.
 
 ```cpp
 struct Pet {
-  // Non-nullable (default) - must not be nullptr
+  // Non-nullable (default)
   std::shared_ptr<Animal> primary;
 
-  // Nullable - can be nullptr
+  // Nullable via explicit field metadata
   fory::field<std::shared_ptr<Animal>, 0, fory::nullable> optional;
 };
 FORY_STRUCT(Pet, primary, optional);
-
-Pet pet;
-pet.primary = std::make_shared<Dog>();
-pet.optional = nullptr;  // Allowed with fory::nullable
-
-auto fory = Fory::builder().build();
-fory.register_struct<Pet>(100);
-fory.register_struct<Dog>(101);
-
-auto bytes = fory.serialize(pet).value();
-auto decoded = fory.deserialize<Pet>(bytes).value();
-
-assert(decoded.primary != nullptr);
-assert(decoded.optional == nullptr);
 ```
+
+See [Field Configuration](field-configuration.md) for more details.
 
 ## Combining Polymorphism with Other Features
 

@@ -31,12 +31,12 @@ Note: Protobuf is fetched automatically via CMake FetchContent, so no manual ins
 
 | Datatype     | Operation   | Fory TPS   | Protobuf TPS | Faster      |
 | ------------ | ----------- | ---------- | ------------ | ----------- |
-| Mediacontent | Serialize   | 2,430,924  | 484,368      | Fory (5.0x) |
-| Mediacontent | Deserialize | 740,074    | 387,522      | Fory (1.9x) |
-| Sample       | Serialize   | 4,813,270  | 3,021,968    | Fory (1.6x) |
-| Sample       | Deserialize | 915,554    | 684,675      | Fory (1.3x) |
-| Struct       | Serialize   | 18,105,957 | 5,788,186    | Fory (3.1x) |
-| Struct       | Deserialize | 7,495,726  | 5,932,982    | Fory (1.3x) |
+| Mediacontent | Serialize   | 11,319,876 | 1,181,595    | Fory (9.6x) |
+| Mediacontent | Deserialize | 2,729,388  | 835,956      | Fory (3.3x) |
+| Sample       | Serialize   | 16,899,403 | 10,575,760   | Fory (1.6x) |
+| Sample       | Deserialize | 3,079,241  | 1,450,789    | Fory (2.1x) |
+| Struct       | Serialize   | 43,184,198 | 29,359,454   | Fory (1.5x) |
+| Struct       | Deserialize | 54,599,691 | 38,796,674   | Fory (1.4x) |
 
 ## Quick Start
 

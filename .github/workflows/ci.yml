@@ -660,10 +660,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Dart SDK
-        uses: dart-lang/setup-dart@v1
-        with:
-          sdk: '3.6.1'
+      - name: Install Dart SDK
+        run: |
+          # Download and install Dart SDK
+          DART_VERSION=3.6.1
+          wget -q https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip
+          unzip -q dartsdk-linux-x64-release.zip
+          export PATH="$PATH:$PWD/dart-sdk/bin"
+          echo "$PWD/dart-sdk/bin" >> $GITHUB_PATH
       - name: Display Dart version
         run: dart --version
       - name: Get dependencies
@@ -678,6 +682,10 @@ jobs:
         run: |
           cd dart
           dart test
+      - name: Run code analysis
+        run: |
+          cd dart
+          dart analyze
       - name: Analyze code
         run: |
           cd dart

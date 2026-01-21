@@ -208,8 +208,8 @@ func buildMonster() monster.Monster {
 	}
 }
 
-func runLocalMonsterRoundTrip(t *testing.T, f *fory.Fory, monster monster.Monster) {
-	data, err := f.Serialize(monster)
+func runLocalMonsterRoundTrip(t *testing.T, f *fory.Fory, monsterValue monster.Monster) {
+	data, err := f.Serialize(monsterValue)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -219,12 +219,12 @@ func runLocalMonsterRoundTrip(t *testing.T, f *fory.Fory, monster monster.Monste
 		t.Fatalf("deserialize: %v", err)
 	}
 
-	if !reflect.DeepEqual(monster, out) {
-		t.Fatalf("roundtrip mismatch: %#v != %#v", monster, out)
+	if !reflect.DeepEqual(monsterValue, out) {
+		t.Fatalf("roundtrip mismatch: %#v != %#v", monsterValue, out)
 	}
 }
 
-func runFileMonsterRoundTrip(t *testing.T, f *fory.Fory, monster monster.Monster) {
+func runFileMonsterRoundTrip(t *testing.T, f *fory.Fory, monsterValue monster.Monster) {
 	dataFile := os.Getenv("DATA_FILE_FLATBUFFERS_MONSTER")
 	if dataFile == "" {
 		return
@@ -238,8 +238,8 @@ func runFileMonsterRoundTrip(t *testing.T, f *fory.Fory, monster monster.Monster
 	if err := f.Deserialize(payload, &decoded); err != nil {
 		t.Fatalf("deserialize peer payload: %v", err)
 	}
-	if !reflect.DeepEqual(monster, decoded) {
-		t.Fatalf("peer payload mismatch: %#v != %#v", monster, decoded)
+	if !reflect.DeepEqual(monsterValue, decoded) {
+		t.Fatalf("peer payload mismatch: %#v != %#v", monsterValue, decoded)
 	}
 
 	out, err := f.Serialize(decoded)

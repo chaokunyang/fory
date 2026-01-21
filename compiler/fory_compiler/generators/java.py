@@ -356,10 +356,10 @@ class JavaGenerator(BaseGenerator):
 
     def collect_message_imports(self, message: Message, imports: Set[str]):
         """Collect imports for a message and all its nested types recursively."""
+        if message.fields:
+            imports.add("org.apache.fory.annotation.ForyField")
         for field in message.fields:
             self.collect_field_imports(field, imports)
-            if field.optional or field.ref:
-                imports.add("org.apache.fory.annotation.ForyField")
 
         # Add imports for equals/hashCode
         imports.add("java.util.Objects")
@@ -447,14 +447,13 @@ class JavaGenerator(BaseGenerator):
         lines = []
 
         # Generate @ForyField annotation if needed
-        annotations = []
+        annotations = [f"id = {field.number}"]
         if field.optional:
             annotations.append("nullable = true")
         if field.ref:
             annotations.append("ref = true")
 
-        if annotations:
-            lines.append(f"@ForyField({', '.join(annotations)})")
+        lines.append(f"@ForyField({', '.join(annotations)})")
 
         int_annotation = self.get_integer_annotation(field.field_type)
         if int_annotation:

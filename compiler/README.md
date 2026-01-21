@@ -359,7 +359,7 @@ Generates structs with:
 
 - `#[derive(ForyObject)]` macro
 - `#[fory(...)]` field attributes
-- `#[tag(...)]` for namespace registration
+- a registration helper for namespace-based registration
 
 ```rust
 #[derive(ForyObject, Debug, Clone, PartialEq, Default)]

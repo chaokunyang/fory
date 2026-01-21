@@ -208,9 +208,9 @@ def main() -> int:
     local_roundtrip_primitives(fory, primitives)
     file_roundtrip_primitives(fory, primitives)
 
-    monster = build_monster()
-    local_roundtrip_monster(fory, monster)
-    file_roundtrip_monster(fory, monster)
+    monster_value = build_monster()
+    local_roundtrip_monster(fory, monster_value)
+    file_roundtrip_monster(fory, monster_value)
 
     container = build_container()
     local_roundtrip_container(fory, container)

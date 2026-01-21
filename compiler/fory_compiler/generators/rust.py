@@ -196,10 +196,6 @@ class RustGenerator(BaseGenerator):
         lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
         lines.append("#[repr(i32)]")
 
-        # Tag for name-based registration
-        if enum.type_id is None and self.package:
-            lines.append(f'#[tag("{self.package}.{reg_name}")]')
-
         lines.append(f"pub enum {type_name} {{")
 
         # Enum values (strip prefix for scoped enums)
@@ -226,10 +222,6 @@ class RustGenerator(BaseGenerator):
 
         # Derive macros
         lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
-
-        # Tag for name-based registration
-        if message.type_id is None and self.package:
-            lines.append(f'#[tag("{self.package}.{reg_name}")]')
 
         lines.append(f"pub struct {type_name} {{")
 
@@ -295,7 +287,7 @@ class RustGenerator(BaseGenerator):
         """Generate a struct field."""
         lines = []
 
-        attrs = []
+        attrs = [f"id = {field.number}"]
         if field.optional:
             attrs.append("nullable = true")
         encoding = self.get_encoding_attr(field.field_type)

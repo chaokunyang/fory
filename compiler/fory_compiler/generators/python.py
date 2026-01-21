@@ -134,7 +134,7 @@ class PythonGenerator(BaseGenerator):
         imports: Set[str] = set()
 
         # Collect all imports
-        imports.add("from dataclasses import dataclass, field")
+        imports.add("from dataclasses import dataclass")
         imports.add("from enum import IntEnum")
         imports.add("from typing import Dict, List, Optional")
         imports.add("import pyfory")
@@ -268,21 +268,16 @@ class PythonGenerator(BaseGenerator):
             default_expr, comment = default.split(" # ", 1)
             trailing_comment = f"  # {comment}"
 
+        field_args = [f"id={field.number}"]
+        if field.optional:
+            field_args.append("nullable=True")
         if field.ref:
-            field_args = []
-            if field.optional:
-                field_args.append("nullable=True")
             field_args.append("ref=True")
-            if default_factory is not None:
-                field_args.append(f"default_factory={default_factory}")
-            else:
-                field_args.append(f"default={default_expr}")
-            field_default = f"pyfory.field({', '.join(field_args)}){trailing_comment}"
+        if default_factory is not None:
+            field_args.append(f"default_factory={default_factory}")
         else:
-            if default_factory is not None:
-                field_default = f"field(default_factory={default_factory})"
-            else:
-                field_default = f"{default_expr}{trailing_comment}"
+            field_args.append(f"default={default_expr}")
+        field_default = f"pyfory.field({', '.join(field_args)}){trailing_comment}"
 
         lines.append(f"{field_name}: {python_type} = {field_default}")
 

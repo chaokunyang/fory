@@ -86,14 +86,26 @@ class CppGenerator(BaseGenerator):
             return self.package.replace(".", "::")
         return ""
 
-    def get_macro_type_name(
+    def get_namespaced_type_name(
+        self,
+        type_name: str,
+        parent_stack: List[Message],
+    ) -> str:
+        """Get a C++ type name including namespace for global macros."""
+        qualified_name = self.get_qualified_type_name(type_name, parent_stack)
+        namespace = self.get_namespace()
+        if namespace:
+            return f"{namespace}::{qualified_name}"
+        return qualified_name
+
+    def get_field_config_type_name(
         self,
         type_name: str,
         parent_stack: List[Message],
         type_aliases: Dict[str, str],
     ) -> str:
-        """Get a macro-safe type name and record alias for nested types."""
-        qualified_name = self.get_qualified_type_name(type_name, parent_stack)
+        """Get a macro-safe type name for FORY_FIELD_CONFIG and record alias."""
+        qualified_name = self.get_namespaced_type_name(type_name, parent_stack)
         if "::" in qualified_name:
             alias = f"ForyType_{qualified_name.replace('::', '_')}"
             type_aliases.setdefault(alias, qualified_name)
@@ -167,13 +179,17 @@ class CppGenerator(BaseGenerator):
             )
             lines.append("")
 
+        if struct_macros:
+            lines.extend(struct_macros)
+            lines.append("")
+
+        if namespace:
+            lines.append(f"}} // namespace {namespace}")
+            lines.append("")
+
         if type_aliases:
             for alias, target in sorted(type_aliases.items()):
                 lines.append(f"using {alias} = {target};")
-            lines.append("")
-
-        if struct_macros:
-            lines.extend(struct_macros)
             lines.append("")
 
         if field_config_macros:
@@ -182,6 +198,10 @@ class CppGenerator(BaseGenerator):
 
         if enum_macros:
             lines.extend(enum_macros)
+            lines.append("")
+
+        if namespace:
+            lines.append(f"namespace {namespace} {{")
             lines.append("")
 
         # Generate registration function (after FORY_STRUCT/FORY_ENUM)
@@ -244,7 +264,7 @@ class CppGenerator(BaseGenerator):
     ) -> str:
         """Generate a FORY_ENUM macro line for an enum."""
         value_names = ", ".join(self.get_enum_value_names(enum))
-        qualified_name = self.get_qualified_type_name(enum.name, parent_stack)
+        qualified_name = self.get_namespaced_type_name(enum.name, parent_stack)
         return f"FORY_ENUM({qualified_name}, {value_names});"
 
     def generate_message_definition(
@@ -270,11 +290,7 @@ class CppGenerator(BaseGenerator):
         for nested_enum in message.nested_enums:
             lines.extend(self.generate_enum_definition(nested_enum, body_indent))
             lines.append("")
-            enum_macros.append(
-                self.generate_enum_macro(
-                    nested_enum, lineage
-                )
-            )
+            enum_macros.append(self.generate_enum_macro(nested_enum, lineage))
 
         for nested_msg in message.nested_messages:
             lines.extend(
@@ -319,17 +335,18 @@ class CppGenerator(BaseGenerator):
 
         lines.append(f"{indent}}};")
 
-        macro_type_name = self.get_macro_type_name(
-            message.name, parent_stack, type_aliases
-        )
+        struct_type_name = self.get_qualified_type_name(message.name, parent_stack)
         if message.fields:
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
-            struct_macros.append(f"FORY_STRUCT({macro_type_name}, {field_names});")
+            struct_macros.append(f"FORY_STRUCT({struct_type_name}, {field_names});")
+            field_config_type_name = self.get_field_config_type_name(
+                message.name, parent_stack, type_aliases
+            )
             field_config_macros.append(
-                self.generate_field_config_macro(message, macro_type_name)
+                self.generate_field_config_macro(message, field_config_type_name)
             )
         else:
-            struct_macros.append(f"FORY_STRUCT({macro_type_name});")
+            struct_macros.append(f"FORY_STRUCT({struct_type_name});")
 
         return lines
 

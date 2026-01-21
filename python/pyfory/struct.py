@@ -1249,8 +1249,6 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
         id_ = item[0]
         compress = id_ in {
             # Signed compressed types
-            TypeId.INT32,
-            TypeId.INT64,
             TypeId.VARINT32,
             TypeId.VARINT64,
             TypeId.TAGGED_INT64,

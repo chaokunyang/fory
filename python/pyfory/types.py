@@ -261,32 +261,48 @@ def get_primitive_type_size(type_id) -> int:
 
 # Int8ArrayType = TypeVar("Int8ArrayType", bound=array.ArrayType)
 BoolArrayType = TypeVar("BoolArrayType")
+uint8_array = TypeVar("uint8_array", bound=array.ArrayType)
 int16_array = TypeVar("int16_array", bound=array.ArrayType)
 int32_array = TypeVar("int32_array", bound=array.ArrayType)
 int64_array = TypeVar("int64_array", bound=array.ArrayType)
+uint16_array = TypeVar("uint16_array", bound=array.ArrayType)
+uint32_array = TypeVar("uint32_array", bound=array.ArrayType)
+uint64_array = TypeVar("uint64_array", bound=array.ArrayType)
 float32_array = TypeVar("float32_array", bound=array.ArrayType)
 float64_array = TypeVar("float64_array", bound=array.ArrayType)
 BoolNDArrayType = TypeVar("BoolNDArrayType", bound=ndarray)
+Uint8NDArrayType = TypeVar("Uint8NDArrayType", bound=ndarray)
 Int16NDArrayType = TypeVar("Int16NDArrayType", bound=ndarray)
 Int32NDArrayType = TypeVar("Int32NDArrayType", bound=ndarray)
 Int64NDArrayType = TypeVar("Int64NDArrayType", bound=ndarray)
+Uint16NDArrayType = TypeVar("Uint16NDArrayType", bound=ndarray)
+Uint32NDArrayType = TypeVar("Uint32NDArrayType", bound=ndarray)
+Uint64NDArrayType = TypeVar("Uint64NDArrayType", bound=ndarray)
 Float32NDArrayType = TypeVar("Float32NDArrayType", bound=ndarray)
 Float64NDArrayType = TypeVar("Float64NDArrayType", bound=ndarray)
 
 
 _py_array_types = {
     # Int8ArrayType,
+    uint8_array,
     int16_array,
     int32_array,
     int64_array,
+    uint16_array,
+    uint32_array,
+    uint64_array,
     float32_array,
     float64_array,
 }
 _np_array_types = {
     BoolNDArrayType,
+    Uint8NDArrayType,
     Int16NDArrayType,
     Int32NDArrayType,
     Int64NDArrayType,
+    Uint16NDArrayType,
+    Uint32NDArrayType,
+    Uint64NDArrayType,
     Float32NDArrayType,
     Float64NDArrayType,
 }
@@ -303,6 +319,10 @@ _primitive_array_type_ids = {
     TypeId.INT16_ARRAY,
     TypeId.INT32_ARRAY,
     TypeId.INT64_ARRAY,
+    TypeId.UINT8_ARRAY,
+    TypeId.UINT16_ARRAY,
+    TypeId.UINT32_ARRAY,
+    TypeId.UINT64_ARRAY,
     TypeId.FLOAT32_ARRAY,
     TypeId.FLOAT64_ARRAY,
 }

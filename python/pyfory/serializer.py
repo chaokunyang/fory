@@ -118,15 +118,23 @@ else:
     )
 
 from pyfory.types import (
+    uint8_array,
     int16_array,
     int32_array,
     int64_array,
+    uint16_array,
+    uint32_array,
+    uint64_array,
     float32_array,
     float64_array,
     BoolNDArrayType,
+    Uint8NDArrayType,
     Int16NDArrayType,
     Int32NDArrayType,
     Int64NDArrayType,
+    Uint16NDArrayType,
+    Uint32NDArrayType,
+    Uint64NDArrayType,
     Float32NDArrayType,
     Float64NDArrayType,
     TypeId,
@@ -222,18 +230,26 @@ class PandasRangeIndexSerializer(Serializer):
 # Use numpy array or python array module.
 typecode_dict = (
     {
-        # use bytes serializer for byte array.
+        # bytes use BytesSerializer; array.array uses explicit typecodes.
+        "B": (1, uint8_array, TypeId.UINT8_ARRAY),
         "h": (2, int16_array, TypeId.INT16_ARRAY),
         "i": (4, int32_array, TypeId.INT32_ARRAY),
         "l": (8, int64_array, TypeId.INT64_ARRAY),
+        "H": (2, uint16_array, TypeId.UINT16_ARRAY),
+        "I": (4, uint32_array, TypeId.UINT32_ARRAY),
+        "L": (8, uint64_array, TypeId.UINT64_ARRAY),
         "f": (4, float32_array, TypeId.FLOAT32_ARRAY),
         "d": (8, float64_array, TypeId.FLOAT64_ARRAY),
     }
     if not _WINDOWS
     else {
+        "B": (1, uint8_array, TypeId.UINT8_ARRAY),
         "h": (2, int16_array, TypeId.INT16_ARRAY),
         "l": (4, int32_array, TypeId.INT32_ARRAY),
         "q": (8, int64_array, TypeId.INT64_ARRAY),
+        "H": (2, uint16_array, TypeId.UINT16_ARRAY),
+        "L": (4, uint32_array, TypeId.UINT32_ARRAY),
+        "Q": (8, uint64_array, TypeId.UINT64_ARRAY),
         "f": (4, float32_array, TypeId.FLOAT32_ARRAY),
         "d": (8, float64_array, TypeId.FLOAT64_ARRAY),
     }
@@ -241,17 +257,25 @@ typecode_dict = (
 
 typeid_code = (
     {
+        TypeId.UINT8_ARRAY: "B",
         TypeId.INT16_ARRAY: "h",
         TypeId.INT32_ARRAY: "i",
         TypeId.INT64_ARRAY: "l",
+        TypeId.UINT16_ARRAY: "H",
+        TypeId.UINT32_ARRAY: "I",
+        TypeId.UINT64_ARRAY: "L",
         TypeId.FLOAT32_ARRAY: "f",
         TypeId.FLOAT64_ARRAY: "d",
     }
     if not _WINDOWS
     else {
+        TypeId.UINT8_ARRAY: "B",
         TypeId.INT16_ARRAY: "h",
         TypeId.INT32_ARRAY: "l",
         TypeId.INT64_ARRAY: "q",
+        TypeId.UINT16_ARRAY: "H",
+        TypeId.UINT32_ARRAY: "L",
+        TypeId.UINT64_ARRAY: "Q",
         TypeId.FLOAT32_ARRAY: "f",
         TypeId.FLOAT64_ARRAY: "d",
     }
@@ -262,17 +286,25 @@ class PyArraySerializer(XlangCompatibleSerializer):
     typecode_dict = typecode_dict
     typecodearray_type = (
         {
+            "B": uint8_array,
             "h": int16_array,
             "i": int32_array,
             "l": int64_array,
+            "H": uint16_array,
+            "I": uint32_array,
+            "L": uint64_array,
             "f": float32_array,
             "d": float64_array,
         }
         if not _WINDOWS
         else {
+            "B": uint8_array,
             "h": int16_array,
             "l": int32_array,
             "q": int64_array,
+            "H": uint16_array,
+            "L": uint32_array,
+            "Q": uint64_array,
             "f": float32_array,
             "d": float64_array,
         }
@@ -381,20 +413,27 @@ class DynamicPyArraySerializer(Serializer):
 if np:
     _np_dtypes_dict = (
         {
-            # use bytes serializer for byte array.
             np.dtype(np.bool_): (1, "?", BoolNDArrayType, TypeId.BOOL_ARRAY),
+            np.dtype(np.uint8): (1, "B", Uint8NDArrayType, TypeId.UINT8_ARRAY),
             np.dtype(np.int16): (2, "h", Int16NDArrayType, TypeId.INT16_ARRAY),
             np.dtype(np.int32): (4, "i", Int32NDArrayType, TypeId.INT32_ARRAY),
             np.dtype(np.int64): (8, "l", Int64NDArrayType, TypeId.INT64_ARRAY),
+            np.dtype(np.uint16): (2, "H", Uint16NDArrayType, TypeId.UINT16_ARRAY),
+            np.dtype(np.uint32): (4, "I", Uint32NDArrayType, TypeId.UINT32_ARRAY),
+            np.dtype(np.uint64): (8, "L", Uint64NDArrayType, TypeId.UINT64_ARRAY),
             np.dtype(np.float32): (4, "f", Float32NDArrayType, TypeId.FLOAT32_ARRAY),
             np.dtype(np.float64): (8, "d", Float64NDArrayType, TypeId.FLOAT64_ARRAY),
         }
         if not _WINDOWS
         else {
             np.dtype(np.bool_): (1, "?", BoolNDArrayType, TypeId.BOOL_ARRAY),
+            np.dtype(np.uint8): (1, "B", Uint8NDArrayType, TypeId.UINT8_ARRAY),
             np.dtype(np.int16): (2, "h", Int16NDArrayType, TypeId.INT16_ARRAY),
             np.dtype(np.int32): (4, "l", Int32NDArrayType, TypeId.INT32_ARRAY),
             np.dtype(np.int64): (8, "q", Int64NDArrayType, TypeId.INT64_ARRAY),
+            np.dtype(np.uint16): (2, "H", Uint16NDArrayType, TypeId.UINT16_ARRAY),
+            np.dtype(np.uint32): (4, "L", Uint32NDArrayType, TypeId.UINT32_ARRAY),
+            np.dtype(np.uint64): (8, "Q", Uint64NDArrayType, TypeId.UINT64_ARRAY),
             np.dtype(np.float32): (4, "f", Float32NDArrayType, TypeId.FLOAT32_ARRAY),
             np.dtype(np.float64): (8, "d", Float64NDArrayType, TypeId.FLOAT64_ARRAY),
         }

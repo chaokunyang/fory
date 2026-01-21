@@ -832,6 +832,10 @@ cdef inline uint8_t* get_address(v):
         const int16_t[:] signed_short_data
         const int32_t[:] signed_int_data
         const int64_t[:] signed_long_data
+        const uint16_t[:] unsigned_short_data
+        const uint32_t[:] unsigned_int_data
+        const uint64_t[:] unsigned_long_data
+        const uint64_t[:] unsigned_long_long_data
         const float[:] signed_float_data
         const double[:] signed_double_data
         uint8_t* ptr
@@ -844,9 +848,15 @@ cdef inline uint8_t* get_address(v):
     elif dtype == "h":
         signed_short_data = v
         ptr = <uint8_t*>(&signed_short_data[0])
+    elif dtype == "H":
+        unsigned_short_data = v
+        ptr = <uint8_t*>(&unsigned_short_data[0])
     elif dtype == "i":
         signed_int_data = v
         ptr = <uint8_t*>(&signed_int_data[0])
+    elif dtype == "I":
+        unsigned_int_data = v
+        ptr = <uint8_t*>(&unsigned_int_data[0])
     elif dtype == "l":
         if _WINDOWS:
             signed_int_data = v
@@ -854,9 +864,19 @@ cdef inline uint8_t* get_address(v):
         else:
             signed_long_data = v
             ptr = <uint8_t*>(&signed_long_data[0])
+    elif dtype == "L":
+        if _WINDOWS:
+            unsigned_int_data = v
+            ptr = <uint8_t*>(&unsigned_int_data[0])
+        else:
+            unsigned_long_data = v
+            ptr = <uint8_t*>(&unsigned_long_data[0])
     elif dtype == "q":
         signed_long_data = v
         ptr = <uint8_t*>(&signed_long_data[0])
+    elif dtype == "Q":
+        unsigned_long_long_data = v
+        ptr = <uint8_t*>(&unsigned_long_long_data[0])
     elif dtype == "f":
         signed_float_data = v
         ptr = <uint8_t*>(&signed_float_data[0])

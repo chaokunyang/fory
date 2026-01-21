@@ -325,41 +325,16 @@ template <typename T> struct CompileTimeFieldHelpers {
       using FieldType = unwrap_field_t<RawFieldType>;
 
       // Check for encoding override from FORY_FIELD_CONFIG
-      // This allows specifying varint/fixed/tagged encoding for unsigned types
       if constexpr (::fory::detail::has_field_config_v<T>) {
-        constexpr auto enc =
-            ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
-        // Apply encoding override for uint32_t (non-optional)
-        if constexpr (std::is_same_v<FieldType, uint32_t>) {
-          if constexpr (enc == Encoding::Varint) {
-            return static_cast<uint32_t>(TypeId::VAR_UINT32);
-          }
-          return static_cast<uint32_t>(TypeId::UINT32);
+        constexpr uint32_t unsigned_tid =
+            compute_unsigned_type_id<FieldType, T, Index>();
+        if constexpr (unsigned_tid != 0) {
+          return unsigned_tid;
         }
-        // Apply encoding override for uint64_t (non-optional)
-        else if constexpr (std::is_same_v<FieldType, uint64_t>) {
-          if constexpr (enc == Encoding::Varint) {
-            return static_cast<uint32_t>(TypeId::VAR_UINT64);
-          } else if constexpr (enc == Encoding::Tagged) {
-            return static_cast<uint32_t>(TypeId::TAGGED_UINT64);
-          }
-          return static_cast<uint32_t>(TypeId::UINT64);
-        }
-        // Apply encoding override for std::optional<uint32_t>
-        else if constexpr (std::is_same_v<FieldType, std::optional<uint32_t>>) {
-          if constexpr (enc == Encoding::Varint) {
-            return static_cast<uint32_t>(TypeId::VAR_UINT32);
-          }
-          return static_cast<uint32_t>(TypeId::UINT32);
-        }
-        // Apply encoding override for std::optional<uint64_t>
-        else if constexpr (std::is_same_v<FieldType, std::optional<uint64_t>>) {
-          if constexpr (enc == Encoding::Varint) {
-            return static_cast<uint32_t>(TypeId::VAR_UINT64);
-          } else if constexpr (enc == Encoding::Tagged) {
-            return static_cast<uint32_t>(TypeId::TAGGED_UINT64);
-          }
-          return static_cast<uint32_t>(TypeId::UINT64);
+        constexpr uint32_t signed_tid =
+            compute_signed_type_id<FieldType, T, Index>();
+        if constexpr (signed_tid != 0) {
+          return signed_tid;
         }
       }
       return static_cast<uint32_t>(Serializer<FieldType>::type_id);
@@ -619,8 +594,16 @@ template <typename T> struct CompileTimeFieldHelpers {
         }
         return 0;
       } else if constexpr (std::is_same_v<FieldType, uint32_t> ||
-                           std::is_same_v<FieldType, unsigned int> ||
-                           std::is_same_v<FieldType, float>) {
+                           std::is_same_v<FieldType, unsigned int>) {
+        if constexpr (::fory::detail::has_field_config_v<T>) {
+          constexpr auto enc =
+              ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+          if constexpr (enc == Encoding::Varint) {
+            return 0;
+          }
+        }
+        return 4;
+      } else if constexpr (std::is_same_v<FieldType, float>) {
         return 4;
       } else if constexpr (std::is_same_v<FieldType, int64_t> ||
                            std::is_same_v<FieldType, long long>) {
@@ -633,8 +616,16 @@ template <typename T> struct CompileTimeFieldHelpers {
         }
         return 0;
       } else if constexpr (std::is_same_v<FieldType, uint64_t> ||
-                           std::is_same_v<FieldType, unsigned long long> ||
-                           std::is_same_v<FieldType, double>) {
+                           std::is_same_v<FieldType, unsigned long long>) {
+        if constexpr (::fory::detail::has_field_config_v<T>) {
+          constexpr auto enc =
+              ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
+          if constexpr (enc == Encoding::Varint || enc == Encoding::Tagged) {
+            return 0;
+          }
+        }
+        return 8;
+      } else if constexpr (std::is_same_v<FieldType, double>) {
         return 8;
       } else {
         return 0; // Not a fixed-size primitive
@@ -1463,6 +1454,61 @@ write_single_remaining_field(const T &obj, Buffer &buffer, uint32_t &offset) {
       return obj.*field_ptr;
     }
   }();
+  if constexpr (::fory::detail::has_field_config_v<T> &&
+                (std::is_same_v<FieldType, uint32_t> ||
+                 std::is_same_v<FieldType, unsigned int> ||
+                 std::is_same_v<FieldType, uint64_t> ||
+                 std::is_same_v<FieldType, unsigned long long> ||
+                 std::is_same_v<FieldType, int32_t> ||
+                 std::is_same_v<FieldType, int> ||
+                 std::is_same_v<FieldType, int64_t> ||
+                 std::is_same_v<FieldType, long long>)) {
+    constexpr auto enc =
+        ::fory::detail::GetFieldConfigEntry<T, original_index>::encoding;
+    if constexpr (std::is_same_v<FieldType, uint32_t> ||
+                  std::is_same_v<FieldType, unsigned int>) {
+      if constexpr (enc == Encoding::Varint) {
+        offset += put_varint_at<FieldType>(field_value, buffer, offset);
+      } else {
+        buffer.UnsafePut<uint32_t>(offset, static_cast<uint32_t>(field_value));
+        offset += 4;
+      }
+      return;
+    } else if constexpr (std::is_same_v<FieldType, uint64_t> ||
+                         std::is_same_v<FieldType, unsigned long long>) {
+      if constexpr (enc == Encoding::Varint) {
+        offset += put_varint_at<FieldType>(field_value, buffer, offset);
+      } else if constexpr (enc == Encoding::Tagged) {
+        offset +=
+            buffer.PutTaggedUint64(offset, static_cast<uint64_t>(field_value));
+      } else {
+        buffer.UnsafePut<uint64_t>(offset, static_cast<uint64_t>(field_value));
+        offset += 8;
+      }
+      return;
+    } else if constexpr (std::is_same_v<FieldType, int32_t> ||
+                         std::is_same_v<FieldType, int>) {
+      if constexpr (enc == Encoding::Fixed) {
+        buffer.UnsafePut<int32_t>(offset, static_cast<int32_t>(field_value));
+        offset += 4;
+      } else {
+        offset += put_varint_at<FieldType>(field_value, buffer, offset);
+      }
+      return;
+    } else if constexpr (std::is_same_v<FieldType, int64_t> ||
+                         std::is_same_v<FieldType, long long>) {
+      if constexpr (enc == Encoding::Fixed) {
+        buffer.UnsafePut<int64_t>(offset, static_cast<int64_t>(field_value));
+        offset += 8;
+      } else if constexpr (enc == Encoding::Tagged) {
+        offset +=
+            buffer.PutTaggedInt64(offset, static_cast<int64_t>(field_value));
+      } else {
+        offset += put_varint_at<FieldType>(field_value, buffer, offset);
+      }
+      return;
+    }
+  }
   offset += put_primitive_at<FieldType>(field_value, buffer, offset);
 }
 

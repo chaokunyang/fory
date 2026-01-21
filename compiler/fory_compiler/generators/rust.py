@@ -190,7 +190,6 @@ class RustGenerator(BaseGenerator):
         lines = []
 
         type_name = enum.name
-        reg_name = self.get_registration_type_name(enum.name, parent_stack)
 
         # Derive macros
         lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
@@ -218,7 +217,6 @@ class RustGenerator(BaseGenerator):
         lines = []
 
         type_name = message.name
-        reg_name = self.get_registration_type_name(message.name, parent_stack)
 
         # Derive macros
         lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
@@ -287,7 +285,7 @@ class RustGenerator(BaseGenerator):
         """Generate a struct field."""
         lines = []
 
-        attrs = [f"id = {field.number}"]
+        attrs = []
         if field.optional:
             attrs.append("nullable = true")
         encoding = self.get_encoding_attr(field.field_type)

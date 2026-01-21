@@ -68,20 +68,12 @@ class PythonGenerator(BaseGenerator):
     # Numpy dtype strings for primitive arrays
     NUMPY_DTYPE_MAP = {
         PrimitiveKind.BOOL: "np.bool_",
-        PrimitiveKind.INT8: "np.int8",
         PrimitiveKind.INT16: "np.int16",
         PrimitiveKind.INT32: "np.int32",
         PrimitiveKind.VARINT32: "np.int32",
         PrimitiveKind.INT64: "np.int64",
         PrimitiveKind.VARINT64: "np.int64",
         PrimitiveKind.TAGGED_INT64: "np.int64",
-        PrimitiveKind.UINT8: "np.uint8",
-        PrimitiveKind.UINT16: "np.uint16",
-        PrimitiveKind.UINT32: "np.uint32",
-        PrimitiveKind.VAR_UINT32: "np.uint32",
-        PrimitiveKind.UINT64: "np.uint64",
-        PrimitiveKind.VAR_UINT64: "np.uint64",
-        PrimitiveKind.TAGGED_UINT64: "np.uint64",
         PrimitiveKind.FLOAT16: "np.float32",
         PrimitiveKind.FLOAT32: "np.float32",
         PrimitiveKind.FLOAT64: "np.float64",
@@ -134,7 +126,7 @@ class PythonGenerator(BaseGenerator):
         imports: Set[str] = set()
 
         # Collect all imports
-        imports.add("from dataclasses import dataclass")
+        imports.add("from dataclasses import dataclass, field")
         imports.add("from enum import IntEnum")
         imports.add("from typing import Dict, List, Optional")
         imports.add("import pyfory")
@@ -268,16 +260,21 @@ class PythonGenerator(BaseGenerator):
             default_expr, comment = default.split(" # ", 1)
             trailing_comment = f"  # {comment}"
 
-        field_args = [f"id={field.number}"]
-        if field.optional:
-            field_args.append("nullable=True")
         if field.ref:
+            field_args = []
+            if field.optional:
+                field_args.append("nullable=True")
             field_args.append("ref=True")
-        if default_factory is not None:
-            field_args.append(f"default_factory={default_factory}")
+            if default_factory is not None:
+                field_args.append(f"default_factory={default_factory}")
+            else:
+                field_args.append(f"default={default_expr}")
+            field_default = f"pyfory.field({', '.join(field_args)}){trailing_comment}"
         else:
-            field_args.append(f"default={default_expr}")
-        field_default = f"pyfory.field({', '.join(field_args)}){trailing_comment}"
+            if default_factory is not None:
+                field_default = f"field(default_factory={default_factory})"
+            else:
+                field_default = f"{default_expr}{trailing_comment}"
 
         lines.append(f"{field_name}: {python_type} = {field_default}")
 

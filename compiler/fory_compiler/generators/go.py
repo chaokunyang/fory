@@ -329,7 +329,7 @@ class GoGenerator(BaseGenerator):
         )  # Go uses PascalCase for exported fields
 
         # Build fory tag
-        tags = [f"id={field.number}"]
+        tags = []
         is_list = isinstance(field.field_type, ListType)
         is_map = isinstance(field.field_type, MapType)
         is_collection = is_list or is_map

@@ -366,7 +366,7 @@ class CppGenerator(BaseGenerator):
 
     def get_field_meta(self, field: Field) -> str:
         """Build FieldMeta expression for a field."""
-        meta = f"fory::F({field.number})"
+        meta = "fory::FieldMeta{}"
         if field.optional:
             meta += ".nullable()"
         if field.ref or field.element_ref or field.options.get("tracking_ref") is True:

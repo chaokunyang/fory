@@ -24,7 +24,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 python "${SCRIPT_DIR}/generate_idl.py" --lang python
 
-PYTHONPATH="${SCRIPT_DIR}/python/src:${ROOT_DIR}/python:${PYTHONPATH:-}" \
+ENABLE_FORY_DEBUG_OUTPUT=1 PYTHONPATH="${SCRIPT_DIR}/python/src:${ROOT_DIR}/python:${PYTHONPATH:-}" \
   ENABLE_FORY_CYTHON_SERIALIZATION=0 \
   python -m idl_tests.roundtrip
 

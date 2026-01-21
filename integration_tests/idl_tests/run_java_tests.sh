@@ -25,4 +25,4 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 python "${SCRIPT_DIR}/generate_idl.py" --lang java
 
 cd "${ROOT_DIR}/java"
-mvn -T16 --no-transfer-progress test -f "${ROOT_DIR}/integration_tests/idl_tests/java/pom.xml"
+ENABLE_FORY_DEBUG_OUTPUT=1 mvn -T16 --no-transfer-progress test -f "${ROOT_DIR}/integration_tests/idl_tests/java/pom.xml"

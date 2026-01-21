@@ -24,6 +24,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python "${SCRIPT_DIR}/generate_idl.py" --lang go
 
 cd "${SCRIPT_DIR}/go"
-go test ./...
+ENABLE_FORY_DEBUG_OUTPUT=1 go test ./...
 
 IDL_PEER_LANG=go "${SCRIPT_DIR}/run_java_tests.sh"

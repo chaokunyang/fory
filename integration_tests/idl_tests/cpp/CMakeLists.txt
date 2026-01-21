@@ -39,6 +39,11 @@ add_executable(idl_roundtrip
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cc
 )
 
+if(DEFINED ENV{ENABLE_FORY_DEBUG_OUTPUT} AND "$ENV{ENABLE_FORY_DEBUG_OUTPUT}" STREQUAL "1")
+    target_compile_definitions(fory_serialization PRIVATE ENABLE_FORY_DEBUG_OUTPUT)
+    target_compile_definitions(idl_roundtrip PRIVATE ENABLE_FORY_DEBUG_OUTPUT)
+endif()
+
 target_include_directories(idl_roundtrip PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/generated
 )

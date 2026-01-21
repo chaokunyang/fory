@@ -144,7 +144,7 @@ public:
 /// Field information including name, type, and assigned field ID
 class FieldInfo {
 public:
-  int16_t field_id;       // Assigned during deserialization (-1 = skip)
+  int16_t field_id;       // Tag ID if configured; -1 means no ID
   std::string field_name; // Field name
   FieldType field_type;   // Field type information
 
@@ -230,19 +230,21 @@ public:
   /// versioning.
   ///
   /// Fingerprint Format:
-  ///   Each field contributes: `<field_name>,<type_id>,<ref>,<nullable>;`
-  ///   Fields are sorted lexicographically by field name (not by type
-  ///   category).
+  ///   Each field contributes: `<field_id_or_name>,<type_id>,<ref>,<nullable>;`
+  ///   Fields are sorted lexicographically by field identifier (tag ID string
+  ///   if present, otherwise snake_case field name).
   ///
   /// Field Components:
-  ///   - field_name: snake_case field name (C++ doesn't support field tag IDs
-  ///   yet)
+  ///   - field_id_or_name: tag ID as string if configured, otherwise snake_case
+  ///   field name
   ///   - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
   ///   - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in
   ///   C++)
   ///   - nullable: "1" if null flag is written, "0" otherwise
   ///
-  /// Example fingerprint: "age,4,0,0;name,12,0,1;"
+  /// Example fingerprints:
+  ///   - With tag IDs: "0,4,0,0;1,12,0,1;"
+  ///   - With field names: "age,4,0,0;name,12,0,1;"
   ///
   /// This format is consistent across Go, Java, Rust, and C++ implementations.
   static std::string
@@ -510,6 +512,21 @@ constexpr bool compute_track_ref() {
   }
 }
 
+template <typename ActualFieldType, typename T, size_t Index>
+constexpr int16_t compute_field_id() {
+  if constexpr (::fory::detail::has_field_config_v<T>) {
+    constexpr int16_t config_id =
+        ::fory::detail::GetFieldConfigEntry<T, Index>::id;
+    if constexpr (config_id >= 0) {
+      return config_id;
+    }
+  }
+  if constexpr (is_fory_field_v<ActualFieldType>) {
+    return field_tag_id_v<ActualFieldType>;
+  }
+  return -1;
+}
+
 // Helper to check if a type is unsigned integer
 template <typename T> struct is_unsigned_integer : std::false_type {};
 template <> struct is_unsigned_integer<uint8_t> : std::true_type {};
@@ -614,6 +631,8 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr bool is_nullable =
         compute_is_nullable<ActualFieldType, T, Index, UnwrappedFieldType>();
     constexpr bool track_ref = compute_track_ref<ActualFieldType, T, Index>();
+    constexpr int16_t field_id =
+        compute_field_id<ActualFieldType, T, Index>();
 
     FieldType field_type = FieldTypeBuilder<UnwrappedFieldType>::build(false);
 
@@ -646,7 +665,9 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
               << ::fory::detail::has_field_tags_v<T> << " is_nullable="
               << is_nullable << " track_ref=" << track_ref << std::endl;
 #endif
-    return FieldInfo(std::move(field_name), std::move(field_type));
+    FieldInfo info(std::move(field_name), std::move(field_type));
+    info.field_id = field_id;
+    return info;
   }
 };
 

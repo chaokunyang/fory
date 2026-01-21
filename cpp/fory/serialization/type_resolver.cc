@@ -125,11 +125,13 @@ Result<FieldType, Error> FieldType::read_from(Buffer &buffer, bool read_flag,
 Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
   Buffer buffer;
 
-  // Write field header (simplified encoding for now - always use UTF8)
+  // Write field header:
   // header: | field_name_encoding:2bits | size:4bits | nullability:1bit |
   // ref_tracking:1bit |
-  uint8_t encoding_idx = 0; // UTF8
-  size_t name_size = field_name.size();
+  const bool use_tag_id = field_id >= 0;
+  uint8_t encoding_idx = use_tag_id ? 3 : 0; // TAG_ID or UTF8
+  size_t name_size = use_tag_id ? static_cast<size_t>(field_id) + 1
+                                : field_name.size();
   uint8_t header =
       (std::min(FIELD_NAME_SIZE_THRESHOLD, name_size - 1) << 2) & 0x3C;
 
@@ -150,9 +152,11 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
   // Write field type
   FORY_RETURN_NOT_OK(field_type.write_to(buffer, false, field_type.nullable));
 
-  // Write field name
-  buffer.WriteBytes(reinterpret_cast<const uint8_t *>(field_name.data()),
-                    field_name.size());
+  // Write field name only when tag ID is not used.
+  if (!use_tag_id) {
+    buffer.WriteBytes(reinterpret_cast<const uint8_t *>(field_name.data()),
+                      field_name.size());
+  }
 
   // CRITICAL FIX: Use writer_index() not size() to get actual bytes written!
   return std::vector<uint8_t>(buffer.data(),
@@ -173,6 +177,7 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
   // bits 2-5: size (0-14, 15 means extended)
   // bits 6-7: field name encoding index
   uint8_t encoding_idx = static_cast<uint8_t>(header >> 6);
+  bool use_tag_id = encoding_idx == 3;
   bool ref_tracking = (header & 0b01u) != 0;
   bool nullable = (header & 0b10u) != 0;
   size_t name_size = ((header >> 2) & FIELD_NAME_SIZE_THRESHOLD);
@@ -188,6 +193,12 @@ Result<FieldInfo, Error> FieldInfo::from_bytes(Buffer &buffer) {
   // Read field type with nullable and ref_tracking from header
   FORY_TRY(field_type,
            FieldType::read_from(buffer, false, nullable, ref_tracking));
+
+  if (use_tag_id) {
+    FieldInfo info("", std::move(field_type));
+    info.field_id = static_cast<int16_t>(name_size - 1);
+    return info;
+  }
 
   // Read and decode field name. Java encodes field names using
   // MetaString with encodings:
@@ -646,6 +657,13 @@ bool is_compress(uint32_t type_id) {
          type_id == static_cast<uint32_t>(TypeId::TAGGED_UINT64);
 }
 
+std::string field_sort_key(const FieldInfo &field) {
+  if (field.field_id >= 0) {
+    return std::to_string(field.field_id);
+  }
+  return field.field_name;
+}
+
 // Numeric field sorter (for primitive fields)
 bool numeric_sorter(const FieldInfo &a, const FieldInfo &b) {
   uint32_t a_id = a.field_type.type_id;
@@ -667,6 +685,11 @@ bool numeric_sorter(const FieldInfo &a, const FieldInfo &b) {
     return size_a > size_b; // larger size first
   if (a_id != b_id)
     return a_id > b_id; // type_id descending to match Java
+  std::string a_key = field_sort_key(a);
+  std::string b_key = field_sort_key(b);
+  if (a_key != b_key) {
+    return a_key < b_key;
+  }
   return a.field_name < b.field_name;
 }
 
@@ -676,12 +699,22 @@ bool type_then_name_sorter(const FieldInfo &a, const FieldInfo &b) {
   if (a.field_type.type_id != b.field_type.type_id) {
     return a.field_type.type_id < b.field_type.type_id;
   }
+  std::string a_key = field_sort_key(a);
+  std::string b_key = field_sort_key(b);
+  if (a_key != b_key) {
+    return a_key < b_key;
+  }
   return a.field_name < b.field_name;
 }
 
 // Name sorter (for list/set/map/other fields)
 // Sorts by: field_name only
 bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
+  std::string a_key = field_sort_key(a);
+  std::string b_key = field_sort_key(b);
+  if (a_key != b_key) {
+    return a_key < b_key;
+  }
   return a.field_name < b.field_name;
 }
 
@@ -764,11 +797,6 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
   sorted.insert(sorted.end(), std::make_move_iterator(other_fields.begin()),
                 std::make_move_iterator(other_fields.end()));
 
-  // Assign sequential field IDs (0, 1, 2, ...)
-  for (size_t i = 0; i < sorted.size(); ++i) {
-    sorted[i].field_id = static_cast<int16_t>(i);
-  }
-
   return sorted;
 }
 
@@ -785,6 +813,14 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
   local_field_index_map.reserve(local_fields.size());
   for (size_t i = 0; i < local_fields.size(); ++i) {
     local_field_index_map.emplace(local_fields[i].field_name, i);
+  }
+  // Tag ID mapping when field IDs are explicitly configured.
+  std::unordered_map<int16_t, size_t> local_field_id_map;
+  local_field_id_map.reserve(local_fields.size());
+  for (size_t i = 0; i < local_fields.size(); ++i) {
+    if (local_fields[i].field_id >= 0) {
+      local_field_id_map.emplace(local_fields[i].field_id, i);
+    }
   }
 
   // Track which local fields have already been matched so that each
@@ -841,14 +877,24 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
   for (auto &remote_field : remote_fields) {
     size_t local_index = static_cast<size_t>(-1);
 
+    // 0) If remote field carries a tag ID, map directly by ID.
+    if (remote_field.field_id >= 0) {
+      auto id_it = local_field_id_map.find(remote_field.field_id);
+      if (id_it != local_field_id_map.end()) {
+        local_index = id_it->second;
+      }
+    }
+
     // 1) Try exact name + type match first (fast path for same-language
     //    schemas and most C++-only cases).
-    auto it = local_field_index_map.find(remote_field.field_name);
-    if (it != local_field_index_map.end()) {
-      size_t idx = it->second;
-      const FieldInfo &local_field = local_fields[idx];
-      if (types_match(remote_field.field_type, local_field.field_type)) {
-        local_index = idx;
+    if (local_index == static_cast<size_t>(-1)) {
+      auto it = local_field_index_map.find(remote_field.field_name);
+      if (it != local_field_index_map.end()) {
+        size_t idx = it->second;
+        const FieldInfo &local_field = local_fields[idx];
+        if (types_match(remote_field.field_type, local_field.field_type)) {
+          local_index = idx;
+        }
       }
     }
 
@@ -962,24 +1008,33 @@ std::string TypeMeta::compute_struct_fingerprint(
   // versioning.
   //
   // Fingerprint Format:
-  //   Each field contributes: <field_name>,<type_id>,<ref>,<nullable>;
-  //   Fields are sorted lexicographically by field name (not by type category).
+  //   Each field contributes: <field_id_or_name>,<type_id>,<ref>,<nullable>;
+  //   Fields are sorted lexicographically by field identifier (tag ID string
+  //   if present, otherwise snake_case field name).
   //
   // Field Components:
-  //   - field_name: snake_case field name (C++ doesn't support field tag IDs
-  //   yet)
+  //   - field_id_or_name: tag ID as string if configured, otherwise snake_case
+  //   field name
   //   - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
   //   - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in
   //   C++)
   //   - nullable: "1" if null flag is written, "0" otherwise
   //
-  // Example fingerprint: "age,4,0,0;name,12,0,1;"
+  // Example fingerprints:
+  //   - With tag IDs: "0,4,0,0;1,12,0,1;"
+  //   - With field names: "age,4,0,0;name,12,0,1;"
 
-  // Copy fields and sort lexicographically by snake_case name for fingerprint
+  // Copy fields and sort lexicographically by field identifier for fingerprint
   std::vector<FieldInfo> sorted_fields = field_infos;
   std::sort(sorted_fields.begin(), sorted_fields.end(),
             [](const FieldInfo &a, const FieldInfo &b) {
-              return ToSnakeCase(a.field_name) < ToSnakeCase(b.field_name);
+              std::string a_id = a.field_id >= 0
+                                     ? std::to_string(a.field_id)
+                                     : ToSnakeCase(a.field_name);
+              std::string b_id = b.field_id >= 0
+                                     ? std::to_string(b.field_id)
+                                     : ToSnakeCase(b.field_name);
+              return a_id < b_id;
             });
 
   std::string fingerprint;
@@ -987,8 +1042,10 @@ std::string TypeMeta::compute_struct_fingerprint(
   fingerprint.reserve(sorted_fields.size() * 24);
 
   for (const auto &fi : sorted_fields) {
-    std::string snake = ToSnakeCase(fi.field_name);
-    fingerprint.append(snake);
+    std::string field_id_or_name = fi.field_id >= 0
+                                       ? std::to_string(fi.field_id)
+                                       : ToSnakeCase(fi.field_name);
+    fingerprint.append(field_id_or_name);
     fingerprint.push_back(',');
 
     // Java's ObjectSerializer.getTypeId returns Types.UNKNOWN (0) for:
@@ -1023,7 +1080,7 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
   // Use the low 64 bits and then keep low 32 bits as i32.
   uint64_t low = static_cast<uint64_t>(hash_out[0]);
   uint32_t version = static_cast<uint32_t>(low & 0xFFFF'FFFFu);
-#ifdef FORY_DEBUG
+#if defined(FORY_DEBUG) || defined(ENABLE_FORY_DEBUG_OUTPUT)
   // DEBUG: Print fingerprint for debugging version mismatch
   std::cerr << "[xlang][debug] struct_version type_name=" << meta.type_name
             << ", fingerprint=\"" << fingerprint

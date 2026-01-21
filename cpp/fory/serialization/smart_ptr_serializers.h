@@ -132,11 +132,6 @@ template <typename T> struct Serializer<std::optional<T>> {
   static inline std::optional<T> read(ReadContext &ctx, RefMode ref_mode,
                                       bool read_type) {
     constexpr bool inner_is_nullable = is_nullable_v<T>;
-
-    std::cerr << "[optional::read] T=" << typeid(T).name()
-              << ", ref_mode=" << static_cast<int>(ref_mode)
-              << ", buffer_pos=" << ctx.buffer().reader_index() << std::endl;
-
     if (ref_mode == RefMode::None) {
       T value = Serializer<T>::read(ctx, RefMode::None, read_type);
       if (ctx.has_error()) {

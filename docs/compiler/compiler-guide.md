@@ -1,5 +1,5 @@
 ---
-title: Compiler
+title: Compiler Guide
 sidebar_position: 3
 id: compiler_guide
 license: |

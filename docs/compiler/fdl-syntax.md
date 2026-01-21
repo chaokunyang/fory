@@ -1,5 +1,5 @@
 ---
-title: Syntax
+title: Syntax Reference
 sidebar_position: 2
 id: syntax
 license: |

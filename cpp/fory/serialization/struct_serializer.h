@@ -895,8 +895,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   /// Flags for fields whose types are nullable wrappers (optional/shared_ptr/
   /// unique_ptr/weak_ptr), which require ref/null flags in the wire format.
   static inline constexpr std::array<bool, FieldCount> nullable_type_flags =
-      make_nullable_type_flags(
-          std::make_index_sequence<FieldCount>{});
+      make_nullable_type_flags(std::make_index_sequence<FieldCount>{});
 
   static inline constexpr std::array<size_t, FieldCount> snake_case_lengths =
       []() constexpr {
@@ -2090,8 +2089,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // shared_ptr) that don't need ref metadata, bypass Serializer<T>::read
   // and use direct buffer reads with Error&.
   constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
-  if constexpr (is_raw_prim && is_primitive_field &&
-                !field_type_is_nullable) {
+  if constexpr (is_raw_prim && is_primitive_field && !field_type_is_nullable) {
     auto read_value = [&ctx]() -> FieldType {
       if constexpr (is_configurable_int_v<FieldType>) {
 #ifdef ENABLE_FORY_DEBUG_OUTPUT

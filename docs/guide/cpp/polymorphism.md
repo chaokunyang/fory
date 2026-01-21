@@ -416,6 +416,7 @@ auto fory = Fory::builder()
    ```
 
 7. **Use `fory::nullable`** for optional polymorphic fields:
+
    ```cpp
    fory::field<std::shared_ptr<Base>, 0, fory::nullable> optional_ptr;
    ```
@@ -465,6 +466,7 @@ if (!decoded_result.ok()) {
 3. **Batch polymorphic objects** in collections rather than individual fields
 
 4. **Consider non-polymorphic alternatives** when polymorphism isn't needed:
+
    ```cpp
    std::variant<Dog, Cat> animal;  // Type-safe union instead of polymorphism
    ```

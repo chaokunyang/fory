@@ -432,7 +432,13 @@ public:
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    return serialize_impl(obj, buffer);
+    // Swap in the caller's buffer so all writes go there.
+    std::swap(buffer, write_ctx_->buffer());
+    auto result = serialize_impl(obj, write_ctx_->buffer());
+    std::swap(buffer, write_ctx_->buffer());
+    // Reset internal state after use without clobbering caller buffer.
+    write_ctx_->reset();
+    return result;
   }
 
   /// Serialize an object to an existing byte vector (zero-copy).
@@ -514,10 +520,6 @@ public:
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    if (buffer.reader_index() >= buffer.writer_index()) {
-      return Unexpected(Error::invalid("No data to read in buffer"));
-    }
-
     FORY_TRY(header, read_header(buffer));
     if (header.is_null) {
       return Unexpected(Error::invalid_data("Cannot deserialize null object"));

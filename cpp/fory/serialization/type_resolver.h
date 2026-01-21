@@ -519,17 +519,6 @@ template <> struct is_unsigned_integer<uint64_t> : std::true_type {};
 template <typename T>
 inline constexpr bool is_unsigned_integer_v = is_unsigned_integer<T>::value;
 
-// Helper to check if a type is signed integer (encoding-configurable)
-template <typename T>
-struct is_signed_integer
-    : std::integral_constant<bool, std::is_integral_v<decay_t<T>> &&
-                                       std::is_signed_v<decay_t<T>> &&
-                                       (sizeof(decay_t<T>) == 4 ||
-                                        sizeof(decay_t<T>) == 8) &&
-                                       !std::is_same_v<decay_t<T>, bool>> {};
-template <typename T>
-inline constexpr bool is_signed_integer_v = is_signed_integer<T>::value;
-
 // Helper to get inner type of optional, or the type itself
 template <typename T, typename Enable = void> struct unwrap_optional_inner {
   using type = T;
@@ -641,7 +630,7 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     // FORY_FIELD_CONFIG
     constexpr uint32_t signed_tid =
         compute_signed_type_id<UnwrappedFieldType, T, Index>();
-    if constexpr (signed_tid != 0 && is_signed_integer_v<InnerType>) {
+    if constexpr (signed_tid != 0) {
       field_type.type_id = signed_tid;
     }
 

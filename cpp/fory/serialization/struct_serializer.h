@@ -40,10 +40,6 @@
 #include <utility>
 #include <vector>
 
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-#include <iostream>
-#endif
-
 namespace fory {
 namespace serialization {
 
@@ -119,13 +115,19 @@ struct SerializationMeta<
   }                                                                            \
   inline constexpr std::true_type ForyStructMarker(const Type &) noexcept {    \
     return {};                                                                 \
-  }
+  }                                                                            \
+  static_assert(static_cast<std::true_type (*)(const Type &) noexcept>(        \
+                    &ForyStructMarker) != nullptr,                             \
+                "ForyStructMarker must be declared");
 
 #define FORY_STRUCT_WITH_FIELDS(Type, ...)                                     \
   FORY_FIELD_INFO(Type, __VA_ARGS__)                                           \
   inline constexpr std::true_type ForyStructMarker(const Type &) noexcept {    \
     return {};                                                                 \
-  }
+  }                                                                            \
+  static_assert(static_cast<std::true_type (*)(const Type &) noexcept>(        \
+                    &ForyStructMarker) != nullptr,                             \
+                "ForyStructMarker must be declared");
 
 #define FORY_STRUCT_1(Type, ...) FORY_STRUCT_TYPE_ONLY(Type)
 #define FORY_STRUCT_0(Type, ...) FORY_STRUCT_WITH_FIELDS(Type, __VA_ARGS__)
@@ -2073,18 +2075,6 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // Per xlang protocol: non-nullable fields skip ref flag entirely
   constexpr RefMode field_ref_mode =
       make_ref_mode(is_nullable || field_type_is_nullable, track_ref);
-
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-  const auto debug_names = decltype(field_info)::Names;
-  std::cerr << "[xlang][field] T=" << typeid(T).name() << ", index=" << Index
-            << ", name=" << debug_names[Index]
-            << ", field_type_is_nullable=" << field_type_is_nullable
-            << ", is_nullable=" << is_nullable
-            << ", ref_mode=" << static_cast<int>(field_ref_mode)
-            << ", read_type=" << read_type
-            << ", reader_index=" << ctx.buffer().reader_index() << std::endl;
-#endif
-
   // OPTIMIZATION: For raw primitive fields (not wrappers like optional,
   // shared_ptr) that don't need ref metadata, bypass Serializer<T>::read
   // and use direct buffer reads with Error&.
@@ -2092,13 +2082,6 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   if constexpr (is_raw_prim && is_primitive_field && !field_type_is_nullable) {
     auto read_value = [&ctx]() -> FieldType {
       if constexpr (is_configurable_int_v<FieldType>) {
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-        constexpr auto enc = field_int_encoding<FieldType, T, Index>();
-        std::cerr << "[xlang][encoding] T=" << typeid(T).name()
-                  << ", Index=" << Index << ", enc=" << static_cast<int>(enc)
-                  << ", reader_index=" << ctx.buffer().reader_index()
-                  << std::endl;
-#endif
         return read_configurable_int<FieldType, T, Index>(ctx);
       }
       return read_primitive_field_direct<FieldType>(ctx, ctx.error());
@@ -2126,19 +2109,8 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
     if constexpr (is_encoded_optional_uint) {
       constexpr auto enc =
           ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-      std::cerr << "[DEBUG] is_encoded_optional_uint: Index=" << Index
-                << ", enc=" << static_cast<int>(enc)
-                << ", reader_index=" << ctx.buffer().reader_index()
-                << std::endl;
-#endif
       // Read nullable flag
       int8_t flag = ctx.read_int8(ctx.error());
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-      std::cerr << "[DEBUG] After read flag: flag=" << static_cast<int>(flag)
-                << ", reader_index=" << ctx.buffer().reader_index()
-                << std::endl;
-#endif
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return;
       }
@@ -2160,11 +2132,6 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
           value = static_cast<uint32_t>(ctx.read_int32(ctx.error()));
         }
       } else if constexpr (std::is_same_v<InnerType, uint64_t>) {
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-        std::cerr << "[DEBUG] Reading uint64 with enc=" << static_cast<int>(enc)
-                  << ", reader_index=" << ctx.buffer().reader_index()
-                  << std::endl;
-#endif
         if constexpr (enc == Encoding::Varint) {
           value = ctx.read_varuint64(ctx.error());
         } else if constexpr (enc == Encoding::Tagged) {
@@ -2172,11 +2139,6 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
         } else {
           value = ctx.read_uint64(ctx.error());
         }
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-        std::cerr << "[DEBUG] After read uint64: value=" << value
-                  << ", reader_index=" << ctx.buffer().reader_index()
-                  << ", has_error=" << ctx.has_error() << std::endl;
-#endif
       }
       if constexpr (is_fory_field_v<RawFieldType>) {
         (obj.*field_ptr).value = std::optional<InnerType>(value);
@@ -2186,18 +2148,7 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
     } else if constexpr (is_encoded_optional_int) {
       constexpr auto enc =
           ::fory::detail::GetFieldConfigEntry<T, Index>::encoding;
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-      std::cerr << "[DEBUG] is_encoded_optional_int: Index=" << Index
-                << ", enc=" << static_cast<int>(enc)
-                << ", reader_index=" << ctx.buffer().reader_index()
-                << std::endl;
-#endif
       int8_t flag = ctx.read_int8(ctx.error());
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-      std::cerr << "[DEBUG] After read flag: flag=" << static_cast<int>(flag)
-                << ", reader_index=" << ctx.buffer().reader_index()
-                << std::endl;
-#endif
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return;
       }
@@ -2292,16 +2243,6 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
 
   // In compatible mode, trust the remote field metadata (remote_ref_mode)
   // to tell us whether a ref/null flag was written before the value payload.
-
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-  const auto debug_names = decltype(field_info)::Names;
-  std::cerr << "[compatible][read_field] Index=" << Index
-            << ", name=" << debug_names[Index]
-            << ", FieldType=" << typeid(FieldType).name()
-            << ", remote_ref_mode=" << static_cast<int>(remote_ref_mode)
-            << ", buffer pos=" << ctx.buffer().reader_index() << std::endl;
-#endif
-
   // In compatible mode, handle primitive fields specially to use remote
   // encoding. This is critical for schema evolution where encoding differs
   // between sender/receiver.
@@ -2715,11 +2656,6 @@ void read_struct_fields_compatible(T &obj, ReadContext &ctx,
                                    const TypeMeta *remote_type_meta,
                                    std::index_sequence<Indices...>) {
   const auto &remote_fields = remote_type_meta->get_field_infos();
-
-  std::cerr << "[compatible] Starting to read " << remote_fields.size()
-            << " remote fields, buffer pos=" << ctx.buffer().reader_index()
-            << std::endl;
-
   // Iterate through remote fields in their serialization order
   for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
     const auto &remote_field = remote_fields[remote_idx];
@@ -2729,15 +2665,6 @@ void read_struct_fields_compatible(T &obj, ReadContext &ctx,
     // This is computed from nullable and ref_tracking flags in the remote
     // field's header during FieldInfo::from_bytes.
     RefMode remote_ref_mode = remote_field.field_type.ref_mode;
-
-    std::cerr << "[compatible] remote_idx=" << remote_idx
-              << ", field=" << remote_field.field_name
-              << ", type_id=" << remote_field.field_type.type_id
-              << ", nullable=" << remote_field.field_type.nullable
-              << ", ref_mode=" << static_cast<int>(remote_ref_mode)
-              << ", field_id=" << field_id
-              << ", buffer pos=" << ctx.buffer().reader_index() << std::endl;
-
     if (field_id == -1) {
       // Field unknown locally — skip its value
       skip_field_value(ctx, remote_field.field_type, remote_ref_mode);
@@ -2907,12 +2834,6 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return T{};
       }
-#ifdef ENABLE_FORY_DEBUG_OUTPUT
-      std::cerr << "[xlang][struct] T=" << typeid(T).name()
-                << ", read_ref_flag=" << static_cast<int>(ref_flag)
-                << ", reader_index=" << ctx.buffer().reader_index()
-                << std::endl;
-#endif
     } else {
       ref_flag = static_cast<int8_t>(RefFlag::NotNullValue);
     }
@@ -3051,8 +2972,6 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
   }
 
   static T read_compatible(ReadContext &ctx, const TypeInfo *remote_type_info) {
-    std::cerr << "[read_compatible] Entering for type " << typeid(T).name()
-              << ", buffer_pos=" << ctx.buffer().reader_index() << std::endl;
     // Read and verify struct version if enabled (matches write_data behavior)
     if (ctx.check_struct_version()) {
       int32_t read_version = ctx.buffer().ReadInt32(ctx.error());

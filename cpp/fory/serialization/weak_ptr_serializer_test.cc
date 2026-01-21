@@ -167,13 +167,6 @@ struct NodeWithParent {
 };
 FORY_STRUCT(NodeWithParent, value, parent, children);
 
-struct MultipleWeakRefs {
-  SharedWeak<SimpleStruct> weak1;
-  SharedWeak<SimpleStruct> weak2;
-  SharedWeak<SimpleStruct> weak3;
-};
-FORY_STRUCT(MultipleWeakRefs, weak1, weak2, weak3);
-
 // ============================================================================
 // Serialization Tests
 // ============================================================================

@@ -925,8 +925,8 @@ struct Serializer<std::map<K, V, Args...>> {
   static inline void write_data(const MapType &map, WriteContext &ctx) {
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       write_map_data_fast<K, V>(map, ctx, false);
@@ -939,8 +939,8 @@ struct Serializer<std::map<K, V, Args...>> {
                                         bool has_generics) {
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       write_map_data_fast<K, V>(map, ctx, has_generics);
@@ -978,8 +978,8 @@ struct Serializer<std::map<K, V, Args...>> {
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       return read_map_data_fast<K, V, MapType>(ctx, length);
@@ -1002,8 +1002,8 @@ struct Serializer<std::map<K, V, Args...>> {
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       return read_map_data_fast<K, V, MapType>(ctx, length);
@@ -1032,8 +1032,8 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       write_map_data_fast<K, V>(map, ctx, false);
@@ -1045,8 +1045,8 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
   static inline void write_data(const MapType &map, WriteContext &ctx) {
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       write_map_data_fast<K, V>(map, ctx, false);
@@ -1059,8 +1059,8 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
                                         bool has_generics) {
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       write_map_data_fast<K, V>(map, ctx, has_generics);
@@ -1098,8 +1098,8 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       return read_map_data_fast<K, V, MapType>(ctx, length);
@@ -1122,8 +1122,8 @@ struct Serializer<std::unordered_map<K, V, Args...>> {
 
     constexpr bool is_fast_path =
         !is_polymorphic_v<K> && !is_polymorphic_v<V> && !is_shared_ref_v<K> &&
-        !is_shared_ref_v<V> && !requires_ref_metadata_v<K> &&
-        !requires_ref_metadata_v<V>;
+        !is_shared_ref_v<V> && !is_nullable_v<K> &&
+        !is_nullable_v<V>;
 
     if constexpr (is_fast_path) {
       return read_map_data_fast<K, V, MapType>(ctx, length);

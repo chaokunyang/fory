@@ -447,9 +447,9 @@ TEST(WeakPtrSerializerTest, RequiresTrackRef) {
 // ============================================================================
 
 TEST(WeakPtrSerializerTest, TypeTraits) {
-  // Test requires_ref_metadata
-  EXPECT_TRUE(requires_ref_metadata_v<SharedWeak<int32_t>>);
-  EXPECT_TRUE(requires_ref_metadata_v<SharedWeak<SimpleStruct>>);
+  // Test is_nullable
+  EXPECT_TRUE(is_nullable_v<SharedWeak<int32_t>>);
+  EXPECT_TRUE(is_nullable_v<SharedWeak<SimpleStruct>>);
 
   // Test is_nullable
   EXPECT_TRUE(is_nullable_v<SharedWeak<int32_t>>);

@@ -680,11 +680,11 @@ jobs:
           dart run build_runner build
       - name: Run tests
         run: |
-          cd dart
+          cd dart/packages/fory-test
           dart test
       - name: Run code analysis
         run: |
-          cd dart
+          cd dart/packages/fory-test
           dart analyze
       - name: Analyze code
         run: |

@@ -148,7 +148,7 @@ class FbsTranslator:
 
     def _translate_fields(self, fields) -> List[Field]:
         translated: List[Field] = []
-        for index, field in enumerate(fields, start=1):
+        for index, field in enumerate(fields):
             field_type = self._translate_type(field.field_type)
             translated.append(
                 Field(

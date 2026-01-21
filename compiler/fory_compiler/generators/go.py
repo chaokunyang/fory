@@ -335,7 +335,10 @@ class GoGenerator(BaseGenerator):
         is_collection = is_list or is_map
         nullable_tag: Optional[bool] = None
         ref_tag: Optional[bool] = None
+        tag_id = self.get_field_id(field)
 
+        if tag_id is not None:
+            tags.append(f"id={tag_id}")
         if field.optional:
             nullable_tag = True
         elif is_collection and (

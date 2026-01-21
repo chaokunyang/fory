@@ -286,6 +286,9 @@ class RustGenerator(BaseGenerator):
         lines = []
 
         attrs = []
+        tag_id = self.get_field_id(field)
+        if tag_id is not None:
+            attrs.append(f"id = {tag_id}")
         if field.optional:
             attrs.append("nullable = true")
         encoding = self.get_encoding_attr(field.field_type)

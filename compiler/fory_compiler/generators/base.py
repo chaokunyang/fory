@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from fory_compiler.ir.ast import Schema, FieldType
+from fory_compiler.ir.ast import Schema, Field, FieldType
 
 
 @dataclass
@@ -136,6 +136,12 @@ class BaseGenerator(ABC):
     def to_upper_snake_case(self, name: str) -> str:
         """Convert name to UPPER_SNAKE_CASE."""
         return self.to_snake_case(name).upper()
+
+    def get_field_id(self, field: Field) -> Optional[int]:
+        """Return a numeric field id when the schema requires tag IDs."""
+        if self.schema.source_format == "fbs":
+            return field.number
+        return None
 
     def write_files(self, files: List[GeneratedFile]):
         """Write generated files to disk."""

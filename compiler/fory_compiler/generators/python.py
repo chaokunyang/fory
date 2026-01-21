@@ -260,11 +260,15 @@ class PythonGenerator(BaseGenerator):
             default_expr, comment = default.split(" # ", 1)
             trailing_comment = f"  # {comment}"
 
-        if field.ref:
+        tag_id = self.get_field_id(field)
+        if tag_id is not None or field.ref:
             field_args = []
+            if tag_id is not None:
+                field_args.append(f"id={tag_id}")
             if field.optional:
                 field_args.append("nullable=True")
-            field_args.append("ref=True")
+            if field.ref:
+                field_args.append("ref=True")
             if default_factory is not None:
                 field_args.append(f"default_factory={default_factory}")
             else:

@@ -32,6 +32,7 @@ JOBS=16
 DATA=""
 SERIALIZER=""
 DEBUG_BUILD=false
+DURATION=""
 
 # Parse arguments
 usage() {
@@ -42,6 +43,7 @@ usage() {
     echo "Options:"
     echo "  --data <struct|sample>       Filter benchmark by data type"
     echo "  --serializer <fory|protobuf> Filter benchmark by serializer"
+    echo "  --duration <seconds>         Minimum time to run each benchmark (e.g., 10, 30)"
     echo "  --debug                      Build with debug symbols and low optimization for profiling"
     echo "  --help                       Show this help message"
     echo ""
@@ -50,6 +52,7 @@ usage() {
     echo "  $0 --data struct            # Run only Struct benchmarks"
     echo "  $0 --serializer fory        # Run only Fory benchmarks"
     echo "  $0 --data struct --serializer fory"
+    echo "  $0 --duration 10            # Run each benchmark for at least 10 seconds"
     echo "  $0 --debug                  # Build for profiling (visible function names in flamegraph)"
     echo ""
     echo "For profiling/flamegraph, use: ./profile.sh"
@@ -64,6 +67,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --serializer)
             SERIALIZER="$2"
+            shift 2
+            ;;
+        --duration)
+            DURATION="$2"
             shift 2
             ;;
         --debug)
@@ -125,6 +132,10 @@ echo ""
 # Step 2: Run benchmark
 echo -e "${YELLOW}[2/3] Running benchmark...${NC}"
 BENCH_ARGS="--benchmark_format=json --benchmark_out=benchmark_results.json"
+if [[ -n "$DURATION" ]]; then
+    BENCH_ARGS="$BENCH_ARGS --benchmark_min_time=${DURATION}s"
+    echo -e "Duration: ${DURATION}s per benchmark"
+fi
 if [[ -n "$FILTER" ]]; then
     BENCH_ARGS="$BENCH_ARGS --benchmark_filter=$FILTER"
     echo -e "Filter: ${FILTER}"

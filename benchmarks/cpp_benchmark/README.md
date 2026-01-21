@@ -47,6 +47,34 @@ cd benchmarks/cpp_benchmark
 ./run.sh
 ```
 
+### Run Options
+
+```bash
+./run.sh --help
+
+Options:
+  --data <struct|sample>       Filter benchmark by data type
+  --serializer <fory|protobuf> Filter benchmark by serializer
+  --duration <seconds>         Minimum time to run each benchmark (e.g., 10, 30)
+  --debug                      Build with debug symbols for profiling
+```
+
+Examples:
+
+```bash
+# Run only Struct benchmarks
+./run.sh --data struct
+
+# Run only Fory benchmarks
+./run.sh --serializer fory
+
+# Run each benchmark for at least 10 seconds (for more stable results)
+./run.sh --duration 10
+
+# Combine options
+./run.sh --data struct --serializer fory --duration 5
+```
+
 ## Building
 
 ```bash

@@ -15,9 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""FlatBuffers frontend (placeholder)."""
+"""FlatBuffers frontend."""
 
 from fory_compiler.frontend.base import BaseFrontend, FrontendError
+from fory_compiler.frontend.fbs.lexer import Lexer, LexerError
+from fory_compiler.frontend.fbs.parser import Parser, ParseError
+from fory_compiler.frontend.fbs.translator import FbsTranslator
 from fory_compiler.ir.ast import Schema
 
 
@@ -27,9 +30,18 @@ class FBSFrontend(BaseFrontend):
     extensions = [".fbs"]
 
     def parse(self, source: str, filename: str = "<input>") -> Schema:
-        raise FrontendError(
-            "FlatBuffers frontend is not implemented yet", filename, 1, 1
-        )
+        try:
+            lexer = Lexer(source, filename)
+            tokens = lexer.tokenize()
+            parser = Parser(tokens, filename)
+            fbs_schema = parser.parse()
+        except (LexerError, ParseError) as exc:
+            raise FrontendError(exc.message, filename, exc.line, exc.column) from exc
+
+        translator = FbsTranslator(fbs_schema)
+        schema = translator.translate()
+
+        return schema
 
 
-__all__ = ["FBSFrontend"]
+__all__ = ["FBSFrontend", "Lexer", "Parser", "LexerError", "ParseError"]

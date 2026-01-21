@@ -24,7 +24,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IDL_DIR = Path(__file__).resolve().parent
-SCHEMA = IDL_DIR / "proto" / "addressbook.fdl"
+SCHEMA = IDL_DIR / "idl" / "addressbook.fdl"
 
 LANG_OUTPUTS = {
     "java": REPO_ROOT / "integration_tests/idl_tests/java/src/main/java",

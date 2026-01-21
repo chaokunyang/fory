@@ -185,7 +185,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     # compile command
     compile_parser = subparsers.add_parser(
         "compile",
-        help="Compile IDL files (.fdl, .proto) to language-specific code",
+        help="Compile IDL files (.fdl, .proto, .fbs) to language-specific code",
     )
 
     compile_parser.add_argument(

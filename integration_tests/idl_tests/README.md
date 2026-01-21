@@ -1,7 +1,7 @@
 # IDL Compiler Integration Tests
 
 This directory validates FDL compiler output across languages by generating code from
-`proto/addressbook.fdl` and running round-trip serialization tests in each language.
+`idl/addressbook.fdl` and running round-trip serialization tests in each language.
 
 Run tests:
 

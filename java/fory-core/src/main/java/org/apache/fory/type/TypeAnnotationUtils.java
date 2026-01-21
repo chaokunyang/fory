@@ -22,9 +22,13 @@ package org.apache.fory.type;
 import java.lang.annotation.Annotation;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
+import org.apache.fory.annotation.Uint16ArrayType;
 import org.apache.fory.annotation.Uint16Type;
+import org.apache.fory.annotation.Uint32ArrayType;
 import org.apache.fory.annotation.Uint32Type;
+import org.apache.fory.annotation.Uint64ArrayType;
 import org.apache.fory.annotation.Uint64Type;
+import org.apache.fory.annotation.Uint8ArrayType;
 import org.apache.fory.annotation.Uint8Type;
 
 public class TypeAnnotationUtils {
@@ -81,6 +85,18 @@ public class TypeAnnotationUtils {
         default:
           throw new IllegalArgumentException("Unsupported encoding: " + int64Type.encoding());
       }
+    } else if (typeAnnotation instanceof Uint8ArrayType) {
+      checkFieldType(fieldType, "@Uint8ArrayType", byte[].class);
+      return Types.UINT8_ARRAY;
+    } else if (typeAnnotation instanceof Uint16ArrayType) {
+      checkFieldType(fieldType, "@Uint16ArrayType", short[].class);
+      return Types.UINT16_ARRAY;
+    } else if (typeAnnotation instanceof Uint32ArrayType) {
+      checkFieldType(fieldType, "@Uint32ArrayType", int[].class);
+      return Types.UINT32_ARRAY;
+    } else if (typeAnnotation instanceof Uint64ArrayType) {
+      checkFieldType(fieldType, "@Uint64ArrayType", long[].class);
+      return Types.UINT64_ARRAY;
     }
     throw new IllegalArgumentException("Unsupported type annotation: " + typeAnnotation.getClass());
   }

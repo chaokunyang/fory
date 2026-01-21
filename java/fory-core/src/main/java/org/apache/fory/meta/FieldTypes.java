@@ -90,6 +90,10 @@ public class FieldTypes {
       } else {
         typeId = Types.getTypeId(resolver.getFory(), rawType);
       }
+    } else if (rawType.isArray() && rawType.getComponentType().isPrimitive() && field != null) {
+      // For primitive arrays with type annotations, use getDescriptorTypeId to parse annotation
+      // This allows @Uint8ArrayType etc. to override the default INT8_ARRAY type
+      typeId = Types.getDescriptorTypeId(resolver.getFory(), field);
     } else {
       ClassInfo info =
           isXlang && rawType == Object.class ? null : resolver.getClassInfo(rawType, false);
@@ -189,10 +193,9 @@ public class FieldTypes {
         Class<?> elemType = rawType.getComponentType();
         if (isXlang) {
           if (elemType.isPrimitive()) {
-            // For xlang mode, use xlang primitive array type IDs
-            int elemTypeId = Types.getTypeId(resolver.getFory(), elemType);
-            int arrayTypeId = Types.getPrimitiveArrayTypeId(elemTypeId);
-            return new RegisteredFieldType(nullable, trackingRef, arrayTypeId);
+            // For xlang mode, use the typeId we already computed above
+            // which respects @Uint8ArrayType etc. annotations
+            return new RegisteredFieldType(nullable, trackingRef, typeId);
           }
           return new CollectionFieldType(
               typeId,

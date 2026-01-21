@@ -23,6 +23,8 @@ import (
 	"testing"
 
 	fory "github.com/apache/fory/go/fory"
+	complexfbs "github.com/apache/fory/integration_tests/idl_tests/go/complex_fbs"
+	monster "github.com/apache/fory/integration_tests/idl_tests/go/monster"
 )
 
 func buildAddressBook() AddressBook {
@@ -56,6 +58,12 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	if err := RegisterTypes(f); err != nil {
 		t.Fatalf("register types: %v", err)
 	}
+	if err := monster.RegisterTypes(f); err != nil {
+		t.Fatalf("register monster types: %v", err)
+	}
+	if err := complexfbs.RegisterTypes(f); err != nil {
+		t.Fatalf("register flatbuffers types: %v", err)
+	}
 
 	book := buildAddressBook()
 	runLocalRoundTrip(t, f, book)
@@ -64,6 +72,14 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	types := buildPrimitiveTypes()
 	runLocalPrimitiveRoundTrip(t, f, types)
 	runFilePrimitiveRoundTrip(t, f, types)
+
+	monster := buildMonster()
+	runLocalMonsterRoundTrip(t, f, monster)
+	runFileMonsterRoundTrip(t, f, monster)
+
+	container := buildContainer()
+	runLocalContainerRoundTrip(t, f, container)
+	runFileContainerRoundTrip(t, f, container)
 }
 
 func runLocalRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
@@ -164,6 +180,134 @@ func runFilePrimitiveRoundTrip(t *testing.T, f *fory.Fory, types PrimitiveTypes)
 	}
 	if !reflect.DeepEqual(types, decoded) {
 		t.Fatalf("peer payload mismatch: %#v != %#v", types, decoded)
+	}
+
+	out, err := f.Serialize(decoded)
+	if err != nil {
+		t.Fatalf("serialize peer payload: %v", err)
+	}
+	if err := os.WriteFile(dataFile, out, 0o644); err != nil {
+		t.Fatalf("write data file: %v", err)
+	}
+}
+
+func buildMonster() monster.Monster {
+	pos := monster.Vec3{
+		X: 1.0,
+		Y: 2.0,
+		Z: 3.0,
+	}
+	return monster.Monster{
+		Pos:       pos,
+		Mana:      int16(200),
+		Hp:        int16(80),
+		Name:      "Orc",
+		Friendly:  true,
+		Inventory: []uint8{1, 2, 3},
+		Color:     monster.ColorBlue,
+	}
+}
+
+func runLocalMonsterRoundTrip(t *testing.T, f *fory.Fory, monster monster.Monster) {
+	data, err := f.Serialize(monster)
+	if err != nil {
+		t.Fatalf("serialize: %v", err)
+	}
+
+	var out monster.Monster
+	if err := f.Deserialize(data, &out); err != nil {
+		t.Fatalf("deserialize: %v", err)
+	}
+
+	if !reflect.DeepEqual(monster, out) {
+		t.Fatalf("roundtrip mismatch: %#v != %#v", monster, out)
+	}
+}
+
+func runFileMonsterRoundTrip(t *testing.T, f *fory.Fory, monster monster.Monster) {
+	dataFile := os.Getenv("DATA_FILE_FLATBUFFERS_MONSTER")
+	if dataFile == "" {
+		return
+	}
+	payload, err := os.ReadFile(dataFile)
+	if err != nil {
+		t.Fatalf("read data file: %v", err)
+	}
+
+	var decoded monster.Monster
+	if err := f.Deserialize(payload, &decoded); err != nil {
+		t.Fatalf("deserialize peer payload: %v", err)
+	}
+	if !reflect.DeepEqual(monster, decoded) {
+		t.Fatalf("peer payload mismatch: %#v != %#v", monster, decoded)
+	}
+
+	out, err := f.Serialize(decoded)
+	if err != nil {
+		t.Fatalf("serialize peer payload: %v", err)
+	}
+	if err := os.WriteFile(dataFile, out, 0o644); err != nil {
+		t.Fatalf("write data file: %v", err)
+	}
+}
+
+func buildContainer() complexfbs.Container {
+	scalars := complexfbs.ScalarPack{
+		B:  -8,
+		Ub: 200,
+		S:  -1234,
+		Us: 40000,
+		I:  -123456,
+		Ui: 123456,
+		L:  -123456789,
+		Ul: 987654321,
+		F:  1.5,
+		D:  2.5,
+		Ok: true,
+	}
+	return complexfbs.Container{
+		Id:      9876543210,
+		Status:  complexfbs.StatusStarted,
+		Bytes:   []int8{1, 2, 3},
+		Numbers: []int32{10, 20, 30},
+		Scalars: scalars,
+		Names:   []string{"alpha", "beta"},
+		Flags:   []bool{true, false},
+	}
+}
+
+func runLocalContainerRoundTrip(t *testing.T, f *fory.Fory, container complexfbs.Container) {
+	data, err := f.Serialize(container)
+	if err != nil {
+		t.Fatalf("serialize: %v", err)
+	}
+
+	var out complexfbs.Container
+	if err := f.Deserialize(data, &out); err != nil {
+		t.Fatalf("deserialize: %v", err)
+	}
+
+	if !reflect.DeepEqual(container, out) {
+		t.Fatalf("roundtrip mismatch: %#v != %#v", container, out)
+	}
+}
+
+func runFileContainerRoundTrip(t *testing.T, f *fory.Fory, container complexfbs.Container) {
+	dataFile := os.Getenv("DATA_FILE_FLATBUFFERS_TEST2")
+	if dataFile == "" {
+		return
+	}
+	payload, err := os.ReadFile(dataFile)
+	if err != nil {
+		t.Fatalf("read data file: %v", err)
+	}
+
+	var decoded complexfbs.Container
+	if err := f.Deserialize(payload, &decoded); err != nil {
+		t.Fatalf("deserialize peer payload: %v", err)
+	}
+	if !reflect.DeepEqual(container, decoded) {
+		t.Fatalf("peer payload mismatch: %#v != %#v", container, decoded)
 	}
 
 	out, err := f.Serialize(decoded)

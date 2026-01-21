@@ -17,7 +17,7 @@
 
 package addressbook;
 
-import "primitive_types.proto";
+import "complex_pb.proto";
 
 message Person [id=100] {
     string name = 1;

@@ -19,7 +19,7 @@
 
 syntax = "proto3";
 
-package addressbook;
+package complex_pb;
 
 message PrimitiveTypes {
     option (fory).id = 200;

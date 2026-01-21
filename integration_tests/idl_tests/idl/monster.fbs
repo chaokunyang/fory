@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-namespace MyGame.Sample;
+namespace monster;
 
 enum Color : byte { Red = 0, Green, Blue }
 

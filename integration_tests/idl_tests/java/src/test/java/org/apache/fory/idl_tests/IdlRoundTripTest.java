@@ -25,6 +25,14 @@ import addressbook.Person;
 import addressbook.Person.PhoneNumber;
 import addressbook.Person.PhoneType;
 import addressbook.PrimitiveTypes;
+import complex_fbs.ComplexFbsForyRegistration;
+import complex_fbs.Container;
+import complex_fbs.ScalarPack;
+import complex_fbs.Status;
+import monster.Color;
+import monster.Monster;
+import monster.MonsterForyRegistration;
+import monster.Vec3;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -62,7 +70,9 @@ public class IdlRoundTripTest {
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
 
-      PeerCommand command = buildPeerCommand(peer, dataFile, "DATA_FILE");
+      Map<String, String> env = new HashMap<>();
+      env.put("DATA_FILE", dataFile.toAbsolutePath().toString());
+      PeerCommand command = buildPeerCommand(peer, env);
       runPeer(command, peer);
 
       byte[] peerBytes = Files.readAllBytes(dataFile);
@@ -89,13 +99,62 @@ public class IdlRoundTripTest {
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
 
-      PeerCommand command = buildPeerCommand(peer, dataFile, "DATA_FILE_PRIMITIVES");
+      Map<String, String> env = new HashMap<>();
+      env.put("DATA_FILE_PRIMITIVES", dataFile.toAbsolutePath().toString());
+      PeerCommand command = buildPeerCommand(peer, env);
       runPeer(command, peer);
 
       byte[] peerBytes = Files.readAllBytes(dataFile);
       Object roundTrip = fory.deserialize(peerBytes);
       Assert.assertTrue(roundTrip instanceof PrimitiveTypes);
       Assert.assertEquals(roundTrip, types);
+    }
+  }
+
+  @Test
+  public void testFlatbuffersRoundTrip() throws Exception {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
+    MonsterForyRegistration.register(fory);
+    ComplexFbsForyRegistration.register(fory);
+
+    Monster monster = buildMonster();
+    byte[] monsterBytes = fory.serialize(monster);
+    Object monsterDecoded = fory.deserialize(monsterBytes);
+    Assert.assertTrue(monsterDecoded instanceof Monster);
+    Assert.assertEquals(monsterDecoded, monster);
+
+    Container container = buildContainer();
+    byte[] containerBytes = fory.serialize(container);
+    Object containerDecoded = fory.deserialize(containerBytes);
+    Assert.assertTrue(containerDecoded instanceof Container);
+    Assert.assertEquals(containerDecoded, container);
+
+    for (String peer : resolvePeers()) {
+      Path monsterFile =
+          Files.createTempFile("idl-flatbuffers-monster-" + peer + "-", ".bin");
+      monsterFile.toFile().deleteOnExit();
+      Files.write(monsterFile, monsterBytes);
+
+      Path containerFile =
+          Files.createTempFile("idl-flatbuffers-test2-" + peer + "-", ".bin");
+      containerFile.toFile().deleteOnExit();
+      Files.write(containerFile, containerBytes);
+
+      Map<String, String> env = new HashMap<>();
+      env.put("DATA_FILE_FLATBUFFERS_MONSTER", monsterFile.toAbsolutePath().toString());
+      env.put("DATA_FILE_FLATBUFFERS_TEST2", containerFile.toAbsolutePath().toString());
+      PeerCommand command = buildPeerCommand(peer, env);
+      runPeer(command, peer);
+
+      byte[] peerMonsterBytes = Files.readAllBytes(monsterFile);
+      Object monsterRoundTrip = fory.deserialize(peerMonsterBytes);
+      Assert.assertTrue(monsterRoundTrip instanceof Monster);
+      Assert.assertEquals(monsterRoundTrip, monster);
+
+      byte[] peerContainerBytes = Files.readAllBytes(containerFile);
+      Object containerRoundTrip = fory.deserialize(peerContainerBytes);
+      Assert.assertTrue(containerRoundTrip instanceof Container);
+      Assert.assertEquals(containerRoundTrip, container);
     }
   }
 
@@ -115,13 +174,13 @@ public class IdlRoundTripTest {
     return peers;
   }
 
-  private PeerCommand buildPeerCommand(String peer, Path dataFile, String dataEnvVar) {
+  private PeerCommand buildPeerCommand(String peer, Map<String, String> environment) {
     Path repoRoot = repoRoot();
     Path idlRoot = repoRoot.resolve("integration_tests").resolve("idl_tests");
     Path workDir = idlRoot;
     List<String> command;
     PeerCommand peerCommand = new PeerCommand();
-    peerCommand.environment.put(dataEnvVar, dataFile.toAbsolutePath().toString());
+    peerCommand.environment.putAll(environment);
 
     switch (peer) {
       case "python":
@@ -251,6 +310,48 @@ public class IdlRoundTripTest {
     types.setFloat32Value(2.5f);
     types.setFloat64Value(3.5d);
     return types;
+  }
+
+  private Monster buildMonster() {
+    Vec3 pos = new Vec3();
+    pos.setX(1.0f);
+    pos.setY(2.0f);
+    pos.setZ(3.0f);
+
+    Monster monster = new Monster();
+    monster.setPos(pos);
+    monster.setMana((short) 200);
+    monster.setHp((short) 80);
+    monster.setName("Orc");
+    monster.setFriendly(true);
+    monster.setInventory(new byte[] {(byte) 1, (byte) 2, (byte) 3});
+    monster.setColor(Color.Blue);
+    return monster;
+  }
+
+  private Container buildContainer() {
+    ScalarPack pack = new ScalarPack();
+    pack.setB((byte) -8);
+    pack.setUb((byte) 200);
+    pack.setS((short) -1234);
+    pack.setUs((short) 40000);
+    pack.setI(-123456);
+    pack.setUi(123456);
+    pack.setL(-123456789L);
+    pack.setUl(987654321L);
+    pack.setF(1.5f);
+    pack.setD(2.5d);
+    pack.setOk(true);
+
+    Container container = new Container();
+    container.setId(9876543210L);
+    container.setStatus(Status.STARTED);
+    container.setBytes(new byte[] {(byte) 1, (byte) 2, (byte) 3});
+    container.setNumbers(new int[] {10, 20, 30});
+    container.setScalars(pack);
+    container.setNames(Arrays.asList("alpha", "beta"));
+    container.setFlags(new boolean[] {true, false});
+    return container;
   }
 
   private static final class PeerCommand {

@@ -25,7 +25,9 @@
 #include <vector>
 
 #include "addressbook.h"
+#include "complex_fbs.h"
 #include "fory/serialization/fory.h"
+#include "monster.h"
 
 namespace {
 
@@ -64,6 +66,8 @@ fory::Result<void, fory::Error> RunRoundTrip() {
                   .build();
 
   addressbook::RegisterTypes(fory);
+  monster::RegisterTypes(fory);
+  complex_fbs::RegisterTypes(fory);
 
   addressbook::Person::PhoneNumber mobile;
   mobile.number = "555-0100";
@@ -125,6 +129,63 @@ fory::Result<void, fory::Error> RunRoundTrip() {
         fory::Error::invalid("primitive types roundtrip mismatch"));
   }
 
+  monster::Vec3 pos;
+  pos.x = 1.0F;
+  pos.y = 2.0F;
+  pos.z = 3.0F;
+
+  monster::Monster monster_value;
+  monster_value.pos = pos;
+  monster_value.mana = 200;
+  monster_value.hp = 80;
+  monster_value.name = "Orc";
+  monster_value.friendly = true;
+  monster_value.inventory = {static_cast<uint8_t>(1), static_cast<uint8_t>(2),
+                             static_cast<uint8_t>(3)};
+  monster_value.color = monster::Color::Blue;
+
+  FORY_TRY(monster_bytes, fory.serialize(monster_value));
+  FORY_TRY(monster_roundtrip, fory.deserialize<monster::Monster>(
+                                  monster_bytes.data(), monster_bytes.size()));
+
+  if (!(monster_roundtrip == monster_value)) {
+    return fory::Unexpected(
+        fory::Error::invalid("flatbuffers monster roundtrip mismatch"));
+  }
+
+  complex_fbs::ScalarPack scalars;
+  scalars.b = -8;
+  scalars.ub = 200;
+  scalars.s = -1234;
+  scalars.us = 40000;
+  scalars.i = -123456;
+  scalars.ui = 123456;
+  scalars.l = -123456789;
+  scalars.ul = 987654321;
+  scalars.f = 1.5F;
+  scalars.d = 2.5;
+  scalars.ok = true;
+
+  complex_fbs::Container container;
+  container.id = 9876543210ULL;
+  container.status = complex_fbs::Status::STARTED;
+  container.bytes = {static_cast<int8_t>(1), static_cast<int8_t>(2),
+                     static_cast<int8_t>(3)};
+  container.numbers = {10, 20, 30};
+  container.scalars = scalars;
+  container.names = {"alpha", "beta"};
+  container.flags = {true, false};
+
+  FORY_TRY(container_bytes, fory.serialize(container));
+  FORY_TRY(container_roundtrip,
+           fory.deserialize<complex_fbs::Container>(container_bytes.data(),
+                                                    container_bytes.size()));
+
+  if (!(container_roundtrip == container)) {
+    return fory::Unexpected(
+        fory::Error::invalid("flatbuffers container roundtrip mismatch"));
+  }
+
   const char *data_file = std::getenv("DATA_FILE");
   if (data_file != nullptr && data_file[0] != '\0') {
     FORY_TRY(payload, ReadFile(data_file));
@@ -148,6 +209,32 @@ fory::Result<void, fory::Error> RunRoundTrip() {
     }
     FORY_TRY(peer_bytes, fory.serialize(peer_types));
     FORY_RETURN_IF_ERROR(WriteFile(primitive_file, peer_bytes));
+  }
+
+  const char *monster_file = std::getenv("DATA_FILE_FLATBUFFERS_MONSTER");
+  if (monster_file != nullptr && monster_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(monster_file));
+    FORY_TRY(peer_monster, fory.deserialize<monster::Monster>(payload.data(),
+                                                              payload.size()));
+    if (!(peer_monster == monster_value)) {
+      return fory::Unexpected(
+          fory::Error::invalid("peer monster payload mismatch"));
+    }
+    FORY_TRY(peer_bytes, fory.serialize(peer_monster));
+    FORY_RETURN_IF_ERROR(WriteFile(monster_file, peer_bytes));
+  }
+
+  const char *container_file = std::getenv("DATA_FILE_FLATBUFFERS_TEST2");
+  if (container_file != nullptr && container_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(container_file));
+    FORY_TRY(peer_container, fory.deserialize<complex_fbs::Container>(
+                                 payload.data(), payload.size()));
+    if (!(peer_container == container)) {
+      return fory::Unexpected(
+          fory::Error::invalid("peer container payload mismatch"));
+    }
+    FORY_TRY(peer_bytes, fory.serialize(peer_container));
+    FORY_RETURN_IF_ERROR(WriteFile(container_file, peer_bytes));
   }
 
   return fory::Result<void, fory::Error>();

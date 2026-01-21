@@ -24,7 +24,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IDL_DIR = Path(__file__).resolve().parent
-SCHEMA = IDL_DIR / "idl" / "addressbook.fdl"
+SCHEMAS = [
+    IDL_DIR / "idl" / "addressbook.fdl",
+    IDL_DIR / "idl" / "monster.fbs",
+    IDL_DIR / "idl" / "complex_fbs.fbs",
+]
 
 LANG_OUTPUTS = {
     "java": REPO_ROOT / "integration_tests/idl_tests/java/src/main/java",
@@ -32,6 +36,11 @@ LANG_OUTPUTS = {
     "cpp": REPO_ROOT / "integration_tests/idl_tests/cpp/generated",
     "go": REPO_ROOT / "integration_tests/idl_tests/go",
     "rust": REPO_ROOT / "integration_tests/idl_tests/rust/src",
+}
+
+GO_OUTPUT_OVERRIDES = {
+    "monster.fbs": IDL_DIR / "go" / "monster",
+    "complex_fbs.fbs": IDL_DIR / "go" / "complex_fbs",
 }
 
 
@@ -58,26 +67,27 @@ def main() -> int:
         print(f"Unknown languages: {', '.join(unknown)}", file=sys.stderr)
         return 2
 
-    for lang in langs:
-        LANG_OUTPUTS[lang].mkdir(parents=True, exist_ok=True)
-
-    cmd = [
-        sys.executable,
-        "-m",
-        "fory_compiler",
-        "compile",
-        str(SCHEMA),
-    ]
-
-    for lang in langs:
-        out_dir = LANG_OUTPUTS[lang]
-        cmd.append(f"--{lang}_out={out_dir}")
-
     env = os.environ.copy()
     compiler_path = str(REPO_ROOT / "compiler")
     env["PYTHONPATH"] = compiler_path + os.pathsep + env.get("PYTHONPATH", "")
 
-    subprocess.check_call(cmd, env=env)
+    for schema in SCHEMAS:
+        cmd = [
+            sys.executable,
+            "-m",
+            "fory_compiler",
+            "compile",
+            str(schema),
+        ]
+
+        for lang in langs:
+            out_dir = LANG_OUTPUTS[lang]
+            if lang == "go":
+                out_dir = GO_OUTPUT_OVERRIDES.get(schema.name, out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            cmd.append(f"--{lang}_out={out_dir}")
+
+        subprocess.check_call(cmd, env=env)
     return 0
 
 

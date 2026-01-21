@@ -21,6 +21,9 @@ import os
 from pathlib import Path
 
 import addressbook
+import complex_fbs
+import monster
+import numpy as np
 import pyfory
 
 
@@ -91,6 +94,84 @@ def build_primitive_types() -> "addressbook.PrimitiveTypes":
     )
 
 
+def build_monster() -> "monster.Monster":
+    pos = monster.Vec3(x=1.0, y=2.0, z=3.0)
+    return monster.Monster(
+        pos=pos,
+        mana=200,
+        hp=80,
+        name="Orc",
+        friendly=True,
+        inventory=np.array([1, 2, 3], dtype=np.uint8),
+        color=monster.Color.Blue,
+    )
+
+
+def local_roundtrip_monster(fory: pyfory.Fory, monster: "monster.Monster") -> None:
+    data = fory.serialize(monster)
+    decoded = fory.deserialize(data)
+    assert isinstance(decoded, monster.Monster)
+    assert decoded == monster
+
+
+def file_roundtrip_monster(fory: pyfory.Fory, monster: "monster.Monster") -> None:
+    data_file = os.environ.get("DATA_FILE_FLATBUFFERS_MONSTER")
+    if not data_file:
+        return
+    payload = Path(data_file).read_bytes()
+    decoded = fory.deserialize(payload)
+    assert isinstance(decoded, monster.Monster)
+    assert decoded == monster
+    Path(data_file).write_bytes(fory.serialize(decoded))
+
+
+def build_container() -> "complex_fbs.Container":
+    scalars = complex_fbs.ScalarPack(
+        b=-8,
+        ub=200,
+        s=-1234,
+        us=40000,
+        i=-123456,
+        ui=123456,
+        l=-123456789,
+        ul=987654321,
+        f=1.5,
+        d=2.5,
+        ok=True,
+    )
+    return complex_fbs.Container(
+        id=9876543210,
+        status=complex_fbs.Status.STARTED,
+        bytes=np.array([1, 2, 3], dtype=np.int8),
+        numbers=np.array([10, 20, 30], dtype=np.int32),
+        scalars=scalars,
+        names=["alpha", "beta"],
+        flags=np.array([True, False], dtype=np.bool_),
+    )
+
+
+def local_roundtrip_container(
+    fory: pyfory.Fory, container: "complex_fbs.Container"
+) -> None:
+    data = fory.serialize(container)
+    decoded = fory.deserialize(data)
+    assert isinstance(decoded, complex_fbs.Container)
+    assert decoded == container
+
+
+def file_roundtrip_container(
+    fory: pyfory.Fory, container: "complex_fbs.Container"
+) -> None:
+    data_file = os.environ.get("DATA_FILE_FLATBUFFERS_TEST2")
+    if not data_file:
+        return
+    payload = Path(data_file).read_bytes()
+    decoded = fory.deserialize(payload)
+    assert isinstance(decoded, complex_fbs.Container)
+    assert decoded == container
+    Path(data_file).write_bytes(fory.serialize(decoded))
+
+
 def local_roundtrip_primitives(
     fory: pyfory.Fory, types: "addressbook.PrimitiveTypes"
 ) -> None:
@@ -116,6 +197,8 @@ def file_roundtrip_primitives(
 def main() -> int:
     fory = pyfory.Fory(xlang=True)
     addressbook.register_addressbook_types(fory)
+    monster.register_monster_types(fory)
+    complex_fbs.register_complex_fbs_types(fory)
 
     book = build_address_book()
     local_roundtrip(fory, book)
@@ -124,6 +207,14 @@ def main() -> int:
     primitives = build_primitive_types()
     local_roundtrip_primitives(fory, primitives)
     file_roundtrip_primitives(fory, primitives)
+
+    monster = build_monster()
+    local_roundtrip_monster(fory, monster)
+    file_roundtrip_monster(fory, monster)
+
+    container = build_container()
+    local_roundtrip_container(fory, container)
+    file_roundtrip_container(fory, container)
     return 0
 
 

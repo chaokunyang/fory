@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-namespace Fory.Flatbuffers;
+namespace complex_fbs;
 
 attribute "priority";
 attribute "custom_note";

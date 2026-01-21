@@ -61,9 +61,7 @@ def test_fbs_type_mapping_and_options():
     assert isinstance(fields["mana"].field_type, PrimitiveType)
     assert fields["mana"].field_type.kind == PrimitiveKind.INT16
     assert isinstance(fields["inventory"].field_type, ListType)
-    assert (
-        fields["inventory"].field_type.element_type.kind == PrimitiveKind.UINT8
-    )
+    assert fields["inventory"].field_type.element_type.kind == PrimitiveKind.UINT8
     assert fields["friendly"].options["deprecated"] is True
     assert fields["friendly"].options["priority"] == 1
 

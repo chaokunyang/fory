@@ -193,9 +193,7 @@ class Parser:
             name_token = self.consume(TokenType.IDENT, "Expected enum value name")
             value = next_value
             if self.match(TokenType.EQUALS):
-                value_token = self.consume(
-                    TokenType.INT, "Expected integer enum value"
-                )
+                value_token = self.consume(TokenType.INT, "Expected integer enum value")
                 value = int(value_token.value, 0)
             values.append(
                 FbsEnumValue(

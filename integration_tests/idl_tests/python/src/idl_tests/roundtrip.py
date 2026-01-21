@@ -107,7 +107,9 @@ def build_monster() -> "monster.Monster":
     )
 
 
-def assert_monster_equal(decoded: "monster.Monster", expected: "monster.Monster") -> None:
+def assert_monster_equal(
+    decoded: "monster.Monster", expected: "monster.Monster"
+) -> None:
     assert decoded.pos == expected.pos
     assert decoded.mana == expected.mana
     assert decoded.hp == expected.hp
@@ -126,9 +128,7 @@ def local_roundtrip_monster(
     assert_monster_equal(decoded, monster_value)
 
 
-def file_roundtrip_monster(
-    fory: pyfory.Fory, monster_value: "monster.Monster"
-) -> None:
+def file_roundtrip_monster(fory: pyfory.Fory, monster_value: "monster.Monster") -> None:
     data_file = os.environ.get("DATA_FILE_FLATBUFFERS_MONSTER")
     if not data_file:
         return

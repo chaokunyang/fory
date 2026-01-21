@@ -92,15 +92,15 @@ type ForyTag struct {
 //   - Shorthand: `-` (equivalent to `ignore=true`)
 func parseForyTag(field reflect.StructField) ForyTag {
 	tag := ForyTag{
-		ID:       TagIDUseFieldName,
-		Nullable: false,
-		Ref:      false,
-		Ignore:   false,
-		HasTag:   false,
-		Compress: true,     // default: varint encoding
-		Encoding: "varint", // default: varint encoding
-		TypeID:   UNKNOWN,
-		TypeIDSet: false,
+		ID:          TagIDUseFieldName,
+		Nullable:    false,
+		Ref:         false,
+		Ignore:      false,
+		HasTag:      false,
+		Compress:    true,     // default: varint encoding
+		Encoding:    "varint", // default: varint encoding
+		TypeID:      UNKNOWN,
+		TypeIDSet:   false,
 		TypeIDValid: true,
 	}
 

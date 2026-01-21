@@ -486,9 +486,13 @@ class Numpy1DArraySerializer(Serializer):
     def xread(self, buffer):
         data = buffer.read_bytes_and_size()
         arr = np.frombuffer(data, dtype=self.dtype.newbyteorder("<"))
-        if not is_little_endian and self.itemsize > 1:
-            # Convert from little-endian to native byte order
-            arr = arr.astype(self.dtype)
+        if self.itemsize > 1:
+            if is_little_endian:
+                # Normalize to native byte order to keep view.format stable.
+                arr = arr.view(self.dtype)
+            else:
+                # Convert from little-endian to native byte order.
+                arr = arr.astype(self.dtype)
         return arr
 
     def write(self, buffer, value):

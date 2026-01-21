@@ -65,12 +65,7 @@ def test_unsigned_array_fingerprint_type_ids():
         serializer._field_infos,
     )
 
-    expected = (
-        f"0,{TypeId.UINT8_ARRAY},0,0;"
-        f"1,{TypeId.UINT16_ARRAY},0,0;"
-        f"2,{TypeId.UINT32_ARRAY},0,0;"
-        f"3,{TypeId.UINT64_ARRAY},0,0;"
-    )
+    expected = f"0,{TypeId.UINT8_ARRAY},0,0;1,{TypeId.UINT16_ARRAY},0,0;2,{TypeId.UINT32_ARRAY},0,0;3,{TypeId.UINT64_ARRAY},0,0;"
     assert fingerprint == expected
 
 

@@ -20,9 +20,9 @@
 package org.apache.fory.type;
 
 import java.lang.annotation.Annotation;
-import org.apache.fory.annotation.Int8ArrayType;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
+import org.apache.fory.annotation.Int8ArrayType;
 import org.apache.fory.annotation.Uint16ArrayType;
 import org.apache.fory.annotation.Uint16Type;
 import org.apache.fory.annotation.Uint32ArrayType;

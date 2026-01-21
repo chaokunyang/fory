@@ -30,8 +30,8 @@ import java.lang.annotation.Target;
  * <p>When applied to a field of type {@code byte[]}, this annotation indicates that the array
  * should be serialized as a signed 8-bit integer array (INT8_ARRAY, type_id=40).
  *
- * <p>This is useful for cross-language schemas that represent signed bytes explicitly
- * (for example, FlatBuffers {@code byte}).
+ * <p>This is useful for cross-language schemas that represent signed bytes explicitly (for example,
+ * FlatBuffers {@code byte}).
  *
  * <p>Example usage:
  *

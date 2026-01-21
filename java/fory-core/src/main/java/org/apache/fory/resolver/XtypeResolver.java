@@ -547,7 +547,7 @@ public class XtypeResolver extends TypeResolver {
 
   public boolean isBuildIn(Descriptor descriptor) {
     Class<?> rawType = descriptor.getRawType();
-    byte typeIdByte = getInternalTypeId(rawType);
+    byte typeIdByte = getInternalTypeId(descriptor);
     if (rawType == NonexistentMetaShared.class) {
       return true;
     }
@@ -1033,8 +1033,8 @@ public class XtypeResolver extends TypeResolver {
             descriptorUpdator,
             getPrimitiveComparator(),
             (o1, o2) -> {
-              int typeId1 = getInternalTypeId(o1.getRawType());
-              int typeId2 = getInternalTypeId(o2.getRawType());
+              int typeId1 = getInternalTypeId(o1);
+              int typeId2 = getInternalTypeId(o2);
               if (typeId1 == typeId2) {
                 return getFieldSortKey(o1).compareTo(getFieldSortKey(o2));
               } else {
@@ -1043,6 +1043,14 @@ public class XtypeResolver extends TypeResolver {
             })
         .setOtherDescriptorComparator(Comparator.comparing(TypeResolver::getFieldSortKey))
         .sort();
+  }
+
+  private byte getInternalTypeId(Descriptor descriptor) {
+    Class<?> cls = descriptor.getRawType();
+    if (cls.isArray() && cls.getComponentType().isPrimitive()) {
+      return (byte) (Types.getDescriptorTypeId(fory, descriptor) & 0xff);
+    }
+    return getInternalTypeId(cls);
   }
 
   private byte getInternalTypeId(Class<?> cls) {

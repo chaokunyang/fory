@@ -1190,16 +1190,19 @@ class StructFieldSerializerVisitor(TypeVisitor):
 _UNKNOWN_TYPE_ID = -1
 
 
-def _sort_fields(type_resolver, field_names, serializers, nullable_map=None):
+def _sort_fields(type_resolver, field_names, serializers, nullable_map=None, field_infos_list=None):
     (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types) = group_fields(
-        type_resolver, field_names, serializers, nullable_map
+        type_resolver, field_names, serializers, nullable_map, field_infos_list
     )
     all_types = boxed_types + nullable_boxed_types + internal_types + collection_types + set_types + map_types + other_types
     return [t[2] for t in all_types], [t[1] for t in all_types]
 
 
-def group_fields(type_resolver, field_names, serializers, nullable_map=None):
+def group_fields(type_resolver, field_names, serializers, nullable_map=None, field_infos_list=None):
     nullable_map = nullable_map or {}
+    field_info_map = {}
+    if field_infos_list:
+        field_info_map = {fi.name: fi for fi in field_infos_list}
     boxed_types = []
     nullable_boxed_types = []
     collection_types = []
@@ -1209,17 +1212,24 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
     other_types = []
     type_ids = []
     for field_name, serializer in zip(field_names, serializers):
+        fi = field_info_map.get(field_name)
+        tag_id = fi.tag_id if fi else -1
+        if tag_id >= 0:
+            sort_key = (0, str(tag_id), "")
+        else:
+            sort_key = (1, field_name, "")
         if serializer is None:
-            other_types.append((_UNKNOWN_TYPE_ID, serializer, field_name))
+            other_types.append((_UNKNOWN_TYPE_ID, serializer, field_name, sort_key))
         else:
             type_ids.append(
                 (
                     type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF,
                     serializer,
                     field_name,
+                    sort_key,
                 )
             )
-    for type_id, serializer, field_name in type_ids:
+    for type_id, serializer, field_name, sort_key in type_ids:
         is_nullable = nullable_map.get(field_name, False)
         if is_primitive_type(type_id):
             container = nullable_boxed_types if is_nullable else boxed_types
@@ -1240,10 +1250,10 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
         else:
             assert TypeId.UNKNOWN < type_id < TypeId.BOUND, (type_id,)
             container = internal_types
-        container.append((type_id, serializer, field_name))
+        container.append((type_id, serializer, field_name, sort_key))
 
     def sorter(item):
-        return item[0], item[2]
+        return item[0], item[3]
 
     def numeric_sorter(item):
         id_ = item[0]
@@ -1259,7 +1269,7 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
         }
         # Sort by: compress flag, -size (largest first), -type_id (higher type ID first), field_name
         # Java sorts by size (largest first), then by primitive type ID (descending)
-        return int(compress), -get_primitive_type_size(id_), -id_, item[2]
+        return int(compress), -get_primitive_type_size(id_), -id_, item[3]
 
     boxed_types = sorted(boxed_types, key=numeric_sorter)
     nullable_boxed_types = sorted(nullable_boxed_types, key=numeric_sorter)
@@ -1267,7 +1277,7 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None):
     set_types = sorted(set_types, key=sorter)
     internal_types = sorted(internal_types, key=sorter)
     map_types = sorted(map_types, key=sorter)
-    other_types = sorted(other_types, key=lambda item: item[2])
+    other_types = sorted(other_types, key=lambda item: item[3])
     return (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types)
 
 
@@ -1330,12 +1340,12 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
         # Determine field identifier for fingerprint
         if tag_id >= 0:
             field_id_or_name = str(tag_id)
-            # Sort by tag ID (numeric) for tag ID fields
-            sort_key = (0, tag_id, "")  # 0 = tag ID fields come first
+            # Sort by tag ID string (lexicographic) for tag ID fields
+            sort_key = (0, field_id_or_name, "")  # 0 = tag ID fields come first
         else:
             field_id_or_name = field_name
             # Sort by field name (lexicographic) for name-based fields
-            sort_key = (1, 0, field_name)  # 1 = name fields come after
+            sort_key = (1, field_name, "")  # 1 = name fields come after
 
         fp_fields.append((sort_key, field_id_or_name, type_id, ref_flag, nullable_flag))
 
@@ -1361,7 +1371,7 @@ def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=No
     consistent with Go, Java, Rust, and C++ implementations.
     """
     (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types) = group_fields(
-        type_resolver, field_names, serializers, nullable_map
+        type_resolver, field_names, serializers, nullable_map, field_infos_list
     )
 
     # Compute fingerprint string using the new format with field infos

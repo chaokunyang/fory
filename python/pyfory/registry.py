@@ -335,11 +335,12 @@ class TypeResolver:
                 ftype,
                 typeid,
             ) in Numpy1DArraySerializer.dtypes_dict.items():
-                register(
+                typeinfo = register(
                     ftype,
                     type_id=typeid,
                     serializer=Numpy1DArraySerializer(self.fory, ftype, dtype),
                 )
+                self._type_id_to_typeinfo[typeid] = typeinfo
         register(list, type_id=TypeId.LIST, serializer=ListSerializer)
         register(set, type_id=TypeId.SET, serializer=SetSerializer)
         register(dict, type_id=TypeId.MAP, serializer=MapSerializer)

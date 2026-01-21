@@ -136,7 +136,8 @@ public class Fingerprint {
     }
     String fingerprint = builder.toString();
     if (Utils.DEBUG_OUTPUT_ENABLED) {
-      LOG.info("Fingerprint string for {} is: {}", Descriptor.getDeclareClass(descriptors), fingerprint);
+      LOG.info(
+          "Fingerprint string for {} is: {}", Descriptor.getDeclareClass(descriptors), fingerprint);
     }
     return fingerprint;
   }

@@ -582,6 +582,11 @@ template <typename T> struct CompileTimeFieldHelpers {
         if constexpr (signed_tid != 0) {
           return signed_tid;
         }
+        constexpr int16_t override_id =
+            ::fory::detail::GetFieldConfigEntry<T, Index>::type_id_override;
+        if constexpr (override_id >= 0) {
+          return static_cast<uint32_t>(override_id);
+        }
       }
       return static_cast<uint32_t>(Serializer<FieldType>::type_id);
     }

@@ -169,7 +169,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if fi.Meta.TypeId != fj.Meta.TypeId {
 			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
 		}
-		return fi.Meta.Name < fj.Meta.Name // name ascending
+		return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
 	})
 
 	// Compute WriteOffset after sorting and build primitive field slice
@@ -196,7 +196,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if fi.Meta.TypeId != fj.Meta.TypeId {
 			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
 		}
-		return fi.Meta.Name < fj.Meta.Name // name ascending
+		return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
 	})
 
 	// Compute maxVarintSize and build primitive varint field slice
@@ -222,15 +222,14 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if catI == 0 {
 			return comparePrimitiveFields(fi, fj)
 		}
-		// Within other internal types category (STRING, BINARY, LIST, SET, MAP),
-		// sort by typeId then by sort key (tagID if available, otherwise name).
-		if catI == 1 {
+		// Within internal/build-in or collection categories, sort by typeId then sort key.
+		if catI == 1 || catI == 2 || catI == 3 {
 			if fi.Meta.TypeId != fj.Meta.TypeId {
 				return fi.Meta.TypeId < fj.Meta.TypeId
 			}
 			return getFieldSortKey(fi) < getFieldSortKey(fj)
 		}
-		// Other categories (struct, enum, etc.): sort by sort key (tagID if available, otherwise name)
+		// Other categories (struct, enum, etc.): sort by sort key
 		return getFieldSortKey(fi) < getFieldSortKey(fj)
 	})
 
@@ -268,21 +267,29 @@ func isEnumField(field *FieldInfo) bool {
 
 // getFieldCategory returns the category for sorting remainingFields:
 // 0: nullable primitives (sorted by primitiveComparator)
-// 1: internal types STRING, BINARY, LIST, SET, MAP (sorted by typeId, then name)
-// 2: struct, enum, and all other types (sorted by name only)
+// 1: internal build-in types (sorted by typeId, then sort key)
+// 2: list/set collections (sorted by typeId, then sort key)
+// 3: map collections (sorted by typeId, then sort key)
+// 4: struct, enum, and all other types (sorted by sort key)
 func getFieldCategory(field *FieldInfo) int {
 	if isNullableFixedSizePrimitive(field.DispatchId) || isNullableVarintPrimitive(field.DispatchId) {
 		return 0
 	}
-	internalId := field.Meta.TypeId & 0xFF
-	switch TypeId(internalId) {
-	case STRING, BINARY, LIST, SET, MAP:
-		// Internal types: sorted by typeId, then name
-		return 1
-	default:
-		// struct, enum, and all other types: sorted by name
+	internalId := int16(field.Meta.TypeId & 0xFF)
+	if internalId == UNKNOWN {
+		return 4
+	}
+	if isUserDefinedType(internalId) {
+		return 4
+	}
+	if internalId == LIST || internalId == SET {
 		return 2
 	}
+	if internalId == MAP {
+		return 3
+	}
+	// Internal build-in types: sorted by typeId, then sort key (matches Java build-in group)
+	return 1
 }
 
 // comparePrimitiveFields compares two nullable primitive fields using Java's primitiveComparator logic:
@@ -303,7 +310,7 @@ func comparePrimitiveFields(fi, fj *FieldInfo) bool {
 	if fi.Meta.TypeId != fj.Meta.TypeId {
 		return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
 	}
-	return fi.Meta.Name < fj.Meta.Name // name ascending
+	return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
 }
 
 // getNullableFixedSize returns the fixed size for nullable fixed primitives

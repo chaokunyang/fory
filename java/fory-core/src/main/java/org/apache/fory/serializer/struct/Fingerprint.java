@@ -23,14 +23,19 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.logging.Logger;
+import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
+import org.apache.fory.util.Utils;
 
 public class Fingerprint {
+  private static final Logger LOG = LoggerFactory.getLogger(Fingerprint.class);
+
   /**
    * Computes the fingerprint string for a struct type used in schema versioning.
    *
@@ -129,7 +134,11 @@ public class Fingerprint {
           .append(info[3])
           .append(';');
     }
-    return builder.toString();
+    String fingerprint = builder.toString();
+    if (Utils.DEBUG_OUTPUT_ENABLED) {
+      LOG.info("Fingerprint string for {} is: {}", Descriptor.getDeclareClass(descriptors), fingerprint);
+    }
+    return fingerprint;
   }
 
   private static int getTypeId(Fory fory, Descriptor descriptor) {

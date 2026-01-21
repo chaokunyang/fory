@@ -704,4 +704,18 @@ public class Descriptor {
     }
     return typeAnnotation;
   }
+
+  public static Class<?> getDeclareClass(List<Descriptor> descriptors) {
+    Class<?> cls = Object.class;
+    for (Descriptor descriptor : descriptors) {
+      Field field = descriptor.getField();
+      if (field == null) {
+        continue;
+      }
+      if (cls.isAssignableFrom(field.getDeclaringClass())) {
+        cls = field.getDeclaringClass();
+      }
+    }
+    return cls;
+  }
 }

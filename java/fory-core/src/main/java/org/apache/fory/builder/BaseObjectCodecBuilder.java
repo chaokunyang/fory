@@ -513,18 +513,18 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   private Expression serializePrimitive(Expression inputObject, Expression buffer, Class<?> clz) {
     // for primitive, inline call here to avoid java boxing, rather call corresponding serializer.
-    if (clz == byte.class || clz == Byte.class) {
+    if (clz == byte.class || clz == Byte.class || clz == org.apache.fory.type.unsigned.Uint8.class) {
       return new Invoke(buffer, "writeByte", inputObject);
     } else if (clz == boolean.class || clz == Boolean.class) {
       return new Invoke(buffer, "writeBoolean", inputObject);
     } else if (clz == char.class || clz == Character.class) {
       return new Invoke(buffer, "writeChar", inputObject);
-    } else if (clz == short.class || clz == Short.class) {
+    } else if (clz == short.class || clz == Short.class || clz == org.apache.fory.type.unsigned.Uint16.class) {
       return new Invoke(buffer, "writeInt16", inputObject);
-    } else if (clz == int.class || clz == Integer.class) {
+    } else if (clz == int.class || clz == Integer.class || clz == org.apache.fory.type.unsigned.Uint32.class) {
       String func = fory.compressInt() ? "writeVarInt32" : "writeInt32";
       return new Invoke(buffer, func, inputObject);
-    } else if (clz == long.class || clz == Long.class) {
+    } else if (clz == long.class || clz == Long.class || clz == org.apache.fory.type.unsigned.Uint64.class) {
       return LongSerializer.writeInt64(buffer, inputObject, fory.longEncoding(), true);
     } else if (clz == float.class || clz == Float.class) {
       return new Invoke(buffer, "writeFloat32", inputObject);

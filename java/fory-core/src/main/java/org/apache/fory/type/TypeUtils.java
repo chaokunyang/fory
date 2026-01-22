@@ -237,6 +237,12 @@ public class TypeUtils {
     add(primToWrap, wrapToPrim, long.class, Long.class);
     add(primToWrap, wrapToPrim, short.class, Short.class);
     add(primToWrap, wrapToPrim, void.class, Void.class);
+    // In Java native mode, Uint types are nullable (boxed types)
+    // In xlang mode, they are not null by default
+    wrapToPrim.put(org.apache.fory.type.unsigned.Uint8.class, byte.class);
+    wrapToPrim.put(org.apache.fory.type.unsigned.Uint16.class, short.class);
+    wrapToPrim.put(org.apache.fory.type.unsigned.Uint32.class, int.class);
+    wrapToPrim.put(org.apache.fory.type.unsigned.Uint64.class, long.class);
   }
 
   private static void add(

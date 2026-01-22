@@ -21,7 +21,12 @@ package org.apache.fory.type.unsigned;
 
 import java.io.Serializable;
 
-/** Unsigned 64-bit integer backed by a long. */
+/**
+ * Unsigned 64-bit integer backed by a long.
+ *
+ * <p>Operations wrap modulo {@code 2^64}. Use {@link #doubleValue()} or {@link #toString()} when
+ * the full unsigned magnitude must be exposed beyond the signed {@code long} range.</p>
+ */
 public final class Uint64 extends Number implements Comparable<Uint64>, Serializable {
   public static final int SIZE_BITS = 64;
   public static final int SIZE_BYTES = 8;
@@ -67,6 +72,16 @@ public final class Uint64 extends Number implements Comparable<Uint64>, Serializ
     return compare(a, b) >= 0 ? new Uint64(a) : new Uint64(b);
   }
 
+  /** Parses an unsigned decimal string into a {@link Uint64}. */
+  public static Uint64 parse(String value) {
+    return parse(value, 10);
+  }
+
+  /** Parses an unsigned string in {@code radix} into a {@link Uint64}. */
+  public static Uint64 parse(String value, int radix) {
+    return new Uint64(Long.parseUnsignedLong(value, radix));
+  }
+
   public long toLong() {
     return data;
   }
@@ -81,6 +96,83 @@ public final class Uint64 extends Number implements Comparable<Uint64>, Serializ
 
   public static String toString(long value, int radix) {
     return Long.toUnsignedString(value, radix);
+  }
+
+  /** Returns the hexadecimal string representation without sign-extension. */
+  public String toHexString() {
+    return Long.toHexString(data);
+  }
+
+  /** Returns the unsigned string representation using the provided {@code radix}. */
+  public String toUnsignedString(int radix) {
+    return Long.toUnsignedString(data, radix);
+  }
+
+  /** Returns {@code true} if the value equals zero. */
+  public boolean isZero() {
+    return data == 0L;
+  }
+
+  /** Returns {@code true} if the value equals {@link #MAX_VALUE}. */
+  public boolean isMaxValue() {
+    return data == -1L;
+  }
+
+  /** Adds {@code other} with wrapping semantics. */
+  public Uint64 add(Uint64 other) {
+    return add(data, other.data);
+  }
+
+  /** Subtracts {@code other} with wrapping semantics. */
+  public Uint64 subtract(Uint64 other) {
+    return subtract(data, other.data);
+  }
+
+  /** Multiplies by {@code other} with wrapping semantics. */
+  public Uint64 multiply(Uint64 other) {
+    return multiply(data, other.data);
+  }
+
+  /** Divides by {@code other} treating both operands as unsigned. */
+  public Uint64 divide(Uint64 other) {
+    return divide(data, other.data);
+  }
+
+  /** Computes the remainder of the unsigned division by {@code other}. */
+  public Uint64 remainder(Uint64 other) {
+    return remainder(data, other.data);
+  }
+
+  /** Bitwise AND with {@code other}. */
+  public Uint64 and(Uint64 other) {
+    return new Uint64(data & other.data);
+  }
+
+  /** Bitwise OR with {@code other}. */
+  public Uint64 or(Uint64 other) {
+    return new Uint64(data | other.data);
+  }
+
+  /** Bitwise XOR with {@code other}. */
+  public Uint64 xor(Uint64 other) {
+    return new Uint64(data ^ other.data);
+  }
+
+  /** Bitwise NOT. */
+  public Uint64 not() {
+    return new Uint64(~data);
+  }
+
+  /** Logical left shift; bits shifted out are discarded. */
+  public Uint64 shiftLeft(int bits) {
+    int shift = bits & 0x3F;
+    return new Uint64(data << shift);
+  }
+
+  /** Logical right shift; zeros are shifted in from the left. */
+  public Uint64 shiftRight(int bits) {
+    int shift = bits & 0x3F;
+    return new Uint64(data >>> shift);
   }
 
   @Override

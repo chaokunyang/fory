@@ -21,10 +21,18 @@ package org.apache.fory.type.unsigned;
 
 import java.io.Serializable;
 
-/** Unsigned 8-bit integer backed by a byte. */
+/**
+ * Unsigned 8-bit integer backed by a byte.
+ *
+ * <p>All arithmetic, bitwise, and shift operations wrap modulo {@code 2^8}. Use the unsigned
+ * conversion helpers such as {@link #toInt()} and {@link #toLong()} when interacting with APIs
+ * that expect unsigned magnitudes.</p>
+ */
 public final class Uint8 extends Number implements Comparable<Uint8>, Serializable {
   public static final int SIZE_BITS = 8;
   public static final int SIZE_BYTES = 1;
+
+  private static final int MASK = 0xFF;
 
   public static final Uint8 MIN_VALUE = new Uint8((byte) 0);
   public static final Uint8 MAX_VALUE = new Uint8((byte) -1);
@@ -73,12 +81,26 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
     return compare(a, b) >= 0 ? new Uint8(a) : new Uint8(b);
   }
 
+  /** Parses an unsigned decimal string into a {@link Uint8}. */
+  public static Uint8 parse(String value) {
+    return parse(value, 10);
+  }
+
+  /** Parses an unsigned string in {@code radix} into a {@link Uint8}. */
+  public static Uint8 parse(String value, int radix) {
+    int parsed = Integer.parseUnsignedInt(value, radix);
+    if ((parsed & ~MASK) != 0) {
+      throw new NumberFormatException("Value out of range for Uint8: " + value);
+    }
+    return new Uint8((byte) parsed);
+  }
+
   public byte toByte() {
     return data;
   }
 
   public static int toInt(byte value) {
-    return value & 0xFF;
+    return value & MASK;
   }
 
   public static long toLong(byte value) {
@@ -90,7 +112,7 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
   }
 
   public int toInt() {
-    return data & 0xFF;
+    return data & MASK;
   }
 
   public long toLong() {
@@ -98,15 +120,92 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
   }
 
   public static int compare(byte a, byte b) {
-    return Integer.compare(a & 0xFF, b & 0xFF);
+    return Integer.compare(a & MASK, b & MASK);
   }
 
   public static String toString(byte value) {
-    return Integer.toString(value & 0xFF);
+    return Integer.toString(value & MASK);
   }
 
   public static String toString(byte value, int radix) {
-    return Integer.toString(value & 0xFF, radix);
+    return Integer.toString(value & MASK, radix);
+  }
+
+  /** Returns the hexadecimal string representation without sign-extension. */
+  public String toHexString() {
+    return Integer.toHexString(toInt());
+  }
+
+  /** Returns the unsigned string representation using the provided {@code radix}. */
+  public String toUnsignedString(int radix) {
+    return Integer.toString(toInt(), radix);
+  }
+
+  /** Returns {@code true} if the value equals zero. */
+  public boolean isZero() {
+    return data == 0;
+  }
+
+  /** Returns {@code true} if the value equals {@link #MAX_VALUE}. */
+  public boolean isMaxValue() {
+    return data == (byte) -1;
+  }
+
+  /** Adds {@code other} with wrapping semantics. */
+  public Uint8 add(Uint8 other) {
+    return add(data, other.data);
+  }
+
+  /** Subtracts {@code other} with wrapping semantics. */
+  public Uint8 subtract(Uint8 other) {
+    return subtract(data, other.data);
+  }
+
+  /** Multiplies by {@code other} with wrapping semantics. */
+  public Uint8 multiply(Uint8 other) {
+    return multiply(data, other.data);
+  }
+
+  /** Divides by {@code other} treating both operands as unsigned. */
+  public Uint8 divide(Uint8 other) {
+    return divide(data, other.data);
+  }
+
+  /** Computes the remainder of the unsigned division by {@code other}. */
+  public Uint8 remainder(Uint8 other) {
+    return remainder(data, other.data);
+  }
+
+  /** Bitwise AND with {@code other}. */
+  public Uint8 and(Uint8 other) {
+    return new Uint8((byte) ((data & MASK) & (other.data & MASK)));
+  }
+
+  /** Bitwise OR with {@code other}. */
+  public Uint8 or(Uint8 other) {
+    return new Uint8((byte) ((data & MASK) | (other.data & MASK)));
+  }
+
+  /** Bitwise XOR with {@code other}. */
+  public Uint8 xor(Uint8 other) {
+    return new Uint8((byte) ((data & MASK) ^ (other.data & MASK)));
+  }
+
+  /** Bitwise NOT. */
+  public Uint8 not() {
+    return new Uint8((byte) (~toInt()));
+  }
+
+  /** Logical left shift; bits shifted out are discarded. */
+  public Uint8 shiftLeft(int bits) {
+    int shift = bits & 0x1F;
+    return new Uint8((byte) ((toInt() << shift) & MASK));
+  }
+
+  /** Logical right shift; zeros are shifted in from the left. */
+  public Uint8 shiftRight(int bits) {
+    int shift = bits & 0x1F;
+    return new Uint8((byte) (toInt() >>> shift));
   }
 
   @Override

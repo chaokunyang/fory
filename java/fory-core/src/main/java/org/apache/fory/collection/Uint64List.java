@@ -20,19 +20,52 @@
 package org.apache.fory.collection;
 
 import java.util.AbstractList;
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.RandomAccess;
 import org.apache.fory.type.unsigned.Uint64;
 
-/** A fixed-size list backed by a long array for unsigned 64-bit values. */
+/**
+ * Resizable list backed by a long array for unsigned 64-bit values.
+ *
+ * <p>Supports auto-growing on insertions, primitive overloads to avoid boxing, and direct access
+ * to the backing array for zero-copy interop. Prefer primitive get/set/add to avoid boxing cost;
+ * elements are always non-null. The {@link #size()} tracks the logical element count while the
+ * backing array capacity may be larger.
+ */
 public final class Uint64List extends AbstractList<Uint64> implements RandomAccess {
-  private final long[] array;
+  private static final int DEFAULT_CAPACITY = 10;
 
-  public Uint64List(long[] array) {
-    this.array = array;
+  private long[] array;
+  private int size;
+
+  /** Creates an empty list with default capacity. */
+  public Uint64List() {
+    this(DEFAULT_CAPACITY);
   }
 
-  public Uint64List(int size) {
-    this.array = new long[size];
+  /**
+   * Creates an empty list with a given initial capacity.
+   *
+   * @param initialCapacity starting backing array length; must be non-negative
+   * @throws IllegalArgumentException if {@code initialCapacity} is negative
+   */
+  public Uint64List(int initialCapacity) {
+    if (initialCapacity < 0) {
+      throw new IllegalArgumentException("Illegal capacity: " + initialCapacity);
+    }
+    this.array = new long[initialCapacity];
+    this.size = 0;
+  }
+
+  /**
+   * Wraps an existing array as the backing storage.
+   *
+   * @param array source array; its current length becomes {@link #size()}
+   */
+  public Uint64List(long[] array) {
+    this.array = array;
+    this.size = array.length;
   }
 
   @Override
@@ -43,15 +76,49 @@ public final class Uint64List extends AbstractList<Uint64> implements RandomAcce
 
   @Override
   public int size() {
-    return array.length;
+    return size;
   }
 
   @Override
   public Uint64 set(int index, Uint64 element) {
     checkIndex(index);
+    Objects.requireNonNull(element, "element");
     long prev = array[index];
     array[index] = element.longValue();
     return new Uint64(prev);
+  }
+
+  /** Sets a value without boxing. */
+  public void set(int index, long value) {
+    checkIndex(index);
+    array[index] = value;
+  }
+
+  @Override
+  public void add(int index, Uint64 element) {
+    checkPositionIndex(index);
+    ensureCapacity(size + 1);
+    System.arraycopy(array, index, array, index + 1, size - index);
+    array[index] = element.longValue();
+    size++;
+    modCount++;
+  }
+
+  @Override
+  public boolean add(Uint64 element) {
+    Objects.requireNonNull(element, "element");
+    ensureCapacity(size + 1);
+    array[size++] = element.longValue();
+    modCount++;
+    return true;
+  }
+
+  /** Appends a value without boxing. */
+  public boolean add(long value) {
+    ensureCapacity(size + 1);
+    array[size++] = value;
+    modCount++;
+    return true;
   }
 
   public long getLong(int index) {
@@ -59,18 +126,36 @@ public final class Uint64List extends AbstractList<Uint64> implements RandomAcce
     return array[index];
   }
 
-  public void set(int index, long value) {
-    checkIndex(index);
-    array[index] = value;
-  }
-
+  /** Returns the live backing array; elements beyond {@code size()} are undefined. */
   public long[] getArray() {
     return array;
   }
 
+  /** Returns a trimmed copy containing exactly {@code size()} elements. */
+  public long[] copyArray() {
+    return Arrays.copyOf(array, size);
+  }
+
+  private void ensureCapacity(int minCapacity) {
+    if (array.length >= minCapacity) {
+      return;
+    }
+    int newCapacity = array.length + (array.length >> 1) + 1;
+    if (newCapacity < minCapacity) {
+      newCapacity = minCapacity;
+    }
+    array = Arrays.copyOf(array, newCapacity);
+  }
+
   private void checkIndex(int index) {
-    if (index < 0 || index >= array.length) {
-      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + array.length);
+    if (index < 0 || index >= size) {
+      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
+    }
+  }
+
+  private void checkPositionIndex(int index) {
+    if (index < 0 || index > size) {
+      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
     }
   }
 }

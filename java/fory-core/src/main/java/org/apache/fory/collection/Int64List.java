@@ -20,18 +20,51 @@
 package org.apache.fory.collection;
 
 import java.util.AbstractList;
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.RandomAccess;
 
-/** A fixed-size list backed by a long array. */
+/**
+ * Resizable list backed by a long array for signed 64-bit values.
+ *
+ * <p>Supports auto-growing on insertions, primitive overloads to avoid boxing, and direct access
+ * to the backing array for zero-copy interop. Prefer primitive get/set/add to avoid boxing cost;
+ * elements are always non-null. The {@link #size()} tracks the logical element count while the
+ * backing array capacity may be larger.
+ */
 public final class Int64List extends AbstractList<Long> implements RandomAccess {
-  private final long[] array;
+  private static final int DEFAULT_CAPACITY = 10;
 
-  public Int64List(long[] array) {
-    this.array = array;
+  private long[] array;
+  private int size;
+
+  /** Creates an empty list with default capacity. */
+  public Int64List() {
+    this(DEFAULT_CAPACITY);
   }
 
-  public Int64List(int size) {
-    this.array = new long[size];
+  /**
+   * Creates an empty list with a given initial capacity.
+   *
+   * @param initialCapacity starting backing array length; must be non-negative
+   * @throws IllegalArgumentException if {@code initialCapacity} is negative
+   */
+  public Int64List(int initialCapacity) {
+    if (initialCapacity < 0) {
+      throw new IllegalArgumentException("Illegal capacity: " + initialCapacity);
+    }
+    this.array = new long[initialCapacity];
+    this.size = 0;
+  }
+
+  /**
+   * Wraps an existing array as the backing storage.
+   *
+   * @param array source array; its current length becomes {@link #size()}
+   */
+  public Int64List(long[] array) {
+    this.array = array;
+    this.size = array.length;
   }
 
   @Override
@@ -42,15 +75,22 @@ public final class Int64List extends AbstractList<Long> implements RandomAccess 
 
   @Override
   public int size() {
-    return array.length;
+    return size;
   }
 
   @Override
   public Long set(int index, Long element) {
     checkIndex(index);
+    Objects.requireNonNull(element, "element");
     long prev = array[index];
     array[index] = element;
     return prev;
+  }
+
+  /** Sets a value without boxing. */
+  public void set(int index, long value) {
+    checkIndex(index);
+    array[index] = value;
   }
 
   public long getLong(int index) {
@@ -58,18 +98,64 @@ public final class Int64List extends AbstractList<Long> implements RandomAccess 
     return array[index];
   }
 
-  public void set(int index, long value) {
-    checkIndex(index);
-    array[index] = value;
+  @Override
+  public void add(int index, Long element) {
+    checkPositionIndex(index);
+    Objects.requireNonNull(element, "element");
+    ensureCapacity(size + 1);
+    System.arraycopy(array, index, array, index + 1, size - index);
+    array[index] = element;
+    size++;
+    modCount++;
   }
 
+  @Override
+  public boolean add(Long element) {
+    Objects.requireNonNull(element, "element");
+    ensureCapacity(size + 1);
+    array[size++] = element;
+    modCount++;
+    return true;
+  }
+
+  /** Appends a value without boxing. */
+  public boolean add(long value) {
+    ensureCapacity(size + 1);
+    array[size++] = value;
+    modCount++;
+    return true;
+  }
+
+  /** Returns the live backing array; elements beyond {@code size()} are undefined. */
   public long[] getArray() {
     return array;
   }
 
+  /** Returns a trimmed copy containing exactly {@code size()} elements. */
+  public long[] copyArray() {
+    return Arrays.copyOf(array, size);
+  }
+
   private void checkIndex(int index) {
-    if (index < 0 || index >= array.length) {
-      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + array.length);
+    if (index < 0 || index >= size) {
+      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
     }
+  }
+
+  private void checkPositionIndex(int index) {
+    if (index < 0 || index > size) {
+      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
+    }
+  }
+
+  private void ensureCapacity(int minCapacity) {
+    if (array.length >= minCapacity) {
+      return;
+    }
+    int newCapacity = array.length + (array.length >> 1) + 1;
+    if (newCapacity < minCapacity) {
+      newCapacity = minCapacity;
+    }
+    array = Arrays.copyOf(array, newCapacity);
   }
 }

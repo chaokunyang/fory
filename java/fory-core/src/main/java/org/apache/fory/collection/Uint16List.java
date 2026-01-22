@@ -20,19 +20,52 @@
 package org.apache.fory.collection;
 
 import java.util.AbstractList;
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.RandomAccess;
 import org.apache.fory.type.unsigned.Uint16;
 
-/** A fixed-size list backed by a short array for unsigned 16-bit values. */
+/**
+ * Resizable list backed by a short array for unsigned 16-bit values.
+ *
+ * <p>Supports auto-growing on insertions, primitive overloads to avoid boxing, and direct access
+ * to the backing array for zero-copy interop. Prefer primitive get/set/add to avoid boxing cost;
+ * elements are always non-null. The {@link #size()} tracks the logical element count while the
+ * backing array capacity may be larger.
+ */
 public final class Uint16List extends AbstractList<Uint16> implements RandomAccess {
-  private final short[] array;
+  private static final int DEFAULT_CAPACITY = 10;
 
-  public Uint16List(short[] array) {
-    this.array = array;
+  private short[] array;
+  private int size;
+
+  /** Creates an empty list with default capacity. */
+  public Uint16List() {
+    this(DEFAULT_CAPACITY);
   }
 
-  public Uint16List(int size) {
-    this.array = new short[size];
+  /**
+   * Creates an empty list with a given initial capacity.
+   *
+   * @param initialCapacity starting backing array length; must be non-negative
+   * @throws IllegalArgumentException if {@code initialCapacity} is negative
+   */
+  public Uint16List(int initialCapacity) {
+    if (initialCapacity < 0) {
+      throw new IllegalArgumentException("Illegal capacity: " + initialCapacity);
+    }
+    this.array = new short[initialCapacity];
+    this.size = 0;
+  }
+
+  /**
+   * Wraps an existing array as the backing storage.
+   *
+   * @param array source array; its current length becomes {@link #size()}
+   */
+  public Uint16List(short[] array) {
+    this.array = array;
+    this.size = array.length;
   }
 
   @Override
@@ -43,15 +76,63 @@ public final class Uint16List extends AbstractList<Uint16> implements RandomAcce
 
   @Override
   public int size() {
-    return array.length;
+    return size;
   }
 
   @Override
   public Uint16 set(int index, Uint16 element) {
     checkIndex(index);
+    Objects.requireNonNull(element, "element");
     short prev = array[index];
     array[index] = element.shortValue();
     return new Uint16(prev);
+  }
+
+  /** Sets a value without boxing. */
+  public void set(int index, short value) {
+    checkIndex(index);
+    array[index] = value;
+  }
+
+  /** Sets a value without boxing; truncates to 16 bits. */
+  public void set(int index, int value) {
+    checkIndex(index);
+    array[index] = (short) value;
+  }
+
+  @Override
+  public void add(int index, Uint16 element) {
+    checkPositionIndex(index);
+    ensureCapacity(size + 1);
+    System.arraycopy(array, index, array, index + 1, size - index);
+    array[index] = element.shortValue();
+    size++;
+    modCount++;
+  }
+
+  @Override
+  public boolean add(Uint16 element) {
+    Objects.requireNonNull(element, "element");
+    ensureCapacity(size + 1);
+    array[size++] = element.shortValue();
+    modCount++;
+    return true;
+  }
+
+  /** Appends a value without boxing. */
+  public boolean add(short value) {
+    ensureCapacity(size + 1);
+    array[size++] = value;
+    modCount++;
+    return true;
+  }
+
+  /** Appends a value without boxing; truncates to 16 bits. */
+  public boolean add(int value) {
+    ensureCapacity(size + 1);
+    array[size++] = (short) value;
+    modCount++;
+    return true;
   }
 
   public int getInt(int index) {
@@ -64,23 +145,36 @@ public final class Uint16List extends AbstractList<Uint16> implements RandomAcce
     return array[index];
   }
 
-  public void set(int index, short value) {
-    checkIndex(index);
-    array[index] = value;
-  }
-
-  public void set(int index, int value) {
-    checkIndex(index);
-    array[index] = (short) value;
-  }
-
+  /** Returns the live backing array; elements beyond {@code size()} are undefined. */
   public short[] getArray() {
     return array;
   }
 
+  /** Returns a trimmed copy containing exactly {@code size()} elements. */
+  public short[] copyArray() {
+    return Arrays.copyOf(array, size);
+  }
+
+  private void ensureCapacity(int minCapacity) {
+    if (array.length >= minCapacity) {
+      return;
+    }
+    int newCapacity = array.length + (array.length >> 1) + 1;
+    if (newCapacity < minCapacity) {
+      newCapacity = minCapacity;
+    }
+    array = Arrays.copyOf(array, newCapacity);
+  }
+
   private void checkIndex(int index) {
-    if (index < 0 || index >= array.length) {
-      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + array.length);
+    if (index < 0 || index >= size) {
+      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
+    }
+  }
+
+  private void checkPositionIndex(int index) {
+    if (index < 0 || index > size) {
+      throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size);
     }
   }
 }

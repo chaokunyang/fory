@@ -25,4 +25,4 @@ python "${SCRIPT_DIR}/generate_idl.py" --lang cpp
 
 "${SCRIPT_DIR}/cpp/run.sh"
 
-IDL_PEER_LANG=cpp "${SCRIPT_DIR}/run_java_tests.sh"
+IDL_PEER_LANG=cpp FORY_CPP_IDL_SKIP_BUILD=1 "${SCRIPT_DIR}/run_java_tests.sh"

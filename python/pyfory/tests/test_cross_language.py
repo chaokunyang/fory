@@ -548,6 +548,52 @@ def test_serialize_complex_struct(data_file_path):
     struct_round_back(data_file_path, fory, obj1)
 
 
+def _deep_equal(left, right):
+    if np is not None:
+        if isinstance(left, np.ndarray) or isinstance(right, np.ndarray):
+            if isinstance(left, np.ndarray) and isinstance(right, np.ndarray):
+                return np.array_equal(left, right)
+            if isinstance(left, np.ndarray) and isinstance(right, array.array):
+                return np.array_equal(left, np.array(right, dtype=left.dtype))
+            if isinstance(right, np.ndarray) and isinstance(left, array.array):
+                return np.array_equal(right, np.array(left, dtype=right.dtype))
+    if isinstance(left, array.array) and isinstance(right, array.array):
+        return left == right
+    if hasattr(left, "__dataclass_fields__") and hasattr(right, "__dataclass_fields__"):
+        if left.__class__ is not right.__class__:
+            return False
+        for field in left.__dataclass_fields__.keys():
+            if not _deep_equal(getattr(left, field), getattr(right, field)):
+                return False
+        return True
+    if isinstance(left, list) and isinstance(right, list):
+        if len(left) != len(right):
+            return False
+        for l_item, r_item in zip(left, right):
+            if not _deep_equal(l_item, r_item):
+                return False
+        return True
+    if isinstance(left, tuple) and isinstance(right, tuple):
+        if len(left) != len(right):
+            return False
+        for l_item, r_item in zip(left, right):
+            if not _deep_equal(l_item, r_item):
+                return False
+        return True
+    if isinstance(left, dict) and isinstance(right, dict):
+        if left.keys() != right.keys():
+            return False
+        for key in left.keys():
+            if not _deep_equal(left[key], right[key]):
+                return False
+        return True
+    return left == right
+
+
+def _assert_deep_equal(left, right, msg_prefix=""):
+    assert _deep_equal(left, right), f"{msg_prefix}left {left}\n right {right}"
+
+
 def struct_round_back(data_file_path, fory, obj1):
     # new_buf = fory.serialize(obj1)
     # assert fory.deserialize(new_buf) == obj1
@@ -557,10 +603,10 @@ def struct_round_back(data_file_path, fory, obj1):
     debug_print(f"first 100 bytes: {data_bytes[:100].hex()}")
     new_obj = fory.deserialize(data_bytes)
     debug_print(new_obj)
-    assert new_obj == obj1, f"new_obj {new_obj}\n expected {obj1}"
+    _assert_deep_equal(new_obj, obj1, "struct_round_back mismatch: ")
     new_buf = fory.serialize(new_obj)
     debug_print(f"new_buf size {len(new_buf)}")
-    assert fory.deserialize(new_buf) == new_obj
+    _assert_deep_equal(fory.deserialize(new_buf), new_obj, "round-trip mismatch: ")
     with open(data_file_path, "wb+") as f:
         f.write(new_buf)
 
@@ -696,7 +742,7 @@ def test_cross_language_meta_share(data_file_path):
 
     # Verify round-trip
     round_trip_obj = fory.deserialize(new_serialized)
-    assert round_trip_obj == obj
+    _assert_deep_equal(round_trip_obj, obj, "meta share round-trip mismatch: ")
 
     # Write back for Java to verify
     with open(data_file_path, "wb") as f:
@@ -753,7 +799,7 @@ def test_cross_language_meta_share_complex(data_file_path):
 
     # Verify round-trip
     round_trip_obj = fory.deserialize(new_serialized)
-    assert round_trip_obj == obj
+    _assert_deep_equal(round_trip_obj, obj, "meta share complex round-trip mismatch: ")
 
     # Write back for Java to verify
     with open(data_file_path, "wb") as f:

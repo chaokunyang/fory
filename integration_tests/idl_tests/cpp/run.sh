@@ -22,6 +22,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
 
+if [[ "${FORY_CPP_IDL_SKIP_BUILD:-}" == "1" && -x "${BUILD_DIR}/idl_roundtrip" ]]; then
+  "${BUILD_DIR}/idl_roundtrip"
+  exit 0
+fi
+
 python -m pip install --quiet cmake
 
 cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release

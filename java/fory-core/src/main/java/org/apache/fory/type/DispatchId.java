@@ -21,6 +21,10 @@ package org.apache.fory.type;
 
 import org.apache.fory.Fory;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.type.unsigned.Uint16;
+import org.apache.fory.type.unsigned.Uint32;
+import org.apache.fory.type.unsigned.Uint64;
+import org.apache.fory.type.unsigned.Uint8;
 
 /**
  * Dispatch IDs for basic types. These IDs identify the type for serialization dispatch. The
@@ -47,14 +51,21 @@ public class DispatchId {
   public static final int UINT64 = 16;
   public static final int VAR_UINT64 = 17;
   public static final int TAGGED_UINT64 = 18;
-  public static final int STRING = 19;
+  public static final int EXT_UINT8 = 19;
+  public static final int EXT_UINT16 = 20;
+  public static final int EXT_UINT32 = 21;
+  public static final int EXT_VAR_UINT32 = 22;
+  public static final int EXT_UINT64 = 23;
+  public static final int EXT_VAR_UINT64 = 24;
+  public static final int STRING = 25;
 
   public static int getDispatchId(Fory fory, Descriptor d) {
     int typeId = Types.getDescriptorTypeId(fory, d);
+    Class<?> rawType = d.getTypeRef().getRawType();
     if (fory.isCrossLanguage()) {
-      return xlangTypeIdToDispatchId(typeId);
+      return adjustUnsignedDispatchId(typeId, rawType, xlangTypeIdToDispatchId(typeId));
     } else {
-      return nativeIdToDispatchId(typeId, d);
+      return adjustUnsignedDispatchId(typeId, rawType, nativeIdToDispatchId(typeId, d));
     }
   }
 
@@ -116,6 +127,32 @@ public class DispatchId {
               descriptor.getField(), nativeId));
     }
     return xlangTypeIdToDispatchId(nativeId);
+  }
+
+  private static int adjustUnsignedDispatchId(int typeId, Class<?> rawType, int dispatchId) {
+    if (rawType == Uint8.class && typeId == Types.UINT8) {
+      return EXT_UINT8;
+    }
+    if (rawType == Uint16.class && typeId == Types.UINT16) {
+      return EXT_UINT16;
+    }
+    if (rawType == Uint32.class) {
+      if (typeId == Types.VAR_UINT32) {
+        return EXT_VAR_UINT32;
+      }
+      if (typeId == Types.UINT32) {
+        return EXT_UINT32;
+      }
+    }
+    if (rawType == Uint64.class) {
+      if (typeId == Types.VAR_UINT64) {
+        return EXT_VAR_UINT64;
+      }
+      if (typeId == Types.UINT64) {
+        return EXT_UINT64;
+      }
+    }
+    return dispatchId;
   }
 
   /** Check if the dispatch ID represents a basic type that can be inlined. */

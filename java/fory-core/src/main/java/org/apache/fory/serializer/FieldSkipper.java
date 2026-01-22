@@ -63,20 +63,24 @@ public class FieldSkipper {
       case DispatchId.BOOL:
       case DispatchId.INT8:
       case DispatchId.UINT8:
+      case DispatchId.EXT_UINT8:
         buffer.increaseReaderIndex(1);
         break;
       case DispatchId.CHAR:
       case DispatchId.INT16:
       case DispatchId.UINT16:
+      case DispatchId.EXT_UINT16:
         buffer.increaseReaderIndex(2);
         break;
       case DispatchId.INT32:
       case DispatchId.UINT32:
+      case DispatchId.EXT_UINT32:
       case DispatchId.FLOAT32:
         buffer.increaseReaderIndex(4);
         break;
       case DispatchId.INT64:
       case DispatchId.UINT64:
+      case DispatchId.EXT_UINT64:
       case DispatchId.FLOAT64:
         buffer.increaseReaderIndex(8);
         break;
@@ -86,10 +90,16 @@ public class FieldSkipper {
       case DispatchId.VAR_UINT32:
         buffer.readVarUint32();
         break;
+      case DispatchId.EXT_VAR_UINT32:
+        buffer.readVarUint32();
+        break;
       case DispatchId.VARINT64:
         buffer.readVarInt64();
         break;
       case DispatchId.VAR_UINT64:
+        buffer.readVarUint64();
+        break;
+      case DispatchId.EXT_VAR_UINT64:
         buffer.readVarUint64();
         break;
       case DispatchId.TAGGED_INT64:

@@ -223,6 +223,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         buffer.writeBoolean((Boolean) fieldAccessor.get(targetObject));
         return false;
       case DispatchId.INT8:
+        buffer.writeByte((Byte) fieldAccessor.get(targetObject));
+        return false;
       case DispatchId.UINT8:
         buffer.writeByte((Byte) fieldAccessor.get(targetObject));
         return false;
@@ -230,10 +232,14 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         buffer.writeChar((Character) fieldAccessor.get(targetObject));
         return false;
       case DispatchId.INT16:
+        buffer.writeInt16((Short) fieldAccessor.get(targetObject));
+        return false;
       case DispatchId.UINT16:
         buffer.writeInt16((Short) fieldAccessor.get(targetObject));
         return false;
       case DispatchId.INT32:
+        buffer.writeInt32((Integer) fieldAccessor.get(targetObject));
+        return false;
       case DispatchId.UINT32:
         buffer.writeInt32((Integer) fieldAccessor.get(targetObject));
         return false;
@@ -247,6 +253,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         buffer.writeFloat32((Float) fieldAccessor.get(targetObject));
         return false;
       case DispatchId.INT64:
+        buffer.writeInt64((Long) fieldAccessor.get(targetObject));
+        return false;
       case DispatchId.UINT64:
         buffer.writeInt64((Long) fieldAccessor.get(targetObject));
         return false;
@@ -292,31 +300,34 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         buffer.writeBoolean((Boolean) fieldValue);
         return;
       case DispatchId.INT8:
+        buffer.writeByte((Byte) fieldValue);
+        return;
       case DispatchId.UINT8:
-        if (fieldValue instanceof Uint8) {
-          buffer.writeByte(((Uint8) fieldValue).byteValue());
-        } else {
-          buffer.writeByte((Byte) fieldValue);
-        }
+        buffer.writeByte((Byte) fieldValue);
+        return;
+      case DispatchId.EXT_UINT8:
+        buffer.writeByte(((Uint8) fieldValue).byteValue());
         return;
       case DispatchId.CHAR:
         buffer.writeChar((Character) fieldValue);
         return;
       case DispatchId.INT16:
+        buffer.writeInt16((Short) fieldValue);
+        return;
       case DispatchId.UINT16:
-        if (fieldValue instanceof Uint16) {
-          buffer.writeInt16(((Uint16) fieldValue).shortValue());
-        } else {
-          buffer.writeInt16((Short) fieldValue);
-        }
+        buffer.writeInt16((Short) fieldValue);
+        return;
+      case DispatchId.EXT_UINT16:
+        buffer.writeInt16(((Uint16) fieldValue).shortValue());
         return;
       case DispatchId.INT32:
+        buffer.writeInt32((Integer) fieldValue);
+        return;
       case DispatchId.UINT32:
-        if (fieldValue instanceof Uint32) {
-          buffer.writeInt32(((Uint32) fieldValue).intValue());
-        } else {
-          buffer.writeInt32((Integer) fieldValue);
-        }
+        buffer.writeInt32((Integer) fieldValue);
+        return;
+      case DispatchId.EXT_UINT32:
+        buffer.writeInt32(((Uint32) fieldValue).intValue());
         return;
       case DispatchId.VARINT32:
         buffer.writeVarInt32((Integer) fieldValue);
@@ -324,13 +335,17 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.VAR_UINT32:
         buffer.writeVarUint32((Integer) fieldValue);
         return;
+      case DispatchId.EXT_VAR_UINT32:
+        buffer.writeVarUint32(((Uint32) fieldValue).intValue());
+        return;
       case DispatchId.INT64:
+        buffer.writeInt64((Long) fieldValue);
+        return;
       case DispatchId.UINT64:
-        if (fieldValue instanceof Uint64) {
-          buffer.writeInt64(((Uint64) fieldValue).longValue());
-        } else {
-          buffer.writeInt64((Long) fieldValue);
-        }
+        buffer.writeInt64((Long) fieldValue);
+        return;
+      case DispatchId.EXT_UINT64:
+        buffer.writeInt64(((Uint64) fieldValue).longValue());
         return;
       case DispatchId.VARINT64:
         buffer.writeVarInt64((Long) fieldValue);
@@ -340,6 +355,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         return;
       case DispatchId.VAR_UINT64:
         buffer.writeVarUint64((Long) fieldValue);
+        return;
+      case DispatchId.EXT_VAR_UINT64:
+        buffer.writeVarUint64(((Uint64) fieldValue).longValue());
         return;
       case DispatchId.TAGGED_UINT64:
         buffer.writeTaggedUint64((Long) fieldValue);
@@ -509,55 +527,43 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.INT8:
         return buffer.readByte();
       case DispatchId.UINT8:
-        {
-          byte value = buffer.readByte();
-          if (fieldInfo.typeRef.getRawType() == Uint8.class) {
-            return Uint8.valueOf(value);
-          }
-          return value;
-        }
+        return buffer.readByte();
+      case DispatchId.EXT_UINT8:
+        return Uint8.valueOf(buffer.readByte());
       case DispatchId.CHAR:
         return buffer.readChar();
       case DispatchId.INT16:
         return buffer.readInt16();
       case DispatchId.UINT16:
-        {
-          short value = buffer.readInt16();
-          if (fieldInfo.typeRef.getRawType() == Uint16.class) {
-            return Uint16.valueOf(value);
-          }
-          return value;
-        }
+        return buffer.readInt16();
+      case DispatchId.EXT_UINT16:
+        return Uint16.valueOf(buffer.readInt16());
       case DispatchId.INT32:
         return buffer.readInt32();
       case DispatchId.UINT32:
-        {
-          int value = buffer.readInt32();
-          if (fieldInfo.typeRef.getRawType() == Uint32.class) {
-            return Uint32.valueOf(value);
-          }
-          return value;
-        }
+        return buffer.readInt32();
+      case DispatchId.EXT_UINT32:
+        return Uint32.valueOf(buffer.readInt32());
       case DispatchId.VARINT32:
         return buffer.readVarInt32();
       case DispatchId.VAR_UINT32:
         return buffer.readVarUint32();
+      case DispatchId.EXT_VAR_UINT32:
+        return Uint32.valueOf(buffer.readVarUint32());
       case DispatchId.INT64:
         return buffer.readInt64();
       case DispatchId.UINT64:
-        {
-          long value = buffer.readInt64();
-          if (fieldInfo.typeRef.getRawType() == Uint64.class) {
-            return Uint64.valueOf(value);
-          }
-          return value;
-        }
+        return buffer.readInt64();
+      case DispatchId.EXT_UINT64:
+        return Uint64.valueOf(buffer.readInt64());
       case DispatchId.VARINT64:
         return buffer.readVarInt64();
       case DispatchId.TAGGED_INT64:
         return buffer.readTaggedInt64();
       case DispatchId.VAR_UINT64:
         return buffer.readVarUint64();
+      case DispatchId.EXT_VAR_UINT64:
+        return Uint64.valueOf(buffer.readVarUint64());
       case DispatchId.TAGGED_UINT64:
         return buffer.readTaggedUint64();
       case DispatchId.FLOAT32:
@@ -717,15 +723,11 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         fieldAccessor.putObject(targetObject, buffer.readByte());
         return;
       case DispatchId.UINT8:
-        {
-          byte value = buffer.readByte();
-          if (fieldInfo.typeRef.getRawType() == Uint8.class) {
-            fieldAccessor.putObject(targetObject, Uint8.valueOf(value));
-          } else {
-            fieldAccessor.putObject(targetObject, value);
-          }
-          return;
-        }
+        fieldAccessor.putObject(targetObject, buffer.readByte());
+        return;
+      case DispatchId.EXT_UINT8:
+        fieldAccessor.putObject(targetObject, Uint8.valueOf(buffer.readByte()));
+        return;
       case DispatchId.CHAR:
         fieldAccessor.putObject(targetObject, buffer.readChar());
         return;
@@ -733,47 +735,38 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         fieldAccessor.putObject(targetObject, buffer.readInt16());
         return;
       case DispatchId.UINT16:
-        {
-          short value = buffer.readInt16();
-          if (fieldInfo.typeRef.getRawType() == Uint16.class) {
-            fieldAccessor.putObject(targetObject, Uint16.valueOf(value));
-          } else {
-            fieldAccessor.putObject(targetObject, value);
-          }
-          return;
-        }
+        fieldAccessor.putObject(targetObject, buffer.readInt16());
+        return;
+      case DispatchId.EXT_UINT16:
+        fieldAccessor.putObject(targetObject, Uint16.valueOf(buffer.readInt16()));
+        return;
       case DispatchId.INT32:
         fieldAccessor.putObject(targetObject, buffer.readInt32());
         return;
       case DispatchId.UINT32:
-        {
-          int value = buffer.readInt32();
-          if (fieldInfo.typeRef.getRawType() == Uint32.class) {
-            fieldAccessor.putObject(targetObject, Uint32.valueOf(value));
-          } else {
-            fieldAccessor.putObject(targetObject, value);
-          }
-          return;
-        }
+        fieldAccessor.putObject(targetObject, buffer.readInt32());
+        return;
+      case DispatchId.EXT_UINT32:
+        fieldAccessor.putObject(targetObject, Uint32.valueOf(buffer.readInt32()));
+        return;
       case DispatchId.VARINT32:
         fieldAccessor.putObject(targetObject, buffer.readVarInt32());
         return;
       case DispatchId.VAR_UINT32:
         fieldAccessor.putObject(targetObject, buffer.readVarUint32());
         return;
+      case DispatchId.EXT_VAR_UINT32:
+        fieldAccessor.putObject(targetObject, Uint32.valueOf(buffer.readVarUint32()));
+        return;
       case DispatchId.INT64:
         fieldAccessor.putObject(targetObject, buffer.readInt64());
         return;
       case DispatchId.UINT64:
-        {
-          long value = buffer.readInt64();
-          if (fieldInfo.typeRef.getRawType() == Uint64.class) {
-            fieldAccessor.putObject(targetObject, Uint64.valueOf(value));
-          } else {
-            fieldAccessor.putObject(targetObject, value);
-          }
-          return;
-        }
+        fieldAccessor.putObject(targetObject, buffer.readInt64());
+        return;
+      case DispatchId.EXT_UINT64:
+        fieldAccessor.putObject(targetObject, Uint64.valueOf(buffer.readInt64()));
+        return;
       case DispatchId.VARINT64:
         fieldAccessor.putObject(targetObject, buffer.readVarInt64());
         return;
@@ -782,6 +775,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         return;
       case DispatchId.VAR_UINT64:
         fieldAccessor.putObject(targetObject, buffer.readVarUint64());
+        return;
+      case DispatchId.EXT_VAR_UINT64:
+        fieldAccessor.putObject(targetObject, Uint64.valueOf(buffer.readVarUint64()));
         return;
       case DispatchId.TAGGED_UINT64:
         fieldAccessor.putObject(targetObject, buffer.readTaggedUint64());
@@ -927,18 +923,24 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.BOOL:
       case DispatchId.INT8:
       case DispatchId.UINT8:
+      case DispatchId.EXT_UINT8:
       case DispatchId.CHAR:
       case DispatchId.INT16:
       case DispatchId.UINT16:
+      case DispatchId.EXT_UINT16:
       case DispatchId.INT32:
       case DispatchId.VARINT32:
       case DispatchId.UINT32:
+      case DispatchId.EXT_UINT32:
       case DispatchId.VAR_UINT32:
+      case DispatchId.EXT_VAR_UINT32:
       case DispatchId.INT64:
       case DispatchId.VARINT64:
       case DispatchId.TAGGED_INT64:
       case DispatchId.UINT64:
+      case DispatchId.EXT_UINT64:
       case DispatchId.VAR_UINT64:
+      case DispatchId.EXT_VAR_UINT64:
       case DispatchId.TAGGED_UINT64:
       case DispatchId.FLOAT32:
       case DispatchId.FLOAT64:

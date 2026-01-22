@@ -30,6 +30,36 @@ import org.testng.annotations.Test;
 public class PrimitiveListsTest {
 
   @Test
+  public void boolListSupportsPrimitiveOps() {
+    BoolList list = new BoolList();
+    assertEquals(list.size(), 0);
+    boolean[] initial = list.getArray();
+
+    for (int i = 0; i < 12; i++) {
+      list.add(i % 2 == 0);
+    }
+    assertEquals(list.size(), 12);
+    assertNotSame(initial, list.getArray());
+
+    list.add(3, Boolean.TRUE);
+    assertEquals(list.getBoolean(3), true);
+    assertEquals(list.getBoolean(4), true);
+
+    Boolean prev = list.set(0, Boolean.FALSE);
+    assertEquals(prev.booleanValue(), true);
+    list.set(0, true);
+    assertTrue(list.getBoolean(0));
+
+    boolean[] copy = list.copyArray();
+    assertEquals(copy.length, list.size());
+    assertEquals(copy[3], list.getBoolean(3));
+    assertNotSame(copy, list.getArray());
+
+    expectThrows(NullPointerException.class, () -> list.add((Boolean) null));
+    expectThrows(NullPointerException.class, () -> list.set(0, (Boolean) null));
+  }
+
+  @Test
   public void int8ListSupportsPrimitiveOps() {
     Int8List list = new Int8List();
     assertEquals(list.size(), 0);
@@ -150,6 +180,66 @@ public class PrimitiveListsTest {
 
     expectThrows(NullPointerException.class, () -> list.add((Long) null));
     expectThrows(NullPointerException.class, () -> list.set(0, (Long) null));
+  }
+
+  @Test
+  public void float32ListSupportsPrimitiveOps() {
+    Float32List list = new Float32List();
+    assertEquals(list.size(), 0);
+    float[] initial = list.getArray();
+
+    for (int i = 0; i < 12; i++) {
+      list.add((float) i + 0.5f);
+    }
+    assertEquals(list.size(), 12);
+    assertNotSame(initial, list.getArray());
+
+    list.add(3, 42.25f);
+    assertEquals(list.getFloat(3), 42.25f, 0.0f);
+    assertEquals(list.getFloat(4), 3.5f, 0.0f);
+
+    Float prev = list.set(0, Float.valueOf(-5.25f));
+    assertEquals(prev.floatValue(), 0.5f, 0.0f);
+    list.set(0, 11.75d);
+    assertEquals(list.getFloat(0), 11.75f, 0.0f);
+
+    float[] copy = list.copyArray();
+    assertEquals(copy.length, list.size());
+    assertEquals(copy[3], list.getFloat(3), 0.0f);
+    assertNotSame(copy, list.getArray());
+
+    expectThrows(NullPointerException.class, () -> list.add((Float) null));
+    expectThrows(NullPointerException.class, () -> list.set(0, (Float) null));
+  }
+
+  @Test
+  public void float64ListSupportsPrimitiveOps() {
+    Float64List list = new Float64List();
+    assertEquals(list.size(), 0);
+    double[] initial = list.getArray();
+
+    for (int i = 0; i < 12; i++) {
+      list.add((double) i + 0.25d);
+    }
+    assertEquals(list.size(), 12);
+    assertNotSame(initial, list.getArray());
+
+    list.add(2, 123.5d);
+    assertEquals(list.getDouble(2), 123.5d, 0.0d);
+    assertEquals(list.getDouble(3), 2.25d, 0.0d);
+
+    Double prev = list.set(0, Double.valueOf(-7.75d));
+    assertEquals(prev.doubleValue(), 0.25d, 0.0d);
+    list.set(0, 9.5d);
+    assertEquals(list.getDouble(0), 9.5d, 0.0d);
+
+    double[] copy = list.copyArray();
+    assertEquals(copy.length, list.size());
+    assertEquals(copy[2], list.getDouble(2), 0.0d);
+    assertNotSame(copy, list.getArray());
+
+    expectThrows(NullPointerException.class, () -> list.add((Double) null));
+    expectThrows(NullPointerException.class, () -> list.set(0, (Double) null));
   }
 
   @Test

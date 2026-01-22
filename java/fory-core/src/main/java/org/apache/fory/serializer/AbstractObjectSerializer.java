@@ -508,46 +508,50 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         return buffer.readBoolean();
       case DispatchId.INT8:
         return buffer.readByte();
-      case DispatchId.UINT8: {
-        byte value = buffer.readByte();
-        if (fieldInfo.typeRef.getRawType() == Uint8.class) {
-          return Uint8.valueOf(value);
+      case DispatchId.UINT8:
+        {
+          byte value = buffer.readByte();
+          if (fieldInfo.typeRef.getRawType() == Uint8.class) {
+            return Uint8.valueOf(value);
+          }
+          return value;
         }
-        return value;
-      }
       case DispatchId.CHAR:
         return buffer.readChar();
       case DispatchId.INT16:
         return buffer.readInt16();
-      case DispatchId.UINT16: {
-        short value = buffer.readInt16();
-        if (fieldInfo.typeRef.getRawType() == Uint16.class) {
-          return Uint16.valueOf(value);
+      case DispatchId.UINT16:
+        {
+          short value = buffer.readInt16();
+          if (fieldInfo.typeRef.getRawType() == Uint16.class) {
+            return Uint16.valueOf(value);
+          }
+          return value;
         }
-        return value;
-      }
       case DispatchId.INT32:
         return buffer.readInt32();
-      case DispatchId.UINT32: {
-        int value = buffer.readInt32();
-        if (fieldInfo.typeRef.getRawType() == Uint32.class) {
-          return Uint32.valueOf(value);
+      case DispatchId.UINT32:
+        {
+          int value = buffer.readInt32();
+          if (fieldInfo.typeRef.getRawType() == Uint32.class) {
+            return Uint32.valueOf(value);
+          }
+          return value;
         }
-        return value;
-      }
       case DispatchId.VARINT32:
         return buffer.readVarInt32();
       case DispatchId.VAR_UINT32:
         return buffer.readVarUint32();
       case DispatchId.INT64:
         return buffer.readInt64();
-      case DispatchId.UINT64: {
-        long value = buffer.readInt64();
-        if (fieldInfo.typeRef.getRawType() == Uint64.class) {
-          return Uint64.valueOf(value);
+      case DispatchId.UINT64:
+        {
+          long value = buffer.readInt64();
+          if (fieldInfo.typeRef.getRawType() == Uint64.class) {
+            return Uint64.valueOf(value);
+          }
+          return value;
         }
-        return value;
-      }
       case DispatchId.VARINT64:
         return buffer.readVarInt64();
       case DispatchId.TAGGED_INT64:
@@ -712,42 +716,45 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.INT8:
         fieldAccessor.putObject(targetObject, buffer.readByte());
         return;
-      case DispatchId.UINT8: {
-        byte value = buffer.readByte();
-        if (fieldInfo.typeRef.getRawType() == Uint8.class) {
-          fieldAccessor.putObject(targetObject, Uint8.valueOf(value));
-        } else {
-          fieldAccessor.putObject(targetObject, value);
+      case DispatchId.UINT8:
+        {
+          byte value = buffer.readByte();
+          if (fieldInfo.typeRef.getRawType() == Uint8.class) {
+            fieldAccessor.putObject(targetObject, Uint8.valueOf(value));
+          } else {
+            fieldAccessor.putObject(targetObject, value);
+          }
+          return;
         }
-        return;
-      }
       case DispatchId.CHAR:
         fieldAccessor.putObject(targetObject, buffer.readChar());
         return;
       case DispatchId.INT16:
         fieldAccessor.putObject(targetObject, buffer.readInt16());
         return;
-      case DispatchId.UINT16: {
-        short value = buffer.readInt16();
-        if (fieldInfo.typeRef.getRawType() == Uint16.class) {
-          fieldAccessor.putObject(targetObject, Uint16.valueOf(value));
-        } else {
-          fieldAccessor.putObject(targetObject, value);
+      case DispatchId.UINT16:
+        {
+          short value = buffer.readInt16();
+          if (fieldInfo.typeRef.getRawType() == Uint16.class) {
+            fieldAccessor.putObject(targetObject, Uint16.valueOf(value));
+          } else {
+            fieldAccessor.putObject(targetObject, value);
+          }
+          return;
         }
-        return;
-      }
       case DispatchId.INT32:
         fieldAccessor.putObject(targetObject, buffer.readInt32());
         return;
-      case DispatchId.UINT32: {
-        int value = buffer.readInt32();
-        if (fieldInfo.typeRef.getRawType() == Uint32.class) {
-          fieldAccessor.putObject(targetObject, Uint32.valueOf(value));
-        } else {
-          fieldAccessor.putObject(targetObject, value);
+      case DispatchId.UINT32:
+        {
+          int value = buffer.readInt32();
+          if (fieldInfo.typeRef.getRawType() == Uint32.class) {
+            fieldAccessor.putObject(targetObject, Uint32.valueOf(value));
+          } else {
+            fieldAccessor.putObject(targetObject, value);
+          }
+          return;
         }
-        return;
-      }
       case DispatchId.VARINT32:
         fieldAccessor.putObject(targetObject, buffer.readVarInt32());
         return;
@@ -757,15 +764,16 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.INT64:
         fieldAccessor.putObject(targetObject, buffer.readInt64());
         return;
-      case DispatchId.UINT64: {
-        long value = buffer.readInt64();
-        if (fieldInfo.typeRef.getRawType() == Uint64.class) {
-          fieldAccessor.putObject(targetObject, Uint64.valueOf(value));
-        } else {
-          fieldAccessor.putObject(targetObject, value);
+      case DispatchId.UINT64:
+        {
+          long value = buffer.readInt64();
+          if (fieldInfo.typeRef.getRawType() == Uint64.class) {
+            fieldAccessor.putObject(targetObject, Uint64.valueOf(value));
+          } else {
+            fieldAccessor.putObject(targetObject, value);
+          }
+          return;
         }
-        return;
-      }
       case DispatchId.VARINT64:
         fieldAccessor.putObject(targetObject, buffer.readVarInt64());
         return;

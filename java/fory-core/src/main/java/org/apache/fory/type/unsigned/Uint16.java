@@ -26,7 +26,7 @@ import java.io.Serializable;
  *
  * <p>Arithmetic, bitwise, and shift operations wrap modulo {@code 2^16}. Use {@link #toInt()} or
  * {@link #toLong()} to obtain an unsigned magnitude for interoperability with APIs that treat the
- * value as unsigned.</p>
+ * value as unsigned.
  */
 public final class Uint16 extends Number implements Comparable<Uint16>, Serializable {
   public static final int SIZE_BITS = 16;

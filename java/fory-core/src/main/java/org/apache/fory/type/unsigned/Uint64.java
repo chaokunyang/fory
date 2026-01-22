@@ -25,7 +25,7 @@ import java.io.Serializable;
  * Unsigned 64-bit integer backed by a long.
  *
  * <p>Operations wrap modulo {@code 2^64}. Use {@link #doubleValue()} or {@link #toString()} when
- * the full unsigned magnitude must be exposed beyond the signed {@code long} range.</p>
+ * the full unsigned magnitude must be exposed beyond the signed {@code long} range.
  */
 public final class Uint64 extends Number implements Comparable<Uint64>, Serializable {
   public static final int SIZE_BITS = 64;

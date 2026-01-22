@@ -449,7 +449,8 @@ public class FieldTypes {
         if (declared != null) {
           ClassInfo declaredInfo = resolver.getClassInfo(declared.getRawType(), false);
           if (declaredInfo != null && declaredInfo.getTypeId() == typeId) {
-            return TypeRef.of(declared.getRawType(), new TypeExtMeta(typeId, nullable, trackingRef));
+            return TypeRef.of(
+                declared.getRawType(), new TypeExtMeta(typeId, nullable, trackingRef));
           }
         }
         cls = Types.getClassForTypeId(internalTypeId);

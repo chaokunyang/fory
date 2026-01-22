@@ -820,17 +820,38 @@ public class XtypeResolver extends TypeResolver {
         Types.FLOAT64_ARRAY, double[].class, new ArraySerializers.DoubleArraySerializer(fory));
 
     // Primitive lists
-    registerType(Types.BOOL_ARRAY, BoolList.class, new PrimitiveListSerializers.BoolListSerializer(fory));
-    registerType(Types.INT8_ARRAY, Int8List.class, new PrimitiveListSerializers.Int8ListSerializer(fory));
-    registerType(Types.INT16_ARRAY, Int16List.class, new PrimitiveListSerializers.Int16ListSerializer(fory));
-    registerType(Types.INT32_ARRAY, Int32List.class, new PrimitiveListSerializers.Int32ListSerializer(fory));
-    registerType(Types.INT64_ARRAY, Int64List.class, new PrimitiveListSerializers.Int64ListSerializer(fory));
-    registerType(Types.UINT8_ARRAY, Uint8List.class, new PrimitiveListSerializers.Uint8ListSerializer(fory));
-    registerType(Types.UINT16_ARRAY, Uint16List.class, new PrimitiveListSerializers.Uint16ListSerializer(fory));
-    registerType(Types.UINT32_ARRAY, Uint32List.class, new PrimitiveListSerializers.Uint32ListSerializer(fory));
-    registerType(Types.UINT64_ARRAY, Uint64List.class, new PrimitiveListSerializers.Uint64ListSerializer(fory));
-    registerType(Types.FLOAT32_ARRAY, Float32List.class, new PrimitiveListSerializers.Float32ListSerializer(fory));
-    registerType(Types.FLOAT64_ARRAY, Float64List.class, new PrimitiveListSerializers.Float64ListSerializer(fory));
+    registerType(
+        Types.BOOL_ARRAY, BoolList.class, new PrimitiveListSerializers.BoolListSerializer(fory));
+    registerType(
+        Types.INT8_ARRAY, Int8List.class, new PrimitiveListSerializers.Int8ListSerializer(fory));
+    registerType(
+        Types.INT16_ARRAY, Int16List.class, new PrimitiveListSerializers.Int16ListSerializer(fory));
+    registerType(
+        Types.INT32_ARRAY, Int32List.class, new PrimitiveListSerializers.Int32ListSerializer(fory));
+    registerType(
+        Types.INT64_ARRAY, Int64List.class, new PrimitiveListSerializers.Int64ListSerializer(fory));
+    registerType(
+        Types.UINT8_ARRAY, Uint8List.class, new PrimitiveListSerializers.Uint8ListSerializer(fory));
+    registerType(
+        Types.UINT16_ARRAY,
+        Uint16List.class,
+        new PrimitiveListSerializers.Uint16ListSerializer(fory));
+    registerType(
+        Types.UINT32_ARRAY,
+        Uint32List.class,
+        new PrimitiveListSerializers.Uint32ListSerializer(fory));
+    registerType(
+        Types.UINT64_ARRAY,
+        Uint64List.class,
+        new PrimitiveListSerializers.Uint64ListSerializer(fory));
+    registerType(
+        Types.FLOAT32_ARRAY,
+        Float32List.class,
+        new PrimitiveListSerializers.Float32ListSerializer(fory));
+    registerType(
+        Types.FLOAT64_ARRAY,
+        Float64List.class,
+        new PrimitiveListSerializers.Float64ListSerializer(fory));
 
     // Collections
     registerType(Types.LIST, ArrayList.class, new ArrayListSerializer(fory));

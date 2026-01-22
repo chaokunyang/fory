@@ -148,7 +148,8 @@ public class UnsignedTest {
 
     Uint64 wrap = Uint64.valueOf(-1L); // MAX
     assertEquals(wrap.add(Uint64.valueOf(1)).longValue(), 0L);
-    assertEquals(wrap.divide(Uint64.valueOf(2)).longValue(), Long.parseUnsignedLong("9223372036854775807"));
+    assertEquals(
+        wrap.divide(Uint64.valueOf(2)).longValue(), Long.parseUnsignedLong("9223372036854775807"));
     assertEquals(wrap.remainder(Uint64.valueOf(2)).longValue(), 1L);
 
     Uint64 lo = Uint64.valueOf(0x00FF00FF00FF00FFL);
@@ -169,13 +170,13 @@ public class UnsignedTest {
   public static class UintPojo {
     @ForyField(nullable = false)
     private Uint8 uint8Field;
-    
+
     @ForyField(nullable = false)
     private Uint16 uint16Field;
-    
+
     @ForyField(nullable = false)
     private Uint32 uint32Field;
-    
+
     @ForyField(nullable = false)
     private Uint64 uint64Field;
   }
@@ -185,17 +186,13 @@ public class UnsignedTest {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class PrimitiveUintPojo {
-    @Uint8Type
-    private byte uint8Field;
+    @Uint8Type private byte uint8Field;
 
-    @Uint16Type
-    private short uint16Field;
+    @Uint16Type private short uint16Field;
 
-    @Uint32Type
-    private int uint32Field;
+    @Uint32Type private int uint32Field;
 
-    @Uint64Type
-    private long uint64Field;
+    @Uint64Type private long uint64Field;
   }
 
   // POJO3: Using boxed types with Uint annotations and non-nullable
@@ -238,10 +235,10 @@ public class UnsignedTest {
             .withCodegen(enableCodegen)
             .requireClassRegistration(false);
     Fory fory = builder.build();
-    
+
     // Register Uint serializers
     UnsignedSerializers.registerSerializers(fory);
-    
+
     // Register the Uint POJO class
     fory.register(UintPojo.class);
 
@@ -273,7 +270,7 @@ public class UnsignedTest {
             .withCodegen(enableCodegen)
             .requireClassRegistration(false);
     Fory fory = builder.build();
-    
+
     // Register the primitive POJO class
     fory.register(PrimitiveUintPojo.class);
 
@@ -294,8 +291,7 @@ public class UnsignedTest {
     assertEquals(Byte.toUnsignedInt(deserialized.getUint8Field()), 255);
     assertEquals(Short.toUnsignedInt(deserialized.getUint16Field()), 65535);
     assertEquals(Integer.toUnsignedLong(deserialized.getUint32Field()), 4294967295L);
-    assertEquals(
-        Long.toUnsignedString(deserialized.getUint64Field()), "18446744073709551615");
+    assertEquals(Long.toUnsignedString(deserialized.getUint64Field()), "18446744073709551615");
   }
 
   @Test(dataProvider = "configProvider")
@@ -306,10 +302,10 @@ public class UnsignedTest {
             .withCodegen(enableCodegen)
             .requireClassRegistration(false);
     Fory fory = builder.build();
-    
+
     // Register Uint serializers
     UnsignedSerializers.registerSerializers(fory);
-    
+
     // Register all POJO classes
     fory.register(UintPojo.class);
     fory.register(PrimitiveUintPojo.class);
@@ -321,8 +317,7 @@ public class UnsignedTest {
             Uint8.valueOf(200),
             Uint16.valueOf(50000),
             Uint32.valueOf((int) 3000000000L),
-            Uint64.valueOf(-1000L)
-            );
+            Uint64.valueOf(-1000L));
 
     byte[] bytes1 = fory.serialize(uintPojo);
     UintPojo deserialized1 = (UintPojo) fory.deserialize(bytes1);
@@ -337,8 +332,7 @@ public class UnsignedTest {
             (byte) -56, // 200 as unsigned
             (short) -15536, // 50000 as unsigned
             (int) -1294967296, // 3000000000 as unsigned
-            -1000L
-            );
+            -1000L);
 
     byte[] bytes2 = fory.serialize(primitivePojo);
     PrimitiveUintPojo deserialized2 = (PrimitiveUintPojo) fory.deserialize(bytes2);
@@ -353,8 +347,7 @@ public class UnsignedTest {
             (byte) -56, // 200 as unsigned
             (short) -15536, // 50000 as unsigned
             (int) -1294967296, // 3000000000 as unsigned
-            -1000L
-            );
+            -1000L);
 
     byte[] bytes3 = fory.serialize(boxedPojo);
     BoxedUintPojo deserialized3 = (BoxedUintPojo) fory.deserialize(bytes3);
@@ -372,17 +365,16 @@ public class UnsignedTest {
             .withCodegen(enableCodegen)
             .requireClassRegistration(false);
     Fory fory = builder.build();
-    
+
     // Register Uint serializers
     UnsignedSerializers.registerSerializers(fory);
-    
+
     // Register the Uint POJO class
     fory.register(UintPojo.class);
 
     // Test with zero/min values
     UintPojo original =
-        new UintPojo(
-            Uint8.valueOf(0), Uint16.valueOf(0), Uint32.valueOf(0), Uint64.valueOf(0));
+        new UintPojo(Uint8.valueOf(0), Uint16.valueOf(0), Uint32.valueOf(0), Uint64.valueOf(0));
 
     byte[] bytes = fory.serialize(original);
     UintPojo deserialized = (UintPojo) fory.deserialize(bytes);
@@ -401,10 +393,10 @@ public class UnsignedTest {
             .withCodegen(enableCodegen)
             .requireClassRegistration(false);
     Fory fory = builder.build();
-    
+
     // Register Uint serializers
     UnsignedSerializers.registerSerializers(fory);
-    
+
     // Register all POJO classes
     fory.register(UintPojo.class);
     fory.register(PrimitiveUintPojo.class);
@@ -413,10 +405,7 @@ public class UnsignedTest {
     // Test UintPojo with max unsigned values using Uint wrapper types
     UintPojo originalUint =
         new UintPojo(
-            Uint8.valueOf(255),
-            Uint16.valueOf(65535),
-            Uint32.valueOf(-1),
-            Uint64.valueOf(-1L));
+            Uint8.valueOf(255), Uint16.valueOf(65535), Uint32.valueOf(-1), Uint64.valueOf(-1L));
 
     byte[] bytes1 = fory.serialize(originalUint);
     UintPojo roundTrippedUint = (UintPojo) fory.deserialize(bytes1);
@@ -440,7 +429,8 @@ public class UnsignedTest {
     assertEquals(Byte.toUnsignedInt(roundTrippedPrimitive.getUint8Field()), 255);
     assertEquals(Short.toUnsignedInt(roundTrippedPrimitive.getUint16Field()), 65535);
     assertEquals(Integer.toUnsignedLong(roundTrippedPrimitive.getUint32Field()), 4294967295L);
-    assertEquals(Long.toUnsignedString(roundTrippedPrimitive.getUint64Field()), "18446744073709551615");
+    assertEquals(
+        Long.toUnsignedString(roundTrippedPrimitive.getUint64Field()), "18446744073709551615");
 
     // Test BoxedUintPojo with boxed types
     BoxedUintPojo originalBoxed =

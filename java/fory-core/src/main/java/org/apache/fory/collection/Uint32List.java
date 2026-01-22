@@ -28,8 +28,8 @@ import org.apache.fory.type.unsigned.Uint32;
 /**
  * Resizable list backed by an int array for unsigned 32-bit values.
  *
- * <p>Supports auto-growing on insertions, primitive overloads to avoid boxing, and direct access
- * to the backing array for zero-copy interop. Prefer primitive get/set/add to avoid boxing cost;
+ * <p>Supports auto-growing on insertions, primitive overloads to avoid boxing, and direct access to
+ * the backing array for zero-copy interop. Prefer primitive get/set/add to avoid boxing cost;
  * elements are always non-null. The {@link #size()} tracks the logical element count while the
  * backing array capacity may be larger.
  */

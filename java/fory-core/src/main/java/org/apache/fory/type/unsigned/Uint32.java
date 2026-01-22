@@ -24,9 +24,9 @@ import java.io.Serializable;
 /**
  * Unsigned 32-bit integer backed by an int.
  *
- * <p>Operations wrap modulo {@code 2^32} to mirror the behavior of unsigned arithmetic. Use
- * {@link #toLong()} to obtain an unsigned magnitude when interacting with APIs that require a
- * larger signed container.</p>
+ * <p>Operations wrap modulo {@code 2^32} to mirror the behavior of unsigned arithmetic. Use {@link
+ * #toLong()} to obtain an unsigned magnitude when interacting with APIs that require a larger
+ * signed container.
  */
 public final class Uint32 extends Number implements Comparable<Uint32>, Serializable {
   public static final int SIZE_BITS = 32;

@@ -25,8 +25,8 @@ import java.io.Serializable;
  * Unsigned 8-bit integer backed by a byte.
  *
  * <p>All arithmetic, bitwise, and shift operations wrap modulo {@code 2^8}. Use the unsigned
- * conversion helpers such as {@link #toInt()} and {@link #toLong()} when interacting with APIs
- * that expect unsigned magnitudes.</p>
+ * conversion helpers such as {@link #toInt()} and {@link #toLong()} when interacting with APIs that
+ * expect unsigned magnitudes.
  */
 public final class Uint8 extends Number implements Comparable<Uint8>, Serializable {
   public static final int SIZE_BITS = 8;

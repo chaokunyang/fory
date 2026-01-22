@@ -52,7 +52,8 @@ public class UnsignedSerializers {
   }
 
   /** Serializer for Uint16 wrapper type. */
-  public static class Uint16Serializer extends Serializers.CrossLanguageCompatibleSerializer<Uint16> {
+  public static class Uint16Serializer
+      extends Serializers.CrossLanguageCompatibleSerializer<Uint16> {
     public Uint16Serializer(Fory fory) {
       super(fory, Uint16.class);
     }
@@ -69,7 +70,8 @@ public class UnsignedSerializers {
   }
 
   /** Serializer for Uint32 wrapper type. */
-  public static class Uint32Serializer extends Serializers.CrossLanguageCompatibleSerializer<Uint32> {
+  public static class Uint32Serializer
+      extends Serializers.CrossLanguageCompatibleSerializer<Uint32> {
     public Uint32Serializer(Fory fory) {
       super(fory, Uint32.class);
     }
@@ -86,7 +88,8 @@ public class UnsignedSerializers {
   }
 
   /** Serializer for Uint64 wrapper type. */
-  public static class Uint64Serializer extends Serializers.CrossLanguageCompatibleSerializer<Uint64> {
+  public static class Uint64Serializer
+      extends Serializers.CrossLanguageCompatibleSerializer<Uint64> {
     public Uint64Serializer(Fory fory) {
       super(fory, Uint64.class);
     }

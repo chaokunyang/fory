@@ -27,8 +27,8 @@ import java.util.RandomAccess;
 /**
  * Resizable list backed by a byte array for signed 8-bit values.
  *
- * <p>Supports auto-growing on insertions, primitive overloads to avoid boxing, and direct access
- * to the backing array for zero-copy interop. Prefer primitive get/set/add to avoid boxing cost;
+ * <p>Supports auto-growing on insertions, primitive overloads to avoid boxing, and direct access to
+ * the backing array for zero-copy interop. Prefer primitive get/set/add to avoid boxing cost;
  * elements are always non-null. The {@link #size()} tracks the logical element count while the
  * backing array capacity may be larger.
  */

@@ -187,11 +187,11 @@ import org.apache.fory.util.record.RecordUtils;
 public class ClassResolver extends TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ClassResolver.class);
 
-  private static final int INTERNAL_ID_LIMIT = 256;
-
+  // reserved last 5 internal type ids for future use
+  private static final int INTERNAL_ID_LIMIT = 250;
   public static final int NATIVE_START_ID = Types.BOUND;
-  // reserved 4 small internal type ids for future use
-  private static final int INTERNAL_TYPE_START_ID = NATIVE_START_ID + 4;
+  // reserved 5 small internal type ids for future use
+  private static final int INTERNAL_TYPE_START_ID = NATIVE_START_ID + 5;
   public static final int VOID_ID = INTERNAL_TYPE_START_ID;
   public static final int CHAR_ID = INTERNAL_TYPE_START_ID + 1;
   // Note: following pre-defined class id should be continuous, since they may be used based range.

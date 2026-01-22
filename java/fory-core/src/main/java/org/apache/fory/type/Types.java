@@ -332,16 +332,6 @@ public class Types {
       Preconditions.checkArgument(!fory.isCrossLanguage(), "Char is not support for xlang");
       return clz.isPrimitive() ? ClassResolver.PRIMITIVE_CHAR_ID : ClassResolver.CHAR_ID;
     }
-    // Handle Uint types - in xlang mode they are not null by default
-    if (clz == org.apache.fory.type.unsigned.Uint8.class) {
-      return Types.UINT8;
-    } else if (clz == org.apache.fory.type.unsigned.Uint16.class) {
-      return Types.UINT16;
-    } else if (clz == org.apache.fory.type.unsigned.Uint32.class) {
-      return Types.UINT32;
-    } else if (clz == org.apache.fory.type.unsigned.Uint64.class) {
-      return Types.UINT64;
-    }
     if (unwrapped.isPrimitive()) {
       if (unwrapped == boolean.class) {
         return Types.BOOL;

@@ -101,7 +101,7 @@ public class PrimitiveListSerializers {
       buffer.writeVarUint32Small7(byteSize);
       short[] array = value.getArray();
       if (Platform.IS_LITTLE_ENDIAN) {
-        buffer.writeFromUnsafe(array, Platform.SHORT_ARRAY_OFFSET, byteSize);
+        buffer.writePrimitiveArray(array, Platform.SHORT_ARRAY_OFFSET, byteSize);
       } else {
         for (int i = 0; i < size; i++) {
           buffer.writeInt16(array[i]);
@@ -142,7 +142,7 @@ public class PrimitiveListSerializers {
       buffer.writeVarUint32Small7(byteSize);
       int[] array = value.getArray();
       if (Platform.IS_LITTLE_ENDIAN) {
-        buffer.writeFromUnsafe(array, Platform.INT_ARRAY_OFFSET, byteSize);
+        buffer.writePrimitiveArray(array, Platform.INT_ARRAY_OFFSET, byteSize);
       } else {
         for (int i = 0; i < size; i++) {
           buffer.writeInt32(array[i]);
@@ -208,7 +208,7 @@ public class PrimitiveListSerializers {
       buffer.writeVarUint32Small7(byteSize);
       long[] array = value.getArray();
       if (Platform.IS_LITTLE_ENDIAN) {
-        buffer.writeFromUnsafe(array, Platform.LONG_ARRAY_OFFSET, byteSize);
+        buffer.writePrimitiveArray(array, Platform.LONG_ARRAY_OFFSET, byteSize);
       } else {
         for (int i = 0; i < size; i++) {
           buffer.writeInt64(array[i]);
@@ -300,7 +300,7 @@ public class PrimitiveListSerializers {
       buffer.writeVarUint32Small7(byteSize);
       short[] array = value.getArray();
       if (Platform.IS_LITTLE_ENDIAN) {
-        buffer.writeFromUnsafe(array, Platform.SHORT_ARRAY_OFFSET, byteSize);
+        buffer.writePrimitiveArray(array, Platform.SHORT_ARRAY_OFFSET, byteSize);
       } else {
         for (int i = 0; i < size; i++) {
           buffer.writeInt16(array[i]);
@@ -341,7 +341,7 @@ public class PrimitiveListSerializers {
       buffer.writeVarUint32Small7(byteSize);
       int[] array = value.getArray();
       if (Platform.IS_LITTLE_ENDIAN) {
-        buffer.writeFromUnsafe(array, Platform.INT_ARRAY_OFFSET, byteSize);
+        buffer.writePrimitiveArray(array, Platform.INT_ARRAY_OFFSET, byteSize);
       } else {
         for (int i = 0; i < size; i++) {
           buffer.writeInt32(array[i]);
@@ -407,7 +407,7 @@ public class PrimitiveListSerializers {
       buffer.writeVarUint32Small7(byteSize);
       long[] array = value.getArray();
       if (Platform.IS_LITTLE_ENDIAN) {
-        buffer.writeFromUnsafe(array, Platform.LONG_ARRAY_OFFSET, byteSize);
+        buffer.writePrimitiveArray(array, Platform.LONG_ARRAY_OFFSET, byteSize);
       } else {
         for (int i = 0; i < size; i++) {
           buffer.writeInt64(array[i]);
@@ -478,7 +478,7 @@ public class PrimitiveListSerializers {
       buffer.writeVarUint32Small7(byteSize);
       float[] array = value.getArray();
       if (Platform.IS_LITTLE_ENDIAN) {
-        buffer.writeFromUnsafe(array, Platform.FLOAT_ARRAY_OFFSET, byteSize);
+        buffer.writePrimitiveArray(array, Platform.FLOAT_ARRAY_OFFSET, byteSize);
       } else {
         for (int i = 0; i < size; i++) {
           buffer.writeFloat32(array[i]);
@@ -515,7 +515,7 @@ public class PrimitiveListSerializers {
       buffer.writeVarUint32Small7(byteSize);
       double[] array = value.getArray();
       if (Platform.IS_LITTLE_ENDIAN) {
-        buffer.writeFromUnsafe(array, Platform.DOUBLE_ARRAY_OFFSET, byteSize);
+        buffer.writePrimitiveArray(array, Platform.DOUBLE_ARRAY_OFFSET, byteSize);
       } else {
         for (int i = 0; i < size; i++) {
           buffer.writeFloat64(array[i]);
@@ -540,6 +540,8 @@ public class PrimitiveListSerializers {
   }
 
   public static void registerDefaultSerializers(Fory fory) {
+    // Note: Classes are already registered in ClassResolver.initialize()
+    // We only need to register serializers here
     TypeResolver resolver = fory._getTypeResolver();
     resolver.registerInternalSerializer(BoolList.class, new BoolListSerializer(fory));
     resolver.registerInternalSerializer(Int8List.class, new Int8ListSerializer(fory));

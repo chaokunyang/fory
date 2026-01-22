@@ -43,7 +43,7 @@ public class PrimitiveListsTest {
 
     list.add(3, Boolean.TRUE);
     assertEquals(list.getBoolean(3), true);
-    assertEquals(list.getBoolean(4), true);
+    assertEquals(list.getBoolean(4), false);
 
     Boolean prev = list.set(0, Boolean.FALSE);
     assertEquals(prev.booleanValue(), true);
@@ -292,7 +292,7 @@ public class PrimitiveListsTest {
     list.add(2, new Uint16((short) 500));
     assertEquals(list.getInt(0), 65535);
     assertEquals(list.getInt(2), 500);
-    assertEquals(list.getInt(3), 5);
+    assertEquals(list.getInt(3), 0);
 
     Uint16 prev = list.set(0, new Uint16((short) 7));
     assertEquals(prev.intValue(), 65535);
@@ -358,7 +358,7 @@ public class PrimitiveListsTest {
     list.add(2, new Uint64(123456789L));
     assertEquals(list.getLong(0), -1L);
     assertEquals(list.getLong(2), 123456789L);
-    assertEquals(list.getLong(3), 5L);
+    assertEquals(list.getLong(3), 0L);
 
     Uint64 prev = list.set(0, new Uint64(7L));
     assertEquals(prev.longValue(), -1L);

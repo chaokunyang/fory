@@ -55,12 +55,27 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
     return new Uint8((byte) (a + b));
   }
 
+  /** Adds {@code other} with wrapping semantics. */
+  public Uint8 add(Uint8 other) {
+    return add(data, other.data);
+  }
+
   public static Uint8 subtract(byte a, byte b) {
     return new Uint8((byte) (a - b));
   }
 
+  /** Subtracts {@code other} with wrapping semantics. */
+  public Uint8 subtract(Uint8 other) {
+    return subtract(data, other.data);
+  }
+
   public static Uint8 multiply(byte a, byte b) {
     return new Uint8((byte) (a * b));
+  }
+
+  /** Multiplies by {@code other} with wrapping semantics. */
+  public Uint8 multiply(Uint8 other) {
+    return multiply(data, other.data);
   }
 
   public static Uint8 divide(byte a, byte b) {
@@ -68,9 +83,19 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
     return new Uint8((byte) ((a & 0xFF) / divisor));
   }
 
+  /** Divides by {@code other} treating both operands as unsigned. */
+  public Uint8 divide(Uint8 other) {
+    return divide(data, other.data);
+  }
+
   public static Uint8 remainder(byte a, byte b) {
     int divisor = b & 0xFF;
     return new Uint8((byte) ((a & 0xFF) % divisor));
+  }
+
+  /** Computes the remainder of the unsigned division by {@code other}. */
+  public Uint8 remainder(Uint8 other) {
+    return remainder(data, other.data);
   }
 
   public static Uint8 min(byte a, byte b) {
@@ -99,20 +124,20 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
     return data;
   }
 
-  public static int toInt(byte value) {
-    return value & MASK;
-  }
-
-  public static long toLong(byte value) {
-    return toInt(value);
-  }
-
   public short toShort() {
     return (short) (data & 0xFF);
   }
 
+  public static int toInt(byte value) {
+    return value & MASK;
+  }
+
   public int toInt() {
     return data & MASK;
+  }
+
+  public static long toLong(byte value) {
+    return toInt(value);
   }
 
   public long toLong() {
@@ -129,6 +154,11 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
 
   public static String toString(byte value, int radix) {
     return Integer.toString(value & MASK, radix);
+  }
+
+  @Override
+  public String toString() {
+    return Integer.toString(toInt());
   }
 
   /** Returns the hexadecimal string representation without sign-extension. */
@@ -149,31 +179,6 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
   /** Returns {@code true} if the value equals {@link #MAX_VALUE}. */
   public boolean isMaxValue() {
     return data == (byte) -1;
-  }
-
-  /** Adds {@code other} with wrapping semantics. */
-  public Uint8 add(Uint8 other) {
-    return add(data, other.data);
-  }
-
-  /** Subtracts {@code other} with wrapping semantics. */
-  public Uint8 subtract(Uint8 other) {
-    return subtract(data, other.data);
-  }
-
-  /** Multiplies by {@code other} with wrapping semantics. */
-  public Uint8 multiply(Uint8 other) {
-    return multiply(data, other.data);
-  }
-
-  /** Divides by {@code other} treating both operands as unsigned. */
-  public Uint8 divide(Uint8 other) {
-    return divide(data, other.data);
-  }
-
-  /** Computes the remainder of the unsigned division by {@code other}. */
-  public Uint8 remainder(Uint8 other) {
-    return remainder(data, other.data);
   }
 
   /** Bitwise AND with {@code other}. */
@@ -257,10 +262,5 @@ public final class Uint8 extends Number implements Comparable<Uint8>, Serializab
   @Override
   public int hashCode() {
     return data;
-  }
-
-  @Override
-  public String toString() {
-    return Integer.toString(toInt());
   }
 }

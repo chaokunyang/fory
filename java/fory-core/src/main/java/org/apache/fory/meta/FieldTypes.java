@@ -446,6 +446,12 @@ public class FieldTypes {
       Class<?> cls;
       int internalTypeId = typeId & 0xff;
       if (Types.isPrimitiveType(internalTypeId)) {
+        if (declared != null) {
+          ClassInfo declaredInfo = resolver.getClassInfo(declared.getRawType(), false);
+          if (declaredInfo != null && declaredInfo.getTypeId() == typeId) {
+            return TypeRef.of(declared.getRawType(), new TypeExtMeta(typeId, nullable, trackingRef));
+          }
+        }
         cls = Types.getClassForTypeId(internalTypeId);
         if (declared == null) {
           // For primitive types, ensure we use the correct primitive/boxed form

@@ -48,20 +48,45 @@ public final class Uint64 extends Number implements Comparable<Uint64>, Serializ
     return new Uint64(a + b);
   }
 
+  /** Adds {@code other} with wrapping semantics. */
+  public Uint64 add(Uint64 other) {
+    return add(data, other.data);
+  }
+
   public static Uint64 subtract(long a, long b) {
     return new Uint64(a - b);
+  }
+
+  /** Subtracts {@code other} with wrapping semantics. */
+  public Uint64 subtract(Uint64 other) {
+    return subtract(data, other.data);
   }
 
   public static Uint64 multiply(long a, long b) {
     return new Uint64(a * b);
   }
 
+  /** Multiplies by {@code other} with wrapping semantics. */
+  public Uint64 multiply(Uint64 other) {
+    return multiply(data, other.data);
+  }
+
   public static Uint64 divide(long a, long b) {
     return new Uint64(Long.divideUnsigned(a, b));
   }
 
+  /** Divides by {@code other} treating both operands as unsigned. */
+  public Uint64 divide(Uint64 other) {
+    return divide(data, other.data);
+  }
+
   public static Uint64 remainder(long a, long b) {
     return new Uint64(Long.remainderUnsigned(a, b));
+  }
+
+  /** Computes the remainder of the unsigned division by {@code other}. */
+  public Uint64 remainder(Uint64 other) {
+    return remainder(data, other.data);
   }
 
   public static Uint64 min(long a, long b) {
@@ -98,6 +123,11 @@ public final class Uint64 extends Number implements Comparable<Uint64>, Serializ
     return Long.toUnsignedString(value, radix);
   }
 
+  @Override
+  public String toString() {
+    return Long.toUnsignedString(data);
+  }
+
   /** Returns the hexadecimal string representation without sign-extension. */
   public String toHexString() {
     return Long.toHexString(data);
@@ -116,31 +146,6 @@ public final class Uint64 extends Number implements Comparable<Uint64>, Serializ
   /** Returns {@code true} if the value equals {@link #MAX_VALUE}. */
   public boolean isMaxValue() {
     return data == -1L;
-  }
-
-  /** Adds {@code other} with wrapping semantics. */
-  public Uint64 add(Uint64 other) {
-    return add(data, other.data);
-  }
-
-  /** Subtracts {@code other} with wrapping semantics. */
-  public Uint64 subtract(Uint64 other) {
-    return subtract(data, other.data);
-  }
-
-  /** Multiplies by {@code other} with wrapping semantics. */
-  public Uint64 multiply(Uint64 other) {
-    return multiply(data, other.data);
-  }
-
-  /** Divides by {@code other} treating both operands as unsigned. */
-  public Uint64 divide(Uint64 other) {
-    return divide(data, other.data);
-  }
-
-  /** Computes the remainder of the unsigned division by {@code other}. */
-  public Uint64 remainder(Uint64 other) {
-    return remainder(data, other.data);
   }
 
   /** Bitwise AND with {@code other}. */
@@ -224,11 +229,6 @@ public final class Uint64 extends Number implements Comparable<Uint64>, Serializ
   @Override
   public int hashCode() {
     return (int) (data ^ (data >>> 32));
-  }
-
-  @Override
-  public String toString() {
-    return Long.toUnsignedString(data);
   }
 
   private static double toUnsignedDouble(long value) {

@@ -55,12 +55,27 @@ public final class Uint16 extends Number implements Comparable<Uint16>, Serializ
     return new Uint16((short) (a + b));
   }
 
+  /** Adds {@code other} with wrapping semantics. */
+  public Uint16 add(Uint16 other) {
+    return add(data, other.data);
+  }
+
   public static Uint16 subtract(short a, short b) {
     return new Uint16((short) (a - b));
   }
 
+  /** Subtracts {@code other} with wrapping semantics. */
+  public Uint16 subtract(Uint16 other) {
+    return subtract(data, other.data);
+  }
+
   public static Uint16 multiply(short a, short b) {
     return new Uint16((short) (a * b));
+  }
+
+  /** Multiplies by {@code other} with wrapping semantics. */
+  public Uint16 multiply(Uint16 other) {
+    return multiply(data, other.data);
   }
 
   public static Uint16 divide(short a, short b) {
@@ -68,9 +83,19 @@ public final class Uint16 extends Number implements Comparable<Uint16>, Serializ
     return new Uint16((short) ((a & 0xFFFF) / divisor));
   }
 
+  /** Divides by {@code other} treating both operands as unsigned. */
+  public Uint16 divide(Uint16 other) {
+    return divide(data, other.data);
+  }
+
   public static Uint16 remainder(short a, short b) {
     int divisor = b & 0xFFFF;
     return new Uint16((short) ((a & 0xFFFF) % divisor));
+  }
+
+  /** Computes the remainder of the unsigned division by {@code other}. */
+  public Uint16 remainder(Uint16 other) {
+    return remainder(data, other.data);
   }
 
   public static Uint16 min(short a, short b) {
@@ -103,12 +128,12 @@ public final class Uint16 extends Number implements Comparable<Uint16>, Serializ
     return value & MASK;
   }
 
-  public static long toLong(short value) {
-    return toInt(value);
-  }
-
   public int toInt() {
     return data & MASK;
+  }
+
+  public static long toLong(short value) {
+    return toInt(value);
   }
 
   public long toLong() {
@@ -125,6 +150,11 @@ public final class Uint16 extends Number implements Comparable<Uint16>, Serializ
 
   public static String toString(short value, int radix) {
     return Integer.toString(value & MASK, radix);
+  }
+
+  @Override
+  public String toString() {
+    return Integer.toString(toInt());
   }
 
   /** Returns the hexadecimal string representation without sign-extension. */
@@ -145,31 +175,6 @@ public final class Uint16 extends Number implements Comparable<Uint16>, Serializ
   /** Returns {@code true} if the value equals {@link #MAX_VALUE}. */
   public boolean isMaxValue() {
     return data == (short) -1;
-  }
-
-  /** Adds {@code other} with wrapping semantics. */
-  public Uint16 add(Uint16 other) {
-    return add(data, other.data);
-  }
-
-  /** Subtracts {@code other} with wrapping semantics. */
-  public Uint16 subtract(Uint16 other) {
-    return subtract(data, other.data);
-  }
-
-  /** Multiplies by {@code other} with wrapping semantics. */
-  public Uint16 multiply(Uint16 other) {
-    return multiply(data, other.data);
-  }
-
-  /** Divides by {@code other} treating both operands as unsigned. */
-  public Uint16 divide(Uint16 other) {
-    return divide(data, other.data);
-  }
-
-  /** Computes the remainder of the unsigned division by {@code other}. */
-  public Uint16 remainder(Uint16 other) {
-    return remainder(data, other.data);
   }
 
   /** Bitwise AND with {@code other}. */
@@ -253,10 +258,5 @@ public final class Uint16 extends Number implements Comparable<Uint16>, Serializ
   @Override
   public int hashCode() {
     return data;
-  }
-
-  @Override
-  public String toString() {
-    return Integer.toString(toInt());
   }
 }

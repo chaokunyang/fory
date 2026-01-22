@@ -42,12 +42,12 @@ public class UnsignedSerializers {
 
     @Override
     public void write(MemoryBuffer buffer, Uint8 value) {
-      buffer.writeVarUint32Small7(value.toInt());
+      buffer.writeByte(value.byteValue());
     }
 
     @Override
     public Uint8 read(MemoryBuffer buffer) {
-      return Uint8.valueOf(buffer.readVarUint32Small7());
+      return Uint8.valueOf(buffer.readByte());
     }
   }
 

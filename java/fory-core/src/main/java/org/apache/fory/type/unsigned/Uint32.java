@@ -49,20 +49,45 @@ public final class Uint32 extends Number implements Comparable<Uint32>, Serializ
     return new Uint32(a + b);
   }
 
+  /** Adds {@code other} with wrapping semantics. */
+  public Uint32 add(Uint32 other) {
+    return add(data, other.data);
+  }
+
   public static Uint32 subtract(int a, int b) {
     return new Uint32(a - b);
+  }
+
+  /** Subtracts {@code other} with wrapping semantics. */
+  public Uint32 subtract(Uint32 other) {
+    return subtract(data, other.data);
   }
 
   public static Uint32 multiply(int a, int b) {
     return new Uint32(a * b);
   }
 
+  /** Multiplies by {@code other} with wrapping semantics. */
+  public Uint32 multiply(Uint32 other) {
+    return multiply(data, other.data);
+  }
+
   public static Uint32 divide(int a, int b) {
     return new Uint32(Integer.divideUnsigned(a, b));
   }
 
+  /** Divides by {@code other} treating both operands as unsigned. */
+  public Uint32 divide(Uint32 other) {
+    return divide(data, other.data);
+  }
+
   public static Uint32 remainder(int a, int b) {
     return new Uint32(Integer.remainderUnsigned(a, b));
+  }
+
+  /** Computes the remainder of the unsigned division by {@code other}. */
+  public Uint32 remainder(Uint32 other) {
+    return remainder(data, other.data);
   }
 
   public static Uint32 min(int a, int b) {
@@ -107,6 +132,11 @@ public final class Uint32 extends Number implements Comparable<Uint32>, Serializ
     return Integer.toUnsignedString(value, radix);
   }
 
+  @Override
+  public String toString() {
+    return Integer.toUnsignedString(data);
+  }
+
   /** Returns the hexadecimal string representation without sign-extension. */
   public String toHexString() {
     return Integer.toHexString(data);
@@ -125,31 +155,6 @@ public final class Uint32 extends Number implements Comparable<Uint32>, Serializ
   /** Returns {@code true} if the value equals {@link #MAX_VALUE}. */
   public boolean isMaxValue() {
     return data == -1;
-  }
-
-  /** Adds {@code other} with wrapping semantics. */
-  public Uint32 add(Uint32 other) {
-    return add(data, other.data);
-  }
-
-  /** Subtracts {@code other} with wrapping semantics. */
-  public Uint32 subtract(Uint32 other) {
-    return subtract(data, other.data);
-  }
-
-  /** Multiplies by {@code other} with wrapping semantics. */
-  public Uint32 multiply(Uint32 other) {
-    return multiply(data, other.data);
-  }
-
-  /** Divides by {@code other} treating both operands as unsigned. */
-  public Uint32 divide(Uint32 other) {
-    return divide(data, other.data);
-  }
-
-  /** Computes the remainder of the unsigned division by {@code other}. */
-  public Uint32 remainder(Uint32 other) {
-    return remainder(data, other.data);
   }
 
   /** Bitwise AND with {@code other}. */
@@ -233,10 +238,5 @@ public final class Uint32 extends Number implements Comparable<Uint32>, Serializ
   @Override
   public int hashCode() {
     return data;
-  }
-
-  @Override
-  public String toString() {
-    return Integer.toUnsignedString(data);
   }
 }

@@ -116,6 +116,25 @@ auto bytes = fory->serialize(person).value();
 auto decoded = fory->deserialize<Person>(bytes).value();
 ```
 
+### 1.1 External/Third-Party Types
+
+For third-party types where you cannot modify the class definition, use
+`FORY_STRUCT_EXTERNAL` at namespace scope. This works for public fields only.
+
+```cpp
+namespace thirdparty {
+struct Foo {
+  int32_t id;
+  std::string name;
+};
+
+FORY_STRUCT_EXTERNAL(Foo, id, name);
+} // namespace thirdparty
+
+auto fory = apache::fory::ForyBuilder().build();
+fory->register_struct<thirdparty::Foo>(1);
+```
+
 ### 2. Shared References
 
 Apache Fory™ automatically tracks and preserves reference identity for shared objects using `std::shared_ptr<T>`. When the same object is referenced multiple times, Fory serializes it only once and uses reference IDs for subsequent occurrences.

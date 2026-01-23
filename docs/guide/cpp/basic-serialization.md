@@ -184,10 +184,8 @@ struct MyStruct {
   int32_t x;
   std::string y;
   std::vector<int32_t> z;
+  FORY_STRUCT(MyStruct, x, y, z);
 };
-
-// Must be in the same namespace as the struct
-FORY_STRUCT(MyStruct, x, y, z);
 ```
 
 The macro:
@@ -198,9 +196,30 @@ The macro:
 
 **Requirements:**
 
-- Must be placed in the same namespace as the struct (for ADL)
+- Must be declared inside the struct/class definition
 - All listed fields must be serializable types
 - Field order in the macro determines serialization order
+
+## External / Third-Party Types
+
+When you cannot modify a third-party type, use `FORY_STRUCT_EXTERNAL` at
+namespace scope. This only works with **public** fields.
+
+```cpp
+namespace thirdparty {
+struct Foo {
+  int32_t id;
+  std::string name;
+};
+
+FORY_STRUCT_EXTERNAL(Foo, id, name);
+} // namespace thirdparty
+```
+
+**Limitations:**
+
+- Must be declared at namespace scope in the same namespace as the type
+- Only public fields are supported
 
 ## Nested Structs
 
@@ -209,14 +228,14 @@ Nested structs are fully supported:
 ```cpp
 struct Inner {
   int32_t value;
+  FORY_STRUCT(Inner, value);
 };
-FORY_STRUCT(Inner, value);
 
 struct Outer {
   Inner inner;
   std::string label;
+  FORY_STRUCT(Outer, inner, label);
 };
-FORY_STRUCT(Outer, inner, label);
 
 // Both must be registered
 fory.register_struct<Inner>(1);

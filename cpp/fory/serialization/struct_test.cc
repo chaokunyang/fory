@@ -298,6 +298,26 @@ struct Order {
   FORY_STRUCT(Order, order_id, customer_id, items, total_amount, order_status);
 };
 
+namespace external_test {
+
+struct ExternalStruct {
+  int32_t id;
+  std::string name;
+  bool operator==(const ExternalStruct &other) const {
+    return id == other.id && name == other.name;
+  }
+};
+
+FORY_STRUCT_EXTERNAL(ExternalStruct, id, name);
+
+struct ExternalEmpty {
+  bool operator==(const ExternalEmpty & /*other*/) const { return true; }
+};
+
+FORY_STRUCT_EXTERNAL(ExternalEmpty);
+
+} // namespace external_test
+
 // ============================================================================
 // TEST IMPLEMENTATION (Inside namespace)
 // ============================================================================
@@ -330,6 +350,8 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_struct<Product>(type_id++);
   fory.register_struct<OrderItem>(type_id++);
   fory.register_struct<Order>(type_id++);
+  fory.register_struct<external_test::ExternalStruct>(type_id++);
+  fory.register_struct<external_test::ExternalEmpty>(type_id++);
 }
 
 template <typename T> void test_roundtrip(const T &original) {
@@ -523,6 +545,15 @@ TEST(StructComprehensiveTest, LargeVectorOfStructs) {
       fory.deserialize<std::vector<Point2D>>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok());
   EXPECT_EQ(points, deser_result.value());
+}
+
+TEST(StructComprehensiveTest, ExternalStruct) {
+  test_roundtrip(external_test::ExternalStruct{1, "external"});
+  test_roundtrip(external_test::ExternalStruct{42, ""});
+}
+
+TEST(StructComprehensiveTest, ExternalEmptyStruct) {
+  test_roundtrip(external_test::ExternalEmpty{});
 }
 
 } // namespace test

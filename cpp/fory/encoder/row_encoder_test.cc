@@ -41,6 +41,21 @@ struct B {
   FORY_STRUCT(B, x, y);
 };
 
+namespace external_row {
+
+struct ExternalRow {
+  int32_t id;
+  std::string name;
+};
+
+FORY_STRUCT_EXTERNAL(ExternalRow, id, name);
+
+struct ExternalRowEmpty {};
+
+FORY_STRUCT_EXTERNAL(ExternalRowEmpty);
+
+} // namespace external_row
+
 TEST(RowEncoder, Simple) {
   B v{233, {1.23, "hello"}};
 
@@ -62,6 +77,31 @@ TEST(RowEncoder, Simple) {
   auto y_row = row->GetStruct(1);
   ASSERT_EQ(y_row->GetString(1), "hello");
   ASSERT_FLOAT_EQ(y_row->GetFloat(0), 1.23);
+}
+
+TEST(RowEncoder, ExternalStruct) {
+  external_row::ExternalRow v{7, "external"};
+  encoder::RowEncoder<external_row::ExternalRow> enc;
+
+  auto &schema = enc.GetSchema();
+  ASSERT_EQ(schema.field_names(), (std::vector<std::string>{"id", "name"}));
+
+  enc.Encode(v);
+  auto row = enc.GetWriter().ToRow();
+  ASSERT_EQ(row->GetInt32(0), 7);
+  ASSERT_EQ(row->GetString(1), "external");
+}
+
+TEST(RowEncoder, ExternalEmptyStruct) {
+  external_row::ExternalRowEmpty v{};
+  encoder::RowEncoder<external_row::ExternalRowEmpty> enc;
+
+  auto &schema = enc.GetSchema();
+  ASSERT_TRUE(schema.field_names().empty());
+
+  enc.Encode(v);
+  auto row = enc.GetWriter().ToRow();
+  ASSERT_EQ(row->num_fields(), 0);
 }
 
 struct C {

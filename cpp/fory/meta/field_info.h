@@ -127,3 +127,75 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
 
 #define FORY_STRUCT(type, ...)                                                 \
   FORY_PP_CONCAT(FORY_STRUCT_, FORY_PP_IS_EMPTY(__VA_ARGS__))(type, __VA_ARGS__)
+
+// NOTE: FORY_STRUCT_EXTERNAL must be used at namespace scope in the same
+// namespace as the type for ADL. It only has access to public members.
+#define FORY_STRUCT_EXTERNAL_WITH_FIELDS(type, unique_id, ...)                 \
+  static_assert(std::is_class_v<type>, "it must be a class type");             \
+  struct FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id) {                 \
+    static inline constexpr size_t Size = FORY_PP_NARG(__VA_ARGS__);           \
+    static inline constexpr std::string_view Name = #type;                     \
+    static inline constexpr std::array<std::string_view, Size> Names = {       \
+        FORY_PP_FOREACH(FORY_FIELD_INFO_NAMES_FUNC, __VA_ARGS__)};             \
+    static inline constexpr auto Ptrs = std::tuple{                            \
+        FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)};      \
+  };                                                                           \
+  static_assert(                                                               \
+      fory::meta::IsValidFieldInfo<FORY_PP_CONCAT(ForyFieldInfoDescriptor_,    \
+                                                  unique_id)>(),               \
+      "duplicated fields in FORY_STRUCT_EXTERNAL arguments are detected");     \
+  static_assert(FORY_PP_CONCAT(ForyFieldInfoDescriptor_,                       \
+                               unique_id)::Name.data() != nullptr,             \
+                "ForyFieldInfoDescriptor name must be available");             \
+  static_assert(                                                               \
+      FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id)::Names.size() ==     \
+          FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id)::Size,           \
+      "ForyFieldInfoDescriptor names size mismatch");                          \
+  [[maybe_unused]] inline constexpr auto ForyFieldInfo(                        \
+      const type &) noexcept {                                                 \
+    return FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id){};              \
+  }                                                                            \
+  [[maybe_unused]] inline constexpr std::true_type ForyStructMarker(           \
+      const type &) noexcept {                                                 \
+    return {};                                                                 \
+  }
+
+#define FORY_STRUCT_EXTERNAL_EMPTY(type, unique_id)                            \
+  static_assert(std::is_class_v<type>, "it must be a class type");             \
+  struct FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id) {                 \
+    static inline constexpr size_t Size = 0;                                   \
+    static inline constexpr std::string_view Name = #type;                     \
+    static inline constexpr std::array<std::string_view, Size> Names = {};     \
+    static inline constexpr auto Ptrs = std::tuple{};                          \
+  };                                                                           \
+  static_assert(                                                               \
+      fory::meta::IsValidFieldInfo<FORY_PP_CONCAT(ForyFieldInfoDescriptor_,    \
+                                                  unique_id)>(),               \
+      "duplicated fields in FORY_STRUCT_EXTERNAL arguments are detected");     \
+  static_assert(FORY_PP_CONCAT(ForyFieldInfoDescriptor_,                       \
+                               unique_id)::Name.data() != nullptr,             \
+                "ForyFieldInfoDescriptor name must be available");             \
+  static_assert(                                                               \
+      FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id)::Names.size() ==     \
+          FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id)::Size,           \
+      "ForyFieldInfoDescriptor names size mismatch");                          \
+  [[maybe_unused]] inline constexpr auto ForyFieldInfo(                        \
+      const type &) noexcept {                                                 \
+    return FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id){};              \
+  }                                                                            \
+  [[maybe_unused]] inline constexpr std::true_type ForyStructMarker(           \
+      const type &) noexcept {                                                 \
+    return {};                                                                 \
+  }
+
+#define FORY_STRUCT_EXTERNAL_IMPL(type, unique_id, ...)                        \
+  FORY_PP_CONCAT(FORY_STRUCT_EXTERNAL_,                                        \
+                 FORY_PP_IS_EMPTY(__VA_ARGS__))(type, unique_id, __VA_ARGS__)
+
+#define FORY_STRUCT_EXTERNAL_1(type, unique_id, ...)                           \
+  FORY_STRUCT_EXTERNAL_EMPTY(type, unique_id)
+#define FORY_STRUCT_EXTERNAL_0(type, unique_id, ...)                           \
+  FORY_STRUCT_EXTERNAL_WITH_FIELDS(type, unique_id, __VA_ARGS__)
+
+#define FORY_STRUCT_EXTERNAL(type, ...)                                        \
+  FORY_STRUCT_EXTERNAL_IMPL(type, __LINE__, __VA_ARGS__)

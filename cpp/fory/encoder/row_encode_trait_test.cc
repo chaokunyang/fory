@@ -34,7 +34,7 @@ struct A {
   int x;
   float y;
   bool z;
-  FORY_FIELD_INFO(A, x, y, z);
+  FORY_STRUCT(A, x, y, z);
 };
 
 TEST(RowEncodeTrait, Basic) {
@@ -66,7 +66,7 @@ TEST(RowEncodeTrait, Basic) {
 struct B {
   int num;
   std::string str;
-  FORY_FIELD_INFO(B, num, str);
+  FORY_STRUCT(B, num, str);
 };
 
 TEST(RowEncodeTrait, String) {
@@ -87,7 +87,7 @@ struct C {
   const int a;
   volatile float b;
   bool c;
-  FORY_FIELD_INFO(C, a, b, c);
+  FORY_STRUCT(C, a, b, c);
 };
 
 TEST(RowEncodeTrait, Const) {
@@ -107,7 +107,7 @@ struct D {
   int x;
   A y;
   B z;
-  FORY_FIELD_INFO(D, x, y, z);
+  FORY_STRUCT(D, x, y, z);
 };
 
 TEST(RowEncodeTrait, NestedStruct) {
@@ -198,7 +198,7 @@ TEST(RowEncodeTrait, StructInArray) {
 struct E {
   int a;
   std::vector<int> b;
-  FORY_FIELD_INFO(E, a, b);
+  FORY_STRUCT(E, a, b);
 };
 
 TEST(RowEncodeTrait, ArrayInStruct) {
@@ -251,7 +251,7 @@ struct F {
   bool a;
   std::optional<int> b;
   int c;
-  FORY_FIELD_INFO(F, a, b, c);
+  FORY_STRUCT(F, a, b, c);
 };
 
 TEST(RowEncodeTrait, Optional) {
@@ -295,7 +295,7 @@ TEST(RowEncodeTrait, Optional) {
 struct G {
   std::map<int, std::map<int, int>> a;
   std::map<std::string, A> b;
-  FORY_FIELD_INFO(G, a, b);
+  FORY_STRUCT(G, a, b);
 };
 
 TEST(RowEncodeTrait, Map) {

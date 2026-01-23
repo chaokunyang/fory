@@ -69,42 +69,6 @@ struct SerializationMeta<
       decltype(ForyFieldInfo(std::declval<const T &>()))::Size;
 };
 
-/// Main serialization registration macro.
-///
-/// This macro must be placed inside the class/struct definition so the
-/// generated friend functions participate in ADL and can access private fields.
-///
-/// It builds upon FORY_FIELD_INFO to add serialization-specific metadata:
-/// - Marks the type as serializable
-/// - Provides compile-time metadata access
-///
-/// Example:
-/// ```cpp
-/// namespace myapp {
-///   struct Person {
-///     std::string name;
-///     int32_t age;
-///     FORY_STRUCT(Person, name, age);
-///   };
-/// }
-/// ```
-///
-/// After expansion, the type can be serialized using Fory:
-/// ```cpp
-/// fory::serialization::Fory fory;
-/// myapp::Person person{"Alice", 30};
-/// auto bytes = fory.serialize(person);
-/// ```
-/// Main struct registration macro (in-class).
-/// TypeIndex uses the fallback (type_fallback_hash based on PRETTY_FUNCTION)
-/// which provides unique type identification without namespace issues.
-#define FORY_STRUCT(Type, ...)                                                 \
-  FORY_FIELD_INFO(Type, __VA_ARGS__)                                           \
-  [[maybe_unused]] friend constexpr std::true_type ForyStructMarker(           \
-      const Type &) noexcept {                                                 \
-    return {};                                                                 \
-  }
-
 namespace detail {
 
 /// Helper to check if a TypeId represents a primitive type.

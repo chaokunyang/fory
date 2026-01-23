@@ -38,7 +38,7 @@ namespace meta {
 // - field member points: typed `decltype(a) T::*` for any member `T::a`
 template <typename T> constexpr auto ForyFieldInfo(const T &) noexcept {
   static_assert(AlwaysFalse<T>,
-                "FORY_FIELD_INFO for type T is expected but not defined");
+                "FORY_STRUCT for type T is expected but not defined");
 }
 
 namespace details {
@@ -63,8 +63,8 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
 #define FORY_FIELD_INFO_NAMES_FUNC(field) #field,
 #define FORY_FIELD_INFO_PTRS_FUNC(type, field) &type::field,
 
-// NOTE: FORY_FIELD_INFO must be used inside the class/struct definition.
-// It defines a hidden friend function for ADL-based lookup and has access
+// NOTE: FORY_STRUCT must be used inside the class/struct definition.
+// It defines hidden friend functions for ADL-based lookup and has access
 // to private fields.
 #define FORY_FIELD_INFO_WITH_FIELDS(type, ...)                                 \
   static_assert(std::is_class_v<type>, "it must be a class type");             \
@@ -76,9 +76,8 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
     static inline constexpr auto Ptrs = std::tuple{                            \
         FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)};      \
   };                                                                           \
-  static_assert(                                                               \
-      fory::meta::IsValidFieldInfo<ForyFieldInfoDescriptor>(),                 \
-      "duplicated fields in FORY_FIELD_INFO arguments are detected");          \
+  static_assert(fory::meta::IsValidFieldInfo<ForyFieldInfoDescriptor>(),       \
+                "duplicated fields in FORY_STRUCT arguments are detected");    \
   static_assert(ForyFieldInfoDescriptor::Name.data() != nullptr,               \
                 "ForyFieldInfoDescriptor name must be available");             \
   static_assert(ForyFieldInfoDescriptor::Names.size() ==                       \
@@ -97,9 +96,8 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
     static inline constexpr std::array<std::string_view, Size> Names = {};     \
     static inline constexpr auto Ptrs = std::tuple{};                          \
   };                                                                           \
-  static_assert(                                                               \
-      fory::meta::IsValidFieldInfo<ForyFieldInfoDescriptor>(),                 \
-      "duplicated fields in FORY_FIELD_INFO arguments are detected");          \
+  static_assert(fory::meta::IsValidFieldInfo<ForyFieldInfoDescriptor>(),       \
+                "duplicated fields in FORY_STRUCT arguments are detected");    \
   static_assert(ForyFieldInfoDescriptor::Name.data() != nullptr,               \
                 "ForyFieldInfoDescriptor name must be available");             \
   static_assert(ForyFieldInfoDescriptor::Names.size() ==                       \
@@ -110,10 +108,22 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
     return ForyFieldInfoDescriptor{};                                          \
   }
 
-#define FORY_FIELD_INFO_1(type, ...) FORY_FIELD_INFO_EMPTY(type)
-#define FORY_FIELD_INFO_0(type, ...)                                           \
-  FORY_FIELD_INFO_WITH_FIELDS(type, __VA_ARGS__)
+#define FORY_STRUCT_WITH_FIELDS(type, ...)                                     \
+  FORY_FIELD_INFO_WITH_FIELDS(type, __VA_ARGS__)                               \
+  [[maybe_unused]] friend constexpr std::true_type ForyStructMarker(           \
+      const type &) noexcept {                                                 \
+    return {};                                                                 \
+  }
 
-#define FORY_FIELD_INFO(type, ...)                                             \
-  FORY_PP_CONCAT(FORY_FIELD_INFO_, FORY_PP_IS_EMPTY(__VA_ARGS__))              \
-  (type, __VA_ARGS__)
+#define FORY_STRUCT_EMPTY(type)                                                \
+  FORY_FIELD_INFO_EMPTY(type)                                                  \
+  [[maybe_unused]] friend constexpr std::true_type ForyStructMarker(           \
+      const type &) noexcept {                                                 \
+    return {};                                                                 \
+  }
+
+#define FORY_STRUCT_1(type, ...) FORY_STRUCT_EMPTY(type)
+#define FORY_STRUCT_0(type, ...) FORY_STRUCT_WITH_FIELDS(type, __VA_ARGS__)
+
+#define FORY_STRUCT(type, ...)                                                 \
+  FORY_PP_CONCAT(FORY_STRUCT_, FORY_PP_IS_EMPTY(__VA_ARGS__))(type, __VA_ARGS__)

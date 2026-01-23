@@ -230,7 +230,7 @@ struct UserProfile {
   std::string email;
   std::vector<int32_t> scores;
   bool is_active;
-  FORY_FIELD_INFO(UserProfile, id, username, email, scores, is_active);
+  FORY_STRUCT(UserProfile, id, username, email, scores, is_active);
 };
 
 apache::fory::RowEncoder<UserProfile> encoder;

@@ -462,7 +462,7 @@ pub fn gen_write_type_info(data_enum: &DataEnum) -> TokenStream {
         quote! {
             if context.is_xlang() {
                 let rs_type_id = std::any::TypeId::of::<Self>();
-                context.write_any_typeinfo(fory_core::types::TypeId::TYPED_UNION as u32, rs_type_id)?;
+                context.write_any_typeinfo(fory_core::types::UNKNOWN, rs_type_id)?;
                 Ok(())
             } else {
                 fory_core::serializer::enum_::write_type_info::<Self>(context)

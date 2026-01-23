@@ -882,7 +882,7 @@ pub(super) fn get_primitive_reader_method_with_encoding(
     get_primitive_reader_method(type_name)
 }
 
-/// Check if a type is Option<i32>, Option<u32>, or Option<u64> that needs encoding-aware handling
+/// Check if a type is `Option<i32>`, `Option<u32>`, or `Option<u64>` that needs encoding-aware handling
 /// based on the field metadata (type_id attribute).
 pub(super) fn is_option_encoding_primitive(
     ty: &Type,
@@ -899,8 +899,8 @@ pub(super) fn is_option_encoding_primitive(
     false
 }
 
-/// Get the inner primitive name if the type is Option<primitive>
-/// Returns Some("u32"), Some("u64"), etc. for Option<u32>, Option<u64>, etc.
+/// Get the inner primitive name if the type is `Option<primitive>`
+/// Returns Some("u32"), Some("u64"), etc. for `Option<u32>`, `Option<u64>`, etc.
 pub(super) fn get_option_inner_primitive_name(ty: &Type) -> Option<&'static str> {
     use syn::PathArguments;
     if let Type::Path(type_path) = ty {

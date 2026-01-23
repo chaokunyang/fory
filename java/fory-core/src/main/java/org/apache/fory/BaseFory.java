@@ -85,10 +85,6 @@ public interface BaseFory {
    */
   void register(Class<?> cls, String namespace, String typeName);
 
-  void registerUnion(Class<?> cls, int id, Serializer<?> serializer);
-
-  void registerUnion(Class<?> cls, String namespace, String typeName, Serializer<?> serializer);
-
   /**
    * Register class and allocate an auto-grown ID for this class.
    *
@@ -107,6 +103,10 @@ public interface BaseFory {
    * into same type when deserializing.
    */
   void register(String className, String namespace, String typeName);
+
+  void registerUnion(Class<?> cls, int id, Serializer<?> serializer);
+
+  void registerUnion(Class<?> cls, String namespace, String typeName, Serializer<?> serializer);
 
   /**
    * Register a Serializer for a class, and allocate an auto-grown ID for this class if it's not

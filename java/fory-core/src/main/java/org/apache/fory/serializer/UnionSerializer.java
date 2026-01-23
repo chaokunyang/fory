@@ -21,10 +21,13 @@ package org.apache.fory.serializer;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.util.function.BiFunction;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.ClassInfo;
+import org.apache.fory.resolver.RefResolver;
+import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.type.Types;
 import org.apache.fory.type.union.Union;
 import org.apache.fory.type.union.Union2;
@@ -32,10 +35,6 @@ import org.apache.fory.type.union.Union3;
 import org.apache.fory.type.union.Union4;
 import org.apache.fory.type.union.Union5;
 import org.apache.fory.type.union.Union6;
-import org.apache.fory.resolver.ClassInfo;
-import org.apache.fory.resolver.RefResolver;
-import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.resolver.XtypeResolver;
 
 /**
  * Serializer for {@link Union} and its subclasses ({@link Union2}, {@link Union3}, {@link Union4},
@@ -96,8 +95,7 @@ public class UnionSerializer extends Serializer<Union> {
     }
   }
 
-  private static BiFunction<Integer, Object, Union> createFactory(
-      Class<? extends Union> cls) {
+  private static BiFunction<Integer, Object, Union> createFactory(Class<? extends Union> cls) {
     try {
       java.lang.reflect.Constructor<? extends Union> ctor =
           cls.getDeclaredConstructor(int.class, Object.class);
@@ -107,8 +105,7 @@ public class UnionSerializer extends Serializer<Union> {
         try {
           return (Union) handle.invoke(index.intValue(), value);
         } catch (Throwable t) {
-          throw new IllegalStateException(
-              "Failed to construct union type " + cls.getName(), t);
+          throw new IllegalStateException("Failed to construct union type " + cls.getName(), t);
         }
       };
     } catch (Throwable t) {
@@ -227,8 +224,7 @@ public class UnionSerializer extends Serializer<Union> {
     return resolver.getClassInfo(value.getClass());
   }
 
-  private void writeValue(
-      MemoryBuffer buffer, Object value, int typeId, Serializer serializer) {
+  private void writeValue(MemoryBuffer buffer, Object value, int typeId, Serializer serializer) {
     int internalTypeId = typeId & 0xff;
     switch (internalTypeId) {
       case Types.BOOL:

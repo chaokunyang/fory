@@ -266,51 +266,6 @@ public class XtypeResolver extends TypeResolver {
     register(type, serializer, namespace, typeName, xtypeId);
   }
 
-  @Override
-  public void registerUnion(Class<?> type, int userTypeId, Serializer<?> serializer) {
-    checkRegisterAllowed();
-    Preconditions.checkNotNull(serializer);
-    Preconditions.checkArgument(userTypeId < MAX_TYPE_ID, "Too big type id %s", userTypeId);
-    Preconditions.checkArgument(
-        !containsUserTypeId(userTypeId), "Type id %s has been registered", userTypeId);
-    ClassInfo classInfo = classInfoMap.get(type);
-    if (classInfo != null && classInfo.typeId != 0) {
-      throw new IllegalArgumentException(
-          String.format("Type %s has been registered with id %s", type, classInfo.typeId));
-    }
-    int xtypeId = (userTypeId << 8) + Types.TYPED_UNION;
-    register(
-        type,
-        serializer,
-        ReflectionUtils.getPackage(type),
-        ReflectionUtils.getClassNameWithoutPackage(type),
-        xtypeId);
-  }
-
-  @Override
-  public void registerUnion(
-      Class<?> type, String namespace, String typeName, Serializer<?> serializer) {
-    checkRegisterAllowed();
-    Preconditions.checkNotNull(serializer);
-    Preconditions.checkArgument(
-        !typeName.contains("."),
-        "Typename %s should not contains `.`, please put it into namespace",
-        typeName);
-    ClassInfo classInfo = classInfoMap.get(type);
-    if (classInfo != null && classInfo.typeNameBytes != null) {
-      String prevNamespace = classInfo.decodeNamespace();
-      String prevTypeName = classInfo.decodeTypeName();
-      if (!namespace.equals(prevNamespace) || typeName.equals(prevTypeName)) {
-        throw new IllegalArgumentException(
-            String.format(
-                "Type %s has been registered with namespace %s type %s",
-                type, prevNamespace, prevTypeName));
-      }
-    }
-    int xtypeId = Types.NAMED_UNION;
-    register(type, serializer, namespace, typeName, xtypeId);
-  }
-
   private void register(
       Class<?> type, Serializer<?> serializer, String namespace, String typeName, int xtypeId) {
     ClassInfo classInfo = newClassInfo(type, serializer, namespace, typeName, xtypeId);
@@ -355,6 +310,51 @@ public class XtypeResolver extends TypeResolver {
         putInternalTypeInfo(xtypeId, classInfo);
       }
     }
+  }
+
+  @Override
+  public void registerUnion(Class<?> type, int userTypeId, Serializer<?> serializer) {
+    checkRegisterAllowed();
+    Preconditions.checkNotNull(serializer);
+    Preconditions.checkArgument(userTypeId < MAX_TYPE_ID, "Too big type id %s", userTypeId);
+    Preconditions.checkArgument(
+        !containsUserTypeId(userTypeId), "Type id %s has been registered", userTypeId);
+    ClassInfo classInfo = classInfoMap.get(type);
+    if (classInfo != null && classInfo.typeId != 0) {
+      throw new IllegalArgumentException(
+          String.format("Type %s has been registered with id %s", type, classInfo.typeId));
+    }
+    int xtypeId = (userTypeId << 8) + Types.TYPED_UNION;
+    register(
+        type,
+        serializer,
+        ReflectionUtils.getPackage(type),
+        ReflectionUtils.getClassNameWithoutPackage(type),
+        xtypeId);
+  }
+
+  @Override
+  public void registerUnion(
+      Class<?> type, String namespace, String typeName, Serializer<?> serializer) {
+    checkRegisterAllowed();
+    Preconditions.checkNotNull(serializer);
+    Preconditions.checkArgument(
+        !typeName.contains("."),
+        "Typename %s should not contains `.`, please put it into namespace",
+        typeName);
+    ClassInfo classInfo = classInfoMap.get(type);
+    if (classInfo != null && classInfo.typeNameBytes != null) {
+      String prevNamespace = classInfo.decodeNamespace();
+      String prevTypeName = classInfo.decodeTypeName();
+      if (!namespace.equals(prevNamespace) || typeName.equals(prevTypeName)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Type %s has been registered with namespace %s type %s",
+                type, prevNamespace, prevTypeName));
+      }
+    }
+    int xtypeId = Types.NAMED_UNION;
+    register(type, serializer, namespace, typeName, xtypeId);
   }
 
   /**
@@ -771,14 +771,14 @@ public class XtypeResolver extends TypeResolver {
     registerType(Types.INT32, int.class, new PrimitiveSerializers.IntSerializer(fory, int.class));
     registerType(Types.INT32, AtomicInteger.class, new Serializers.AtomicIntegerSerializer(fory));
     registerType(
+        Types.VAR_UINT32, Integer.class, new PrimitiveSerializers.VarUint32Serializer(fory));
+    registerType(Types.VAR_UINT32, int.class, new PrimitiveSerializers.VarUint32Serializer(fory));
+    registerType(
         Types.VARINT32, Integer.class, new PrimitiveSerializers.IntSerializer(fory, Integer.class));
     registerType(
         Types.VARINT32, int.class, new PrimitiveSerializers.IntSerializer(fory, int.class));
     registerType(
         Types.VARINT32, AtomicInteger.class, new Serializers.AtomicIntegerSerializer(fory));
-    registerType(
-        Types.VAR_UINT32, Integer.class, new PrimitiveSerializers.VarUint32Serializer(fory));
-    registerType(Types.VAR_UINT32, int.class, new PrimitiveSerializers.VarUint32Serializer(fory));
     registerType(Types.UINT32, Uint32.class, new UnsignedSerializers.Uint32Serializer(fory));
 
     // Long types
@@ -802,14 +802,13 @@ public class XtypeResolver extends TypeResolver {
     registerType(
         Types.TAGGED_INT64, long.class, new PrimitiveSerializers.LongSerializer(fory, long.class));
     registerType(Types.TAGGED_INT64, AtomicLong.class, new Serializers.AtomicLongSerializer(fory));
+    registerType(Types.VAR_UINT64, Long.class, new PrimitiveSerializers.VarUint64Serializer(fory));
+    registerType(Types.VAR_UINT64, long.class, new PrimitiveSerializers.VarUint64Serializer(fory));
     registerType(
         Types.VARINT64, Long.class, new PrimitiveSerializers.LongSerializer(fory, Long.class));
     registerType(
         Types.VARINT64, long.class, new PrimitiveSerializers.LongSerializer(fory, long.class));
     registerType(Types.VARINT64, AtomicLong.class, new Serializers.AtomicLongSerializer(fory));
-    registerType(
-        Types.VAR_UINT64, Long.class, new PrimitiveSerializers.VarUint64Serializer(fory));
-    registerType(Types.VAR_UINT64, long.class, new PrimitiveSerializers.VarUint64Serializer(fory));
 
     // Float types
     registerType(

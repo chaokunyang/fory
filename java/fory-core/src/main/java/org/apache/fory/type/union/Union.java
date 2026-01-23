@@ -102,15 +102,6 @@ public class Union {
   }
 
   /**
-   * Gets the xlang type id of the current value.
-   *
-   * @return the value type id
-   */
-  public int getValueTypeId() {
-    return typeId;
-  }
-
-  /**
    * Gets the current value cast to the specified type.
    *
    * @param <T> the expected type
@@ -121,6 +112,15 @@ public class Union {
   @SuppressWarnings("unchecked")
   public <T> T getValue(Class<T> type) {
     return (T) value;
+  }
+
+  /**
+   * Gets the xlang type id of the current value.
+   *
+   * @return the value type id
+   */
+  public int getValueTypeId() {
+    return typeId;
   }
 
   /**

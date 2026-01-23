@@ -103,7 +103,7 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
                 Some(type_info),
             )
         }
-        types::STRUCT | types::NAMED_STRUCT => {
+        types::STRUCT | types::NAMED_STRUCT | types::NAMED_UNION => {
             // For non-compatible struct types with share_meta enabled, read type meta inline
             if context.is_share_meta() {
                 let type_info = context.read_type_meta()?;
@@ -136,19 +136,6 @@ pub fn skip_any_value(context: &mut ReadContext, read_ref_flag: bool) -> Result<
                     Some(type_info),
                 )
             }
-        }
-        types::NAMED_UNION => {
-            let _namespace = context.read_meta_string()?;
-            let _type_name = context.read_meta_string()?;
-            (
-                FieldType {
-                    type_id,
-                    nullable: true,
-                    ref_tracking: false,
-                    generics: vec![],
-                },
-                None,
-            )
         }
         _ => (
             FieldType {

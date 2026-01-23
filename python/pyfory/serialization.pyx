@@ -646,7 +646,7 @@ cdef class TypeResolver:
             int32_t type_id = typeinfo.type_id
             int32_t internal_type_id = type_id & 0xFF
 
-        if self.meta_share and internal_type_id != <int32_t>TypeId.NAMED_UNION:
+        if self.meta_share:
             self.write_shared_type_meta(buffer, typeinfo)
             return
 
@@ -665,7 +665,7 @@ cdef class TypeResolver:
         cdef:
             int32_t internal_type_id = type_id & 0xFF
             MetaStringBytes namespace_bytes, typename_bytes
-        if self.meta_share and internal_type_id != <int32_t>TypeId.NAMED_UNION:
+        if self.meta_share:
             return self.serialization_context.meta_context.read_shared_typeinfo_with_type_id(buffer, type_id)
         if IsNamespacedType(internal_type_id):
             namespace_bytes = self.metastring_resolver.read_meta_string_bytes(buffer)

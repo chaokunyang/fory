@@ -248,12 +248,7 @@ impl<'a> WriteContext<'a> {
                     &self.type_resolver,
                 )?;
             }
-            types::NAMED_UNION => {
-                // Union types always encode namespace/type name, no type meta.
-                self.write_meta_string_bytes(namespace)?;
-                self.write_meta_string_bytes(type_name)?;
-            }
-            types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT => {
+            types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT | types::NAMED_UNION => {
                 if self.is_share_meta() {
                     // Write type meta inline using streaming protocol
                     self.meta_resolver.write_type_meta(
@@ -424,16 +419,7 @@ impl<'a> ReadContext<'a> {
                 // Read type meta inline using streaming protocol
                 self.read_type_meta()
             }
-            types::NAMED_UNION => {
-                let namespace = self.read_meta_string()?.to_owned();
-                let type_name = self.read_meta_string()?.to_owned();
-                let rc_namespace = Rc::from(namespace);
-                let rc_type_name = Rc::from(type_name);
-                self.type_resolver
-                    .get_type_info_by_meta_string_name(rc_namespace, rc_type_name)
-                    .ok_or_else(|| Error::type_error("Name harness not found"))
-            }
-            types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT => {
+            types::NAMED_ENUM | types::NAMED_EXT | types::NAMED_STRUCT | types::NAMED_UNION => {
                 if self.is_share_meta() {
                     // Read type meta inline using streaming protocol
                     self.read_type_meta()

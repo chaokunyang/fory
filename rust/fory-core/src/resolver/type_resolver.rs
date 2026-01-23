@@ -661,9 +661,7 @@ impl TypeResolver {
         self.register::<T>(0, namespace, type_name, true)
     }
 
-    pub fn register_union_by_namespace<
-        T: 'static + StructSerializer + Serializer + ForyDefault,
-    >(
+    pub fn register_union_by_namespace<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
         namespace: &str,
         type_name: &str,

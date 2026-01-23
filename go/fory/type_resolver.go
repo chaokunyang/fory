@@ -673,7 +673,7 @@ func (r *TypeResolver) RegisterNamedStruct(
 }
 
 // RegisterNamedUnion registers a union type with a namespace and type name.
-// Union types always use NAMED_UNION and encode namespace/type name, regardless of compatible mode.
+// Union types always use NAMED_UNION and follow the same meta-share rules as other named types.
 func (r *TypeResolver) RegisterNamedUnion(
 	type_ reflect.Type,
 	namespace string,
@@ -1266,7 +1266,7 @@ func (r *TypeResolver) WriteTypeInfo(buffer *ByteBuffer, typeInfo *TypeInfo, err
 	// Handle type meta based on internal type ID (matching Java XtypeResolver.writeClassInfo)
 	switch internalTypeID {
 	case NAMED_ENUM, NAMED_STRUCT, NAMED_EXT, NAMED_UNION:
-		if internalTypeID != NAMED_UNION && r.metaShareEnabled() {
+		if r.metaShareEnabled() {
 			r.writeSharedTypeMeta(buffer, typeInfo, err)
 			return
 		}
@@ -1819,7 +1819,7 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 	// Handle type meta based on internal type ID (matching Java XtypeResolver.readClassInfo)
 	switch internalTypeID {
 	case NAMED_ENUM, NAMED_STRUCT, NAMED_EXT, NAMED_UNION:
-		if internalTypeID != NAMED_UNION && r.metaShareEnabled() {
+		if r.metaShareEnabled() {
 			return r.readSharedTypeMeta(buffer, err)
 		}
 		// ReadData namespace and type name metadata bytes
@@ -2001,7 +2001,7 @@ func (r *TypeResolver) readTypeInfoWithTypeID(buffer *ByteBuffer, typeID uint32,
 	internalTypeID := TypeId(typeID & 0xFF)
 
 	if IsNamespacedType(TypeId(typeID)) {
-		if internalTypeID != NAMED_UNION && r.metaShareEnabled() {
+		if r.metaShareEnabled() {
 			return r.readSharedTypeMeta(buffer, err)
 		}
 		// ReadData namespace and type name metadata bytes

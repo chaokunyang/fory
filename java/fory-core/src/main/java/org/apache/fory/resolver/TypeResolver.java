@@ -158,6 +158,21 @@ public abstract class TypeResolver {
    */
   public abstract void register(Class<?> type, String namespace, String typeName);
 
+  /** Registers a class by name with an auto-assigned user ID. */
+  public void register(String className) {
+    register(loadClass(className));
+  }
+
+  /** Registers a class by name with a user-specified ID. */
+  public void register(String className, int classId) {
+    register(loadClass(className), classId);
+  }
+
+  /** Registers a class by name with a namespace and type name. */
+  public void register(String className, String namespace, String typeName) {
+    register(loadClass(className), namespace, typeName);
+  }
+
   /**
    * Registers a union type with a user-specified ID and serializer.
    *
@@ -177,21 +192,6 @@ public abstract class TypeResolver {
    */
   public abstract void registerUnion(
       Class<?> type, String namespace, String typeName, Serializer<?> serializer);
-
-  /** Registers a class by name with an auto-assigned user ID. */
-  public void register(String className) {
-    register(loadClass(className));
-  }
-
-  /** Registers a class by name with a user-specified ID. */
-  public void register(String className, int classId) {
-    register(loadClass(className), classId);
-  }
-
-  /** Registers a class by name with a namespace and type name. */
-  public void register(String className, String namespace, String typeName) {
-    register(loadClass(className), namespace, typeName);
-  }
 
   /**
    * Registers a custom serializer for a type.
@@ -312,7 +312,8 @@ public abstract class TypeResolver {
    * <p>Encoding:
    *
    * <ul>
-   *   <li>NAMED_ENUM/NAMED_STRUCT/NAMED_EXT: namespace + typename bytes (or meta-share if enabled)
+   *   <li>NAMED_ENUM/NAMED_STRUCT/NAMED_EXT/NAMED_UNION: namespace + typename bytes (or meta-share
+   *       if enabled)
    *   <li>NAMED_COMPATIBLE_STRUCT: namespace + typename bytes (or meta-share if enabled)
    *   <li>COMPATIBLE_STRUCT: meta-share when enabled, otherwise only type ID
    *   <li>Other types: just the type ID
@@ -329,7 +330,7 @@ public abstract class TypeResolver {
       case Types.NAMED_EXT:
       case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
+        if (!metaContextShareEnabled) {
           Preconditions.checkNotNull(classInfo.namespaceBytes);
           metaStringResolver.writeMetaStringBytes(buffer, classInfo.namespaceBytes);
           Preconditions.checkNotNull(classInfo.typeNameBytes);
@@ -410,7 +411,7 @@ public abstract class TypeResolver {
       case Types.NAMED_EXT:
       case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
+        if (!metaContextShareEnabled) {
           classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
         } else {
           classInfo = readSharedClassMeta(buffer);
@@ -458,7 +459,7 @@ public abstract class TypeResolver {
       case Types.NAMED_EXT:
       case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
+        if (!metaContextShareEnabled) {
           classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
         } else {
           classInfo = readSharedClassMeta(buffer, targetClass);
@@ -512,7 +513,7 @@ public abstract class TypeResolver {
       case Types.NAMED_EXT:
       case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
+        if (!metaContextShareEnabled) {
           classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
         } else {
           classInfo = readSharedClassMeta(buffer);
@@ -565,7 +566,7 @@ public abstract class TypeResolver {
       case Types.NAMED_EXT:
       case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
+        if (!metaContextShareEnabled) {
           classInfo = readClassInfoFromBytes(buffer, classInfoHolder.classInfo, header);
           updateCache = true;
         } else {
@@ -963,6 +964,22 @@ public abstract class TypeResolver {
 
   public abstract <T> Serializer<T> getSerializer(Class<T> cls);
 
+  public final Serializer<?> getSerializer(TypeRef<?> typeRef) {
+    if (!fory.isCrossLanguage()) {
+      return getSerializer(typeRef.getRawType());
+    }
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (extMeta != null) {
+      return getSerializerByTypeId(extMeta.typeId());
+    }
+    Class<?> rawType = typeRef.getRawType();
+    int typeId = Types.getTypeId(fory, rawType);
+    if (typeId != Types.UNKNOWN) {
+      return getSerializerByTypeId(typeId);
+    }
+    return getSerializer(rawType);
+  }
+
   public abstract Serializer<?> getRawSerializer(Class<?> cls);
 
   public abstract <T> void setSerializer(Class<T> cls, Serializer<T> serializer);
@@ -978,22 +995,6 @@ public abstract class TypeResolver {
       }
     }
     return requireInternalTypeInfoByTypeId(internalTypeId).getSerializer();
-  }
-
-  public final Serializer<?> getSerializer(TypeRef<?> typeRef) {
-    if (!fory.isCrossLanguage()) {
-      return getSerializer(typeRef.getRawType());
-    }
-    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
-    if (extMeta != null) {
-      return getSerializerByTypeId(extMeta.typeId());
-    }
-    Class<?> rawType = typeRef.getRawType();
-    int typeId = Types.getTypeId(fory, rawType);
-    if (typeId != Types.UNKNOWN) {
-      return getSerializerByTypeId(typeId);
-    }
-    return getSerializer(rawType);
   }
 
   public final ClassInfo nilClassInfo() {

@@ -549,8 +549,7 @@ public class ClassResolver extends TypeResolver {
             GENERIC_ENCODER.encode(fullname, MetaString.Encoding.UTF_8));
     MetaStringBytes nsBytes =
         metaStringResolver.getOrCreateMetaStringBytes(encodePackage(namespace));
-    MetaStringBytes nameBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(encodeTypeName(name));
+    MetaStringBytes nameBytes = metaStringResolver.getOrCreateMetaStringBytes(encodeTypeName(name));
     int typeId = Types.NAMED_UNION;
     ClassInfo classInfo =
         new ClassInfo(cls, fullNameBytes, nsBytes, nameBytes, false, serializer, typeId);

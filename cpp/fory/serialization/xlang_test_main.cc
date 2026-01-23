@@ -1242,7 +1242,7 @@ void RunTestStringSerializer(const std::string &data_file) {
   auto fory = BuildFory(true, true);
   std::vector<std::string> test_strings = {
       "ab",     "Rust123", "Çüéâäàåçêëèïî", "こんにちは",
-      "Привет", "𝄞🎵🎶",     "Hello, 世界",
+      "Привет", "𝄞🎵🎶",   "Hello, 世界",
   };
 
   {

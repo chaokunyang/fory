@@ -170,7 +170,9 @@ template <typename T> inline bool is_null_value(const T &value) {
 }
 
 /// Get the inner/element type of a nullable type
-template <typename T> struct nullable_element_type { using type = T; };
+template <typename T> struct nullable_element_type {
+  using type = T;
+};
 
 template <typename T> struct nullable_element_type<std::optional<T>> {
   using type = T;

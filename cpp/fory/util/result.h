@@ -148,8 +148,8 @@ public:
 
   // Move constructor
   Result(Result &&other) noexcept(
-      std::is_nothrow_move_constructible<T>::value
-          &&std::is_nothrow_move_constructible<E>::value)
+      std::is_nothrow_move_constructible<T>::value &&
+      std::is_nothrow_move_constructible<E>::value)
       : has_value_(other.has_value_) {
     if (has_value_) {
       new (&storage_.value_) T(std::move(other.storage_.value_));
@@ -184,10 +184,10 @@ public:
 
   // Move assignment
   Result &operator=(Result &&other) noexcept(
-      std::is_nothrow_move_constructible<T>::value
-          &&std::is_nothrow_move_constructible<E>::value
-              &&std::is_nothrow_move_assignable<T>::value
-                  &&std::is_nothrow_move_assignable<E>::value) {
+      std::is_nothrow_move_constructible<T>::value &&
+      std::is_nothrow_move_constructible<E>::value &&
+      std::is_nothrow_move_assignable<T>::value &&
+      std::is_nothrow_move_assignable<E>::value) {
     if (this != &other) {
       if (has_value_ == other.has_value_) {
         // Same state - just move assign
@@ -398,8 +398,8 @@ public:
 
   // Move assignment
   Result &operator=(Result &&other) noexcept(
-      std::is_nothrow_move_constructible<E>::value
-          &&std::is_nothrow_move_assignable<E>::value) {
+      std::is_nothrow_move_constructible<E>::value &&
+      std::is_nothrow_move_assignable<E>::value) {
     if (this != &other) {
       if (has_value_ == other.has_value_) {
         if (!has_value_) {
@@ -560,8 +560,8 @@ public:
 
   // Move assignment
   Result &operator=(Result &&other) noexcept(
-      std::is_nothrow_move_constructible<E>::value
-          &&std::is_nothrow_move_assignable<E>::value) {
+      std::is_nothrow_move_constructible<E>::value &&
+      std::is_nothrow_move_assignable<E>::value) {
     if (this != &other) {
       if (has_value_ == other.has_value_) {
         if (has_value_) {

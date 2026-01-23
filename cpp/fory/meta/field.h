@@ -488,7 +488,9 @@ template <typename T>
 inline constexpr bool is_fory_field_v = is_fory_field<T>::value;
 
 /// Unwrap fory::field to get the underlying type
-template <typename T> struct unwrap_field { using type = T; };
+template <typename T> struct unwrap_field {
+  using type = T;
+};
 
 template <typename T, int16_t Id, typename... Options>
 struct unwrap_field<field<T, Id, Options...>> {

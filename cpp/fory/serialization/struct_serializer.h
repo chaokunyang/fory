@@ -926,15 +926,14 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   static inline constexpr std::array<size_t, FieldCount> snake_case_lengths =
       []() constexpr {
-    std::array<size_t, FieldCount> lengths{};
-    if constexpr (FieldCount > 0) {
-      for (size_t i = 0; i < FieldCount; ++i) {
-        lengths[i] = ::fory::snake_case_length(Names[i]);
-      }
-    }
-    return lengths;
-  }
-  ();
+        std::array<size_t, FieldCount> lengths{};
+        if constexpr (FieldCount > 0) {
+          for (size_t i = 0; i < FieldCount; ++i) {
+            lengths[i] = ::fory::snake_case_length(Names[i]);
+          }
+        }
+        return lengths;
+      }();
 
   static constexpr size_t compute_max_snake_length() {
     size_t max_length = 0;
@@ -954,32 +953,30 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr std::array<
       std::array<char, max_snake_case_length + 1>, FieldCount>
       snake_case_storage = []() constexpr {
-    std::array<std::array<char, max_snake_case_length + 1>, FieldCount>
-        storage{};
-    if constexpr (FieldCount > 0) {
-      for (size_t i = 0; i < FieldCount; ++i) {
-        const auto [buffer, length] =
-            ::fory::to_snake_case<max_snake_case_length>(Names[i]);
-        (void)length;
-        storage[i] = buffer;
-      }
-    }
-    return storage;
-  }
-  ();
+        std::array<std::array<char, max_snake_case_length + 1>, FieldCount>
+            storage{};
+        if constexpr (FieldCount > 0) {
+          for (size_t i = 0; i < FieldCount; ++i) {
+            const auto [buffer, length] =
+                ::fory::to_snake_case<max_snake_case_length>(Names[i]);
+            (void)length;
+            storage[i] = buffer;
+          }
+        }
+        return storage;
+      }();
 
   static inline constexpr std::array<std::string_view, FieldCount>
       snake_case_names = []() constexpr {
-    std::array<std::string_view, FieldCount> names{};
-    if constexpr (FieldCount > 0) {
-      for (size_t i = 0; i < FieldCount; ++i) {
-        names[i] = std::string_view(snake_case_storage[i].data(),
-                                    snake_case_lengths[i]);
-      }
-    }
-    return names;
-  }
-  ();
+        std::array<std::string_view, FieldCount> names{};
+        if constexpr (FieldCount > 0) {
+          for (size_t i = 0; i < FieldCount; ++i) {
+            names[i] = std::string_view(snake_case_storage[i].data(),
+                                        snake_case_lengths[i]);
+          }
+        }
+        return names;
+      }();
 
   static constexpr size_t tag_id_length(int16_t value) {
     size_t count = 1;
@@ -1030,33 +1027,32 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr std::array<
       std::array<char, max_identifier_length + 1>, FieldCount>
       identifier_storage = []() constexpr {
-    std::array<std::array<char, max_identifier_length + 1>, FieldCount>
-        storage{};
-    if constexpr (FieldCount > 0) {
-      for (size_t i = 0; i < FieldCount; ++i) {
-        size_t length = identifier_lengths[i];
-        if (field_ids[i] >= 0) {
-          int16_t value = field_ids[i];
-          int16_t divisor = 1;
-          for (size_t j = 1; j < length; ++j) {
-            divisor *= 10;
-          }
-          for (size_t pos = 0; pos < length; ++pos) {
-            int digit = (value / divisor) % 10;
-            storage[i][pos] = static_cast<char>('0' + digit);
-            divisor /= 10;
-          }
-        } else {
-          for (size_t pos = 0; pos < length; ++pos) {
-            storage[i][pos] = snake_case_storage[i][pos];
+        std::array<std::array<char, max_identifier_length + 1>, FieldCount>
+            storage{};
+        if constexpr (FieldCount > 0) {
+          for (size_t i = 0; i < FieldCount; ++i) {
+            size_t length = identifier_lengths[i];
+            if (field_ids[i] >= 0) {
+              int16_t value = field_ids[i];
+              int16_t divisor = 1;
+              for (size_t j = 1; j < length; ++j) {
+                divisor *= 10;
+              }
+              for (size_t pos = 0; pos < length; ++pos) {
+                int digit = (value / divisor) % 10;
+                storage[i][pos] = static_cast<char>('0' + digit);
+                divisor /= 10;
+              }
+            } else {
+              for (size_t pos = 0; pos < length; ++pos) {
+                storage[i][pos] = snake_case_storage[i][pos];
+              }
+            }
+            storage[i][length] = '\0';
           }
         }
-        storage[i][length] = '\0';
-      }
-    }
-    return storage;
-  }
-  ();
+        return storage;
+      }();
 
   static constexpr bool is_primitive_type_id(uint32_t tid) {
     return tid >= static_cast<uint32_t>(TypeId::BOOL) &&
@@ -1245,13 +1241,12 @@ template <typename T> struct CompileTimeFieldHelpers {
 
   static inline constexpr std::array<std::string_view, FieldCount>
       sorted_field_names = []() constexpr {
-    std::array<std::string_view, FieldCount> arr{};
-    for (size_t i = 0; i < FieldCount; ++i) {
-      arr[i] = snake_case_names[sorted_indices[i]];
-    }
-    return arr;
-  }
-  ();
+        std::array<std::string_view, FieldCount> arr{};
+        for (size_t i = 0; i < FieldCount; ++i) {
+          arr[i] = snake_case_names[sorted_indices[i]];
+        }
+        return arr;
+      }();
 
   /// Check if ALL fields are primitives and non-nullable (can use fast path)
   /// Also excludes fields that require ref metadata (smart pointers, optional)

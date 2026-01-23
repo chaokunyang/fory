@@ -119,7 +119,7 @@ class CppGenerator(BaseGenerator):
         includes: Set[str] = set()
         enum_macros: List[str] = []
         struct_macros: List[str] = []
-        union_serializers: List[str] = []
+        union_macros: List[str] = []
         field_config_macros: List[str] = []
         type_aliases: Dict[str, str] = {}
         definition_items = self.get_definition_order()
@@ -133,7 +133,7 @@ class CppGenerator(BaseGenerator):
             includes.add("<variant>")
             includes.add("<memory>")
             includes.add("<typeindex>")
-            includes.add('"fory/serialization/skip.h"')
+            includes.add('"fory/serialization/union_serializer.h"')
 
         for message in self.schema.messages:
             self.collect_message_includes(message, includes)
@@ -183,7 +183,7 @@ class CppGenerator(BaseGenerator):
                         item, [], struct_macros, type_aliases, ""
                     )
                 )
-                union_serializers.extend(self.generate_union_serializer(item, []))
+                union_macros.extend(self.generate_union_macros(item, []))
                 lines.append("")
                 continue
             lines.extend(
@@ -192,12 +192,12 @@ class CppGenerator(BaseGenerator):
                     [],
                     struct_macros,
                     enum_macros,
+                    union_macros,
                     field_config_macros,
                     type_aliases,
                     "",
                 )
             )
-            self.collect_union_serializers(item, [], union_serializers)
             lines.append("")
 
         if struct_macros:
@@ -208,12 +208,8 @@ class CppGenerator(BaseGenerator):
             lines.append(f"}} // namespace {namespace}")
             lines.append("")
 
-        if union_serializers:
-            lines.append("namespace fory {")
-            lines.append("namespace serialization {")
-            lines.extend(union_serializers)
-            lines.append("} // namespace serialization")
-            lines.append("} // namespace fory")
+        if union_macros:
+            lines.extend(union_macros)
             lines.append("")
 
         if type_aliases:
@@ -417,6 +413,7 @@ class CppGenerator(BaseGenerator):
         parent_stack: List[Message],
         struct_macros: List[str],
         enum_macros: List[str],
+        union_macros: List[str],
         field_config_macros: List[str],
         type_aliases: Dict[str, str],
         indent: str,
@@ -443,6 +440,7 @@ class CppGenerator(BaseGenerator):
                     lineage,
                     struct_macros,
                     enum_macros,
+                    union_macros,
                     field_config_macros,
                     type_aliases,
                     body_indent,
@@ -459,6 +457,9 @@ class CppGenerator(BaseGenerator):
                     type_aliases,
                     body_indent,
                 )
+            )
+            union_macros.extend(
+                self.generate_union_macros(nested_union, lineage)
             )
             lines.append("")
 
@@ -569,6 +570,12 @@ class CppGenerator(BaseGenerator):
         )
         lines.append(f"{body_indent}  }}")
         lines.append("")
+        lines.append(f"{body_indent}  uint32_t fory_case_id() const noexcept {{")
+        lines.append(
+            f"{body_indent}    return {self.to_snake_case(class_name)}_case_id();"
+        )
+        lines.append(f"{body_indent}  }}")
+        lines.append("")
 
         for field, case_type in zip(union.fields, case_types):
             case_snake = self.to_snake_case(field.name)
@@ -649,6 +656,37 @@ class CppGenerator(BaseGenerator):
             f"{body_indent}      : value_(tag, std::forward<Args>(args)...) {{}}"
         )
         lines.append(f"{indent}}};")
+
+        return lines
+
+    def generate_union_macros(
+        self,
+        union: Union,
+        parent_stack: List[Message],
+    ) -> List[str]:
+        """Generate FORY_UNION metadata macros for a union."""
+        if not union.fields:
+            return []
+
+        lines: List[str] = []
+        union_type = self.get_namespaced_type_name(union.name, parent_stack)
+        case_ids = ", ".join(str(field.number) for field in union.fields)
+        lines.append(f"FORY_UNION_IDS({union_type}, {case_ids});")
+
+        for field in union.fields:
+            case_type = self.generate_namespaced_type(
+                field.field_type,
+                False,
+                field.ref,
+                field.element_optional,
+                field.element_ref,
+                parent_stack,
+            )
+            case_ctor = self.to_snake_case(field.name)
+            meta = self.get_union_field_meta(field)
+            lines.append(
+                f"FORY_UNION_CASE({union_type}, {field.number}, {case_type}, {union_type}::{case_ctor}, {meta});"
+            )
 
         return lines
 
@@ -1003,6 +1041,21 @@ class CppGenerator(BaseGenerator):
         meta = "fory::FieldMeta{}"
         if field.tag_id is not None:
             meta += f".id({field.tag_id})"
+        if field.optional:
+            meta += ".nullable()"
+        if field.ref or field.element_ref or field.options.get("tracking_ref") is True:
+            meta += ".ref()"
+        encoding = self.get_encoding_config(field.field_type)
+        if encoding:
+            meta += encoding
+        array_type = self.get_array_type_config(field)
+        if array_type:
+            meta += array_type
+        return meta
+
+    def get_union_field_meta(self, field: Field) -> str:
+        """Build FieldMeta expression for a union case."""
+        meta = f"fory::FieldMeta{{}}.id({field.number})"
         if field.optional:
             meta += ".nullable()"
         if field.ref or field.element_ref or field.options.get("tracking_ref") is True:

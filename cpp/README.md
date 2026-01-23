@@ -135,6 +135,24 @@ auto fory = apache::fory::ForyBuilder().build();
 fory->register_struct<thirdparty::Foo>(1);
 ```
 
+### 1.2 Inherited Fields
+
+To include base-class fields in a derived type, use `FORY_BASE(Base)` inside
+`FORY_STRUCT`. The base must define its own `FORY_STRUCT` so its fields can be
+referenced.
+
+```cpp
+struct Base {
+  int32_t id;
+  FORY_STRUCT(Base, id);
+};
+
+struct Derived : Base {
+  std::string name;
+  FORY_STRUCT(Derived, FORY_BASE(Base), name);
+};
+```
+
 ### 2. Shared References
 
 Apache Fory™ automatically tracks and preserves reference identity for shared objects using `std::shared_ptr<T>`. When the same object is referenced multiple times, Fory serializes it only once and uses reference IDs for subsequent occurrences.

@@ -435,15 +435,40 @@ func isInternalTypeWithoutTypeMeta(t reflect.Type) bool {
 	return false
 }
 
-// isStructField checks if a type is a struct type (directly or via pointer)
+var (
+	unionGetterType = reflect.TypeOf((*UnionGetter)(nil)).Elem()
+	unionSetterType = reflect.TypeOf((*UnionSetter)(nil)).Elem()
+)
+
+// isUnionType checks if a type implements the union accessors.
+func isUnionType(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return false
+	}
+	if t.Implements(unionGetterType) || reflect.PtrTo(t).Implements(unionGetterType) {
+		return true
+	}
+	return t.Implements(unionSetterType) || reflect.PtrTo(t).Implements(unionSetterType)
+}
+
+// isStructField checks if a type is a struct type (directly or via pointer) excluding unions.
 func isStructField(t reflect.Type) bool {
+	if t == nil {
+		return false
+	}
+	if isUnionType(t) {
+		return false
+	}
 	if t.Kind() == reflect.Struct {
 		return true
 	}
-	if t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct {
-		return true
-	}
-	return false
+	return t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct
 }
 
 // isSetReflectType checks if a reflect.Type is a Set type (map[T]struct{})

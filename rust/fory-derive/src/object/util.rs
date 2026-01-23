@@ -639,7 +639,12 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
 
     quote! {
         {
-            let type_id = #get_type_id;
+            let mut type_id = #get_type_id;
+            let internal_type_id = type_id & 0xff;
+            if internal_type_id == fory_core::types::TypeId::TYPED_UNION as u32
+                || internal_type_id == fory_core::types::TypeId::NAMED_UNION as u32 {
+                type_id = fory_core::types::TypeId::UNION as u32;
+            }
             let mut generics = vec![#(#children_tokens),*] as Vec<fory_core::meta::FieldType>;
             // For tuples and sets, if no generic info is available, add UNKNOWN element
             // This handles type aliases to tuples where we can't detect the tuple at macro time
@@ -882,7 +887,7 @@ pub(super) fn get_primitive_reader_method_with_encoding(
     get_primitive_reader_method(type_name)
 }
 
-/// Check if a type is Option<i32>, Option<u32>, or Option<u64> that needs encoding-aware handling
+/// Check if a type is `Option<i32>`, `Option<u32>`, or `Option<u64>` that needs encoding-aware handling
 /// based on the field metadata (type_id attribute).
 pub(super) fn is_option_encoding_primitive(
     ty: &Type,
@@ -899,8 +904,8 @@ pub(super) fn is_option_encoding_primitive(
     false
 }
 
-/// Get the inner primitive name if the type is Option<primitive>
-/// Returns Some("u32"), Some("u64"), etc. for Option<u32>, Option<u64>, etc.
+/// Get the inner primitive name if the type is `Option<primitive>`
+/// Returns Some("u32"), Some("u64"), etc. for `Option<u32>`, `Option<u64>`, etc.
 pub(super) fn get_option_inner_primitive_name(ty: &Type) -> Option<&'static str> {
     use syn::PathArguments;
     if let Type::Path(type_path) = ty {
@@ -1309,6 +1314,10 @@ fn adjust_type_id_for_encoding(base_type_id: u32, meta: &super::field_meta::Fory
         return base_type_id;
     };
 
+    if explicit_type_id == TypeId::UNION as i16 {
+        return TypeId::UNION as u32;
+    }
+
     if explicit_type_id == TypeId::INT8_ARRAY as i16
         || explicit_type_id == TypeId::UINT8_ARRAY as i16
     {
@@ -1543,6 +1552,31 @@ pub(crate) fn is_skip_enum_variant(variant: &syn::Variant) -> bool {
             skip
         }
     })
+}
+
+pub(crate) fn enum_variant_id(variant: &syn::Variant) -> Option<u32> {
+    for attr in &variant.attrs {
+        if !attr.path().is_ident("fory") {
+            continue;
+        }
+        let mut id = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("id") {
+                if let Ok(value) = meta.value() {
+                    if let Ok(lit) = value.parse::<syn::LitInt>() {
+                        if let Ok(parsed) = lit.base10_parse::<u32>() {
+                            id = Some(parsed);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        });
+        if id.is_some() {
+            return id;
+        }
+    }
+    None
 }
 
 pub(crate) fn is_default_value_variant(variant: &syn::Variant) -> bool {

@@ -813,6 +813,11 @@ func (s *structSerializer) computeHash() int32 {
 					typeId = UNKNOWN
 				}
 			}
+			// Unions use UNION type ID in fingerprints, regardless of typed/named variants.
+			internalId := TypeId(typeId & 0xFF)
+			if internalId == TYPED_UNION || internalId == NAMED_UNION || internalId == UNION {
+				typeId = UNION
+			}
 			// For user-defined types (struct, ext types), use UNKNOWN in fingerprint
 			// This matches Java's behavior where user-defined types return UNKNOWN
 			// to ensure consistent fingerprint computation across languages

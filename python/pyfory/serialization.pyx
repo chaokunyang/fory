@@ -550,6 +550,24 @@ cdef class TypeResolver:
         )
         self._populate_typeinfo(typeinfo)
 
+    def register_union(
+            self,
+            cls: Union[type, TypeVar],
+            *,
+            type_id: int = None,
+            namespace: str = None,
+            typename: str = None,
+            serializer=None,
+    ):
+        typeinfo = self._resolver.register_union(
+            cls,
+            type_id=type_id,
+            namespace=namespace,
+            typename=typename,
+            serializer=serializer,
+        )
+        self._populate_typeinfo(typeinfo)
+
     cdef _populate_typeinfo(self, typeinfo):
         type_id = typeinfo.type_id
         if type_id >= self._c_registered_id_to_type_info.size():
@@ -638,9 +656,6 @@ cdef class TypeResolver:
             self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.typename_bytes)
 
     cpdef inline TypeInfo read_typeinfo(self, Buffer buffer):
-        if self.meta_share:
-            return self.read_shared_type_meta(buffer)
-
         cdef:
             int32_t type_id = buffer.read_varuint32()
         if type_id < 0:
@@ -650,6 +665,8 @@ cdef class TypeResolver:
         cdef:
             int32_t internal_type_id = type_id & 0xFF
             MetaStringBytes namespace_bytes, typename_bytes
+        if self.meta_share:
+            return self.serialization_context.meta_context.read_shared_typeinfo_with_type_id(buffer, type_id)
         if IsNamespacedType(internal_type_id):
             namespace_bytes = self.metastring_resolver.read_meta_string_bytes(buffer)
             typename_bytes = self.metastring_resolver.read_meta_string_bytes(buffer)
@@ -772,7 +789,11 @@ cdef class MetaContext:
 
     cpdef inline read_shared_typeinfo(self, Buffer buffer):
         """Read type info with streaming inline TypeDef."""
-        cdef type_id = buffer.read_varuint32()
+        cdef int32_t type_id = buffer.read_varuint32()
+        return self.read_shared_typeinfo_with_type_id(buffer, type_id)
+
+    cpdef inline read_shared_typeinfo_with_type_id(self, Buffer buffer, int32_t type_id):
+        """Read shared type info when type_id is already consumed."""
         if not IsTypeShareMeta(type_id & 0xFF):
             return self.type_resolver.get_typeinfo_by_id(type_id)
 
@@ -1118,6 +1139,18 @@ cdef class Fory:
             >>> fory.register_type(Person)
         """
         self.type_resolver.register_type(
+            cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
+
+    def register_union(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self.type_resolver.register_union(
             cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer)
 
     def dumps(

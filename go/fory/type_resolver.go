@@ -308,6 +308,11 @@ func (r *TypeResolver) IsXlang() bool {
 	return r.isXlang
 }
 
+// GetTypeInfo returns TypeInfo for the given value. This is exported for generated serializers.
+func (r *TypeResolver) GetTypeInfo(value reflect.Value, create bool) (*TypeInfo, error) {
+	return r.getTypeInfo(value, create)
+}
+
 func (r *TypeResolver) initialize() {
 	serializers := []struct {
 		reflect.Type
@@ -460,6 +465,48 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, fullTypeID uint32) err
 		return fmt.Errorf("unsupported type for ID registration: %v (use RegisterEnum for enum types)", type_.Kind())
 	}
 
+	return nil
+}
+
+// RegisterUnion registers a union type with a numeric type ID for cross-language serialization.
+// The fullTypeID should already be calculated as (user_id << 8) | TYPED_UNION.
+func (r *TypeResolver) RegisterUnion(type_ reflect.Type, fullTypeID uint32, serializer Serializer) error {
+	if serializer == nil {
+		return fmt.Errorf("RegisterUnion requires a non-nil serializer")
+	}
+	if info, ok := r.typeIDToTypeInfo[fullTypeID]; ok {
+		return fmt.Errorf("type %s with id %d has been registered", info.Type, fullTypeID)
+	}
+	if TypeId(fullTypeID&0xFF) != TYPED_UNION {
+		return fmt.Errorf("RegisterUnion requires internal type ID TYPED_UNION, got %d", fullTypeID&0xFF)
+	}
+	if type_.Kind() != reflect.Struct {
+		return fmt.Errorf("RegisterUnion only supports struct types; got: %v", type_.Kind())
+	}
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+	}
+
+	tag := type_.Name()
+	r.typeToSerializers[type_] = serializer
+	r.typeToTypeInfo[type_] = "@" + tag
+	r.typeInfoToType["@"+tag] = type_
+
+	ptrType := reflect.PtrTo(type_)
+	ptrSerializer := &ptrToValueSerializer{valueSerializer: serializer}
+	r.typeToSerializers[ptrType] = ptrSerializer
+	r.typeTagToSerializers[tag] = ptrSerializer
+	r.typeToTypeInfo[ptrType] = "*@" + tag
+	r.typeInfoToType["*@"+tag] = ptrType
+
+	_, err := r.registerType(type_, fullTypeID, "", "", serializer, false)
+	if err != nil {
+		return fmt.Errorf("failed to register union by ID: %w", err)
+	}
+	_, err = r.registerType(ptrType, fullTypeID, "", "", ptrSerializer, false)
+	if err != nil {
+		return fmt.Errorf("failed to register pointer union by ID: %w", err)
+	}
 	return nil
 }
 
@@ -621,6 +668,61 @@ func (r *TypeResolver) RegisterNamedStruct(
 	_, err = r.registerType(ptrType, typeId, namespace, typeName, nil, false)
 	if err != nil {
 		return fmt.Errorf("failed to register named structs: %w", err)
+	}
+	return nil
+}
+
+// RegisterNamedUnion registers a union type with a namespace and type name.
+// Union types always use NAMED_UNION and follow the same meta-share rules as other named types.
+func (r *TypeResolver) RegisterNamedUnion(
+	type_ reflect.Type,
+	namespace string,
+	typeName string,
+	serializer Serializer,
+) error {
+	if serializer == nil {
+		return fmt.Errorf("RegisterNamedUnion requires a non-nil serializer")
+	}
+	if prev, ok := r.typeToSerializers[type_]; ok {
+		return fmt.Errorf("type %s already has a serializer %s registered", type_, prev)
+	}
+	if type_.Kind() != reflect.Struct {
+		return fmt.Errorf("RegisterNamedUnion only supports struct types; got: %v", type_.Kind())
+	}
+	if namespace == "" {
+		if idx := strings.LastIndex(typeName, "."); idx != -1 {
+			namespace = typeName[:idx]
+			typeName = typeName[idx+1:]
+		}
+	}
+	if typeName == "" && namespace != "" {
+		return fmt.Errorf("typeName cannot be empty if namespace is provided")
+	}
+	var tag string
+	if namespace == "" {
+		tag = typeName
+	} else {
+		tag = namespace + "." + typeName
+	}
+	r.typeToSerializers[type_] = serializer
+	r.typeToTypeInfo[type_] = "@" + tag
+	r.typeInfoToType["@"+tag] = type_
+
+	ptrType := reflect.PtrTo(type_)
+	ptrSerializer := &ptrToValueSerializer{valueSerializer: serializer}
+	r.typeToSerializers[ptrType] = ptrSerializer
+	r.typeTagToSerializers[tag] = ptrSerializer
+	r.typeToTypeInfo[ptrType] = "*@" + tag
+	r.typeInfoToType["*@"+tag] = ptrType
+
+	typeId := uint32(NAMED_UNION)
+	_, err := r.registerType(type_, typeId, namespace, typeName, serializer, false)
+	if err != nil {
+		return fmt.Errorf("failed to register union by name: %w", err)
+	}
+	_, err = r.registerType(ptrType, typeId, namespace, typeName, ptrSerializer, false)
+	if err != nil {
+		return fmt.Errorf("failed to register pointer union by name: %w", err)
 	}
 	return nil
 }
@@ -1163,7 +1265,7 @@ func (r *TypeResolver) WriteTypeInfo(buffer *ByteBuffer, typeInfo *TypeInfo, err
 
 	// Handle type meta based on internal type ID (matching Java XtypeResolver.writeClassInfo)
 	switch internalTypeID {
-	case NAMED_ENUM, NAMED_STRUCT, NAMED_EXT:
+	case NAMED_ENUM, NAMED_STRUCT, NAMED_EXT, NAMED_UNION:
 		if r.metaShareEnabled() {
 			r.writeSharedTypeMeta(buffer, typeInfo, err)
 			return
@@ -1716,7 +1818,7 @@ func (r *TypeResolver) ReadTypeInfo(buffer *ByteBuffer, err *Error) *TypeInfo {
 
 	// Handle type meta based on internal type ID (matching Java XtypeResolver.readClassInfo)
 	switch internalTypeID {
-	case NAMED_ENUM, NAMED_STRUCT, NAMED_EXT:
+	case NAMED_ENUM, NAMED_STRUCT, NAMED_EXT, NAMED_UNION:
 		if r.metaShareEnabled() {
 			return r.readSharedTypeMeta(buffer, err)
 		}

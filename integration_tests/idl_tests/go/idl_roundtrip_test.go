@@ -37,6 +37,15 @@ func buildAddressBook() AddressBook {
 		PhoneType: Person_PhoneTypeWork,
 	}
 
+	pet := DogAnimal(&Dog{
+		Name:       "Rex",
+		BarkVolume: 5,
+	})
+	pet = CatAnimal(&Cat{
+		Name:  "Mimi",
+		Lives: 9,
+	})
+
 	person := Person{
 		Name:   "Alice",
 		Id:     123,
@@ -45,6 +54,7 @@ func buildAddressBook() AddressBook {
 		Scores: map[string]int32{"math": 100, "science": 98},
 		Salary: 120000.5,
 		Phones: []Person_PhoneNumber{mobile, work},
+		Pet:    pet,
 	}
 
 	return AddressBook{
@@ -126,6 +136,8 @@ func runFileRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
 }
 
 func buildPrimitiveTypes() PrimitiveTypes {
+	contact := EmailPrimitiveTypes_Contact("alice@example.com")
+	contact = PhonePrimitiveTypes_Contact(12345)
 	return PrimitiveTypes{
 		BoolValue:         true,
 		Int8Value:         12,
@@ -145,6 +157,7 @@ func buildPrimitiveTypes() PrimitiveTypes {
 		Float16Value:      1.5,
 		Float32Value:      2.5,
 		Float64Value:      3.5,
+		Contact:           &contact,
 	}
 }
 
@@ -265,6 +278,8 @@ func buildContainer() complexfbs.Container {
 		D:  2.5,
 		Ok: true,
 	}
+	payload := complexfbs.NotePayload(&complexfbs.Note{Text: "alpha"})
+	payload = complexfbs.MetricPayload(&complexfbs.Metric{Value: 42.0})
 	return complexfbs.Container{
 		Id:      9876543210,
 		Status:  complexfbs.StatusStarted,
@@ -273,6 +288,7 @@ func buildContainer() complexfbs.Container {
 		Scalars: scalars,
 		Names:   []string{"alpha", "beta"},
 		Flags:   []bool{true, false},
+		Payload: payload,
 	}
 }
 

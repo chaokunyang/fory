@@ -84,52 +84,56 @@ const (
 	EXT = 29
 	// NAMED_EXT an ext type whose type mapping will be encoded as a name
 	NAMED_EXT = 30
-	// UNION an union type that can hold different types of values
+	// UNION a union value whose schema identity is not embedded
 	UNION = 31
+	// TYPED_UNION a union value with embedded numeric union type ID
+	TYPED_UNION = 32
+	// NAMED_UNION a union value with embedded union type name/TypeDef
+	NAMED_UNION = 33
 	// NONE a null value with no data
-	NONE = 32
+	NONE = 34
 	// DURATION Measure of elapsed time in either seconds milliseconds microseconds
-	DURATION = 33
+	DURATION = 35
 	// TIMESTAMP Exact timestamp encoded with int64 since UNIX epoch
-	TIMESTAMP = 34
+	TIMESTAMP = 36
 	// LOCAL_DATE a naive date without timezone
-	LOCAL_DATE = 35
+	LOCAL_DATE = 37
 	// DECIMAL Precision- and scale-based decimal type
-	DECIMAL = 36
+	DECIMAL = 38
 	// BINARY Variable-length bytes (no guarantee of UTF8-ness)
-	BINARY = 37
+	BINARY = 39
 	// ARRAY a multidimensional array which every sub-array can have different sizes but all have the same type
-	ARRAY = 38
+	ARRAY = 40
 	// BOOL_ARRAY one dimensional bool array
-	BOOL_ARRAY = 39
+	BOOL_ARRAY = 41
 	// INT8_ARRAY one dimensional int8 array
-	INT8_ARRAY = 40
+	INT8_ARRAY = 42
 	// INT16_ARRAY one dimensional int16 array
-	INT16_ARRAY = 41
+	INT16_ARRAY = 43
 	// INT32_ARRAY one dimensional int32 array
-	INT32_ARRAY = 42
+	INT32_ARRAY = 44
 	// INT64_ARRAY one dimensional int64 array
-	INT64_ARRAY = 43
+	INT64_ARRAY = 45
 	// UINT8_ARRAY one dimensional uint8 array
-	UINT8_ARRAY = 44
+	UINT8_ARRAY = 46
 	// UINT16_ARRAY one dimensional uint16 array
-	UINT16_ARRAY = 45
+	UINT16_ARRAY = 47
 	// UINT32_ARRAY one dimensional uint32 array
-	UINT32_ARRAY = 46
+	UINT32_ARRAY = 48
 	// UINT64_ARRAY one dimensional uint64 array
-	UINT64_ARRAY = 47
+	UINT64_ARRAY = 49
 	// FLOAT16_ARRAY one dimensional float16 array
-	FLOAT16_ARRAY = 48
+	FLOAT16_ARRAY = 50
 	// FLOAT32_ARRAY one dimensional float32 array
-	FLOAT32_ARRAY = 49
+	FLOAT32_ARRAY = 51
 	// FLOAT64_ARRAY one dimensional float64 array
-	FLOAT64_ARRAY = 50
+	FLOAT64_ARRAY = 52
 )
 
 // IsNamespacedType checks whether the given type ID is a namespace type
 func IsNamespacedType(typeID TypeId) bool {
 	switch typeID & 0xFF {
-	case NAMED_EXT, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT:
+	case NAMED_EXT, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_UNION:
 		return true
 	default:
 		return false
@@ -141,7 +145,7 @@ func IsNamespacedType(typeID TypeId) bool {
 func NeedsTypeMetaWrite(typeID TypeId) bool {
 	internalID := typeID & 0xFF
 	switch TypeId(internalID) {
-	case NAMED_EXT, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, COMPATIBLE_STRUCT, STRUCT:
+	case NAMED_EXT, NAMED_ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_UNION, COMPATIBLE_STRUCT, STRUCT:
 		return true
 	default:
 		return false
@@ -181,7 +185,7 @@ func NeedWriteRef(typeID TypeId) bool {
 	switch typeID {
 	case BOOL, INT8, INT16, INT32, INT64, VARINT32, VARINT64, TAGGED_INT64,
 		FLOAT32, FLOAT64, FLOAT16,
-		STRING, TIMESTAMP, LOCAL_DATE, DURATION:
+		STRING, TIMESTAMP, LOCAL_DATE, DURATION, NONE:
 		return false
 	default:
 		return true
@@ -270,7 +274,9 @@ func isUserDefinedType(typeID int16) bool {
 		id == EXT ||
 		id == NAMED_EXT ||
 		id == ENUM ||
-		id == NAMED_ENUM
+		id == NAMED_ENUM ||
+		id == TYPED_UNION ||
+		id == NAMED_UNION
 }
 
 // ============================================================================

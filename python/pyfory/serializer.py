@@ -77,7 +77,7 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         EnumSerializer,
         SliceSerializer,
     )
-    from pyfory._serializer import UnionSerializer  # noqa: F401
+    from pyfory.union import UnionSerializer  # noqa: F401
 else:
     from pyfory._serializer import (  # noqa: F401 # pylint: disable=unused-import
         Serializer,
@@ -106,8 +106,8 @@ else:
         TimestampSerializer,
         EnumSerializer,
         SliceSerializer,
-        UnionSerializer,
     )
+    from pyfory.union import UnionSerializer  # noqa: F401
     from pyfory.collection import (
         CollectionSerializer,
         ListSerializer,

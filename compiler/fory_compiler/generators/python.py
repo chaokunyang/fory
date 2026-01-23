@@ -255,9 +255,7 @@ class PythonGenerator(BaseGenerator):
 
         # Generate nested unions
         for nested_union in message.nested_unions:
-            for line in self.generate_union(
-                nested_union, indent=indent + 1, parent_stack=lineage
-            ):
+            for line in self.generate_union(nested_union, indent=indent + 1, parent_stack=lineage):
                 lines.append(line)
             lines.append("")
 
@@ -272,12 +270,7 @@ class PythonGenerator(BaseGenerator):
             lines.append("")
 
         # Generate fields
-        if (
-            not message.fields
-            and not message.nested_enums
-            and not message.nested_unions
-            and not message.nested_messages
-        ):
+        if not message.fields and not message.nested_enums and not message.nested_unions and not message.nested_messages:
             lines.append(f"{ind}    pass")
             return lines
 
@@ -287,9 +280,7 @@ class PythonGenerator(BaseGenerator):
                 lines.append(f"{ind}    {line}")
 
         # If there are nested types but no fields, add pass to avoid empty class body issues
-        if not message.fields and (
-            message.nested_enums or message.nested_unions or message.nested_messages
-        ):
+        if not message.fields and (message.nested_enums or message.nested_unions or message.nested_messages):
             lines.append(f"{ind}    pass")
 
         return lines
@@ -307,9 +298,7 @@ class PythonGenerator(BaseGenerator):
         if parent_stack:
             parent_path = ".".join([msg.name for msg in parent_stack])
         case_enum = f"{union.name}Case"
-        case_enum_ref = (
-            f"{parent_path}.{case_enum}" if parent_path else case_enum
-        )
+        case_enum_ref = f"{parent_path}.{case_enum}" if parent_path else case_enum
         union_ref = f"{parent_path}.{union.name}" if parent_path else union.name
 
         lines.append(f"{ind}class {case_enum}(Enum):")
@@ -319,11 +308,9 @@ class PythonGenerator(BaseGenerator):
         lines.append("")
 
         lines.append(f"{ind}class {union.name}(Union):")
-        lines.append(f"{ind}    __slots__ = (\"_case\",)")
+        lines.append(f'{ind}    __slots__ = ("_case",)')
         lines.append("")
-        lines.append(
-            f"{ind}    def __init__(self, case: {case_enum_ref}, value: object) -> None:"
-        )
+        lines.append(f"{ind}    def __init__(self, case: {case_enum_ref}, value: object) -> None:")
         lines.append(f"{ind}        super().__init__(case.value, value)")
         lines.append(f"{ind}        self._case = case")
         lines.append(f"{ind}        self._validate()")
@@ -334,27 +321,17 @@ class PythonGenerator(BaseGenerator):
             case_name = self.to_upper_snake_case(field.name)
             case_type = self.get_union_case_type(field, parent_stack)
             lines.append(f"{ind}    @classmethod")
-            lines.append(
-                f"{ind}    def {method_name}(cls, v: {case_type}) -> \"{union_ref}\":"
-            )
+            lines.append(f'{ind}    def {method_name}(cls, v: {case_type}) -> "{union_ref}":')
             lines.append(f"{ind}        return cls({case_enum_ref}.{case_name}, v)")
             lines.append("")
 
         lines.append(f"{ind}    @classmethod")
-        lines.append(
-            f"{ind}    def _from_case_id(cls, case_id: int, value: object) -> \"{union_ref}\":"
-        )
+        lines.append(f'{ind}    def _from_case_id(cls, case_id: int, value: object) -> "{union_ref}":')
         for field in union.fields:
             case_name = self.to_upper_snake_case(field.name)
-            lines.append(
-                f"{ind}        if case_id == {case_enum_ref}.{case_name}.value:"
-            )
-            lines.append(
-                f"{ind}            return cls({case_enum_ref}.{case_name}, value)"
-            )
-        lines.append(
-            f"{ind}        raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
-        )
+            lines.append(f"{ind}        if case_id == {case_enum_ref}.{case_name}.value:")
+            lines.append(f"{ind}            return cls({case_enum_ref}.{case_name}, value)")
+        lines.append(f'{ind}        raise ValueError("unknown {union.name} case id: {{}}".format(case_id))')
         lines.append("")
 
         lines.append(f"{ind}    def _validate(self) -> None:")
@@ -365,12 +342,8 @@ class PythonGenerator(BaseGenerator):
             check_expr = self.get_union_case_check(field, parent_stack)
             if check_expr:
                 has_checks = True
-                lines.append(
-                    f"{ind}        if self._case == {case_enum_ref}.{case_name} and not {check_expr}:"
-                )
-                lines.append(
-                    f"{ind}            raise TypeError(\"{union.name}.{self.to_snake_case(field.name)}(...) requires {case_type}\")"
-                )
+                lines.append(f"{ind}        if self._case == {case_enum_ref}.{case_name} and not {check_expr}:")
+                lines.append(f'{ind}            raise TypeError("{union.name}.{self.to_snake_case(field.name)}(...) requires {case_type}")')
         if not union.fields or not has_checks:
             lines.append(f"{ind}        pass")
         lines.append("")
@@ -392,20 +365,12 @@ class PythonGenerator(BaseGenerator):
             method_name = self.to_snake_case(field.name)
             case_type = self.get_union_case_type(field, parent_stack)
             lines.append(f"{ind}    def is_{method_name}(self) -> bool:")
-            lines.append(
-                f"{ind}        return self._case == {case_enum_ref}.{case_name}"
-            )
+            lines.append(f"{ind}        return self._case == {case_enum_ref}.{case_name}")
             lines.append("")
             lines.append(f"{ind}    def {method_name}_value(self) -> {case_type}:")
-            lines.append(
-                f"{ind}        if self._case != {case_enum_ref}.{case_name}:"
-            )
-            lines.append(
-                f"{ind}            raise ValueError(\"{union.name} is not {case_name.lower()}\")"
-            )
-            lines.append(
-                f"{ind}        return cast({case_type}, self._value)"
-            )
+            lines.append(f"{ind}        if self._case != {case_enum_ref}.{case_name}:")
+            lines.append(f'{ind}            raise ValueError("{union.name} is not {case_name.lower()}")')
+            lines.append(f"{ind}        return cast({case_type}, self._value)")
             lines.append("")
             lines.append(f"{ind}    def set_{method_name}(self, v: {case_type}) -> None:")
             lines.append(f"{ind}        self._case = {case_enum_ref}.{case_name}")
@@ -431,10 +396,6 @@ class PythonGenerator(BaseGenerator):
         parent_path = ""
         if parent_stack:
             parent_path = ".".join([msg.name for msg in parent_stack])
-        case_enum = f"{union.name}Case"
-        case_enum_ref = (
-            f"{parent_path}.{case_enum}" if parent_path else case_enum
-        )
         union_ref = f"{parent_path}.{union.name}" if parent_path else union.name
 
         lines.append(f"{ind}class {serializer_name}(UnionSerializer):")
@@ -500,10 +461,7 @@ class PythonGenerator(BaseGenerator):
         """Return True if a list should be represented as a numpy array."""
         if not isinstance(field_type.element_type, PrimitiveType):
             return False
-        return (
-            field_type.element_type.kind in self.ARRAY_TYPE_HINTS
-            and not element_optional
-        )
+        return field_type.element_type.kind in self.ARRAY_TYPE_HINTS and not element_optional
 
     def get_default_factory(self, field: Field) -> Optional[str]:
         """Get default factory name for list/map fields."""
@@ -570,12 +528,8 @@ class PythonGenerator(BaseGenerator):
             return list_type
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(
-                field_type.key_type, False, False, parent_stack
-            )
-            value_type = self.generate_type(
-                field_type.value_type, False, False, parent_stack
-            )
+            key_type = self.generate_type(field_type.key_type, False, False, parent_stack)
+            value_type = self.generate_type(field_type.value_type, False, False, parent_stack)
             map_type = f"Dict[{key_type}, {value_type}]"
             if nullable:
                 return f"Optional[{map_type}]"
@@ -583,9 +537,7 @@ class PythonGenerator(BaseGenerator):
 
         return "object"
 
-    def get_union_case_type(
-        self, field: Field, parent_stack: Optional[List[Message]] = None
-    ) -> str:
+    def get_union_case_type(self, field: Field, parent_stack: Optional[List[Message]] = None) -> str:
         """Return the Python type name for a union case."""
         return self.generate_type(
             field.field_type,
@@ -594,9 +546,7 @@ class PythonGenerator(BaseGenerator):
             parent_stack=parent_stack,
         )
 
-    def get_union_case_check(
-        self, field: Field, parent_stack: Optional[List[Message]] = None
-    ) -> Optional[str]:
+    def get_union_case_check(self, field: Field, parent_stack: Optional[List[Message]] = None) -> Optional[str]:
         """Return an isinstance expression to validate a union case value."""
         return self.get_union_case_runtime_check(field, parent_stack, "self._value")
 
@@ -624,9 +574,7 @@ class PythonGenerator(BaseGenerator):
             if base == "datetime.datetime":
                 return f"isinstance({value_expr}, datetime.datetime)"
         if isinstance(field.field_type, NamedType):
-            type_name = self.resolve_nested_type_name(
-                field.field_type.name, parent_stack
-            )
+            type_name = self.resolve_nested_type_name(field.field_type.name, parent_stack)
             return f"isinstance({value_expr}, {type_name})"
         return None
 
@@ -685,10 +633,7 @@ class PythonGenerator(BaseGenerator):
         elif isinstance(field_type, ListType):
             # Add numpy import for primitive arrays
             if isinstance(field_type.element_type, PrimitiveType):
-                if (
-                    field_type.element_type.kind in self.ARRAY_TYPE_HINTS
-                    and not element_optional
-                ):
+                if field_type.element_type.kind in self.ARRAY_TYPE_HINTS and not element_optional:
                     imports.add("import numpy as np")
                     return
             self.collect_imports(field_type.element_type, imports)
@@ -726,9 +671,7 @@ class PythonGenerator(BaseGenerator):
 
         return lines
 
-    def generate_enum_registration(
-        self, lines: List[str], enum: Enum, parent_path: str
-    ):
+    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_path: str):
         """Generate registration code for an enum."""
         # In Python, nested class references use Outer.Inner syntax
         class_ref = f"{parent_path}.{enum.name}" if parent_path else enum.name
@@ -738,27 +681,19 @@ class PythonGenerator(BaseGenerator):
             lines.append(f"    fory.register_type({class_ref}, type_id={enum.type_id})")
         else:
             ns = self.package or "default"
-            lines.append(
-                f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")'
-            )
+            lines.append(f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")')
 
-    def generate_message_registration(
-        self, lines: List[str], message: Message, parent_path: str
-    ):
+    def generate_message_registration(self, lines: List[str], message: Message, parent_path: str):
         """Generate registration code for a message and its nested types."""
         # In Python, nested class references use Outer.Inner syntax
         class_ref = f"{parent_path}.{message.name}" if parent_path else message.name
         type_name = class_ref if parent_path else message.name
 
         if message.type_id is not None:
-            lines.append(
-                f"    fory.register_type({class_ref}, type_id={message.type_id})"
-            )
+            lines.append(f"    fory.register_type({class_ref}, type_id={message.type_id})")
         else:
             ns = self.package or "default"
-            lines.append(
-                f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")'
-            )
+            lines.append(f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")')
 
         # Register nested enums
         for nested_enum in message.nested_enums:
@@ -772,22 +707,14 @@ class PythonGenerator(BaseGenerator):
         for nested_msg in message.nested_messages:
             self.generate_message_registration(lines, nested_msg, class_ref)
 
-    def generate_union_registration(
-        self, lines: List[str], union: Union, parent_path: str
-    ):
+    def generate_union_registration(self, lines: List[str], union: Union, parent_path: str):
         """Generate registration code for a union."""
         class_ref = f"{parent_path}.{union.name}" if parent_path else union.name
         type_name = class_ref if parent_path else union.name
-        serializer_ref = (
-            f"{parent_path}.{union.name}Serializer" if parent_path else f"{union.name}Serializer"
-        )
+        serializer_ref = f"{parent_path}.{union.name}Serializer" if parent_path else f"{union.name}Serializer"
 
         if union.type_id is not None:
-            lines.append(
-                f"    fory.register_union({class_ref}, type_id={union.type_id}, serializer={serializer_ref}(fory))"
-            )
+            lines.append(f"    fory.register_union({class_ref}, type_id={union.type_id}, serializer={serializer_ref}(fory))")
         else:
             ns = self.package or "default"
-            lines.append(
-                f'    fory.register_union({class_ref}, namespace="{ns}", typename="{type_name}", serializer={serializer_ref}(fory))'
-            )
+            lines.append(f'    fory.register_union({class_ref}, namespace="{ns}", typename="{type_name}", serializer={serializer_ref}(fory))')

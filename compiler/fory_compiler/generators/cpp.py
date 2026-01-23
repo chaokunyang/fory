@@ -173,11 +173,7 @@ class CppGenerator(BaseGenerator):
         # Generate top-level unions/messages in dependency order
         for kind, item in definition_items:
             if kind == "union":
-                lines.extend(
-                    self.generate_union_definition(
-                        item, [], struct_macros, ""
-                    )
-                )
+                lines.extend(self.generate_union_definition(item, [], struct_macros, ""))
                 union_macros.extend(self.generate_union_macros(item, []))
                 lines.append("")
                 continue
@@ -314,9 +310,7 @@ class CppGenerator(BaseGenerator):
 
         return ordered
 
-    def collect_message_dependencies(
-        self, message: Message, parent_stack: List[Message], deps: Set[str]
-    ) -> None:
+    def collect_message_dependencies(self, message: Message, parent_stack: List[Message], deps: Set[str]) -> None:
         """Collect top-level type dependencies for a message."""
         lineage = parent_stack + [message]
         for field in message.fields:
@@ -326,16 +320,12 @@ class CppGenerator(BaseGenerator):
         for nested_msg in message.nested_messages:
             self.collect_message_dependencies(nested_msg, lineage, deps)
 
-    def collect_union_dependencies(
-        self, union: Union, parent_stack: List[Message], deps: Set[str]
-    ) -> None:
+    def collect_union_dependencies(self, union: Union, parent_stack: List[Message], deps: Set[str]) -> None:
         """Collect top-level type dependencies for a union."""
         for field in union.fields:
             self.collect_type_dependencies(field.field_type, parent_stack, deps)
 
-    def collect_type_dependencies(
-        self, field_type: FieldType, parent_stack: List[Message], deps: Set[str]
-    ) -> None:
+    def collect_type_dependencies(self, field_type: FieldType, parent_stack: List[Message], deps: Set[str]) -> None:
         if isinstance(field_type, PrimitiveType):
             return
         if isinstance(field_type, NamedType):
@@ -346,18 +336,14 @@ class CppGenerator(BaseGenerator):
             deps.add(top_level)
             return
         if isinstance(field_type, ListType):
-            self.collect_type_dependencies(
-                field_type.element_type, parent_stack, deps
-            )
+            self.collect_type_dependencies(field_type.element_type, parent_stack, deps)
             return
         if isinstance(field_type, MapType):
             self.collect_type_dependencies(field_type.key_type, parent_stack, deps)
             self.collect_type_dependencies(field_type.value_type, parent_stack, deps)
             return
 
-    def is_nested_type_reference(
-        self, type_name: str, parent_stack: List[Message]
-    ) -> bool:
+    def is_nested_type_reference(self, type_name: str, parent_stack: List[Message]) -> bool:
         if not parent_stack:
             return False
         root_name = parent_stack[0].name
@@ -444,9 +430,7 @@ class CppGenerator(BaseGenerator):
                     body_indent,
                 )
             )
-            union_macros.extend(
-                self.generate_union_macros(nested_union, lineage)
-            )
+            union_macros.extend(self.generate_union_macros(nested_union, lineage))
             lines.append("")
 
         for field in message.fields:
@@ -463,9 +447,7 @@ class CppGenerator(BaseGenerator):
 
         lines.append("")
 
-        lines.append(
-            f"{body_indent}bool operator==(const {class_name}& other) const {{"
-        )
+        lines.append(f"{body_indent}bool operator==(const {class_name}& other) const {{")
         if message.fields:
             conditions = []
             for field in message.fields:
@@ -482,14 +464,8 @@ class CppGenerator(BaseGenerator):
         if message.fields:
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
             struct_macros.append(f"FORY_STRUCT({struct_type_name}, {field_names});")
-            field_config_type_name = self.get_field_config_type_and_alias(
-                message.name, parent_stack
-            )
-            field_config_macros.append(
-                self.generate_field_config_macro(
-                    message, field_config_type_name[0], field_config_type_name[1]
-                )
-            )
+            field_config_type_name = self.get_field_config_type_and_alias(message.name, parent_stack)
+            field_config_macros.append(self.generate_field_config_macro(message, field_config_type_name[0], field_config_type_name[1]))
         else:
             struct_macros.append(f"FORY_STRUCT({struct_type_name});")
 
@@ -506,12 +482,9 @@ class CppGenerator(BaseGenerator):
         lines: List[str] = []
         class_name = union.name
         body_indent = f"{indent}  "
-        field_indent = f"{indent}    "
 
         case_enum = f"{class_name}Case"
-        case_types = [
-            self.get_union_case_type(field, parent_stack) for field in union.fields
-        ]
+        case_types = [self.get_union_case_type(field, parent_stack) for field in union.fields]
         variant_type = f"std::variant<{', '.join(case_types)}>"
 
         lines.append(f"{indent}class {class_name} final {{")
@@ -528,12 +501,8 @@ class CppGenerator(BaseGenerator):
 
         for field, case_type in zip(union.fields, case_types):
             case_name = self.to_snake_case(field.name)
-            lines.append(
-                f"{body_indent}  static {class_name} {case_name}({case_type} v) {{"
-            )
-            lines.append(
-                f"{body_indent}    return {class_name}(std::in_place_type<{case_type}>, std::move(v));"
-            )
+            lines.append(f"{body_indent}  static {class_name} {case_name}({case_type} v) {{")
+            lines.append(f"{body_indent}    return {class_name}(std::in_place_type<{case_type}>, std::move(v));")
             lines.append(f"{body_indent}  }}")
             lines.append("")
 
@@ -541,93 +510,55 @@ class CppGenerator(BaseGenerator):
         for i, (field, case_type) in enumerate(zip(union.fields, case_types)):
             case_name = self.to_upper_snake_case(field.name)
             if i < len(case_types) - 1:
-                lines.append(
-                    f"{body_indent}    if (std::holds_alternative<{case_type}>(value_)) return {case_enum}::{case_name};"
-                )
+                lines.append(f"{body_indent}    if (std::holds_alternative<{case_type}>(value_)) return {case_enum}::{case_name};")
             else:
                 lines.append(f"{body_indent}    return {case_enum}::{case_name};")
         lines.append(f"{body_indent}  }}")
         lines.append("")
 
-        lines.append(
-            f"{body_indent}  uint32_t {self.to_snake_case(class_name)}_case_id() const noexcept {{"
-        )
-        lines.append(
-            f"{body_indent}    return static_cast<uint32_t>({self.to_snake_case(class_name)}_case());"
-        )
+        lines.append(f"{body_indent}  uint32_t {self.to_snake_case(class_name)}_case_id() const noexcept {{")
+        lines.append(f"{body_indent}    return static_cast<uint32_t>({self.to_snake_case(class_name)}_case());")
         lines.append(f"{body_indent}  }}")
         lines.append("")
         lines.append(f"{body_indent}  uint32_t fory_case_id() const noexcept {{")
-        lines.append(
-            f"{body_indent}    return {self.to_snake_case(class_name)}_case_id();"
-        )
+        lines.append(f"{body_indent}    return {self.to_snake_case(class_name)}_case_id();")
         lines.append(f"{body_indent}  }}")
         lines.append("")
 
         for field, case_type in zip(union.fields, case_types):
             case_snake = self.to_snake_case(field.name)
-            lines.append(
-                f"{body_indent}  bool is_{case_snake}() const noexcept {{"
-            )
-            lines.append(
-                f"{body_indent}    return std::holds_alternative<{case_type}>(value_);"
-            )
+            lines.append(f"{body_indent}  bool is_{case_snake}() const noexcept {{")
+            lines.append(f"{body_indent}    return std::holds_alternative<{case_type}>(value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
-            lines.append(
-                f"{body_indent}  const {case_type}* as_{case_snake}() const noexcept {{"
-            )
-            lines.append(
-                f"{body_indent}    return std::get_if<{case_type}>(&value_);"
-            )
+            lines.append(f"{body_indent}  const {case_type}* as_{case_snake}() const noexcept {{")
+            lines.append(f"{body_indent}    return std::get_if<{case_type}>(&value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
-            lines.append(
-                f"{body_indent}  {case_type}* as_{case_snake}() noexcept {{"
-            )
-            lines.append(
-                f"{body_indent}    return std::get_if<{case_type}>(&value_);"
-            )
+            lines.append(f"{body_indent}  {case_type}* as_{case_snake}() noexcept {{")
+            lines.append(f"{body_indent}    return std::get_if<{case_type}>(&value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
-            lines.append(
-                f"{body_indent}  const {case_type}& {case_snake}() const {{"
-            )
-            lines.append(
-                f"{body_indent}    return std::get<{case_type}>(value_);"
-            )
+            lines.append(f"{body_indent}  const {case_type}& {case_snake}() const {{")
+            lines.append(f"{body_indent}    return std::get<{case_type}>(value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
-            lines.append(
-                f"{body_indent}  {case_type}& {case_snake}() {{"
-            )
-            lines.append(
-                f"{body_indent}    return std::get<{case_type}>(value_);"
-            )
+            lines.append(f"{body_indent}  {case_type}& {case_snake}() {{")
+            lines.append(f"{body_indent}    return std::get<{case_type}>(value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
 
         lines.append(f"{body_indent}  template <class Visitor>")
-        lines.append(
-            f"{body_indent}  decltype(auto) visit(Visitor&& vis) const {{"
-        )
-        lines.append(
-            f"{body_indent}    return std::visit(std::forward<Visitor>(vis), value_);"
-        )
+        lines.append(f"{body_indent}  decltype(auto) visit(Visitor&& vis) const {{")
+        lines.append(f"{body_indent}    return std::visit(std::forward<Visitor>(vis), value_);")
         lines.append(f"{body_indent}  }}")
         lines.append("")
         lines.append(f"{body_indent}  template <class Visitor>")
-        lines.append(
-            f"{body_indent}  decltype(auto) visit(Visitor&& vis) {{"
-        )
-        lines.append(
-            f"{body_indent}    return std::visit(std::forward<Visitor>(vis), value_);"
-        )
+        lines.append(f"{body_indent}  decltype(auto) visit(Visitor&& vis) {{")
+        lines.append(f"{body_indent}    return std::visit(std::forward<Visitor>(vis), value_);")
         lines.append(f"{body_indent}  }}")
         lines.append("")
-        lines.append(
-            f"{body_indent}  bool operator==(const {class_name}& other) const {{"
-        )
+        lines.append(f"{body_indent}  bool operator==(const {class_name}& other) const {{")
         lines.append(f"{body_indent}    return value_ == other.value_;")
         lines.append(f"{body_indent}  }}")
         lines.append("")
@@ -636,12 +567,8 @@ class CppGenerator(BaseGenerator):
         lines.append("")
         lines.append(f"{body_indent}private:")
         lines.append(f"{body_indent}  template <class T, class... Args>")
-        lines.append(
-            f"{body_indent}  explicit {class_name}(std::in_place_type_t<T> tag, Args&&... args)"
-        )
-        lines.append(
-            f"{body_indent}      : value_(tag, std::forward<Args>(args)...) {{}}"
-        )
+        lines.append(f"{body_indent}  explicit {class_name}(std::in_place_type_t<T> tag, Args&&... args)")
+        lines.append(f"{body_indent}      : value_(tag, std::forward<Args>(args)...) {{}}")
         lines.append(f"{indent}}};")
 
         return lines
@@ -688,15 +615,11 @@ class CppGenerator(BaseGenerator):
             )
             case_ctor = self.to_snake_case(field.name)
             meta = self.get_union_field_meta(field)
-            lines.append(
-                f"FORY_UNION_CASE({union_type}, {field.number}, {case_type}, {union_type}::{case_ctor}, {meta});"
-            )
+            lines.append(f"FORY_UNION_CASE({union_type}, {field.number}, {case_type}, {union_type}::{case_ctor}, {meta});")
 
         return lines
 
-    def get_union_case_type(
-        self, field: Field, parent_stack: List[Message]
-    ) -> str:
+    def get_union_case_type(self, field: Field, parent_stack: List[Message]) -> str:
         """Return the C++ type for a union case."""
         return self.generate_type(
             field.field_type,
@@ -732,9 +655,7 @@ class CppGenerator(BaseGenerator):
         """Collect serializer specializations for nested unions."""
         lineage = parent_stack + [message]
         for nested_union in message.nested_unions:
-            union_serializers.extend(
-                self.generate_union_serializer(nested_union, lineage)
-            )
+            union_serializers.extend(self.generate_union_serializer(nested_union, lineage))
         for nested_msg in message.nested_messages:
             self.collect_union_serializers(nested_msg, lineage, union_serializers)
 
@@ -766,201 +687,163 @@ class CppGenerator(BaseGenerator):
         default_ctor = self.to_snake_case(default_field.name)
         default_type = case_types[0]
 
-        lines.append(f"template <>")
+        lines.append("template <>")
         lines.append(f"struct Serializer<{qualified_name}> {{")
-        lines.append(f"  static constexpr TypeId type_id = TypeId::UNION;")
+        lines.append("  static constexpr TypeId type_id = TypeId::UNION;")
         lines.append("")
-        lines.append(f"  static inline void write_type_info(WriteContext &ctx) {{")
+        lines.append("  static inline void write_type_info(WriteContext &ctx) {")
         lines.append(
             f"    auto result = ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::TYPED_UNION), std::type_index(typeid({qualified_name})));"
         )
-        lines.append(f"    if (FORY_PREDICT_FALSE(!result.ok())) {{")
-        lines.append(f"      ctx.set_error(std::move(result).error());")
-        lines.append(f"    }}")
-        lines.append(f"  }}")
+        lines.append("    if (FORY_PREDICT_FALSE(!result.ok())) {")
+        lines.append("      ctx.set_error(std::move(result).error());")
+        lines.append("    }")
+        lines.append("  }")
         lines.append("")
-        lines.append(f"  static inline void read_type_info(ReadContext &ctx) {{")
-        lines.append(
-            f"    auto type_info_res = ctx.type_resolver().template get_type_info<{qualified_name}>();"
-        )
-        lines.append(f"    if (FORY_PREDICT_FALSE(!type_info_res.ok())) {{")
-        lines.append(f"      ctx.set_error(std::move(type_info_res).error());")
-        lines.append(f"      return;")
-        lines.append(f"    }}")
-        lines.append(f"    const TypeInfo *expected = type_info_res.value();")
-        lines.append(f"    const TypeInfo *remote = ctx.read_any_typeinfo(ctx.error());")
-        lines.append(f"    if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
-        lines.append(f"      return;")
-        lines.append(f"    }}")
-        lines.append(f"    if (!remote || remote->type_id != expected->type_id) {{")
-        lines.append(
-            f"      ctx.set_error(Error::type_mismatch(remote ? remote->type_id : 0u, expected->type_id));"
-        )
-        lines.append(f"    }}")
-        lines.append(f"  }}")
+        lines.append("  static inline void read_type_info(ReadContext &ctx) {")
+        lines.append(f"    auto type_info_res = ctx.type_resolver().template get_type_info<{qualified_name}>();")
+        lines.append("    if (FORY_PREDICT_FALSE(!type_info_res.ok())) {")
+        lines.append("      ctx.set_error(std::move(type_info_res).error());")
+        lines.append("      return;")
+        lines.append("    }")
+        lines.append("    const TypeInfo *expected = type_info_res.value();")
+        lines.append("    const TypeInfo *remote = ctx.read_any_typeinfo(ctx.error());")
+        lines.append("    if (FORY_PREDICT_FALSE(ctx.has_error())) {")
+        lines.append("      return;")
+        lines.append("    }")
+        lines.append("    if (!remote || remote->type_id != expected->type_id) {")
+        lines.append("      ctx.set_error(Error::type_mismatch(remote ? remote->type_id : 0u, expected->type_id));")
+        lines.append("    }")
+        lines.append("  }")
         lines.append("")
-        lines.append(
-            f"  static inline void write(const {qualified_name} &obj, WriteContext &ctx,"
-        )
-        lines.append(
-            f"                           RefMode ref_mode, bool write_type,"
-        )
-        lines.append(f"                           bool has_generics = false) {{")
-        lines.append(f"    (void)has_generics;")
-        lines.append(f"    if (ref_mode == RefMode::Tracking && ctx.track_ref()) {{")
-        lines.append(f"      ctx.write_int8(REF_VALUE_FLAG);")
-        lines.append(f"      ctx.ref_writer().reserve_ref_id();")
-        lines.append(f"    }} else if (ref_mode != RefMode::None) {{")
-        lines.append(f"      ctx.write_int8(NOT_NULL_VALUE_FLAG);")
-        lines.append(f"    }}")
-        lines.append(f"    if (write_type) {{")
-        lines.append(f"      write_type_info(ctx);")
-        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
-        lines.append(f"        return;")
-        lines.append(f"      }}")
-        lines.append(f"    }}")
-        lines.append(f"    write_data(obj, ctx);")
-        lines.append(f"  }}")
+        lines.append(f"  static inline void write(const {qualified_name} &obj, WriteContext &ctx,")
+        lines.append("                           RefMode ref_mode, bool write_type,")
+        lines.append("                           bool has_generics = false) {")
+        lines.append("    (void)has_generics;")
+        lines.append("    if (ref_mode == RefMode::Tracking && ctx.track_ref()) {")
+        lines.append("      ctx.write_int8(REF_VALUE_FLAG);")
+        lines.append("      ctx.ref_writer().reserve_ref_id();")
+        lines.append("    } else if (ref_mode != RefMode::None) {")
+        lines.append("      ctx.write_int8(NOT_NULL_VALUE_FLAG);")
+        lines.append("    }")
+        lines.append("    if (write_type) {")
+        lines.append("      write_type_info(ctx);")
+        lines.append("      if (FORY_PREDICT_FALSE(ctx.has_error())) {")
+        lines.append("        return;")
+        lines.append("      }")
+        lines.append("    }")
+        lines.append("    write_data(obj, ctx);")
+        lines.append("  }")
         lines.append("")
-        lines.append(
-            f"  static inline void write_data(const {qualified_name} &obj, WriteContext &ctx) {{"
-        )
+        lines.append(f"  static inline void write_data(const {qualified_name} &obj, WriteContext &ctx) {{")
         lines.append(f"    ctx.write_varuint32(obj.{case_id_method}());")
-        lines.append(f"    obj.visit([&](const auto &value) {{")
-        lines.append(f"      using Alt = std::decay_t<decltype(value)>;")
-        lines.append(f"      Serializer<Alt>::write(value, ctx, RefMode::Tracking, true);")
-        lines.append(f"    }});")
-        lines.append(f"  }}")
+        lines.append("    obj.visit([&](const auto &value) {")
+        lines.append("      using Alt = std::decay_t<decltype(value)>;")
+        lines.append("      Serializer<Alt>::write(value, ctx, RefMode::Tracking, true);")
+        lines.append("    });")
+        lines.append("  }")
         lines.append("")
-        lines.append(
-            f"  static inline void write_data_generic(const {qualified_name} &obj, WriteContext &ctx,"
-        )
-        lines.append(f"                                      bool has_generics) {{")
-        lines.append(f"    (void)has_generics;")
-        lines.append(f"    write_data(obj, ctx);")
-        lines.append(f"  }}")
+        lines.append(f"  static inline void write_data_generic(const {qualified_name} &obj, WriteContext &ctx,")
+        lines.append("                                      bool has_generics) {")
+        lines.append("    (void)has_generics;")
+        lines.append("    write_data(obj, ctx);")
+        lines.append("  }")
         lines.append("")
-        lines.append(
-            f"  static inline {qualified_name} read(ReadContext &ctx, RefMode ref_mode,"
-        )
-        lines.append(f"                           bool read_type) {{")
-        lines.append(f"    int8_t ref_flag = NOT_NULL_VALUE_FLAG;")
-        lines.append(f"    if (ref_mode != RefMode::None) {{")
-        lines.append(f"      ref_flag = ctx.read_int8(ctx.error());")
-        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
-        lines.append(f"        return default_value();")
-        lines.append(f"      }}")
-        lines.append(f"    }}")
-        lines.append(f"    if (ref_flag == NULL_FLAG) {{")
-        lines.append(
-            f"      ctx.set_error(Error::invalid_data(\"Null value encountered for union\"));"
-        )
-        lines.append(f"      return default_value();")
-        lines.append(f"    }}")
-        lines.append(f"    if (ref_flag == REF_FLAG) {{")
-        lines.append(
-            f"      ctx.set_error(Error::invalid_ref(\"Unexpected reference flag for union\"));"
-        )
-        lines.append(f"      return default_value();")
-        lines.append(f"    }}")
-        lines.append(
-            f"    if (ref_flag != NOT_NULL_VALUE_FLAG && ref_flag != REF_VALUE_FLAG) {{"
-        )
-        lines.append(
-            f"      ctx.set_error(Error::invalid_ref(\"Unknown ref flag for union\"));"
-        )
-        lines.append(f"      return default_value();")
-        lines.append(f"    }}")
-        lines.append(f"    if (ctx.track_ref() && ref_flag == REF_VALUE_FLAG) {{")
-        lines.append(f"      ctx.ref_reader().reserve_ref_id();")
-        lines.append(f"    }}")
-        lines.append(f"    if (read_type) {{")
-        lines.append(f"      read_type_info(ctx);")
-        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
-        lines.append(f"        return default_value();")
-        lines.append(f"      }}")
-        lines.append(f"    }}")
-        lines.append(f"    return read_data(ctx);")
-        lines.append(f"  }}")
+        lines.append(f"  static inline {qualified_name} read(ReadContext &ctx, RefMode ref_mode,")
+        lines.append("                           bool read_type) {")
+        lines.append("    int8_t ref_flag = NOT_NULL_VALUE_FLAG;")
+        lines.append("    if (ref_mode != RefMode::None) {")
+        lines.append("      ref_flag = ctx.read_int8(ctx.error());")
+        lines.append("      if (FORY_PREDICT_FALSE(ctx.has_error())) {")
+        lines.append("        return default_value();")
+        lines.append("      }")
+        lines.append("    }")
+        lines.append("    if (ref_flag == NULL_FLAG) {")
+        lines.append('      ctx.set_error(Error::invalid_data("Null value encountered for union"));')
+        lines.append("      return default_value();")
+        lines.append("    }")
+        lines.append("    if (ref_flag == REF_FLAG) {")
+        lines.append('      ctx.set_error(Error::invalid_ref("Unexpected reference flag for union"));')
+        lines.append("      return default_value();")
+        lines.append("    }")
+        lines.append("    if (ref_flag != NOT_NULL_VALUE_FLAG && ref_flag != REF_VALUE_FLAG) {")
+        lines.append('      ctx.set_error(Error::invalid_ref("Unknown ref flag for union"));')
+        lines.append("      return default_value();")
+        lines.append("    }")
+        lines.append("    if (ctx.track_ref() && ref_flag == REF_VALUE_FLAG) {")
+        lines.append("      ctx.ref_reader().reserve_ref_id();")
+        lines.append("    }")
+        lines.append("    if (read_type) {")
+        lines.append("      read_type_info(ctx);")
+        lines.append("      if (FORY_PREDICT_FALSE(ctx.has_error())) {")
+        lines.append("        return default_value();")
+        lines.append("      }")
+        lines.append("    }")
+        lines.append("    return read_data(ctx);")
+        lines.append("  }")
         lines.append("")
         lines.append(f"  static inline {qualified_name} read_data(ReadContext &ctx) {{")
-        lines.append(f"    uint32_t case_id = ctx.read_varuint32(ctx.error());")
-        lines.append(f"    if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
-        lines.append(f"      return default_value();")
-        lines.append(f"    }}")
-        lines.append(f"    switch (case_id) {{")
+        lines.append("    uint32_t case_id = ctx.read_varuint32(ctx.error());")
+        lines.append("    if (FORY_PREDICT_FALSE(ctx.has_error())) {")
+        lines.append("      return default_value();")
+        lines.append("    }")
+        lines.append("    switch (case_id) {")
         for field, case_type in zip(union.fields, case_types):
             case_ctor = self.to_snake_case(field.name)
             lines.append(f"    case {field.number}: {{")
-            lines.append(
-                f"      auto value = Serializer<{case_type}>::read(ctx, RefMode::Tracking, true);"
-            )
-            lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
-            lines.append(f"        return default_value();")
-            lines.append(f"      }}")
-            lines.append(
-                f"      return {qualified_name}::{case_ctor}(std::move(value));"
-            )
-            lines.append(f"    }}")
-        lines.append(f"    default: {{")
-        lines.append(f"      int8_t ref_flag = ctx.read_int8(ctx.error());")
-        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
-        lines.append(f"        return default_value();")
-        lines.append(f"      }}")
-        lines.append(f"      if (ref_flag == NULL_FLAG) {{")
-        lines.append(f"        ctx.set_error(Error::invalid_data(\"Unknown union case id\"));")
-        lines.append(f"        return default_value();")
-        lines.append(f"      }}")
-        lines.append(f"      if (ref_flag == REF_FLAG) {{")
-        lines.append(f"        (void)ctx.read_varuint32(ctx.error());")
-        lines.append(f"        ctx.set_error(Error::invalid_data(\"Unknown union case id\"));")
-        lines.append(f"        return default_value();")
-        lines.append(f"      }}")
-        lines.append(
-            f"      if (ref_flag != NOT_NULL_VALUE_FLAG && ref_flag != REF_VALUE_FLAG) {{"
-        )
-        lines.append(
-            f"        ctx.set_error(Error::invalid_data(\"Unknown reference flag in union value\"));"
-        )
-        lines.append(f"        return default_value();")
-        lines.append(f"      }}")
-        lines.append(f"      const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());")
-        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
-        lines.append(f"        return default_value();")
-        lines.append(f"      }}")
-        lines.append(f"      if (!type_info) {{")
-        lines.append(
-            f"        ctx.set_error(Error::type_error(\"TypeInfo not found for union skip\"));"
-        )
-        lines.append(f"        return default_value();")
-        lines.append(f"      }}")
-        lines.append(f"      FieldType field_type;")
-        lines.append(f"      field_type.type_id = type_info->type_id;")
-        lines.append(f"      field_type.nullable = false;")
-        lines.append(f"      skip_field_value(ctx, field_type, RefMode::None);")
-        lines.append(
-            f"      ctx.set_error(Error::invalid_data(\"Unknown union case id\"));"
-        )
-        lines.append(f"      return default_value();")
-        lines.append(f"    }}")
-        lines.append(f"    }}")
-        lines.append(f"  }}")
+            lines.append(f"      auto value = Serializer<{case_type}>::read(ctx, RefMode::Tracking, true);")
+            lines.append("      if (FORY_PREDICT_FALSE(ctx.has_error())) {")
+            lines.append("        return default_value();")
+            lines.append("      }")
+            lines.append(f"      return {qualified_name}::{case_ctor}(std::move(value));")
+            lines.append("    }")
+        lines.append("    default: {")
+        lines.append("      int8_t ref_flag = ctx.read_int8(ctx.error());")
+        lines.append("      if (FORY_PREDICT_FALSE(ctx.has_error())) {")
+        lines.append("        return default_value();")
+        lines.append("      }")
+        lines.append("      if (ref_flag == NULL_FLAG) {")
+        lines.append('        ctx.set_error(Error::invalid_data("Unknown union case id"));')
+        lines.append("        return default_value();")
+        lines.append("      }")
+        lines.append("      if (ref_flag == REF_FLAG) {")
+        lines.append("        (void)ctx.read_varuint32(ctx.error());")
+        lines.append('        ctx.set_error(Error::invalid_data("Unknown union case id"));')
+        lines.append("        return default_value();")
+        lines.append("      }")
+        lines.append("      if (ref_flag != NOT_NULL_VALUE_FLAG && ref_flag != REF_VALUE_FLAG) {")
+        lines.append('        ctx.set_error(Error::invalid_data("Unknown reference flag in union value"));')
+        lines.append("        return default_value();")
+        lines.append("      }")
+        lines.append("      const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());")
+        lines.append("      if (FORY_PREDICT_FALSE(ctx.has_error())) {")
+        lines.append("        return default_value();")
+        lines.append("      }")
+        lines.append("      if (!type_info) {")
+        lines.append('        ctx.set_error(Error::type_error("TypeInfo not found for union skip"));')
+        lines.append("        return default_value();")
+        lines.append("      }")
+        lines.append("      FieldType field_type;")
+        lines.append("      field_type.type_id = type_info->type_id;")
+        lines.append("      field_type.nullable = false;")
+        lines.append("      skip_field_value(ctx, field_type, RefMode::None);")
+        lines.append('      ctx.set_error(Error::invalid_data("Unknown union case id"));')
+        lines.append("      return default_value();")
+        lines.append("    }")
+        lines.append("    }")
+        lines.append("  }")
         lines.append("")
-        lines.append(
-            f"  static inline {qualified_name} read_with_type_info(ReadContext &ctx, RefMode ref_mode,"
-        )
-        lines.append(f"                           const TypeInfo &type_info) {{")
-        lines.append(f"    (void)type_info;")
-        lines.append(f"    return read(ctx, ref_mode, false);")
-        lines.append(f"  }}")
+        lines.append(f"  static inline {qualified_name} read_with_type_info(ReadContext &ctx, RefMode ref_mode,")
+        lines.append("                           const TypeInfo &type_info) {")
+        lines.append("    (void)type_info;")
+        lines.append("    return read(ctx, ref_mode, false);")
+        lines.append("  }")
         lines.append("")
-        lines.append(f"private:")
+        lines.append("private:")
         lines.append(f"  static inline {qualified_name} default_value() {{")
-        lines.append(
-            f"    return {qualified_name}::{default_ctor}({default_type}{{}});"
-        )
-        lines.append(f"  }}")
-        lines.append(f"}};")
+        lines.append(f"    return {qualified_name}::{default_ctor}({default_type}{{}});")
+        lines.append("  }")
+        lines.append("};")
         lines.append("")
 
         return lines
@@ -982,9 +865,7 @@ class CppGenerator(BaseGenerator):
             return base_type
 
         if isinstance(field_type, NamedType):
-            type_name = self.resolve_nested_type_name(
-                field_type.name, parent_stack
-            )
+            type_name = self.resolve_nested_type_name(field_type.name, parent_stack)
             namespace = self.get_namespace()
             if namespace:
                 type_name = f"{namespace}::{type_name}"
@@ -1011,12 +892,8 @@ class CppGenerator(BaseGenerator):
             return list_type
 
         if isinstance(field_type, MapType):
-            key_type = self.generate_namespaced_type(
-                field_type.key_type, False, False, False, False, parent_stack
-            )
-            value_type = self.generate_namespaced_type(
-                field_type.value_type, False, False, False, False, parent_stack
-            )
+            key_type = self.generate_namespaced_type(field_type.key_type, False, False, False, False, parent_stack)
+            value_type = self.generate_namespaced_type(field_type.value_type, False, False, False, False, parent_stack)
             map_type = f"std::map<{key_type}, {value_type}>"
             if ref:
                 map_type = f"std::shared_ptr<{map_type}>"
@@ -1078,9 +955,7 @@ class CppGenerator(BaseGenerator):
         kind = None
         if isinstance(field_type, PrimitiveType):
             kind = field_type.kind
-        elif isinstance(field_type, ListType) and isinstance(
-            field_type.element_type, PrimitiveType
-        ):
+        elif isinstance(field_type, ListType) and isinstance(field_type.element_type, PrimitiveType):
             kind = field_type.element_type.kind
         if kind is None:
             return ""
@@ -1153,12 +1028,8 @@ class CppGenerator(BaseGenerator):
             return list_type
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(
-                field_type.key_type, False, False, False, False, parent_stack
-            )
-            value_type = self.generate_type(
-                field_type.value_type, False, False, False, False, parent_stack
-            )
+            key_type = self.generate_type(field_type.key_type, False, False, False, False, parent_stack)
+            value_type = self.generate_type(field_type.value_type, False, False, False, False, parent_stack)
             map_type = f"std::map<{key_type}, {value_type}>"
             if ref:
                 map_type = f"std::shared_ptr<{map_type}>"
@@ -1268,9 +1139,7 @@ class CppGenerator(BaseGenerator):
 
         return lines
 
-    def generate_enum_registration(
-        self, lines: List[str], enum: Enum, parent_stack: List[Message]
-    ):
+    def generate_enum_registration(self, lines: List[str], enum: Enum, parent_stack: List[Message]):
         """Generate registration code for an enum."""
         code_name = self.get_qualified_type_name(enum.name, parent_stack)
         type_name = self.get_registration_type_name(enum.name, parent_stack)
@@ -1281,40 +1150,30 @@ class CppGenerator(BaseGenerator):
             ns = self.package or "default"
             lines.append(f'    fory.register_enum<{code_name}>("{ns}", "{type_name}");')
 
-    def generate_message_registration(
-        self, lines: List[str], message: Message, parent_stack: List[Message]
-    ):
+    def generate_message_registration(self, lines: List[str], message: Message, parent_stack: List[Message]):
         """Generate registration code for a message and its nested types."""
         code_name = self.get_qualified_type_name(message.name, parent_stack)
         type_name = self.get_registration_type_name(message.name, parent_stack)
 
         # Register nested enums first
         for nested_enum in message.nested_enums:
-            self.generate_enum_registration(
-                lines, nested_enum, parent_stack + [message]
-            )
+            self.generate_enum_registration(lines, nested_enum, parent_stack + [message])
 
         for nested_union in message.nested_unions:
             self.generate_union_registration(lines, nested_union, parent_stack + [message])
 
         # Register nested messages recursively
         for nested_msg in message.nested_messages:
-            self.generate_message_registration(
-                lines, nested_msg, parent_stack + [message]
-            )
+            self.generate_message_registration(lines, nested_msg, parent_stack + [message])
 
         # Register this message
         if message.type_id is not None:
             lines.append(f"    fory.register_struct<{code_name}>({message.type_id});")
         else:
             ns = self.package or "default"
-            lines.append(
-                f'    fory.register_struct<{code_name}>("{ns}", "{type_name}");'
-            )
+            lines.append(f'    fory.register_struct<{code_name}>("{ns}", "{type_name}");')
 
-    def generate_union_registration(
-        self, lines: List[str], union: Union, parent_stack: List[Message]
-    ):
+    def generate_union_registration(self, lines: List[str], union: Union, parent_stack: List[Message]):
         """Generate registration code for a union."""
         code_name = self.get_qualified_type_name(union.name, parent_stack)
         type_name = self.get_registration_type_name(union.name, parent_stack)
@@ -1323,6 +1182,4 @@ class CppGenerator(BaseGenerator):
             lines.append(f"    fory.register_union<{code_name}>({union.type_id});")
         else:
             ns = self.package or "default"
-            lines.append(
-                f'    fory.register_union<{code_name}>("{ns}", "{type_name}");'
-            )
+            lines.append(f'    fory.register_union<{code_name}>("{ns}", "{type_name}");')

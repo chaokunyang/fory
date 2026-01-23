@@ -969,6 +969,33 @@ public abstract class TypeResolver {
 
   public abstract <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer);
 
+  public final Serializer<?> getSerializerByTypeId(int typeId) {
+    int internalTypeId = typeId & 0xFF;
+    if (Types.isUserDefinedType((byte) internalTypeId)) {
+      int userId = typeId >>> 8;
+      if (userId != 0) {
+        return requireUserTypeInfoByTypeId(userId).getSerializer();
+      }
+    }
+    return requireInternalTypeInfoByTypeId(internalTypeId).getSerializer();
+  }
+
+  public final Serializer<?> getSerializer(TypeRef<?> typeRef) {
+    if (!fory.isCrossLanguage()) {
+      return getSerializer(typeRef.getRawType());
+    }
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (extMeta != null) {
+      return getSerializerByTypeId(extMeta.typeId());
+    }
+    Class<?> rawType = typeRef.getRawType();
+    int typeId = Types.getTypeId(fory, rawType);
+    if (typeId != Types.UNKNOWN) {
+      return getSerializerByTypeId(typeId);
+    }
+    return getSerializer(rawType);
+  }
+
   public final ClassInfo nilClassInfo() {
     return NIL_CLASS_INFO;
   }

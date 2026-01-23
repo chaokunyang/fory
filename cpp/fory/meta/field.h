@@ -853,7 +853,7 @@ struct GetFieldTagEntry<
 // Creates a constexpr tuple of FieldEntry objects with member pointer
 // verification. Alias is a token-safe name without '::'.
 #define FORY_FIELD_CONFIG(Type, Alias, ...)                                    \
-  template <> struct ::fory::detail::ForyFieldConfigImpl<Type> {               \
+  template <> struct fory::detail::ForyFieldConfigImpl<Type> {                 \
     static constexpr bool has_config = true;                                   \
     static inline constexpr auto entries =                                     \
         std::make_tuple(FORY_FC_ENTRIES(Type, __VA_ARGS__));                   \

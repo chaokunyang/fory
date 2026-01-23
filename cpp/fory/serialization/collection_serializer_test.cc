@@ -45,13 +45,13 @@ struct Animal {
 struct Dog : Animal {
   std::string speak() const override { return "Woof"; }
   std::string name;
-  FORY_STRUCT(Dog, age, name);
+  FORY_STRUCT(Dog, FORY_BASE(Animal), name);
 };
 
 struct Cat : Animal {
   std::string speak() const override { return "Meow"; }
   int32_t lives = 9;
-  FORY_STRUCT(Cat, age, lives);
+  FORY_STRUCT(Cat, FORY_BASE(Animal), lives);
 };
 
 // Holder structs for testing collections as struct fields

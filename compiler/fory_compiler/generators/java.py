@@ -17,7 +17,7 @@
 
 """Java code generator."""
 
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Union as TypingUnion
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
@@ -288,12 +288,16 @@ class JavaGenerator(BaseGenerator):
 
         # Generate nested unions as static inner classes
         for nested_union in message.nested_unions:
-            for line in self.generate_union_class(nested_union, indent=0, nested=True):
+            for line in self.generate_union_class(
+                nested_union, indent=0, nested=True, parent_stack=[message]
+            ):
                 lines.append(f"    {line}")
 
         # Generate nested messages as static inner classes
         for nested_msg in message.nested_messages:
-            for line in self.generate_nested_message(nested_msg, indent=1):
+            for line in self.generate_nested_message(
+                nested_msg, indent=1, parent_stack=[message]
+            ):
                 lines.append(f"    {line}")
 
         # Fields
@@ -420,9 +424,8 @@ class JavaGenerator(BaseGenerator):
 
     def collect_union_imports(self, union: Union, imports: Set[str]):
         """Collect imports for a union and its cases."""
-        imports.add("org.apache.fory.Fory")
-        imports.add("org.apache.fory.memory.MemoryBuffer")
-        imports.add("org.apache.fory.serializer.Serializer")
+        imports.add("org.apache.fory.type.union.Union")
+        imports.add("org.apache.fory.type.Types")
         imports.add("java.util.Objects")
         for field in union.fields:
             self.collect_type_imports(
@@ -461,15 +464,15 @@ class JavaGenerator(BaseGenerator):
         union: Union,
         indent: int = 0,
         nested: bool = False,
+        parent_stack: Optional[List[Message]] = None,
     ) -> List[str]:
         """Generate a Java union class."""
         lines: List[str] = []
         ind = "    " * indent
         class_prefix = "public static final class" if nested else "public final class"
         case_enum = f"{union.name}Case"
-        case_field = f"{self.to_camel_case(union.name)}Case"
 
-        lines.append(f"{ind}{class_prefix} {union.name} {{")
+        lines.append(f"{ind}{class_prefix} {union.name} extends Union {{")
         lines.append(f"{ind}    public enum {case_enum} {{")
 
         for i, field in enumerate(union.fields):
@@ -484,15 +487,26 @@ class JavaGenerator(BaseGenerator):
         lines.append(f"{ind}    }}")
         lines.append("")
 
-        lines.append(f"{ind}    private final {case_enum} {case_field};")
-        lines.append(f"{ind}    private final Object value;")
+        lines.append(f"{ind}    private static int resolveTypeId(int caseId) {{")
+        lines.append(f"{ind}        switch (caseId) {{")
+        for field in union.fields:
+            type_id_expr = self.get_union_case_type_id_expr(field, parent_stack)
+            lines.append(f"{ind}            case {field.number}:")
+            lines.append(f"{ind}                return {type_id_expr};")
+        lines.append(f"{ind}            default:")
+        lines.append(
+            f'{ind}                throw new IllegalStateException("Unknown {union.name} case id: " + caseId);'
+        )
+        lines.append(f"{ind}        }}")
+        lines.append(f"{ind}    }}")
         lines.append("")
-        lines.append(f"{ind}    private {union.name}({case_enum} c, Object v) {{")
-        lines.append(f"{ind}        if (c == null || v == null) {{")
+
+        lines.append(f"{ind}    private {union.name}(int caseId, Object v) {{")
+        lines.append(f"{ind}        super(caseId, v, resolveTypeId(caseId));")
+        lines.append(f"{ind}        if (v == null) {{")
         lines.append(f"{ind}            throw new NullPointerException();")
         lines.append(f"{ind}        }}")
-        lines.append(f"{ind}        this.{case_field} = c;")
-        lines.append(f"{ind}        this.value = v;")
+        lines.append(f"{ind}        get{union.name}Case();")
         lines.append(f"{ind}    }}")
         lines.append("")
 
@@ -504,17 +518,26 @@ class JavaGenerator(BaseGenerator):
                 f"{ind}    public static {union.name} of{case_name}({case_type} v) {{"
             )
             lines.append(
-                f"{ind}        return new {union.name}({case_enum}.{case_enum_name}, v);"
+                f"{ind}        return new {union.name}({case_enum}.{case_enum_name}.id, v);"
             )
             lines.append(f"{ind}    }}")
             lines.append("")
 
         lines.append(f"{ind}    public {case_enum} get{union.name}Case() {{")
-        lines.append(f"{ind}        return {case_field};")
+        lines.append(f"{ind}        switch (index) {{")
+        for field in union.fields:
+            case_enum_name = self.to_upper_snake_case(field.name)
+            lines.append(f"{ind}            case {field.number}:")
+            lines.append(f"{ind}                return {case_enum}.{case_enum_name};")
+        lines.append(f"{ind}            default:")
+        lines.append(
+            f'{ind}                throw new IllegalStateException("Unknown {union.name} case id: " + index);'
+        )
+        lines.append(f"{ind}        }}")
         lines.append(f"{ind}    }}")
         lines.append("")
         lines.append(f"{ind}    public int get{union.name}CaseId() {{")
-        lines.append(f"{ind}        return {case_field}.id;")
+        lines.append(f"{ind}        return index;")
         lines.append(f"{ind}    }}")
         lines.append("")
 
@@ -528,7 +551,7 @@ class JavaGenerator(BaseGenerator):
                 f"{ind}    public boolean has{case_name}() {{"
             )
             lines.append(
-                f"{ind}        return {case_field} == {case_enum}.{case_enum_name};"
+                f"{ind}        return index == {case_enum}.{case_enum_name}.id;"
             )
             lines.append(f"{ind}    }}")
             lines.append("")
@@ -536,13 +559,28 @@ class JavaGenerator(BaseGenerator):
                 f"{ind}    public {case_type} get{case_name}() {{"
             )
             lines.append(
-                f"{ind}        if ({case_field} != {case_enum}.{case_enum_name}) {{"
+                f"{ind}        if (index != {case_enum}.{case_enum_name}.id) {{"
             )
             lines.append(
                 f'{ind}            throw new IllegalStateException("{union.name} is not {case_enum_name}");'
             )
             lines.append(f"{ind}        }}")
             lines.append(f"{ind}        return ({cast_type}) value;")
+            lines.append(f"{ind}    }}")
+            lines.append("")
+            lines.append(
+                f"{ind}    public void set{case_name}({case_type} v) {{"
+            )
+            if not self.is_java_primitive_type(case_type):
+                lines.append(f"{ind}        if (v == null) {{")
+                lines.append(f"{ind}            throw new NullPointerException();")
+                lines.append(f"{ind}        }}")
+            lines.append(
+                f"{ind}        this.index = {case_enum}.{case_enum_name}.id;"
+            )
+            lines.append(f"{ind}        this.value = v;")
+            type_id_expr = self.get_union_case_type_id_expr(field, parent_stack)
+            lines.append(f"{ind}        this.typeId = {type_id_expr};")
             lines.append(f"{ind}    }}")
             lines.append("")
 
@@ -556,95 +594,17 @@ class JavaGenerator(BaseGenerator):
         lines.append(f"{ind}        }}")
         lines.append(f"{ind}        {union.name} that = ({union.name}) o;")
         lines.append(
-            f"{ind}        return {case_field} == that.{case_field} && Objects.equals(value, that.value);"
+            f"{ind}        return index == that.index && Objects.equals(value, that.value);"
         )
         lines.append(f"{ind}    }}")
         lines.append("")
         lines.append(f"{ind}    @Override")
         lines.append(f"{ind}    public int hashCode() {{")
-        lines.append(f"{ind}        return Objects.hash({case_field}, value);")
+        lines.append(f"{ind}        return Objects.hash(index, value);")
         lines.append(f"{ind}    }}")
         lines.append("")
-
-        for line in self.generate_union_serializer(union, indent):
-            lines.append(line)
 
         lines.append(f"{ind}}}")
-        lines.append("")
-        return lines
-
-    def generate_union_serializer(self, union: Union, indent: int = 0) -> List[str]:
-        """Generate a Java union serializer as a nested class."""
-        lines: List[str] = []
-        ind = "    " * indent
-        serializer_name = f"{union.name}Serializer"
-        case_enum = f"{union.name}Case"
-        case_field = f"{self.to_camel_case(union.name)}Case"
-
-        lines.append(f"{ind}    public static final class {serializer_name} extends Serializer<{union.name}> {{")
-        lines.append(f"{ind}        public {serializer_name}(Fory fory) {{")
-        lines.append(f"{ind}            super(fory, {union.name}.class);")
-        lines.append(f"{ind}        }}")
-        lines.append("")
-        lines.append(f"{ind}        @Override")
-        lines.append(f"{ind}        public void write(MemoryBuffer buffer, {union.name} obj) {{")
-        lines.append(f"{ind}            xwrite(buffer, obj);")
-        lines.append(f"{ind}        }}")
-        lines.append("")
-        lines.append(f"{ind}        @Override")
-        lines.append(f"{ind}        public void xwrite(MemoryBuffer buffer, {union.name} obj) {{")
-        lines.append(f"{ind}            buffer.writeVarUint32(obj.get{union.name}CaseId());")
-        lines.append(f"{ind}            fory.xwriteRef(buffer, obj.value);")
-        lines.append(f"{ind}        }}")
-        lines.append("")
-        lines.append(f"{ind}        @Override")
-        lines.append(f"{ind}        public {union.name} read(MemoryBuffer buffer) {{")
-        lines.append(f"{ind}            return xread(buffer);")
-        lines.append(f"{ind}        }}")
-        lines.append("")
-        lines.append(f"{ind}        @Override")
-        lines.append(f"{ind}        public {union.name} xread(MemoryBuffer buffer) {{")
-        lines.append(f"{ind}            int caseId = buffer.readVarUint32();")
-        lines.append(f"{ind}            Object value = fory.xreadRef(buffer);")
-        lines.append(f"{ind}            switch (caseId) {{")
-        for field in union.fields:
-            case_name = self.to_pascal_case(field.name)
-            cast_type = self.get_union_case_cast_type(field)
-            lines.append(
-                f"{ind}                case {field.number}:"
-            )
-            lines.append(
-                f"{ind}                    return {union.name}.of{case_name}(({cast_type}) value);"
-            )
-        lines.append(f"{ind}                default:")
-        lines.append(
-            f'{ind}                    throw new IllegalStateException("Unknown {union.name} case id: " + caseId);'
-        )
-        lines.append(f"{ind}            }}")
-        lines.append(f"{ind}        }}")
-        lines.append("")
-        lines.append(f"{ind}        @Override")
-        lines.append(f"{ind}        public {union.name} copy({union.name} obj) {{")
-        lines.append(f"{ind}            if (obj == null) {{")
-        lines.append(f"{ind}                return null;")
-        lines.append(f"{ind}            }}")
-        lines.append(f"{ind}            Object copied = fory.copyObject(obj.value);")
-        lines.append(f"{ind}            switch (obj.{case_field}) {{")
-        for field in union.fields:
-            case_name = self.to_pascal_case(field.name)
-            case_enum_name = self.to_upper_snake_case(field.name)
-            cast_type = self.get_union_case_cast_type(field)
-            lines.append(f"{ind}                case {case_enum_name}:")
-            lines.append(
-                f"{ind}                    return {union.name}.of{case_name}(({cast_type}) copied);"
-            )
-        lines.append(f"{ind}                default:")
-        lines.append(
-            f'{ind}                    throw new IllegalStateException("Unknown {union.name} case: " + obj.{case_field});'
-        )
-        lines.append(f"{ind}            }}")
-        lines.append(f"{ind}        }}")
-        lines.append(f"{ind}    }}")
         lines.append("")
         return lines
 
@@ -666,9 +626,112 @@ class JavaGenerator(BaseGenerator):
             return self.PRIMITIVE_MAP[field.field_type.kind]
         return self.get_union_case_type(field)
 
-    def generate_nested_message(self, message: Message, indent: int = 1) -> List[str]:
+    def get_union_case_type_id_expr(
+        self, field: Field, parent_stack: Optional[List[Message]]
+    ) -> str:
+        """Return the Java expression for a union case value type id."""
+        if isinstance(field.field_type, PrimitiveType):
+            kind = field.field_type.kind
+            primitive_type_ids = {
+                PrimitiveKind.BOOL: "Types.BOOL",
+                PrimitiveKind.INT8: "Types.INT8",
+                PrimitiveKind.INT16: "Types.INT16",
+                PrimitiveKind.INT32: "Types.INT32",
+                PrimitiveKind.VARINT32: "Types.VARINT32",
+                PrimitiveKind.INT64: "Types.INT64",
+                PrimitiveKind.VARINT64: "Types.VARINT64",
+                PrimitiveKind.TAGGED_INT64: "Types.TAGGED_INT64",
+                PrimitiveKind.UINT8: "Types.UINT8",
+                PrimitiveKind.UINT16: "Types.UINT16",
+                PrimitiveKind.UINT32: "Types.UINT32",
+                PrimitiveKind.VAR_UINT32: "Types.VAR_UINT32",
+                PrimitiveKind.UINT64: "Types.UINT64",
+                PrimitiveKind.VAR_UINT64: "Types.VAR_UINT64",
+                PrimitiveKind.TAGGED_UINT64: "Types.TAGGED_UINT64",
+                PrimitiveKind.FLOAT16: "Types.FLOAT16",
+                PrimitiveKind.FLOAT32: "Types.FLOAT32",
+                PrimitiveKind.FLOAT64: "Types.FLOAT64",
+                PrimitiveKind.STRING: "Types.STRING",
+                PrimitiveKind.BYTES: "Types.BINARY",
+                PrimitiveKind.DATE: "Types.LOCAL_DATE",
+                PrimitiveKind.TIMESTAMP: "Types.TIMESTAMP",
+            }
+            return primitive_type_ids.get(kind, "Types.UNKNOWN")
+        if isinstance(field.field_type, ListType):
+            return "Types.LIST"
+        if isinstance(field.field_type, MapType):
+            return "Types.MAP"
+        if isinstance(field.field_type, NamedType):
+            type_def = self.resolve_named_type(field.field_type.name, parent_stack)
+            if isinstance(type_def, Enum):
+                if type_def.type_id is None:
+                    return "Types.NAMED_ENUM"
+                return f"({type_def.type_id} << 8) | Types.ENUM"
+            if isinstance(type_def, Union):
+                if type_def.type_id is None:
+                    return "Types.NAMED_UNION"
+                return f"({type_def.type_id} << 8) | Types.UNION"
+            if isinstance(type_def, Message):
+                if type_def.type_id is None:
+                    return "Types.NAMED_STRUCT"
+                return f"({type_def.type_id} << 8) | Types.STRUCT"
+        return "Types.UNKNOWN"
+
+    def resolve_named_type(
+        self, name: str, parent_stack: Optional[List[Message]]
+    ) -> Optional[TypingUnion[Message, Enum, Union]]:
+        """Resolve a named type to a schema definition."""
+        parts = name.split(".")
+        if len(parts) > 1:
+            current = self.find_top_level_type(parts[0])
+            for part in parts[1:]:
+                if isinstance(current, Message):
+                    current = current.get_nested_type(part)
+                else:
+                    return None
+            return current
+        if parent_stack:
+            for msg in reversed(parent_stack):
+                nested = msg.get_nested_type(name)
+                if nested is not None:
+                    return nested
+        return self.find_top_level_type(name)
+
+    def find_top_level_type(self, name: str) -> Optional[TypingUnion[Message, Enum, Union]]:
+        """Find a top-level type definition by name."""
+        for msg in self.schema.messages:
+            if msg.name == name:
+                return msg
+        for enum in self.schema.enums:
+            if enum.name == name:
+                return enum
+        for union in self.schema.unions:
+            if union.name == name:
+                return union
+        return None
+
+    def is_java_primitive_type(self, type_name: str) -> bool:
+        """Return True if the Java type name is a primitive type."""
+        return type_name in {
+            "boolean",
+            "byte",
+            "short",
+            "int",
+            "long",
+            "float",
+            "double",
+            "char",
+        }
+
+    def generate_nested_message(
+        self,
+        message: Message,
+        indent: int = 1,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
         """Generate a nested message as a static inner class."""
         lines = []
+        lineage = (parent_stack or []) + [message]
 
         # Class declaration
         lines.append(f"public static class {message.name} {{")
@@ -680,12 +743,21 @@ class JavaGenerator(BaseGenerator):
 
         # Generate nested unions
         for nested_union in message.nested_unions:
-            for line in self.generate_union_class(nested_union, indent=0, nested=True):
+            for line in self.generate_union_class(
+                nested_union,
+                indent=0,
+                nested=True,
+                parent_stack=lineage,
+            ):
                 lines.append(f"    {line}")
 
         # Generate nested messages (recursively)
         for nested_msg in message.nested_messages:
-            for line in self.generate_nested_message(nested_msg, indent=1):
+            for line in self.generate_nested_message(
+                nested_msg,
+                indent=1,
+                parent_stack=lineage,
+            ):
                 lines.append(f"    {line}")
 
         # Fields
@@ -1210,16 +1282,18 @@ class JavaGenerator(BaseGenerator):
         """Generate registration code for a union."""
         class_ref = f"{parent_path}.{union.name}" if parent_path else union.name
         type_name = union.name
-        serializer_ref = f"{class_ref}.{union.name}Serializer"
+        serializer_ref = (
+            f"new org.apache.fory.serializer.UnionSerializer(fory, {class_ref}.class)"
+        )
 
         if union.type_id is not None:
             lines.append(
-                f"        fory.registerUnion({class_ref}.class, {union.type_id}, new {serializer_ref}(fory));"
+                f"        fory.registerUnion({class_ref}.class, {union.type_id}, {serializer_ref});"
             )
         else:
             ns = self.schema.package or "default"
             if parent_path:
                 ns = f"{ns}.{parent_path}"
             lines.append(
-                f'        fory.registerUnion({class_ref}.class, "{ns}", "{type_name}", new {serializer_ref}(fory));'
+                f'        fory.registerUnion({class_ref}.class, "{ns}", "{type_name}", {serializer_ref});'
             )

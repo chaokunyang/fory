@@ -89,6 +89,10 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   dog.name = "Rex";
   dog.bark_volume = 5;
   person.pet = addressbook::Animal::dog(dog);
+  addressbook::Cat cat;
+  cat.name = "Mimi";
+  cat.lives = 9;
+  person.pet = addressbook::Animal::cat(cat);
 
   addressbook::AddressBook book;
   book.people = {person};
@@ -124,6 +128,7 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   types.float64_value = 3.5;
   types.contact =
       addressbook::PrimitiveTypes::Contact::email(std::string("alice@example.com"));
+  types.contact = addressbook::PrimitiveTypes::Contact::phone(12345);
 
   FORY_TRY(primitive_bytes, fory.serialize(types));
   FORY_TRY(primitive_roundtrip,
@@ -184,6 +189,9 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   complex_fbs::Note note;
   note.text = "alpha";
   container.payload = complex_fbs::Payload::note(note);
+  complex_fbs::Metric metric;
+  metric.value = 42.0;
+  container.payload = complex_fbs::Payload::metric(metric);
 
   FORY_TRY(container_bytes, fory.serialize(container));
   FORY_TRY(container_roundtrip,

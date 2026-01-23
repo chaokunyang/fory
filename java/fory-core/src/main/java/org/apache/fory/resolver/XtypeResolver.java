@@ -776,6 +776,9 @@ public class XtypeResolver extends TypeResolver {
         Types.VARINT32, int.class, new PrimitiveSerializers.IntSerializer(fory, int.class));
     registerType(
         Types.VARINT32, AtomicInteger.class, new Serializers.AtomicIntegerSerializer(fory));
+    registerType(
+        Types.VAR_UINT32, Integer.class, new PrimitiveSerializers.VarUint32Serializer(fory));
+    registerType(Types.VAR_UINT32, int.class, new PrimitiveSerializers.VarUint32Serializer(fory));
     registerType(Types.UINT32, Uint32.class, new UnsignedSerializers.Uint32Serializer(fory));
 
     // Long types
@@ -804,6 +807,9 @@ public class XtypeResolver extends TypeResolver {
     registerType(
         Types.VARINT64, long.class, new PrimitiveSerializers.LongSerializer(fory, long.class));
     registerType(Types.VARINT64, AtomicLong.class, new Serializers.AtomicLongSerializer(fory));
+    registerType(
+        Types.VAR_UINT64, Long.class, new PrimitiveSerializers.VarUint64Serializer(fory));
+    registerType(Types.VAR_UINT64, long.class, new PrimitiveSerializers.VarUint64Serializer(fory));
 
     // Float types
     registerType(

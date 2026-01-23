@@ -22,6 +22,7 @@ package org.apache.fory.idl_tests;
 import addressbook.AddressBook;
 import addressbook.AddressbookForyRegistration;
 import addressbook.Animal;
+import addressbook.Cat;
 import addressbook.Dog;
 import addressbook.Person;
 import addressbook.Person.PhoneNumber;
@@ -29,6 +30,7 @@ import addressbook.Person.PhoneType;
 import addressbook.PrimitiveTypes;
 import complex_fbs.ComplexFbsForyRegistration;
 import complex_fbs.Container;
+import complex_fbs.Metric;
 import complex_fbs.Note;
 import complex_fbs.Payload;
 import complex_fbs.ScalarPack;
@@ -283,7 +285,12 @@ public class IdlRoundTripTest {
     Dog dog = new Dog();
     dog.setName("Rex");
     dog.setBarkVolume(5);
-    person.setPet(Animal.ofDog(dog));
+    Animal pet = Animal.ofDog(dog);
+    Cat cat = new Cat();
+    cat.setName("Mimi");
+    cat.setLives(9);
+    pet.setCat(cat);
+    person.setPet(pet);
 
     AddressBook book = new AddressBook();
     List<Person> people = new ArrayList<>();
@@ -317,7 +324,9 @@ public class IdlRoundTripTest {
     types.setFloat16Value(1.5f);
     types.setFloat32Value(2.5f);
     types.setFloat64Value(3.5d);
-    types.setContact(PrimitiveTypes.Contact.ofEmail("alice@example.com"));
+    PrimitiveTypes.Contact contact = PrimitiveTypes.Contact.ofEmail("alice@example.com");
+    contact.setPhone(12345);
+    types.setContact(contact);
     return types;
   }
 
@@ -362,7 +371,11 @@ public class IdlRoundTripTest {
     container.setFlags(new boolean[] {true, false});
     Note note = new Note();
     note.setText("alpha");
-    container.setPayload(Payload.ofNote(note));
+    Payload payload = Payload.ofNote(note);
+    Metric metric = new Metric();
+    metric.setValue(42.0d);
+    payload.setMetric(metric);
+    container.setPayload(payload);
     return container;
   }
 

@@ -216,7 +216,7 @@ class PythonGenerator(BaseGenerator):
 
     def collect_union_imports(self, union: Union, imports: Set[str]):
         """Collect imports for a union and its cases."""
-        imports.add("from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG")
+        imports.add("from pyfory.union import Union, UnionSerializer")
         for field in union.fields:
             self.collect_field_imports(field, imports)
 
@@ -318,14 +318,14 @@ class PythonGenerator(BaseGenerator):
             lines.append(f"{ind}    {case_name} = {field.number}")
         lines.append("")
 
-        lines.append(f"{ind}class {union.name}:")
-        lines.append(f"{ind}    __slots__ = (\"_case\", \"_value\")")
+        lines.append(f"{ind}class {union.name}(Union):")
+        lines.append(f"{ind}    __slots__ = (\"_case\",)")
         lines.append("")
         lines.append(
             f"{ind}    def __init__(self, case: {case_enum_ref}, value: object) -> None:"
         )
+        lines.append(f"{ind}        super().__init__(case.value, value)")
         lines.append(f"{ind}        self._case = case")
-        lines.append(f"{ind}        self._value = value")
         lines.append(f"{ind}        self._validate()")
         lines.append("")
 
@@ -339,6 +339,23 @@ class PythonGenerator(BaseGenerator):
             )
             lines.append(f"{ind}        return cls({case_enum_ref}.{case_name}, v)")
             lines.append("")
+
+        lines.append(f"{ind}    @classmethod")
+        lines.append(
+            f"{ind}    def _from_case_id(cls, case_id: int, value: object) -> \"{union_ref}\":"
+        )
+        for field in union.fields:
+            case_name = self.to_upper_snake_case(field.name)
+            lines.append(
+                f"{ind}        if case_id == {case_enum_ref}.{case_name}.value:"
+            )
+            lines.append(
+                f"{ind}            return cls({case_enum_ref}.{case_name}, value)"
+            )
+        lines.append(
+            f"{ind}        raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
+        )
+        lines.append("")
 
         lines.append(f"{ind}    def _validate(self) -> None:")
         has_checks = False
@@ -362,7 +379,7 @@ class PythonGenerator(BaseGenerator):
         lines.append(f"{ind}        return self._case")
         lines.append("")
         lines.append(f"{ind}    def case_id(self) -> int:")
-        lines.append(f"{ind}        return self._case.value")
+        lines.append(f"{ind}        return self._case_id")
         lines.append("")
         lines.append(f"{ind}    def __eq__(self, other: object) -> bool:")
         lines.append(f"{ind}        if not isinstance(other, {union_ref}):")
@@ -390,6 +407,12 @@ class PythonGenerator(BaseGenerator):
                 f"{ind}        return cast({case_type}, self._value)"
             )
             lines.append("")
+            lines.append(f"{ind}    def set_{method_name}(self, v: {case_type}) -> None:")
+            lines.append(f"{ind}        self._case = {case_enum_ref}.{case_name}")
+            lines.append(f"{ind}        self._case_id = {case_enum_ref}.{case_name}.value")
+            lines.append(f"{ind}        self._value = v")
+            lines.append(f"{ind}        self._validate()")
+            lines.append("")
 
         lines.extend(self.generate_union_serializer(union, indent, parent_stack))
 
@@ -414,119 +437,14 @@ class PythonGenerator(BaseGenerator):
         )
         union_ref = f"{parent_path}.{union.name}" if parent_path else union.name
 
-        lines.append(f"{ind}class {serializer_name}(pyfory.Serializer):")
-        lines.append(
-            f"{ind}    __slots__ = (\"_case_types\", \"_case_typeinfos\", \"_case_serializers\")"
-        )
+        lines.append(f"{ind}class {serializer_name}(UnionSerializer):")
         lines.append("")
         lines.append(f"{ind}    def __init__(self, fory: pyfory.Fory):")
-        lines.append(f"{ind}        super().__init__(fory, {union_ref})")
-        lines.append(f"{ind}        self._case_types = {{")
+        lines.append(f"{ind}        super().__init__(fory, {union_ref}, {{")
         for field in union.fields:
-            case_name = self.to_upper_snake_case(field.name)
             case_type = self.get_union_case_type(field, parent_stack)
-            lines.append(
-                f"{ind}            {case_enum_ref}.{case_name}: {case_type},"
-            )
-        lines.append(f"{ind}        }}")
-        lines.append(f"{ind}        self._case_typeinfos = {{}}")
-        lines.append(f"{ind}        self._case_serializers = {{}}")
-        lines.append("")
-        lines.append(f"{ind}    def write(self, buffer, value: \"{union_ref}\"):")
-        lines.append(f"{ind}        buffer.write_varuint32(value.case_id())")
-        lines.append(f"{ind}        case = value.case()")
-        lines.append(f"{ind}        typeinfo = self._case_typeinfos.get(case)")
-        lines.append(f"{ind}        if typeinfo is None:")
-        lines.append(f"{ind}            case_type = self._case_types.get(case)")
-        lines.append(f"{ind}            if case_type is None:")
-        lines.append(
-            f"{ind}                raise ValueError(\"unknown {union.name} case: {{}}\".format(case))"
-        )
-        lines.append(f"{ind}            typeinfo = self.fory.type_resolver.get_typeinfo(case_type)")
-        lines.append(f"{ind}            self._case_typeinfos[case] = typeinfo")
-        lines.append(f"{ind}        self.fory.write_ref(buffer, value._value, typeinfo=typeinfo)")
-        lines.append("")
-        lines.append(f"{ind}    def read(self, buffer):")
-        lines.append(f"{ind}        case_id = buffer.read_varuint32()")
-        lines.append(f"{ind}        value = self.fory.read_ref(buffer)")
-        lines.append(f"{ind}        for case in {case_enum_ref}:")
-        lines.append(f"{ind}            if case.value == case_id:")
-        lines.append(f"{ind}                break")
-        lines.append(f"{ind}        else:")
-        lines.append(
-            f"{ind}            raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
-        )
-        for field in union.fields:
-            case_name = self.to_upper_snake_case(field.name)
-            method_name = self.to_snake_case(field.name)
-            case_check = self.get_union_case_runtime_check(
-                field, parent_stack, "value"
-            )
-            lines.append(f"{ind}        if case == {case_enum_ref}.{case_name}:")
-            if case_check:
-                lines.append(f"{ind}            if not {case_check}:")
-                lines.append(
-                    f"{ind}                raise TypeError(\"invalid {union.name} value for {case_name}\")"
-                )
-            lines.append(f"{ind}            return {union_ref}.{method_name}(value)")
-        lines.append(
-            f"{ind}        raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
-        )
-        lines.append("")
-        lines.append(f"{ind}    def xwrite(self, buffer, value: \"{union_ref}\"):")
-        lines.append(f"{ind}        buffer.write_varuint32(value.case_id())")
-        lines.append(f"{ind}        case = value.case()")
-        lines.append(f"{ind}        serializer = self._case_serializers.get(case)")
-        lines.append(f"{ind}        typeinfo = self._case_typeinfos.get(case)")
-        lines.append(f"{ind}        if serializer is None or typeinfo is None:")
-        lines.append(f"{ind}            case_type = self._case_types.get(case)")
-        lines.append(f"{ind}            if case_type is None:")
-        lines.append(
-            f"{ind}                raise ValueError(\"unknown {union.name} case: {{}}\".format(case))"
-        )
-        lines.append(f"{ind}            if serializer is None:")
-        lines.append(f"{ind}                serializer = self.fory.type_resolver.get_serializer(case_type)")
-        lines.append(f"{ind}                self._case_serializers[case] = serializer")
-        lines.append(f"{ind}            if typeinfo is None:")
-        lines.append(f"{ind}                typeinfo = self.fory.type_resolver.get_typeinfo(case_type)")
-        lines.append(f"{ind}                self._case_typeinfos[case] = typeinfo")
-        lines.append(f"{ind}        if serializer.need_to_write_ref:")
-        lines.append(f"{ind}            if self.fory.ref_resolver.write_ref_or_null(buffer, value._value):")
-        lines.append(f"{ind}                return")
-        lines.append(f"{ind}        else:")
-        lines.append(f"{ind}            if value._value is None:")
-        lines.append(f"{ind}                buffer.write_int8(NULL_FLAG)")
-        lines.append(f"{ind}                return")
-        lines.append(f"{ind}            buffer.write_int8(NOT_NULL_VALUE_FLAG)")
-        lines.append(f"{ind}        self.fory.type_resolver.write_typeinfo(buffer, typeinfo)")
-        lines.append(f"{ind}        serializer.xwrite(buffer, value._value)")
-        lines.append("")
-        lines.append(f"{ind}    def xread(self, buffer):")
-        lines.append(f"{ind}        case_id = buffer.read_varuint32()")
-        lines.append(f"{ind}        value = self.fory.xread_ref(buffer)")
-        lines.append(f"{ind}        for case in {case_enum_ref}:")
-        lines.append(f"{ind}            if case.value == case_id:")
-        lines.append(f"{ind}                break")
-        lines.append(f"{ind}        else:")
-        lines.append(
-            f"{ind}            raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
-        )
-        for field in union.fields:
-            case_name = self.to_upper_snake_case(field.name)
-            method_name = self.to_snake_case(field.name)
-            case_check = self.get_union_case_runtime_check(
-                field, parent_stack, "value"
-            )
-            lines.append(f"{ind}        if case == {case_enum_ref}.{case_name}:")
-            if case_check:
-                lines.append(f"{ind}            if not {case_check}:")
-                lines.append(
-                    f"{ind}                raise TypeError(\"invalid {union.name} value for {case_name}\")"
-                )
-            lines.append(f"{ind}            return {union_ref}.{method_name}(value)")
-        lines.append(
-            f"{ind}        raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
-        )
+            lines.append(f"{ind}            {field.number}: {case_type},")
+        lines.append(f"{ind}        }})")
         lines.append("")
 
         return lines

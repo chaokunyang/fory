@@ -22,7 +22,7 @@ use fory::Fory;
 use idl_tests::addressbook::{
     self,
     person::{PhoneNumber, PhoneType},
-    AddressBook, Animal, Dog, Person,
+    AddressBook, Animal, Cat, Dog, Person,
 };
 use idl_tests::complex_fbs::{self, Container, Note, Payload, ScalarPack, Status};
 use idl_tests::monster::{self, Color, Monster, Vec3};
@@ -37,6 +37,15 @@ fn build_address_book() -> AddressBook {
         phone_type: PhoneType::Work,
     };
 
+    let mut pet = Animal::Dog(Dog {
+        name: "Rex".to_string(),
+        bark_volume: 5,
+    });
+    pet = Animal::Cat(Cat {
+        name: "Mimi".to_string(),
+        lives: 9,
+    });
+
     let person = Person {
         name: "Alice".to_string(),
         id: 123,
@@ -45,10 +54,7 @@ fn build_address_book() -> AddressBook {
         scores: HashMap::from([("math".to_string(), 100), ("science".to_string(), 98)]),
         salary: 120000.5,
         phones: vec![mobile, work],
-        pet: Animal::Dog(Dog {
-            name: "Rex".to_string(),
-            bark_volume: 5,
-        }),
+        pet,
     };
 
     AddressBook {
@@ -58,6 +64,10 @@ fn build_address_book() -> AddressBook {
 }
 
 fn build_primitive_types() -> addressbook::PrimitiveTypes {
+    let mut contact =
+        addressbook::primitive_types::Contact::Email("alice@example.com".to_string());
+    contact = addressbook::primitive_types::Contact::Phone(12345);
+
     addressbook::PrimitiveTypes {
         bool_value: true,
         int8_value: 12,
@@ -77,9 +87,7 @@ fn build_primitive_types() -> addressbook::PrimitiveTypes {
         float16_value: 1.5,
         float32_value: 2.5,
         float64_value: 3.5,
-        contact: Some(addressbook::primitive_types::Contact::Email(
-            "alice@example.com".to_string(),
-        )),
+        contact: Some(contact),
     }
 }
 
@@ -114,6 +122,11 @@ fn build_container() -> Container {
         d: 2.5,
         ok: true,
     };
+    let mut payload = Payload::Note(Note {
+        text: "alpha".to_string(),
+    });
+    payload = Payload::Metric(complex_fbs::Metric { value: 42.0 });
+
     Container {
         id: 9876543210,
         status: Status::Started,
@@ -122,9 +135,7 @@ fn build_container() -> Container {
         scalars,
         names: vec!["alpha".to_string(), "beta".to_string()],
         flags: vec![true, false],
-        payload: Payload::Note(Note {
-            text: "alpha".to_string(),
-        }),
+        payload,
     }
 }
 

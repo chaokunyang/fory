@@ -37,6 +37,11 @@ def build_address_book() -> "addressbook.AddressBook":
         phone_type=addressbook.Person.PhoneType.WORK,
     )
 
+    pet = addressbook.Animal.dog(
+        addressbook.Dog(name="Rex", bark_volume=5)
+    )
+    pet = addressbook.Animal.cat(addressbook.Cat(name="Mimi", lives=9))
+
     person = addressbook.Person(
         name="Alice",
         id=123,
@@ -45,9 +50,7 @@ def build_address_book() -> "addressbook.AddressBook":
         scores={"math": 100, "science": 98},
         salary=120000.5,
         phones=[mobile, work],
-        pet=addressbook.Animal.dog(
-            addressbook.Dog(name="Rex", bark_volume=5)
-        ),
+        pet=pet,
     )
 
     return addressbook.AddressBook(
@@ -75,6 +78,8 @@ def file_roundtrip(fory: pyfory.Fory, book: "addressbook.AddressBook") -> None:
 
 
 def build_primitive_types() -> "addressbook.PrimitiveTypes":
+    contact = addressbook.PrimitiveTypes.Contact.email("alice@example.com")
+    contact = addressbook.PrimitiveTypes.Contact.phone(12345)
     return addressbook.PrimitiveTypes(
         bool_value=True,
         int8_value=12,
@@ -94,7 +99,7 @@ def build_primitive_types() -> "addressbook.PrimitiveTypes":
         float16_value=1.5,
         float32_value=2.5,
         float64_value=3.5,
-        contact=addressbook.PrimitiveTypes.Contact.email("alice@example.com"),
+        contact=contact,
     )
 
 
@@ -157,6 +162,8 @@ def build_container() -> "complex_fbs.Container":
         d=2.5,
         ok=True,
     )
+    payload = complex_fbs.Payload.note(complex_fbs.Note(text="alpha"))
+    payload = complex_fbs.Payload.metric(complex_fbs.Metric(value=42.0))
     return complex_fbs.Container(
         id=9876543210,
         status=complex_fbs.Status.STARTED,
@@ -165,7 +172,7 @@ def build_container() -> "complex_fbs.Container":
         scalars=scalars,
         names=["alpha", "beta"],
         flags=np.array([True, False], dtype=np.bool_),
-        payload=complex_fbs.Payload.note(complex_fbs.Note(text="alpha")),
+        payload=payload,
     )
 
 

@@ -222,10 +222,14 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
             FORY_PP_FOREACH(FORY_FIELD_INFO_NAMES_FUNC, __VA_ARGS__)};         \
     static inline constexpr auto Names =                                       \
         fory::meta::ConcatArrays(BaseNames, FieldNames);                       \
-    static inline constexpr auto BasePtrs = fory::meta::ConcatTuplesFromTuple( \
-        std::tuple{FORY_PP_FOREACH(FORY_BASE_PTRS_ARG, __VA_ARGS__)});         \
-    static inline constexpr auto FieldPtrs = std::tuple{                       \
-        FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)};      \
+    static inline constexpr auto BasePtrs = []() constexpr {                   \
+      return fory::meta::ConcatTuplesFromTuple(                                \
+          std::tuple{FORY_PP_FOREACH(FORY_BASE_PTRS_ARG, __VA_ARGS__)});       \
+    }();                                                                       \
+    static inline constexpr auto FieldPtrs = []() constexpr {                  \
+      return std::tuple{                                                       \
+          FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)};    \
+    }();                                                                       \
     static inline constexpr auto Ptrs =                                        \
         fory::meta::ConcatTuples(BasePtrs, FieldPtrs);                         \
   };                                                                           \
@@ -300,10 +304,14 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
             FORY_PP_FOREACH(FORY_FIELD_INFO_NAMES_FUNC, __VA_ARGS__)};         \
     static inline constexpr auto Names =                                       \
         fory::meta::ConcatArrays(BaseNames, FieldNames);                       \
-    static inline constexpr auto BasePtrs = fory::meta::ConcatTuplesFromTuple( \
-        std::tuple{FORY_PP_FOREACH(FORY_BASE_PTRS_ARG, __VA_ARGS__)});         \
-    static inline constexpr auto FieldPtrs = std::tuple{                       \
-        FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)};      \
+    static inline constexpr auto BasePtrs = []() constexpr {                   \
+      return fory::meta::ConcatTuplesFromTuple(                                \
+          std::tuple{FORY_PP_FOREACH(FORY_BASE_PTRS_ARG, __VA_ARGS__)});       \
+    }();                                                                       \
+    static inline constexpr auto FieldPtrs = []() constexpr {                  \
+      return std::tuple{                                                       \
+          FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)};    \
+    }();                                                                       \
     static inline constexpr auto Ptrs =                                        \
         fory::meta::ConcatTuples(BasePtrs, FieldPtrs);                         \
   };                                                                           \

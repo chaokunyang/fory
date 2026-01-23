@@ -66,7 +66,7 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
 // NOTE: FORY_STRUCT must be used inside the class/struct definition.
 // It defines hidden friend functions for ADL-based lookup and has access
 // to private fields.
-#define FORY_FIELD_INFO_WITH_FIELDS(type, ...)                                 \
+#define FORY_STRUCT_FIELDS(type, ...)                                          \
   static_assert(std::is_class_v<type>, "it must be a class type");             \
   struct ForyFieldInfoDescriptor {                                             \
     static inline constexpr size_t Size = FORY_PP_NARG(__VA_ARGS__);           \
@@ -88,7 +88,7 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
     return ForyFieldInfoDescriptor{};                                          \
   }
 
-#define FORY_FIELD_INFO_EMPTY(type)                                            \
+#define FORY_STRUCT_DETAIL_EMPTY(type)                                         \
   static_assert(std::is_class_v<type>, "it must be a class type");             \
   struct ForyFieldInfoDescriptor {                                             \
     static inline constexpr size_t Size = 0;                                   \
@@ -109,14 +109,14 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
   }
 
 #define FORY_STRUCT_WITH_FIELDS(type, ...)                                     \
-  FORY_FIELD_INFO_WITH_FIELDS(type, __VA_ARGS__)                               \
+  FORY_STRUCT_FIELDS(type, __VA_ARGS__)                                        \
   [[maybe_unused]] friend constexpr std::true_type ForyStructMarker(           \
       const type &) noexcept {                                                 \
     return {};                                                                 \
   }
 
 #define FORY_STRUCT_EMPTY(type)                                                \
-  FORY_FIELD_INFO_EMPTY(type)                                                  \
+  FORY_STRUCT_DETAIL_EMPTY(type)                                               \
   [[maybe_unused]] friend constexpr std::true_type ForyStructMarker(           \
       const type &) noexcept {                                                 \
     return {};                                                                 \

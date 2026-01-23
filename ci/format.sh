@@ -52,11 +52,20 @@ fi
 
 if command -v clang-format >/dev/null; then
   clang-format --version
-  CLANG_FORMAT_VERSION=$(clang-format --version | awk '{print $3}')
+  CLANG_FORMAT_VERSION=$(clang-format --version | awk '{print $4}')
   echo "clang-format installed: $CLANG_FORMAT_VERSION"
-  tool_version_check "clang-format" "$CLANG_FORMAT_VERSION" "12.0.0"
+  if [ "$CLANG_FORMAT_VERSION" != "18.1.8" ]; then
+    echo "WARNING: Fory uses clang-format 18.1.8, You currently are using $CLANG_FORMAT_VERSION."
+    echo "Installing clang-format 18.1.8..."
+    pip install clang-format==18.1.8
+    # Update the version after installation
+    CLANG_FORMAT_VERSION=$(clang-format --version | awk '{print $4}')
+    echo "clang-format updated to: $CLANG_FORMAT_VERSION"
+  fi
 else
     echo "WARNING: clang-format is not installed!"
+    echo "Installing clang-format 18.1.8..."
+    pip install clang-format==18.1.8
 fi
 
 if ! command -v node >/dev/null; then

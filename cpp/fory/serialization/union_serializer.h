@@ -608,38 +608,43 @@ private:
                                         _9, _10, _11)                          \
   M(A, _1)                                                                     \
   M(A, _2)                                                                     \
-  M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10)     \
-      M(A, _11)
+  M(A, _3)                                                                     \
+  M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10) M(A, _11)
 #define FORY_UNION_PP_FOREACH_2_IMPL_12(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
                                         _9, _10, _11, _12)                     \
   M(A, _1)                                                                     \
   M(A, _2)                                                                     \
-  M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10)     \
-      M(A, _11) M(A, _12)
+  M(A, _3)                                                                     \
+  M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10) M(A, _11)    \
+      M(A, _12)
 #define FORY_UNION_PP_FOREACH_2_IMPL_13(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
                                         _9, _10, _11, _12, _13)                \
   M(A, _1)                                                                     \
   M(A, _2)                                                                     \
-  M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10)     \
-      M(A, _11) M(A, _12) M(A, _13)
+  M(A, _3)                                                                     \
+  M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10) M(A, _11)    \
+      M(A, _12) M(A, _13)
 #define FORY_UNION_PP_FOREACH_2_IMPL_14(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
                                         _9, _10, _11, _12, _13, _14)           \
   M(A, _1)                                                                     \
   M(A, _2)                                                                     \
-  M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10)     \
-      M(A, _11) M(A, _12) M(A, _13) M(A, _14)
+  M(A, _3)                                                                     \
+  M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10) M(A, _11)    \
+      M(A, _12) M(A, _13) M(A, _14)
 #define FORY_UNION_PP_FOREACH_2_IMPL_15(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
                                         _9, _10, _11, _12, _13, _14, _15)      \
   M(A, _1)                                                                     \
   M(A, _2)                                                                     \
-  M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10)     \
-      M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15)
+  M(A, _3)                                                                     \
+  M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10) M(A, _11)    \
+      M(A, _12) M(A, _13) M(A, _14) M(A, _15)
 #define FORY_UNION_PP_FOREACH_2_IMPL_16(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
                                         _9, _10, _11, _12, _13, _14, _15, _16) \
   M(A, _1)                                                                     \
   M(A, _2)                                                                     \
-  M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10)     \
-      M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15) M(A, _16)
+  M(A, _3)                                                                     \
+  M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9) M(A, _10) M(A, _11)    \
+      M(A, _12) M(A, _13) M(A, _14) M(A, _15) M(A, _16)
 
 #define FORY_UNION_CASE_ID(Type, tuple)                                        \
   static_cast<uint32_t>(FORY_UNION_CASE_META(tuple).id_)

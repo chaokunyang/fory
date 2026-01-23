@@ -17,7 +17,7 @@
 
 """Go code generator."""
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union as TypingUnion
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
@@ -428,182 +428,113 @@ class GoGenerator(BaseGenerator):
         lines.append("}")
 
         lines.append("")
-        lines.extend(self.generate_union_serializer(union, parent_stack))
-
-        return lines
-
-    def generate_union_serializer(
-        self, union: Union, parent_stack: Optional[List[Message]] = None
-    ) -> List[str]:
-        """Generate a Go serializer for a union."""
-        lines: List[str] = []
-        type_name = self.get_type_name(union.name, parent_stack)
-        case_type = f"{type_name}Case"
-        serializer_name = f"{type_name}UnionSerializer"
-        invalid_const = f"{case_type}Invalid"
-
-        lines.append(f"type {serializer_name} struct {{}}")
-        lines.append("")
 
         lines.append(
-            f"func (s *{serializer_name}) Write(ctx *fory.WriteContext, refMode fory.RefMode, writeType bool, hasGenerics bool, value reflect.Value) {{"
+            f"func (u {type_name}) ForyUnionGet() (uint32, any) {{ return uint32(u.case_), u.value }}"
         )
-        lines.append("\t_ = hasGenerics")
-        lines.append("\tswitch refMode {")
-        lines.append("\tcase fory.RefModeTracking:")
         lines.append(
-            "\t\tif !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {"
+            f"func (u *{type_name}) ForyUnionSet(caseId uint32, value any) {{"
         )
-        lines.append("\t\t\tctx.Buffer().WriteInt8(fory.NullFlag)")
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append(
-            "\t\trefWritten, err := ctx.RefResolver().WriteRefOrNull(ctx.Buffer(), value)"
-        )
-        lines.append("\t\tif err != nil {")
-        lines.append("\t\t\tctx.SetError(fory.FromError(err))")
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append("\t\tif refWritten {")
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append("\tcase fory.RefModeNullOnly:")
-        lines.append(
-            "\t\tif !value.IsValid() || (value.Kind() == reflect.Ptr && value.IsNil()) {"
-        )
-        lines.append("\t\t\tctx.Buffer().WriteInt8(fory.NullFlag)")
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append("\t\tctx.Buffer().WriteInt8(fory.NotNullValueFlag)")
-        lines.append("\t}")
-        lines.append("\tif writeType {")
-        lines.append(
-            "\t\ttypeInfo, err := ctx.TypeResolver().GetTypeInfo(value, true)"
-        )
-        lines.append("\t\tif err != nil {")
-        lines.append(
-            f'\t\t\tctx.SetError(fory.SerializationErrorf("failed to get type info for {type_name}: %v", err))'
-        )
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append("\t\tctx.TypeResolver().WriteTypeInfo(ctx.Buffer(), typeInfo, ctx.Err())")
-        lines.append("\t}")
-        lines.append("\ts.WriteData(ctx, value)")
-        lines.append("}")
-        lines.append("")
-
-        lines.append(
-            f"func (s *{serializer_name}) WriteData(ctx *fory.WriteContext, value reflect.Value) {{"
-        )
-        lines.append("\tif ctx.HasError() {")
-        lines.append("\t\treturn")
-        lines.append("\t}")
-        lines.append("\tif value.Kind() == reflect.Ptr {")
-        lines.append("\t\tif value.IsNil() {")
-        lines.append(
-            f'\t\t\tctx.SetError(fory.SerializationErrorf("{type_name} is nil"))'
-        )
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append("\t\tvalue = value.Elem()")
-        lines.append("\t}")
-        lines.append(f"\tobj := value.Interface().({type_name})")
-        lines.append(f"\tif obj.case_ == {invalid_const} {{")
-        lines.append(
-            f'\t\tctx.SetError(fory.SerializationErrorf("{type_name} has invalid case"))'
-        )
-        lines.append("\t\treturn")
-        lines.append("\t}")
-        lines.append("\tctx.Buffer().WriteVaruint32(uint32(obj.case_))")
-        lines.append("\tctx.WriteValue(reflect.ValueOf(obj.value), fory.RefModeTracking, true)")
-        lines.append("}")
-        lines.append("")
-
-        lines.append(
-            f"func (s *{serializer_name}) Read(ctx *fory.ReadContext, refMode fory.RefMode, readType bool, hasGenerics bool, value reflect.Value) {{"
-        )
-        lines.append("\t_ = hasGenerics")
-        lines.append("\terr := ctx.Err()")
-        lines.append("\tswitch refMode {")
-        lines.append("\tcase fory.RefModeTracking:")
-        lines.append("\t\trefID, refErr := ctx.RefResolver().TryPreserveRefId(ctx.Buffer())")
-        lines.append("\t\tif refErr != nil {")
-        lines.append("\t\t\tctx.SetError(fory.FromError(refErr))")
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append("\t\tif int8(refID) < -1 {")
-        lines.append("\t\t\tobj := ctx.RefResolver().GetReadObject(refID)")
-        lines.append("\t\t\tif obj.IsValid() {")
-        lines.append("\t\t\t\tvalue.Set(obj)")
-        lines.append("\t\t\t}")
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append("\tcase fory.RefModeNullOnly:")
-        lines.append("\t\tflag := ctx.Buffer().ReadInt8(err)")
-        lines.append("\t\tif flag == fory.NullFlag {")
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append("\t}")
-        lines.append("\tif readType {")
-        lines.append("\t\tctx.TypeResolver().ReadTypeInfo(ctx.Buffer(), err)")
-        lines.append("\t}")
-        lines.append("\ts.ReadData(ctx, value)")
-        lines.append("}")
-        lines.append("")
-
-        lines.append(
-            f"func (s *{serializer_name}) ReadData(ctx *fory.ReadContext, value reflect.Value) {{"
-        )
-        lines.append("\tif ctx.HasError() {")
-        lines.append("\t\treturn")
-        lines.append("\t}")
-        lines.append("\terr := ctx.Err()")
-        lines.append("\tcaseId := ctx.Buffer().ReadVaruint32(err)")
-        lines.append("\tif ctx.HasError() {")
-        lines.append("\t\treturn")
-        lines.append("\t}")
-        lines.append("\tswitch caseId {")
-        for field in union.fields:
-            case_name = self.to_pascal_case(field.name)
-            case_const = f"{case_type}{case_name}"
-            case_type_name = self.get_union_case_type(field, parent_stack)
-            lines.append(f"\tcase {field.number}:")
-            lines.append(f"\t\tvar v {case_type_name}")
-            lines.append(
-                "\t\tctx.ReadValue(reflect.ValueOf(&v).Elem(), fory.RefModeTracking, true)"
-            )
-            lines.append("\t\tif ctx.HasError() {")
-            lines.append("\t\t\treturn")
-            lines.append("\t\t}")
-            lines.append(f"\t\tobj := {type_name}{{case_: {case_const}, value: v}}")
-            lines.append("\t\tif value.Kind() == reflect.Ptr {")
-            lines.append("\t\t\tif value.IsNil() {")
-            lines.append("\t\t\t\tvalue.Set(reflect.New(value.Type().Elem()))")
-            lines.append("\t\t\t}")
-            lines.append("\t\t\tvalue = value.Elem()")
-            lines.append("\t\t}")
-            lines.append("\t\tvalue.Set(reflect.ValueOf(obj))")
-            lines.append("\t\treturn")
-        lines.append("\tdefault:")
-        lines.append("\t\tfory.SkipAnyValue(ctx, true)")
-        lines.append("\t\tif ctx.HasError() {")
-        lines.append("\t\t\treturn")
-        lines.append("\t\t}")
-        lines.append(
-            f'\t\tctx.SetError(fory.DeserializationErrorf("unknown {type_name} case id: %d", caseId))'
-        )
-        lines.append("\t\treturn")
-        lines.append("\t}")
-        lines.append("}")
-        lines.append("")
-
-        lines.append(
-            f"func (s *{serializer_name}) ReadWithTypeInfo(ctx *fory.ReadContext, refMode fory.RefMode, typeInfo *fory.TypeInfo, value reflect.Value) {{"
-        )
-        lines.append("\ts.Read(ctx, refMode, false, false, value)")
+        lines.append(f"\tu.case_ = {case_type}(caseId)")
+        lines.append("\tu.value = value")
         lines.append("}")
 
         return lines
+
+    def get_union_case_type_id_expr(
+        self, field: Field, parent_stack: Optional[List[Message]]
+    ) -> str:
+        """Return the Go expression for a union case value type id."""
+        if isinstance(field.field_type, PrimitiveType):
+            kind = field.field_type.kind
+            primitive_type_ids = {
+                PrimitiveKind.BOOL: "fory.BOOL",
+                PrimitiveKind.INT8: "fory.INT8",
+                PrimitiveKind.INT16: "fory.INT16",
+                PrimitiveKind.INT32: "fory.INT32",
+                PrimitiveKind.VARINT32: "fory.VARINT32",
+                PrimitiveKind.INT64: "fory.INT64",
+                PrimitiveKind.VARINT64: "fory.VARINT64",
+                PrimitiveKind.TAGGED_INT64: "fory.TAGGED_INT64",
+                PrimitiveKind.UINT8: "fory.UINT8",
+                PrimitiveKind.UINT16: "fory.UINT16",
+                PrimitiveKind.UINT32: "fory.UINT32",
+                PrimitiveKind.VAR_UINT32: "fory.VAR_UINT32",
+                PrimitiveKind.UINT64: "fory.UINT64",
+                PrimitiveKind.VAR_UINT64: "fory.VAR_UINT64",
+                PrimitiveKind.TAGGED_UINT64: "fory.TAGGED_UINT64",
+                PrimitiveKind.FLOAT16: "fory.FLOAT16",
+                PrimitiveKind.FLOAT32: "fory.FLOAT32",
+                PrimitiveKind.FLOAT64: "fory.FLOAT64",
+                PrimitiveKind.STRING: "fory.STRING",
+                PrimitiveKind.BYTES: "fory.BINARY",
+                PrimitiveKind.DATE: "fory.LOCAL_DATE",
+                PrimitiveKind.TIMESTAMP: "fory.TIMESTAMP",
+            }
+            return primitive_type_ids.get(kind, "fory.UNKNOWN")
+        if isinstance(field.field_type, ListType):
+            return "fory.LIST"
+        if isinstance(field.field_type, MapType):
+            return "fory.MAP"
+        if isinstance(field.field_type, NamedType):
+            type_def = self.resolve_named_type(field.field_type.name, parent_stack)
+            if isinstance(type_def, Enum):
+                if type_def.type_id is None:
+                    return "fory.NAMED_ENUM"
+                return f"({type_def.type_id} << 8) | fory.ENUM"
+            if isinstance(type_def, Union):
+                if type_def.type_id is None:
+                    return "fory.NAMED_UNION"
+                return f"({type_def.type_id} << 8) | fory.UNION"
+            if isinstance(type_def, Message):
+                if type_def.type_id is None:
+                    return "fory.NAMED_STRUCT"
+                return f"({type_def.type_id} << 8) | fory.STRUCT"
+        return "fory.UNKNOWN"
+
+    def get_union_case_reflect_type_expr(
+        self, field: Field, parent_stack: Optional[List[Message]]
+    ) -> str:
+        """Return the Go expression for reflect.Type of a union case."""
+        case_type = self.get_union_case_type(field, parent_stack)
+        if case_type.startswith("*"):
+            return f"reflect.TypeOf((*{case_type[1:]})(nil))"
+        return f"reflect.TypeOf((*{case_type})(nil)).Elem()"
+
+    def resolve_named_type(
+        self, name: str, parent_stack: Optional[List[Message]]
+    ) -> Optional[TypingUnion[Message, Enum, Union]]:
+        """Resolve a named type to a schema definition."""
+        parts = name.split(".")
+        if len(parts) > 1:
+            current = self.find_top_level_type(parts[0])
+            for part in parts[1:]:
+                if isinstance(current, Message):
+                    current = current.get_nested_type(part)
+                else:
+                    return None
+            return current
+        if parent_stack:
+            for msg in reversed(parent_stack):
+                nested = msg.get_nested_type(name)
+                if nested is not None:
+                    return nested
+        return self.find_top_level_type(name)
+
+    def find_top_level_type(
+        self, name: str
+    ) -> Optional[TypingUnion[Message, Enum, Union]]:
+        """Find a top-level type definition by name."""
+        for msg in self.schema.messages:
+            if msg.name == name:
+                return msg
+        for enum in self.schema.enums:
+            if enum.name == name:
+                return enum
+        for union in self.schema.unions:
+            if union.name == name:
+                return union
+        return None
 
     def generate_message(
         self,
@@ -969,18 +900,25 @@ class GoGenerator(BaseGenerator):
         """Generate registration code for a union."""
         code_name = self.get_type_name(union.name, parent_stack)
         type_name = self.get_registration_type_name(union.name, parent_stack)
-        serializer_name = f"{code_name}UnionSerializer"
+        cases = []
+        for field in union.fields:
+            type_expr = self.get_union_case_reflect_type_expr(field, parent_stack)
+            type_id_expr = self.get_union_case_type_id_expr(field, parent_stack)
+            cases.append(
+                f"fory.UnionCase{{ID: {field.number}, Type: {type_expr}, TypeID: {type_id_expr}}}"
+            )
+        serializer_expr = f"fory.NewUnionSerializer({', '.join(cases)})"
 
         if union.type_id is not None:
             lines.append(
-                f"\tif err := f.RegisterUnion({code_name}{{}}, {union.type_id}, &{serializer_name}{{}}); err != nil {{"
+                f"\tif err := f.RegisterUnion({code_name}{{}}, {union.type_id}, {serializer_expr}); err != nil {{"
             )
             lines.append("\t\treturn err")
             lines.append("\t}")
         else:
             ns = self.schema.package or "default"
             lines.append(
-                f'\tif err := f.RegisterNamedUnion({code_name}{{}}, "{ns}.{type_name}", &{serializer_name}{{}}); err != nil {{'
+                f'\tif err := f.RegisterNamedUnion({code_name}{{}}, "{ns}.{type_name}", {serializer_expr}); err != nil {{'
             )
             lines.append("\t\treturn err")
             lines.append("\t}")

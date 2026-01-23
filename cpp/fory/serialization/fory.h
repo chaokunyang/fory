@@ -332,8 +332,7 @@ public:
   /// @tparam T The union type to register (must provide Serializer<T>).
   /// @param type_id Unique numeric identifier for this union type.
   /// @return Success or error if registration fails.
-  template <typename T>
-  Result<void, Error> register_union(uint32_t type_id) {
+  template <typename T> Result<void, Error> register_union(uint32_t type_id) {
     return type_resolver_->template register_union_by_id<T>(type_id);
   }
 

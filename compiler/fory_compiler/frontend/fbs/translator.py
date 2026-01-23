@@ -175,7 +175,8 @@ class FbsTranslator:
                 Field(
                     name=field_name,
                     field_type=NamedType(
-                        type_name, location=self._location(fbs_union.line, fbs_union.column)
+                        type_name,
+                        location=self._location(fbs_union.line, fbs_union.column),
                     ),
                     number=index,
                     line=fbs_union.line,
@@ -201,7 +202,10 @@ class FbsTranslator:
         result = []
         for i, char in enumerate(name):
             if char.isupper():
-                if i > 0 and (name[i - 1].islower() or (i + 1 < len(name) and name[i + 1].islower())):
+                if i > 0 and (
+                    name[i - 1].islower()
+                    or (i + 1 < len(name) and name[i + 1].islower())
+                ):
                     result.append("_")
                 result.append(char.lower())
             else:

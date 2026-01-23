@@ -383,6 +383,3 @@ class SliceSerializer(Serializer):
 
     def xread(self, buffer):
         raise NotImplementedError
-
-
-from pyfory.union import UnionSerializer

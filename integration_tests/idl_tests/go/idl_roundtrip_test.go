@@ -54,7 +54,7 @@ func buildAddressBook() AddressBook {
 		Scores: map[string]int32{"math": 100, "science": 98},
 		Salary: 120000.5,
 		Phones: []Person_PhoneNumber{mobile, work},
-		Pet: pet,
+		Pet:    pet,
 	}
 
 	return AddressBook{

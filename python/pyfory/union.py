@@ -147,9 +147,7 @@ class UnionSerializer(Serializer):
                 break
 
         if active_index is None:
-            raise TypeError(
-                f"Value {value} of type {type(value)} doesn't match any alternative in Union{self._alternative_types}"
-            )
+            raise TypeError(f"Value {value} of type {type(value)} doesn't match any alternative in Union{self._alternative_types}")
 
         buffer.write_varuint32(active_index)
         active_serializer.write(buffer, value)
@@ -157,9 +155,7 @@ class UnionSerializer(Serializer):
     def _read_typing_union(self, buffer):
         stored_index = buffer.read_varuint32()
         if stored_index >= len(self._alternative_serializers):
-            raise ValueError(
-                f"Union index out of bounds: {stored_index} (max: {len(self._alternative_serializers) - 1})"
-            )
+            raise ValueError(f"Union index out of bounds: {stored_index} (max: {len(self._alternative_serializers) - 1})")
         _, serializer = self._alternative_serializers[stored_index]
         return serializer.read(buffer)
 
@@ -176,9 +172,7 @@ class UnionSerializer(Serializer):
                 break
 
         if active_index is None:
-            raise TypeError(
-                f"Value {value} of type {type(value)} doesn't match any alternative in Union{self._alternative_types}"
-            )
+            raise TypeError(f"Value {value} of type {type(value)} doesn't match any alternative in Union{self._alternative_types}")
 
         buffer.write_varuint32(active_index)
         typeinfo = self.type_resolver.get_typeinfo(active_type)
@@ -188,8 +182,6 @@ class UnionSerializer(Serializer):
     def _xread_typing_union(self, buffer):
         stored_index = buffer.read_varuint32()
         if stored_index >= len(self._alternative_serializers):
-            raise ValueError(
-                f"Union index out of bounds: {stored_index} (max: {len(self._alternative_serializers) - 1})"
-            )
+            raise ValueError(f"Union index out of bounds: {stored_index} (max: {len(self._alternative_serializers) - 1})")
         typeinfo = self.type_resolver.read_typeinfo(buffer)
         return typeinfo.serializer.xread(buffer)

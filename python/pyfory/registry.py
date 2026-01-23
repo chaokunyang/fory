@@ -382,9 +382,7 @@ class TypeResolver:
                 except BaseException:
                     serializer = serializer()
         if typename is not None and type_id is not None:
-            raise TypeError(
-                f"type name {typename} and id {type_id} should not be set at the same time"
-            )
+            raise TypeError(f"type name {typename} and id {type_id} should not be set at the same time")
         if typename is None and type_id is None:
             type_id = self._next_type_id()
         if type_id not in {0, None}:
@@ -789,11 +787,7 @@ class TypeResolver:
                     typename = split_typename
                     ns = split_ns
                 if typename:
-                    matches = [
-                        info
-                        for (reg_ns, reg_typename), info in self._named_type_to_typeinfo.items()
-                        if reg_typename == typename
-                    ]
+                    matches = [info for (reg_ns, reg_typename), info in self._named_type_to_typeinfo.items() if reg_typename == typename]
                     if len(matches) == 1:
                         typeinfo = matches[0]
                         self._ns_type_to_typeinfo[(ns_metabytes, type_metabytes)] = typeinfo

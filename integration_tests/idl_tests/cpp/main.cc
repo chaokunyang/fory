@@ -126,8 +126,8 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   types.float16_value = 1.5F;
   types.float32_value = 2.5F;
   types.float64_value = 3.5;
-  types.contact =
-      addressbook::PrimitiveTypes::Contact::email(std::string("alice@example.com"));
+  types.contact = addressbook::PrimitiveTypes::Contact::email(
+      std::string("alice@example.com"));
   types.contact = addressbook::PrimitiveTypes::Contact::phone(12345);
 
   FORY_TRY(primitive_bytes, fory.serialize(types));

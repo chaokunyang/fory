@@ -141,9 +141,7 @@ class ProtoTranslator:
     def _translate_message(self, proto_msg: ProtoMessage) -> Message:
         type_id, options = self._translate_type_options(proto_msg.options)
         fields = [self._translate_field(f) for f in proto_msg.fields]
-        nested_unions = [
-            self._translate_oneof(o, proto_msg) for o in proto_msg.oneofs
-        ]
+        nested_unions = [self._translate_oneof(o, proto_msg) for o in proto_msg.oneofs]
         for oneof in proto_msg.oneofs:
             if not oneof.fields:
                 continue

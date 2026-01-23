@@ -1112,15 +1112,14 @@ TypeResolver::register_union_by_name(const std::string &ns,
                                      const std::string &type_name) {
   check_registration_thread();
   if (type_name.empty()) {
-    return Unexpected(
-        Error::invalid("type_name must be non-empty for register_union_by_name"));
+    return Unexpected(Error::invalid(
+        "type_name must be non-empty for register_union_by_name"));
   }
 
   constexpr uint64_t ctid = type_index<T>();
 
   uint32_t actual_type_id = static_cast<uint32_t>(TypeId::NAMED_UNION);
-  FORY_TRY(info,
-           build_union_type_info<T>(actual_type_id, ns, type_name, true));
+  FORY_TRY(info, build_union_type_info<T>(actual_type_id, ns, type_name, true));
 
   FORY_TRY(stored_ptr, register_type_internal(ctid, std::move(info)));
   partial_type_infos_.put(ctid, stored_ptr);
@@ -1304,8 +1303,7 @@ TypeResolver::build_union_type_info(uint32_t type_id, std::string ns,
   entry->harness = make_serializer_harness<T>();
 
   if (!entry->harness.valid()) {
-    return Unexpected(
-        Error::invalid("Harness for union type is incomplete"));
+    return Unexpected(Error::invalid("Harness for union type is incomplete"));
   }
 
   FORY_TRY(enc_ns, encode_meta_string(entry->namespace_name, true));

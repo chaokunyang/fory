@@ -162,9 +162,7 @@ class Message:
         id_str = f" [id={self.type_id}]" if self.type_id is not None else ""
         nested_str = ""
         if self.nested_messages or self.nested_enums or self.nested_unions:
-            nested_str = (
-                f", nested={len(self.nested_messages)}msg+{len(self.nested_enums)}enum+{len(self.nested_unions)}union"
-            )
+            nested_str = f", nested={len(self.nested_messages)}msg+{len(self.nested_enums)}enum+{len(self.nested_unions)}union"
         opts_str = f", options={len(self.options)}" if self.options else ""
         return (
             f"Message({self.name}{id_str}, fields={self.fields}{nested_str}{opts_str})"

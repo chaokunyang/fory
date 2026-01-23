@@ -30,8 +30,8 @@
 
 #include <cstddef>
 #include <optional>
-#include <typeindex>
 #include <type_traits>
+#include <typeindex>
 #include <utility>
 
 namespace fory {
@@ -43,8 +43,8 @@ template <typename T, uint32_t CaseId> struct UnionCaseMeta;
 
 namespace detail {
 
-template <typename T, typename = void> struct has_union_case_ids : std::false_type {
-};
+template <typename T, typename = void>
+struct has_union_case_ids : std::false_type {};
 
 template <typename T>
 struct has_union_case_ids<T, std::void_t<decltype(UnionCaseIds<T>::case_count)>>
@@ -91,8 +91,7 @@ constexpr uint32_t resolve_union_type_id(const ::fory::FieldMeta &meta) {
     }
     return static_cast<uint32_t>(TypeId::UINT64);
   }
-  if constexpr (std::is_same_v<Inner, int32_t> ||
-                std::is_same_v<Inner, int>) {
+  if constexpr (std::is_same_v<Inner, int32_t> || std::is_same_v<Inner, int>) {
     if (meta.encoding_ == ::fory::Encoding::Fixed) {
       return static_cast<uint32_t>(TypeId::INT32);
     }
@@ -178,8 +177,8 @@ inline bool read_union_ref_flag(ReadContext &ctx, RefMode ref_mode,
 }
 
 template <typename T>
-inline const union_unwrap_optional_inner_t<T> &unwrap_union_value(
-    const T &value) {
+inline const union_unwrap_optional_inner_t<T> &
+unwrap_union_value(const T &value) {
   if constexpr (is_optional_v<decay_t<T>>) {
     return value.value();
   } else {
@@ -196,10 +195,7 @@ inline T wrap_union_case_value(union_unwrap_optional_inner_t<T> &&value) {
   }
 }
 
-template <typename T>
-inline T default_union_case_value() {
-  return T{};
-}
+template <typename T> inline T default_union_case_value() { return T{}; }
 
 template <typename T>
 inline void write_union_value_data(const T &value, WriteContext &ctx,
@@ -296,8 +292,7 @@ inline bool dispatch_union_case(uint32_t case_id, F &&fn) {
       fn(std::integral_constant<uint32_t, id>{});
       return true;
     }
-    return dispatch_union_case<T, F, Index + 1>(case_id,
-                                                std::forward<F>(fn));
+    return dispatch_union_case<T, F, Index + 1>(case_id, std::forward<F>(fn));
   }
   return false;
 }
@@ -314,8 +309,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
 
   static inline void write_type_info(WriteContext &ctx) {
     auto result = ctx.write_any_typeinfo(
-        static_cast<uint32_t>(TypeId::TYPED_UNION),
-        std::type_index(typeid(T)));
+        static_cast<uint32_t>(TypeId::TYPED_UNION), std::type_index(typeid(T)));
     if (FORY_PREDICT_FALSE(!result.ok())) {
       ctx.set_error(std::move(result).error());
     }
@@ -470,8 +464,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
           return;
         }
         if (!type_id_matches(actual_type_id, field_type_id)) {
-          ctx.set_error(
-              Error::type_mismatch(actual_type_id, field_type_id));
+          ctx.set_error(Error::type_mismatch(actual_type_id, field_type_id));
           result = default_value();
           return;
         }
@@ -517,8 +510,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
         return default_value();
       }
       if (!type_info) {
-        ctx.set_error(
-            Error::type_error("TypeInfo not found for union skip"));
+        ctx.set_error(Error::type_error("TypeInfo not found for union skip"));
         return default_value();
       }
       FieldType field_type;
@@ -585,14 +577,12 @@ private:
 #define FORY_UNION_CASE_META_IMPL(type, name, meta) meta
 
 #define FORY_UNION_PP_FOREACH_2(M, A, ...)                                     \
-  FORY_PP_INVOKE(                                                              \
-      FORY_PP_CONCAT(FORY_UNION_PP_FOREACH_2_IMPL_,                            \
-                     FORY_PP_NARG(__VA_ARGS__)),                               \
-      M, A, __VA_ARGS__)
+  FORY_PP_INVOKE(FORY_PP_CONCAT(FORY_UNION_PP_FOREACH_2_IMPL_,                 \
+                                FORY_PP_NARG(__VA_ARGS__)),                    \
+                 M, A, __VA_ARGS__)
 
 #define FORY_UNION_PP_FOREACH_2_IMPL_1(M, A, _1) M(A, _1)
-#define FORY_UNION_PP_FOREACH_2_IMPL_2(M, A, _1, _2)                           \
-  M(A, _1) M(A, _2)
+#define FORY_UNION_PP_FOREACH_2_IMPL_2(M, A, _1, _2) M(A, _1) M(A, _2)
 #define FORY_UNION_PP_FOREACH_2_IMPL_3(M, A, _1, _2, _3)                       \
   M(A, _1) M(A, _2) M(A, _3)
 #define FORY_UNION_PP_FOREACH_2_IMPL_4(M, A, _1, _2, _3, _4)                   \
@@ -606,50 +596,54 @@ private:
 #define FORY_UNION_PP_FOREACH_2_IMPL_8(M, A, _1, _2, _3, _4, _5, _6, _7, _8)   \
   M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)
 #define FORY_UNION_PP_FOREACH_2_IMPL_9(M, A, _1, _2, _3, _4, _5, _6, _7, _8,   \
-                                      _9)                                     \
-  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
-      M(A, _9)
+                                       _9)                                     \
+  M(A, _1)                                                                     \
+  M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9)
 #define FORY_UNION_PP_FOREACH_2_IMPL_10(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
-                                       _9, _10)                               \
-  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
-      M(A, _9) M(A, _10)
+                                        _9, _10)                               \
+  M(A, _1)                                                                     \
+  M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9)      \
+      M(A, _10)
 #define FORY_UNION_PP_FOREACH_2_IMPL_11(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
-                                       _9, _10, _11)                          \
-  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
-      M(A, _9) M(A, _10) M(A, _11)
+                                        _9, _10, _11)                          \
+  M(A, _1)                                                                     \
+  M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9)      \
+      M(A, _10) M(A, _11)
 #define FORY_UNION_PP_FOREACH_2_IMPL_12(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
-                                       _9, _10, _11, _12)                     \
-  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
-      M(A, _9) M(A, _10) M(A, _11) M(A, _12)
+                                        _9, _10, _11, _12)                     \
+  M(A, _1)                                                                     \
+  M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9)      \
+      M(A, _10) M(A, _11) M(A, _12)
 #define FORY_UNION_PP_FOREACH_2_IMPL_13(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
-                                       _9, _10, _11, _12, _13)                \
-  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
-      M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13)
+                                        _9, _10, _11, _12, _13)                \
+  M(A, _1)                                                                     \
+  M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9)      \
+      M(A, _10) M(A, _11) M(A, _12) M(A, _13)
 #define FORY_UNION_PP_FOREACH_2_IMPL_14(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
-                                       _9, _10, _11, _12, _13, _14)           \
-  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
-      M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14)
+                                        _9, _10, _11, _12, _13, _14)           \
+  M(A, _1)                                                                     \
+  M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9)      \
+      M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14)
 #define FORY_UNION_PP_FOREACH_2_IMPL_15(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
-                                       _9, _10, _11, _12, _13, _14, _15)      \
-  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
-      M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15)
+                                        _9, _10, _11, _12, _13, _14, _15)      \
+  M(A, _1)                                                                     \
+  M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9)      \
+      M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15)
 #define FORY_UNION_PP_FOREACH_2_IMPL_16(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
-                                       _9, _10, _11, _12, _13, _14, _15,      \
-                                       _16)                                   \
-  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
-      M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15)     \
-          M(A, _16)
+                                        _9, _10, _11, _12, _13, _14, _15, _16) \
+  M(A, _1)                                                                     \
+  M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8) M(A, _9)      \
+      M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15) M(A, _16)
 
 #define FORY_UNION_CASE_ID(Type, tuple)                                        \
   static_cast<uint32_t>(FORY_UNION_CASE_META(tuple).id_)
 
-#define FORY_UNION_CASE_ID_ENTRY(Type, tuple)                                  \
-  FORY_UNION_CASE_ID(Type, tuple),
+#define FORY_UNION_CASE_ID_ENTRY(Type, tuple) FORY_UNION_CASE_ID(Type, tuple),
 
 #define FORY_UNION_CASE_DEF(Type, tuple)                                       \
   template <>                                                                  \
-  struct UnionCaseMeta<Type,                                                   \
-                       static_cast<uint32_t>(FORY_UNION_CASE_META(tuple).id_)> { \
+  struct UnionCaseMeta<Type, static_cast<uint32_t>(                            \
+                                 FORY_UNION_CASE_META(tuple).id_)> {           \
     using UnionType = Type;                                                    \
     using CaseT = FORY_UNION_CASE_TYPE(tuple);                                 \
     static constexpr ::fory::FieldMeta meta = FORY_UNION_CASE_META(tuple);     \
@@ -659,10 +653,10 @@ private:
   };
 
 #define FORY_UNION(Type, ...)                                                  \
-  static_assert(                                                               \
-      FORY_PP_NARG(__VA_ARGS__) <= 16,                                         \
-      "FORY_UNION supports up to 16 cases; use FORY_UNION_IDS/FORY_UNION_CASE " \
-      "for larger unions");                                                    \
+  static_assert(FORY_PP_NARG(__VA_ARGS__) <= 16,                               \
+                "FORY_UNION supports up to 16 cases; use "                     \
+                "FORY_UNION_IDS/FORY_UNION_CASE "                              \
+                "for larger unions");                                          \
   namespace fory {                                                             \
   namespace serialization {                                                    \
   template <> struct UnionCaseIds<Type> {                                      \

@@ -37,9 +37,7 @@ def build_address_book() -> "addressbook.AddressBook":
         phone_type=addressbook.Person.PhoneType.WORK,
     )
 
-    pet = addressbook.Animal.dog(
-        addressbook.Dog(name="Rex", bark_volume=5)
-    )
+    pet = addressbook.Animal.dog(addressbook.Dog(name="Rex", bark_volume=5))
     pet = addressbook.Animal.cat(addressbook.Cat(name="Mimi", lives=9))
 
     person = addressbook.Person(

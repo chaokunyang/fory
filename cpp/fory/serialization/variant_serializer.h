@@ -209,8 +209,7 @@ template <typename... Ts> struct Serializer<std::variant<Ts...>> {
     // Dispatch to the appropriate alternative's serializer
     // In xlang/compatible mode, write type info for the alternative
     bool write_alt_type = ctx.is_xlang() || ctx.is_compatible();
-    RefMode alt_ref_mode =
-        ctx.is_xlang() ? RefMode::Tracking : RefMode::None;
+    RefMode alt_ref_mode = ctx.is_xlang() ? RefMode::Tracking : RefMode::None;
     write_variant_by_index(variant, ctx, active_index, alt_ref_mode,
                            write_alt_type);
   }
@@ -247,8 +246,7 @@ template <typename... Ts> struct Serializer<std::variant<Ts...>> {
     // Dispatch to the appropriate alternative's serializer
     // In xlang/compatible mode, read type info for the alternative
     bool read_alt_type = ctx.is_xlang() || ctx.is_compatible();
-    RefMode alt_ref_mode =
-        ctx.is_xlang() ? RefMode::Tracking : RefMode::None;
+    RefMode alt_ref_mode = ctx.is_xlang() ? RefMode::Tracking : RefMode::None;
     return read_variant_by_index<VariantType>(ctx, stored_index, alt_ref_mode,
                                               read_alt_type);
   }

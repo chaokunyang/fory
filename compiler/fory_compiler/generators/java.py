@@ -547,17 +547,13 @@ class JavaGenerator(BaseGenerator):
             case_type = self.get_union_case_type(field)
             cast_type = self.get_union_case_cast_type(field)
 
-            lines.append(
-                f"{ind}    public boolean has{case_name}() {{"
-            )
+            lines.append(f"{ind}    public boolean has{case_name}() {{")
             lines.append(
                 f"{ind}        return index == {case_enum}.{case_enum_name}.id;"
             )
             lines.append(f"{ind}    }}")
             lines.append("")
-            lines.append(
-                f"{ind}    public {case_type} get{case_name}() {{"
-            )
+            lines.append(f"{ind}    public {case_type} get{case_name}() {{")
             lines.append(
                 f"{ind}        if (index != {case_enum}.{case_enum_name}.id) {{"
             )
@@ -568,16 +564,12 @@ class JavaGenerator(BaseGenerator):
             lines.append(f"{ind}        return ({cast_type}) value;")
             lines.append(f"{ind}    }}")
             lines.append("")
-            lines.append(
-                f"{ind}    public void set{case_name}({case_type} v) {{"
-            )
+            lines.append(f"{ind}    public void set{case_name}({case_type} v) {{")
             if not self.is_java_primitive_type(case_type):
                 lines.append(f"{ind}        if (v == null) {{")
                 lines.append(f"{ind}            throw new NullPointerException();")
                 lines.append(f"{ind}        }}")
-            lines.append(
-                f"{ind}        this.index = {case_enum}.{case_enum_name}.id;"
-            )
+            lines.append(f"{ind}        this.index = {case_enum}.{case_enum_name}.id;")
             lines.append(f"{ind}        this.value = v;")
             type_id_expr = self.get_union_case_type_id_expr(field, parent_stack)
             lines.append(f"{ind}        this.typeId = {type_id_expr};")
@@ -697,7 +689,9 @@ class JavaGenerator(BaseGenerator):
                     return nested
         return self.find_top_level_type(name)
 
-    def find_top_level_type(self, name: str) -> Optional[TypingUnion[Message, Enum, Union]]:
+    def find_top_level_type(
+        self, name: str
+    ) -> Optional[TypingUnion[Message, Enum, Union]]:
         """Find a top-level type definition by name."""
         for msg in self.schema.messages:
             if msg.name == name:

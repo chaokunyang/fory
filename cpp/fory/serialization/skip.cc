@@ -418,8 +418,9 @@ void skip_union(ReadContext &ctx) {
     return;
   }
   if (ref_flag != NOT_NULL_VALUE_FLAG && ref_flag != REF_VALUE_FLAG) {
-    ctx.set_error(Error::invalid_data("Unknown reference flag: " +
-                                      std::to_string(static_cast<int>(ref_flag))));
+    ctx.set_error(
+        Error::invalid_data("Unknown reference flag: " +
+                            std::to_string(static_cast<int>(ref_flag))));
     return;
   }
 

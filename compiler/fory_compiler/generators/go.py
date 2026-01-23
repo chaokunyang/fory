@@ -341,7 +341,7 @@ class GoGenerator(BaseGenerator):
             case_type_name = self.get_union_case_type(field, parent_stack)
             lines.append(f"func {ctor_name}(v {case_type_name}) {type_name} {{")
             if case_type_name.startswith("*"):
-                lines.append(f'\tif v == nil {{')
+                lines.append("\tif v == nil {")
                 lines.append(f'\t\tpanic("{ctor_name}: nil pointer")')
                 lines.append("\t}")
             lines.append(
@@ -364,15 +364,11 @@ class GoGenerator(BaseGenerator):
             lines.append(
                 f"func (u {type_name}) {method_name}() ({case_type_name}, bool) {{"
             )
-            lines.append(
-                f"\tif u.case_ != {case_type}{case_name} {{"
-            )
+            lines.append(f"\tif u.case_ != {case_type}{case_name} {{")
             lines.append(f"\t\t{zero_decl}")
             lines.append("\t\treturn zero, false")
             lines.append("\t}")
-            lines.append(
-                f"\tv, ok := u.value.({case_type_name})"
-            )
+            lines.append(f"\tv, ok := u.value.({case_type_name})")
             lines.append("\tif !ok {")
             lines.append(f"\t\t{zero_decl}")
             lines.append("\t\treturn zero, false")
@@ -381,9 +377,7 @@ class GoGenerator(BaseGenerator):
             lines.append("}")
             lines.append("")
 
-        lines.append(
-            f"func (u {type_name}) Visit(visitor {type_name}Visitor) error {{"
-        )
+        lines.append(f"func (u {type_name}) Visit(visitor {type_name}Visitor) error {{")
         lines.append(f"\tif u.case_ == {case_type}Invalid || u.value == nil {{")
         lines.append("\t\tif visitor.Invalid != nil {")
         lines.append("\t\t\treturn visitor.Invalid()")
@@ -412,9 +406,7 @@ class GoGenerator(BaseGenerator):
             lines.append("\t\t}")
             lines.append("\t\treturn nil")
         lines.append("\tdefault:")
-        lines.append(
-            f'\t\treturn fmt.Errorf("unknown {type_name} case: %d", u.case_)'
-        )
+        lines.append(f'\t\treturn fmt.Errorf("unknown {type_name} case: %d", u.case_)')
         lines.append("\t}")
         lines.append("}")
         lines.append("")
@@ -432,9 +424,7 @@ class GoGenerator(BaseGenerator):
         lines.append(
             f"func (u {type_name}) ForyUnionGet() (uint32, any) {{ return uint32(u.case_), u.value }}"
         )
-        lines.append(
-            f"func (u *{type_name}) ForyUnionSet(caseId uint32, value any) {{"
-        )
+        lines.append(f"func (u *{type_name}) ForyUnionSet(caseId uint32, value any) {{")
         lines.append(f"\tu.case_ = {case_type}(caseId)")
         lines.append("\tu.value = value")
         lines.append("}")

@@ -151,7 +151,7 @@ class FbsTranslator:
 
     def _translate_fields(self, fields) -> List[Field]:
         translated: List[Field] = []
-        for index, field in enumerate(fields):
+        for index, field in enumerate(fields, start=1):
             field_type = self._translate_type(field.field_type)
             translated.append(
                 Field(
@@ -169,7 +169,7 @@ class FbsTranslator:
 
     def _translate_union(self, fbs_union: FbsUnion) -> Union:
         fields: List[Field] = []
-        for index, type_name in enumerate(fbs_union.types):
+        for index, type_name in enumerate(fbs_union.types, start=1):
             field_name = self._lower_name(type_name)
             fields.append(
                 Field(

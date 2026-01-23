@@ -32,16 +32,14 @@ namespace test2 {
 struct A {
   float a;
   std::string b;
+  FORY_FIELD_INFO(A, a, b);
 };
-
-FORY_FIELD_INFO(A, a, b);
 
 struct B {
   int x;
   A y;
+  FORY_FIELD_INFO(B, x, y);
 };
-
-FORY_FIELD_INFO(B, x, y);
 
 TEST(RowEncoder, Simple) {
   B v{233, {1.23, "hello"}};
@@ -69,9 +67,8 @@ TEST(RowEncoder, Simple) {
 struct C {
   std::vector<A> x;
   bool y;
+  FORY_FIELD_INFO(C, x, y);
 };
-
-FORY_FIELD_INFO(C, x, y);
 
 TEST(RowEncoder, SimpleArray) {
   std::vector<C> v{C{{{1, "a"}, {2, "b"}}, false},

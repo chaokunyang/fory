@@ -39,7 +39,7 @@
 #include <vector>
 
 // ============================================================================
-// ALL STRUCT DEFINITIONS MUST BE AT GLOBAL SCOPE (for FORY_STRUCT macro)
+// FORY_STRUCT must be declared inside the struct/class definition.
 // ============================================================================
 
 // Edge cases
@@ -48,8 +48,8 @@ struct SingleFieldStruct {
   bool operator==(const SingleFieldStruct &other) const {
     return value == other.value;
   }
+  FORY_STRUCT(SingleFieldStruct, value);
 };
-FORY_STRUCT(SingleFieldStruct, value);
 
 struct TwoFieldStruct {
   int32_t x;
@@ -57,8 +57,8 @@ struct TwoFieldStruct {
   bool operator==(const TwoFieldStruct &other) const {
     return x == other.x && y == other.y;
   }
+  FORY_STRUCT(TwoFieldStruct, x, y);
 };
-FORY_STRUCT(TwoFieldStruct, x, y);
 
 struct ManyFieldsStruct {
   bool b1;
@@ -75,8 +75,8 @@ struct ManyFieldsStruct {
            i32 == other.i32 && i64 == other.i64 && f32 == other.f32 &&
            f64 == other.f64 && str == other.str;
   }
+  FORY_STRUCT(ManyFieldsStruct, b1, i8, i16, i32, i64, f32, f64, str);
 };
-FORY_STRUCT(ManyFieldsStruct, b1, i8, i16, i32, i64, f32, f64, str);
 
 // All primitives
 struct AllPrimitivesStruct {
@@ -100,10 +100,10 @@ struct AllPrimitivesStruct {
            uint64_val == other.uint64_val && float_val == other.float_val &&
            double_val == other.double_val;
   }
+  FORY_STRUCT(AllPrimitivesStruct, bool_val, int8_val, int16_val, int32_val,
+              int64_val, uint8_val, uint16_val, uint32_val, uint64_val,
+              float_val, double_val);
 };
-FORY_STRUCT(AllPrimitivesStruct, bool_val, int8_val, int16_val, int32_val,
-            int64_val, uint8_val, uint16_val, uint32_val, uint64_val, float_val,
-            double_val);
 
 // String handling
 struct StringTestStruct {
@@ -116,8 +116,8 @@ struct StringTestStruct {
     return empty == other.empty && ascii == other.ascii && utf8 == other.utf8 &&
            long_text == other.long_text;
   }
+  FORY_STRUCT(StringTestStruct, empty, ascii, utf8, long_text);
 };
-FORY_STRUCT(StringTestStruct, empty, ascii, utf8, long_text);
 
 // Nested structs
 struct Point2D {
@@ -126,8 +126,8 @@ struct Point2D {
   bool operator==(const Point2D &other) const {
     return x == other.x && y == other.y;
   }
+  FORY_STRUCT(Point2D, x, y);
 };
-FORY_STRUCT(Point2D, x, y);
 
 struct Point3D {
   int32_t x;
@@ -136,8 +136,8 @@ struct Point3D {
   bool operator==(const Point3D &other) const {
     return x == other.x && y == other.y && z == other.z;
   }
+  FORY_STRUCT(Point3D, x, y, z);
 };
-FORY_STRUCT(Point3D, x, y, z);
 
 struct Rectangle {
   Point2D top_left;
@@ -145,8 +145,8 @@ struct Rectangle {
   bool operator==(const Rectangle &other) const {
     return top_left == other.top_left && bottom_right == other.bottom_right;
   }
+  FORY_STRUCT(Rectangle, top_left, bottom_right);
 };
-FORY_STRUCT(Rectangle, top_left, bottom_right);
 
 struct BoundingBox {
   Rectangle bounds;
@@ -154,8 +154,8 @@ struct BoundingBox {
   bool operator==(const BoundingBox &other) const {
     return bounds == other.bounds && label == other.label;
   }
+  FORY_STRUCT(BoundingBox, bounds, label);
 };
-FORY_STRUCT(BoundingBox, bounds, label);
 
 struct Scene {
   Point3D camera;
@@ -165,8 +165,8 @@ struct Scene {
     return camera == other.camera && light == other.light &&
            viewport == other.viewport;
   }
+  FORY_STRUCT(Scene, camera, light, viewport);
 };
-FORY_STRUCT(Scene, camera, light, viewport);
 
 // Containers
 struct VectorStruct {
@@ -178,8 +178,8 @@ struct VectorStruct {
     return numbers == other.numbers && strings == other.strings &&
            points == other.points;
   }
+  FORY_STRUCT(VectorStruct, numbers, strings, points);
 };
-FORY_STRUCT(VectorStruct, numbers, strings, points);
 
 struct MapStruct {
   std::map<std::string, int32_t> str_to_int;
@@ -190,8 +190,8 @@ struct MapStruct {
     return str_to_int == other.str_to_int && int_to_str == other.int_to_str &&
            named_points == other.named_points;
   }
+  FORY_STRUCT(MapStruct, str_to_int, int_to_str, named_points);
 };
-FORY_STRUCT(MapStruct, str_to_int, int_to_str, named_points);
 
 struct NestedContainerStruct {
   std::vector<std::vector<int32_t>> matrix;
@@ -200,8 +200,8 @@ struct NestedContainerStruct {
   bool operator==(const NestedContainerStruct &other) const {
     return matrix == other.matrix && grouped_numbers == other.grouped_numbers;
   }
+  FORY_STRUCT(NestedContainerStruct, matrix, grouped_numbers);
 };
-FORY_STRUCT(NestedContainerStruct, matrix, grouped_numbers);
 
 // Optional fields
 struct OptionalFieldsStruct {
@@ -214,8 +214,8 @@ struct OptionalFieldsStruct {
     return name == other.name && age == other.age && email == other.email &&
            location == other.location;
   }
+  FORY_STRUCT(OptionalFieldsStruct, name, age, email, location);
 };
-FORY_STRUCT(OptionalFieldsStruct, name, age, email, location);
 
 // Enums
 enum class Color { RED = 0, GREEN = 1, BLUE = 2 };
@@ -227,8 +227,8 @@ struct EnumStruct {
   bool operator==(const EnumStruct &other) const {
     return color == other.color && status == other.status;
   }
+  FORY_STRUCT(EnumStruct, color, status);
 };
-FORY_STRUCT(EnumStruct, color, status);
 
 // Real-world scenarios
 struct UserProfile {
@@ -248,9 +248,9 @@ struct UserProfile {
            follower_count == other.follower_count &&
            is_verified == other.is_verified;
   }
+  FORY_STRUCT(UserProfile, user_id, username, email, bio, interests, metadata,
+              follower_count, is_verified);
 };
-FORY_STRUCT(UserProfile, user_id, username, email, bio, interests, metadata,
-            follower_count, is_verified);
 
 struct Product {
   int64_t product_id;
@@ -267,9 +267,9 @@ struct Product {
            stock == other.stock && tags == other.tags &&
            attributes == other.attributes;
   }
+  FORY_STRUCT(Product, product_id, name, description, price, stock, tags,
+              attributes);
 };
-FORY_STRUCT(Product, product_id, name, description, price, stock, tags,
-            attributes);
 
 struct OrderItem {
   int64_t product_id;
@@ -280,8 +280,8 @@ struct OrderItem {
     return product_id == other.product_id && quantity == other.quantity &&
            unit_price == other.unit_price;
   }
+  FORY_STRUCT(OrderItem, product_id, quantity, unit_price);
 };
-FORY_STRUCT(OrderItem, product_id, quantity, unit_price);
 
 struct Order {
   int64_t order_id;
@@ -295,8 +295,8 @@ struct Order {
            items == other.items && total_amount == other.total_amount &&
            order_status == other.order_status;
   }
+  FORY_STRUCT(Order, order_id, customer_id, items, total_amount, order_status);
 };
-FORY_STRUCT(Order, order_id, customer_id, items, total_amount, order_status);
 
 // ============================================================================
 // TEST IMPLEMENTATION (Inside namespace)

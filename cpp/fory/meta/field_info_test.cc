@@ -29,9 +29,8 @@ struct A {
   int x;
   float y;
   bool z;
+  FORY_FIELD_INFO(A, x, y, z);
 };
-
-FORY_FIELD_INFO(A, x, y, z);
 
 TEST(FieldInfo, Simple) {
   A a;
@@ -53,9 +52,8 @@ TEST(FieldInfo, Simple) {
 struct B {
   A a;
   int hidden;
+  FORY_FIELD_INFO(B, a);
 };
-
-FORY_FIELD_INFO(B, a);
 
 TEST(FieldInfo, Hidden) {
   B b;

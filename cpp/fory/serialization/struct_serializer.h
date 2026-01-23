@@ -71,8 +71,8 @@ struct SerializationMeta<
 
 /// Main serialization registration macro.
 ///
-/// This macro must be placed in the same namespace as the type for ADL
-/// (Argument-Dependent Lookup).
+/// This macro must be placed inside the class/struct definition so the
+/// generated friend functions participate in ADL and can access private fields.
 ///
 /// It builds upon FORY_FIELD_INFO to add serialization-specific metadata:
 /// - Marks the type as serializable
@@ -84,8 +84,8 @@ struct SerializationMeta<
 ///   struct Person {
 ///     std::string name;
 ///     int32_t age;
+///     FORY_STRUCT(Person, name, age);
 ///   };
-///   FORY_STRUCT(Person, name, age);
 /// }
 /// ```
 ///
@@ -95,45 +95,15 @@ struct SerializationMeta<
 /// myapp::Person person{"Alice", 30};
 /// auto bytes = fory.serialize(person);
 /// ```
-/// Main struct registration macro.
+/// Main struct registration macro (in-class).
 /// TypeIndex uses the fallback (type_fallback_hash based on PRETTY_FUNCTION)
 /// which provides unique type identification without namespace issues.
-#define FORY_STRUCT_TYPE_ONLY(Type)                                            \
-  static_assert(std::is_class_v<Type>, "it must be a class type");             \
-  template <typename> struct ForyFieldInfoImpl;                                \
-  template <> struct ForyFieldInfoImpl<Type> {                                 \
-    static inline constexpr size_t Size = 0;                                   \
-    static inline constexpr std::string_view Name = #Type;                     \
-    static inline constexpr std::array<std::string_view, Size> Names = {};     \
-    static inline constexpr auto Ptrs = std::tuple{};                          \
-  };                                                                           \
-  static_assert(                                                               \
-      fory::meta::IsValidFieldInfo<ForyFieldInfoImpl<Type>>(),                 \
-      "duplicated fields in FORY_FIELD_INFO arguments are detected");          \
-  inline constexpr auto ForyFieldInfo(const Type &) noexcept {                 \
-    return ForyFieldInfoImpl<Type>{};                                          \
-  }                                                                            \
-  inline constexpr std::true_type ForyStructMarker(const Type &) noexcept {    \
-    return {};                                                                 \
-  }                                                                            \
-  static_assert(static_cast<std::true_type (*)(const Type &) noexcept>(        \
-                    &ForyStructMarker) != nullptr,                             \
-                "ForyStructMarker must be declared");
-
-#define FORY_STRUCT_WITH_FIELDS(Type, ...)                                     \
-  FORY_FIELD_INFO(Type, __VA_ARGS__)                                           \
-  inline constexpr std::true_type ForyStructMarker(const Type &) noexcept {    \
-    return {};                                                                 \
-  }                                                                            \
-  static_assert(static_cast<std::true_type (*)(const Type &) noexcept>(        \
-                    &ForyStructMarker) != nullptr,                             \
-                "ForyStructMarker must be declared");
-
-#define FORY_STRUCT_1(Type, ...) FORY_STRUCT_TYPE_ONLY(Type)
-#define FORY_STRUCT_0(Type, ...) FORY_STRUCT_WITH_FIELDS(Type, __VA_ARGS__)
-
 #define FORY_STRUCT(Type, ...)                                                 \
-  FORY_PP_CONCAT(FORY_STRUCT_, FORY_PP_IS_EMPTY(__VA_ARGS__))(Type, __VA_ARGS__)
+  FORY_FIELD_INFO(Type, __VA_ARGS__)                                           \
+  [[maybe_unused]] friend constexpr std::true_type ForyStructMarker(           \
+      const Type &) noexcept {                                                 \
+    return {};                                                                 \
+  }
 
 namespace detail {
 

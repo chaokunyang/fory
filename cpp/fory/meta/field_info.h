@@ -63,15 +63,12 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
 #define FORY_FIELD_INFO_NAMES_FUNC(field) #field,
 #define FORY_FIELD_INFO_PTRS_FUNC(type, field) &type::field,
 
-// here we define function overloads in the current namespace rather than
-// template specialization of classes since specialization of template in
-// different namespace is hard
-// NOTE: for performing ADL (argument-dependent lookup),
-// `FORY_FIELD_INFO(T, ...)` must be defined in the same namespace as `T`
-#define FORY_FIELD_INFO(type, ...)                                             \
+// NOTE: FORY_FIELD_INFO must be used inside the class/struct definition.
+// It defines a hidden friend function for ADL-based lookup and has access
+// to private fields.
+#define FORY_FIELD_INFO_WITH_FIELDS(type, ...)                                 \
   static_assert(std::is_class_v<type>, "it must be a class type");             \
-  template <typename> struct ForyFieldInfoImpl;                                \
-  template <> struct ForyFieldInfoImpl<type> {                                 \
+  struct ForyFieldInfoDescriptor {                                             \
     static inline constexpr size_t Size = FORY_PP_NARG(__VA_ARGS__);           \
     static inline constexpr std::string_view Name = #type;                     \
     static inline constexpr std::array<std::string_view, Size> Names = {       \
@@ -80,17 +77,43 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
         FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)};      \
   };                                                                           \
   static_assert(                                                               \
-      fory::meta::IsValidFieldInfo<ForyFieldInfoImpl<type>>(),                 \
+      fory::meta::IsValidFieldInfo<ForyFieldInfoDescriptor>(),                 \
       "duplicated fields in FORY_FIELD_INFO arguments are detected");          \
-  static_assert(ForyFieldInfoImpl<type>::Name.data() != nullptr,               \
-                "ForyFieldInfoImpl name must be available");                   \
-  static_assert(ForyFieldInfoImpl<type>::Names.size() ==                       \
-                    ForyFieldInfoImpl<type>::Size,                             \
-                "ForyFieldInfoImpl names size mismatch");                      \
-  inline constexpr auto ForyFieldInfo(const type &) noexcept {                 \
-    return ForyFieldInfoImpl<type>{};                                          \
-  }                                                                            \
+  static_assert(ForyFieldInfoDescriptor::Name.data() != nullptr,               \
+                "ForyFieldInfoDescriptor name must be available");             \
+  static_assert(ForyFieldInfoDescriptor::Names.size() ==                       \
+                    ForyFieldInfoDescriptor::Size,                             \
+                "ForyFieldInfoDescriptor names size mismatch");                \
+  [[maybe_unused]] friend constexpr auto ForyFieldInfo(                        \
+      const type &) noexcept {                                                 \
+    return ForyFieldInfoDescriptor{};                                          \
+  }
+
+#define FORY_FIELD_INFO_EMPTY(type)                                            \
+  static_assert(std::is_class_v<type>, "it must be a class type");             \
+  struct ForyFieldInfoDescriptor {                                             \
+    static inline constexpr size_t Size = 0;                                   \
+    static inline constexpr std::string_view Name = #type;                     \
+    static inline constexpr std::array<std::string_view, Size> Names = {};     \
+    static inline constexpr auto Ptrs = std::tuple{};                          \
+  };                                                                           \
   static_assert(                                                               \
-      static_cast<ForyFieldInfoImpl<type> (*)(const type &) noexcept>(         \
-          &ForyFieldInfo) != nullptr,                                          \
-      "ForyFieldInfo must be declared");
+      fory::meta::IsValidFieldInfo<ForyFieldInfoDescriptor>(),                 \
+      "duplicated fields in FORY_FIELD_INFO arguments are detected");          \
+  static_assert(ForyFieldInfoDescriptor::Name.data() != nullptr,               \
+                "ForyFieldInfoDescriptor name must be available");             \
+  static_assert(ForyFieldInfoDescriptor::Names.size() ==                       \
+                    ForyFieldInfoDescriptor::Size,                             \
+                "ForyFieldInfoDescriptor names size mismatch");                \
+  [[maybe_unused]] friend constexpr auto ForyFieldInfo(                        \
+      const type &) noexcept {                                                 \
+    return ForyFieldInfoDescriptor{};                                          \
+  }
+
+#define FORY_FIELD_INFO_1(type, ...) FORY_FIELD_INFO_EMPTY(type)
+#define FORY_FIELD_INFO_0(type, ...)                                           \
+  FORY_FIELD_INFO_WITH_FIELDS(type, __VA_ARGS__)
+
+#define FORY_FIELD_INFO(type, ...)                                             \
+  FORY_PP_CONCAT(FORY_FIELD_INFO_, FORY_PP_IS_EMPTY(__VA_ARGS__))              \
+  (type, __VA_ARGS__)

@@ -24,6 +24,7 @@ from fory_compiler.ir.ast import (
     Schema,
     Message,
     Enum,
+    Union,
     Field,
     FieldType,
     NamedType,
@@ -74,6 +75,13 @@ class SchemaValidator:
                     enum.location or names[enum.name],
                 )
             names.setdefault(enum.name, enum.location)
+        for union in self.schema.unions:
+            if union.name in names:
+                self._error(
+                    f"Duplicate type name: {union.name}",
+                    union.location or names[union.name],
+                )
+            names.setdefault(union.name, union.location)
         for message in self.schema.messages:
             if message.name in names:
                 self._error(
@@ -106,6 +114,13 @@ class SchemaValidator:
                         nested_enum.location,
                     )
                 nested_names.setdefault(nested_enum.name, nested_enum.location)
+            for nested_union in message.nested_unions:
+                if nested_union.name in nested_names:
+                    self._error(
+                        f"Duplicate nested type name in {full_name}: {nested_union.name}",
+                        nested_union.location,
+                    )
+                nested_names.setdefault(nested_union.name, nested_union.location)
             for nested_msg in message.nested_messages:
                 if nested_msg.name in nested_names:
                     self._error(
@@ -132,6 +147,9 @@ class SchemaValidator:
             for nested_enum in message.nested_enums:
                 validate_enum(nested_enum, full_name)
 
+            for nested_union in message.nested_unions:
+                validate_union(nested_union, full_name)
+
             for nested_msg in message.nested_messages:
                 validate_message(nested_msg, full_name)
 
@@ -153,8 +171,29 @@ class SchemaValidator:
                     )
                 value_names.setdefault(v.name, v)
 
+        def validate_union(union: Union, parent_path: str = ""):
+            full_name = f"{parent_path}.{union.name}" if parent_path else union.name
+            case_numbers = {}
+            case_names = {}
+            for f in union.fields:
+                if f.number in case_numbers:
+                    self._error(
+                        f"Duplicate union case id {f.number} in {full_name}: {f.name} and {case_numbers[f.number].name}",
+                        f.location,
+                    )
+                case_numbers.setdefault(f.number, f)
+                if f.name in case_names:
+                    self._error(
+                        f"Duplicate union case name in {full_name}: {f.name}",
+                        f.location,
+                    )
+                case_names.setdefault(f.name, f)
+
         for enum in self.schema.enums:
             validate_enum(enum)
+
+        for union in self.schema.unions:
+            validate_union(union)
 
         for message in self.schema.messages:
             validate_message(message)
@@ -196,8 +235,16 @@ class SchemaValidator:
             for nested_msg in message.nested_messages:
                 check_message_refs(nested_msg, lineage)
 
+            for nested_union in message.nested_unions:
+                for f in nested_union.fields:
+                    check_type_ref(f.field_type, f, lineage)
+
         for message in self.schema.messages:
             check_message_refs(message)
+
+        for union in self.schema.unions:
+            for f in union.fields:
+                check_type_ref(f.field_type, f, None)
 
 
 def validate_schema(schema: Schema) -> List[str]:

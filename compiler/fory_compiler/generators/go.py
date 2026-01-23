@@ -23,6 +23,7 @@ from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
     Message,
     Enum,
+    Union,
     Field,
     FieldType,
     PrimitiveType,
@@ -110,6 +111,8 @@ class GoGenerator(BaseGenerator):
 
         for enum in self.schema.enums:
             add_name(enum.name, enum.name)
+        for union in self.schema.unions:
+            add_name(union.name, union.name)
 
         def visit_message(message: Message, parents: List[Message]) -> None:
             qualified = ".".join([p.name for p in parents] + [message.name])
@@ -119,6 +122,12 @@ class GoGenerator(BaseGenerator):
                 add_name(
                     self.get_type_name(nested_enum.name, parents + [message]),
                     enum_qualified,
+                )
+            for nested_union in message.nested_unions:
+                union_qualified = f"{qualified}.{nested_union.name}"
+                add_name(
+                    self.get_type_name(nested_union.name, parents + [message]),
+                    union_qualified,
                 )
             for nested_msg in message.nested_messages:
                 visit_message(nested_msg, parents + [message])
@@ -133,6 +142,23 @@ class GoGenerator(BaseGenerator):
                 for name, types in sorted(duplicates.items())
             )
             raise ValueError(f"Go type name collision detected: {details}")
+
+    def schema_has_unions(self) -> bool:
+        """Return True if schema contains any unions (including nested)."""
+        if self.schema.unions:
+            return True
+        for message in self.schema.messages:
+            if self.message_has_unions(message):
+                return True
+        return False
+
+    def message_has_unions(self, message: Message) -> bool:
+        if message.nested_unions:
+            return True
+        for nested_msg in message.nested_messages:
+            if self.message_has_unions(nested_msg):
+                return True
+        return False
 
     # Mapping from FDL primitive types to Go types
     PRIMITIVE_MAP = {
@@ -192,6 +218,11 @@ class GoGenerator(BaseGenerator):
 
         for message in self.schema.messages:
             self.collect_message_imports(message, imports)
+        for union in self.schema.unions:
+            self.collect_union_imports(union, imports)
+
+        if self.schema_has_unions():
+            imports.add('"fmt"')
 
         # License header
         lines.append(self.get_license_header("//"))
@@ -214,6 +245,11 @@ class GoGenerator(BaseGenerator):
             lines.extend(self.generate_enum(enum))
             lines.append("")
 
+        # Generate unions (top-level)
+        for union in self.schema.unions:
+            lines.extend(self.generate_union(union))
+            lines.append("")
+
         # Generate messages (including nested as flat types with qualified names)
         for message in self.schema.messages:
             lines.extend(self.generate_message_with_nested(message))
@@ -233,6 +269,13 @@ class GoGenerator(BaseGenerator):
             self.collect_imports(field.field_type, imports)
         for nested_msg in message.nested_messages:
             self.collect_message_imports(nested_msg, imports)
+        for nested_union in message.nested_unions:
+            self.collect_union_imports(nested_union, imports)
+
+    def collect_union_imports(self, union: Union, imports: Set[str]):
+        """Collect imports for a union and its cases."""
+        for field in union.fields:
+            self.collect_imports(field.field_type, imports)
 
     def generate_enum(
         self,
@@ -257,6 +300,129 @@ class GoGenerator(BaseGenerator):
             const_name = f"{type_name}{self.to_pascal_case(stripped_name)}"
             lines.append(f"\t{const_name} {type_name} = {value.value}")
         lines.append(")")
+
+        return lines
+
+    def generate_union(
+        self,
+        union: Union,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
+        """Generate a Go tagged union."""
+        lines: List[str] = []
+
+        type_name = self.get_type_name(union.name, parent_stack)
+        case_type = f"{type_name}Case"
+        has_zero_case = any(field.number == 0 for field in union.fields)
+        invalid_value = "^uint32(0)" if has_zero_case else "0"
+
+        lines.append(f"type {case_type} uint32")
+        lines.append("")
+        lines.append("const (")
+        lines.append(f"\t{case_type}Invalid {case_type} = {invalid_value}")
+        for field in union.fields:
+            const_name = f"{case_type}{self.to_pascal_case(field.name)}"
+            lines.append(f"\t{const_name} {case_type} = {field.number}")
+        lines.append(")")
+        lines.append("")
+
+        lines.append(f"type {type_name} struct {{")
+        lines.append(f"\tcase_ {case_type}")
+        lines.append("\tvalue any")
+        lines.append("}")
+        lines.append("")
+
+        for field in union.fields:
+            case_name = self.to_pascal_case(field.name)
+            ctor_name = f"{case_name}{type_name}"
+            case_type_name = self.get_union_case_type(field, parent_stack)
+            lines.append(f"func {ctor_name}(v {case_type_name}) {type_name} {{")
+            if case_type_name.startswith("*"):
+                lines.append(f'\tif v == nil {{')
+                lines.append(f'\t\tpanic("{ctor_name}: nil pointer")')
+                lines.append("\t}")
+            lines.append(
+                f"\treturn {type_name}{{case_: {case_type}{case_name}, value: v}}"
+            )
+            lines.append("}")
+            lines.append("")
+
+        lines.append(f"func (u {type_name}) Case() {case_type} {{ return u.case_ }}")
+        lines.append(
+            f"func (u {type_name}) IsSet() bool {{ return u.case_ != {case_type}Invalid && u.value != nil }}"
+        )
+        lines.append("")
+
+        for field in union.fields:
+            case_name = self.to_pascal_case(field.name)
+            case_type_name = self.get_union_case_type(field, parent_stack)
+            method_name = f"As{case_name}"
+            zero_decl = f"var zero {case_type_name}"
+            lines.append(
+                f"func (u {type_name}) {method_name}() ({case_type_name}, bool) {{"
+            )
+            lines.append(
+                f"\tif u.case_ != {case_type}{case_name} {{"
+            )
+            lines.append(f"\t\t{zero_decl}")
+            lines.append("\t\treturn zero, false")
+            lines.append("\t}")
+            lines.append(
+                f"\tv, ok := u.value.({case_type_name})"
+            )
+            lines.append("\tif !ok {")
+            lines.append(f"\t\t{zero_decl}")
+            lines.append("\t\treturn zero, false")
+            lines.append("\t}")
+            lines.append("\treturn v, true")
+            lines.append("}")
+            lines.append("")
+
+        lines.append(
+            f"func (u {type_name}) Visit(visitor {type_name}Visitor) error {{"
+        )
+        lines.append(f"\tif u.case_ == {case_type}Invalid || u.value == nil {{")
+        lines.append("\t\tif visitor.Invalid != nil {")
+        lines.append("\t\t\treturn visitor.Invalid()")
+        lines.append("\t\t}")
+        lines.append("\t\treturn nil")
+        lines.append("\t}")
+        lines.append("\tswitch u.case_ {")
+        for field in union.fields:
+            case_name = self.to_pascal_case(field.name)
+            case_type_name = self.get_union_case_type(field, parent_stack)
+            lines.append(f"\tcase {case_type}{case_name}:")
+            lines.append(f"\t\tv, ok := u.value.({case_type_name})")
+            lines.append("\t\tif !ok {")
+            lines.append(
+                f'\t\t\treturn fmt.Errorf("corrupted {type_name}: case={case_name} but invalid value")'
+            )
+            lines.append("\t\t}")
+            if case_type_name.startswith("*"):
+                lines.append("\t\tif v == nil {")
+                lines.append(
+                    f'\t\t\treturn fmt.Errorf("corrupted {type_name}: case={case_name} but nil value")'
+                )
+                lines.append("\t\t}")
+            lines.append(f"\t\tif visitor.{case_name} != nil {{")
+            lines.append(f"\t\t\treturn visitor.{case_name}(v)")
+            lines.append("\t\t}")
+            lines.append("\t\treturn nil")
+        lines.append("\tdefault:")
+        lines.append(
+            f'\t\treturn fmt.Errorf("unknown {type_name} case: %d", u.case_)'
+        )
+        lines.append("\t}")
+        lines.append("}")
+        lines.append("")
+
+        lines.append(f"type {type_name}Visitor struct {{")
+        lines.append("\tInvalid func() error")
+        for field in union.fields:
+            case_name = self.to_pascal_case(field.name)
+            case_type_name = self.get_union_case_type(field, parent_stack)
+            lines.append(f"\t{case_name} func({case_type_name}) error")
+        lines.append("}")
 
         return lines
 
@@ -296,6 +462,10 @@ class GoGenerator(BaseGenerator):
         # First, generate all nested enums
         for nested_enum in message.nested_enums:
             lines.extend(self.generate_enum(nested_enum, lineage))
+            lines.append("")
+
+        for nested_union in message.nested_unions:
+            lines.extend(self.generate_union(nested_union, lineage))
             lines.append("")
 
         # Then, generate all nested messages (recursively)
@@ -461,6 +631,26 @@ class GoGenerator(BaseGenerator):
 
         return "interface{}"
 
+    def get_union_case_type(
+        self,
+        field: Field,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
+        """Return the Go type for a union case."""
+        if isinstance(field.field_type, NamedType):
+            type_name = self.resolve_nested_type_name(
+                field.field_type.name, parent_stack
+            )
+            return f"*{type_name}"
+        return self.generate_type(
+            field.field_type,
+            nullable=False,
+            ref=False,
+            element_optional=False,
+            element_ref=False,
+            parent_stack=parent_stack,
+        )
+
     def resolve_nested_type_name(
         self,
         type_name: str,
@@ -509,6 +699,10 @@ class GoGenerator(BaseGenerator):
         # Register enums (top-level)
         for enum in self.schema.enums:
             self.generate_enum_registration(lines, enum, None)
+
+        # Register unions (top-level)
+        for union in self.schema.unions:
+            self.generate_union_registration(lines, union, None)
 
         # Register messages (including nested types)
         for message in self.schema.messages:
@@ -560,6 +754,11 @@ class GoGenerator(BaseGenerator):
                 lines, nested_enum, (parent_stack or []) + [message]
             )
 
+        for nested_union in message.nested_unions:
+            self.generate_union_registration(
+                lines, nested_union, (parent_stack or []) + [message]
+            )
+
         # Register nested messages recursively
         for nested_msg in message.nested_messages:
             self.generate_message_registration(
@@ -575,6 +774,30 @@ class GoGenerator(BaseGenerator):
             lines.append("\t}")
         else:
             # Use FDL package for namespace (consistent across languages)
+            ns = self.schema.package or "default"
+            lines.append(
+                f'\tif err := f.RegisterNamedStruct({code_name}{{}}, "{ns}.{type_name}"); err != nil {{'
+            )
+            lines.append("\t\treturn err")
+            lines.append("\t}")
+
+    def generate_union_registration(
+        self,
+        lines: List[str],
+        union: Union,
+        parent_stack: Optional[List[Message]],
+    ):
+        """Generate registration code for a union."""
+        code_name = self.get_type_name(union.name, parent_stack)
+        type_name = self.get_registration_type_name(union.name, parent_stack)
+
+        if union.type_id is not None:
+            lines.append(
+                f"\tif err := f.RegisterStruct({code_name}{{}}, {union.type_id}); err != nil {{"
+            )
+            lines.append("\t\treturn err")
+            lines.append("\t}")
+        else:
             ns = self.schema.package or "default"
             lines.append(
                 f'\tif err := f.RegisterNamedStruct({code_name}{{}}, "{ns}.{type_name}"); err != nil {{'

@@ -23,6 +23,7 @@ from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
     Message,
     Enum,
+    Union,
     Field,
     FieldType,
     PrimitiveType,
@@ -125,9 +126,15 @@ class CppGenerator(BaseGenerator):
         includes.add("<cstdint>")
         includes.add("<string>")
         includes.add('"fory/serialization/fory.h"')
+        if self.schema_has_unions():
+            includes.add("<utility>")
+            includes.add("<variant>")
+            includes.add("<memory>")
 
         for message in self.schema.messages:
             self.collect_message_includes(message, includes)
+        for union in self.schema.unions:
+            self.collect_union_includes(union, includes)
 
         # License header
         lines.append("/*")
@@ -162,6 +169,15 @@ class CppGenerator(BaseGenerator):
         for enum in self.schema.enums:
             lines.extend(self.generate_enum_definition(enum))
             enum_macros.append(self.generate_enum_macro(enum, []))
+            lines.append("")
+
+        # Generate unions (top-level)
+        for union in self.schema.unions:
+            lines.extend(
+                self.generate_union_definition(
+                    union, [], struct_macros, type_aliases, ""
+                )
+            )
             lines.append("")
 
         # Generate messages (with nested enums/messages defined inside classes)
@@ -234,6 +250,20 @@ class CppGenerator(BaseGenerator):
             )
         for nested_msg in message.nested_messages:
             self.collect_message_includes(nested_msg, includes)
+        for nested_union in message.nested_unions:
+            self.collect_union_includes(nested_union, includes)
+
+    def collect_union_includes(self, union: Union, includes: Set[str]):
+        """Collect includes for a union and its cases."""
+        for field in union.fields:
+            self.collect_includes(
+                field.field_type,
+                False,
+                False,
+                includes,
+                field.element_optional,
+                field.element_ref,
+            )
 
     def generate_forward_declarations(self, lines: List[str]):
         """Generate forward declarations for top-level messages."""
@@ -306,6 +336,18 @@ class CppGenerator(BaseGenerator):
             )
             lines.append("")
 
+        for nested_union in message.nested_unions:
+            lines.extend(
+                self.generate_union_definition(
+                    nested_union,
+                    lineage,
+                    struct_macros,
+                    type_aliases,
+                    body_indent,
+                )
+            )
+            lines.append("")
+
         for field in message.fields:
             cpp_type = self.generate_type(
                 field.field_type,
@@ -349,6 +391,181 @@ class CppGenerator(BaseGenerator):
             struct_macros.append(f"FORY_STRUCT({struct_type_name});")
 
         return lines
+
+    def generate_union_definition(
+        self,
+        union: Union,
+        parent_stack: List[Message],
+        struct_macros: List[str],
+        type_aliases: Dict[str, str],
+        indent: str,
+    ) -> List[str]:
+        """Generate a C++ union class definition."""
+        lines: List[str] = []
+        class_name = union.name
+        body_indent = f"{indent}  "
+        field_indent = f"{indent}    "
+
+        case_enum = f"{class_name}Case"
+        case_types = [
+            self.get_union_case_type(field, parent_stack) for field in union.fields
+        ]
+        variant_type = f"std::variant<{', '.join(case_types)}>"
+
+        lines.append(f"{indent}class {class_name} final {{")
+        lines.append(f"{body_indent}public:")
+        lines.append(f"{body_indent}  enum class {case_enum} : uint32_t {{")
+        for field in union.fields:
+            case_name = self.to_upper_snake_case(field.name)
+            lines.append(f"{body_indent}    {case_name} = {field.number},")
+        lines.append(f"{body_indent}  }};")
+        lines.append("")
+
+        lines.append(f"{body_indent}  {class_name}() = delete;")
+        lines.append("")
+
+        for field, case_type in zip(union.fields, case_types):
+            case_name = self.to_snake_case(field.name)
+            lines.append(
+                f"{body_indent}  static {class_name} {case_name}({case_type} v) {{"
+            )
+            lines.append(
+                f"{body_indent}    return {class_name}(std::in_place_type<{case_type}>, std::move(v));"
+            )
+            lines.append(f"{body_indent}  }}")
+            lines.append("")
+
+        lines.append(f"{body_indent}  {case_enum} {self.to_snake_case(class_name)}_case() const noexcept {{")
+        for i, (field, case_type) in enumerate(zip(union.fields, case_types)):
+            case_name = self.to_upper_snake_case(field.name)
+            if i < len(case_types) - 1:
+                lines.append(
+                    f"{body_indent}    if (std::holds_alternative<{case_type}>(value_)) return {case_enum}::{case_name};"
+                )
+            else:
+                lines.append(f"{body_indent}    return {case_enum}::{case_name};")
+        lines.append(f"{body_indent}  }}")
+        lines.append("")
+
+        lines.append(
+            f"{body_indent}  uint32_t {self.to_snake_case(class_name)}_case_id() const noexcept {{"
+        )
+        lines.append(
+            f"{body_indent}    return static_cast<uint32_t>({self.to_snake_case(class_name)}_case());"
+        )
+        lines.append(f"{body_indent}  }}")
+        lines.append("")
+
+        for field, case_type in zip(union.fields, case_types):
+            case_snake = self.to_snake_case(field.name)
+            lines.append(
+                f"{body_indent}  bool is_{case_snake}() const noexcept {{"
+            )
+            lines.append(
+                f"{body_indent}    return std::holds_alternative<{case_type}>(value_);"
+            )
+            lines.append(f"{body_indent}  }}")
+            lines.append("")
+            lines.append(
+                f"{body_indent}  const {case_type}* as_{case_snake}() const noexcept {{"
+            )
+            lines.append(
+                f"{body_indent}    return std::get_if<{case_type}>(&value_);"
+            )
+            lines.append(f"{body_indent}  }}")
+            lines.append("")
+            lines.append(
+                f"{body_indent}  {case_type}* as_{case_snake}() noexcept {{"
+            )
+            lines.append(
+                f"{body_indent}    return std::get_if<{case_type}>(&value_);"
+            )
+            lines.append(f"{body_indent}  }}")
+            lines.append("")
+            lines.append(
+                f"{body_indent}  const {case_type}& {case_snake}() const {{"
+            )
+            lines.append(
+                f"{body_indent}    return std::get<{case_type}>(value_);"
+            )
+            lines.append(f"{body_indent}  }}")
+            lines.append("")
+            lines.append(
+                f"{body_indent}  {case_type}& {case_snake}() {{"
+            )
+            lines.append(
+                f"{body_indent}    return std::get<{case_type}>(value_);"
+            )
+            lines.append(f"{body_indent}  }}")
+            lines.append("")
+
+        lines.append(f"{body_indent}  template <class Visitor>")
+        lines.append(
+            f"{body_indent}  decltype(auto) visit(Visitor&& vis) const {{"
+        )
+        lines.append(
+            f"{body_indent}    return std::visit(std::forward<Visitor>(vis), value_);"
+        )
+        lines.append(f"{body_indent}  }}")
+        lines.append("")
+        lines.append(f"{body_indent}  template <class Visitor>")
+        lines.append(
+            f"{body_indent}  decltype(auto) visit(Visitor&& vis) {{"
+        )
+        lines.append(
+            f"{body_indent}    return std::visit(std::forward<Visitor>(vis), value_);"
+        )
+        lines.append(f"{body_indent}  }}")
+        lines.append("")
+
+        lines.append(f"{body_indent}  {variant_type} value_;")
+        lines.append("")
+        lines.append(f"{body_indent}private:")
+        lines.append(f"{body_indent}  template <class T, class... Args>")
+        lines.append(
+            f"{body_indent}  explicit {class_name}(std::in_place_type_t<T> tag, Args&&... args)"
+        )
+        lines.append(
+            f"{body_indent}      : value_(tag, std::forward<Args>(args)...) {{}}"
+        )
+        lines.append(f"{indent}}};")
+
+        struct_type_name = self.get_qualified_type_name(union.name, parent_stack)
+        struct_macros.append(f"FORY_STRUCT({struct_type_name}, value_);")
+
+        return lines
+
+    def get_union_case_type(
+        self, field: Field, parent_stack: List[Message]
+    ) -> str:
+        """Return the C++ type for a union case."""
+        if isinstance(field.field_type, NamedType):
+            type_name = self.resolve_nested_type_name(field.field_type.name, parent_stack)
+            return f"std::shared_ptr<{type_name}>"
+        return self.generate_type(
+            field.field_type,
+            False,
+            field.ref,
+            field.element_optional,
+            field.element_ref,
+            parent_stack,
+        )
+
+    def schema_has_unions(self) -> bool:
+        if self.schema.unions:
+            return True
+        for message in self.schema.messages:
+            if self.message_has_unions(message):
+                return True
+        return False
+
+    def message_has_unions(self, message: Message) -> bool:
+        if message.nested_unions:
+            return True
+        for nested_msg in message.nested_messages:
+            if self.message_has_unions(nested_msg):
+                return True
+        return False
 
     def generate_field_config_macro(
         self,
@@ -564,6 +781,10 @@ class CppGenerator(BaseGenerator):
         for enum in self.schema.enums:
             self.generate_enum_registration(lines, enum, [])
 
+        # Register unions (top-level)
+        for union in self.schema.unions:
+            self.generate_union_registration(lines, union, [])
+
         # Register messages (including nested types)
         for message in self.schema.messages:
             self.generate_message_registration(lines, message, [])
@@ -598,6 +819,9 @@ class CppGenerator(BaseGenerator):
                 lines, nested_enum, parent_stack + [message]
             )
 
+        for nested_union in message.nested_unions:
+            self.generate_union_registration(lines, nested_union, parent_stack + [message])
+
         # Register nested messages recursively
         for nested_msg in message.nested_messages:
             self.generate_message_registration(
@@ -607,6 +831,21 @@ class CppGenerator(BaseGenerator):
         # Register this message
         if message.type_id is not None:
             lines.append(f"    fory.register_struct<{code_name}>({message.type_id});")
+        else:
+            ns = self.package or "default"
+            lines.append(
+                f'    fory.register_struct<{code_name}>("{ns}", "{type_name}");'
+            )
+
+    def generate_union_registration(
+        self, lines: List[str], union: Union, parent_stack: List[Message]
+    ):
+        """Generate registration code for a union."""
+        code_name = self.get_qualified_type_name(union.name, parent_stack)
+        type_name = self.get_registration_type_name(union.name, parent_stack)
+
+        if union.type_id is not None:
+            lines.append(f"    fory.register_struct<{code_name}>({union.type_id});")
         else:
             ns = self.package or "default"
             lines.append(

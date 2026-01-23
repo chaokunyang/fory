@@ -23,6 +23,7 @@ from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
     Message,
     Enum,
+    Union,
     Field,
     FieldType,
     PrimitiveType,
@@ -167,6 +168,10 @@ class JavaGenerator(BaseGenerator):
             for enum in self.schema.enums:
                 files.append(self.generate_enum_file(enum))
 
+            # Generate union files (top-level only, nested unions go inside message files)
+            for union in self.schema.unions:
+                files.append(self.generate_union_file(union))
+
             # Generate message files (includes nested types as inner classes)
             for message in self.schema.messages:
                 files.append(self.generate_message_file(message))
@@ -218,6 +223,37 @@ class JavaGenerator(BaseGenerator):
 
         return GeneratedFile(path=path, content="\n".join(lines))
 
+    def generate_union_file(self, union: Union) -> GeneratedFile:
+        """Generate a Java union class file."""
+        lines = []
+        imports: Set[str] = set()
+        java_package = self.get_java_package()
+
+        self.collect_union_imports(union, imports)
+
+        lines.append(self.get_license_header())
+        lines.append("")
+
+        if java_package:
+            lines.append(f"package {java_package};")
+            lines.append("")
+
+        if imports:
+            for imp in sorted(imports):
+                lines.append(f"import {imp};")
+            lines.append("")
+
+        for line in self.generate_union_class(union):
+            lines.append(line)
+
+        path = self.get_java_package_path()
+        if path:
+            path = f"{path}/{union.name}.java"
+        else:
+            path = f"{union.name}.java"
+
+        return GeneratedFile(path=path, content="\n".join(lines))
+
     def generate_message_file(self, message: Message) -> GeneratedFile:
         """Generate a Java class file for a message."""
         lines = []
@@ -248,6 +284,11 @@ class JavaGenerator(BaseGenerator):
         # Generate nested enums as static inner classes
         for nested_enum in message.nested_enums:
             for line in self.generate_nested_enum(nested_enum):
+                lines.append(f"    {line}")
+
+        # Generate nested unions as static inner classes
+        for nested_union in message.nested_unions:
+            for line in self.generate_union_class(nested_union, indent=0, nested=True):
                 lines.append(f"    {line}")
 
         # Generate nested messages as static inner classes
@@ -308,6 +349,8 @@ class JavaGenerator(BaseGenerator):
             self.collect_message_imports(message, imports)
         for enum in self.schema.enums:
             pass  # Enums don't need special imports
+        for union in self.schema.unions:
+            self.collect_union_imports(union, imports)
 
         # License header
         lines.append(self.get_license_header())
@@ -335,6 +378,11 @@ class JavaGenerator(BaseGenerator):
         # Generate all top-level enums as static inner classes
         for enum in self.schema.enums:
             for line in self.generate_nested_enum(enum):
+                lines.append(f"    {line}")
+
+        # Generate all top-level unions as static inner classes
+        for union in self.schema.unions:
+            for line in self.generate_union_class(union, indent=0, nested=True):
                 lines.append(f"    {line}")
 
         # Generate all top-level messages as static inner classes
@@ -367,6 +415,18 @@ class JavaGenerator(BaseGenerator):
         # Collect imports from nested messages
         for nested_msg in message.nested_messages:
             self.collect_message_imports(nested_msg, imports)
+        for nested_union in message.nested_unions:
+            self.collect_union_imports(nested_union, imports)
+
+    def collect_union_imports(self, union: Union, imports: Set[str]):
+        """Collect imports for a union and its cases."""
+        for field in union.fields:
+            self.collect_type_imports(
+                field.field_type,
+                imports,
+                field.element_optional,
+                field.element_ref,
+            )
 
     def has_array_field_recursive(self, message: Message) -> bool:
         """Check if message or any nested message has array fields."""
@@ -392,6 +452,118 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         return lines
 
+    def generate_union_class(
+        self,
+        union: Union,
+        indent: int = 0,
+        nested: bool = False,
+    ) -> List[str]:
+        """Generate a Java union class."""
+        lines: List[str] = []
+        ind = "    " * indent
+        class_prefix = "public static final class" if nested else "public final class"
+        case_enum = f"{union.name}Case"
+        case_field = f"{self.to_camel_case(union.name)}Case"
+
+        lines.append(f"{ind}{class_prefix} {union.name} {{")
+        lines.append(f"{ind}    public enum {case_enum} {{")
+
+        for i, field in enumerate(union.fields):
+            comma = "," if i < len(union.fields) - 1 else ";"
+            case_name = self.to_upper_snake_case(field.name)
+            lines.append(f"{ind}        {case_name}({field.number}){comma}")
+
+        lines.append(f"{ind}        public final int id;")
+        lines.append(f"{ind}        {case_enum}(int id) {{")
+        lines.append(f"{ind}            this.id = id;")
+        lines.append(f"{ind}        }}")
+        lines.append(f"{ind}    }}")
+        lines.append("")
+
+        lines.append(f"{ind}    private final {case_enum} {case_field};")
+        lines.append(f"{ind}    private final Object value;")
+        lines.append("")
+        lines.append(f"{ind}    private {union.name}({case_enum} c, Object v) {{")
+        lines.append(f"{ind}        if (c == null || v == null) {{")
+        lines.append(f"{ind}            throw new NullPointerException();")
+        lines.append(f"{ind}        }}")
+        lines.append(f"{ind}        this.{case_field} = c;")
+        lines.append(f"{ind}        this.value = v;")
+        lines.append(f"{ind}    }}")
+        lines.append("")
+
+        for field in union.fields:
+            case_name = self.to_pascal_case(field.name)
+            case_enum_name = self.to_upper_snake_case(field.name)
+            case_type = self.get_union_case_type(field)
+            lines.append(
+                f"{ind}    public static {union.name} of{case_name}({case_type} v) {{"
+            )
+            lines.append(
+                f"{ind}        return new {union.name}({case_enum}.{case_enum_name}, v);"
+            )
+            lines.append(f"{ind}    }}")
+            lines.append("")
+
+        lines.append(f"{ind}    public {case_enum} get{union.name}Case() {{")
+        lines.append(f"{ind}        return {case_field};")
+        lines.append(f"{ind}    }}")
+        lines.append("")
+        lines.append(f"{ind}    public int get{union.name}CaseId() {{")
+        lines.append(f"{ind}        return {case_field}.id;")
+        lines.append(f"{ind}    }}")
+        lines.append("")
+
+        for field in union.fields:
+            case_name = self.to_pascal_case(field.name)
+            case_enum_name = self.to_upper_snake_case(field.name)
+            case_type = self.get_union_case_type(field)
+            cast_type = self.get_union_case_cast_type(field)
+
+            lines.append(
+                f"{ind}    public boolean has{case_name}() {{"
+            )
+            lines.append(
+                f"{ind}        return {case_field} == {case_enum}.{case_enum_name};"
+            )
+            lines.append(f"{ind}    }}")
+            lines.append("")
+            lines.append(
+                f"{ind}    public {case_type} get{case_name}() {{"
+            )
+            lines.append(
+                f"{ind}        if ({case_field} != {case_enum}.{case_enum_name}) {{"
+            )
+            lines.append(
+                f'{ind}            throw new IllegalStateException("{union.name} is not {case_enum_name}");'
+            )
+            lines.append(f"{ind}        }}")
+            lines.append(f"{ind}        return ({cast_type}) value;")
+            lines.append(f"{ind}    }}")
+            lines.append("")
+
+        lines.append(f"{ind}}}")
+        lines.append("")
+        return lines
+
+    def get_union_case_type(self, field: Field) -> str:
+        """Return the Java type for a union case."""
+        return self.generate_type(
+            field.field_type,
+            False,
+            field.element_optional,
+            field.element_ref,
+        )
+
+    def get_union_case_cast_type(self, field: Field) -> str:
+        """Return the Java cast type for a union case value."""
+        if isinstance(field.field_type, PrimitiveType):
+            boxed = self.BOXED_MAP.get(field.field_type.kind)
+            if boxed is not None:
+                return boxed
+            return self.PRIMITIVE_MAP[field.field_type.kind]
+        return self.get_union_case_type(field)
+
     def generate_nested_message(self, message: Message, indent: int = 1) -> List[str]:
         """Generate a nested message as a static inner class."""
         lines = []
@@ -402,6 +574,11 @@ class JavaGenerator(BaseGenerator):
         # Generate nested enums
         for nested_enum in message.nested_enums:
             for line in self.generate_nested_enum(nested_enum):
+                lines.append(f"    {line}")
+
+        # Generate nested unions
+        for nested_union in message.nested_unions:
+            for line in self.generate_union_class(nested_union, indent=0, nested=True):
                 lines.append(f"    {line}")
 
         # Generate nested messages (recursively)
@@ -856,6 +1033,10 @@ class JavaGenerator(BaseGenerator):
         for enum in self.schema.enums:
             self.generate_enum_registration(lines, enum, type_prefix)
 
+        # Register unions (top-level)
+        for union in self.schema.unions:
+            self.generate_union_registration(lines, union, type_prefix)
+
         # Register messages (top-level and nested)
         for message in self.schema.messages:
             self.generate_message_registration(lines, message, type_prefix)
@@ -913,6 +1094,25 @@ class JavaGenerator(BaseGenerator):
         for nested_enum in message.nested_enums:
             self.generate_enum_registration(lines, nested_enum, class_ref)
 
+        # Register nested unions
+        for nested_union in message.nested_unions:
+            self.generate_union_registration(lines, nested_union, class_ref)
+
         # Register nested messages
         for nested_msg in message.nested_messages:
             self.generate_message_registration(lines, nested_msg, class_ref)
+
+    def generate_union_registration(
+        self, lines: List[str], union: Union, parent_path: str
+    ):
+        """Generate registration code for a union."""
+        class_ref = f"{parent_path}.{union.name}" if parent_path else union.name
+        type_name = class_ref if parent_path else union.name
+
+        if union.type_id is not None:
+            lines.append(f"        fory.register({class_ref}.class, {union.type_id});")
+        else:
+            ns = self.schema.package or "default"
+            lines.append(
+                f'        fory.register({class_ref}.class, "{ns}", "{type_name}");'
+            )

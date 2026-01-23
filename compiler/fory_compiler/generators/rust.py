@@ -23,6 +23,7 @@ from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
     Message,
     Enum,
+    Union,
     Field,
     FieldType,
     PrimitiveType,
@@ -90,6 +91,8 @@ class RustGenerator(BaseGenerator):
 
         for message in self.schema.messages:
             self.collect_message_uses(message, uses)
+        for union in self.schema.unions:
+            self.collect_union_uses(union, uses)
 
         # License header
         lines.append(self.get_license_header("//"))
@@ -103,6 +106,11 @@ class RustGenerator(BaseGenerator):
         # Generate enums (top-level)
         for enum in self.schema.enums:
             lines.extend(self.generate_enum(enum))
+            lines.append("")
+
+        # Generate unions (top-level)
+        for union in self.schema.unions:
+            lines.extend(self.generate_union(union))
             lines.append("")
 
         # Generate modules for nested types
@@ -132,6 +140,15 @@ class RustGenerator(BaseGenerator):
             self.collect_uses_for_field(field, uses)
         for nested_msg in message.nested_messages:
             self.collect_message_uses(nested_msg, uses)
+        for nested_union in message.nested_unions:
+            self.collect_union_uses(nested_union, uses)
+
+    def collect_union_uses(self, union: Union, uses: Set[str]):
+        """Collect uses for a union and its cases."""
+        for field in union.fields:
+            if field.ref or field.element_ref:
+                uses.add("use std::sync::Arc")
+            self.collect_uses(field.field_type, uses)
 
     def get_registration_type_name(
         self, name: str, parent_stack: Optional[List[Message]] = None
@@ -208,6 +225,35 @@ class RustGenerator(BaseGenerator):
 
         return lines
 
+    def generate_union(
+        self,
+        union: Union,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
+        """Generate a Rust tagged union."""
+        lines: List[str] = []
+
+        lines.append("#[derive(ForyObject, Debug, Clone, PartialEq)]")
+        lines.append(f"pub enum {union.name} {{")
+
+        for field in union.fields:
+            variant_name = self.to_pascal_case(field.name)
+            variant_type = self.generate_type(
+                field.field_type,
+                nullable=False,
+                ref=field.ref,
+                element_optional=field.element_optional,
+                element_ref=field.element_ref,
+                parent_stack=parent_stack,
+                pointer_type="Arc",
+            )
+            lines.append(f"    #[fory(id = {field.number})]")
+            lines.append(f"    {variant_name}({variant_type}),")
+
+        lines.append("}")
+
+        return lines
+
     def generate_message(
         self,
         message: Message,
@@ -257,6 +303,12 @@ class RustGenerator(BaseGenerator):
         for nested_enum in message.nested_enums:
             enum_lines = self.generate_enum(nested_enum, lineage)
             lines.extend(self.indent_lines(enum_lines, indent + 1))
+            lines.append("")
+
+        # Nested unions
+        for nested_union in message.nested_unions:
+            union_lines = self.generate_union(nested_union, lineage)
+            lines.extend(self.indent_lines(union_lines, indent + 1))
             lines.append("")
 
         # Nested messages and their modules
@@ -483,6 +535,10 @@ class RustGenerator(BaseGenerator):
         for enum in self.schema.enums:
             self.generate_enum_registration(lines, enum, None)
 
+        # Register unions (top-level)
+        for union in self.schema.unions:
+            self.generate_union_registration(lines, union, None)
+
         # Register messages (including nested types)
         for message in self.schema.messages:
             self.generate_message_registration(lines, message, None)
@@ -526,6 +582,11 @@ class RustGenerator(BaseGenerator):
                 lines, nested_enum, (parent_stack or []) + [message]
             )
 
+        for nested_union in message.nested_unions:
+            self.generate_union_registration(
+                lines, nested_union, (parent_stack or []) + [message]
+            )
+
         # Register nested messages recursively
         for nested_msg in message.nested_messages:
             self.generate_message_registration(
@@ -535,6 +596,24 @@ class RustGenerator(BaseGenerator):
         # Register this message
         if message.type_id is not None:
             lines.append(f"    fory.register::<{type_name}>({message.type_id})?;")
+        else:
+            ns = self.package or "default"
+            lines.append(
+                f'    fory.register_by_namespace::<{type_name}>("{ns}", "{reg_name}")?;'
+            )
+
+    def generate_union_registration(
+        self,
+        lines: List[str],
+        union: Union,
+        parent_stack: Optional[List[Message]],
+    ):
+        """Generate registration code for a union."""
+        type_name = self.get_type_path(union.name, parent_stack)
+        reg_name = self.get_registration_type_name(union.name, parent_stack)
+
+        if union.type_id is not None:
+            lines.append(f"    fory.register::<{type_name}>({union.type_id})?;")
         else:
             ns = self.package or "default"
             lines.append(

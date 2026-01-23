@@ -233,7 +233,9 @@ struct FieldMeta {
   constexpr FieldMeta tagged() const { return encoding(Encoding::Tagged); }
 };
 
-/// Short factory function for FieldMeta - use F(id) in macros for brevity
+/// Short factory functions for FieldMeta - use F() as a builder or F(id) for
+/// tag
+constexpr FieldMeta F() { return FieldMeta{}; }
 constexpr FieldMeta F(int16_t id) { return FieldMeta{}.id(id); }
 
 namespace detail {
@@ -745,7 +747,7 @@ struct GetFieldTagEntry<
 // ============================================================================
 //
 // Usage:
-//   FORY_FIELD_CONFIG(MyStruct,
+//   FORY_FIELD_CONFIG(MyStruct, MyStruct,
 //       (field1, F(0)),                        // Simple: just ID
 //       (field2, F(1).nullable()),             // With nullable
 //       (field3, F(2).varint()),               // With encoding
@@ -849,13 +851,12 @@ struct GetFieldTagEntry<
 
 // Main FORY_FIELD_CONFIG macro
 // Creates a constexpr tuple of FieldEntry objects with member pointer
-// verification
-#define FORY_FIELD_CONFIG(Type, ...)                                           \
-  inline constexpr auto _fory_field_entries_##Type =                           \
-      std::make_tuple(FORY_FC_ENTRIES(Type, __VA_ARGS__));                     \
-  template <> struct fory::detail::ForyFieldConfigImpl<Type> {                 \
+// verification. Alias is a token-safe name without '::'.
+#define FORY_FIELD_CONFIG(Type, Alias, ...)                                    \
+  template <> struct ::fory::detail::ForyFieldConfigImpl<Type> {               \
     static constexpr bool has_config = true;                                   \
-    static constexpr auto &entries = _fory_field_entries_##Type;               \
+    static inline constexpr auto entries =                                     \
+        std::make_tuple(FORY_FC_ENTRIES(Type, __VA_ARGS__));                   \
     static constexpr size_t field_count =                                      \
         std::tuple_size_v<std::decay_t<decltype(entries)>>;                    \
   }

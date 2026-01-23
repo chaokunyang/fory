@@ -17,7 +17,7 @@
 
 """C++ code generator."""
 
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
@@ -99,19 +99,15 @@ class CppGenerator(BaseGenerator):
             return f"{namespace}::{qualified_name}"
         return qualified_name
 
-    def get_field_config_type_name(
+    def get_field_config_type_and_alias(
         self,
         type_name: str,
         parent_stack: List[Message],
-        type_aliases: Dict[str, str],
-    ) -> str:
-        """Get a macro-safe type name for FORY_FIELD_CONFIG and record alias."""
+    ) -> Tuple[str, str]:
+        """Get type name and token-safe alias for FORY_FIELD_CONFIG."""
         qualified_name = self.get_namespaced_type_name(type_name, parent_stack)
-        if "::" in qualified_name:
-            alias = f"ForyType_{qualified_name.replace('::', '_')}"
-            type_aliases.setdefault(alias, qualified_name)
-            return alias
-        return qualified_name
+        alias = f"ForyType_{qualified_name.replace('::', '_')}"
+        return qualified_name, alias
 
     def generate_header(self) -> GeneratedFile:
         """Generate a C++ header file with all types."""
@@ -121,7 +117,6 @@ class CppGenerator(BaseGenerator):
         struct_macros: List[str] = []
         union_macros: List[str] = []
         field_config_macros: List[str] = []
-        type_aliases: Dict[str, str] = {}
         definition_items = self.get_definition_order()
 
         # Collect includes (including from nested types)
@@ -180,7 +175,7 @@ class CppGenerator(BaseGenerator):
             if kind == "union":
                 lines.extend(
                     self.generate_union_definition(
-                        item, [], struct_macros, type_aliases, ""
+                        item, [], struct_macros, ""
                     )
                 )
                 union_macros.extend(self.generate_union_macros(item, []))
@@ -194,7 +189,6 @@ class CppGenerator(BaseGenerator):
                     enum_macros,
                     union_macros,
                     field_config_macros,
-                    type_aliases,
                     "",
                 )
             )
@@ -210,11 +204,6 @@ class CppGenerator(BaseGenerator):
 
         if union_macros:
             lines.extend(union_macros)
-            lines.append("")
-
-        if type_aliases:
-            for alias, target in sorted(type_aliases.items()):
-                lines.append(f"using {alias} = {target};")
             lines.append("")
 
         if field_config_macros:
@@ -415,7 +404,6 @@ class CppGenerator(BaseGenerator):
         enum_macros: List[str],
         union_macros: List[str],
         field_config_macros: List[str],
-        type_aliases: Dict[str, str],
         indent: str,
     ) -> List[str]:
         """Generate a C++ class definition with nested types."""
@@ -442,7 +430,6 @@ class CppGenerator(BaseGenerator):
                     enum_macros,
                     union_macros,
                     field_config_macros,
-                    type_aliases,
                     body_indent,
                 )
             )
@@ -454,7 +441,6 @@ class CppGenerator(BaseGenerator):
                     nested_union,
                     lineage,
                     struct_macros,
-                    type_aliases,
                     body_indent,
                 )
             )
@@ -496,11 +482,13 @@ class CppGenerator(BaseGenerator):
         if message.fields:
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
             struct_macros.append(f"FORY_STRUCT({struct_type_name}, {field_names});")
-            field_config_type_name = self.get_field_config_type_name(
-                message.name, parent_stack, type_aliases
+            field_config_type_name = self.get_field_config_type_and_alias(
+                message.name, parent_stack
             )
             field_config_macros.append(
-                self.generate_field_config_macro(message, field_config_type_name)
+                self.generate_field_config_macro(
+                    message, field_config_type_name[0], field_config_type_name[1]
+                )
             )
         else:
             struct_macros.append(f"FORY_STRUCT({struct_type_name});")
@@ -512,7 +500,6 @@ class CppGenerator(BaseGenerator):
         union: Union,
         parent_stack: List[Message],
         struct_macros: List[str],
-        type_aliases: Dict[str, str],
         indent: str,
     ) -> List[str]:
         """Generate a C++ union class definition."""
@@ -670,9 +657,26 @@ class CppGenerator(BaseGenerator):
 
         lines: List[str] = []
         union_type = self.get_namespaced_type_name(union.name, parent_stack)
+        if len(union.fields) <= 16:
+            lines.append(f"FORY_UNION({union_type},")
+            for index, field in enumerate(union.fields):
+                case_type = self.generate_namespaced_type(
+                    field.field_type,
+                    False,
+                    field.ref,
+                    field.element_optional,
+                    field.element_ref,
+                    parent_stack,
+                )
+                case_ctor = self.to_snake_case(field.name)
+                meta = self.get_union_field_meta(field)
+                suffix = "," if index + 1 < len(union.fields) else ""
+                lines.append(f"    ({case_type}, {case_ctor}, {meta}){suffix}")
+            lines.append(");")
+            return lines
+
         case_ids = ", ".join(str(field.number) for field in union.fields)
         lines.append(f"FORY_UNION_IDS({union_type}, {case_ids});")
-
         for field in union.fields:
             case_type = self.generate_namespaced_type(
                 field.field_type,
@@ -1026,6 +1030,7 @@ class CppGenerator(BaseGenerator):
         self,
         message: Message,
         qualified_name: str,
+        alias_name: str,
     ) -> str:
         """Generate FORY_FIELD_CONFIG macro for a message."""
         entries = []
@@ -1034,11 +1039,11 @@ class CppGenerator(BaseGenerator):
             meta = self.get_field_meta(field)
             entries.append(f"({field_name}, {meta})")
         joined = ", ".join(entries)
-        return f"FORY_FIELD_CONFIG({qualified_name}, {joined});"
+        return f"FORY_FIELD_CONFIG({qualified_name}, {alias_name}, {joined});"
 
     def get_field_meta(self, field: Field) -> str:
         """Build FieldMeta expression for a field."""
-        meta = "fory::FieldMeta{}"
+        meta = "fory::F()"
         if field.tag_id is not None:
             meta += f".id({field.tag_id})"
         if field.optional:
@@ -1055,7 +1060,7 @@ class CppGenerator(BaseGenerator):
 
     def get_union_field_meta(self, field: Field) -> str:
         """Build FieldMeta expression for a union case."""
-        meta = f"fory::FieldMeta{{}}.id({field.number})"
+        meta = f"fory::F({field.number})"
         if field.optional:
             meta += ".nullable()"
         if field.ref or field.element_ref or field.options.get("tracking_ref") is True:

@@ -575,5 +575,105 @@ private:
   }                                                                            \
   }
 
+#define FORY_UNION_CASE_TYPE(tuple) FORY_UNION_CASE_TYPE_IMPL tuple
+#define FORY_UNION_CASE_TYPE_IMPL(type, name, meta) type
+
+#define FORY_UNION_CASE_NAME(tuple) FORY_UNION_CASE_NAME_IMPL tuple
+#define FORY_UNION_CASE_NAME_IMPL(type, name, meta) name
+
+#define FORY_UNION_CASE_META(tuple) FORY_UNION_CASE_META_IMPL tuple
+#define FORY_UNION_CASE_META_IMPL(type, name, meta) meta
+
+#define FORY_UNION_PP_FOREACH_2(M, A, ...)                                     \
+  FORY_PP_INVOKE(                                                              \
+      FORY_PP_CONCAT(FORY_UNION_PP_FOREACH_2_IMPL_,                            \
+                     FORY_PP_NARG(__VA_ARGS__)),                               \
+      M, A, __VA_ARGS__)
+
+#define FORY_UNION_PP_FOREACH_2_IMPL_1(M, A, _1) M(A, _1)
+#define FORY_UNION_PP_FOREACH_2_IMPL_2(M, A, _1, _2)                           \
+  M(A, _1) M(A, _2)
+#define FORY_UNION_PP_FOREACH_2_IMPL_3(M, A, _1, _2, _3)                       \
+  M(A, _1) M(A, _2) M(A, _3)
+#define FORY_UNION_PP_FOREACH_2_IMPL_4(M, A, _1, _2, _3, _4)                   \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4)
+#define FORY_UNION_PP_FOREACH_2_IMPL_5(M, A, _1, _2, _3, _4, _5)               \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5)
+#define FORY_UNION_PP_FOREACH_2_IMPL_6(M, A, _1, _2, _3, _4, _5, _6)           \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6)
+#define FORY_UNION_PP_FOREACH_2_IMPL_7(M, A, _1, _2, _3, _4, _5, _6, _7)       \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7)
+#define FORY_UNION_PP_FOREACH_2_IMPL_8(M, A, _1, _2, _3, _4, _5, _6, _7, _8)   \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)
+#define FORY_UNION_PP_FOREACH_2_IMPL_9(M, A, _1, _2, _3, _4, _5, _6, _7, _8,   \
+                                      _9)                                     \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
+      M(A, _9)
+#define FORY_UNION_PP_FOREACH_2_IMPL_10(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
+                                       _9, _10)                               \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
+      M(A, _9) M(A, _10)
+#define FORY_UNION_PP_FOREACH_2_IMPL_11(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
+                                       _9, _10, _11)                          \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
+      M(A, _9) M(A, _10) M(A, _11)
+#define FORY_UNION_PP_FOREACH_2_IMPL_12(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
+                                       _9, _10, _11, _12)                     \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
+      M(A, _9) M(A, _10) M(A, _11) M(A, _12)
+#define FORY_UNION_PP_FOREACH_2_IMPL_13(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
+                                       _9, _10, _11, _12, _13)                \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
+      M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13)
+#define FORY_UNION_PP_FOREACH_2_IMPL_14(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
+                                       _9, _10, _11, _12, _13, _14)           \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
+      M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14)
+#define FORY_UNION_PP_FOREACH_2_IMPL_15(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
+                                       _9, _10, _11, _12, _13, _14, _15)      \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
+      M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15)
+#define FORY_UNION_PP_FOREACH_2_IMPL_16(M, A, _1, _2, _3, _4, _5, _6, _7, _8,  \
+                                       _9, _10, _11, _12, _13, _14, _15,      \
+                                       _16)                                   \
+  M(A, _1) M(A, _2) M(A, _3) M(A, _4) M(A, _5) M(A, _6) M(A, _7) M(A, _8)      \
+      M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15)     \
+          M(A, _16)
+
+#define FORY_UNION_CASE_ID(Type, tuple)                                        \
+  static_cast<uint32_t>(FORY_UNION_CASE_META(tuple).id_)
+
+#define FORY_UNION_CASE_ID_ENTRY(Type, tuple)                                  \
+  FORY_UNION_CASE_ID(Type, tuple),
+
+#define FORY_UNION_CASE_DEF(Type, tuple)                                       \
+  template <>                                                                  \
+  struct UnionCaseMeta<Type,                                                   \
+                       static_cast<uint32_t>(FORY_UNION_CASE_META(tuple).id_)> { \
+    using UnionType = Type;                                                    \
+    using CaseT = FORY_UNION_CASE_TYPE(tuple);                                 \
+    static constexpr ::fory::FieldMeta meta = FORY_UNION_CASE_META(tuple);     \
+    static inline UnionType make(CaseT value) {                                \
+      return Type::FORY_UNION_CASE_NAME(tuple)(std::move(value));              \
+    }                                                                          \
+  };
+
+#define FORY_UNION(Type, ...)                                                  \
+  static_assert(                                                               \
+      FORY_PP_NARG(__VA_ARGS__) <= 16,                                         \
+      "FORY_UNION supports up to 16 cases; use FORY_UNION_IDS/FORY_UNION_CASE " \
+      "for larger unions");                                                    \
+  namespace fory {                                                             \
+  namespace serialization {                                                    \
+  template <> struct UnionCaseIds<Type> {                                      \
+    static inline constexpr uint32_t case_ids[] = {                            \
+        FORY_UNION_PP_FOREACH_2(FORY_UNION_CASE_ID_ENTRY, Type, __VA_ARGS__)}; \
+    static constexpr size_t case_count =                                       \
+        sizeof(case_ids) / sizeof(case_ids[0]);                                \
+  };                                                                           \
+  FORY_UNION_PP_FOREACH_2(FORY_UNION_CASE_DEF, Type, __VA_ARGS__)              \
+  }                                                                            \
+  }
+
 } // namespace serialization
 } // namespace fory

@@ -51,7 +51,9 @@ else
 fi
 
 if command -v clang-format >/dev/null; then
+  clang-format --version
   CLANG_FORMAT_VERSION=$(clang-format --version | awk '{print $3}')
+  echo "clang-format installed: $CLANG_FORMAT_VERSION"
   tool_version_check "clang-format" "$CLANG_FORMAT_VERSION" "12.0.0"
 else
     echo "WARNING: clang-format is not installed!"
@@ -65,7 +67,7 @@ fi
 if [ ! -f "$ROOT/javascript/node_modules/.bin/eslint" ]; then
   echo "eslint is not installed, start to install it."
   pushd "$ROOT/javascript"
-  npm install --registry=https://registry.npmmirror.com
+  npm install
   popd
 fi
 

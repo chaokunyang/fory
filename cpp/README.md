@@ -23,7 +23,7 @@ The C++ implementation provides high-performance serialization with compile-time
 ```cpp
 #include "fory/serialization/fory.h"
 
-// Define your struct with FORY_STRUCT macro
+// Define your struct with FORY_STRUCT macro (place it after all fields)
 struct Person {
   std::string name;
   int32_t age;

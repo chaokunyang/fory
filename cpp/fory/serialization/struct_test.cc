@@ -78,6 +78,24 @@ struct ManyFieldsStruct {
   FORY_STRUCT(ManyFieldsStruct, b1, i8, i16, i32, i64, f32, f64, str);
 };
 
+class PrivateFieldsStruct {
+public:
+  PrivateFieldsStruct() = default;
+  PrivateFieldsStruct(int32_t id, std::string name, std::vector<int32_t> scores)
+      : id_(id), name_(std::move(name)), scores_(std::move(scores)) {}
+
+  bool operator==(const PrivateFieldsStruct &other) const {
+    return id_ == other.id_ && name_ == other.name_ && scores_ == other.scores_;
+  }
+
+private:
+  int32_t id_ = 0;
+  std::string name_;
+  std::vector<int32_t> scores_;
+
+  FORY_STRUCT(PrivateFieldsStruct, id_, name_, scores_);
+};
+
 // All primitives
 struct AllPrimitivesStruct {
   bool bool_val;
@@ -334,6 +352,7 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_struct<SingleFieldStruct>(type_id++);
   fory.register_struct<TwoFieldStruct>(type_id++);
   fory.register_struct<ManyFieldsStruct>(type_id++);
+  fory.register_struct<PrivateFieldsStruct>(type_id++);
   fory.register_struct<AllPrimitivesStruct>(type_id++);
   fory.register_struct<StringTestStruct>(type_id++);
   fory.register_struct<Point2D>(type_id++);
@@ -397,6 +416,10 @@ TEST(StructComprehensiveTest, ManyFieldsStruct) {
                                   "Hello, World!"});
   test_roundtrip(ManyFieldsStruct{false, -128, -32768, INT32_MIN,
                                   -9223372036854775807LL - 1, -1.0f, -1.0, ""});
+}
+
+TEST(StructComprehensiveTest, PrivateFieldsStruct) {
+  test_roundtrip(PrivateFieldsStruct{42, "secret", {1, 2, 3}});
 }
 
 TEST(StructComprehensiveTest, AllPrimitivesZero) {

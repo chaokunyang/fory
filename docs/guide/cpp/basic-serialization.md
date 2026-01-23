@@ -197,6 +197,7 @@ The macro:
 **Requirements:**
 
 - Must be declared inside the struct/class definition
+- Must be placed after all field declarations
 - All listed fields must be serializable types
 - Field order in the macro determines serialization order
 

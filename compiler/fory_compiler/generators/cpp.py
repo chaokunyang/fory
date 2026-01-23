@@ -117,7 +117,6 @@ class CppGenerator(BaseGenerator):
         lines = []
         includes: Set[str] = set()
         enum_macros: List[str] = []
-        struct_macros: List[str] = []
         field_config_macros: List[str] = []
         type_aliases: Dict[str, str] = {}
 
@@ -170,17 +169,12 @@ class CppGenerator(BaseGenerator):
                 self.generate_message_definition(
                     message,
                     [],
-                    struct_macros,
                     enum_macros,
                     field_config_macros,
                     type_aliases,
                     "",
                 )
             )
-            lines.append("")
-
-        if struct_macros:
-            lines.extend(struct_macros)
             lines.append("")
 
         if namespace:
@@ -271,7 +265,6 @@ class CppGenerator(BaseGenerator):
         self,
         message: Message,
         parent_stack: List[Message],
-        struct_macros: List[str],
         enum_macros: List[str],
         field_config_macros: List[str],
         type_aliases: Dict[str, str],
@@ -297,7 +290,6 @@ class CppGenerator(BaseGenerator):
                 self.generate_message_definition(
                     nested_msg,
                     lineage,
-                    struct_macros,
                     enum_macros,
                     field_config_macros,
                     type_aliases,
@@ -334,11 +326,12 @@ class CppGenerator(BaseGenerator):
         lines.append(f"{body_indent}}}")
 
         lines.append(f"{indent}}};")
-
-        struct_type_name = self.get_qualified_type_name(message.name, parent_stack)
         if message.fields:
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
-            struct_macros.append(f"FORY_STRUCT({struct_type_name}, {field_names});")
+            lines.insert(
+                len(lines) - 1,
+                f"{body_indent}FORY_STRUCT({message.name}, {field_names});",
+            )
             field_config_type_name = self.get_field_config_type_name(
                 message.name, parent_stack, type_aliases
             )
@@ -346,7 +339,7 @@ class CppGenerator(BaseGenerator):
                 self.generate_field_config_macro(message, field_config_type_name)
             )
         else:
-            struct_macros.append(f"FORY_STRUCT({struct_type_name});")
+            lines.insert(len(lines) - 1, f"{body_indent}FORY_STRUCT({message.name});")
 
         return lines
 

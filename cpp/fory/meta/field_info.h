@@ -189,8 +189,8 @@ template <typename FieldInfo> constexpr bool IsValidFieldInfo() {
   }
 
 #define FORY_STRUCT_EXTERNAL_IMPL(type, unique_id, ...)                        \
-  FORY_PP_CONCAT(FORY_STRUCT_EXTERNAL_,                                        \
-                 FORY_PP_IS_EMPTY(__VA_ARGS__))(type, unique_id, __VA_ARGS__)
+  FORY_PP_CONCAT(FORY_STRUCT_EXTERNAL_, FORY_PP_IS_EMPTY(__VA_ARGS__))         \
+  (type, unique_id, __VA_ARGS__)
 
 #define FORY_STRUCT_EXTERNAL_1(type, unique_id, ...)                           \
   FORY_STRUCT_EXTERNAL_EMPTY(type, unique_id)

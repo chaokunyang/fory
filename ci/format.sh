@@ -51,8 +51,11 @@ else
 fi
 
 if command -v clang-format >/dev/null; then
-  clang-format --version
-  CLANG_FORMAT_VERSION=$(clang-format --version | awk '{print $4}')
+  CLANG_FORMAT_OUTPUT=$(clang-format --version)
+  echo "Full clang-format version output: $CLANG_FORMAT_OUTPUT"
+  # Extract version number - handles both "clang-format version X.Y.Z" and "Ubuntu clang-format version X.Y.Z"
+  # Use sed instead of grep -P for macOS compatibility
+  CLANG_FORMAT_VERSION=$(echo "$CLANG_FORMAT_OUTPUT" | sed -n 's/.*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\).*/\1/p' | head -n1)
   echo "clang-format installed: $CLANG_FORMAT_VERSION"
   if [ "$CLANG_FORMAT_VERSION" != "18.1.8" ]; then
     echo "WARNING: Fory uses clang-format 18.1.8, You currently are using $CLANG_FORMAT_VERSION."
@@ -64,7 +67,9 @@ if command -v clang-format >/dev/null; then
     PYTHON_SCRIPTS_DIR=$(python3 -c "import sysconfig; print(sysconfig.get_path('scripts'))")
     export PATH="$PYTHON_SCRIPTS_DIR:$PATH"
     # Update the version after installation
-    CLANG_FORMAT_VERSION=$(clang-format --version | awk '{print $4}')
+    CLANG_FORMAT_OUTPUT=$(clang-format --version)
+    echo "Full clang-format version output after install: $CLANG_FORMAT_OUTPUT"
+    CLANG_FORMAT_VERSION=$(echo "$CLANG_FORMAT_OUTPUT" | sed -n 's/.*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\).*/\1/p' | head -n1)
     echo "clang-format updated to: $CLANG_FORMAT_VERSION"
   fi
 else

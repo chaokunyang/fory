@@ -173,31 +173,31 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
 
 #define FORY_FIELD_INFO_NAMES_FIELD(field) #field,
 #define FORY_FIELD_INFO_NAMES_FUNC(arg)                                        \
-  FORY_PP_IF(FORY_PP_IS_BASE(arg))(FORY_PP_EMPTY(),                            \
-                                   FORY_FIELD_INFO_NAMES_FIELD(arg))
+  FORY_PP_IF(FORY_PP_IS_BASE(arg))                                             \
+  (FORY_PP_EMPTY(), FORY_FIELD_INFO_NAMES_FIELD(arg))
 
 #define FORY_FIELD_INFO_PTRS_FIELD(type, field) &type::field,
 #define FORY_FIELD_INFO_PTRS_FUNC(type, arg)                                   \
-  FORY_PP_IF(FORY_PP_IS_BASE(arg))(FORY_PP_EMPTY(),                            \
-                                   FORY_FIELD_INFO_PTRS_FIELD(type, arg))
+  FORY_PP_IF(FORY_PP_IS_BASE(arg))                                             \
+  (FORY_PP_EMPTY(), FORY_FIELD_INFO_PTRS_FIELD(type, arg))
 
 #define FORY_BASE_NAMES_ARG(arg)                                               \
-  FORY_PP_IF(FORY_PP_IS_BASE(arg))(FORY_BASE_NAMES_ARG_IMPL(arg),              \
-                                   FORY_PP_EMPTY())
+  FORY_PP_IF(FORY_PP_IS_BASE(arg))                                             \
+  (FORY_BASE_NAMES_ARG_IMPL(arg), FORY_PP_EMPTY())
 #define FORY_BASE_NAMES_ARG_IMPL(arg)                                          \
   decltype(ForyFieldInfo(std::declval<FORY_BASE_TYPE(arg)>()))::Names,
 
 #define FORY_BASE_PTRS_ARG(arg)                                                \
-  FORY_PP_IF(FORY_PP_IS_BASE(arg))(FORY_BASE_PTRS_ARG_IMPL(arg),               \
-                                   FORY_PP_EMPTY())
+  FORY_PP_IF(FORY_PP_IS_BASE(arg))                                             \
+  (FORY_BASE_PTRS_ARG_IMPL(arg), FORY_PP_EMPTY())
 #define FORY_BASE_PTRS_ARG_IMPL(arg)                                           \
   fory::meta::details::WrapTuple(                                              \
       decltype(ForyFieldInfo(std::declval<FORY_BASE_TYPE(arg)>()))::Ptrs),
 
 #define FORY_BASE_SIZE_ADD(arg)                                                \
-  FORY_PP_IF(FORY_PP_IS_BASE(arg))(                                            \
-      +decltype(ForyFieldInfo(std::declval<FORY_BASE_TYPE(arg)>()))::Size,     \
-      FORY_PP_EMPTY())
+  FORY_PP_IF(FORY_PP_IS_BASE(arg))                                             \
+  (+decltype(ForyFieldInfo(std::declval<FORY_BASE_TYPE(arg)>()))::Size,        \
+   FORY_PP_EMPTY())
 
 #define FORY_FIELD_SIZE_ADD(arg)                                               \
   FORY_PP_IF(FORY_PP_IS_BASE(arg))(FORY_PP_EMPTY(), +1)

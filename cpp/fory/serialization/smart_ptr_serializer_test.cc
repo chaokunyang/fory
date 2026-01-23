@@ -194,13 +194,13 @@ struct Base {
 struct Derived1 : Base {
   std::string get_type() const override { return "Derived1"; }
   std::string derived1_data;
-  FORY_STRUCT(Derived1, base_value, derived1_data);
+  FORY_STRUCT(Derived1, FORY_BASE(Base), derived1_data);
 };
 
 struct Derived2 : Base {
   std::string get_type() const override { return "Derived2"; }
   int32_t derived2_data = 0;
-  FORY_STRUCT(Derived2, base_value, derived2_data);
+  FORY_STRUCT(Derived2, FORY_BASE(Base), derived2_data);
 };
 
 struct PolymorphicSharedHolder {

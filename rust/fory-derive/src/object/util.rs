@@ -639,7 +639,12 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
 
     quote! {
         {
-            let type_id = #get_type_id;
+            let mut type_id = #get_type_id;
+            let internal_type_id = type_id & 0xff;
+            if internal_type_id == fory_core::types::TypeId::TYPED_UNION as u32
+                || internal_type_id == fory_core::types::TypeId::NAMED_UNION as u32 {
+                type_id = fory_core::types::TypeId::UNION as u32;
+            }
             let mut generics = vec![#(#children_tokens),*] as Vec<fory_core::meta::FieldType>;
             // For tuples and sets, if no generic info is available, add UNKNOWN element
             // This handles type aliases to tuples where we can't detect the tuple at macro time

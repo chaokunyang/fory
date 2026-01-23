@@ -359,6 +359,26 @@ class Fory:
             serializer=serializer,
         )
 
+    def register_union(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        """
+        Register a union type with a generated serializer.
+        """
+        return self.type_resolver.register_union(
+            cls,
+            type_id=type_id,
+            namespace=namespace,
+            typename=typename,
+            serializer=serializer,
+        )
+
     def register_serializer(self, cls: type, serializer):
         """
         Register a custom serializer for a type.
@@ -894,6 +914,17 @@ class ThreadSafeFory:
         serializer=None,
     ):
         self._register_callback(lambda f: f.register_type(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer))
+
+    def register_union(
+        self,
+        cls: Union[type, TypeVar],
+        *,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
+        serializer=None,
+    ):
+        self._register_callback(lambda f: f.register_union(cls, type_id=type_id, namespace=namespace, typename=typename, serializer=serializer))
 
     def register_serializer(self, cls: type, serializer):
         self._register_callback(lambda f: f.register_serializer(cls, serializer))

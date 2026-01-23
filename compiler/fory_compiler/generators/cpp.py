@@ -119,8 +119,10 @@ class CppGenerator(BaseGenerator):
         includes: Set[str] = set()
         enum_macros: List[str] = []
         struct_macros: List[str] = []
+        union_serializers: List[str] = []
         field_config_macros: List[str] = []
         type_aliases: Dict[str, str] = {}
+        definition_items = self.get_definition_order()
 
         # Collect includes (including from nested types)
         includes.add("<cstdint>")
@@ -130,6 +132,8 @@ class CppGenerator(BaseGenerator):
             includes.add("<utility>")
             includes.add("<variant>")
             includes.add("<memory>")
+            includes.add("<typeindex>")
+            includes.add('"fory/serialization/skip.h"')
 
         for message in self.schema.messages:
             self.collect_message_includes(message, includes)
@@ -171,20 +175,20 @@ class CppGenerator(BaseGenerator):
             enum_macros.append(self.generate_enum_macro(enum, []))
             lines.append("")
 
-        # Generate unions (top-level)
-        for union in self.schema.unions:
-            lines.extend(
-                self.generate_union_definition(
-                    union, [], struct_macros, type_aliases, ""
+        # Generate top-level unions/messages in dependency order
+        for kind, item in definition_items:
+            if kind == "union":
+                lines.extend(
+                    self.generate_union_definition(
+                        item, [], struct_macros, type_aliases, ""
+                    )
                 )
-            )
-            lines.append("")
-
-        # Generate messages (with nested enums/messages defined inside classes)
-        for message in self.schema.messages:
+                union_serializers.extend(self.generate_union_serializer(item, []))
+                lines.append("")
+                continue
             lines.extend(
                 self.generate_message_definition(
-                    message,
+                    item,
                     [],
                     struct_macros,
                     enum_macros,
@@ -193,6 +197,7 @@ class CppGenerator(BaseGenerator):
                     "",
                 )
             )
+            self.collect_union_serializers(item, [], union_serializers)
             lines.append("")
 
         if struct_macros:
@@ -201,6 +206,14 @@ class CppGenerator(BaseGenerator):
 
         if namespace:
             lines.append(f"}} // namespace {namespace}")
+            lines.append("")
+
+        if union_serializers:
+            lines.append("namespace fory {")
+            lines.append("namespace serialization {")
+            lines.extend(union_serializers)
+            lines.append("} // namespace serialization")
+            lines.append("} // namespace fory")
             lines.append("")
 
         if type_aliases:
@@ -269,6 +282,107 @@ class CppGenerator(BaseGenerator):
         """Generate forward declarations for top-level messages."""
         for message in self.schema.messages:
             lines.append(f"class {message.name};")
+
+    def get_definition_order(self) -> List:
+        """Return top-level unions/messages in dependency order."""
+        items: List = []
+        for union in self.schema.unions:
+            items.append(("union", union))
+        for message in self.schema.messages:
+            items.append(("message", message))
+
+        name_to_index = {}
+        for idx, (kind, item) in enumerate(items):
+            name_to_index[item.name] = idx
+
+        dependencies: Dict[int, Set[int]] = {i: set() for i in range(len(items))}
+        reverse_edges: Dict[int, Set[int]] = {i: set() for i in range(len(items))}
+
+        for idx, (kind, item) in enumerate(items):
+            deps: Set[str] = set()
+            if kind == "union":
+                self.collect_union_dependencies(item, [], deps)
+            else:
+                self.collect_message_dependencies(item, [], deps)
+            for dep_name in deps:
+                dep_idx = name_to_index.get(dep_name)
+                if dep_idx is None or dep_idx == idx:
+                    continue
+                dependencies[idx].add(dep_idx)
+                reverse_edges[dep_idx].add(idx)
+
+        in_degree = {idx: len(dependencies[idx]) for idx in dependencies}
+        available = [idx for idx, degree in in_degree.items() if degree == 0]
+        ordered: List = []
+
+        while available:
+            available.sort()
+            idx = available.pop(0)
+            ordered.append(items[idx])
+            for neighbor in reverse_edges[idx]:
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    available.append(neighbor)
+
+        if len(ordered) != len(items):
+            raise ValueError("C++ generator cannot resolve type order for unions.")
+
+        return ordered
+
+    def collect_message_dependencies(
+        self, message: Message, parent_stack: List[Message], deps: Set[str]
+    ) -> None:
+        """Collect top-level type dependencies for a message."""
+        lineage = parent_stack + [message]
+        for field in message.fields:
+            self.collect_type_dependencies(field.field_type, lineage, deps)
+        for nested_union in message.nested_unions:
+            self.collect_union_dependencies(nested_union, lineage, deps)
+        for nested_msg in message.nested_messages:
+            self.collect_message_dependencies(nested_msg, lineage, deps)
+
+    def collect_union_dependencies(
+        self, union: Union, parent_stack: List[Message], deps: Set[str]
+    ) -> None:
+        """Collect top-level type dependencies for a union."""
+        for field in union.fields:
+            self.collect_type_dependencies(field.field_type, parent_stack, deps)
+
+    def collect_type_dependencies(
+        self, field_type: FieldType, parent_stack: List[Message], deps: Set[str]
+    ) -> None:
+        if isinstance(field_type, PrimitiveType):
+            return
+        if isinstance(field_type, NamedType):
+            type_name = field_type.name
+            if self.is_nested_type_reference(type_name, parent_stack):
+                return
+            top_level = type_name.split(".")[0]
+            deps.add(top_level)
+            return
+        if isinstance(field_type, ListType):
+            self.collect_type_dependencies(
+                field_type.element_type, parent_stack, deps
+            )
+            return
+        if isinstance(field_type, MapType):
+            self.collect_type_dependencies(field_type.key_type, parent_stack, deps)
+            self.collect_type_dependencies(field_type.value_type, parent_stack, deps)
+            return
+
+    def is_nested_type_reference(
+        self, type_name: str, parent_stack: List[Message]
+    ) -> bool:
+        if not parent_stack:
+            return False
+        root_name = parent_stack[0].name
+        if "." in type_name:
+            return type_name.split(".")[0] == root_name
+        for i in range(len(parent_stack) - 1, -1, -1):
+            message = parent_stack[i]
+            if message.get_nested_type(type_name) is not None:
+                return True
+        return False
 
     def get_enum_value_names(self, enum: Enum) -> List[str]:
         """Get enum value names without the enum prefix."""
@@ -421,7 +535,7 @@ class CppGenerator(BaseGenerator):
         lines.append(f"{body_indent}  }};")
         lines.append("")
 
-        lines.append(f"{body_indent}  {class_name}() = delete;")
+        lines.append(f"{body_indent}  {class_name}() = default;")
         lines.append("")
 
         for field, case_type in zip(union.fields, case_types):
@@ -517,6 +631,12 @@ class CppGenerator(BaseGenerator):
         )
         lines.append(f"{body_indent}  }}")
         lines.append("")
+        lines.append(
+            f"{body_indent}  bool operator==(const {class_name}& other) const {{"
+        )
+        lines.append(f"{body_indent}    return value_ == other.value_;")
+        lines.append(f"{body_indent}  }}")
+        lines.append("")
 
         lines.append(f"{body_indent}  {variant_type} value_;")
         lines.append("")
@@ -530,18 +650,12 @@ class CppGenerator(BaseGenerator):
         )
         lines.append(f"{indent}}};")
 
-        struct_type_name = self.get_qualified_type_name(union.name, parent_stack)
-        struct_macros.append(f"FORY_STRUCT({struct_type_name}, value_);")
-
         return lines
 
     def get_union_case_type(
         self, field: Field, parent_stack: List[Message]
     ) -> str:
         """Return the C++ type for a union case."""
-        if isinstance(field.field_type, NamedType):
-            type_name = self.resolve_nested_type_name(field.field_type.name, parent_stack)
-            return f"std::shared_ptr<{type_name}>"
         return self.generate_type(
             field.field_type,
             False,
@@ -566,6 +680,309 @@ class CppGenerator(BaseGenerator):
             if self.message_has_unions(nested_msg):
                 return True
         return False
+
+    def collect_union_serializers(
+        self,
+        message: Message,
+        parent_stack: List[Message],
+        union_serializers: List[str],
+    ) -> None:
+        """Collect serializer specializations for nested unions."""
+        lineage = parent_stack + [message]
+        for nested_union in message.nested_unions:
+            union_serializers.extend(
+                self.generate_union_serializer(nested_union, lineage)
+            )
+        for nested_msg in message.nested_messages:
+            self.collect_union_serializers(nested_msg, lineage, union_serializers)
+
+    def generate_union_serializer(
+        self,
+        union: Union,
+        parent_stack: List[Message],
+    ) -> List[str]:
+        """Generate a C++ union serializer specialization."""
+        lines: List[str] = []
+        qualified_name = self.get_namespaced_type_name(union.name, parent_stack)
+        case_id_method = f"{self.to_snake_case(union.name)}_case_id"
+        case_types = [
+            self.generate_namespaced_type(
+                field.field_type,
+                False,
+                field.ref,
+                field.element_optional,
+                field.element_ref,
+                parent_stack,
+            )
+            for field in union.fields
+        ]
+
+        if not union.fields:
+            return lines
+
+        default_field = union.fields[0]
+        default_ctor = self.to_snake_case(default_field.name)
+        default_type = case_types[0]
+
+        lines.append(f"template <>")
+        lines.append(f"struct Serializer<{qualified_name}> {{")
+        lines.append(f"  static constexpr TypeId type_id = TypeId::UNION;")
+        lines.append("")
+        lines.append(f"  static inline void write_type_info(WriteContext &ctx) {{")
+        lines.append(
+            f"    auto result = ctx.write_any_typeinfo(static_cast<uint32_t>(TypeId::TYPED_UNION), std::type_index(typeid({qualified_name})));"
+        )
+        lines.append(f"    if (FORY_PREDICT_FALSE(!result.ok())) {{")
+        lines.append(f"      ctx.set_error(std::move(result).error());")
+        lines.append(f"    }}")
+        lines.append(f"  }}")
+        lines.append("")
+        lines.append(f"  static inline void read_type_info(ReadContext &ctx) {{")
+        lines.append(
+            f"    auto type_info_res = ctx.type_resolver().template get_type_info<{qualified_name}>();"
+        )
+        lines.append(f"    if (FORY_PREDICT_FALSE(!type_info_res.ok())) {{")
+        lines.append(f"      ctx.set_error(std::move(type_info_res).error());")
+        lines.append(f"      return;")
+        lines.append(f"    }}")
+        lines.append(f"    const TypeInfo *expected = type_info_res.value();")
+        lines.append(f"    const TypeInfo *remote = ctx.read_any_typeinfo(ctx.error());")
+        lines.append(f"    if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
+        lines.append(f"      return;")
+        lines.append(f"    }}")
+        lines.append(f"    if (!remote || remote->type_id != expected->type_id) {{")
+        lines.append(
+            f"      ctx.set_error(Error::type_mismatch(remote ? remote->type_id : 0u, expected->type_id));"
+        )
+        lines.append(f"    }}")
+        lines.append(f"  }}")
+        lines.append("")
+        lines.append(
+            f"  static inline void write(const {qualified_name} &obj, WriteContext &ctx,"
+        )
+        lines.append(
+            f"                           RefMode ref_mode, bool write_type,"
+        )
+        lines.append(f"                           bool has_generics = false) {{")
+        lines.append(f"    (void)has_generics;")
+        lines.append(f"    if (ref_mode == RefMode::Tracking && ctx.track_ref()) {{")
+        lines.append(f"      ctx.write_int8(REF_VALUE_FLAG);")
+        lines.append(f"      ctx.ref_writer().reserve_ref_id();")
+        lines.append(f"    }} else if (ref_mode != RefMode::None) {{")
+        lines.append(f"      ctx.write_int8(NOT_NULL_VALUE_FLAG);")
+        lines.append(f"    }}")
+        lines.append(f"    if (write_type) {{")
+        lines.append(f"      write_type_info(ctx);")
+        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
+        lines.append(f"        return;")
+        lines.append(f"      }}")
+        lines.append(f"    }}")
+        lines.append(f"    write_data(obj, ctx);")
+        lines.append(f"  }}")
+        lines.append("")
+        lines.append(
+            f"  static inline void write_data(const {qualified_name} &obj, WriteContext &ctx) {{"
+        )
+        lines.append(f"    ctx.write_varuint32(obj.{case_id_method}());")
+        lines.append(f"    obj.visit([&](const auto &value) {{")
+        lines.append(f"      using Alt = std::decay_t<decltype(value)>;")
+        lines.append(f"      Serializer<Alt>::write(value, ctx, RefMode::Tracking, true);")
+        lines.append(f"    }});")
+        lines.append(f"  }}")
+        lines.append("")
+        lines.append(
+            f"  static inline void write_data_generic(const {qualified_name} &obj, WriteContext &ctx,"
+        )
+        lines.append(f"                                      bool has_generics) {{")
+        lines.append(f"    (void)has_generics;")
+        lines.append(f"    write_data(obj, ctx);")
+        lines.append(f"  }}")
+        lines.append("")
+        lines.append(
+            f"  static inline {qualified_name} read(ReadContext &ctx, RefMode ref_mode,"
+        )
+        lines.append(f"                           bool read_type) {{")
+        lines.append(f"    int8_t ref_flag = NOT_NULL_VALUE_FLAG;")
+        lines.append(f"    if (ref_mode != RefMode::None) {{")
+        lines.append(f"      ref_flag = ctx.read_int8(ctx.error());")
+        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
+        lines.append(f"        return default_value();")
+        lines.append(f"      }}")
+        lines.append(f"    }}")
+        lines.append(f"    if (ref_flag == NULL_FLAG) {{")
+        lines.append(
+            f"      ctx.set_error(Error::invalid_data(\"Null value encountered for union\"));"
+        )
+        lines.append(f"      return default_value();")
+        lines.append(f"    }}")
+        lines.append(f"    if (ref_flag == REF_FLAG) {{")
+        lines.append(
+            f"      ctx.set_error(Error::invalid_ref(\"Unexpected reference flag for union\"));"
+        )
+        lines.append(f"      return default_value();")
+        lines.append(f"    }}")
+        lines.append(
+            f"    if (ref_flag != NOT_NULL_VALUE_FLAG && ref_flag != REF_VALUE_FLAG) {{"
+        )
+        lines.append(
+            f"      ctx.set_error(Error::invalid_ref(\"Unknown ref flag for union\"));"
+        )
+        lines.append(f"      return default_value();")
+        lines.append(f"    }}")
+        lines.append(f"    if (ctx.track_ref() && ref_flag == REF_VALUE_FLAG) {{")
+        lines.append(f"      ctx.ref_reader().reserve_ref_id();")
+        lines.append(f"    }}")
+        lines.append(f"    if (read_type) {{")
+        lines.append(f"      read_type_info(ctx);")
+        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
+        lines.append(f"        return default_value();")
+        lines.append(f"      }}")
+        lines.append(f"    }}")
+        lines.append(f"    return read_data(ctx);")
+        lines.append(f"  }}")
+        lines.append("")
+        lines.append(f"  static inline {qualified_name} read_data(ReadContext &ctx) {{")
+        lines.append(f"    uint32_t case_id = ctx.read_varuint32(ctx.error());")
+        lines.append(f"    if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
+        lines.append(f"      return default_value();")
+        lines.append(f"    }}")
+        lines.append(f"    switch (case_id) {{")
+        for field, case_type in zip(union.fields, case_types):
+            case_ctor = self.to_snake_case(field.name)
+            lines.append(f"    case {field.number}: {{")
+            lines.append(
+                f"      auto value = Serializer<{case_type}>::read(ctx, RefMode::Tracking, true);"
+            )
+            lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
+            lines.append(f"        return default_value();")
+            lines.append(f"      }}")
+            lines.append(
+                f"      return {qualified_name}::{case_ctor}(std::move(value));"
+            )
+            lines.append(f"    }}")
+        lines.append(f"    default: {{")
+        lines.append(f"      int8_t ref_flag = ctx.read_int8(ctx.error());")
+        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
+        lines.append(f"        return default_value();")
+        lines.append(f"      }}")
+        lines.append(f"      if (ref_flag == NULL_FLAG) {{")
+        lines.append(f"        ctx.set_error(Error::invalid_data(\"Unknown union case id\"));")
+        lines.append(f"        return default_value();")
+        lines.append(f"      }}")
+        lines.append(f"      if (ref_flag == REF_FLAG) {{")
+        lines.append(f"        (void)ctx.read_varuint32(ctx.error());")
+        lines.append(f"        ctx.set_error(Error::invalid_data(\"Unknown union case id\"));")
+        lines.append(f"        return default_value();")
+        lines.append(f"      }}")
+        lines.append(
+            f"      if (ref_flag != NOT_NULL_VALUE_FLAG && ref_flag != REF_VALUE_FLAG) {{"
+        )
+        lines.append(
+            f"        ctx.set_error(Error::invalid_data(\"Unknown reference flag in union value\"));"
+        )
+        lines.append(f"        return default_value();")
+        lines.append(f"      }}")
+        lines.append(f"      const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());")
+        lines.append(f"      if (FORY_PREDICT_FALSE(ctx.has_error())) {{")
+        lines.append(f"        return default_value();")
+        lines.append(f"      }}")
+        lines.append(f"      if (!type_info) {{")
+        lines.append(
+            f"        ctx.set_error(Error::type_error(\"TypeInfo not found for union skip\"));"
+        )
+        lines.append(f"        return default_value();")
+        lines.append(f"      }}")
+        lines.append(f"      FieldType field_type;")
+        lines.append(f"      field_type.type_id = type_info->type_id;")
+        lines.append(f"      field_type.nullable = false;")
+        lines.append(f"      skip_field_value(ctx, field_type, RefMode::None);")
+        lines.append(
+            f"      ctx.set_error(Error::invalid_data(\"Unknown union case id\"));"
+        )
+        lines.append(f"      return default_value();")
+        lines.append(f"    }}")
+        lines.append(f"    }}")
+        lines.append(f"  }}")
+        lines.append("")
+        lines.append(
+            f"  static inline {qualified_name} read_with_type_info(ReadContext &ctx, RefMode ref_mode,"
+        )
+        lines.append(f"                           const TypeInfo &type_info) {{")
+        lines.append(f"    (void)type_info;")
+        lines.append(f"    return read(ctx, ref_mode, false);")
+        lines.append(f"  }}")
+        lines.append("")
+        lines.append(f"private:")
+        lines.append(f"  static inline {qualified_name} default_value() {{")
+        lines.append(
+            f"    return {qualified_name}::{default_ctor}({default_type}{{}});"
+        )
+        lines.append(f"  }}")
+        lines.append(f"}};")
+        lines.append("")
+
+        return lines
+
+    def generate_namespaced_type(
+        self,
+        field_type: FieldType,
+        nullable: bool = False,
+        ref: bool = False,
+        element_optional: bool = False,
+        element_ref: bool = False,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
+        """Generate C++ type string with package namespace."""
+        if isinstance(field_type, PrimitiveType):
+            base_type = self.PRIMITIVE_MAP[field_type.kind]
+            if nullable:
+                return f"std::optional<{base_type}>"
+            return base_type
+
+        if isinstance(field_type, NamedType):
+            type_name = self.resolve_nested_type_name(
+                field_type.name, parent_stack
+            )
+            namespace = self.get_namespace()
+            if namespace:
+                type_name = f"{namespace}::{type_name}"
+            if ref:
+                type_name = f"std::shared_ptr<{type_name}>"
+            if nullable:
+                type_name = f"std::optional<{type_name}>"
+            return type_name
+
+        if isinstance(field_type, ListType):
+            element_type = self.generate_namespaced_type(
+                field_type.element_type,
+                element_optional,
+                element_ref,
+                False,
+                False,
+                parent_stack,
+            )
+            list_type = f"std::vector<{element_type}>"
+            if ref:
+                list_type = f"std::shared_ptr<{list_type}>"
+            if nullable:
+                list_type = f"std::optional<{list_type}>"
+            return list_type
+
+        if isinstance(field_type, MapType):
+            key_type = self.generate_namespaced_type(
+                field_type.key_type, False, False, False, False, parent_stack
+            )
+            value_type = self.generate_namespaced_type(
+                field_type.value_type, False, False, False, False, parent_stack
+            )
+            map_type = f"std::map<{key_type}, {value_type}>"
+            if ref:
+                map_type = f"std::shared_ptr<{map_type}>"
+            if nullable:
+                map_type = f"std::optional<{map_type}>"
+            return map_type
+
+        return "void*"
 
     def generate_field_config_macro(
         self,
@@ -845,9 +1262,9 @@ class CppGenerator(BaseGenerator):
         type_name = self.get_registration_type_name(union.name, parent_stack)
 
         if union.type_id is not None:
-            lines.append(f"    fory.register_struct<{code_name}>({union.type_id});")
+            lines.append(f"    fory.register_union<{code_name}>({union.type_id});")
         else:
             ns = self.package or "default"
             lines.append(
-                f'    fory.register_struct<{code_name}>("{ns}", "{type_name}");'
+                f'    fory.register_union<{code_name}>("{ns}", "{type_name}");'
             )

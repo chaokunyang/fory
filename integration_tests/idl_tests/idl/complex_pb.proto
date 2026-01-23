@@ -42,4 +42,9 @@ message PrimitiveTypes {
     float16 float16_value = 16;
     float float32_value = 17;
     double float64_value = 18;
+
+    oneof Contact {
+        string email = 19;
+        int32 phone = 20;
+    }
 }

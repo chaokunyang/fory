@@ -1309,6 +1309,10 @@ fn adjust_type_id_for_encoding(base_type_id: u32, meta: &super::field_meta::Fory
         return base_type_id;
     };
 
+    if explicit_type_id == TypeId::UNION as i16 {
+        return TypeId::UNION as u32;
+    }
+
     if explicit_type_id == TypeId::INT8_ARRAY as i16
         || explicit_type_id == TypeId::UINT8_ARRAY as i16
     {
@@ -1543,6 +1547,31 @@ pub(crate) fn is_skip_enum_variant(variant: &syn::Variant) -> bool {
             skip
         }
     })
+}
+
+pub(crate) fn enum_variant_id(variant: &syn::Variant) -> Option<u32> {
+    for attr in &variant.attrs {
+        if !attr.path().is_ident("fory") {
+            continue;
+        }
+        let mut id = None;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("id") {
+                if let Ok(value) = meta.value() {
+                    if let Ok(lit) = value.parse::<syn::LitInt>() {
+                        if let Ok(parsed) = lit.base10_parse::<u32>() {
+                            id = Some(parsed);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        });
+        if id.is_some() {
+            return id;
+        }
+    }
+    None
 }
 
 pub(crate) fn is_default_value_variant(variant: &syn::Variant) -> bool {

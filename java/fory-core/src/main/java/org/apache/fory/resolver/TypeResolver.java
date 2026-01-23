@@ -158,6 +158,26 @@ public abstract class TypeResolver {
    */
   public abstract void register(Class<?> type, String namespace, String typeName);
 
+  /**
+   * Registers a union type with a user-specified ID and serializer.
+   *
+   * @param type the union class to register
+   * @param id the user ID to assign (0-based)
+   * @param serializer serializer for the union
+   */
+  public abstract void registerUnion(Class<?> type, int id, Serializer<?> serializer);
+
+  /**
+   * Registers a union type with a namespace and type name and serializer.
+   *
+   * @param type the union class to register
+   * @param namespace the namespace (can be empty if type name has no conflict)
+   * @param typeName the type name
+   * @param serializer serializer for the union
+   */
+  public abstract void registerUnion(
+      Class<?> type, String namespace, String typeName, Serializer<?> serializer);
+
   /** Registers a class by name with an auto-assigned user ID. */
   public void register(String className) {
     register(loadClass(className));
@@ -307,14 +327,15 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          writeSharedClassMeta(buffer, classInfo);
-        } else {
+        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
           Preconditions.checkNotNull(classInfo.namespaceBytes);
           metaStringResolver.writeMetaStringBytes(buffer, classInfo.namespaceBytes);
           Preconditions.checkNotNull(classInfo.typeNameBytes);
           metaStringResolver.writeMetaStringBytes(buffer, classInfo.typeNameBytes);
+        } else {
+          writeSharedClassMeta(buffer, classInfo);
         }
         break;
       case Types.COMPATIBLE_STRUCT:
@@ -387,11 +408,12 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          classInfo = readSharedClassMeta(buffer);
-        } else {
+        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
           classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
+        } else {
+          classInfo = readSharedClassMeta(buffer);
         }
         break;
       case Types.COMPATIBLE_STRUCT:
@@ -434,11 +456,12 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          classInfo = readSharedClassMeta(buffer, targetClass);
-        } else {
+        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
           classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
+        } else {
+          classInfo = readSharedClassMeta(buffer, targetClass);
         }
         break;
       case Types.COMPATIBLE_STRUCT:
@@ -487,11 +510,12 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          classInfo = readSharedClassMeta(buffer);
-        } else {
+        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
           classInfo = readClassInfoFromBytes(buffer, classInfoCache, header);
+        } else {
+          classInfo = readSharedClassMeta(buffer);
         }
         break;
       case Types.COMPATIBLE_STRUCT:
@@ -539,12 +563,13 @@ public abstract class TypeResolver {
       case Types.NAMED_ENUM:
       case Types.NAMED_STRUCT:
       case Types.NAMED_EXT:
+      case Types.NAMED_UNION:
       case Types.NAMED_COMPATIBLE_STRUCT:
-        if (metaContextShareEnabled) {
-          classInfo = readSharedClassMeta(buffer);
-        } else {
+        if (internalTypeId == Types.NAMED_UNION || !metaContextShareEnabled) {
           classInfo = readClassInfoFromBytes(buffer, classInfoHolder.classInfo, header);
           updateCache = true;
+        } else {
+          classInfo = readSharedClassMeta(buffer);
         }
         break;
       case Types.COMPATIBLE_STRUCT:

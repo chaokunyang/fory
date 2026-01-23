@@ -216,6 +216,7 @@ class PythonGenerator(BaseGenerator):
 
     def collect_union_imports(self, union: Union, imports: Set[str]):
         """Collect imports for a union and its cases."""
+        imports.add("from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG")
         for field in union.fields:
             self.collect_field_imports(field, imports)
 
@@ -302,7 +303,14 @@ class PythonGenerator(BaseGenerator):
         """Generate a Python tagged union."""
         lines: List[str] = []
         ind = "    " * indent
+        parent_path = ""
+        if parent_stack:
+            parent_path = ".".join([msg.name for msg in parent_stack])
         case_enum = f"{union.name}Case"
+        case_enum_ref = (
+            f"{parent_path}.{case_enum}" if parent_path else case_enum
+        )
+        union_ref = f"{parent_path}.{union.name}" if parent_path else union.name
 
         lines.append(f"{ind}class {case_enum}(Enum):")
         for field in union.fields:
@@ -314,7 +322,7 @@ class PythonGenerator(BaseGenerator):
         lines.append(f"{ind}    __slots__ = (\"_case\", \"_value\")")
         lines.append("")
         lines.append(
-            f"{ind}    def __init__(self, case: {case_enum}, value: object) -> None:"
+            f"{ind}    def __init__(self, case: {case_enum_ref}, value: object) -> None:"
         )
         lines.append(f"{ind}        self._case = case")
         lines.append(f"{ind}        self._value = value")
@@ -327,9 +335,9 @@ class PythonGenerator(BaseGenerator):
             case_type = self.get_union_case_type(field, parent_stack)
             lines.append(f"{ind}    @classmethod")
             lines.append(
-                f"{ind}    def {method_name}(cls, v: {case_type}) -> \"{union.name}\":"
+                f"{ind}    def {method_name}(cls, v: {case_type}) -> \"{union_ref}\":"
             )
-            lines.append(f"{ind}        return cls({case_enum}.{case_name}, v)")
+            lines.append(f"{ind}        return cls({case_enum_ref}.{case_name}, v)")
             lines.append("")
 
         lines.append(f"{ind}    def _validate(self) -> None:")
@@ -341,7 +349,7 @@ class PythonGenerator(BaseGenerator):
             if check_expr:
                 has_checks = True
                 lines.append(
-                    f"{ind}        if self._case == {case_enum}.{case_name} and not {check_expr}:"
+                    f"{ind}        if self._case == {case_enum_ref}.{case_name} and not {check_expr}:"
                 )
                 lines.append(
                     f"{ind}            raise TypeError(\"{union.name}.{self.to_snake_case(field.name)}(...) requires {case_type}\")"
@@ -350,11 +358,16 @@ class PythonGenerator(BaseGenerator):
             lines.append(f"{ind}        pass")
         lines.append("")
 
-        lines.append(f"{ind}    def case(self) -> {case_enum}:")
+        lines.append(f"{ind}    def case(self) -> {case_enum_ref}:")
         lines.append(f"{ind}        return self._case")
         lines.append("")
         lines.append(f"{ind}    def case_id(self) -> int:")
         lines.append(f"{ind}        return self._case.value")
+        lines.append("")
+        lines.append(f"{ind}    def __eq__(self, other: object) -> bool:")
+        lines.append(f"{ind}        if not isinstance(other, {union_ref}):")
+        lines.append(f"{ind}            return NotImplemented")
+        lines.append(f"{ind}        return self._case == other._case and self._value == other._value")
         lines.append("")
 
         for field in union.fields:
@@ -363,12 +376,12 @@ class PythonGenerator(BaseGenerator):
             case_type = self.get_union_case_type(field, parent_stack)
             lines.append(f"{ind}    def is_{method_name}(self) -> bool:")
             lines.append(
-                f"{ind}        return self._case == {case_enum}.{case_name}"
+                f"{ind}        return self._case == {case_enum_ref}.{case_name}"
             )
             lines.append("")
             lines.append(f"{ind}    def {method_name}_value(self) -> {case_type}:")
             lines.append(
-                f"{ind}        if self._case != {case_enum}.{case_name}:"
+                f"{ind}        if self._case != {case_enum_ref}.{case_name}:"
             )
             lines.append(
                 f"{ind}            raise ValueError(\"{union.name} is not {case_name.lower()}\")"
@@ -377,6 +390,144 @@ class PythonGenerator(BaseGenerator):
                 f"{ind}        return cast({case_type}, self._value)"
             )
             lines.append("")
+
+        lines.extend(self.generate_union_serializer(union, indent, parent_stack))
+
+        return lines
+
+    def generate_union_serializer(
+        self,
+        union: Union,
+        indent: int = 0,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
+        """Generate a Python serializer for a union."""
+        lines: List[str] = []
+        ind = "    " * indent
+        serializer_name = f"{union.name}Serializer"
+        parent_path = ""
+        if parent_stack:
+            parent_path = ".".join([msg.name for msg in parent_stack])
+        case_enum = f"{union.name}Case"
+        case_enum_ref = (
+            f"{parent_path}.{case_enum}" if parent_path else case_enum
+        )
+        union_ref = f"{parent_path}.{union.name}" if parent_path else union.name
+
+        lines.append(f"{ind}class {serializer_name}(pyfory.Serializer):")
+        lines.append(
+            f"{ind}    __slots__ = (\"_case_types\", \"_case_typeinfos\", \"_case_serializers\")"
+        )
+        lines.append("")
+        lines.append(f"{ind}    def __init__(self, fory: pyfory.Fory):")
+        lines.append(f"{ind}        super().__init__(fory, {union_ref})")
+        lines.append(f"{ind}        self._case_types = {{")
+        for field in union.fields:
+            case_name = self.to_upper_snake_case(field.name)
+            case_type = self.get_union_case_type(field, parent_stack)
+            lines.append(
+                f"{ind}            {case_enum_ref}.{case_name}: {case_type},"
+            )
+        lines.append(f"{ind}        }}")
+        lines.append(f"{ind}        self._case_typeinfos = {{}}")
+        lines.append(f"{ind}        self._case_serializers = {{}}")
+        lines.append("")
+        lines.append(f"{ind}    def write(self, buffer, value: \"{union_ref}\"):")
+        lines.append(f"{ind}        buffer.write_varuint32(value.case_id())")
+        lines.append(f"{ind}        case = value.case()")
+        lines.append(f"{ind}        typeinfo = self._case_typeinfos.get(case)")
+        lines.append(f"{ind}        if typeinfo is None:")
+        lines.append(f"{ind}            case_type = self._case_types.get(case)")
+        lines.append(f"{ind}            if case_type is None:")
+        lines.append(
+            f"{ind}                raise ValueError(\"unknown {union.name} case: {{}}\".format(case))"
+        )
+        lines.append(f"{ind}            typeinfo = self.fory.type_resolver.get_typeinfo(case_type)")
+        lines.append(f"{ind}            self._case_typeinfos[case] = typeinfo")
+        lines.append(f"{ind}        self.fory.write_ref(buffer, value._value, typeinfo=typeinfo)")
+        lines.append("")
+        lines.append(f"{ind}    def read(self, buffer):")
+        lines.append(f"{ind}        case_id = buffer.read_varuint32()")
+        lines.append(f"{ind}        value = self.fory.read_ref(buffer)")
+        lines.append(f"{ind}        for case in {case_enum_ref}:")
+        lines.append(f"{ind}            if case.value == case_id:")
+        lines.append(f"{ind}                break")
+        lines.append(f"{ind}        else:")
+        lines.append(
+            f"{ind}            raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
+        )
+        for field in union.fields:
+            case_name = self.to_upper_snake_case(field.name)
+            method_name = self.to_snake_case(field.name)
+            case_check = self.get_union_case_runtime_check(
+                field, parent_stack, "value"
+            )
+            lines.append(f"{ind}        if case == {case_enum_ref}.{case_name}:")
+            if case_check:
+                lines.append(f"{ind}            if not {case_check}:")
+                lines.append(
+                    f"{ind}                raise TypeError(\"invalid {union.name} value for {case_name}\")"
+                )
+            lines.append(f"{ind}            return {union_ref}.{method_name}(value)")
+        lines.append(
+            f"{ind}        raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
+        )
+        lines.append("")
+        lines.append(f"{ind}    def xwrite(self, buffer, value: \"{union_ref}\"):")
+        lines.append(f"{ind}        buffer.write_varuint32(value.case_id())")
+        lines.append(f"{ind}        case = value.case()")
+        lines.append(f"{ind}        serializer = self._case_serializers.get(case)")
+        lines.append(f"{ind}        typeinfo = self._case_typeinfos.get(case)")
+        lines.append(f"{ind}        if serializer is None or typeinfo is None:")
+        lines.append(f"{ind}            case_type = self._case_types.get(case)")
+        lines.append(f"{ind}            if case_type is None:")
+        lines.append(
+            f"{ind}                raise ValueError(\"unknown {union.name} case: {{}}\".format(case))"
+        )
+        lines.append(f"{ind}            if serializer is None:")
+        lines.append(f"{ind}                serializer = self.fory.type_resolver.get_serializer(case_type)")
+        lines.append(f"{ind}                self._case_serializers[case] = serializer")
+        lines.append(f"{ind}            if typeinfo is None:")
+        lines.append(f"{ind}                typeinfo = self.fory.type_resolver.get_typeinfo(case_type)")
+        lines.append(f"{ind}                self._case_typeinfos[case] = typeinfo")
+        lines.append(f"{ind}        if serializer.need_to_write_ref:")
+        lines.append(f"{ind}            if self.fory.ref_resolver.write_ref_or_null(buffer, value._value):")
+        lines.append(f"{ind}                return")
+        lines.append(f"{ind}        else:")
+        lines.append(f"{ind}            if value._value is None:")
+        lines.append(f"{ind}                buffer.write_int8(NULL_FLAG)")
+        lines.append(f"{ind}                return")
+        lines.append(f"{ind}            buffer.write_int8(NOT_NULL_VALUE_FLAG)")
+        lines.append(f"{ind}        self.fory.type_resolver.write_typeinfo(buffer, typeinfo)")
+        lines.append(f"{ind}        serializer.xwrite(buffer, value._value)")
+        lines.append("")
+        lines.append(f"{ind}    def xread(self, buffer):")
+        lines.append(f"{ind}        case_id = buffer.read_varuint32()")
+        lines.append(f"{ind}        value = self.fory.xread_ref(buffer)")
+        lines.append(f"{ind}        for case in {case_enum_ref}:")
+        lines.append(f"{ind}            if case.value == case_id:")
+        lines.append(f"{ind}                break")
+        lines.append(f"{ind}        else:")
+        lines.append(
+            f"{ind}            raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
+        )
+        for field in union.fields:
+            case_name = self.to_upper_snake_case(field.name)
+            method_name = self.to_snake_case(field.name)
+            case_check = self.get_union_case_runtime_check(
+                field, parent_stack, "value"
+            )
+            lines.append(f"{ind}        if case == {case_enum_ref}.{case_name}:")
+            if case_check:
+                lines.append(f"{ind}            if not {case_check}:")
+                lines.append(
+                    f"{ind}                raise TypeError(\"invalid {union.name} value for {case_name}\")"
+                )
+            lines.append(f"{ind}            return {union_ref}.{method_name}(value)")
+        lines.append(
+            f"{ind}        raise ValueError(\"unknown {union.name} case id: {{}}\".format(case_id))"
+        )
+        lines.append("")
 
         return lines
 
@@ -529,55 +680,36 @@ class PythonGenerator(BaseGenerator):
         self, field: Field, parent_stack: Optional[List[Message]] = None
     ) -> Optional[str]:
         """Return an isinstance expression to validate a union case value."""
+        return self.get_union_case_runtime_check(field, parent_stack, "self._value")
+
+    def get_union_case_runtime_check(
+        self,
+        field: Field,
+        parent_stack: Optional[List[Message]],
+        value_expr: str,
+    ) -> Optional[str]:
+        """Return an isinstance expression for a union case value expression."""
         if isinstance(field.field_type, PrimitiveType):
             base = self.PRIMITIVE_MAP[field.field_type.kind]
-            if base == "pyfory.int32":
-                return "isinstance(self._value, pyfory.int32)"
-            if base == "pyfory.int64":
-                return "isinstance(self._value, pyfory.int64)"
-            if base == "pyfory.uint32":
-                return "isinstance(self._value, pyfory.uint32)"
-            if base == "pyfory.uint64":
-                return "isinstance(self._value, pyfory.uint64)"
-            if base == "pyfory.int8":
-                return "isinstance(self._value, pyfory.int8)"
-            if base == "pyfory.int16":
-                return "isinstance(self._value, pyfory.int16)"
-            if base == "pyfory.uint8":
-                return "isinstance(self._value, pyfory.uint8)"
-            if base == "pyfory.uint16":
-                return "isinstance(self._value, pyfory.uint16)"
-            if base == "pyfory.fixed_int32":
-                return "isinstance(self._value, pyfory.fixed_int32)"
-            if base == "pyfory.fixed_int64":
-                return "isinstance(self._value, pyfory.fixed_int64)"
-            if base == "pyfory.fixed_uint32":
-                return "isinstance(self._value, pyfory.fixed_uint32)"
-            if base == "pyfory.fixed_uint64":
-                return "isinstance(self._value, pyfory.fixed_uint64)"
-            if base == "pyfory.tagged_int64":
-                return "isinstance(self._value, pyfory.tagged_int64)"
-            if base == "pyfory.tagged_uint64":
-                return "isinstance(self._value, pyfory.tagged_uint64)"
-            if base == "pyfory.float32":
-                return "isinstance(self._value, float)"
-            if base == "pyfory.float64":
-                return "isinstance(self._value, float)"
+            if base.startswith("pyfory."):
+                if "float" in base:
+                    return f"isinstance({value_expr}, float)"
+                return f"isinstance({value_expr}, int)"
             if base == "bool":
-                return "isinstance(self._value, bool)"
+                return f"isinstance({value_expr}, bool)"
             if base == "str":
-                return "isinstance(self._value, str)"
+                return f"isinstance({value_expr}, str)"
             if base == "bytes":
-                return "isinstance(self._value, (bytes, bytearray))"
+                return f"isinstance({value_expr}, (bytes, bytearray))"
             if base == "datetime.date":
-                return "isinstance(self._value, datetime.date)"
+                return f"isinstance({value_expr}, datetime.date)"
             if base == "datetime.datetime":
-                return "isinstance(self._value, datetime.datetime)"
+                return f"isinstance({value_expr}, datetime.datetime)"
         if isinstance(field.field_type, NamedType):
             type_name = self.resolve_nested_type_name(
                 field.field_type.name, parent_stack
             )
-            return f"isinstance(self._value, {type_name})"
+            return f"isinstance({value_expr}, {type_name})"
         return None
 
     def resolve_nested_type_name(
@@ -728,11 +860,16 @@ class PythonGenerator(BaseGenerator):
         """Generate registration code for a union."""
         class_ref = f"{parent_path}.{union.name}" if parent_path else union.name
         type_name = class_ref if parent_path else union.name
+        serializer_ref = (
+            f"{parent_path}.{union.name}Serializer" if parent_path else f"{union.name}Serializer"
+        )
 
         if union.type_id is not None:
-            lines.append(f"    fory.register_type({class_ref}, type_id={union.type_id})")
+            lines.append(
+                f"    fory.register_union({class_ref}, type_id={union.type_id}, serializer={serializer_ref}(fory))"
+            )
         else:
             ns = self.package or "default"
             lines.append(
-                f'    fory.register_type({class_ref}, namespace="{ns}", typename="{type_name}")'
+                f'    fory.register_union({class_ref}, namespace="{ns}", typename="{type_name}", serializer={serializer_ref}(fory))'
             )

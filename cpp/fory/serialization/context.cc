@@ -196,6 +196,17 @@ WriteContext::write_any_typeinfo(uint32_t fory_type_id,
     FORY_RETURN_NOT_OK(write_type_meta(concrete_type_id));
     break;
   }
+  case static_cast<uint32_t>(TypeId::NAMED_UNION): {
+    // Union types always encode namespace/type name, no type meta.
+    if (type_info->encoded_namespace && type_info->encoded_type_name) {
+      write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+      write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
+    } else {
+      return Unexpected(
+          Error::invalid("Encoded meta strings not initialized for union"));
+    }
+    break;
+  }
   case static_cast<uint32_t>(TypeId::NAMED_ENUM):
   case static_cast<uint32_t>(TypeId::NAMED_EXT):
   case static_cast<uint32_t>(TypeId::NAMED_STRUCT): {
@@ -475,6 +486,15 @@ Result<const TypeInfo *, Error> ReadContext::read_any_typeinfo() {
   case static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT): {
     // Read type meta inline using streaming protocol
     return read_type_meta();
+  }
+  case static_cast<uint32_t>(TypeId::NAMED_UNION): {
+    FORY_TRY(namespace_str,
+             meta_string_table_.read_string(*buffer_, kNamespaceDecoder));
+    FORY_TRY(type_name,
+             meta_string_table_.read_string(*buffer_, kTypeNameDecoder));
+    FORY_TRY(type_info,
+             type_resolver_->get_type_info_by_name(namespace_str, type_name));
+    return type_info;
   }
   case static_cast<uint32_t>(TypeId::NAMED_ENUM):
   case static_cast<uint32_t>(TypeId::NAMED_EXT):

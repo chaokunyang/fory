@@ -841,6 +841,11 @@ struct GetFieldTagEntry<
   FORY_FC_ENTRIES_17(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
                      _13, _14, _15, _16, _17),                                 \
       FORY_FC_MAKE_ENTRY(T, _18)
+#define FORY_FC_ENTRIES_19(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11,    \
+                           _12, _13, _14, _15, _16, _17, _18, _19)             \
+  FORY_FC_ENTRIES_18(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18),                            \
+      FORY_FC_MAKE_ENTRY(T, _19)
 
 // Main FORY_FIELD_CONFIG macro
 // Creates a constexpr tuple of FieldEntry objects with member pointer

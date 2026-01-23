@@ -21,12 +21,16 @@ package org.apache.fory.idl_tests;
 
 import addressbook.AddressBook;
 import addressbook.AddressbookForyRegistration;
+import addressbook.Animal;
+import addressbook.Dog;
 import addressbook.Person;
 import addressbook.Person.PhoneNumber;
 import addressbook.Person.PhoneType;
 import addressbook.PrimitiveTypes;
 import complex_fbs.ComplexFbsForyRegistration;
 import complex_fbs.Container;
+import complex_fbs.Note;
+import complex_fbs.Payload;
 import complex_fbs.ScalarPack;
 import complex_fbs.Status;
 import monster.Color;
@@ -276,6 +280,10 @@ public class IdlRoundTripTest {
     person.setScores(scores);
     person.setSalary(120000.5);
     person.setPhones(phones);
+    Dog dog = new Dog();
+    dog.setName("Rex");
+    dog.setBarkVolume(5);
+    person.setPet(Animal.ofDog(dog));
 
     AddressBook book = new AddressBook();
     List<Person> people = new ArrayList<>();
@@ -309,6 +317,7 @@ public class IdlRoundTripTest {
     types.setFloat16Value(1.5f);
     types.setFloat32Value(2.5f);
     types.setFloat64Value(3.5d);
+    types.setContact(PrimitiveTypes.Contact.ofEmail("alice@example.com"));
     return types;
   }
 
@@ -351,6 +360,9 @@ public class IdlRoundTripTest {
     container.setScalars(pack);
     container.setNames(Arrays.asList("alpha", "beta"));
     container.setFlags(new boolean[] {true, false});
+    Note note = new Note();
+    note.setText("alpha");
+    container.setPayload(Payload.ofNote(note));
     return container;
   }
 

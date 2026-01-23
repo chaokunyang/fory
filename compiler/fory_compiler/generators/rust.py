@@ -251,6 +251,16 @@ class RustGenerator(BaseGenerator):
             lines.append(f"    {variant_name}({variant_type}),")
 
         lines.append("}")
+        lines.append("")
+
+        if union.fields:
+            first_field = union.fields[0]
+            first_variant = self.to_pascal_case(first_field.name)
+            lines.append(f"impl Default for {union.name} {{")
+            lines.append("    fn default() -> Self {")
+            lines.append(f"        Self::{first_variant}(Default::default())")
+            lines.append("    }")
+            lines.append("}")
 
         return lines
 
@@ -287,7 +297,11 @@ class RustGenerator(BaseGenerator):
         indent: int = 0,
     ) -> List[str]:
         """Generate a nested Rust module containing message nested types."""
-        if not message.nested_enums and not message.nested_messages:
+        if (
+            not message.nested_enums
+            and not message.nested_unions
+            and not message.nested_messages
+        ):
             return []
 
         lines: List[str] = []
@@ -348,6 +362,8 @@ class RustGenerator(BaseGenerator):
         array_attr = self.get_array_attr(field)
         if array_attr:
             attrs.append(array_attr)
+        if self.is_union_type(field.field_type, parent_stack):
+            attrs.append('type_id = "union"')
         if attrs:
             lines.append(f"#[fory({', '.join(attrs)})]")
 
@@ -397,6 +413,23 @@ class RustGenerator(BaseGenerator):
         if element_type.kind == PrimitiveKind.UINT8:
             return 'type_id = "uint8_array"'
         return None
+
+    def is_union_type(
+        self, field_type: FieldType, parent_stack: Optional[List[Message]]
+    ) -> bool:
+        if not isinstance(field_type, NamedType):
+            return False
+        type_name = field_type.name
+        if "." in type_name:
+            resolved = self.schema.get_type(type_name)
+            return isinstance(resolved, Union)
+        if parent_stack:
+            for i in range(len(parent_stack) - 1, -1, -1):
+                nested = parent_stack[i].get_nested_type(type_name)
+                if nested is not None:
+                    return isinstance(nested, Union)
+        resolved = self.schema.get_type(type_name)
+        return isinstance(resolved, Union)
 
     def generate_type(
         self,
@@ -613,9 +646,9 @@ class RustGenerator(BaseGenerator):
         reg_name = self.get_registration_type_name(union.name, parent_stack)
 
         if union.type_id is not None:
-            lines.append(f"    fory.register::<{type_name}>({union.type_id})?;")
+            lines.append(f"    fory.register_union::<{type_name}>({union.type_id})?;")
         else:
             ns = self.package or "default"
             lines.append(
-                f'    fory.register_by_namespace::<{type_name}>("{ns}", "{reg_name}")?;'
+                f'    fory.register_union_by_namespace::<{type_name}>("{ns}", "{reg_name}")?;'
             )

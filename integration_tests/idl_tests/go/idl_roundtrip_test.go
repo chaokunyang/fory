@@ -45,6 +45,10 @@ func buildAddressBook() AddressBook {
 		Scores: map[string]int32{"math": 100, "science": 98},
 		Salary: 120000.5,
 		Phones: []Person_PhoneNumber{mobile, work},
+		Pet: DogAnimal(&Dog{
+			Name:       "Rex",
+			BarkVolume: 5,
+		}),
 	}
 
 	return AddressBook{
@@ -126,6 +130,7 @@ func runFileRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
 }
 
 func buildPrimitiveTypes() PrimitiveTypes {
+	contact := EmailPrimitiveTypes_Contact("alice@example.com")
 	return PrimitiveTypes{
 		BoolValue:         true,
 		Int8Value:         12,
@@ -145,6 +150,7 @@ func buildPrimitiveTypes() PrimitiveTypes {
 		Float16Value:      1.5,
 		Float32Value:      2.5,
 		Float64Value:      3.5,
+		Contact:           &contact,
 	}
 }
 
@@ -273,6 +279,7 @@ func buildContainer() complexfbs.Container {
 		Scalars: scalars,
 		Names:   []string{"alpha", "beta"},
 		Flags:   []bool{true, false},
+		Payload: complexfbs.NotePayload(&complexfbs.Note{Text: "alpha"}),
 	}
 }
 

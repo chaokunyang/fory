@@ -22,9 +22,9 @@ use fory::Fory;
 use idl_tests::addressbook::{
     self,
     person::{PhoneNumber, PhoneType},
-    AddressBook, Person,
+    AddressBook, Animal, Dog, Person,
 };
-use idl_tests::complex_fbs::{self, Container, ScalarPack, Status};
+use idl_tests::complex_fbs::{self, Container, Note, Payload, ScalarPack, Status};
 use idl_tests::monster::{self, Color, Monster, Vec3};
 
 fn build_address_book() -> AddressBook {
@@ -45,6 +45,10 @@ fn build_address_book() -> AddressBook {
         scores: HashMap::from([("math".to_string(), 100), ("science".to_string(), 98)]),
         salary: 120000.5,
         phones: vec![mobile, work],
+        pet: Animal::Dog(Dog {
+            name: "Rex".to_string(),
+            bark_volume: 5,
+        }),
     };
 
     AddressBook {
@@ -73,6 +77,9 @@ fn build_primitive_types() -> addressbook::PrimitiveTypes {
         float16_value: 1.5,
         float32_value: 2.5,
         float64_value: 3.5,
+        contact: Some(addressbook::primitive_types::Contact::Email(
+            "alice@example.com".to_string(),
+        )),
     }
 }
 
@@ -115,6 +122,9 @@ fn build_container() -> Container {
         scalars,
         names: vec!["alpha".to_string(), "beta".to_string()],
         flags: vec![true, false],
+        payload: Payload::Note(Note {
+            text: "alpha".to_string(),
+        }),
     }
 }
 

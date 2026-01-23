@@ -420,6 +420,10 @@ class JavaGenerator(BaseGenerator):
 
     def collect_union_imports(self, union: Union, imports: Set[str]):
         """Collect imports for a union and its cases."""
+        imports.add("org.apache.fory.Fory")
+        imports.add("org.apache.fory.memory.MemoryBuffer")
+        imports.add("org.apache.fory.serializer.Serializer")
+        imports.add("java.util.Objects")
         for field in union.fields:
             self.collect_type_imports(
                 field.field_type,
@@ -542,7 +546,105 @@ class JavaGenerator(BaseGenerator):
             lines.append(f"{ind}    }}")
             lines.append("")
 
+        lines.append(f"{ind}    @Override")
+        lines.append(f"{ind}    public boolean equals(Object o) {{")
+        lines.append(f"{ind}        if (this == o) {{")
+        lines.append(f"{ind}            return true;")
+        lines.append(f"{ind}        }}")
+        lines.append(f"{ind}        if (!(o instanceof {union.name})) {{")
+        lines.append(f"{ind}            return false;")
+        lines.append(f"{ind}        }}")
+        lines.append(f"{ind}        {union.name} that = ({union.name}) o;")
+        lines.append(
+            f"{ind}        return {case_field} == that.{case_field} && Objects.equals(value, that.value);"
+        )
+        lines.append(f"{ind}    }}")
+        lines.append("")
+        lines.append(f"{ind}    @Override")
+        lines.append(f"{ind}    public int hashCode() {{")
+        lines.append(f"{ind}        return Objects.hash({case_field}, value);")
+        lines.append(f"{ind}    }}")
+        lines.append("")
+
+        for line in self.generate_union_serializer(union, indent):
+            lines.append(line)
+
         lines.append(f"{ind}}}")
+        lines.append("")
+        return lines
+
+    def generate_union_serializer(self, union: Union, indent: int = 0) -> List[str]:
+        """Generate a Java union serializer as a nested class."""
+        lines: List[str] = []
+        ind = "    " * indent
+        serializer_name = f"{union.name}Serializer"
+        case_enum = f"{union.name}Case"
+        case_field = f"{self.to_camel_case(union.name)}Case"
+
+        lines.append(f"{ind}    public static final class {serializer_name} extends Serializer<{union.name}> {{")
+        lines.append(f"{ind}        public {serializer_name}(Fory fory) {{")
+        lines.append(f"{ind}            super(fory, {union.name}.class);")
+        lines.append(f"{ind}        }}")
+        lines.append("")
+        lines.append(f"{ind}        @Override")
+        lines.append(f"{ind}        public void write(MemoryBuffer buffer, {union.name} obj) {{")
+        lines.append(f"{ind}            xwrite(buffer, obj);")
+        lines.append(f"{ind}        }}")
+        lines.append("")
+        lines.append(f"{ind}        @Override")
+        lines.append(f"{ind}        public void xwrite(MemoryBuffer buffer, {union.name} obj) {{")
+        lines.append(f"{ind}            buffer.writeVarUint32(obj.get{union.name}CaseId());")
+        lines.append(f"{ind}            fory.xwriteRef(buffer, obj.value);")
+        lines.append(f"{ind}        }}")
+        lines.append("")
+        lines.append(f"{ind}        @Override")
+        lines.append(f"{ind}        public {union.name} read(MemoryBuffer buffer) {{")
+        lines.append(f"{ind}            return xread(buffer);")
+        lines.append(f"{ind}        }}")
+        lines.append("")
+        lines.append(f"{ind}        @Override")
+        lines.append(f"{ind}        public {union.name} xread(MemoryBuffer buffer) {{")
+        lines.append(f"{ind}            int caseId = buffer.readVarUint32();")
+        lines.append(f"{ind}            Object value = fory.xreadRef(buffer);")
+        lines.append(f"{ind}            switch (caseId) {{")
+        for field in union.fields:
+            case_name = self.to_pascal_case(field.name)
+            cast_type = self.get_union_case_cast_type(field)
+            lines.append(
+                f"{ind}                case {field.number}:"
+            )
+            lines.append(
+                f"{ind}                    return {union.name}.of{case_name}(({cast_type}) value);"
+            )
+        lines.append(f"{ind}                default:")
+        lines.append(
+            f'{ind}                    throw new IllegalStateException("Unknown {union.name} case id: " + caseId);'
+        )
+        lines.append(f"{ind}            }}")
+        lines.append(f"{ind}        }}")
+        lines.append("")
+        lines.append(f"{ind}        @Override")
+        lines.append(f"{ind}        public {union.name} copy({union.name} obj) {{")
+        lines.append(f"{ind}            if (obj == null) {{")
+        lines.append(f"{ind}                return null;")
+        lines.append(f"{ind}            }}")
+        lines.append(f"{ind}            Object copied = fory.copyObject(obj.value);")
+        lines.append(f"{ind}            switch (obj.{case_field}) {{")
+        for field in union.fields:
+            case_name = self.to_pascal_case(field.name)
+            case_enum_name = self.to_upper_snake_case(field.name)
+            cast_type = self.get_union_case_cast_type(field)
+            lines.append(f"{ind}                case {case_enum_name}:")
+            lines.append(
+                f"{ind}                    return {union.name}.of{case_name}(({cast_type}) copied);"
+            )
+        lines.append(f"{ind}                default:")
+        lines.append(
+            f'{ind}                    throw new IllegalStateException("Unknown {union.name} case: " + obj.{case_field});'
+        )
+        lines.append(f"{ind}            }}")
+        lines.append(f"{ind}        }}")
+        lines.append(f"{ind}    }}")
         lines.append("")
         return lines
 
@@ -1107,12 +1209,17 @@ class JavaGenerator(BaseGenerator):
     ):
         """Generate registration code for a union."""
         class_ref = f"{parent_path}.{union.name}" if parent_path else union.name
-        type_name = class_ref if parent_path else union.name
+        type_name = union.name
+        serializer_ref = f"{class_ref}.{union.name}Serializer"
 
         if union.type_id is not None:
-            lines.append(f"        fory.register({class_ref}.class, {union.type_id});")
+            lines.append(
+                f"        fory.registerUnion({class_ref}.class, {union.type_id}, new {serializer_ref}(fory));"
+            )
         else:
             ns = self.schema.package or "default"
+            if parent_path:
+                ns = f"{ns}.{parent_path}"
             lines.append(
-                f'        fory.register({class_ref}.class, "{ns}", "{type_name}");'
+                f'        fory.registerUnion({class_ref}.class, "{ns}", "{type_name}", new {serializer_ref}(fory));'
             )

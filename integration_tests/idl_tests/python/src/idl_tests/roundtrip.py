@@ -45,6 +45,9 @@ def build_address_book() -> "addressbook.AddressBook":
         scores={"math": 100, "science": 98},
         salary=120000.5,
         phones=[mobile, work],
+        pet=addressbook.Animal.dog(
+            addressbook.Dog(name="Rex", bark_volume=5)
+        ),
     )
 
     return addressbook.AddressBook(
@@ -91,6 +94,7 @@ def build_primitive_types() -> "addressbook.PrimitiveTypes":
         float16_value=1.5,
         float32_value=2.5,
         float64_value=3.5,
+        contact=addressbook.PrimitiveTypes.Contact.email("alice@example.com"),
     )
 
 
@@ -161,6 +165,7 @@ def build_container() -> "complex_fbs.Container":
         scalars=scalars,
         names=["alpha", "beta"],
         flags=np.array([True, False], dtype=np.bool_),
+        payload=complex_fbs.Payload.note(complex_fbs.Note(text="alpha")),
     )
 
 
@@ -174,6 +179,7 @@ def assert_container_equal(
     assert decoded.scalars == expected.scalars
     assert decoded.names == expected.names
     np.testing.assert_array_equal(decoded.flags, expected.flags)
+    assert decoded.payload == expected.payload
 
 
 def local_roundtrip_container(

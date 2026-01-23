@@ -405,6 +405,24 @@ void skip_union(ReadContext &ctx) {
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return;
   }
+  // Read ref flag for the union value (Any-style)
+  int8_t ref_flag = ctx.read_int8(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return;
+  }
+  if (ref_flag == NULL_FLAG) {
+    return;
+  }
+  if (ref_flag == REF_FLAG) {
+    (void)ctx.read_varuint32(ctx.error());
+    return;
+  }
+  if (ref_flag != NOT_NULL_VALUE_FLAG && ref_flag != REF_VALUE_FLAG) {
+    ctx.set_error(Error::invalid_data("Unknown reference flag: " +
+                                      std::to_string(static_cast<int>(ref_flag))));
+    return;
+  }
+
   // Read and skip the alternative's type info
   const TypeInfo *type_info = ctx.read_any_typeinfo(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
@@ -599,6 +617,10 @@ void skip_field_value(ReadContext &ctx, const FieldType &field_type,
     return;
 
   case TypeId::UNION:
+    skip_union(ctx);
+    return;
+  case TypeId::TYPED_UNION:
+  case TypeId::NAMED_UNION:
     skip_union(ctx);
     return;
 

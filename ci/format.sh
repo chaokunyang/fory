@@ -58,6 +58,11 @@ if command -v clang-format >/dev/null; then
     echo "WARNING: Fory uses clang-format 18.1.8, You currently are using $CLANG_FORMAT_VERSION."
     echo "Installing clang-format 18.1.8..."
     pip install clang-format==18.1.8
+    # Refresh command hash to find the newly installed version
+    hash -r
+    # Update PATH to prioritize pip-installed binaries
+    PYTHON_SCRIPTS_DIR=$(python3 -c "import sysconfig; print(sysconfig.get_path('scripts'))")
+    export PATH="$PYTHON_SCRIPTS_DIR:$PATH"
     # Update the version after installation
     CLANG_FORMAT_VERSION=$(clang-format --version | awk '{print $4}')
     echo "clang-format updated to: $CLANG_FORMAT_VERSION"
@@ -66,6 +71,9 @@ else
     echo "WARNING: clang-format is not installed!"
     echo "Installing clang-format 18.1.8..."
     pip install clang-format==18.1.8
+    hash -r
+    PYTHON_SCRIPTS_DIR=$(python3 -c "import sysconfig; print(sysconfig.get_path('scripts'))")
+    export PATH="$PYTHON_SCRIPTS_DIR:$PATH"
 fi
 
 if ! command -v node >/dev/null; then

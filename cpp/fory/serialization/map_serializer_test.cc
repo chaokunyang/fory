@@ -330,89 +330,86 @@ namespace polymorphic_test {
 
 // Base class for polymorphic keys
 struct BaseKey {
+  int32_t id = 0;
+
   BaseKey() = default;
+  explicit BaseKey(int32_t id) : id(id) {}
   virtual ~BaseKey() = default;
 
-  virtual int32_t get_id() const = 0;
   virtual std::string type_name() const = 0;
 
-  bool operator<(const BaseKey &other) const {
-    return get_id() < other.get_id();
-  }
+  bool operator<(const BaseKey &other) const { return id < other.id; }
   bool operator==(const BaseKey &other) const {
-    return get_id() == other.get_id() && type_name() == other.type_name();
+    return id == other.id && type_name() == other.type_name();
   }
+
+  FORY_STRUCT(BaseKey, id);
 };
 
 struct DerivedKeyA : public BaseKey {
-  int32_t id = 0;
   std::string data;
 
   DerivedKeyA() = default;
   DerivedKeyA(int32_t id, std::string data)
-      : id(id), data(std::move(data)) {}
+      : BaseKey(id), data(std::move(data)) {}
 
-  int32_t get_id() const override { return id; }
   std::string type_name() const override { return "DerivedKeyA"; }
-  FORY_STRUCT(DerivedKeyA, id, data);
+  FORY_STRUCT(DerivedKeyA, FORY_BASE(BaseKey), data);
 };
 
 struct DerivedKeyB : public BaseKey {
-  int32_t id = 0;
   double value = 0.0;
 
   DerivedKeyB() = default;
-  DerivedKeyB(int32_t id, double value) : id(id), value(value) {}
+  DerivedKeyB(int32_t id, double value) : BaseKey(id), value(value) {}
 
-  int32_t get_id() const override { return id; }
   std::string type_name() const override { return "DerivedKeyB"; }
-  FORY_STRUCT(DerivedKeyB, id, value);
+  FORY_STRUCT(DerivedKeyB, FORY_BASE(BaseKey), value);
 };
 
 // Base class for polymorphic values
 struct BaseValue {
+  std::string name;
+
   BaseValue() = default;
+  explicit BaseValue(std::string name) : name(std::move(name)) {}
   virtual ~BaseValue() = default;
 
-  virtual const std::string &get_name() const = 0;
   virtual int32_t get_priority() const = 0;
   virtual std::string type_name() const = 0;
 
   bool operator==(const BaseValue &other) const {
-    return get_name() == other.get_name() &&
-           get_priority() == other.get_priority() &&
+    return name == other.name && get_priority() == other.get_priority() &&
            type_name() == other.type_name();
   }
+
+  FORY_STRUCT(BaseValue, name);
 };
 
 struct DerivedValueX : public BaseValue {
-  std::string name;
   int32_t priority = 0;
 
   DerivedValueX() = default;
   DerivedValueX(std::string name, int32_t priority)
-      : name(std::move(name)), priority(priority) {}
+      : BaseValue(std::move(name)), priority(priority) {}
 
-  const std::string &get_name() const override { return name; }
   int32_t get_priority() const override { return priority; }
   std::string type_name() const override { return "DerivedValueX"; }
-  FORY_STRUCT(DerivedValueX, name, priority);
+  FORY_STRUCT(DerivedValueX, FORY_BASE(BaseValue), priority);
 };
 
 struct DerivedValueY : public BaseValue {
-  std::string name;
   int32_t priority = 0;
   std::vector<std::string> tags;
 
   DerivedValueY() = default;
   DerivedValueY(std::string name, int32_t priority,
                 std::vector<std::string> tags)
-      : name(std::move(name)), priority(priority), tags(std::move(tags)) {}
+      : BaseValue(std::move(name)), priority(priority), tags(std::move(tags)) {}
 
-  const std::string &get_name() const override { return name; }
   int32_t get_priority() const override { return priority; }
   std::string type_name() const override { return "DerivedValueY"; }
-  FORY_STRUCT(DerivedValueY, name, priority, tags);
+  FORY_STRUCT(DerivedValueY, FORY_BASE(BaseValue), priority, tags);
 };
 
 } // namespace polymorphic_test
@@ -462,13 +459,13 @@ TEST(MapSerializerTest, PolymorphicValueTypes) {
 
   // Verify first entry (DerivedValueX)
   ASSERT_NE(deserialized[1], nullptr);
-  EXPECT_EQ(deserialized[1]->get_name(), "first");
+  EXPECT_EQ(deserialized[1]->name, "first");
   EXPECT_EQ(deserialized[1]->get_priority(), 10);
   EXPECT_EQ(deserialized[1]->type_name(), "DerivedValueX");
 
   // Verify second entry (DerivedValueY)
   ASSERT_NE(deserialized[2], nullptr);
-  EXPECT_EQ(deserialized[2]->get_name(), "second");
+  EXPECT_EQ(deserialized[2]->name, "second");
   EXPECT_EQ(deserialized[2]->get_priority(), 20);
   EXPECT_EQ(deserialized[2]->type_name(), "DerivedValueY");
   auto *derived_y = dynamic_cast<DerivedValueY *>(deserialized[2].get());
@@ -479,7 +476,7 @@ TEST(MapSerializerTest, PolymorphicValueTypes) {
 
   // Verify third entry (DerivedValueX)
   ASSERT_NE(deserialized[3], nullptr);
-  EXPECT_EQ(deserialized[3]->get_name(), "third");
+  EXPECT_EQ(deserialized[3]->name, "third");
   EXPECT_EQ(deserialized[3]->get_priority(), 30);
   EXPECT_EQ(deserialized[3]->type_name(), "DerivedValueX");
 }
@@ -653,13 +650,13 @@ TEST(MapSerializerTest, PolymorphicTypesWithNulls) {
   // Verify
   ASSERT_EQ(deserialized.size(), 5u);
   ASSERT_NE(deserialized[1], nullptr);
-  EXPECT_EQ(deserialized[1]->get_name(), "first");
+  EXPECT_EQ(deserialized[1]->name, "first");
   EXPECT_EQ(deserialized[2], nullptr);
   ASSERT_NE(deserialized[3], nullptr);
-  EXPECT_EQ(deserialized[3]->get_name(), "third");
+  EXPECT_EQ(deserialized[3]->name, "third");
   EXPECT_EQ(deserialized[4], nullptr);
   ASSERT_NE(deserialized[5], nullptr);
-  EXPECT_EQ(deserialized[5]->get_name(), "fifth");
+  EXPECT_EQ(deserialized[5]->name, "fifth");
 }
 
 // Test polymorphic types with shared references
@@ -710,18 +707,18 @@ TEST(MapSerializerTest, PolymorphicTypesWithSharedReferences) {
   // Keys 1, 3, 6 should point to the same object
   EXPECT_EQ(deserialized[1].get(), deserialized[3].get());
   EXPECT_EQ(deserialized[1].get(), deserialized[6].get());
-  EXPECT_EQ(deserialized[1]->get_name(), "shared_x");
+  EXPECT_EQ(deserialized[1]->name, "shared_x");
   EXPECT_EQ(deserialized[1]->get_priority(), 999);
 
   // Keys 2, 5 should point to the same object
   EXPECT_EQ(deserialized[2].get(), deserialized[5].get());
-  EXPECT_EQ(deserialized[2]->get_name(), "shared_y");
+  EXPECT_EQ(deserialized[2]->name, "shared_y");
   EXPECT_EQ(deserialized[2]->get_priority(), 888);
 
   // Key 4 should be unique
   EXPECT_NE(deserialized[4].get(), deserialized[1].get());
   EXPECT_NE(deserialized[4].get(), deserialized[2].get());
-  EXPECT_EQ(deserialized[4]->get_name(), "unique");
+  EXPECT_EQ(deserialized[4]->name, "unique");
   EXPECT_EQ(deserialized[4]->get_priority(), 777);
 }
 
@@ -772,15 +769,15 @@ TEST(MapSerializerTest, LargeMapWithPolymorphicValues) {
   // Spot check a few entries
   ASSERT_NE(deserialized[0], nullptr);
   EXPECT_EQ(deserialized[0]->type_name(), "DerivedValueX");
-  EXPECT_EQ(deserialized[0]->get_name(), "value_x_0");
+  EXPECT_EQ(deserialized[0]->name, "value_x_0");
 
   ASSERT_NE(deserialized[1], nullptr);
   EXPECT_EQ(deserialized[1]->type_name(), "DerivedValueY");
-  EXPECT_EQ(deserialized[1]->get_name(), "value_y_1");
+  EXPECT_EQ(deserialized[1]->name, "value_y_1");
 
   ASSERT_NE(deserialized[299], nullptr);
   EXPECT_EQ(deserialized[299]->type_name(), "DerivedValueY");
-  EXPECT_EQ(deserialized[299]->get_name(), "value_y_299");
+  EXPECT_EQ(deserialized[299]->name, "value_y_299");
 }
 
 int main(int argc, char **argv) {

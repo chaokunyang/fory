@@ -221,6 +221,29 @@ FORY_STRUCT_EXTERNAL(Foo, id, name);
 - Must be declared at namespace scope in the same namespace as the type
 - Only public fields are supported
 
+## Inherited Fields
+
+To include base-class fields in a derived type, use `FORY_BASE(Base)` inside
+`FORY_STRUCT`. The base must define its own `FORY_STRUCT` so its fields can be
+referenced.
+
+```cpp
+struct Base {
+  int32_t a;
+  FORY_STRUCT(Base, a);
+};
+
+struct Derived : Base {
+  int32_t b;
+  FORY_STRUCT(Derived, FORY_BASE(Base), b);
+};
+```
+
+**Notes:**
+
+- Base fields are serialized before derived fields.
+- Only fields visible from the derived type are supported.
+
 ## Nested Structs
 
 Nested structs are fully supported:

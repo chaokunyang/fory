@@ -380,6 +380,15 @@ jobs:
           key: bazel-build-cpp-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cpp/**', 'BUILD', 'WORKSPACE') }}
       - name: Run C++ CI with Bazel
         run: python ./ci/run_ci.py cpp
+      - name: Upload Bazel Test Logs
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: bazel-test-logs-${{ matrix.os }}
+          path: |
+            bazel-out/*/testlogs/**/*.log
+            bazel-out/*/testlogs/**/*.xml
+          if-no-files-found: ignore
 
   cpp_xlang:
     name: C++ Xlang Test

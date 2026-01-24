@@ -114,7 +114,6 @@ class CppGenerator(BaseGenerator):
         lines = []
         includes: Set[str] = set()
         enum_macros: List[str] = []
-        struct_macros: List[str] = []
         union_macros: List[str] = []
         field_config_macros: List[str] = []
         definition_items = self.get_definition_order()
@@ -173,9 +172,7 @@ class CppGenerator(BaseGenerator):
         # Generate top-level unions/messages in dependency order
         for kind, item in definition_items:
             if kind == "union":
-                lines.extend(
-                    self.generate_union_definition(item, [], struct_macros, "")
-                )
+                lines.extend(self.generate_union_definition(item, [], ""))
                 union_macros.extend(self.generate_union_macros(item, []))
                 lines.append("")
                 continue
@@ -183,17 +180,12 @@ class CppGenerator(BaseGenerator):
                 self.generate_message_definition(
                     item,
                     [],
-                    struct_macros,
                     enum_macros,
                     union_macros,
                     field_config_macros,
                     "",
                 )
             )
-            lines.append("")
-
-        if struct_macros:
-            lines.extend(struct_macros)
             lines.append("")
 
         if namespace:
@@ -396,7 +388,6 @@ class CppGenerator(BaseGenerator):
         self,
         message: Message,
         parent_stack: List[Message],
-        struct_macros: List[str],
         enum_macros: List[str],
         union_macros: List[str],
         field_config_macros: List[str],
@@ -422,7 +413,6 @@ class CppGenerator(BaseGenerator):
                 self.generate_message_definition(
                     nested_msg,
                     lineage,
-                    struct_macros,
                     enum_macros,
                     union_macros,
                     field_config_macros,
@@ -436,7 +426,6 @@ class CppGenerator(BaseGenerator):
                 self.generate_union_definition(
                     nested_union,
                     lineage,
-                    struct_macros,
                     body_indent,
                 )
             )
@@ -470,11 +459,9 @@ class CppGenerator(BaseGenerator):
             lines.append(f"{body_indent}  return true;")
         lines.append(f"{body_indent}}}")
 
-        lines.append(f"{indent}}};")
         struct_type_name = self.get_qualified_type_name(message.name, parent_stack)
         if message.fields:
             field_names = ", ".join(self.to_snake_case(f.name) for f in message.fields)
-            struct_macros.append(f"FORY_STRUCT({struct_type_name}, {field_names});")
             field_config_type_name = self.get_field_config_type_and_alias(
                 message.name, parent_stack
             )
@@ -483,8 +470,11 @@ class CppGenerator(BaseGenerator):
                     message, field_config_type_name[0], field_config_type_name[1]
                 )
             )
+            lines.append(f"{body_indent}FORY_STRUCT({struct_type_name}, {field_names});")
         else:
-            struct_macros.append(f"FORY_STRUCT({struct_type_name});")
+            lines.append(f"{body_indent}FORY_STRUCT({struct_type_name});")
+
+        lines.append(f"{indent}}};")
 
         return lines
 
@@ -492,7 +482,6 @@ class CppGenerator(BaseGenerator):
         self,
         union: Union,
         parent_stack: List[Message],
-        struct_macros: List[str],
         indent: str,
     ) -> List[str]:
         """Generate a C++ union class definition."""

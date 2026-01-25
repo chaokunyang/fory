@@ -309,81 +309,87 @@ inline void write_union_value_data(const T &value, WriteContext &ctx,
                                    uint32_t type_id) {
   using Inner = union_unwrap_optional_inner_t<T>;
   const Inner &inner = unwrap_union_value(value);
-  switch (static_cast<TypeId>(type_id)) {
-  case TypeId::VAR_UINT32:
-    ctx.write_varuint32(static_cast<uint32_t>(inner));
-    return;
-  case TypeId::UINT32:
-    ctx.buffer().WriteInt32(static_cast<int32_t>(inner));
-    return;
-  case TypeId::VAR_UINT64:
-    ctx.write_varuint64(static_cast<uint64_t>(inner));
-    return;
-  case TypeId::UINT64:
-    ctx.buffer().WriteInt64(static_cast<int64_t>(inner));
-    return;
-  case TypeId::TAGGED_UINT64:
-    ctx.write_tagged_uint64(static_cast<uint64_t>(inner));
-    return;
-  case TypeId::VARINT32:
-    ctx.write_varint32(static_cast<int32_t>(inner));
-    return;
-  case TypeId::INT32:
-    ctx.buffer().WriteInt32(static_cast<int32_t>(inner));
-    return;
-  case TypeId::VARINT64:
-    ctx.write_varint64(static_cast<int64_t>(inner));
-    return;
-  case TypeId::INT64:
-    ctx.buffer().WriteInt64(static_cast<int64_t>(inner));
-    return;
-  case TypeId::TAGGED_INT64:
-    ctx.write_tagged_int64(static_cast<int64_t>(inner));
-    return;
-  default:
-    Serializer<Inner>::write_data(inner, ctx);
-    return;
+  if constexpr (std::is_integral_v<Inner> || std::is_enum_v<Inner>) {
+    switch (static_cast<TypeId>(type_id)) {
+    case TypeId::VAR_UINT32:
+      ctx.write_varuint32(static_cast<uint32_t>(inner));
+      return;
+    case TypeId::UINT32:
+      ctx.buffer().WriteInt32(static_cast<int32_t>(inner));
+      return;
+    case TypeId::VAR_UINT64:
+      ctx.write_varuint64(static_cast<uint64_t>(inner));
+      return;
+    case TypeId::UINT64:
+      ctx.buffer().WriteInt64(static_cast<int64_t>(inner));
+      return;
+    case TypeId::TAGGED_UINT64:
+      ctx.write_tagged_uint64(static_cast<uint64_t>(inner));
+      return;
+    case TypeId::VARINT32:
+      ctx.write_varint32(static_cast<int32_t>(inner));
+      return;
+    case TypeId::INT32:
+      ctx.buffer().WriteInt32(static_cast<int32_t>(inner));
+      return;
+    case TypeId::VARINT64:
+      ctx.write_varint64(static_cast<int64_t>(inner));
+      return;
+    case TypeId::INT64:
+      ctx.buffer().WriteInt64(static_cast<int64_t>(inner));
+      return;
+    case TypeId::TAGGED_INT64:
+      ctx.write_tagged_int64(static_cast<int64_t>(inner));
+      return;
+    default:
+      break;
+    }
   }
+  Serializer<Inner>::write_data(inner, ctx);
 }
 
 template <typename T>
 inline T read_union_value_data(ReadContext &ctx, uint32_t type_id) {
   using Inner = union_unwrap_optional_inner_t<T>;
   Inner value{};
-  switch (static_cast<TypeId>(type_id)) {
-  case TypeId::VAR_UINT32:
-    value = static_cast<Inner>(ctx.read_varuint32(ctx.error()));
-    break;
-  case TypeId::UINT32:
-    value = static_cast<Inner>(ctx.read_uint32(ctx.error()));
-    break;
-  case TypeId::VAR_UINT64:
-    value = static_cast<Inner>(ctx.read_varuint64(ctx.error()));
-    break;
-  case TypeId::UINT64:
-    value = static_cast<Inner>(ctx.read_uint64(ctx.error()));
-    break;
-  case TypeId::TAGGED_UINT64:
-    value = static_cast<Inner>(ctx.read_tagged_uint64(ctx.error()));
-    break;
-  case TypeId::VARINT32:
-    value = static_cast<Inner>(ctx.read_varint32(ctx.error()));
-    break;
-  case TypeId::INT32:
-    value = static_cast<Inner>(ctx.read_int32(ctx.error()));
-    break;
-  case TypeId::VARINT64:
-    value = static_cast<Inner>(ctx.read_varint64(ctx.error()));
-    break;
-  case TypeId::INT64:
-    value = static_cast<Inner>(ctx.read_int64(ctx.error()));
-    break;
-  case TypeId::TAGGED_INT64:
-    value = static_cast<Inner>(ctx.read_tagged_int64(ctx.error()));
-    break;
-  default:
+  if constexpr (std::is_integral_v<Inner> || std::is_enum_v<Inner>) {
+    switch (static_cast<TypeId>(type_id)) {
+    case TypeId::VAR_UINT32:
+      value = static_cast<Inner>(ctx.read_varuint32(ctx.error()));
+      break;
+    case TypeId::UINT32:
+      value = static_cast<Inner>(ctx.read_uint32(ctx.error()));
+      break;
+    case TypeId::VAR_UINT64:
+      value = static_cast<Inner>(ctx.read_varuint64(ctx.error()));
+      break;
+    case TypeId::UINT64:
+      value = static_cast<Inner>(ctx.read_uint64(ctx.error()));
+      break;
+    case TypeId::TAGGED_UINT64:
+      value = static_cast<Inner>(ctx.read_tagged_uint64(ctx.error()));
+      break;
+    case TypeId::VARINT32:
+      value = static_cast<Inner>(ctx.read_varint32(ctx.error()));
+      break;
+    case TypeId::INT32:
+      value = static_cast<Inner>(ctx.read_int32(ctx.error()));
+      break;
+    case TypeId::VARINT64:
+      value = static_cast<Inner>(ctx.read_varint64(ctx.error()));
+      break;
+    case TypeId::INT64:
+      value = static_cast<Inner>(ctx.read_int64(ctx.error()));
+      break;
+    case TypeId::TAGGED_INT64:
+      value = static_cast<Inner>(ctx.read_tagged_int64(ctx.error()));
+      break;
+    default:
+      value = Serializer<Inner>::read_data(ctx);
+      break;
+    }
+  } else {
     value = Serializer<Inner>::read_data(ctx);
-    break;
   }
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return default_union_case_value<T>();
@@ -468,7 +474,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
           detail::UnionInfo<T>::template Meta<index>::value;
       constexpr uint32_t field_type_id =
           detail::resolve_union_type_id<CaseT>(meta);
-      constexpr bool manual = detail::needs_manual_encoding<CaseT>(meta);
+      const bool manual = detail::needs_manual_encoding<CaseT>(meta);
       constexpr bool nullable =
           meta.nullable_ || is_nullable_v<detail::decay_t<CaseT>>;
       const RefMode value_ref_mode =
@@ -477,7 +483,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
       obj.visit([&](const auto &value) {
         using ValueType = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<ValueType, CaseT>) {
-          if constexpr (manual) {
+          if (manual) {
             if (!detail::write_union_ref_flag(value, ctx, value_ref_mode,
                                               nullable)) {
               return;
@@ -550,13 +556,13 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
           detail::UnionInfo<T>::template Meta<index>::value;
       constexpr uint32_t field_type_id =
           detail::resolve_union_type_id<CaseT>(meta);
-      constexpr bool manual = detail::needs_manual_encoding<CaseT>(meta);
+      const bool manual = detail::needs_manual_encoding<CaseT>(meta);
       constexpr bool nullable =
           meta.nullable_ || is_nullable_v<detail::decay_t<CaseT>>;
       const RefMode value_ref_mode =
           meta.ref_ ? RefMode::Tracking : RefMode::NullOnly;
 
-      if constexpr (manual) {
+      if (manual) {
         bool is_null = false;
         if (!detail::read_union_ref_flag(ctx, value_ref_mode, nullable,
                                          is_null)) {

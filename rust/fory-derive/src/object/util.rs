@@ -1154,27 +1154,28 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             .collect::<String>();
 
         // Closure to group non-option fields, considering encoding attributes
-        let mut group_field = |ident: String, sort_key: String, ty_str: &str, is_primitive: bool| {
-            let base_type_id = get_type_id_by_name(ty_str);
-            // Adjust type ID based on encoding attributes for u32/u64 fields
-            let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
+        let mut group_field =
+            |ident: String, sort_key: String, ty_str: &str, is_primitive: bool| {
+                let base_type_id = get_type_id_by_name(ty_str);
+                // Adjust type ID based on encoding attributes for u32/u64 fields
+                let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
 
-            // Categorize based on type_id
-            if is_primitive {
-                primitive_fields.push((ident, sort_key, type_id));
-            } else if is_internal_type_id(type_id) {
-                internal_type_fields.push((ident, sort_key, type_id));
-            } else if type_id == TypeId::LIST as u32 {
-                list_fields.push((ident, sort_key, type_id));
-            } else if type_id == TypeId::SET as u32 {
-                set_fields.push((ident, sort_key, type_id));
-            } else if type_id == TypeId::MAP as u32 {
-                map_fields.push((ident, sort_key, type_id));
-            } else {
-                // User-defined type
-                other_fields.push((ident, sort_key, type_id));
-            }
-        };
+                // Categorize based on type_id
+                if is_primitive {
+                    primitive_fields.push((ident, sort_key, type_id));
+                } else if is_internal_type_id(type_id) {
+                    internal_type_fields.push((ident, sort_key, type_id));
+                } else if type_id == TypeId::LIST as u32 {
+                    list_fields.push((ident, sort_key, type_id));
+                } else if type_id == TypeId::SET as u32 {
+                    set_fields.push((ident, sort_key, type_id));
+                } else if type_id == TypeId::MAP as u32 {
+                    map_fields.push((ident, sort_key, type_id));
+                } else {
+                    // User-defined type
+                    other_fields.push((ident, sort_key, type_id));
+                }
+            };
 
         // handle Option<Primitive> specially
         if let Some(inner) = extract_option_inner(&ty) {
@@ -1213,8 +1214,7 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
         a: &(String, String, u32),
         b: &(String, String, u32),
     ) -> std::cmp::Ordering {
-        a.2
-            .cmp(&b.2)
+        a.2.cmp(&b.2)
             .then_with(|| a.1.cmp(&b.1))
             .then_with(|| a.0.cmp(&b.0))
     }

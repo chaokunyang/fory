@@ -151,8 +151,7 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   monster_value.set_hp(80);
   monster_value.set_name("Orc");
   monster_value.set_friendly(true);
-  monster_value.set_inventory({static_cast<uint8_t>(1),
-                               static_cast<uint8_t>(2),
+  monster_value.set_inventory({static_cast<uint8_t>(1), static_cast<uint8_t>(2),
                                static_cast<uint8_t>(3)});
   monster_value.set_color(monster::Color::Blue);
 
@@ -168,8 +167,8 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   complex_fbs::Container container;
   container.set_id(9876543210ULL);
   container.set_status(complex_fbs::Status::STARTED);
-  container.set_bytes({static_cast<int8_t>(1), static_cast<int8_t>(2),
-                       static_cast<int8_t>(3)});
+  container.set_bytes(
+      {static_cast<int8_t>(1), static_cast<int8_t>(2), static_cast<int8_t>(3)});
   container.set_numbers({10, 20, 30});
   auto *scalars = container.mutable_scalars();
   scalars->set_b(-8);

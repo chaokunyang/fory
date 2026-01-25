@@ -1,0 +1,134 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+#include "fory/serialization/fory.h"
+#include "fory/serialization/union_serializer.h"
+
+#include "gtest/gtest.h"
+
+#include <optional>
+#include <string>
+#include <utility>
+#include <variant>
+
+namespace macro_test {
+
+class Configured final {
+public:
+  Configured() = default;
+  explicit Configured(int32_t id) : id_(id) {}
+
+  bool operator==(const Configured &other) const { return id_ == other.id_; }
+
+  FORY_STRUCT(Configured, id_);
+
+private:
+  int32_t id_ = 0;
+};
+
+class OptionalHolder final {
+public:
+  OptionalHolder() = default;
+  explicit OptionalHolder(std::optional<std::string> name)
+      : name_(std::move(name)) {}
+
+  bool operator==(const OptionalHolder &other) const {
+    return name_ == other.name_;
+  }
+
+  FORY_STRUCT(OptionalHolder, name_);
+
+private:
+  std::optional<std::string> name_;
+};
+
+class Choice final {
+public:
+  Choice() = default;
+
+  static Choice text(std::string value) {
+    return Choice(std::in_place_type<std::string>, std::move(value));
+  }
+
+  static Choice number(int32_t value) {
+    return Choice(std::in_place_type<int32_t>, value);
+  }
+
+  uint32_t fory_case_id() const noexcept {
+    if (std::holds_alternative<std::string>(value_)) {
+      return 1;
+    }
+    return 2;
+  }
+
+  template <class Visitor> decltype(auto) visit(Visitor &&vis) const {
+    return std::visit(std::forward<Visitor>(vis), value_);
+  }
+
+  bool operator==(const Choice &other) const { return value_ == other.value_; }
+
+private:
+  std::variant<std::string, int32_t> value_;
+
+  template <class T, class... Args>
+  explicit Choice(std::in_place_type_t<T> tag, Args &&...args)
+      : value_(tag, std::forward<Args>(args)...) {}
+};
+
+FORY_FIELD_CONFIG(Configured, Configured, (id_, fory::F().id(1).varint()));
+FORY_FIELD_TAGS(OptionalHolder, (name_, 1));
+
+FORY_UNION(Choice, (std::string, text, fory::F(1)),
+           (int32_t, number, fory::F(2).varint()));
+
+} // namespace macro_test
+
+namespace fory {
+namespace serialization {
+namespace test {
+
+TEST(NamespaceMacros, FieldConfigAndTagsInNamespace) {
+  static_assert(::fory::detail::has_field_config_v<macro_test::Configured>);
+  static_assert(
+      ::fory::detail::GetFieldConfigEntry<macro_test::Configured, 0>::id == 1);
+  static_assert(::fory::detail::GetFieldConfigEntry<macro_test::Configured,
+                                                    0>::encoding ==
+                ::fory::Encoding::Varint);
+
+  static_assert(::fory::detail::has_field_tags_v<macro_test::OptionalHolder>);
+  static_assert(::fory::detail::GetFieldTagEntry<macro_test::OptionalHolder,
+                                                 0>::is_nullable);
+}
+
+TEST(NamespaceMacros, UnionInNamespace) {
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_union<macro_test::Choice>(1001).ok());
+
+  auto bytes = fory.serialize(macro_test::Choice::text("hello"));
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+
+  auto decoded =
+      fory.deserialize<macro_test::Choice>(bytes->data(), bytes->size());
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(macro_test::Choice::text("hello"), decoded.value());
+}
+
+} // namespace test
+} // namespace serialization
+} // namespace fory

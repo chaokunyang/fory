@@ -74,7 +74,8 @@ struct EnumInfo<Enum, std::enable_if_t<detail::HasAdlEnumInfo<Enum>::value>> {
   static constexpr bool defined = Descriptor::defined;
   static constexpr std::size_t size = Descriptor::size;
 
-  static inline constexpr std::array<EnumType, size> values = Descriptor::values;
+  static inline constexpr std::array<EnumType, size> values =
+      Descriptor::values;
   static inline constexpr std::array<std::string_view, size> names =
       Descriptor::names;
 

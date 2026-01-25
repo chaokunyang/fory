@@ -540,17 +540,9 @@ class CppGenerator(BaseGenerator):
         lineage = parent_stack + [message]
         body_indent = f"{indent}  "
         field_indent = f"{indent}    "
-        field_config_type_name = None
-
         lines.append(f"{indent}class {class_name} final {{")
         lines.append(f"{body_indent}public:")
         if message.fields:
-            field_config_type_name = self.get_field_config_type_and_alias(
-                message.name, parent_stack
-            )
-            lines.append(
-                f"{body_indent}  friend struct ForyFieldConfigDescriptor_{field_config_type_name[1]};"
-            )
             lines.append("")
 
         for nested_enum in message.nested_enums:
@@ -614,10 +606,9 @@ class CppGenerator(BaseGenerator):
             field_members = ", ".join(
                 self.get_field_member_name(f) for f in message.fields
             )
-            if field_config_type_name is None:
-                field_config_type_name = self.get_field_config_type_and_alias(
-                    message.name, parent_stack
-                )
+            field_config_type_name = self.get_field_config_type_and_alias(
+                message.name, parent_stack
+            )
             field_config_macros.append(
                 self.generate_field_config_macro(
                     message, field_config_type_name[0], field_config_type_name[1]
@@ -750,25 +741,6 @@ class CppGenerator(BaseGenerator):
         lines.append(f"{body_indent}  }}")
         lines.append("")
 
-        if len(union.fields) <= 16:
-            union_type_name = self.get_qualified_type_name(union.name, parent_stack)
-            lines.append(f"{body_indent}  FORY_UNION({union_type_name},")
-            for index, field in enumerate(union.fields):
-                case_type = self.generate_namespaced_type(
-                    field.field_type,
-                    False,
-                    field.ref,
-                    field.element_optional,
-                    field.element_ref,
-                    parent_stack,
-                )
-                case_ctor = self.to_snake_case(field.name)
-                meta = self.get_union_field_meta(field)
-                suffix = "," if index + 1 < len(union.fields) else ""
-                lines.append(f"{body_indent}    ({case_type}, {case_ctor}, {meta}){suffix}")
-            lines.append(f"{body_indent}  );")
-            lines.append("")
-
         lines.append(f"{body_indent}private:")
         lines.append(f"{body_indent}  {variant_type} value_;")
         lines.append("")
@@ -794,6 +766,22 @@ class CppGenerator(BaseGenerator):
 
         lines: List[str] = []
         if len(union.fields) <= 16:
+            union_type = self.get_namespaced_type_name(union.name, parent_stack)
+            lines.append(f"FORY_UNION({union_type},")
+            for index, field in enumerate(union.fields):
+                case_type = self.generate_namespaced_type(
+                    field.field_type,
+                    False,
+                    field.ref,
+                    field.element_optional,
+                    field.element_ref,
+                    parent_stack,
+                )
+                case_ctor = self.to_snake_case(field.name)
+                meta = self.get_union_field_meta(field)
+                suffix = "," if index + 1 < len(union.fields) else ""
+                lines.append(f"  ({case_type}, {case_ctor}, {meta}){suffix}")
+            lines.append(");")
             return lines
 
         union_type = self.get_namespaced_type_name(union.name, parent_stack)

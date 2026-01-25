@@ -178,9 +178,8 @@ struct FieldTagsInfo<T, std::enable_if_t<HasAdlFieldTags<T>::value>> {
 };
 
 template <typename T>
-struct FieldTagsInfo<T,
-                     std::enable_if_t<!HasAdlFieldTags<T>::value &&
-                                      ForyFieldTagsImpl<T>::has_tags>> {
+struct FieldTagsInfo<T, std::enable_if_t<!HasAdlFieldTags<T>::value &&
+                                         ForyFieldTagsImpl<T>::has_tags>> {
   static constexpr bool has_tags = true;
   static constexpr size_t field_count = ForyFieldTagsImpl<T>::field_count;
   using Entries = typename ForyFieldTagsImpl<T>::Entries;
@@ -315,23 +314,20 @@ constexpr FieldMeta apply_tags(FieldMeta base, Tags... tags) {
 }
 
 // ============================================================================
-// FieldEntry - Binds Member Pointer to Config for Compile-Time Verification
+// FieldEntry - Stores Field Configuration Metadata
 // ============================================================================
 
-/// Field entry that stores member pointer (for verification) + configuration
-template <typename T, typename M> struct FieldEntry {
-  M T::*ptr;        // Member pointer - compile-time field verification
+/// Field entry that stores name and configuration metadata
+struct FieldEntry {
   const char *name; // Field name for debugging
   FieldMeta meta;   // Field configuration
 
-  constexpr FieldEntry(M T::*p, const char *n, FieldMeta m)
-      : ptr(p), name(n), meta(m) {}
+  constexpr FieldEntry(const char *n, FieldMeta m) : name(n), meta(m) {}
 };
 
-/// Create a FieldEntry with automatic type deduction
-template <typename T, typename M>
-constexpr auto make_field_entry(M T::*ptr, const char *name, FieldMeta meta) {
-  return FieldEntry<T, M>{ptr, name, meta};
+/// Create a FieldEntry
+constexpr auto make_field_entry(const char *name, FieldMeta meta) {
+  return FieldEntry{name, meta};
 }
 
 /// Default: no field config defined for type T
@@ -638,6 +634,36 @@ inline constexpr int field_dynamic_value_v = field_dynamic_value<T>::value;
 
 namespace detail {
 
+template <typename T>
+using FieldInfo = decltype(::fory::meta::ForyFieldInfo(std::declval<T>()));
+
+inline constexpr size_t kInvalidFieldIndex = static_cast<size_t>(-1);
+
+template <typename T> constexpr size_t FieldIndex(std::string_view name) {
+  constexpr auto names = FieldInfo<T>::Names;
+  for (size_t i = 0; i < names.size(); ++i) {
+    if (names[i] == name) {
+      return i;
+    }
+  }
+  return kInvalidFieldIndex;
+}
+
+template <typename T, size_t Index, typename Enable = void> struct FieldTypeAt;
+
+template <typename T, size_t Index>
+struct FieldTypeAt<T, Index, std::enable_if_t<Index != kInvalidFieldIndex>> {
+  using PtrsType = typename FieldInfo<T>::PtrsType;
+  using PtrT = std::tuple_element_t<Index, PtrsType>;
+  using type = ::fory::meta::RemoveMemberPointerCVRefT<PtrT>;
+};
+
+template <typename T, size_t Index>
+struct FieldTypeAt<T, Index, std::enable_if_t<Index == kInvalidFieldIndex>> {
+  static_assert(Index != kInvalidFieldIndex,
+                "Unknown field name in FORY_FIELD_TAGS");
+};
+
 // Helper to parse field tag entry from macro arguments
 // Supports: (field, id), (field, id, nullable), (field, id, ref),
 //           (field, id, nullable, ref), (field, id, dynamic<false>), etc.
@@ -698,6 +724,10 @@ struct GetFieldTagEntry<
 #define FORY_FT_FIELD(tuple) FORY_FT_FIELD_IMPL tuple
 #define FORY_FT_FIELD_IMPL(field, ...) field
 
+// Stringify field name
+#define FORY_FT_STRINGIFY(x) FORY_FT_STRINGIFY_I(x)
+#define FORY_FT_STRINGIFY_I(x) #x
+
 #define FORY_FT_ID(tuple) FORY_FT_ID_IMPL tuple
 #define FORY_FT_ID_IMPL(field, id, ...) id
 
@@ -724,24 +754,31 @@ struct GetFieldTagEntry<
 #define FORY_FT_MAKE_ENTRY_II(Type, tuple, size)                               \
   FORY_FT_MAKE_ENTRY_##size(Type, tuple)
 
+#define FORY_FT_FIELD_INDEX(Type, tuple)                                       \
+  ::fory::detail::FieldIndex<Type>(                                            \
+      std::string_view{FORY_FT_STRINGIFY(FORY_FT_FIELD(tuple))})
+
+#define FORY_FT_FIELD_TYPE(Type, tuple)                                        \
+  typename ::fory::detail::FieldTypeAt<Type,                                   \
+                                       FORY_FT_FIELD_INDEX(Type, tuple)>::type
+
 #define FORY_FT_MAKE_ENTRY_2(Type, tuple)                                      \
-  typename ::fory::detail::ParseFieldTagEntry<                                 \
-      decltype(std::declval<Type>().FORY_FT_FIELD(tuple)),                     \
-      FORY_FT_ID(tuple)>::type
+  typename ::fory::detail::ParseFieldTagEntry<FORY_FT_FIELD_TYPE(Type, tuple), \
+                                              FORY_FT_ID(tuple)>::type
 
 #define FORY_FT_MAKE_ENTRY_3(Type, tuple)                                      \
   typename ::fory::detail::ParseFieldTagEntry<                                 \
-      decltype(std::declval<Type>().FORY_FT_FIELD(tuple)), FORY_FT_ID(tuple),  \
+      FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                      \
       ::fory::FORY_FT_GET_OPT1(tuple)>::type
 
 #define FORY_FT_MAKE_ENTRY_4(Type, tuple)                                      \
   typename ::fory::detail::ParseFieldTagEntry<                                 \
-      decltype(std::declval<Type>().FORY_FT_FIELD(tuple)), FORY_FT_ID(tuple),  \
+      FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                      \
       ::fory::FORY_FT_GET_OPT1(tuple), ::fory::FORY_FT_GET_OPT2(tuple)>::type
 
 #define FORY_FT_MAKE_ENTRY_5(Type, tuple)                                      \
   typename ::fory::detail::ParseFieldTagEntry<                                 \
-      decltype(std::declval<Type>().FORY_FT_FIELD(tuple)), FORY_FT_ID(tuple),  \
+      FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                      \
       ::fory::FORY_FT_GET_OPT1(tuple), ::fory::FORY_FT_GET_OPT2(tuple),        \
       ::fory::FORY_FT_GET_OPT3(tuple)>::type
 
@@ -851,7 +888,7 @@ struct GetFieldTagEntry<
 // Create a FieldEntry with member pointer verification
 #define FORY_FC_MAKE_ENTRY(Type, tuple)                                        \
   ::fory::detail::make_field_entry(                                            \
-      &Type::FORY_FC_NAME(tuple), FORY_FC_STRINGIFY(FORY_FC_NAME(tuple)),      \
+      FORY_FC_STRINGIFY(FORY_FC_NAME(tuple)),                                  \
       ::fory::detail::normalize_config(FORY_FC_CONFIG(tuple)))
 
 // Generate entries using indirect expansion

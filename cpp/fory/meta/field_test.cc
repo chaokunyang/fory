@@ -310,10 +310,10 @@ struct SingleField {
 };
 
 // Define field tags in the same namespace as the types.
-FORY_FIELD_TAGS(Document, (title, 0), // string: non-nullable
-                (version, 1),         // int: non-nullable
-                (description, 2),     // optional: inherently nullable
-                (author, 3),          // shared_ptr: non-nullable (default)
+FORY_FIELD_TAGS(Document, (title, 0),     // string: non-nullable
+                (version, 1),             // int: non-nullable
+                (description, 2),         // optional: inherently nullable
+                (author, 3),              // shared_ptr: non-nullable (default)
                 (reviewer, 4, nullable),  // shared_ptr: nullable
                 (parent, 5, ref),         // shared_ptr: non-nullable, with ref
                 (metadata, 6, nullable)); // unique_ptr: nullable

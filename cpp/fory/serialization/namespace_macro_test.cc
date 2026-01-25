@@ -87,7 +87,10 @@ public:
   }
 
   template <class Visitor> decltype(auto) visit(Visitor &&vis) const {
-    return std::visit(std::forward<Visitor>(vis), value_);
+    if (std::holds_alternative<std::string>(value_)) {
+      return std::forward<Visitor>(vis)(std::get<std::string>(value_));
+    }
+    return std::forward<Visitor>(vis)(std::get<int32_t>(value_));
   }
 
   bool operator==(const Choice &other) const { return value_ == other.value_; }

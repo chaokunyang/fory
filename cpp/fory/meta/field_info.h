@@ -250,6 +250,9 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
 // NOTE: FORY_STRUCT can be used inside the class/struct definition or at
 // namespace scope. The macro defines constexpr functions which are detected
 // via member lookup (in-class) or ADL (namespace scope).
+// MSVC (VS 2022 17.11, 19.41) fixes in-class pointer-to-member constexpr
+// issues; keep evaluation inside `Ptrs` function instead of field for older
+// toolsets.
 #define FORY_STRUCT_FIELDS(type, unique_id, ...)                               \
   static_assert(std::is_class_v<type>, "it must be a class type");             \
   struct FORY_PP_CONCAT(ForyFieldInfoDescriptor_, unique_id) {                 \

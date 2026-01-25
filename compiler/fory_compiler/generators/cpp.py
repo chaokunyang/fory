@@ -540,12 +540,16 @@ class CppGenerator(BaseGenerator):
         lineage = parent_stack + [message]
         body_indent = f"{indent}  "
         field_indent = f"{indent}    "
+        field_config_type_name = None
 
         lines.append(f"{indent}class {class_name} final {{")
         lines.append(f"{body_indent}public:")
         if message.fields:
+            field_config_type_name = self.get_field_config_type_and_alias(
+                message.name, parent_stack
+            )
             lines.append(
-                f"{body_indent}  friend struct ::fory::detail::ForyFieldConfigImpl<{class_name}>;"
+                f"{body_indent}  friend struct ForyFieldConfigDescriptor_{field_config_type_name[1]};"
             )
             lines.append("")
 
@@ -610,9 +614,10 @@ class CppGenerator(BaseGenerator):
             field_members = ", ".join(
                 self.get_field_member_name(f) for f in message.fields
             )
-            field_config_type_name = self.get_field_config_type_and_alias(
-                message.name, parent_stack
-            )
+            if field_config_type_name is None:
+                field_config_type_name = self.get_field_config_type_and_alias(
+                    message.name, parent_stack
+                )
             field_config_macros.append(
                 self.generate_field_config_macro(
                     message, field_config_type_name[0], field_config_type_name[1]

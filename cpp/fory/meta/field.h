@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "fory/meta/field_info.h"
 #include "fory/meta/preprocessor.h"
 #include "fory/type/type.h"
 #include <array>
@@ -146,13 +147,47 @@ struct FieldTagEntry {
   static constexpr int dynamic_value = Dynamic;
 };
 
-/// Default: no field tags defined for type T
+/// Default: no field tags defined for type T (legacy specialization path)
 template <typename T> struct ForyFieldTagsImpl {
   static constexpr bool has_tags = false;
 };
 
 template <typename T>
-inline constexpr bool has_field_tags_v = ForyFieldTagsImpl<T>::has_tags;
+using AdlFieldTagsDescriptor =
+    decltype(ForyFieldTags(std::declval<meta::Identity<T>>()));
+
+template <typename T, typename = void>
+struct HasAdlFieldTags : std::false_type {};
+
+template <typename T>
+struct HasAdlFieldTags<T, std::void_t<AdlFieldTagsDescriptor<T>>>
+    : std::true_type {};
+
+template <typename T, typename Enable = void> struct FieldTagsInfo {
+  static constexpr bool has_tags = false;
+  static constexpr size_t field_count = 0;
+  using Entries = std::tuple<>;
+};
+
+template <typename T>
+struct FieldTagsInfo<T, std::enable_if_t<HasAdlFieldTags<T>::value>> {
+  using Descriptor = AdlFieldTagsDescriptor<T>;
+  static constexpr bool has_tags = Descriptor::has_tags;
+  static constexpr size_t field_count = Descriptor::field_count;
+  using Entries = typename Descriptor::Entries;
+};
+
+template <typename T>
+struct FieldTagsInfo<T,
+                     std::enable_if_t<!HasAdlFieldTags<T>::value &&
+                                      ForyFieldTagsImpl<T>::has_tags>> {
+  static constexpr bool has_tags = true;
+  static constexpr size_t field_count = ForyFieldTagsImpl<T>::field_count;
+  using Entries = typename ForyFieldTagsImpl<T>::Entries;
+};
+
+template <typename T>
+inline constexpr bool has_field_tags_v = FieldTagsInfo<T>::has_tags;
 
 } // namespace detail
 
@@ -305,9 +340,43 @@ template <typename T> struct ForyFieldConfigImpl {
 };
 
 template <typename T>
-inline constexpr bool has_field_config_v = ForyFieldConfigImpl<T>::has_config;
+using AdlFieldConfigDescriptor =
+    decltype(ForyFieldConfig(std::declval<meta::Identity<T>>()));
 
-/// Helper to get field encoding from ForyFieldConfigImpl
+template <typename T, typename = void>
+struct HasAdlFieldConfig : std::false_type {};
+
+template <typename T>
+struct HasAdlFieldConfig<T, std::void_t<AdlFieldConfigDescriptor<T>>>
+    : std::true_type {};
+
+template <typename T, typename Enable = void> struct FieldConfigInfo {
+  static constexpr bool has_config = false;
+  static constexpr size_t field_count = 0;
+  static inline constexpr auto entries = std::tuple<>{};
+};
+
+template <typename T>
+struct FieldConfigInfo<T, std::enable_if_t<HasAdlFieldConfig<T>::value>> {
+  using Descriptor = AdlFieldConfigDescriptor<T>;
+  static constexpr bool has_config = Descriptor::has_config;
+  static constexpr size_t field_count = Descriptor::field_count;
+  static inline constexpr auto entries = Descriptor::entries;
+};
+
+template <typename T>
+struct FieldConfigInfo<T,
+                       std::enable_if_t<!HasAdlFieldConfig<T>::value &&
+                                        ForyFieldConfigImpl<T>::has_config>> {
+  static constexpr bool has_config = true;
+  static constexpr size_t field_count = ForyFieldConfigImpl<T>::field_count;
+  static inline constexpr auto entries = ForyFieldConfigImpl<T>::entries;
+};
+
+template <typename T>
+inline constexpr bool has_field_config_v = FieldConfigInfo<T>::has_config;
+
+/// Helper to get field encoding from FieldConfigInfo
 template <typename T, size_t Index, typename = void>
 struct GetFieldConfigEntry {
   static constexpr Encoding encoding = Encoding::Default;
@@ -322,11 +391,11 @@ struct GetFieldConfigEntry {
 template <typename T, size_t Index>
 struct GetFieldConfigEntry<
     T, Index,
-    std::enable_if_t<ForyFieldConfigImpl<T>::has_config &&
-                     (Index < ForyFieldConfigImpl<T>::field_count)>> {
+    std::enable_if_t<FieldConfigInfo<T>::has_config &&
+                     (Index < FieldConfigInfo<T>::field_count)>> {
 private:
   static constexpr auto get_entry() {
-    return std::get<Index>(ForyFieldConfigImpl<T>::entries);
+    return std::get<Index>(FieldConfigInfo<T>::entries);
   }
 
 public:
@@ -597,7 +666,7 @@ struct ParseFieldTagEntry {
   using type = FieldTagEntry<Id, is_nullable, track_ref, dynamic_value>;
 };
 
-/// Get field tag entry by index from ForyFieldTagsImpl
+/// Get field tag entry by index from FieldTagsInfo
 template <typename T, size_t Index, typename = void> struct GetFieldTagEntry {
   static constexpr int16_t id = -1;
   static constexpr bool is_nullable = false;
@@ -608,10 +677,9 @@ template <typename T, size_t Index, typename = void> struct GetFieldTagEntry {
 template <typename T, size_t Index>
 struct GetFieldTagEntry<
     T, Index,
-    std::enable_if_t<ForyFieldTagsImpl<T>::has_tags &&
-                     (Index < ForyFieldTagsImpl<T>::field_count)>> {
-  using Entry =
-      std::tuple_element_t<Index, typename ForyFieldTagsImpl<T>::Entries>;
+    std::enable_if_t<FieldTagsInfo<T>::has_tags &&
+                     (Index < FieldTagsInfo<T>::field_count)>> {
+  using Entry = std::tuple_element_t<Index, typename FieldTagsInfo<T>::Entries>;
   static constexpr int16_t id = Entry::id;
   static constexpr bool is_nullable = Entry::is_nullable;
   static constexpr bool track_ref = Entry::track_ref;
@@ -678,12 +746,20 @@ struct GetFieldTagEntry<
       ::fory::FORY_FT_GET_OPT3(tuple)>::type
 
 // Main macro: FORY_FIELD_TAGS(Type, (field1, id1), (field2, id2, nullable),...)
+#define FORY_FT_DESCRIPTOR_NAME(line)                                          \
+  FORY_PP_CONCAT(ForyFieldTagsDescriptor_, line)
 #define FORY_FIELD_TAGS(Type, ...)                                             \
-  template <> struct ::fory::detail::ForyFieldTagsImpl<Type> {                 \
+  FORY_FIELD_TAGS_IMPL(__LINE__, Type, __VA_ARGS__)
+#define FORY_FIELD_TAGS_IMPL(line, Type, ...)                                  \
+  struct FORY_FT_DESCRIPTOR_NAME(line) {                                       \
     static constexpr bool has_tags = true;                                     \
     static constexpr size_t field_count = FORY_PP_NARG(__VA_ARGS__);           \
     using Entries = std::tuple<FORY_FT_ENTRIES(Type, __VA_ARGS__)>;            \
-  }
+  };                                                                           \
+  constexpr auto ForyFieldTags(::fory::meta::Identity<Type>) {                 \
+    return FORY_FT_DESCRIPTOR_NAME(line){};                                    \
+  }                                                                            \
+  static_assert(true)
 
 // Helper to generate entries tuple content using indirect expansion pattern
 // This ensures FORY_PP_NARG is fully expanded before concatenation
@@ -851,11 +927,17 @@ struct GetFieldTagEntry<
 // Main FORY_FIELD_CONFIG macro
 // Creates a constexpr tuple of FieldEntry objects with member pointer
 // verification. Alias is a token-safe name without '::'.
+#define FORY_FC_DESCRIPTOR_NAME(Alias)                                         \
+  FORY_PP_CONCAT(ForyFieldConfigDescriptor_, Alias)
 #define FORY_FIELD_CONFIG(Type, Alias, ...)                                    \
-  template <> struct ::fory::detail::ForyFieldConfigImpl<Type> {               \
+  struct FORY_FC_DESCRIPTOR_NAME(Alias) {                                      \
     static constexpr bool has_config = true;                                   \
     static inline constexpr auto entries =                                     \
         std::make_tuple(FORY_FC_ENTRIES(Type, __VA_ARGS__));                   \
     static constexpr size_t field_count =                                      \
         std::tuple_size_v<std::decay_t<decltype(entries)>>;                    \
-  }
+  };                                                                           \
+  constexpr auto ForyFieldConfig(::fory::meta::Identity<Type>) {               \
+    return FORY_FC_DESCRIPTOR_NAME(Alias){};                                   \
+  }                                                                            \
+  static_assert(true)

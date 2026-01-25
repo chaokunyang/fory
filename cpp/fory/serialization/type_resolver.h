@@ -497,9 +497,10 @@ constexpr bool compute_is_nullable() {
   } else if constexpr (::fory::detail::has_field_tags_v<T>) {
     return ::fory::detail::GetFieldTagEntry<T, Index>::is_nullable;
   } else {
-    // Default: nullable if std::optional or std::shared_ptr
+    // Default: nullable if std::optional or smart pointers.
     return is_optional_v<UnwrappedFieldType> ||
-           is_shared_ptr_v<UnwrappedFieldType>;
+           is_shared_ptr_v<UnwrappedFieldType> ||
+           is_unique_ptr_v<UnwrappedFieldType>;
   }
 }
 

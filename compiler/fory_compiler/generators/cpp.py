@@ -551,6 +551,11 @@ class CppGenerator(BaseGenerator):
 
         lines.append(f"{indent}class {class_name} final {{")
         lines.append(f"{body_indent}public:")
+        if message.fields:
+            lines.append(
+                f"{body_indent}  friend struct ::fory::detail::ForyFieldConfigImpl<{class_name}>;"
+            )
+            lines.append("")
 
         for nested_enum in message.nested_enums:
             lines.extend(self.generate_enum_definition(nested_enum, body_indent))
@@ -602,6 +607,14 @@ class CppGenerator(BaseGenerator):
 
         struct_type_name = self.get_qualified_type_name(message.name, parent_stack)
         if message.fields:
+            lines.append("")
+            lines.append(f"{body_indent}private:")
+            for field in message.fields:
+                field_type = self.get_field_storage_type(field, lineage)
+                member_name = self.get_field_member_name(field)
+                lines.append(f"{field_indent}{field_type} {member_name};")
+            lines.append("")
+            lines.append(f"{body_indent}public:")
             field_members = ", ".join(
                 self.get_field_member_name(f) for f in message.fields
             )
@@ -618,14 +631,6 @@ class CppGenerator(BaseGenerator):
             )
         else:
             lines.append(f"{body_indent}FORY_STRUCT({struct_type_name});")
-
-        if message.fields:
-            lines.append("")
-            lines.append(f"{body_indent}private:")
-            for field in message.fields:
-                field_type = self.get_field_storage_type(field, lineage)
-                member_name = self.get_field_member_name(field)
-                lines.append(f"{field_indent}{field_type} {member_name};")
 
         lines.append(f"{indent}}};")
 

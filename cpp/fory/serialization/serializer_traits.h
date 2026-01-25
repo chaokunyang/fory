@@ -216,9 +216,9 @@ inline const nullable_element_t<T> &deref_nullable(const T &value) {
 // Fory Struct Detection
 // ============================================================================
 
-/// Check if type has FORY_STRUCT defined via ADL
+/// Check if type has FORY_STRUCT defined via member lookup or ADL.
 /// This trait only evaluates to true if ForyFieldInfo is available AND doesn't
-/// trigger static_assert
+/// trigger static_assert.
 template <typename T, typename = void>
 struct has_fory_field_info : std::false_type {};
 

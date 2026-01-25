@@ -39,7 +39,8 @@
 #include <vector>
 
 // ============================================================================
-// FORY_STRUCT must be declared inside the struct/class definition.
+// FORY_STRUCT can be declared inside the struct/class definition or at
+// namespace scope.
 // ============================================================================
 
 // Edge cases
@@ -93,6 +94,7 @@ private:
   std::string name_;
   std::vector<int32_t> scores_;
 
+public:
   FORY_STRUCT(PrivateFieldsStruct, id_, name_, scores_);
 };
 
@@ -316,6 +318,31 @@ struct Order {
   FORY_STRUCT(Order, order_id, customer_id, items, total_amount, order_status);
 };
 
+namespace nested_test {
+namespace inner {
+
+struct InClassStruct {
+  int32_t id;
+  std::string name;
+  bool operator==(const InClassStruct &other) const {
+    return id == other.id && name == other.name;
+  }
+  FORY_STRUCT(InClassStruct, id, name);
+};
+
+struct OutClassStruct {
+  int32_t id;
+  std::string name;
+  bool operator==(const OutClassStruct &other) const {
+    return id == other.id && name == other.name;
+  }
+};
+
+FORY_STRUCT(OutClassStruct, id, name);
+
+} // namespace inner
+} // namespace nested_test
+
 namespace external_test {
 
 struct ExternalStruct {
@@ -326,13 +353,13 @@ struct ExternalStruct {
   }
 };
 
-FORY_STRUCT_EXTERNAL(ExternalStruct, id, name);
+FORY_STRUCT(ExternalStruct, id, name);
 
 struct ExternalEmpty {
   bool operator==(const ExternalEmpty & /*other*/) const { return true; }
 };
 
-FORY_STRUCT_EXTERNAL(ExternalEmpty);
+FORY_STRUCT(ExternalEmpty);
 
 } // namespace external_test
 
@@ -369,6 +396,8 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_struct<Product>(type_id++);
   fory.register_struct<OrderItem>(type_id++);
   fory.register_struct<Order>(type_id++);
+  fory.register_struct<nested_test::inner::InClassStruct>(type_id++);
+  fory.register_struct<nested_test::inner::OutClassStruct>(type_id++);
   fory.register_struct<external_test::ExternalStruct>(type_id++);
   fory.register_struct<external_test::ExternalEmpty>(type_id++);
 }
@@ -568,6 +597,14 @@ TEST(StructComprehensiveTest, LargeVectorOfStructs) {
       fory.deserialize<std::vector<Point2D>>(bytes.data(), bytes.size());
   ASSERT_TRUE(deser_result.ok());
   EXPECT_EQ(points, deser_result.value());
+}
+
+TEST(StructComprehensiveTest, NestedNamespaceInClassStruct) {
+  test_roundtrip(nested_test::inner::InClassStruct{7, "in"});
+}
+
+TEST(StructComprehensiveTest, NestedNamespaceOutClassStruct) {
+  test_roundtrip(nested_test::inner::OutClassStruct{8, "out"});
 }
 
 TEST(StructComprehensiveTest, ExternalStruct) {

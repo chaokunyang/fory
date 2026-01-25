@@ -48,13 +48,32 @@ struct ExternalRow {
   std::string name;
 };
 
-FORY_STRUCT_EXTERNAL(ExternalRow, id, name);
+FORY_STRUCT(ExternalRow, id, name);
 
 struct ExternalRowEmpty {};
 
-FORY_STRUCT_EXTERNAL(ExternalRowEmpty);
+FORY_STRUCT(ExternalRowEmpty);
 
 } // namespace external_row
+
+namespace nested_row {
+namespace inner {
+
+struct InClassRow {
+  int32_t id;
+  std::string name;
+  FORY_STRUCT(InClassRow, id, name);
+};
+
+struct OutClassRow {
+  int32_t id;
+  std::string name;
+};
+
+FORY_STRUCT(OutClassRow, id, name);
+
+} // namespace inner
+} // namespace nested_row
 
 TEST(RowEncoder, Simple) {
   B v{233, {1.23, "hello"}};
@@ -102,6 +121,25 @@ TEST(RowEncoder, ExternalEmptyStruct) {
   enc.Encode(v);
   auto row = enc.GetWriter().ToRow();
   ASSERT_EQ(row->num_fields(), 0);
+}
+
+TEST(RowEncoder, NestedNamespaceStructs) {
+  nested_row::inner::InClassRow in{11, "in"};
+  nested_row::inner::OutClassRow out{22, "out"};
+
+  encoder::RowEncoder<nested_row::inner::InClassRow> in_enc;
+  encoder::RowEncoder<nested_row::inner::OutClassRow> out_enc;
+
+  in_enc.Encode(in);
+  out_enc.Encode(out);
+
+  auto in_row = in_enc.GetWriter().ToRow();
+  auto out_row = out_enc.GetWriter().ToRow();
+
+  ASSERT_EQ(in_row->GetInt32(0), 11);
+  ASSERT_EQ(in_row->GetString(1), "in");
+  ASSERT_EQ(out_row->GetInt32(0), 22);
+  ASSERT_EQ(out_row->GetString(1), "out");
 }
 
 struct C {

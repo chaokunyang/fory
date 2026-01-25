@@ -261,7 +261,7 @@ TEST(FieldStruct, BasicUsage) {
 
 TEST(FieldStruct, FieldInfo) {
   Person p;
-  constexpr auto info = ForyFieldInfo(p);
+  constexpr auto info = meta::ForyFieldInfo(p);
 
   static_assert(info.Size == 5);
   static_assert(info.Name == "Person");

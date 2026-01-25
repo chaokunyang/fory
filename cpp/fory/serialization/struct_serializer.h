@@ -43,6 +43,8 @@
 namespace fory {
 namespace serialization {
 
+using meta::ForyFieldInfo;
+
 /// Field type markers for collection fields in compatible/evolution mode.
 /// These match Java's FieldResolver.FieldTypes values.
 constexpr int8_t FIELD_TYPE_OBJECT = 0;
@@ -54,16 +56,16 @@ constexpr int8_t FIELD_TYPE_MAP_KV_FINAL = 4;
 /// Serialization metadata for a type.
 ///
 /// This template is populated automatically when `FORY_STRUCT` is used to
-/// register a type. The registration macro defines an ADL-visible marker
-/// function which this trait detects in order to enable serialization. The
-/// field count is derived from the generated `ForyFieldInfo` metadata.
+/// register a type. The registration macro defines a constexpr metadata
+/// function that is discovered via member lookup or ADL. The field count is
+/// derived from the generated `ForyFieldInfo` metadata.
 template <typename T, typename Enable> struct SerializationMeta {
   static constexpr bool is_serializable = false;
   static constexpr size_t field_count = 0;
 };
 template <typename T>
-struct SerializationMeta<
-    T, std::void_t<decltype(ForyStructMarker(std::declval<const T &>()))>> {
+struct SerializationMeta<T,
+                         std::enable_if_t<meta::HasForyStructInfo<T>::value>> {
   static constexpr bool is_serializable = true;
   static constexpr size_t field_count =
       decltype(ForyFieldInfo(std::declval<const T &>()))::Size;

@@ -62,6 +62,8 @@
 namespace fory {
 namespace serialization {
 
+using meta::ForyFieldInfo;
+
 // Forward declarations
 class Fory;
 class TypeResolver;

@@ -34,7 +34,7 @@ struct A {
 
 TEST(FieldInfo, Simple) {
   A a;
-  constexpr auto info = ForyFieldInfo(a);
+  constexpr auto info = meta::ForyFieldInfo(a);
 
   static_assert(info.Size == 3);
 
@@ -57,7 +57,7 @@ struct B {
 
 TEST(FieldInfo, Hidden) {
   B b;
-  constexpr auto info = ForyFieldInfo(b);
+  constexpr auto info = meta::ForyFieldInfo(b);
 
   static_assert(info.Size == 1);
 

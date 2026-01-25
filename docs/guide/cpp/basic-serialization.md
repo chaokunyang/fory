@@ -177,10 +177,12 @@ Common error types:
 
 ## The FORY_STRUCT Macro
 
-The `FORY_STRUCT` macro registers a struct for serialization:
+The `FORY_STRUCT` macro registers a class for serialization (struct works the
+same way):
 
 ```cpp
-struct MyStruct {
+class MyStruct {
+public:
   int32_t x;
   std::string y;
   std::vector<int32_t> z;
@@ -188,23 +190,45 @@ struct MyStruct {
 };
 ```
 
+Private fields are supported when the macro is placed in a `public:` section:
+
+```cpp
+class PrivateUser {
+public:
+  PrivateUser(int32_t id, std::string name) : id_(id), name_(std::move(name)) {}
+
+  bool operator==(const PrivateUser &other) const {
+    return id_ == other.id_ && name_ == other.name_;
+  }
+
+private:
+  int32_t id_ = 0;
+  std::string name_;
+
+public:
+  FORY_STRUCT(PrivateUser, id_, name_);
+};
+```
+
 The macro:
 
 1. Generates compile-time field metadata
-2. Enables ADL (Argument-Dependent Lookup) for serialization
+2. Enables member or ADL (Argument-Dependent Lookup) discovery for serialization
 3. Creates efficient serialization code via template specialization
 
 **Requirements:**
 
-- Must be declared inside the struct/class definition
-- Must be placed after all field declarations
+- Must be declared inside the class definition (struct works the same way) or
+  at namespace scope
+- Must be placed after all field declarations (when used inside the class)
+- When used inside a class, the macro must be placed in a `public:` section
 - All listed fields must be serializable types
-- Field order in the macro determines serialization order
+- Field order in the macro is not important
 
 ## External / Third-Party Types
 
-When you cannot modify a third-party type, use `FORY_STRUCT_EXTERNAL` at
-namespace scope. This only works with **public** fields.
+When you cannot modify a third-party type, use `FORY_STRUCT` at namespace
+scope. This only works with **public** fields.
 
 ```cpp
 namespace thirdparty {
@@ -213,7 +237,7 @@ struct Foo {
   std::string name;
 };
 
-FORY_STRUCT_EXTERNAL(Foo, id, name);
+FORY_STRUCT(Foo, id, name);
 } // namespace thirdparty
 ```
 

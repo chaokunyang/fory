@@ -23,7 +23,9 @@ The C++ implementation provides high-performance serialization with compile-time
 ```cpp
 #include "fory/serialization/fory.h"
 
-// Define your struct with FORY_STRUCT macro (place it after all fields)
+// Define your class with FORY_STRUCT macro (struct works the same way).
+// Place it after all fields.
+// When used inside a class, it must be placed in a public: section.
 struct Person {
   std::string name;
   int32_t age;
@@ -84,14 +86,16 @@ Apache Fory™ provides automatic serialization of complex object graphs, preser
 ```cpp
 #include "fory/serialization/fory.h"
 
-struct Address {
+class Address {
+public:
   std::string street;
   std::string city;
   std::string country;
   FORY_STRUCT(Address, street, city, country);
 };
 
-struct Person {
+class Person {
+public:
   std::string name;
   int32_t age;
   Address address;
@@ -119,7 +123,7 @@ auto decoded = fory->deserialize<Person>(bytes).value();
 ### 1.1 External/Third-Party Types
 
 For third-party types where you cannot modify the class definition, use
-`FORY_STRUCT_EXTERNAL` at namespace scope. This works for public fields only.
+`FORY_STRUCT` at namespace scope. This works for public fields only.
 
 ```cpp
 namespace thirdparty {
@@ -128,7 +132,7 @@ struct Foo {
   std::string name;
 };
 
-FORY_STRUCT_EXTERNAL(Foo, id, name);
+FORY_STRUCT(Foo, id, name);
 } // namespace thirdparty
 
 auto fory = apache::fory::ForyBuilder().build();

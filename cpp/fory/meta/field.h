@@ -70,6 +70,36 @@ namespace detail {
 // Type Traits for Smart Pointers and Optional
 // ============================================================================
 
+template <typename T>
+using FieldInfo = decltype(::fory::meta::ForyFieldInfo(std::declval<T>()));
+
+inline constexpr size_t kInvalidFieldIndex = static_cast<size_t>(-1);
+
+template <typename T> constexpr size_t FieldIndex(std::string_view name) {
+  constexpr auto names = FieldInfo<T>::Names;
+  for (size_t i = 0; i < names.size(); ++i) {
+    if (names[i] == name) {
+      return i;
+    }
+  }
+  return kInvalidFieldIndex;
+}
+
+template <typename T, size_t Index, typename Enable = void> struct FieldTypeAt;
+
+template <typename T, size_t Index>
+struct FieldTypeAt<T, Index, std::enable_if_t<Index != kInvalidFieldIndex>> {
+  using PtrsType = typename FieldInfo<T>::PtrsType;
+  using PtrT = std::tuple_element_t<Index, PtrsType>;
+  using type = ::fory::meta::RemoveMemberPointerCVRefT<PtrT>;
+};
+
+template <typename T, size_t Index>
+struct FieldTypeAt<T, Index, std::enable_if_t<Index == kInvalidFieldIndex>> {
+  static_assert(Index != kInvalidFieldIndex,
+                "Unknown field name in FORY_FIELD_TAGS");
+};
+
 template <typename T> struct is_shared_ptr : std::false_type {};
 
 template <typename T>
@@ -147,6 +177,20 @@ struct FieldTagEntry {
   static constexpr int dynamic_value = Dynamic;
 };
 
+struct FieldTagEntryWithName {
+  const char *name;
+  int16_t id;
+  bool is_nullable;
+  bool track_ref;
+  int dynamic_value;
+};
+
+template <typename Entry>
+constexpr FieldTagEntryWithName make_field_tag_entry(const char *name) {
+  return FieldTagEntryWithName{name, Entry::id, Entry::is_nullable,
+                               Entry::track_ref, Entry::dynamic_value};
+}
+
 /// Default: no field tags defined for type T (legacy specialization path)
 template <typename T> struct ForyFieldTagsImpl {
   static constexpr bool has_tags = false;
@@ -166,15 +210,19 @@ struct HasAdlFieldTags<T, std::void_t<AdlFieldTagsDescriptor<T>>>
 template <typename T, typename Enable = void> struct FieldTagsInfo {
   static constexpr bool has_tags = false;
   static constexpr size_t field_count = 0;
-  using Entries = std::tuple<>;
+  static inline constexpr auto entries = std::tuple<>{};
+  using Entries = std::decay_t<decltype(entries)>;
+  static constexpr bool use_index = true;
 };
 
 template <typename T>
 struct FieldTagsInfo<T, std::enable_if_t<HasAdlFieldTags<T>::value>> {
   using Descriptor = AdlFieldTagsDescriptor<T>;
   static constexpr bool has_tags = Descriptor::has_tags;
-  static constexpr size_t field_count = Descriptor::field_count;
-  using Entries = typename Descriptor::Entries;
+  static inline constexpr auto entries = Descriptor::entries;
+  using Entries = std::decay_t<decltype(entries)>;
+  static constexpr size_t field_count = std::tuple_size_v<Entries>;
+  static constexpr bool use_index = false;
 };
 
 template <typename T>
@@ -183,6 +231,8 @@ struct FieldTagsInfo<T, std::enable_if_t<!HasAdlFieldTags<T>::value &&
   static constexpr bool has_tags = true;
   static constexpr size_t field_count = ForyFieldTagsImpl<T>::field_count;
   using Entries = typename ForyFieldTagsImpl<T>::Entries;
+  static inline constexpr auto entries = Entries{};
+  static constexpr bool use_index = true;
 };
 
 template <typename T>
@@ -382,27 +432,39 @@ struct GetFieldConfigEntry {
   static constexpr int dynamic_value = -1; // AUTO
   static constexpr bool compress = true;
   static constexpr int16_t type_id_override = -1;
+  static constexpr bool has_entry = false;
 };
 
 template <typename T, size_t Index>
-struct GetFieldConfigEntry<
-    T, Index,
-    std::enable_if_t<FieldConfigInfo<T>::has_config &&
-                     (Index < FieldConfigInfo<T>::field_count)>> {
+struct GetFieldConfigEntry<T, Index,
+                           std::enable_if_t<FieldConfigInfo<T>::has_config>> {
 private:
-  static constexpr auto get_entry() {
-    return std::get<Index>(FieldConfigInfo<T>::entries);
+  static constexpr std::string_view field_name = FieldInfo<T>::Names[Index];
+
+  template <size_t I = 0> static constexpr FieldEntry find_entry() {
+    if constexpr (I >=
+                  std::tuple_size_v<
+                      std::decay_t<decltype(FieldConfigInfo<T>::entries)>>) {
+      return FieldEntry{"", FieldMeta{}};
+    } else {
+      constexpr auto entry = std::get<I>(FieldConfigInfo<T>::entries);
+      if (std::string_view{entry.name} == field_name) {
+        return entry;
+      }
+      return find_entry<I + 1>();
+    }
   }
 
 public:
-  static constexpr Encoding encoding = get_entry().meta.encoding_;
-  static constexpr int16_t id = get_entry().meta.id_;
-  static constexpr bool nullable = get_entry().meta.nullable_;
-  static constexpr bool ref = get_entry().meta.ref_;
-  static constexpr int dynamic_value = get_entry().meta.dynamic_;
-  static constexpr bool compress = get_entry().meta.compress_;
-  static constexpr int16_t type_id_override =
-      get_entry().meta.type_id_override_;
+  static constexpr FieldEntry entry = find_entry<>();
+  static constexpr Encoding encoding = entry.meta.encoding_;
+  static constexpr int16_t id = entry.meta.id_;
+  static constexpr bool nullable = entry.meta.nullable_;
+  static constexpr bool ref = entry.meta.ref_;
+  static constexpr int dynamic_value = entry.meta.dynamic_;
+  static constexpr bool compress = entry.meta.compress_;
+  static constexpr int16_t type_id_override = entry.meta.type_id_override_;
+  static constexpr bool has_entry = entry.name[0] != '\0';
 };
 
 } // namespace detail
@@ -634,36 +696,6 @@ inline constexpr int field_dynamic_value_v = field_dynamic_value<T>::value;
 
 namespace detail {
 
-template <typename T>
-using FieldInfo = decltype(::fory::meta::ForyFieldInfo(std::declval<T>()));
-
-inline constexpr size_t kInvalidFieldIndex = static_cast<size_t>(-1);
-
-template <typename T> constexpr size_t FieldIndex(std::string_view name) {
-  constexpr auto names = FieldInfo<T>::Names;
-  for (size_t i = 0; i < names.size(); ++i) {
-    if (names[i] == name) {
-      return i;
-    }
-  }
-  return kInvalidFieldIndex;
-}
-
-template <typename T, size_t Index, typename Enable = void> struct FieldTypeAt;
-
-template <typename T, size_t Index>
-struct FieldTypeAt<T, Index, std::enable_if_t<Index != kInvalidFieldIndex>> {
-  using PtrsType = typename FieldInfo<T>::PtrsType;
-  using PtrT = std::tuple_element_t<Index, PtrsType>;
-  using type = ::fory::meta::RemoveMemberPointerCVRefT<PtrT>;
-};
-
-template <typename T, size_t Index>
-struct FieldTypeAt<T, Index, std::enable_if_t<Index == kInvalidFieldIndex>> {
-  static_assert(Index != kInvalidFieldIndex,
-                "Unknown field name in FORY_FIELD_TAGS");
-};
-
 // Helper to parse field tag entry from macro arguments
 // Supports: (field, id), (field, id, nullable), (field, id, ref),
 //           (field, id, nullable, ref), (field, id, dynamic<false>), etc.
@@ -698,18 +730,50 @@ template <typename T, size_t Index, typename = void> struct GetFieldTagEntry {
   static constexpr bool is_nullable = false;
   static constexpr bool track_ref = false;
   static constexpr int dynamic_value = -1; // AUTO
+  static constexpr bool has_entry = false;
 };
 
 template <typename T, size_t Index>
 struct GetFieldTagEntry<
     T, Index,
     std::enable_if_t<FieldTagsInfo<T>::has_tags &&
-                     (Index < FieldTagsInfo<T>::field_count)>> {
+                     (Index < FieldTagsInfo<T>::field_count) &&
+                     FieldTagsInfo<T>::use_index>> {
   using Entry = std::tuple_element_t<Index, typename FieldTagsInfo<T>::Entries>;
   static constexpr int16_t id = Entry::id;
   static constexpr bool is_nullable = Entry::is_nullable;
   static constexpr bool track_ref = Entry::track_ref;
   static constexpr int dynamic_value = Entry::dynamic_value;
+  static constexpr bool has_entry = true;
+};
+
+template <typename T, size_t Index>
+struct GetFieldTagEntry<T, Index,
+                        std::enable_if_t<FieldTagsInfo<T>::has_tags &&
+                                         !FieldTagsInfo<T>::use_index>> {
+private:
+  static constexpr std::string_view field_name = FieldInfo<T>::Names[Index];
+
+  template <size_t I = 0> static constexpr FieldTagEntryWithName find_entry() {
+    if constexpr (I >= std::tuple_size_v<typename FieldTagsInfo<T>::Entries>) {
+      return FieldTagEntryWithName{"", -1, false, false, -1};
+    } else {
+      constexpr auto entry = std::get<I>(FieldTagsInfo<T>::entries);
+      if (std::string_view{entry.name} == field_name) {
+        return entry;
+      }
+      return find_entry<I + 1>();
+    }
+  }
+
+  static constexpr FieldTagEntryWithName entry = find_entry<>();
+
+public:
+  static constexpr int16_t id = entry.id;
+  static constexpr bool is_nullable = entry.is_nullable;
+  static constexpr bool track_ref = entry.track_ref;
+  static constexpr int dynamic_value = entry.dynamic_value;
+  static constexpr bool has_entry = entry.name[0] != '\0';
 };
 
 } // namespace detail
@@ -763,24 +827,33 @@ struct GetFieldTagEntry<
                                        FORY_FT_FIELD_INDEX(Type, tuple)>::type
 
 #define FORY_FT_MAKE_ENTRY_2(Type, tuple)                                      \
-  typename ::fory::detail::ParseFieldTagEntry<FORY_FT_FIELD_TYPE(Type, tuple), \
-                                              FORY_FT_ID(tuple)>::type
+  ::fory::detail::make_field_tag_entry<                                        \
+      typename ::fory::detail::ParseFieldTagEntry<                             \
+          FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple)>::type>(          \
+      FORY_FT_STRINGIFY(FORY_FT_FIELD(tuple)))
 
 #define FORY_FT_MAKE_ENTRY_3(Type, tuple)                                      \
-  typename ::fory::detail::ParseFieldTagEntry<                                 \
-      FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                      \
-      ::fory::FORY_FT_GET_OPT1(tuple)>::type
+  ::fory::detail::make_field_tag_entry<                                        \
+      typename ::fory::detail::ParseFieldTagEntry<                             \
+          FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                  \
+          ::fory::FORY_FT_GET_OPT1(tuple)>::type>(                             \
+      FORY_FT_STRINGIFY(FORY_FT_FIELD(tuple)))
 
 #define FORY_FT_MAKE_ENTRY_4(Type, tuple)                                      \
-  typename ::fory::detail::ParseFieldTagEntry<                                 \
-      FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                      \
-      ::fory::FORY_FT_GET_OPT1(tuple), ::fory::FORY_FT_GET_OPT2(tuple)>::type
+  ::fory::detail::make_field_tag_entry<                                        \
+      typename ::fory::detail::ParseFieldTagEntry<                             \
+          FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                  \
+          ::fory::FORY_FT_GET_OPT1(tuple),                                     \
+          ::fory::FORY_FT_GET_OPT2(tuple)>::type>(                             \
+      FORY_FT_STRINGIFY(FORY_FT_FIELD(tuple)))
 
 #define FORY_FT_MAKE_ENTRY_5(Type, tuple)                                      \
-  typename ::fory::detail::ParseFieldTagEntry<                                 \
-      FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                      \
-      ::fory::FORY_FT_GET_OPT1(tuple), ::fory::FORY_FT_GET_OPT2(tuple),        \
-      ::fory::FORY_FT_GET_OPT3(tuple)>::type
+  ::fory::detail::make_field_tag_entry<                                        \
+      typename ::fory::detail::ParseFieldTagEntry<                             \
+          FORY_FT_FIELD_TYPE(Type, tuple), FORY_FT_ID(tuple),                  \
+          ::fory::FORY_FT_GET_OPT1(tuple), ::fory::FORY_FT_GET_OPT2(tuple),    \
+          ::fory::FORY_FT_GET_OPT3(tuple)>::type>(                             \
+      FORY_FT_STRINGIFY(FORY_FT_FIELD(tuple)))
 
 // Main macro: FORY_FIELD_TAGS(Type, (field1, id1), (field2, id2, nullable),...)
 #define FORY_FT_DESCRIPTOR_NAME(line)                                          \
@@ -790,8 +863,10 @@ struct GetFieldTagEntry<
 #define FORY_FIELD_TAGS_IMPL(line, Type, ...)                                  \
   struct FORY_FT_DESCRIPTOR_NAME(line) {                                       \
     static constexpr bool has_tags = true;                                     \
-    static constexpr size_t field_count = FORY_PP_NARG(__VA_ARGS__);           \
-    using Entries = std::tuple<FORY_FT_ENTRIES(Type, __VA_ARGS__)>;            \
+    static inline constexpr auto entries =                                     \
+        std::make_tuple(FORY_FT_ENTRIES(Type, __VA_ARGS__));                   \
+    using Entries = std::decay_t<decltype(entries)>;                           \
+    static constexpr size_t field_count = std::tuple_size_v<Entries>;          \
   };                                                                           \
   constexpr auto ForyFieldTags(::fory::meta::Identity<Type>) {                 \
     return FORY_FT_DESCRIPTOR_NAME(line){};                                    \

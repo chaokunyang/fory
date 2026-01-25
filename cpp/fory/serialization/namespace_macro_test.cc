@@ -18,10 +18,12 @@
  */
 
 #include "fory/serialization/fory.h"
+#include "fory/serialization/struct_serializer.h"
 #include "fory/serialization/union_serializer.h"
 
 #include "gtest/gtest.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
@@ -36,10 +38,11 @@ public:
 
   bool operator==(const Configured &other) const { return id_ == other.id_; }
 
-  FORY_STRUCT(Configured, id_);
-
 private:
   int32_t id_ = 0;
+
+public:
+  FORY_STRUCT(Configured, id_);
 };
 
 class OptionalHolder final {
@@ -52,10 +55,11 @@ public:
     return name_ == other.name_;
   }
 
-  FORY_STRUCT(OptionalHolder, name_);
-
 private:
   std::optional<std::string> name_;
+
+public:
+  FORY_STRUCT(OptionalHolder, name_);
 };
 
 class Choice final {
@@ -91,8 +95,25 @@ private:
       : value_(tag, std::forward<Args>(args)...) {}
 };
 
+class Partial final {
+public:
+  Partial() = default;
+  Partial(int32_t id, std::optional<std::string> name, int64_t count)
+      : id_(id), name_(std::move(name)), count_(count) {}
+
+private:
+  int32_t id_ = 0;
+  std::optional<std::string> name_;
+  int64_t count_ = 0;
+
+public:
+  FORY_STRUCT(Partial, id_, name_, count_);
+};
+
 FORY_FIELD_CONFIG(Configured, Configured, (id_, fory::F().id(1).varint()));
 FORY_FIELD_TAGS(OptionalHolder, (name_, 1));
+FORY_FIELD_CONFIG(Partial, Partial, (count_, fory::F().id(7).varint()));
+FORY_FIELD_TAGS(Partial, (id_, 5));
 
 FORY_UNION(Choice, (std::string, text, fory::F(1)),
            (int32_t, number, fory::F(2).varint()));
@@ -114,6 +135,17 @@ TEST(NamespaceMacros, FieldConfigAndTagsInNamespace) {
   static_assert(::fory::detail::has_field_tags_v<macro_test::OptionalHolder>);
   static_assert(::fory::detail::GetFieldTagEntry<macro_test::OptionalHolder,
                                                  0>::is_nullable);
+
+  static_assert(::fory::detail::GetFieldTagEntry<macro_test::Partial, 0>::id ==
+                5);
+  static_assert(
+      !::fory::detail::GetFieldTagEntry<macro_test::Partial, 1>::has_entry);
+  static_assert(::fory::serialization::detail::CompileTimeFieldHelpers<
+                macro_test::Partial>::field_nullable<1>());
+  static_assert(
+      ::fory::detail::GetFieldConfigEntry<macro_test::Partial, 2>::id == 7);
+  static_assert(
+      ::fory::detail::GetFieldConfigEntry<macro_test::Partial, 0>::id == -1);
 }
 
 TEST(NamespaceMacros, UnionInNamespace) {

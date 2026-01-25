@@ -122,9 +122,7 @@ struct EnumMetadata<Enum, std::enable_if_t<EnumInfo<Enum>::defined>> {
   std::string_view(FORY_PP_STRINGIFY(EnumType::value)),
 
 #define FORY_INTERNAL_ENUM_DEFINE(EnumType, ...)                               \
-  namespace fory {                                                             \
-  namespace meta {                                                             \
-  template <> struct EnumInfo<EnumType> {                                      \
+  template <> struct ::fory::meta::EnumInfo<EnumType> {                        \
     using Enum = EnumType;                                                     \
     static constexpr bool defined = true;                                      \
     static constexpr std::size_t size = FORY_PP_NARG(__VA_ARGS__);             \
@@ -166,8 +164,6 @@ struct EnumMetadata<Enum, std::enable_if_t<EnumInfo<Enum>::defined>> {
       return std::string_view();                                               \
     }                                                                          \
   };                                                                           \
-  }                                                                            \
-  }                                                                            \
   static_assert(true)
 
 /// Register an enum's enumerators to enable compile-time metadata queries.

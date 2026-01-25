@@ -312,7 +312,7 @@ struct SingleField {
 
 } // namespace field_tags_test
 
-// FORY_FIELD_TAGS must be in global namespace
+// FORY_FIELD_TAGS must be declared at namespace scope
 
 // Define field tags separately (non-invasive)
 FORY_FIELD_TAGS(field_tags_test::Document, (title, 0), // string: non-nullable

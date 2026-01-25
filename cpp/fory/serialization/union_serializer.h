@@ -28,8 +28,10 @@
 #include "fory/type/type.h"
 #include "fory/util/error.h"
 
+#include <array>
 #include <cstddef>
 #include <optional>
+#include <tuple>
 #include <type_traits>
 #include <typeindex>
 #include <utility>
@@ -50,8 +52,73 @@ template <typename T>
 struct has_union_case_ids<T, std::void_t<decltype(UnionCaseIds<T>::case_count)>>
     : std::true_type {};
 
+template <typename T, typename = void>
+struct has_union_case_info : std::false_type {};
+
 template <typename T>
-inline constexpr bool is_union_type_v = has_union_case_ids<T>::value;
+struct has_union_case_info<
+    T, std::void_t<decltype(T::ForyUnionCaseCount),
+                   decltype(T::ForyUnionCaseIds),
+                   decltype(T::ForyUnionCaseMetas),
+                   typename T::ForyUnionCaseTypes>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_union_type_v =
+    has_union_case_ids<T>::value || has_union_case_info<T>::value;
+
+template <typename T, typename Enable = void> struct UnionInfo;
+
+template <typename T>
+struct UnionInfo<T, std::enable_if_t<has_union_case_info<T>::value>> {
+  static constexpr size_t case_count = T::ForyUnionCaseCount;
+
+  template <size_t Index> struct CaseId {
+    static constexpr uint32_t value = T::ForyUnionCaseIds[Index];
+  };
+
+  template <size_t Index> struct Meta {
+    static constexpr ::fory::FieldMeta value = T::ForyUnionCaseMetas[Index];
+  };
+
+  template <size_t Index>
+  using CaseT =
+      std::tuple_element_t<Index, typename T::ForyUnionCaseTypes>;
+};
+
+template <typename T>
+struct UnionInfo<T, std::enable_if_t<!has_union_case_info<T>::value>> {
+  static constexpr size_t case_count = UnionCaseIds<T>::case_count;
+
+  template <size_t Index> struct CaseId {
+    static constexpr uint32_t value = UnionCaseIds<T>::case_ids[Index];
+  };
+
+  template <size_t Index> struct Meta {
+    static constexpr ::fory::FieldMeta value =
+        UnionCaseMeta<T, CaseId<Index>::value>::meta;
+  };
+
+  template <size_t Index>
+  using CaseT = typename UnionCaseMeta<T, CaseId<Index>::value>::CaseT;
+};
+
+template <typename T> struct UnionAccess {
+  template <typename CaseT, typename... Args>
+  static inline T make(std::in_place_type_t<CaseT> tag, Args &&...args) {
+    return T(tag, std::forward<Args>(args)...);
+  }
+};
+
+template <typename T, typename CaseT, size_t Index>
+inline T make_union_case(CaseT value) {
+  if constexpr (has_union_case_info<T>::value) {
+    return UnionAccess<T>::template make<CaseT>(std::in_place_type<CaseT>,
+                                                std::move(value));
+  } else {
+    constexpr uint32_t id = UnionInfo<T>::template CaseId<Index>::value;
+    return UnionCaseMeta<T, id>::make(std::move(value));
+  }
+}
 
 template <typename T>
 using decay_t = std::remove_cv_t<std::remove_reference_t<T>>;
@@ -286,10 +353,10 @@ inline T read_union_value_data(ReadContext &ctx, uint32_t type_id) {
 
 template <typename T, typename F, size_t Index = 0>
 inline bool dispatch_union_case(uint32_t case_id, F &&fn) {
-  if constexpr (Index < UnionCaseIds<T>::case_count) {
-    constexpr uint32_t id = UnionCaseIds<T>::case_ids[Index];
+  if constexpr (Index < UnionInfo<T>::case_count) {
+    constexpr uint32_t id = UnionInfo<T>::template CaseId<Index>::value;
     if (case_id == id) {
-      fn(std::integral_constant<uint32_t, id>{});
+      fn(std::integral_constant<size_t, Index>{});
       return true;
     }
     return dispatch_union_case<T, F, Index + 1>(case_id, std::forward<F>(fn));
@@ -354,10 +421,11 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
     uint32_t case_id = obj.fory_case_id();
     ctx.write_varuint32(case_id);
 
-    bool matched = detail::dispatch_union_case<T>(case_id, [&](auto tag) {
-      using CaseMeta = UnionCaseMeta<T, tag.value>;
-      using CaseT = typename CaseMeta::CaseT;
-      constexpr ::fory::FieldMeta meta = CaseMeta::meta;
+    bool matched = detail::dispatch_union_case<T>(case_id, [&](auto index_tag) {
+      constexpr size_t index = index_tag.value;
+      using CaseT = typename detail::UnionInfo<T>::template CaseT<index>;
+      constexpr ::fory::FieldMeta meta =
+          detail::UnionInfo<T>::template Meta<index>::value;
       constexpr uint32_t field_type_id =
           detail::resolve_union_type_id<CaseT>(meta);
       constexpr bool manual = detail::needs_manual_encoding<CaseT>(meta);
@@ -435,10 +503,11 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
     }
 
     T result{};
-    bool matched = detail::dispatch_union_case<T>(case_id, [&](auto tag) {
-      using CaseMeta = UnionCaseMeta<T, tag.value>;
-      using CaseT = typename CaseMeta::CaseT;
-      constexpr ::fory::FieldMeta meta = CaseMeta::meta;
+    bool matched = detail::dispatch_union_case<T>(case_id, [&](auto index_tag) {
+      constexpr size_t index = index_tag.value;
+      using CaseT = typename detail::UnionInfo<T>::template CaseT<index>;
+      constexpr ::fory::FieldMeta meta =
+          detail::UnionInfo<T>::template Meta<index>::value;
       constexpr uint32_t field_type_id =
           detail::resolve_union_type_id<CaseT>(meta);
       constexpr bool manual = detail::needs_manual_encoding<CaseT>(meta);
@@ -455,7 +524,8 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
           return;
         }
         if (is_null) {
-          result = CaseMeta::make(detail::default_union_case_value<CaseT>());
+          result = detail::make_union_case<T, CaseT, index>(
+              detail::default_union_case_value<CaseT>());
           return;
         }
         uint32_t actual_type_id = ctx.read_varuint32(ctx.error());
@@ -473,7 +543,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
           result = default_value();
           return;
         }
-        result = CaseMeta::make(std::move(value));
+        result = detail::make_union_case<T, CaseT, index>(std::move(value));
         return;
       }
 
@@ -482,7 +552,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
         result = default_value();
         return;
       }
-      result = CaseMeta::make(std::move(value));
+      result = detail::make_union_case<T, CaseT, index>(std::move(value));
     });
 
     if (FORY_PREDICT_FALSE(!matched)) {
@@ -531,10 +601,9 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
 
 private:
   static inline T default_value() {
-    constexpr uint32_t default_case_id = UnionCaseIds<T>::case_ids[0];
-    using DefaultMeta = UnionCaseMeta<T, default_case_id>;
-    using DefaultType = typename DefaultMeta::CaseT;
-    return DefaultMeta::make(DefaultType{});
+    using DefaultType =
+        typename detail::UnionInfo<T>::template CaseT<0>;
+    return detail::make_union_case<T, DefaultType, 0>(DefaultType{});
   }
 };
 
@@ -543,29 +612,21 @@ private:
 // ============================================================================//
 
 #define FORY_UNION_IDS(Type, ...)                                              \
-  namespace fory {                                                             \
-  namespace serialization {                                                    \
-  template <> struct UnionCaseIds<Type> {                                      \
+  template <> struct ::fory::serialization::UnionCaseIds<Type> {               \
     static inline constexpr uint32_t case_ids[] = {__VA_ARGS__};               \
     static constexpr size_t case_count =                                       \
         sizeof(case_ids) / sizeof(case_ids[0]);                                \
-  };                                                                           \
-  }                                                                            \
-  }
+  };
 
 #define FORY_UNION_CASE(Type, CaseId, CaseType, Factory, MetaExpr)             \
-  namespace fory {                                                             \
-  namespace serialization {                                                    \
-  template <> struct UnionCaseMeta<Type, CaseId> {                             \
+  template <> struct ::fory::serialization::UnionCaseMeta<Type, CaseId> {      \
     using UnionType = Type;                                                    \
     using CaseT = CaseType;                                                    \
     static constexpr ::fory::FieldMeta meta = MetaExpr;                        \
     static inline UnionType make(CaseT value) {                                \
       return Factory(std::move(value));                                        \
     }                                                                          \
-  };                                                                           \
-  }                                                                            \
-  }
+  };
 
 #define FORY_UNION_CASE_TYPE(tuple) FORY_UNION_CASE_TYPE_IMPL tuple
 #define FORY_UNION_CASE_TYPE_IMPL(type, name, meta) type
@@ -656,39 +717,91 @@ private:
   M(A, _8)                                                                     \
   M(A, _9) M(A, _10) M(A, _11) M(A, _12) M(A, _13) M(A, _14) M(A, _15) M(A, _16)
 
+#define FORY_UNION_PP_FOREACH_2_COMMA(M, A, ...)                               \
+  FORY_PP_INVOKE(FORY_PP_CONCAT(FORY_UNION_PP_FOREACH_2_COMMA_IMPL_,          \
+                                FORY_PP_NARG(__VA_ARGS__)),                    \
+                 M, A, __VA_ARGS__)
+
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_1(M, A, _1) M(A, _1)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_2(M, A, _1, _2)                     \
+  M(A, _1), M(A, _2)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_3(M, A, _1, _2, _3)                 \
+  M(A, _1), M(A, _2), M(A, _3)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_4(M, A, _1, _2, _3, _4)             \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_5(M, A, _1, _2, _3, _4, _5)         \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_6(M, A, _1, _2, _3, _4, _5, _6)     \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_7(M, A, _1, _2, _3, _4, _5, _6, _7) \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_8(M, A, _1, _2, _3, _4, _5, _6, _7, \
+                                            _8)                               \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7), M(A, _8)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_9(M, A, _1, _2, _3, _4, _5, _6, _7, \
+                                            _8, _9)                           \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7),        \
+      M(A, _8), M(A, _9)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_10(M, A, _1, _2, _3, _4, _5, _6,    \
+                                             _7, _8, _9, _10)                 \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7),        \
+      M(A, _8), M(A, _9), M(A, _10)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_11(M, A, _1, _2, _3, _4, _5, _6,    \
+                                             _7, _8, _9, _10, _11)            \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7),        \
+      M(A, _8), M(A, _9), M(A, _10), M(A, _11)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_12(M, A, _1, _2, _3, _4, _5, _6,    \
+                                             _7, _8, _9, _10, _11, _12)       \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7),        \
+      M(A, _8), M(A, _9), M(A, _10), M(A, _11), M(A, _12)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_13(M, A, _1, _2, _3, _4, _5, _6,    \
+                                             _7, _8, _9, _10, _11, _12, _13)  \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7),        \
+      M(A, _8), M(A, _9), M(A, _10), M(A, _11), M(A, _12), M(A, _13)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_14(M, A, _1, _2, _3, _4, _5, _6,    \
+                                             _7, _8, _9, _10, _11, _12, _13,  \
+                                             _14)                             \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7),        \
+      M(A, _8), M(A, _9), M(A, _10), M(A, _11), M(A, _12), M(A, _13),          \
+      M(A, _14)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_15(M, A, _1, _2, _3, _4, _5, _6,    \
+                                             _7, _8, _9, _10, _11, _12, _13,  \
+                                             _14, _15)                        \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7),        \
+      M(A, _8), M(A, _9), M(A, _10), M(A, _11), M(A, _12), M(A, _13),          \
+      M(A, _14), M(A, _15)
+#define FORY_UNION_PP_FOREACH_2_COMMA_IMPL_16(M, A, _1, _2, _3, _4, _5, _6,    \
+                                             _7, _8, _9, _10, _11, _12, _13,  \
+                                             _14, _15, _16)                   \
+  M(A, _1), M(A, _2), M(A, _3), M(A, _4), M(A, _5), M(A, _6), M(A, _7),        \
+      M(A, _8), M(A, _9), M(A, _10), M(A, _11), M(A, _12), M(A, _13),          \
+      M(A, _14), M(A, _15), M(A, _16)
+
 #define FORY_UNION_CASE_ID(Type, tuple)                                        \
   static_cast<uint32_t>(FORY_UNION_CASE_META(tuple).id_)
 
 #define FORY_UNION_CASE_ID_ENTRY(Type, tuple) FORY_UNION_CASE_ID(Type, tuple),
 
-#define FORY_UNION_CASE_DEF(Type, tuple)                                       \
-  template <>                                                                  \
-  struct UnionCaseMeta<Type, static_cast<uint32_t>(                            \
-                                 FORY_UNION_CASE_META(tuple).id_)> {           \
-    using UnionType = Type;                                                    \
-    using CaseT = FORY_UNION_CASE_TYPE(tuple);                                 \
-    static constexpr ::fory::FieldMeta meta = FORY_UNION_CASE_META(tuple);     \
-    static inline UnionType make(CaseT value) {                                \
-      return Type::FORY_UNION_CASE_NAME(tuple)(std::move(value));              \
-    }                                                                          \
-  };
+#define FORY_UNION_CASE_TYPE_VALUE(Type, tuple) FORY_UNION_CASE_TYPE(tuple)
+#define FORY_UNION_CASE_META_VALUE(Type, tuple) FORY_UNION_CASE_META(tuple)
+#define FORY_UNION_CASE_ID_VALUE(Type, tuple) FORY_UNION_CASE_ID(Type, tuple)
 
 #define FORY_UNION(Type, ...)                                                  \
   static_assert(FORY_PP_NARG(__VA_ARGS__) <= 16,                               \
                 "FORY_UNION supports up to 16 cases; use "                     \
                 "FORY_UNION_IDS/FORY_UNION_CASE "                              \
                 "for larger unions");                                          \
-  namespace fory {                                                             \
-  namespace serialization {                                                    \
-  template <> struct UnionCaseIds<Type> {                                      \
-    static inline constexpr uint32_t case_ids[] = {                            \
-        FORY_UNION_PP_FOREACH_2(FORY_UNION_CASE_ID_ENTRY, Type, __VA_ARGS__)}; \
-    static constexpr size_t case_count =                                       \
-        sizeof(case_ids) / sizeof(case_ids[0]);                                \
-  };                                                                           \
-  FORY_UNION_PP_FOREACH_2(FORY_UNION_CASE_DEF, Type, __VA_ARGS__)              \
-  }                                                                            \
-  }
+  friend struct ::fory::serialization::detail::UnionAccess<Type>;              \
+  using ForyUnionCaseTypes = std::tuple<FORY_UNION_PP_FOREACH_2_COMMA(         \
+      FORY_UNION_CASE_TYPE_VALUE, Type, __VA_ARGS__)>;                         \
+  static inline constexpr std::array<::fory::FieldMeta,                        \
+                                     FORY_PP_NARG(__VA_ARGS__)>               \
+      ForyUnionCaseMetas = {FORY_UNION_PP_FOREACH_2_COMMA(                     \
+          FORY_UNION_CASE_META_VALUE, Type, __VA_ARGS__)};                     \
+  static inline constexpr std::array<uint32_t, FORY_PP_NARG(__VA_ARGS__)>      \
+      ForyUnionCaseIds = {FORY_UNION_PP_FOREACH_2_COMMA(                       \
+          FORY_UNION_CASE_ID_VALUE, Type, __VA_ARGS__)};                       \
+  static constexpr size_t ForyUnionCaseCount = FORY_PP_NARG(__VA_ARGS__);
 
 } // namespace serialization
 } // namespace fory

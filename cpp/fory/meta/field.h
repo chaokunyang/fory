@@ -678,9 +678,8 @@ struct GetFieldTagEntry<
       ::fory::FORY_FT_GET_OPT3(tuple)>::type
 
 // Main macro: FORY_FIELD_TAGS(Type, (field1, id1), (field2, id2, nullable),...)
-// Note: Uses fory::detail:: instead of ::fory::detail:: for GCC compatibility
 #define FORY_FIELD_TAGS(Type, ...)                                             \
-  template <> struct fory::detail::ForyFieldTagsImpl<Type> {                   \
+  template <> struct ::fory::detail::ForyFieldTagsImpl<Type> {                 \
     static constexpr bool has_tags = true;                                     \
     static constexpr size_t field_count = FORY_PP_NARG(__VA_ARGS__);           \
     using Entries = std::tuple<FORY_FT_ENTRIES(Type, __VA_ARGS__)>;            \
@@ -853,7 +852,7 @@ struct GetFieldTagEntry<
 // Creates a constexpr tuple of FieldEntry objects with member pointer
 // verification. Alias is a token-safe name without '::'.
 #define FORY_FIELD_CONFIG(Type, Alias, ...)                                    \
-  template <> struct fory::detail::ForyFieldConfigImpl<Type> {                 \
+  template <> struct ::fory::detail::ForyFieldConfigImpl<Type> {               \
     static constexpr bool has_config = true;                                   \
     static inline constexpr auto entries =                                     \
         std::make_tuple(FORY_FC_ENTRIES(Type, __VA_ARGS__));                   \

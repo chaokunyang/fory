@@ -287,6 +287,10 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
     static constexpr PtrsType Ptrs() {                                         \
       return fory::meta::ConcatTuples(BasePtrs(), FieldPtrs());                \
     }                                                                          \
+    static const PtrsType &PtrsRef() {                                         \
+      static const PtrsType value = Ptrs();                                    \
+      return value;                                                            \
+    }                                                                          \
   };                                                                           \
   static_assert(FORY_PP_CONCAT(ForyFieldInfoDescriptor_,                       \
                                unique_id)::Name.data() != nullptr,             \
@@ -310,7 +314,12 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
     static inline constexpr size_t Size = 0;                                   \
     static inline constexpr std::string_view Name = #type;                     \
     static inline constexpr std::array<std::string_view, Size> Names = {};     \
-    static constexpr auto Ptrs() { return std::tuple{}; }                      \
+    using PtrsType = decltype(std::tuple{});                                   \
+    static constexpr PtrsType Ptrs() { return {}; }                            \
+    static const PtrsType &PtrsRef() {                                         \
+      static const PtrsType value = Ptrs();                                    \
+      return value;                                                            \
+    }                                                                          \
   };                                                                           \
   static_assert(FORY_PP_CONCAT(ForyFieldInfoDescriptor_,                       \
                                unique_id)::Name.data() != nullptr,             \

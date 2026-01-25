@@ -207,7 +207,7 @@ private:
     using FieldType = meta::RemoveMemberPointerCVRefT<
         std::tuple_element_t<I, decltype(FieldInfo::Ptrs())>>;
     RowEncodeTrait<FieldType>::Write(std::forward<V>(visitor),
-                                     value.*std::get<I>(FieldInfo::Ptrs()),
+                                     value.*std::get<I>(FieldInfo::PtrsRef()),
                                      writer, I);
   }
 

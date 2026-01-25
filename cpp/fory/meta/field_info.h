@@ -77,7 +77,8 @@ constexpr const T &UnwrapTuple(const TupleWrapper<T> &value) {
 // it must be able to be executed in compile-time
 template <typename FieldInfo, size_t... I>
 constexpr bool IsValidFieldInfoImpl(std::index_sequence<I...>) {
-  return IsUnique<std::get<I>(FieldInfo::Ptrs)...>::value;
+  constexpr auto ptrs = FieldInfo::Ptrs();
+  return IsUnique<std::get<I>(ptrs)...>::value;
 }
 
 } // namespace details
@@ -100,8 +101,14 @@ struct HasForyStructInfo
 template <typename T>
 constexpr auto ForyFieldInfo([[maybe_unused]] const T &value) noexcept {
   if constexpr (details::HasMemberStructInfo<T>::value) {
+    using FieldInfo = decltype(T::ForyStructInfo(Identity<T>{}));
+    static_assert(IsValidFieldInfo<FieldInfo>(),
+                  "duplicated fields in FORY_STRUCT arguments are detected");
     return T::ForyStructInfo(Identity<T>{});
   } else if constexpr (details::HasAdlStructInfo<T>::value) {
+    using FieldInfo = decltype(ForyStructInfo(Identity<T>{}));
+    static_assert(IsValidFieldInfo<FieldInfo>(),
+                  "duplicated fields in FORY_STRUCT arguments are detected");
     return ForyStructInfo(Identity<T>{});
   } else {
     static_assert(AlwaysFalse<T>,
@@ -229,7 +236,7 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
   (FORY_BASE_PTRS_ARG_IMPL(arg), FORY_PP_EMPTY())
 #define FORY_BASE_PTRS_ARG_IMPL(arg)                                           \
   fory::meta::details::WrapTuple(decltype(::fory::meta::ForyFieldInfo(         \
-      std::declval<FORY_BASE_TYPE(arg)>()))::Ptrs),
+      std::declval<FORY_BASE_TYPE(arg)>()))::Ptrs()),
 
 #define FORY_BASE_SIZE_ADD(arg)                                                \
   FORY_PP_IF(FORY_PP_IS_BASE(arg))                                             \
@@ -260,20 +267,24 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
             FORY_PP_FOREACH(FORY_FIELD_INFO_NAMES_FUNC, __VA_ARGS__)};         \
     static inline constexpr auto Names =                                       \
         fory::meta::ConcatArrays(BaseNames, FieldNames);                       \
-    static inline constexpr auto BasePtrs = []() constexpr {                   \
+    using BasePtrsType = decltype(fory::meta::ConcatTuplesFromTuple(           \
+        std::tuple{FORY_PP_FOREACH(FORY_BASE_PTRS_ARG, __VA_ARGS__)}));        \
+    static constexpr BasePtrsType BasePtrs() {                                 \
       return fory::meta::ConcatTuplesFromTuple(                                \
           std::tuple{FORY_PP_FOREACH(FORY_BASE_PTRS_ARG, __VA_ARGS__)});       \
-    }();                                                                       \
-    static inline constexpr auto FieldPtrs = []() constexpr {                  \
+    }                                                                          \
+    using FieldPtrsType = decltype(std::tuple{                                 \
+        FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)});     \
+    static constexpr FieldPtrsType FieldPtrs() {                               \
       return std::tuple{                                                       \
           FORY_PP_FOREACH_1(FORY_FIELD_INFO_PTRS_FUNC, type, __VA_ARGS__)};    \
-    }();                                                                       \
-    static inline constexpr auto Ptrs =                                        \
-        fory::meta::ConcatTuples(BasePtrs, FieldPtrs);                         \
+    }                                                                          \
+    using PtrsType = decltype(fory::meta::ConcatTuples(                        \
+        std::declval<BasePtrsType>(), std::declval<FieldPtrsType>()));         \
+    static constexpr PtrsType Ptrs() {                                         \
+      return fory::meta::ConcatTuples(BasePtrs(), FieldPtrs());                \
+    }                                                                          \
   };                                                                           \
-  static_assert(fory::meta::IsValidFieldInfo<FORY_PP_CONCAT(                   \
-                    ForyFieldInfoDescriptor_, unique_id)>(),                   \
-                "duplicated fields in FORY_STRUCT arguments are detected");    \
   static_assert(FORY_PP_CONCAT(ForyFieldInfoDescriptor_,                       \
                                unique_id)::Name.data() != nullptr,             \
                 "ForyFieldInfoDescriptor name must be available");             \
@@ -296,11 +307,8 @@ constexpr auto ConcatTuplesFromTuple(const Tuple &tuple) {
     static inline constexpr size_t Size = 0;                                   \
     static inline constexpr std::string_view Name = #type;                     \
     static inline constexpr std::array<std::string_view, Size> Names = {};     \
-    static inline constexpr auto Ptrs = std::tuple{};                          \
+    static constexpr auto Ptrs() { return std::tuple{}; }                      \
   };                                                                           \
-  static_assert(fory::meta::IsValidFieldInfo<FORY_PP_CONCAT(                   \
-                    ForyFieldInfoDescriptor_, unique_id)>(),                   \
-                "duplicated fields in FORY_STRUCT arguments are detected");    \
   static_assert(FORY_PP_CONCAT(ForyFieldInfoDescriptor_,                       \
                                unique_id)::Name.data() != nullptr,             \
                 "ForyFieldInfoDescriptor name must be available");             \

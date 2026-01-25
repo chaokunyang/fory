@@ -17,6 +17,7 @@
  * under the License.
  */
 
+#include "fory/meta/enum_info.h"
 #include "fory/serialization/fory.h"
 #include "fory/serialization/struct_serializer.h"
 #include "fory/serialization/union_serializer.h"
@@ -30,6 +31,10 @@
 #include <variant>
 
 namespace macro_test {
+
+enum class LocalEnum { One, Two };
+
+FORY_ENUM(LocalEnum, One, Two);
 
 class Configured final {
 public:
@@ -110,6 +115,13 @@ public:
   FORY_STRUCT(Partial, id_, name_, count_);
 };
 
+class EnumContainer final {
+public:
+  enum class Kind { Alpha, Beta };
+
+  FORY_ENUM_IN_CLASS(Kind, Alpha, Beta);
+};
+
 FORY_FIELD_CONFIG(Configured, Configured, (id_, fory::F().id(1).varint()));
 FORY_FIELD_TAGS(OptionalHolder, (name_, 1));
 FORY_FIELD_CONFIG(Partial, Partial, (count_, fory::F().id(7).varint()));
@@ -159,6 +171,20 @@ TEST(NamespaceMacros, UnionInNamespace) {
       fory.deserialize<macro_test::Choice>(bytes->data(), bytes->size());
   ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
   EXPECT_EQ(macro_test::Choice::text("hello"), decoded.value());
+}
+
+TEST(NamespaceMacros, EnumInAndOutOfClass) {
+  static_assert(::fory::meta::EnumInfo<macro_test::LocalEnum>::defined);
+  static_assert(::fory::meta::EnumInfo<macro_test::LocalEnum>::size == 2);
+  static_assert(::fory::meta::EnumInfo<macro_test::LocalEnum>::name(
+                    macro_test::LocalEnum::One) == "LocalEnum::One");
+
+  static_assert(
+      ::fory::meta::EnumInfo<macro_test::EnumContainer::Kind>::defined);
+  static_assert(::fory::meta::EnumInfo<macro_test::EnumContainer::Kind>::size ==
+                2);
+  static_assert(::fory::meta::EnumInfo<macro_test::EnumContainer::Kind>::name(
+                    macro_test::EnumContainer::Kind::Alpha) == "Kind::Alpha");
 }
 
 } // namespace test

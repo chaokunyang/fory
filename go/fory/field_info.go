@@ -43,6 +43,10 @@ type FieldMeta struct {
 	FieldIndex int      // -1 if field doesn't exist in current struct (for compatible mode)
 	FieldDef   FieldDef // original FieldDef from remote TypeDef (for compatible mode skip)
 
+	// Optional fields (fory/optional.Optional[T])
+	IsOptional   bool
+	OptionalInfo optionalInfo
+
 	// Pre-computed sizes (for fixed primitives)
 	FixedSize int // 0 if not fixed-size, else 1/2/4/8
 
@@ -147,6 +151,10 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 	// Categorize fields
 	for i := range fields {
 		field := &fields[i]
+		if field.Meta.IsOptional {
+			g.RemainingFields = append(g.RemainingFields, *field)
+			continue
+		}
 		if isFixedSizePrimitive(field.DispatchId, field.Meta.Nullable) {
 			// Non-nullable fixed-size primitives only
 			field.Meta.FixedSize = getFixedSizeByDispatchId(field.DispatchId)
@@ -445,6 +453,9 @@ func isUnionType(t reflect.Type) bool {
 	if t == nil {
 		return false
 	}
+	if info, ok := getOptionalInfo(t); ok {
+		t = info.valueType
+	}
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
@@ -461,6 +472,9 @@ func isUnionType(t reflect.Type) bool {
 func isStructField(t reflect.Type) bool {
 	if t == nil {
 		return false
+	}
+	if info, ok := getOptionalInfo(t); ok {
+		t = info.valueType
 	}
 	if isUnionType(t) {
 		return false
@@ -748,6 +762,12 @@ func typesCompatible(actual, expected reflect.Type) bool {
 	if actual == nil || expected == nil {
 		return false
 	}
+	if info, ok := getOptionalInfo(actual); ok {
+		actual = info.valueType
+	}
+	if info, ok := getOptionalInfo(expected); ok {
+		expected = info.valueType
+	}
 	if actual == expected {
 		return true
 	}
@@ -783,6 +803,12 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 	if actual == nil || expected == nil {
 		return false
 	}
+	if info, ok := getOptionalInfo(actual); ok {
+		actual = info.valueType
+	}
+	if info, ok := getOptionalInfo(expected); ok {
+		expected = info.valueType
+	}
 	if actual == expected || actual.AssignableTo(expected) || expected.AssignableTo(actual) {
 		return true
 	}
@@ -796,6 +822,9 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 // This is used when the type is not registered in typesInfo
 // Note: Uses VARINT32/VARINT64/VAR_UINT32/VAR_UINT64 to match Java xlang mode and Rust
 func typeIdFromKind(type_ reflect.Type) TypeId {
+	if info, ok := getOptionalInfo(type_); ok {
+		return typeIdFromKind(info.valueType)
+	}
 	switch type_.Kind() {
 	case reflect.Bool:
 		return BOOL

@@ -436,15 +436,22 @@ func (r *TypeResolver) RegisterStruct(type_ reflect.Type, fullTypeID uint32) err
 		tag := type_.Name()
 		serializer := newStructSerializer(type_, tag)
 		r.typeToSerializers[type_] = serializer
+		if err := serializer.initialize(r); err != nil {
+			delete(r.typeToSerializers, type_)
+			return err
+		}
 		r.typeToTypeInfo[type_] = "@" + tag
 		r.typeInfoToType["@"+tag] = type_
 
 		// Create pointer serializer
 		ptrType := reflect.PtrTo(type_)
-		ptrSerializer := &ptrToValueSerializer{
-			valueSerializer: serializer,
+		ptrSerializer, ok := r.typeToSerializers[ptrType]
+		if !ok {
+			ptrSerializer = &ptrToValueSerializer{
+				valueSerializer: serializer,
+			}
+			r.typeToSerializers[ptrType] = ptrSerializer
 		}
-		r.typeToSerializers[ptrType] = ptrSerializer
 		r.typeTagToSerializers[tag] = ptrSerializer
 		r.typeToTypeInfo[ptrType] = "*@" + tag
 		r.typeInfoToType["*@"+tag] = ptrType
@@ -845,6 +852,9 @@ func (r *TypeResolver) getSerializerByType(type_ reflect.Type, mapInStruct bool)
 // getTypeIdByType returns the TypeId for a given type, or 0 if not found in typesInfo.
 // This is used to get the type ID without calling Serializer.TypeId().
 func (r *TypeResolver) getTypeIdByType(type_ reflect.Type) TypeId {
+	if info, ok := getOptionalInfo(type_); ok {
+		type_ = info.valueType
+	}
 	if info, ok := r.typesInfo[type_]; ok {
 		return TypeId(info.TypeID & 0xFF) // Extract base type ID
 	}
@@ -1398,6 +1408,23 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 }
 
 func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s Serializer, err error) {
+	if info, ok := getOptionalInfo(type_); ok {
+		optionalType := type_
+		if optionalType.Kind() == reflect.Ptr {
+			optionalType = optionalType.Elem()
+		}
+		if err := validateOptionalValueType(info.valueType); err != nil {
+			return nil, err
+		}
+		valueSerializer, err := r.getSerializerByType(info.valueType, false)
+		if err != nil {
+			return nil, err
+		}
+		if valueSerializer == nil {
+			return nil, fmt.Errorf("no serializer found for optional element type %s", info.valueType)
+		}
+		return newOptionalSerializer(optionalType, info, valueSerializer), nil
+	}
 	kind := type_.Kind()
 	switch kind {
 	case reflect.Ptr:

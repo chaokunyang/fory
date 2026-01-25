@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/apache/fory/go/fory/optional"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,6 +72,65 @@ func TestUnsignedTypeSerialization(t *testing.T) {
 	if resultObj.U64Tagged != obj.U64Tagged {
 		t.Errorf("U64Tagged mismatch: expected %d, got %d", obj.U64Tagged, resultObj.U64Tagged)
 	}
+}
+
+func TestOptionFieldSerialization(t *testing.T) {
+	type Nested struct {
+		Name string
+	}
+	type OptionStruct struct {
+		OptInt    optional.Optional[int32]
+		OptZero   optional.Optional[int32]
+		OptString optional.Optional[string]
+		OptBool   optional.Optional[bool]
+	}
+
+	f := New(WithXlang(true), WithCompatible(false))
+	require.NoError(t, f.RegisterStruct(OptionStruct{}, 1100))
+
+	obj := OptionStruct{
+		OptInt:    optional.Some[int32](123),
+		OptZero:   optional.Some[int32](0),
+		OptString: optional.Some("hello"),
+		OptBool:   optional.Some(true),
+	}
+
+	data, err := f.Serialize(obj)
+	require.NoError(t, err)
+
+	var result any
+	err = f.Deserialize(data, &result)
+	require.NoError(t, err)
+
+	out := result.(*OptionStruct)
+	require.True(t, out.OptInt.Has)
+	require.Equal(t, int32(123), out.OptInt.Value)
+	require.True(t, out.OptZero.Has)
+	require.Equal(t, int32(0), out.OptZero.Value)
+	require.True(t, out.OptString.Has)
+	require.Equal(t, "hello", out.OptString.Value)
+	require.True(t, out.OptBool.Has)
+	require.Equal(t, true, out.OptBool.Value)
+}
+
+func TestOptionFieldUnsupportedTypes(t *testing.T) {
+	type Nested struct {
+		Name string
+	}
+	type OptionStruct struct {
+		OptStruct optional.Optional[Nested]
+	}
+	type OptionSlice struct {
+		OptSlice optional.Optional[[]int]
+	}
+	type OptionMap struct {
+		OptMap optional.Optional[map[string]int]
+	}
+
+	f := New(WithXlang(true), WithCompatible(false))
+	require.Error(t, f.RegisterStruct(OptionStruct{}, 1101))
+	require.Error(t, f.RegisterStruct(OptionSlice{}, 1102))
+	require.Error(t, f.RegisterStruct(OptionMap{}, 1103))
 }
 
 // Test struct for compatible mode tests (must be named struct at package level)
@@ -200,14 +260,14 @@ func TestSetFieldTypeId(t *testing.T) {
 			field.Meta.Name, field.Meta.Type, field.Meta.TypeId, field.Serializer)
 
 		if field.Meta.Name == "set_field" {
-			require.Equal(t, SET, field.Meta.TypeId, "SetField should have TypeId=SET(21)")
+			require.Equal(t, TypeId(SET), field.Meta.TypeId, "SetField should have TypeId=SET(21)")
 			require.NotNil(t, field.Serializer, "SetField serializer should not be nil")
 			_, isSetSerializer := field.Serializer.(setSerializer)
 			require.True(t, isSetSerializer, "SetField serializer should be setSerializer")
 		}
 
 		if field.Meta.Name == "map_field" {
-			require.Equal(t, MAP, field.Meta.TypeId, "MapField should have TypeId=MAP(22)")
+			require.Equal(t, TypeId(MAP), field.Meta.TypeId, "MapField should have TypeId=MAP(22)")
 			require.NotNil(t, field.Serializer, "MapField serializer should not be nil")
 		}
 	}

@@ -53,8 +53,7 @@ def test_message_fields_disallow_optional_modifier_in_fdl():
     validator = SchemaValidator(schema)
     assert not validator.validate()
     assert any(
-        "Message fields are always optional" in str(err)
-        for err in validator.errors
+        "Message fields are always optional" in str(err) for err in validator.errors
     )
 
 

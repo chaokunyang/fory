@@ -593,8 +593,7 @@ class CppGenerator(BaseGenerator):
         )
         if message.fields:
             conditions = [
-                self.get_field_eq_expression(field, lineage)
-                for field in message.fields
+                self.get_field_eq_expression(field, lineage) for field in message.fields
             ]
             lines.append(f"{body_indent}  return {' && '.join(conditions)};")
         else:

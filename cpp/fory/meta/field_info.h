@@ -97,8 +97,8 @@ struct HasForyStructInfo
 // - number of fields: typed size_t
 // - field names: typed `std::string_view`
 // - field member points: typed `decltype(a) T::*` for any member `T::a`
-template <typename T> constexpr auto ForyFieldInfo(const T &value) noexcept {
-  (void)value;
+template <typename T>
+constexpr auto ForyFieldInfo([[maybe_unused]] const T &value) noexcept {
   if constexpr (details::HasMemberStructInfo<T>::value) {
     return T::ForyStructInfo(Identity<T>{});
   } else if constexpr (details::HasAdlStructInfo<T>::value) {

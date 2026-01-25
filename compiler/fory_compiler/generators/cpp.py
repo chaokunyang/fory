@@ -470,7 +470,9 @@ class CppGenerator(BaseGenerator):
                     message, field_config_type_name[0], field_config_type_name[1]
                 )
             )
-            lines.append(f"{body_indent}FORY_STRUCT({struct_type_name}, {field_names});")
+            lines.append(
+                f"{body_indent}FORY_STRUCT({struct_type_name}, {field_names});"
+            )
         else:
             lines.append(f"{body_indent}FORY_STRUCT({struct_type_name});")
 

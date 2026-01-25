@@ -352,6 +352,12 @@ struct NullableComprehensiveSchemaConsistent {
            nullable_map == other.nullable_map;
   }
 
+  FORY_STRUCT(NullableComprehensiveSchemaConsistent, byte_field, short_field,
+              int_field, long_field, float_field, double_field, bool_field,
+              string_field, list_field, set_field, map_field, nullable_int,
+              nullable_long, nullable_float, nullable_double, nullable_bool,
+              nullable_string, nullable_list, nullable_set, nullable_map);
+
 private:
   static bool compare_optional_float(const std::optional<float> &a,
                                      const std::optional<float> &b) {
@@ -370,11 +376,6 @@ private:
       return true;
     return std::abs(*a - *b) < 1e-9;
   }
-  FORY_STRUCT(NullableComprehensiveSchemaConsistent, byte_field, short_field,
-              int_field, long_field, float_field, double_field, bool_field,
-              string_field, list_field, set_field, map_field, nullable_int,
-              nullable_long, nullable_float, nullable_double, nullable_bool,
-              nullable_string, nullable_list, nullable_set, nullable_map);
 };
 
 // NullableComprehensiveCompatible (type id 402)
@@ -439,6 +440,13 @@ struct NullableComprehensiveCompatible {
            nullable_map2 == other.nullable_map2;
   }
 
+  FORY_STRUCT(NullableComprehensiveCompatible, byte_field, short_field,
+              int_field, long_field, float_field, double_field, bool_field,
+              boxed_int, boxed_long, boxed_float, boxed_double, boxed_bool,
+              string_field, list_field, set_field, map_field, nullable_int1,
+              nullable_long1, nullable_float1, nullable_double1, nullable_bool1,
+              nullable_string2, nullable_list2, nullable_set2, nullable_map2);
+
 private:
   static bool compare_optional_float(const std::optional<float> &a,
                                      const std::optional<float> &b) {
@@ -457,12 +465,6 @@ private:
       return true;
     return std::abs(*a - *b) < 1e-9;
   }
-  FORY_STRUCT(NullableComprehensiveCompatible, byte_field, short_field,
-              int_field, long_field, float_field, double_field, bool_field,
-              boxed_int, boxed_long, boxed_float, boxed_double, boxed_bool,
-              string_field, list_field, set_field, map_field, nullable_int1,
-              nullable_long1, nullable_float1, nullable_double1, nullable_bool1,
-              nullable_string2, nullable_list2, nullable_set2, nullable_map2);
 };
 
 // ============================================================================

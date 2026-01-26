@@ -659,10 +659,12 @@ func sortFields(
 		}
 		typeTriples = append(typeTriples, triple{typeIds[i], ser, name, nullables[i], tagID})
 	}
-	// Java orders: primitives, boxed, finals, others, collections, maps
+	// Ordering:
+	// 1) primitives (nullable=false), 2) primitives (nullable=true),
+	// 3) built-in non-container, 4) list/set, 5) map, 6) user-defined/unknown
 	// primitives = non-nullable primitive types (int, long, etc.)
 	// boxed = nullable boxed types (Integer, Long, etc. which are pointers in Go)
-	var primitives, boxed, collection, otherInternalTypeFields []triple
+	var primitives, boxed, listSet, maps, otherInternalTypeFields []triple
 
 	for _, t := range typeTriples {
 		switch {
@@ -674,11 +676,14 @@ func sortFields(
 				primitives = append(primitives, t)
 			}
 		case isPrimitiveArrayType(t.typeID):
-			// Primitive arrays: sorted by name only (category 2 in reflection)
-			collection = append(collection, t)
-		case isListType(t.typeID), isSetType(t.typeID), isMapType(t.typeID):
-			// LIST, SET, MAP: sorted by typeId, name (category 1 in reflection)
+			// Primitive arrays: built-in non-container types (sorted by typeId then name)
 			otherInternalTypeFields = append(otherInternalTypeFields, t)
+		case isListType(t.typeID), isSetType(t.typeID):
+			// LIST, SET: collection group
+			listSet = append(listSet, t)
+		case isMapType(t.typeID):
+			// MAP: map group
+			maps = append(maps, t)
 		case isUserDefinedType(t.typeID):
 			userDefined = append(userDefined, t)
 		case t.typeID == UNKNOWN:
@@ -734,21 +739,24 @@ func sortFields(
 		})
 	}
 	sortByTypeIDThenName(otherInternalTypeFields)
+	sortByTypeIDThenName(listSet)
+	sortByTypeIDThenName(maps)
 	// Merge all category 2 fields (primitive arrays, userDefined, others) and sort by name
-	// This matches GroupFields' getFieldCategory which sorts all category 2 fields together
-	category2 := make([]triple, 0, len(collection)+len(userDefined)+len(others))
-	category2 = append(category2, collection...)  // primitive arrays
-	category2 = append(category2, userDefined...) // structs, enums
-	category2 = append(category2, others...)      // unknown types
-	sortTuple(category2)
+	// This matches GroupFields' getFieldCategory which sorts all category 4 fields together
+	otherGroup := make([]triple, 0, len(userDefined)+len(others))
+	otherGroup = append(otherGroup, userDefined...) // structs, enums, ext
+	otherGroup = append(otherGroup, others...)      // unknown types
+	sortTuple(otherGroup)
 
-	// Order: primitives, boxed, internal types (STRING/BINARY/LIST/SET/MAP), category 2 (by name)
-	// This aligns with GroupFields' getFieldCategory sorting
+	// Order: primitives, boxed, built-in non-container, list/set, map, other (by name)
+	// This aligns with GroupFields' getFieldCategory sorting and spec ordering.
 	all := make([]triple, 0, len(fieldNames))
 	all = append(all, primitives...)
 	all = append(all, boxed...)
-	all = append(all, otherInternalTypeFields...) // STRING, BINARY, LIST, SET, MAP (category 1)
-	all = append(all, category2...)               // all category 2 fields sorted by name
+	all = append(all, otherInternalTypeFields...) // STRING, BINARY, primitive arrays, time, unions, etc.
+	all = append(all, listSet...)
+	all = append(all, maps...)
+	all = append(all, otherGroup...)
 
 	outSer := make([]Serializer, len(all))
 	outNam := make([]string, len(all))

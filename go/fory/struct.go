@@ -3180,6 +3180,12 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 // Uses context error state for deferred error checking.
 func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) {
 	if field.Meta.FieldDef.name != "" {
+		if DebugOutputEnabled() {
+			fmt.Printf("[Go][fory-debug] skipField name=%s typeId=%d fieldType=%s\n",
+				field.Meta.FieldDef.name,
+				field.Meta.FieldDef.fieldType.TypeId(),
+				fieldTypeToString(field.Meta.FieldDef.fieldType))
+		}
 		fieldDefIsStructType := isStructFieldType(field.Meta.FieldDef.fieldType)
 		// Use FieldDef's trackingRef and nullable to determine if ref flag was written by Java
 		// Java writes ref flag based on its FieldDef, not Go's field type

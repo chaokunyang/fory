@@ -305,7 +305,7 @@ sbt scalafmt
 - For mac, graalvm is installed at `/Library/Java/JavaVirtualMachines/graalvm-xxx` by default.
 - For `integration_tests/idl_tests`:
   - you must install fory java first before runing tests under this dir if any code changes under `java` dir.
-  - you must install fory python first before runing tests under this dir if any code changes under `python` dir.
+  - you must install fory python first before runing tests under this dir if any code cython code changes under `python` dir.
 - You are never allowed to manual edit generated code by fory compiler for `IDL` files, you must invoke fory compiler to regenerate code.
 
 ```bash

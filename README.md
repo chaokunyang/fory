@@ -553,8 +553,8 @@ For more details on row format, see [Row Format Specification](docs/specificatio
 
 ### User Guides
 
-| Guide                            | Description                                | Source                                          | Website                                                                  |
-| -------------------------------- | ------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------ |
+| Guide                            | Description                                | Source                                          | Website                                                             |
+| -------------------------------- | ------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------- |
 | **Java Serialization**           | Comprehensive guide for Java serialization | [java](docs/guide/java)                         | [📖 View](https://fory.apache.org/docs/guide/java/)                 |
 | **Python**                       | Python-specific features and usage         | [python](docs/guide/python)                     | [📖 View](https://fory.apache.org/docs/guide/python/)               |
 | **Rust**                         | Rust implementation and patterns           | [rust](docs/guide/rust)                         | [📖 View](https://fory.apache.org/docs/guide/rust/)                 |

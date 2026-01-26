@@ -249,6 +249,7 @@ func generateOptionReadTyped(buf *bytes.Buffer, field *FieldInfo, fieldAccess st
 	}
 	fmt.Fprintf(buf, "\t{\n")
 	if isReferencableType(elemType) {
+		fmt.Fprintf(buf, "\t\tvar optValue %s\n", elemType.String())
 		fmt.Fprintf(buf, "\t\tif ctx.TrackRef() {\n")
 		fmt.Fprintf(buf, "\t\t\trefID, refErr := ctx.RefResolver().TryPreserveRefId(buf)\n")
 		fmt.Fprintf(buf, "\t\t\tif refErr != nil {\n")
@@ -256,39 +257,40 @@ func generateOptionReadTyped(buf *bytes.Buffer, field *FieldInfo, fieldAccess st
 		fmt.Fprintf(buf, "\t\t\t}\n")
 		fmt.Fprintf(buf, "\t\t\tif refID < int32(fory.NotNullValueFlag) {\n")
 		fmt.Fprintf(buf, "\t\t\t\tif refID == int32(fory.NullFlag) {\n")
-		fmt.Fprintf(buf, "\t\t\t\t\t%s.Has = false\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t\t\t%s = optional.None[%s]()\n", fieldAccess, elemType.String())
 		fmt.Fprintf(buf, "\t\t\t\t\treturn nil\n")
 		fmt.Fprintf(buf, "\t\t\t\t}\n")
 		fmt.Fprintf(buf, "\t\t\t\tobj := ctx.RefResolver().GetReadObject(refID)\n")
 		fmt.Fprintf(buf, "\t\t\t\tif obj.IsValid() {\n")
-		fmt.Fprintf(buf, "\t\t\t\t\ttarget := reflect.ValueOf(&%s.Value).Elem()\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t\t\ttarget := reflect.ValueOf(&optValue).Elem()\n")
 		fmt.Fprintf(buf, "\t\t\t\t\tif obj.Type().AssignableTo(target.Type()) {\n")
 		fmt.Fprintf(buf, "\t\t\t\t\t\ttarget.Set(obj)\n")
-		fmt.Fprintf(buf, "\t\t\t\t\t\t%s.Has = true\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t\t\t\t%s = optional.Some(optValue)\n", fieldAccess)
 		fmt.Fprintf(buf, "\t\t\t\t\t\treturn nil\n")
 		fmt.Fprintf(buf, "\t\t\t\t\t}\n")
 		fmt.Fprintf(buf, "\t\t\t\t}\n")
-		fmt.Fprintf(buf, "\t\t\t\t%s.Has = false\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t\t%s = optional.None[%s]()\n", fieldAccess, elemType.String())
 		fmt.Fprintf(buf, "\t\t\t\treturn nil\n")
 		fmt.Fprintf(buf, "\t\t\t}\n")
-		fmt.Fprintf(buf, "\t\t\t%s.Has = true\n", fieldAccess)
-		if err := generateOptionValueRead(buf, elemType, fmt.Sprintf("%s.Value", fieldAccess)); err != nil {
+		if err := generateOptionValueRead(buf, elemType, "optValue"); err != nil {
 			return err
 		}
 		fmt.Fprintf(buf, "\t\t\tif refID >= 0 {\n")
-		fmt.Fprintf(buf, "\t\t\t\tctx.RefResolver().SetReadObject(refID, reflect.ValueOf(%s.Value))\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\t\tctx.RefResolver().SetReadObject(refID, reflect.ValueOf(optValue))\n")
 		fmt.Fprintf(buf, "\t\t\t}\n")
+		fmt.Fprintf(buf, "\t\t\t%s = optional.Some(optValue)\n", fieldAccess)
 		fmt.Fprintf(buf, "\t\t\treturn nil\n")
 		fmt.Fprintf(buf, "\t\t}\n")
 	}
 	fmt.Fprintf(buf, "\t\tflag := buf.ReadInt8(err)\n")
 	fmt.Fprintf(buf, "\t\tif flag == fory.NullFlag {\n")
-	fmt.Fprintf(buf, "\t\t\t%s.Has = false\n", fieldAccess)
+	fmt.Fprintf(buf, "\t\t\t%s = optional.None[%s]()\n", fieldAccess, elemType.String())
 	fmt.Fprintf(buf, "\t\t} else {\n")
-	fmt.Fprintf(buf, "\t\t\t%s.Has = true\n", fieldAccess)
-	if err := generateOptionValueRead(buf, elemType, fmt.Sprintf("%s.Value", fieldAccess)); err != nil {
+	fmt.Fprintf(buf, "\t\t\tvar optValue %s\n", elemType.String())
+	if err := generateOptionValueRead(buf, elemType, "optValue"); err != nil {
 		return err
 	}
+	fmt.Fprintf(buf, "\t\t\t%s = optional.Some(optValue)\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\t}\n")
 	fmt.Fprintf(buf, "\t}\n")
 	return nil
@@ -319,7 +321,9 @@ func generateOptionValueRead(buf *bytes.Buffer, elemType types.Type, valueExpr s
 			fmt.Fprintf(buf, "\t\t\t%s = buf.ReadInt16(err)\n", valueExpr)
 		case types.Int32:
 			fmt.Fprintf(buf, "\t\t\t%s = buf.ReadVarint32(err)\n", valueExpr)
-		case types.Int, types.Int64:
+		case types.Int:
+			fmt.Fprintf(buf, "\t\t\t%s = int(buf.ReadVarint64(err))\n", valueExpr)
+		case types.Int64:
 			fmt.Fprintf(buf, "\t\t\t%s = buf.ReadVarint64(err)\n", valueExpr)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\t\t%s = buf.ReadByte(err)\n", valueExpr)
@@ -327,7 +331,9 @@ func generateOptionValueRead(buf *bytes.Buffer, elemType types.Type, valueExpr s
 			fmt.Fprintf(buf, "\t\t\t%s = uint16(buf.ReadInt16(err))\n", valueExpr)
 		case types.Uint32:
 			fmt.Fprintf(buf, "\t\t\t%s = uint32(buf.ReadInt32(err))\n", valueExpr)
-		case types.Uint, types.Uint64:
+		case types.Uint:
+			fmt.Fprintf(buf, "\t\t\t%s = uint(buf.ReadInt64(err))\n", valueExpr)
+		case types.Uint64:
 			fmt.Fprintf(buf, "\t\t\t%s = uint64(buf.ReadInt64(err))\n", valueExpr)
 		case types.Float32:
 			fmt.Fprintf(buf, "\t\t\t%s = buf.ReadFloat32(err)\n", valueExpr)

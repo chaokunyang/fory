@@ -107,14 +107,14 @@ func TestOptionFieldSerialization(t *testing.T) {
 	require.NoError(t, err)
 
 	out := result.(*OptionStruct)
-	require.True(t, out.OptInt.Has)
-	require.Equal(t, int32(123), out.OptInt.Value)
-	require.True(t, out.OptZero.Has)
-	require.Equal(t, int32(0), out.OptZero.Value)
-	require.True(t, out.OptString.Has)
-	require.Equal(t, "hello", out.OptString.Value)
-	require.True(t, out.OptBool.Has)
-	require.Equal(t, true, out.OptBool.Value)
+	require.True(t, out.OptInt.IsSome())
+	require.Equal(t, int32(123), out.OptInt.Unwrap())
+	require.True(t, out.OptZero.IsSome())
+	require.Equal(t, int32(0), out.OptZero.Unwrap())
+	require.True(t, out.OptString.IsSome())
+	require.Equal(t, "hello", out.OptString.Unwrap())
+	require.True(t, out.OptBool.IsSome())
+	require.Equal(t, true, out.OptBool.Unwrap())
 }
 
 func TestOptionFieldUnsupportedTypes(t *testing.T) {
@@ -207,18 +207,18 @@ func TestNumericPointerOptionalInterop(t *testing.T) {
 		var out NumericOptStruct
 		require.NoError(t, reader.Unmarshal(data, &out))
 
-		require.False(t, out.I8.Has)
-		require.False(t, out.I16.Has)
-		require.False(t, out.I32.Has)
-		require.False(t, out.I64.Has)
-		require.False(t, out.I.Has)
-		require.False(t, out.U8.Has)
-		require.False(t, out.U16.Has)
-		require.False(t, out.U32.Has)
-		require.False(t, out.U64.Has)
-		require.False(t, out.U.Has)
-		require.False(t, out.F32.Has)
-		require.False(t, out.F64.Has)
+	require.False(t, out.I8.IsSome())
+	require.False(t, out.I16.IsSome())
+	require.False(t, out.I32.IsSome())
+	require.False(t, out.I64.IsSome())
+	require.False(t, out.I.IsSome())
+	require.False(t, out.U8.IsSome())
+	require.False(t, out.U16.IsSome())
+	require.False(t, out.U32.IsSome())
+	require.False(t, out.U64.IsSome())
+	require.False(t, out.U.IsSome())
+	require.False(t, out.F32.IsSome())
+	require.False(t, out.F64.IsSome())
 	})
 
 	t.Run("PointerToOptionalValue", func(t *testing.T) {

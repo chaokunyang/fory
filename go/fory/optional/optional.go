@@ -17,15 +17,17 @@
 
 package optional
 
-// Optional represents an optional value without pointer indirection.
+// Optional represents an immutable optional value without pointer indirection.
+// Optional is intended for scalar values. Do not wrap structs; prefer *Struct
+// (or Optional[*Struct] if you need explicit optional semantics).
 type Optional[T any] struct {
-	Value T
-	Has   bool
+	value T
+	has   bool
 }
 
 // Some returns an Optional containing a value.
 func Some[T any](v T) Optional[T] {
-	return Optional[T]{Value: v, Has: true}
+	return Optional[T]{value: v, has: true}
 }
 
 // None returns an empty Optional.
@@ -41,49 +43,40 @@ func FromPtr[T any](v *T) Optional[T] {
 	return Some(*v)
 }
 
-// Ptr returns a pointer to the contained value or nil.
-func (o Optional[T]) Ptr() *T {
-	if !o.Has {
-		return nil
-	}
-	v := o.Value
-	return &v
-}
-
 // IsSome reports whether the optional contains a value.
-func (o Optional[T]) IsSome() bool { return o.Has }
+func (o Optional[T]) IsSome() bool { return o.has }
 
 // IsNone reports whether the optional is empty.
-func (o Optional[T]) IsNone() bool { return !o.Has }
+func (o Optional[T]) IsNone() bool { return !o.has }
 
 // Expect returns the contained value or panics with the provided message.
 func (o Optional[T]) Expect(message string) T {
-	if o.Has {
-		return o.Value
+	if o.has {
+		return o.value
 	}
 	panic(message)
 }
 
 // Unwrap returns the contained value or panics.
 func (o Optional[T]) Unwrap() T {
-	if o.Has {
-		return o.Value
+	if o.has {
+		return o.value
 	}
 	panic("optional: unwrap on None")
 }
 
 // UnwrapOr returns the contained value or a default.
 func (o Optional[T]) UnwrapOr(defaultValue T) T {
-	if o.Has {
-		return o.Value
+	if o.has {
+		return o.value
 	}
 	return defaultValue
 }
 
 // UnwrapOrDefault returns the contained value or the zero value.
 func (o Optional[T]) UnwrapOrDefault() T {
-	if o.Has {
-		return o.Value
+	if o.has {
+		return o.value
 	}
 	var zero T
 	return zero
@@ -91,55 +84,24 @@ func (o Optional[T]) UnwrapOrDefault() T {
 
 // UnwrapOrElse returns the contained value or computes a default.
 func (o Optional[T]) UnwrapOrElse(defaultFn func() T) T {
-	if o.Has {
-		return o.Value
+	if o.has {
+		return o.value
 	}
 	return defaultFn()
 }
 
-// Map maps an Optional[T] to Optional[U] by applying a function.
-func Map[T, U any](o Optional[T], f func(T) U) Optional[U] {
-	if o.Has {
-		return Some(f(o.Value))
+// OkOr returns the contained value or the provided error.
+func (o Optional[T]) OkOr(err error) (T, error) {
+	if o.has {
+		return o.value, nil
 	}
-	return None[U]()
-}
-
-// MapOr applies a function to the contained value or returns a default.
-func MapOr[T, U any](o Optional[T], defaultValue U, f func(T) U) U {
-	if o.Has {
-		return f(o.Value)
-	}
-	return defaultValue
-}
-
-// MapOrElse applies a function to the contained value or computes a default.
-func MapOrElse[T, U any](o Optional[T], defaultFn func() U, f func(T) U) U {
-	if o.Has {
-		return f(o.Value)
-	}
-	return defaultFn()
-}
-
-// And returns None if either option is None, otherwise returns the second option.
-func And[T, U any](o Optional[T], other Optional[U]) Optional[U] {
-	if o.Has {
-		return other
-	}
-	return None[U]()
-}
-
-// AndThen returns None if this option is None, otherwise calls f and returns its result.
-func AndThen[T, U any](o Optional[T], f func(T) Optional[U]) Optional[U] {
-	if o.Has {
-		return f(o.Value)
-	}
-	return None[U]()
+	var zero T
+	return zero, err
 }
 
 // Or returns the option if it is Some, otherwise returns other.
 func (o Optional[T]) Or(other Optional[T]) Optional[T] {
-	if o.Has {
+	if o.has {
 		return o
 	}
 	return other
@@ -147,69 +109,23 @@ func (o Optional[T]) Or(other Optional[T]) Optional[T] {
 
 // OrElse returns the option if it is Some, otherwise returns the result of f.
 func (o Optional[T]) OrElse(f func() Optional[T]) Optional[T] {
-	if o.Has {
+	if o.has {
 		return o
 	}
 	return f()
 }
 
+// ValueOrZero returns the contained value or the zero value.
+func (o Optional[T]) ValueOrZero() T {
+	return o.UnwrapOrDefault()
+}
+
 // Filter returns None if the predicate returns false.
 func (o Optional[T]) Filter(predicate func(T) bool) Optional[T] {
-	if o.Has && predicate(o.Value) {
+	if o.has && predicate(o.value) {
 		return o
 	}
 	return None[T]()
-}
-
-// Result represents a simplified Result type for OkOr helpers.
-type Result[T any] struct {
-	Value T
-	Err   error
-}
-
-// OkOr transforms the option into a Result, using err if None.
-func (o Optional[T]) OkOr(err error) Result[T] {
-	if o.Has {
-		return Result[T]{Value: o.Value}
-	}
-	return Result[T]{Err: err}
-}
-
-// OkOrElse transforms the option into a Result, using a function to produce the error.
-func (o Optional[T]) OkOrElse(errFn func() error) Result[T] {
-	if o.Has {
-		return Result[T]{Value: o.Value}
-	}
-	return Result[T]{Err: errFn()}
-}
-
-// Take takes the value out, leaving None in its place.
-func (o *Optional[T]) Take() Optional[T] {
-	if o == nil || !o.Has {
-		return None[T]()
-	}
-	v := o.Value
-	o.Has = false
-	var zero T
-	o.Value = zero
-	return Some(v)
-}
-
-// Set sets the option to Some(value).
-func (o *Optional[T]) Set(v T) {
-	if o == nil {
-		return
-	}
-	o.Value = v
-	o.Has = true
-}
-
-// Flatten transforms Optional[Optional[T]] into Optional[T].
-func Flatten[T any](o Optional[Optional[T]]) Optional[T] {
-	if !o.Has {
-		return None[T]()
-	}
-	return o.Value
 }
 
 // Int8 wraps an int8 value in Optional.

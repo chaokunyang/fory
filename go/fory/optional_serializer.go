@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unsafe"
 )
 
 const optionalPkgPath = "github.com/apache/fory/go/fory/optional"
@@ -49,11 +50,11 @@ func getOptionalInfo(type_ reflect.Type) (optionalInfo, bool) {
 	if name != "Optional" && !strings.HasPrefix(name, "Optional[") {
 		return optionalInfo{}, false
 	}
-	valueField, ok := type_.FieldByName("Value")
+	valueField, ok := type_.FieldByName("value")
 	if !ok {
 		return optionalInfo{}, false
 	}
-	hasField, ok := type_.FieldByName("Has")
+	hasField, ok := type_.FieldByName("has")
 	if !ok || hasField.Type.Kind() != reflect.Bool {
 		return optionalInfo{}, false
 	}
@@ -68,16 +69,18 @@ func validateOptionalValueType(valueType reflect.Type) error {
 	if valueType == nil {
 		return fmt.Errorf("optional value type is nil")
 	}
-	base := valueType
-	for base.Kind() == reflect.Ptr {
-		base = base.Elem()
+	switch valueType.Kind() {
+	case reflect.Struct:
+		return fmt.Errorf("optional.Optional[%s] is not supported for struct values", valueType.String())
+	case reflect.Slice, reflect.Map:
+		return fmt.Errorf("optional.Optional[%s] is not supported for slice/map values", valueType.String())
+	case reflect.Ptr:
+		elem := valueType.Elem()
+		if elem.Kind() == reflect.Slice || elem.Kind() == reflect.Map {
+			return fmt.Errorf("optional.Optional[%s] is not supported for slice/map values", valueType.String())
+		}
 	}
-	switch base.Kind() {
-	case reflect.Struct, reflect.Slice, reflect.Map:
-		return fmt.Errorf("optional.Optional[%s] is not supported for struct/slice/map", valueType.String())
-	default:
-		return nil
-	}
+	return nil
 }
 
 func isOptionalType(type_ reflect.Type) bool {
@@ -100,32 +103,41 @@ func optionalHasValue(value reflect.Value, info optionalInfo) bool {
 		}
 		value = value.Elem()
 	}
-	return value.FieldByName("Has").Bool()
+	if value.CanAddr() {
+		hasPtr := (*bool)(unsafe.Add(unsafe.Pointer(value.UnsafeAddr()), info.hasOffset))
+		return *hasPtr
+	}
+	field := value.FieldByName("has")
+	if !field.IsValid() {
+		return false
+	}
+	return field.Bool()
 }
 
 // optionalSerializer handles Optional[T] values by writing null flags and delegating to the element serializer.
 type optionalSerializer struct {
 	optionalType    reflect.Type
 	valueType       reflect.Type
-	valueIndex      int
-	hasIndex        int
+	valueOffset     uintptr
+	hasOffset       uintptr
 	valueSerializer Serializer
 }
 
 func newOptionalSerializer(optionalType reflect.Type, info optionalInfo, valueSerializer Serializer) *optionalSerializer {
-	valueField, _ := optionalType.FieldByName("Value")
-	hasField, _ := optionalType.FieldByName("Has")
 	return &optionalSerializer{
 		optionalType:    optionalType,
 		valueType:       info.valueType,
-		valueIndex:      valueField.Index[0],
-		hasIndex:        hasField.Index[0],
+		valueOffset:     info.valueOffset,
+		hasOffset:       info.hasOffset,
 		valueSerializer: valueSerializer,
 	}
 }
 
 func (s *optionalSerializer) unwrap(value reflect.Value) reflect.Value {
 	if value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			return reflect.Value{}
+		}
 		return value.Elem()
 	}
 	return value
@@ -133,17 +145,50 @@ func (s *optionalSerializer) unwrap(value reflect.Value) reflect.Value {
 
 func (s *optionalSerializer) has(value reflect.Value) bool {
 	value = s.unwrap(value)
-	return value.Field(s.hasIndex).Bool()
+	if !value.IsValid() {
+		return false
+	}
+	if value.CanAddr() {
+		hasPtr := (*bool)(unsafe.Add(unsafe.Pointer(value.UnsafeAddr()), s.hasOffset))
+		return *hasPtr
+	}
+	field := value.FieldByName("has")
+	if !field.IsValid() {
+		return false
+	}
+	return field.Bool()
 }
 
 func (s *optionalSerializer) valueField(value reflect.Value) reflect.Value {
 	value = s.unwrap(value)
-	return value.Field(s.valueIndex)
+	if !value.IsValid() {
+		return reflect.New(s.valueType).Elem()
+	}
+	if value.CanAddr() {
+		ptr := unsafe.Add(unsafe.Pointer(value.UnsafeAddr()), s.valueOffset)
+		return reflect.NewAt(s.valueType, ptr).Elem()
+	}
+	field := value.FieldByName("value")
+	if field.IsValid() {
+		return field
+	}
+	return reflect.New(s.valueType).Elem()
 }
 
 func (s *optionalSerializer) setHas(value reflect.Value, has bool) {
 	value = s.unwrap(value)
-	value.Field(s.hasIndex).SetBool(has)
+	if !value.IsValid() {
+		return
+	}
+	if value.CanAddr() {
+		hasPtr := (*bool)(unsafe.Add(unsafe.Pointer(value.UnsafeAddr()), s.hasOffset))
+		*hasPtr = has
+		return
+	}
+	field := value.FieldByName("has")
+	if field.IsValid() && field.CanSet() {
+		field.SetBool(has)
+	}
 }
 
 func (s *optionalSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {

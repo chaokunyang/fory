@@ -233,12 +233,13 @@ func generateOptionWriteTyped(buf *bytes.Buffer, field *FieldInfo, fieldAccess s
 		fmt.Fprintf(buf, "\tctx.WriteValue(reflect.ValueOf(%s), fory.RefModeTracking, true)\n", fieldAccess)
 		return nil
 	}
-	fmt.Fprintf(buf, "\tif !%s.Has {\n", fieldAccess)
+	fmt.Fprintf(buf, "\tif !%s.IsSome() {\n", fieldAccess)
 	fmt.Fprintf(buf, "\t\tbuf.WriteInt8(fory.NullFlag)\n")
 	fmt.Fprintf(buf, "\t} else {\n")
+	fmt.Fprintf(buf, "\t\toptValue := %s.Unwrap()\n", fieldAccess)
 	if isReferencableType(elemType) {
 		fmt.Fprintf(buf, "\t\tif ctx.TrackRef() {\n")
-		fmt.Fprintf(buf, "\t\t\trefWritten, err := ctx.RefResolver().WriteRefOrNull(buf, reflect.ValueOf(%s.Value))\n", fieldAccess)
+		fmt.Fprintf(buf, "\t\t\trefWritten, err := ctx.RefResolver().WriteRefOrNull(buf, reflect.ValueOf(optValue))\n")
 		fmt.Fprintf(buf, "\t\t\tif err != nil {\n")
 		fmt.Fprintf(buf, "\t\t\t\treturn err\n")
 		fmt.Fprintf(buf, "\t\t\t}\n")
@@ -251,7 +252,7 @@ func generateOptionWriteTyped(buf *bytes.Buffer, field *FieldInfo, fieldAccess s
 	} else {
 		fmt.Fprintf(buf, "\t\tbuf.WriteInt8(fory.NotNullValueFlag)\n")
 	}
-	if err := generateOptionValueWrite(buf, elemType, fmt.Sprintf("%s.Value", fieldAccess)); err != nil {
+	if err := generateOptionValueWrite(buf, elemType, "optValue"); err != nil {
 		return err
 	}
 	fmt.Fprintf(buf, "\t}\n")
@@ -283,7 +284,9 @@ func generateOptionValueWrite(buf *bytes.Buffer, elemType types.Type, valueExpr 
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt16(%s)\n", valueExpr)
 		case types.Int32:
 			fmt.Fprintf(buf, "\t\tbuf.WriteVarint32(%s)\n", valueExpr)
-		case types.Int, types.Int64:
+		case types.Int:
+			fmt.Fprintf(buf, "\t\tbuf.WriteVarint64(int64(%s))\n", valueExpr)
+		case types.Int64:
 			fmt.Fprintf(buf, "\t\tbuf.WriteVarint64(%s)\n", valueExpr)
 		case types.Uint8:
 			fmt.Fprintf(buf, "\t\tbuf.WriteByte_(%s)\n", valueExpr)
@@ -291,7 +294,9 @@ func generateOptionValueWrite(buf *bytes.Buffer, elemType types.Type, valueExpr 
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt16(int16(%s))\n", valueExpr)
 		case types.Uint32:
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt32(int32(%s))\n", valueExpr)
-		case types.Uint, types.Uint64:
+		case types.Uint:
+			fmt.Fprintf(buf, "\t\tbuf.WriteInt64(int64(%s))\n", valueExpr)
+		case types.Uint64:
 			fmt.Fprintf(buf, "\t\tbuf.WriteInt64(int64(%s))\n", valueExpr)
 		case types.Float32:
 			fmt.Fprintf(buf, "\t\tbuf.WriteFloat32(%s)\n", valueExpr)

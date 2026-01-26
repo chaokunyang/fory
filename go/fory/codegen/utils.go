@@ -520,17 +520,16 @@ func analyzeField(field *types.Var, index int) (*FieldInfo, error) {
 
 	optionalElem, isOptional := getOptionalElementType(fieldType)
 	if isOptional && optionalElem != nil {
-		base := optionalElem
-		for {
-			if ptr, ok := base.(*types.Pointer); ok {
-				base = ptr.Elem()
-				continue
+		if ptr, ok := optionalElem.(*types.Pointer); ok {
+			switch ptr.Elem().Underlying().(type) {
+			case *types.Slice, *types.Map:
+				return nil, fmt.Errorf("field %s: optional.Optional is not allowed for slice/map", goName)
 			}
-			break
-		}
-		switch base.Underlying().(type) {
-		case *types.Struct, *types.Slice, *types.Map:
-			return nil, fmt.Errorf("field %s: optional.Optional is not supported for struct/slice/map", goName)
+		} else {
+			switch optionalElem.Underlying().(type) {
+			case *types.Struct, *types.Slice, *types.Map:
+				return nil, fmt.Errorf("field %s: optional.Optional is not allowed for struct/slice/map", goName)
+			}
 		}
 	}
 

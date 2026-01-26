@@ -1276,7 +1276,7 @@ void RunTestCrossLanguageSerializer(const std::string &data_file) {
   std::map<std::string, std::string> str_map = {{"hello", "world"},
                                                 {"foo", "bar"}};
   LocalDate day(18954); // 2021-11-23
-  Timestamp instant(std::chrono::nanoseconds(100000000));
+  Timestamp instant(std::chrono::seconds(100));
 
   std::vector<uint8_t> copy = bytes;
   Buffer buffer = MakeBuffer(copy);

@@ -182,7 +182,7 @@ class GoGenerator(BaseGenerator):
         PrimitiveKind.FLOAT64: "float64",
         PrimitiveKind.STRING: "string",
         PrimitiveKind.BYTES: "[]byte",
-        PrimitiveKind.DATE: "time.Time",
+        PrimitiveKind.DATE: "fory.Date",
         PrimitiveKind.TIMESTAMP: "time.Time",
     }
 
@@ -685,7 +685,7 @@ class GoGenerator(BaseGenerator):
             return False
         if isinstance(field.field_type, PrimitiveType):
             base_type = self.PRIMITIVE_MAP[field.field_type.kind]
-            return base_type not in ("[]byte", "time.Time")
+            return base_type not in ("[]byte", "time.Time", "fory.Date")
         if isinstance(field.field_type, NamedType):
             named_type = self.schema.get_type(field.field_type.name)
             return isinstance(named_type, Enum)
@@ -705,7 +705,7 @@ class GoGenerator(BaseGenerator):
         if isinstance(field_type, PrimitiveType):
             base_type = self.PRIMITIVE_MAP[field_type.kind]
             if nullable and base_type not in ("[]byte",):
-                if use_option and not ref and base_type != "time.Time":
+                if use_option and not ref and base_type not in ("time.Time", "fory.Date"):
                     return f"optional.Optional[{base_type}]"
                 return f"*{base_type}"
             return base_type

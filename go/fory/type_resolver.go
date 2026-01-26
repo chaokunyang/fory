@@ -858,6 +858,11 @@ func (r *TypeResolver) getTypeIdByType(type_ reflect.Type) TypeId {
 	if info, ok := r.typesInfo[type_]; ok {
 		return TypeId(info.TypeID & 0xFF) // Extract base type ID
 	}
+	if type_ != nil && type_.Kind() == reflect.Ptr {
+		if info, ok := r.typesInfo[type_.Elem()]; ok {
+			return TypeId(info.TypeID & 0xFF)
+		}
+	}
 	return 0
 }
 

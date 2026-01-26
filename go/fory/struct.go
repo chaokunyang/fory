@@ -908,7 +908,7 @@ func (s *structSerializer) computeHash() int32 {
 		if field.Meta.IsOptional {
 			fieldTypeForNullable = field.Meta.OptionalInfo.valueType
 		}
-		if isNonNullablePrimitiveKind(fieldTypeForNullable.Kind()) && !isEnumField {
+		if !field.Meta.IsOptional && isNonNullablePrimitiveKind(fieldTypeForNullable.Kind()) && !isEnumField {
 			nullable = false
 		}
 
@@ -1414,11 +1414,19 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			if field.RefMode == RefModeTracking {
 				break
 			}
+			if field.Meta.HasGenerics && field.Serializer != nil {
+				field.Serializer.Write(ctx, field.RefMode, field.Meta.WriteType, field.Meta.HasGenerics, value.Field(field.Meta.FieldIndex))
+				return
+			}
 			ctx.WriteStringStringMap(*(*map[string]string)(fieldPtr), field.RefMode, false)
 			return
 		case StringInt64MapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
+			}
+			if field.Meta.HasGenerics && field.Serializer != nil {
+				field.Serializer.Write(ctx, field.RefMode, field.Meta.WriteType, field.Meta.HasGenerics, value.Field(field.Meta.FieldIndex))
+				return
 			}
 			ctx.WriteStringInt64Map(*(*map[string]int64)(fieldPtr), field.RefMode, false)
 			return
@@ -1426,17 +1434,29 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			if field.RefMode == RefModeTracking {
 				break
 			}
+			if field.Meta.HasGenerics && field.Serializer != nil {
+				field.Serializer.Write(ctx, field.RefMode, field.Meta.WriteType, field.Meta.HasGenerics, value.Field(field.Meta.FieldIndex))
+				return
+			}
 			ctx.WriteStringInt32Map(*(*map[string]int32)(fieldPtr), field.RefMode, false)
 			return
 		case StringIntMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
 			}
+			if field.Meta.HasGenerics && field.Serializer != nil {
+				field.Serializer.Write(ctx, field.RefMode, field.Meta.WriteType, field.Meta.HasGenerics, value.Field(field.Meta.FieldIndex))
+				return
+			}
 			ctx.WriteStringIntMap(*(*map[string]int)(fieldPtr), field.RefMode, false)
 			return
 		case StringFloat64MapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
+			}
+			if field.Meta.HasGenerics && field.Serializer != nil {
+				field.Serializer.Write(ctx, field.RefMode, field.Meta.WriteType, field.Meta.HasGenerics, value.Field(field.Meta.FieldIndex))
+				return
 			}
 			ctx.WriteStringFloat64Map(*(*map[string]float64)(fieldPtr), field.RefMode, false)
 			return
@@ -1446,11 +1466,19 @@ func (s *structSerializer) writeRemainingField(ctx *WriteContext, ptr unsafe.Poi
 			if field.RefMode == RefModeTracking {
 				break
 			}
+			if field.Meta.HasGenerics && field.Serializer != nil {
+				field.Serializer.Write(ctx, field.RefMode, field.Meta.WriteType, field.Meta.HasGenerics, value.Field(field.Meta.FieldIndex))
+				return
+			}
 			ctx.WriteStringBoolMap(*(*map[string]bool)(fieldPtr), field.RefMode, false)
 			return
 		case IntIntMapDispatchId:
 			if field.RefMode == RefModeTracking {
 				break
+			}
+			if field.Meta.HasGenerics && field.Serializer != nil {
+				field.Serializer.Write(ctx, field.RefMode, field.Meta.WriteType, field.Meta.HasGenerics, value.Field(field.Meta.FieldIndex))
+				return
 			}
 			ctx.WriteIntIntMap(*(*map[int]int)(fieldPtr), field.RefMode, false)
 			return

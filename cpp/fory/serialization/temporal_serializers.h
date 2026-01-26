@@ -32,9 +32,9 @@ namespace serialization {
 /// Duration: absolute length of time as nanoseconds
 using Duration = std::chrono::nanoseconds;
 
-/// Timestamp: point in time as nanoseconds since Unix epoch (Jan 1, 1970 UTC)
+/// Timestamp: point in time as microseconds since Unix epoch (Jan 1, 1970 UTC)
 using Timestamp = std::chrono::time_point<std::chrono::system_clock,
-                                          std::chrono::nanoseconds>;
+                                          std::chrono::microseconds>;
 
 /// LocalDate: naive date without timezone as days since Unix epoch
 struct LocalDate {
@@ -131,7 +131,7 @@ template <> struct Serializer<Duration> {
 // ============================================================================
 
 /// Serializer for Timestamp
-/// Per xlang spec: serialized as int64 nanosecond count since Unix epoch
+/// Per xlang spec: serialized as int64 microsecond count since Unix epoch
 template <> struct Serializer<Timestamp> {
   static constexpr TypeId type_id = TypeId::TIMESTAMP;
 
@@ -161,8 +161,8 @@ template <> struct Serializer<Timestamp> {
   }
 
   static inline void write_data(const Timestamp &timestamp, WriteContext &ctx) {
-    int64_t nanos = timestamp.time_since_epoch().count();
-    ctx.write_bytes(&nanos, sizeof(int64_t));
+    int64_t micros = timestamp.time_since_epoch().count();
+    ctx.write_bytes(&micros, sizeof(int64_t));
   }
 
   static inline void write_data_generic(const Timestamp &timestamp,
@@ -174,26 +174,26 @@ template <> struct Serializer<Timestamp> {
                                bool read_type) {
     bool has_value = read_null_only_flag(ctx, ref_mode);
     if (ctx.has_error() || !has_value) {
-      return Timestamp(Duration(0));
+      return Timestamp(std::chrono::microseconds(0));
     }
     if (read_type) {
       uint32_t type_id_read = ctx.read_varuint32(ctx.error());
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
-        return Timestamp(Duration(0));
+        return Timestamp(std::chrono::microseconds(0));
       }
       if (type_id_read != static_cast<uint32_t>(type_id)) {
         ctx.set_error(
             Error::type_mismatch(type_id_read, static_cast<uint32_t>(type_id)));
-        return Timestamp(Duration(0));
+        return Timestamp(std::chrono::microseconds(0));
       }
     }
     return read_data(ctx);
   }
 
   static inline Timestamp read_data(ReadContext &ctx) {
-    int64_t nanos;
-    ctx.read_bytes(&nanos, sizeof(int64_t), ctx.error());
-    return Timestamp(Duration(nanos));
+    int64_t micros;
+    ctx.read_bytes(&micros, sizeof(int64_t), ctx.error());
+    return Timestamp(std::chrono::microseconds(micros));
   }
 
   static inline Timestamp read_with_type_info(ReadContext &ctx,

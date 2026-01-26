@@ -825,6 +825,12 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 	if info, ok := getOptionalInfo(type_); ok {
 		return typeIdFromKind(info.valueType)
 	}
+	if type_ == dateType {
+		return LOCAL_DATE
+	}
+	if type_ == timestampType {
+		return TIMESTAMP
+	}
 	switch type_.Kind() {
 	case reflect.Bool:
 		return BOOL

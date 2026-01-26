@@ -1330,6 +1330,9 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
             nullable_flag = "1" if nullable_map.get(field_name, False) else "0"
         else:
             type_id = type_resolver.get_typeinfo(serializer.type_).type_id & 0xFF
+            # For xlang, user-defined types use UNKNOWN in fingerprint to match other languages.
+            if not type_resolver.fory.is_py and type_id >= TypeId.BOUND:
+                type_id = TypeId.UNKNOWN
             if type_id in {TypeId.TYPED_UNION, TypeId.NAMED_UNION}:
                 type_id = TypeId.UNION
             is_nullable = nullable_map.get(field_name, False)

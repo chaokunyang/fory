@@ -346,7 +346,7 @@ func runFileContainerRoundTrip(t *testing.T, f *fory.Fory, container complexfbs.
 }
 
 func buildOptionalHolder() optionaltypes.OptionalHolder {
-	dateValue := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+	dateValue := fory.Date{Year: 2024, Month: time.January, Day: 2}
 	timestampValue := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
 	allTypes := &optionaltypes.AllOptionalTypes{
 		BoolValue:         optional.Some(true),
@@ -554,8 +554,10 @@ func assertOptionalTypesEqual(t *testing.T, expected, actual *optionaltypes.AllO
 		if expected.DateValue != actual.DateValue {
 			t.Fatalf("date_value mismatch: %#v != %#v", expected.DateValue, actual.DateValue)
 		}
-	} else if !expected.DateValue.Equal(*actual.DateValue) {
-		t.Fatalf("date_value mismatch: %v != %v", expected.DateValue, actual.DateValue)
+	} else if expected.DateValue.Year != actual.DateValue.Year ||
+		expected.DateValue.Month != actual.DateValue.Month ||
+		expected.DateValue.Day != actual.DateValue.Day {
+		t.Fatalf("date_value mismatch: %#v != %#v", expected.DateValue, actual.DateValue)
 	}
 	if expected.TimestampValue == nil || actual.TimestampValue == nil {
 		if expected.TimestampValue != actual.TimestampValue {

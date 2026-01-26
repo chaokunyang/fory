@@ -17,12 +17,6 @@
 
 package optional
 
-import (
-	"unsafe"
-
-	"github.com/apache/fory/go/fory/refl"
-)
-
 // Optional represents an immutable optional value without pointer indirection.
 // Optional is intended for scalar values. Do not wrap structs; prefer *Struct
 // (or Optional[*Struct] if you need explicit optional semantics).
@@ -169,8 +163,3 @@ func String(v string) Optional[string] { return Some(v) }
 
 // Bool wraps a bool value in Optional.
 func Bool(v bool) Optional[bool] { return Some(v) }
-
-// ForyReflect exposes the address of the Optional for unsafe fast paths.
-func (o *Optional[T]) ForyReflect() refl.ForyReflectValue {
-	return refl.NewForyReflectValue(unsafe.Pointer(o))
-}

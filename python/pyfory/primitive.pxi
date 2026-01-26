@@ -280,6 +280,6 @@ cdef class TimestampSerializer(XlangCompatibleSerializer):
     cpdef inline read(self, Buffer buffer):
         cdef long long seconds = buffer.read_int64()
         cdef unsigned int nanos = buffer.read_uint32()
-        ts = seconds + nanos / 1000000000
+        ts = seconds + (<double>nanos) / 1000000000.0
         # TODO support timezone
         return datetime.datetime.fromtimestamp(ts)

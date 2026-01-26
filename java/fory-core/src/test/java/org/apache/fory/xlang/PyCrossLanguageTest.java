@@ -704,7 +704,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     return Files.readAllBytes(dataFile);
   }
 
-  @Test(enabled = false)
+  @Test
   public void testOutOfBandBuffer() throws Exception {
     Fory fory =
         Fory.builder()

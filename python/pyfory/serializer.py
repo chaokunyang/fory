@@ -550,21 +550,20 @@ class NDArraySerializer(Serializer):
 
 class BytesSerializer(XlangCompatibleSerializer):
     def write(self, buffer, value):
+        if self.fory.buffer_callback is None:
+            buffer.write_bytes_and_size(value)
+            return
         self.fory.write_buffer_object(buffer, BytesBufferObject(value))
 
     def read(self, buffer):
+        if not self.fory.is_peer_out_of_band_enabled:
+            return buffer.read_bytes_and_size()
         fory_buf = self.fory.read_buffer_object(buffer)
         if isinstance(fory_buf, memoryview):
             return bytes(fory_buf)
         elif isinstance(fory_buf, bytes):
             return fory_buf
         return fory_buf.to_pybytes()
-
-    def xwrite(self, buffer, value):
-        buffer.write_bytes_and_size(value)
-
-    def xread(self, buffer):
-        return buffer.read_bytes_and_size()
 
 
 class BytesBufferObject(BufferObject):

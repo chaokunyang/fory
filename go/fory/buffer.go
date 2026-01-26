@@ -969,14 +969,14 @@ func (b *ByteBuffer) WriteVarint64(value int64) {
 	b.WriteVaruint64(u)
 }
 
-// WriteVaruint64 writes to unsigned varint (up to 9 bytes)
+// WriteVaruint64 writes to unsigned varint (up to 10 bytes)
 func (b *ByteBuffer) WriteVaruint64(value uint64) {
-	b.grow(9)
+	b.grow(10)
 	offset := b.writerIndex
-	data := b.data[offset : offset+9]
+	data := b.data[offset : offset+10]
 
 	i := 0
-	for i < 8 && value >= 0x80 {
+	for value >= 0x80 {
 		data[i] = byte(value&0x7F) | 0x80
 		value >>= 7
 		i++
@@ -1206,7 +1206,7 @@ func (b *ByteBuffer) ReadTaggedUint64(err *Error) uint64 {
 //
 //go:inline
 func (b *ByteBuffer) ReadVaruint64(err *Error) uint64 {
-	if b.remaining() >= 9 {
+	if b.remaining() >= 10 {
 		return b.readVaruint64Fast()
 	}
 	return b.readVaruint64Slow(err)
@@ -1249,9 +1249,16 @@ func (b *ByteBuffer) readVaruint64Fast() uint64 {
 								result |= (bulk >> 7) & 0xFE000000000000
 								readLength = 8
 								if (bulk & 0x8000000000000000) != 0 {
-									// Need 9th byte
-									result |= uint64(b.data[b.readerIndex+8]) << 56
+									// Need 9th byte (and possibly 10th if continuation bit is set)
+									b9 := b.data[b.readerIndex+8]
+									result |= uint64(b9&0x7F) << 56
 									readLength = 9
+									if (b9 & 0x80) != 0 {
+										// 10th byte carries the remaining bits
+										b10 := b.data[b.readerIndex+9]
+										result |= uint64(b10) << 63
+										readLength = 10
+									}
 								}
 							}
 						}

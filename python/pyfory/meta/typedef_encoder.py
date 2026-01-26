@@ -135,7 +135,7 @@ def prepend_header(buffer: bytes, is_compressed: bool, has_fields_meta: bool):
     header |= min(meta_size, META_SIZE_MASKS)
     result = Buffer.allocate(meta_size + 8)
     result.write_int64(header)
-    if meta_size > META_SIZE_MASKS:
+    if meta_size >= META_SIZE_MASKS:
         result.write_varuint32(meta_size - META_SIZE_MASKS)
 
     result.write_bytes(buffer)

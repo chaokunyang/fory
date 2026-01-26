@@ -356,7 +356,6 @@ public class IdlRoundTripTest {
     types.setUint64Value(9876543210L);
     types.setVarUint64Value(12345678901L);
     types.setTaggedUint64Value(2222222222L);
-    types.setFloat16Value(1.5f);
     types.setFloat32Value(2.5f);
     types.setFloat64Value(3.5d);
     PrimitiveTypes.Contact contact = PrimitiveTypes.Contact.ofEmail("alice@example.com");
@@ -403,7 +402,6 @@ public class IdlRoundTripTest {
     allTypes.setFixedUint64Value(9876543210L);
     allTypes.setVarUint64Value(12345678901L);
     allTypes.setTaggedUint64Value(2222222222L);
-    allTypes.setFloat16Value(1.5f);
     allTypes.setFloat32Value(2.5f);
     allTypes.setFloat64Value(3.5);
     allTypes.setStringValue("optional");

@@ -43,9 +43,9 @@
 using ::fory::Buffer;
 using ::fory::Error;
 using ::fory::Result;
+using ::fory::serialization::Date;
 using ::fory::serialization::Fory;
 using ::fory::serialization::ForyBuilder;
-using ::fory::serialization::Date;
 using ::fory::serialization::Serializer;
 using ::fory::serialization::Timestamp;
 

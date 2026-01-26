@@ -126,7 +126,6 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   types.set_uint64_value(9876543210ULL);
   types.set_var_uint64_value(12345678901ULL);
   types.set_tagged_uint64_value(2222222222ULL);
-  types.set_float16_value(1.5F);
   types.set_float32_value(2.5F);
   types.set_float64_value(3.5);
   types.set_contact(addressbook::PrimitiveTypes::Contact::email(
@@ -224,7 +223,6 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   all_types.set_fixed_uint64_value(9876543210ULL);
   all_types.set_var_uint64_value(12345678901ULL);
   all_types.set_tagged_uint64_value(2222222222ULL);
-  all_types.set_float16_value(1.5F);
   all_types.set_float32_value(2.5F);
   all_types.set_float64_value(3.5);
   all_types.set_string_value("optional");

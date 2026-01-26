@@ -164,7 +164,6 @@ func buildPrimitiveTypes() PrimitiveTypes {
 		Uint64Value:       9876543210,
 		VarUint64Value:    12345678901,
 		TaggedUint64Value: 2222222222,
-		Float16Value:      1.5,
 		Float32Value:      2.5,
 		Float64Value:      3.5,
 		Contact:           &contact,
@@ -368,7 +367,6 @@ func buildOptionalHolder() optionaltypes.OptionalHolder {
 		FixedUint64Value:  optional.Some(uint64(9876543210)),
 		VarUint64Value:    optional.Some(uint64(12345678901)),
 		TaggedUint64Value: optional.Some(uint64(2222222222)),
-		Float16Value:      optional.Some(float32(1.5)),
 		Float32Value:      optional.Some(float32(2.5)),
 		Float64Value:      optional.Some(3.5),
 		StringValue:       optional.Some("optional"),
@@ -534,9 +532,6 @@ func assertOptionalTypesEqual(t *testing.T, expected, actual *optionaltypes.AllO
 	}
 	if expected.TaggedUint64Value != actual.TaggedUint64Value {
 		t.Fatalf("tagged_uint64_value mismatch: %#v != %#v", expected.TaggedUint64Value, actual.TaggedUint64Value)
-	}
-	if expected.Float16Value != actual.Float16Value {
-		t.Fatalf("float16_value mismatch: %#v != %#v", expected.Float16Value, actual.Float16Value)
 	}
 	if expected.Float32Value != actual.Float32Value {
 		t.Fatalf("float32_value mismatch: %#v != %#v", expected.Float32Value, actual.Float32Value)

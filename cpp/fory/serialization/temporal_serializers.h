@@ -131,7 +131,8 @@ template <> struct Serializer<Duration> {
 // ============================================================================
 
 /// Serializer for Timestamp
-/// Per xlang spec: serialized as int64 seconds + uint32 nanoseconds since Unix epoch
+/// Per xlang spec: serialized as int64 seconds + uint32 nanoseconds since Unix
+/// epoch
 template <> struct Serializer<Timestamp> {
   static constexpr TypeId type_id = TypeId::TIMESTAMP;
 
@@ -170,8 +171,8 @@ template <> struct Serializer<Timestamp> {
     }
     int64_t seconds_count = seconds.count();
     uint32_t nanos_count = static_cast<uint32_t>(remainder.count());
-    ctx.write_bytes(&seconds_count, sizeof(int64_t));
-    ctx.write_bytes(&nanos_count, sizeof(uint32_t));
+    ctx.write_int64(seconds_count);
+    ctx.write_uint32(nanos_count);
   }
 
   static inline void write_data_generic(const Timestamp &timestamp,
@@ -200,13 +201,11 @@ template <> struct Serializer<Timestamp> {
   }
 
   static inline Timestamp read_data(ReadContext &ctx) {
-    int64_t seconds;
-    uint32_t nanos;
-    ctx.read_bytes(&seconds, sizeof(int64_t), ctx.error());
+    int64_t seconds = ctx.read_int64(ctx.error());
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return Timestamp(std::chrono::nanoseconds(0));
     }
-    ctx.read_bytes(&nanos, sizeof(uint32_t), ctx.error());
+    uint32_t nanos = ctx.read_uint32(ctx.error());
     return Timestamp(std::chrono::seconds(seconds) +
                      std::chrono::nanoseconds(nanos));
   }
@@ -256,8 +255,8 @@ template <> struct Serializer<Date> {
     ctx.write_bytes(&date.days_since_epoch, sizeof(int32_t));
   }
 
-  static inline void write_data_generic(const Date &date,
-                                        WriteContext &ctx, bool has_generics) {
+  static inline void write_data_generic(const Date &date, WriteContext &ctx,
+                                        bool has_generics) {
     write_data(date, ctx);
   }
 

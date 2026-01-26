@@ -661,7 +661,7 @@ func (b *ByteBuffer) UnsafePutVaruint32(offset int, value uint32) int {
 
 // UnsafePutVarInt64 writes a zigzag-encoded varint64 at the given offset without advancing writerIndex.
 // Caller must have called Reserve() to ensure capacity.
-// Returns the number of bytes written (1-10).
+// Returns the number of bytes written (1-9).
 //
 //go:inline
 func (b *ByteBuffer) UnsafePutVarInt64(offset int, value int64) int {
@@ -671,7 +671,7 @@ func (b *ByteBuffer) UnsafePutVarInt64(offset int, value int64) int {
 
 // UnsafePutVaruint64 writes an unsigned varuint64 at the given offset without advancing writerIndex.
 // Caller must have called Reserve(16) to ensure capacity (for bulk writes).
-// Returns the number of bytes written (1-10).
+// Returns the number of bytes written (1-9).
 func (b *ByteBuffer) UnsafePutVaruint64(offset int, value uint64) int {
 	if value>>7 == 0 {
 		b.data[offset] = byte(value)
@@ -770,7 +770,7 @@ func (b *ByteBuffer) UnsafePutVaruint64(offset int, value uint64) int {
 		}
 		return 8
 	}
-	// 9 or 10 bytes needed
+	// 9 bytes needed
 	encoded := uint64((value&0x7F)|0x80) |
 		uint64(((value>>7)&0x7F)|0x80)<<8 |
 		uint64(((value>>14)&0x7F)|0x80)<<16 |
@@ -785,14 +785,8 @@ func (b *ByteBuffer) UnsafePutVaruint64(offset int, value uint64) int {
 		binary.LittleEndian.PutUint64(b.data[offset:], encoded)
 	}
 
-	remaining := value >> 56
-	if remaining>>7 == 0 {
-		b.data[offset+8] = byte(remaining)
-		return 9
-	}
-	b.data[offset+8] = byte(remaining) | 0x80
-	b.data[offset+9] = byte(remaining >> 7)
-	return 10
+	b.data[offset+8] = byte(value >> 56)
+	return 9
 }
 
 //go:inline
@@ -824,21 +818,23 @@ func (b *ByteBuffer) WriteVarint64(value int64) {
 	b.WriteVaruint64(u)
 }
 
-// WriteVaruint64 writes to unsigned varint (up to 10 bytes)
+// WriteVaruint64 writes to unsigned varint (up to 9 bytes)
 func (b *ByteBuffer) WriteVaruint64(value uint64) {
-	b.grow(10)
+	b.grow(9)
 	offset := b.writerIndex
-	data := b.data[offset : offset+10]
+	data := b.data[offset : offset+9]
 
-	i := 0
-	for value >= 0x80 {
+	for i := 0; i < 8; i++ {
+		if value < 0x80 {
+			data[i] = byte(value)
+			b.writerIndex += i + 1
+			return
+		}
 		data[i] = byte(value&0x7F) | 0x80
 		value >>= 7
-		i++
 	}
-	data[i] = byte(value)
-	i++
-	b.writerIndex += i
+	data[8] = byte(value)
+	b.writerIndex += 9
 }
 
 // WriteVaruint36Small writes a varint optimized for small values (up to 36 bits)
@@ -1061,7 +1057,7 @@ func (b *ByteBuffer) ReadTaggedUint64(err *Error) uint64 {
 //
 //go:inline
 func (b *ByteBuffer) ReadVaruint64(err *Error) uint64 {
-	if b.remaining() >= 10 {
+	if b.remaining() >= 9 {
 		return b.readVaruint64Fast()
 	}
 	return b.readVaruint64Slow(err)
@@ -1104,16 +1100,10 @@ func (b *ByteBuffer) readVaruint64Fast() uint64 {
 								result |= (bulk >> 7) & 0xFE000000000000
 								readLength = 8
 								if (bulk & 0x8000000000000000) != 0 {
-									// Need 9th byte (and possibly 10th if continuation bit is set)
+									// Need 9th byte (full 8 bits)
 									b9 := b.data[b.readerIndex+8]
-									result |= uint64(b9&0x7F) << 56
+									result |= uint64(b9) << 56
 									readLength = 9
-									if (b9 & 0x80) != 0 {
-										// 10th byte carries the remaining bits
-										b10 := b.data[b.readerIndex+9]
-										result |= uint64(b10) << 63
-										readLength = 10
-									}
 								}
 							}
 						}
@@ -1130,7 +1120,7 @@ func (b *ByteBuffer) readVaruint64Fast() uint64 {
 func (b *ByteBuffer) readVaruint64Slow(err *Error) uint64 {
 	var result uint64
 	var shift uint
-	for {
+	for i := 0; i < 8; i++ {
 		if b.readerIndex >= len(b.data) {
 			*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
 			return 0
@@ -1139,15 +1129,17 @@ func (b *ByteBuffer) readVaruint64Slow(err *Error) uint64 {
 		b.readerIndex++
 		result |= (uint64(byteVal) & 0x7F) << shift
 		if byteVal < 0x80 {
-			break
+			return result
 		}
 		shift += 7
-		if shift >= 64 {
-			*err = DeserializationError("varuint64 overflow")
-			return 0
-		}
 	}
-	return result
+	if b.readerIndex >= len(b.data) {
+		*err = BufferOutOfBoundError(b.readerIndex, 1, len(b.data))
+		return 0
+	}
+	byteVal := b.data[b.readerIndex]
+	b.readerIndex++
+	return result | (uint64(byteVal) << 56)
 }
 
 // Auxiliary function

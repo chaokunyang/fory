@@ -35,14 +35,6 @@ func None[T any]() Optional[T] {
 	return Optional[T]{}
 }
 
-// FromPtr converts a pointer to an Optional.
-func FromPtr[T any](v *T) Optional[T] {
-	if v == nil {
-		return None[T]()
-	}
-	return Some(*v)
-}
-
 // IsSome reports whether the optional contains a value.
 func (o Optional[T]) IsSome() bool { return o.has }
 

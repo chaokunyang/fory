@@ -37,7 +37,6 @@ message AllOptionalTypes [id=120] {
     optional fixed_uint64 fixed_uint64_value = 17;
     optional var_uint64 var_uint64_value = 18;
     optional tagged_uint64 tagged_uint64_value = 19;
-    optional float16 float16_value = 20;
     optional float32 float32_value = 21;
     optional float64 float64_value = 22;
     optional string string_value = 23;

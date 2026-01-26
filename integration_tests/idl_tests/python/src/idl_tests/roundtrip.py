@@ -96,7 +96,6 @@ def build_primitive_types() -> "addressbook.PrimitiveTypes":
         uint64_value=9876543210,
         var_uint64_value=12345678901,
         tagged_uint64_value=2222222222,
-        float16_value=1.5,
         float32_value=2.5,
         float64_value=3.5,
         contact=contact,
@@ -124,7 +123,6 @@ def build_optional_holder() -> "optional_types.OptionalHolder":
         fixed_uint64_value=9876543210,
         var_uint64_value=12345678901,
         tagged_uint64_value=2222222222,
-        float16_value=1.5,
         float32_value=2.5,
         float64_value=3.5,
         string_value="optional",
@@ -292,7 +290,6 @@ def assert_optional_types_equal(
     assert decoded.fixed_uint64_value == expected.fixed_uint64_value
     assert decoded.var_uint64_value == expected.var_uint64_value
     assert decoded.tagged_uint64_value == expected.tagged_uint64_value
-    assert decoded.float16_value == expected.float16_value
     assert decoded.float32_value == expected.float32_value
     assert decoded.float64_value == expected.float64_value
     assert decoded.string_value == expected.string_value

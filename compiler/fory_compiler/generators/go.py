@@ -705,7 +705,11 @@ class GoGenerator(BaseGenerator):
         if isinstance(field_type, PrimitiveType):
             base_type = self.PRIMITIVE_MAP[field_type.kind]
             if nullable and base_type not in ("[]byte",):
-                if use_option and not ref and base_type not in ("time.Time", "fory.Date"):
+                if (
+                    use_option
+                    and not ref
+                    and base_type not in ("time.Time", "fory.Date")
+                ):
                     return f"optional.Optional[{base_type}]"
                 return f"*{base_type}"
             return base_type

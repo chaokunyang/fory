@@ -560,12 +560,6 @@ class BytesSerializer(XlangCompatibleSerializer):
             return fory_buf
         return fory_buf.to_pybytes()
 
-    def xwrite(self, buffer, value):
-        buffer.write_bytes_and_size(value)
-
-    def xread(self, buffer):
-        return buffer.read_bytes_and_size()
-
 
 class BytesBufferObject(BufferObject):
     __slots__ = ("binary",)

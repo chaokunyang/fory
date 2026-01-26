@@ -114,7 +114,7 @@ jobs:
 
   java21_windows:
     name: Windows Java 21 CI
-    runs-on: windows-2025
+    runs-on: windows-2022
     env:
       MY_VAR: "PATH"
     strategy:
@@ -256,7 +256,7 @@ jobs:
     strategy:
       matrix:
         node-version: [18, 20, 24]
-        os: [ubuntu-latest, macos-latest, windows-2025]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -345,7 +345,7 @@ jobs:
     name: C++ CI
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-2025]
+        os: [ubuntu-latest, macos-latest, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -514,7 +514,7 @@ jobs:
     strategy:
       matrix:
         python-version: [3.8, 3.12, 3.13.3]
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-2025]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-2022]
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python ${{ matrix.python-version }}

@@ -121,9 +121,9 @@ public:
 class EnumContainer final {
 public:
   enum class Kind { Alpha, Beta };
-
-  FORY_ENUM_IN_CLASS(Kind, Alpha, Beta);
 };
+
+FORY_ENUM(EnumContainer::Kind, Alpha, Beta);
 
 FORY_FIELD_CONFIG(Configured, Configured, (id_, fory::F().id(1).varint()));
 FORY_FIELD_TAGS(OptionalHolder, (name_, 1));
@@ -187,7 +187,8 @@ TEST(NamespaceMacros, EnumInAndOutOfClass) {
   static_assert(::fory::meta::EnumInfo<macro_test::EnumContainer::Kind>::size ==
                 2);
   static_assert(::fory::meta::EnumInfo<macro_test::EnumContainer::Kind>::name(
-                    macro_test::EnumContainer::Kind::Alpha) == "Kind::Alpha");
+                    macro_test::EnumContainer::Kind::Alpha) ==
+                "EnumContainer::Kind::Alpha");
 }
 
 } // namespace test

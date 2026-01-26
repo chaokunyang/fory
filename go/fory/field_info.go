@@ -24,13 +24,23 @@ import (
 	"strings"
 )
 
+// FieldKind describes how a field is stored in Go memory.
+type FieldKind uint8
+
+const (
+	FieldKindValue FieldKind = iota
+	FieldKindPointer
+	FieldKindOptional
+)
+
 // PrimitiveFieldInfo contains only the fields needed for hot primitive serialization loops.
 // This minimal struct improves cache efficiency during iteration.
-// Size: 16 bytes (vs full FieldInfo)
 type PrimitiveFieldInfo struct {
 	Offset      uintptr    // Field offset for unsafe access
 	DispatchId  DispatchId // Type dispatch ID
 	WriteOffset uint8      // Offset within fixed-fields buffer (0-255, sufficient for fixed primitives)
+	Kind        FieldKind
+	Meta        *FieldMeta
 }
 
 // FieldMeta contains cold/rarely-accessed field metadata.
@@ -43,8 +53,7 @@ type FieldMeta struct {
 	FieldIndex int      // -1 if field doesn't exist in current struct (for compatible mode)
 	FieldDef   FieldDef // original FieldDef from remote TypeDef (for compatible mode skip)
 
-	// Optional fields (fory/optional.Optional[T])
-	IsOptional   bool
+	// Optional fields (fory/optional.Optional[T]) - only valid when FieldKindOptional
 	OptionalInfo optionalInfo
 
 	// Pre-computed sizes (for fixed primitives)
@@ -71,7 +80,7 @@ type FieldInfo struct {
 	DispatchId  DispatchId // Type dispatch ID
 	WriteOffset int        // Offset within fixed-fields buffer region (sum of preceding field sizes)
 	RefMode     RefMode    // ref mode for serializer.Write/Read
-	IsPtr       bool       // True if field.Type.Kind() == reflect.Ptr
+	Kind        FieldKind
 	Serializer  Serializer // Serializer for this field
 
 	// Cold fields - accessed less frequently
@@ -151,15 +160,11 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 	// Categorize fields
 	for i := range fields {
 		field := &fields[i]
-		if field.Meta.IsOptional {
-			g.RemainingFields = append(g.RemainingFields, *field)
-			continue
-		}
-		if isFixedSizePrimitive(field.DispatchId, field.Meta.Nullable) {
+		if isFixedSizePrimitive(field.DispatchId) {
 			// Non-nullable fixed-size primitives only
 			field.Meta.FixedSize = getFixedSizeByDispatchId(field.DispatchId)
 			g.FixedFields = append(g.FixedFields, *field)
-		} else if isVarintPrimitive(field.DispatchId, field.Meta.Nullable) {
+		} else if isVarintPrimitive(field.DispatchId) {
 			// Non-nullable varint primitives only
 			g.VarintFields = append(g.VarintFields, *field)
 		} else {
@@ -188,6 +193,8 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 			Offset:      g.FixedFields[i].Offset,
 			DispatchId:  g.FixedFields[i].DispatchId,
 			WriteOffset: uint8(g.FixedSize),
+			Kind:        g.FixedFields[i].Kind,
+			Meta:        g.FixedFields[i].Meta,
 		}
 		g.FixedSize += g.FixedFields[i].Meta.FixedSize
 	}
@@ -214,6 +221,8 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		g.PrimitiveVarintFields[i] = PrimitiveFieldInfo{
 			Offset:     g.VarintFields[i].Offset,
 			DispatchId: g.VarintFields[i].DispatchId,
+			Kind:       g.VarintFields[i].Kind,
+			Meta:       g.VarintFields[i].Meta,
 			// WriteOffset not used for varint fields (variable length)
 		}
 	}
@@ -357,27 +366,19 @@ func getUnderlyingTypeSize(dispatchId DispatchId) int {
 	switch dispatchId {
 	// 64-bit types
 	case PrimitiveInt64DispatchId, PrimitiveUint64DispatchId, PrimitiveFloat64DispatchId,
-		NotnullInt64PtrDispatchId, NotnullUint64PtrDispatchId, NotnullFloat64PtrDispatchId,
 		PrimitiveVarint64DispatchId, PrimitiveVarUint64DispatchId,
-		NotnullVarint64PtrDispatchId, NotnullVarUint64PtrDispatchId,
 		PrimitiveTaggedInt64DispatchId, PrimitiveTaggedUint64DispatchId,
-		NotnullTaggedInt64PtrDispatchId, NotnullTaggedUint64PtrDispatchId,
-		PrimitiveIntDispatchId, PrimitiveUintDispatchId,
-		NotnullIntPtrDispatchId, NotnullUintPtrDispatchId:
+		PrimitiveIntDispatchId, PrimitiveUintDispatchId:
 		return 8
 	// 32-bit types
 	case PrimitiveInt32DispatchId, PrimitiveUint32DispatchId, PrimitiveFloat32DispatchId,
-		NotnullInt32PtrDispatchId, NotnullUint32PtrDispatchId, NotnullFloat32PtrDispatchId,
-		PrimitiveVarint32DispatchId, PrimitiveVarUint32DispatchId,
-		NotnullVarint32PtrDispatchId, NotnullVarUint32PtrDispatchId:
+		PrimitiveVarint32DispatchId, PrimitiveVarUint32DispatchId:
 		return 4
 	// 16-bit types
-	case PrimitiveInt16DispatchId, PrimitiveUint16DispatchId,
-		NotnullInt16PtrDispatchId, NotnullUint16PtrDispatchId:
+	case PrimitiveInt16DispatchId, PrimitiveUint16DispatchId:
 		return 2
 	// 8-bit types
-	case PrimitiveBoolDispatchId, PrimitiveInt8DispatchId, PrimitiveUint8DispatchId,
-		NotnullBoolPtrDispatchId, NotnullInt8PtrDispatchId, NotnullUint8PtrDispatchId:
+	case PrimitiveBoolDispatchId, PrimitiveInt8DispatchId, PrimitiveUint8DispatchId:
 		return 1
 	// Nullable types
 	case NullableInt64DispatchId, NullableUint64DispatchId, NullableFloat64DispatchId,
@@ -771,6 +772,12 @@ func typesCompatible(actual, expected reflect.Type) bool {
 	if actual == expected {
 		return true
 	}
+	if (actual.Kind() == reflect.Int && expected.Kind() == reflect.Int64) ||
+		(actual.Kind() == reflect.Int64 && expected.Kind() == reflect.Int) ||
+		(actual.Kind() == reflect.Uint && expected.Kind() == reflect.Uint64) ||
+		(actual.Kind() == reflect.Uint64 && expected.Kind() == reflect.Uint) {
+		return true
+	}
 	// any can accept any value
 	if actual.Kind() == reflect.Interface && actual.NumMethod() == 0 {
 		return true
@@ -783,6 +790,24 @@ func typesCompatible(actual, expected reflect.Type) bool {
 	}
 	if expected.Kind() == reflect.Ptr && expected.Elem() == actual {
 		return true
+	}
+	if actual.Kind() == reflect.Ptr && expected.Kind() != reflect.Ptr {
+		elem := actual.Elem()
+		if (elem.Kind() == reflect.Int && expected.Kind() == reflect.Int64) ||
+			(elem.Kind() == reflect.Int64 && expected.Kind() == reflect.Int) ||
+			(elem.Kind() == reflect.Uint && expected.Kind() == reflect.Uint64) ||
+			(elem.Kind() == reflect.Uint64 && expected.Kind() == reflect.Uint) {
+			return true
+		}
+	}
+	if expected.Kind() == reflect.Ptr && actual.Kind() != reflect.Ptr {
+		elem := expected.Elem()
+		if (elem.Kind() == reflect.Int && actual.Kind() == reflect.Int64) ||
+			(elem.Kind() == reflect.Int64 && actual.Kind() == reflect.Int) ||
+			(elem.Kind() == reflect.Uint && actual.Kind() == reflect.Uint64) ||
+			(elem.Kind() == reflect.Uint64 && actual.Kind() == reflect.Uint) {
+			return true
+		}
 	}
 	if actual.Kind() == expected.Kind() {
 		switch actual.Kind() {
@@ -810,6 +835,12 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 		expected = info.valueType
 	}
 	if actual == expected || actual.AssignableTo(expected) || expected.AssignableTo(actual) {
+		return true
+	}
+	if (actual.Kind() == reflect.Int && expected.Kind() == reflect.Int64) ||
+		(actual.Kind() == reflect.Int64 && expected.Kind() == reflect.Int) ||
+		(actual.Kind() == reflect.Uint && expected.Kind() == reflect.Uint64) ||
+		(actual.Kind() == reflect.Uint64 && expected.Kind() == reflect.Uint) {
 		return true
 	}
 	if actual.Kind() == reflect.Ptr {

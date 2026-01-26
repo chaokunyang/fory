@@ -85,6 +85,7 @@ var (
 	uint16Type           = reflect.TypeOf((*uint16)(nil)).Elem()
 	uint32Type           = reflect.TypeOf((*uint32)(nil)).Elem()
 	uint64Type           = reflect.TypeOf((*uint64)(nil)).Elem()
+	uintType             = reflect.TypeOf((*uint)(nil)).Elem()
 	int8Type             = reflect.TypeOf((*int8)(nil)).Elem()
 	int16Type            = reflect.TypeOf((*int16)(nil)).Elem()
 	int32Type            = reflect.TypeOf((*int32)(nil)).Elem()
@@ -354,6 +355,7 @@ func (r *TypeResolver) initialize() {
 		{uint16Type, UINT16, uint16Serializer{}},
 		{uint32Type, VAR_UINT32, uint32Serializer{}},
 		{uint64Type, VAR_UINT64, uint64Serializer{}},
+		{uintType, VAR_UINT64, uintSerializer{}},
 		{int8Type, INT8, int8Serializer{}},
 		{int16Type, INT16, int16Serializer{}},
 		{int32Type, VARINT32, int32Serializer{}},

@@ -129,6 +129,33 @@ func (s *structSerializer) initialize(typeResolver *TypeResolver) error {
 	return nil
 }
 
+func computeLocalNullable(typeResolver *TypeResolver, field reflect.StructField, foryTag ForyTag) bool {
+	fieldType := field.Type
+	optionalInfo, isOptional := getOptionalInfo(fieldType)
+	if isOptional {
+		fieldType = optionalInfo.valueType
+	}
+	typeId := typeResolver.getTypeIdByType(fieldType)
+	internalId := TypeId(typeId & 0xFF)
+	isEnum := internalId == ENUM || internalId == NAMED_ENUM
+	var nullableFlag bool
+	if typeResolver.fory.config.IsXlang {
+		nullableFlag = isOptional || field.Type.Kind() == reflect.Ptr
+	} else {
+		nullableFlag = isOptional || field.Type.Kind() == reflect.Ptr ||
+			field.Type.Kind() == reflect.Slice ||
+			field.Type.Kind() == reflect.Map ||
+			field.Type.Kind() == reflect.Interface
+	}
+	if foryTag.NullableSet {
+		nullableFlag = foryTag.Nullable
+	}
+	if isNonNullablePrimitiveKind(fieldType.Kind()) && !isEnum {
+		nullableFlag = false
+	}
+	return nullableFlag
+}
+
 // initFields initializes fields from local struct type using TypeResolver
 func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 	// If we have fieldDefs from type_def (remote meta), use them
@@ -456,6 +483,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 	fieldNameToIndex := make(map[string]int)
 	fieldNameToOffset := make(map[string]uintptr)
 	fieldNameToType := make(map[string]reflect.Type)
+	localNullableByIndex := make(map[int]bool)
 	fieldTagIDToIndex := make(map[int]int)         // tag ID -> struct field index
 	fieldTagIDToOffset := make(map[int]uintptr)    // tag ID -> field offset
 	fieldTagIDToType := make(map[int]reflect.Type) // tag ID -> field type
@@ -473,6 +501,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		fieldNameToIndex[name] = i
 		fieldNameToOffset[name] = field.Offset
 		fieldNameToType[name] = field.Type
+		localNullableByIndex[i] = computeLocalNullable(typeResolver, field, foryTag)
 
 		// Also index by tag ID if present
 		if foryTag.ID >= 0 {
@@ -818,8 +847,8 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		// Local nullable is determined by whether the Go field is a pointer type
 		if i < len(s.fieldDefs) && field.Meta.FieldIndex >= 0 {
 			remoteNullable := s.fieldDefs[i].nullable
-			// Check if local Go field is nullable based on computed field metadata
-			localNullable := field.Meta.Nullable
+			// Check if local Go field is nullable based on local field definitions
+			localNullable := localNullableByIndex[field.Meta.FieldIndex]
 			if remoteNullable != localNullable {
 				s.typeDefDiffers = true
 				break
@@ -3138,22 +3167,8 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 		}
 	}
 
-	for i := range s.fieldGroup.FixedFields {
-		field := &s.fieldGroup.FixedFields[i]
-		readField(field)
-		if ctx.HasError() {
-			return
-		}
-	}
-	for i := range s.fieldGroup.VarintFields {
-		field := &s.fieldGroup.VarintFields[i]
-		readField(field)
-		if ctx.HasError() {
-			return
-		}
-	}
-	for i := range s.fieldGroup.RemainingFields {
-		field := &s.fieldGroup.RemainingFields[i]
+	for i := range s.fields {
+		field := &s.fields[i]
 		readField(field)
 		if ctx.HasError() {
 			return

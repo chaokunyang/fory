@@ -511,7 +511,9 @@ constexpr bool compute_track_ref() {
   } else if constexpr (::fory::detail::has_field_tags_v<T>) {
     return ::fory::detail::GetFieldTagEntry<T, Index>::track_ref;
   } else {
-    return false;
+    using UnwrappedFieldType = fory::unwrap_field_t<ActualFieldType>;
+    return ::fory::detail::is_shared_ptr_v<UnwrappedFieldType> ||
+           ::fory::detail::is_shared_weak_v<UnwrappedFieldType>;
   }
 }
 

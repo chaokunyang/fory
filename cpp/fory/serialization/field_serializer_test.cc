@@ -656,7 +656,7 @@ TEST(FieldSerializerTest, FieldMetadataCompileTime) {
 
   // Ref tracking
   static_assert(decltype(FieldRefTrackingHolder::first)::track_ref);
-  static_assert(!decltype(FieldSharedPtrHolder::value)::track_ref);
+  static_assert(decltype(FieldSharedPtrHolder::value)::track_ref);
 
   // not_null doesn't change is_nullable for already non-nullable
   static_assert(!decltype(FieldNotNullRefHolder::node)::is_nullable);

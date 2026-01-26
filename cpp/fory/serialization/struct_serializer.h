@@ -604,7 +604,7 @@ template <typename T> struct CompileTimeFieldHelpers {
   }
 
   /// Returns true if reference tracking is enabled for the field at Index.
-  /// Only valid for std::shared_ptr fields with fory::ref tag.
+  /// Defaults to true for std::shared_ptr/SharedWeak fields.
   template <size_t Index> static constexpr bool field_track_ref() {
     if constexpr (FieldCount == 0) {
       return false;
@@ -620,9 +620,9 @@ template <typename T> struct CompileTimeFieldHelpers {
       else if constexpr (::fory::detail::has_field_tags_v<T>) {
         return ::fory::detail::GetFieldTagEntry<T, Index>::track_ref;
       }
-      // Default: no reference tracking
+      // Default: shared_ptr/SharedWeak track refs
       else {
-        return false;
+        return field_track_ref_v<RawFieldType>;
       }
     }
   }

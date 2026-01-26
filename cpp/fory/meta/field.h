@@ -33,23 +33,28 @@
 
 namespace fory {
 
+namespace serialization {
+template <typename T> class SharedWeak;
+} // namespace serialization
+
 // ============================================================================
 // Field Option Tags
 // ============================================================================
 
-/// Tag to mark a shared_ptr/unique_ptr field as nullable.
-/// Only valid for std::shared_ptr and std::unique_ptr types.
+/// Tag to mark a shared_ptr/SharedWeak/unique_ptr field as nullable.
+/// Only valid for std::shared_ptr, SharedWeak, and std::unique_ptr types.
 /// For nullable primitives/strings, use std::optional<T> instead.
 struct nullable {};
 
 /// Tag to explicitly mark a pointer field as non-nullable.
 /// Useful for future pointer types (e.g., weak_ptr) that might be nullable by
-/// default. For shared_ptr/unique_ptr, non-nullable is already the default.
+/// default. For shared_ptr/SharedWeak/unique_ptr, non-nullable is already the
+/// default.
 struct not_null {};
 
-/// Tag to enable reference tracking for shared_ptr fields.
-/// Only valid for std::shared_ptr types (requires shared ownership for ref
-/// tracking).
+/// Tag to enable reference tracking for shared_ptr/SharedWeak fields.
+/// Only valid for std::shared_ptr or SharedWeak types (requires shared
+/// ownership for ref tracking).
 struct ref {};
 
 /// Template tag to control dynamic type dispatch for smart pointer fields.
@@ -108,6 +113,14 @@ struct is_shared_ptr<std::shared_ptr<T>> : std::true_type {};
 template <typename T>
 inline constexpr bool is_shared_ptr_v = is_shared_ptr<T>::value;
 
+template <typename T> struct is_shared_weak : std::false_type {};
+
+template <typename T>
+struct is_shared_weak<serialization::SharedWeak<T>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_shared_weak_v = is_shared_weak<T>::value;
+
 template <typename T> struct is_unique_ptr : std::false_type {};
 
 template <typename T, typename D>
@@ -123,9 +136,10 @@ template <typename T> struct is_optional<std::optional<T>> : std::true_type {};
 template <typename T>
 inline constexpr bool is_optional_v = is_optional<T>::value;
 
-/// Helper to check if type is shared_ptr or unique_ptr
+/// Helper to check if type is shared_ptr/SharedWeak or unique_ptr
 template <typename T>
-inline constexpr bool is_smart_ptr_v = is_shared_ptr_v<T> || is_unique_ptr_v<T>;
+inline constexpr bool is_smart_ptr_v =
+    is_shared_ptr_v<T> || is_shared_weak_v<T> || is_unique_ptr_v<T>;
 
 // ============================================================================
 // Option Tag Detection
@@ -495,6 +509,7 @@ public:
 ///   - Primitives/strings: No options allowed (use std::optional for nullable)
 ///   - std::optional<T>: Inherently nullable, no options needed
 ///   - std::shared_ptr<T>: Can use nullable and/or ref
+///   - SharedWeak<T>: Can use nullable and/or ref
 ///   - std::unique_ptr<T>: Can use nullable only (no ref - exclusive
 ///   ownership)
 template <typename T, int16_t Id, typename... Options> class field {
@@ -506,7 +521,8 @@ template <typename T, int16_t Id, typename... Options> class field {
   // Validate: nullable only for smart pointers
   static_assert(!detail::has_option_v<nullable, Options...> ||
                     detail::is_smart_ptr_v<T>,
-                "fory::nullable is only valid for shared_ptr/unique_ptr. "
+                "fory::nullable is only valid for shared_ptr/SharedWeak/"
+                "unique_ptr. "
                 "Use std::optional<T> for nullable primitives/strings.");
 
   // Validate: not_null only for smart pointers (for now)
@@ -514,16 +530,17 @@ template <typename T, int16_t Id, typename... Options> class field {
                     detail::is_smart_ptr_v<T>,
                 "fory::not_null is only valid for pointer types.");
 
-  // Validate: ref only for shared_ptr
+  // Validate: ref only for shared_ptr/SharedWeak
   static_assert(!detail::has_option_v<ref, Options...> ||
-                    detail::is_shared_ptr_v<T>,
-                "fory::ref is only valid for shared_ptr "
+                    detail::is_shared_ptr_v<T> || detail::is_shared_weak_v<T>,
+                "fory::ref is only valid for shared_ptr/SharedWeak "
                 "(reference tracking requires shared ownership).");
 
   // Validate: dynamic<V> only for smart pointers
   static_assert(!detail::has_dynamic_option_v<Options...> ||
                     detail::is_smart_ptr_v<T>,
-                "fory::dynamic<V> is only valid for shared_ptr/unique_ptr.");
+                "fory::dynamic<V> is only valid for shared_ptr/SharedWeak/"
+                "unique_ptr.");
 
   // Validate: no options for optional (inherently nullable)
   static_assert(!detail::is_optional_v<T> || sizeof...(Options) == 0,
@@ -532,7 +549,8 @@ template <typename T, int16_t Id, typename... Options> class field {
   // Validate: no options for non-smart-pointer types
   static_assert(detail::is_smart_ptr_v<T> || detail::is_optional_v<T> ||
                     sizeof...(Options) == 0,
-                "Options are only valid for shared_ptr/unique_ptr fields. "
+                "Options are only valid for shared_ptr/SharedWeak/unique_ptr "
+                "fields. "
                 "Use std::optional<T> for nullable primitives/strings.");
 
 public:
@@ -547,9 +565,11 @@ public:
       (detail::is_smart_ptr_v<T> && detail::has_option_v<nullable, Options...>);
 
   /// Reference tracking is enabled if:
-  /// - It's std::shared_ptr with fory::ref option
-  static constexpr bool track_ref =
-      detail::is_shared_ptr_v<T> && detail::has_option_v<ref, Options...>;
+  /// - It's std::shared_ptr or SharedWeak (default)
+  /// - Or explicitly marked with fory::ref
+  static constexpr bool track_ref = detail::is_shared_ptr_v<T> ||
+                                    detail::is_shared_weak_v<T> ||
+                                    detail::has_option_v<ref, Options...>;
 
   /// Dynamic type dispatch control:
   /// - -1 (AUTO): Use std::is_polymorphic<T> to decide
@@ -666,7 +686,8 @@ inline constexpr bool field_is_nullable_v = field_is_nullable<T>::value;
 
 /// Get track_ref from field type
 template <typename T> struct field_track_ref {
-  static constexpr bool value = false;
+  static constexpr bool value =
+      detail::is_shared_ptr_v<T> || detail::is_shared_weak_v<T>;
 };
 
 template <typename T, int16_t Id, typename... Options>
@@ -705,21 +726,25 @@ struct ParseFieldTagEntry {
       is_optional_v<FieldType> ||
       (is_smart_ptr_v<FieldType> && has_option_v<nullable, Options...>);
 
-  static constexpr bool track_ref =
-      is_shared_ptr_v<FieldType> && has_option_v<ref, Options...>;
+  static constexpr bool track_ref = is_shared_ptr_v<FieldType> ||
+                                    is_shared_weak_v<FieldType> ||
+                                    has_option_v<ref, Options...>;
 
   static constexpr int dynamic_value = get_dynamic_value_v<Options...>;
 
   // Compile-time validation
   static_assert(!has_option_v<nullable, Options...> ||
                     is_smart_ptr_v<FieldType>,
-                "fory::nullable is only valid for shared_ptr/unique_ptr");
+                "fory::nullable is only valid for shared_ptr/SharedWeak/"
+                "unique_ptr");
 
-  static_assert(!has_option_v<ref, Options...> || is_shared_ptr_v<FieldType>,
-                "fory::ref is only valid for shared_ptr");
+  static_assert(!has_option_v<ref, Options...> || is_shared_ptr_v<FieldType> ||
+                    is_shared_weak_v<FieldType>,
+                "fory::ref is only valid for shared_ptr/SharedWeak");
 
   static_assert(!has_dynamic_option_v<Options...> || is_smart_ptr_v<FieldType>,
-                "fory::dynamic<V> is only valid for shared_ptr/unique_ptr");
+                "fory::dynamic<V> is only valid for shared_ptr/SharedWeak/"
+                "unique_ptr");
 
   using type = FieldTagEntry<Id, is_nullable, track_ref, dynamic_value>;
 };

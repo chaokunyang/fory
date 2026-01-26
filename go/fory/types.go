@@ -94,10 +94,10 @@ const (
 	NONE = 34
 	// DURATION Measure of elapsed time in either seconds milliseconds microseconds
 	DURATION = 35
-	// TIMESTAMP Exact timestamp encoded with int64 since UNIX epoch
+	// TIMESTAMP Exact timestamp encoded with seconds(int64) + nanos(uint32) since UNIX epoch
 	TIMESTAMP = 36
-	// LOCAL_DATE a naive date without timezone
-	LOCAL_DATE = 37
+	// DATE a naive date without timezone
+	DATE = 37
 	// DECIMAL Precision- and scale-based decimal type
 	DECIMAL = 38
 	// BINARY Variable-length bytes (no guarantee of UTF8-ness)
@@ -185,7 +185,7 @@ func NeedWriteRef(typeID TypeId) bool {
 	switch typeID {
 	case BOOL, INT8, INT16, INT32, INT64, VARINT32, VARINT64, TAGGED_INT64,
 		FLOAT32, FLOAT64, FLOAT16,
-		STRING, TIMESTAMP, LOCAL_DATE, DURATION, NONE:
+		STRING, TIMESTAMP, DATE, DURATION, NONE:
 		return false
 	default:
 		return true

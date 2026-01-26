@@ -237,7 +237,7 @@ func getTypeID(t types.Type) string {
 		case "time.Time":
 			return "TIMESTAMP"
 		case "github.com/apache/fory/go/fory.Date":
-			return "LOCAL_DATE"
+			return "DATE"
 		}
 		// Struct types
 		if _, ok := named.Underlying().(*types.Struct); ok {
@@ -355,8 +355,8 @@ func getTypeIDValue(typeID string) int {
 		return int(fory.MAP) // 22
 	case "TIMESTAMP":
 		return int(fory.TIMESTAMP) // 25
-	case "LOCAL_DATE":
-		return int(fory.LOCAL_DATE) // 26
+	case "DATE":
+		return int(fory.DATE) // 26
 	case "NAMED_STRUCT":
 		return int(fory.NAMED_STRUCT) // 17
 	// Primitive array types

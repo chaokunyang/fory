@@ -372,7 +372,7 @@ func generateElementTypeIDWrite(buf *bytes.Buffer, elemType types.Type) error {
 			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // TIMESTAMP\n", fory.TIMESTAMP)
 			return nil
 		case "github.com/apache/fory/go/fory.Date":
-			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // LOCAL_DATE\n", fory.LOCAL_DATE)
+			fmt.Fprintf(buf, "\t\tbuf.WriteVaruint32(%d) // DATE\n", fory.DATE)
 			return nil
 		}
 		// Check if it's a struct

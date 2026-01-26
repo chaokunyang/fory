@@ -826,7 +826,7 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 		return typeIdFromKind(info.valueType)
 	}
 	if type_ == dateType {
-		return LOCAL_DATE
+		return DATE
 	}
 	if type_ == timestampType {
 		return TIMESTAMP

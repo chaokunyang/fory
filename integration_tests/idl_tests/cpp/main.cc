@@ -230,7 +230,7 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   all_types.set_string_value("optional");
   all_types.set_bytes_value({static_cast<uint8_t>(1), static_cast<uint8_t>(2),
                              static_cast<uint8_t>(3)});
-  all_types.set_date_value(fory::serialization::LocalDate(19724));
+  all_types.set_date_value(fory::serialization::Date(19724));
   all_types.set_timestamp_value(
       fory::serialization::Timestamp(std::chrono::seconds(1704164645)));
   all_types.set_int32_list({1, 2, 3});

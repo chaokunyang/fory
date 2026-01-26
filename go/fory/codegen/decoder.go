@@ -456,8 +456,9 @@ func generateSliceElementRead(buf *bytes.Buffer, elemType types.Type, elemAccess
 		typeStr := named.String()
 		switch typeStr {
 		case "time.Time":
-			fmt.Fprintf(buf, "\t\t\t\tusec := buf.ReadInt64()\n")
-			fmt.Fprintf(buf, "\t\t\t\t%s = fory.CreateTimeFromUnixMicro(usec)\n", elemAccess)
+			fmt.Fprintf(buf, "\t\t\t\tseconds := buf.ReadInt64()\n")
+			fmt.Fprintf(buf, "\t\t\t\tnanos := buf.ReadUint32()\n")
+			fmt.Fprintf(buf, "\t\t\t\t%s = fory.CreateTimeFromUnixSecondsAndNanos(seconds, nanos)\n", elemAccess)
 			return nil
 		case "github.com/apache/fory/go/fory.Date":
 			fmt.Fprintf(buf, "\t\t\t\tdays := buf.ReadInt32()\n")

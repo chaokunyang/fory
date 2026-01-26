@@ -361,7 +361,7 @@ func (r *TypeResolver) initialize() {
 		{intType, VARINT64, intSerializer{}}, // int maps to int64 for xlang
 		{float32Type, FLOAT32, float32Serializer{}},
 		{float64Type, FLOAT64, float64Serializer{}},
-		{dateType, LOCAL_DATE, dateSerializer{}},
+		{dateType, DATE, dateSerializer{}},
 		{timestampType, TIMESTAMP, timeSerializer{}},
 		{genericSetType, SET, setSerializer{}},
 	}

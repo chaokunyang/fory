@@ -460,7 +460,7 @@ class GoGenerator(BaseGenerator):
                 PrimitiveKind.FLOAT64: "fory.FLOAT64",
                 PrimitiveKind.STRING: "fory.STRING",
                 PrimitiveKind.BYTES: "fory.BINARY",
-                PrimitiveKind.DATE: "fory.LOCAL_DATE",
+                PrimitiveKind.DATE: "fory.DATE",
                 PrimitiveKind.TIMESTAMP: "fory.TIMESTAMP",
             }
             return primitive_type_ids.get(kind, "fory.UNKNOWN")

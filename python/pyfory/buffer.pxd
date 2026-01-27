@@ -24,7 +24,7 @@
 from libc.stdint cimport *
 from libcpp.memory cimport shared_ptr
 from libcpp cimport bool as c_bool
-from pyfory.includes.libutil cimport CBuffer
+from pyfory.includes.libutil cimport CBuffer, CError
 
 
 cdef class Buffer:
@@ -36,11 +36,19 @@ cdef class Buffer:
         CBuffer* c_buffer_ptr
         uint8_t* _c_address
         int32_t _c_size
+        CError _error
         # hold python buffer reference count
         object data
         Py_ssize_t shape[1]
         Py_ssize_t stride[1]
-        public int32_t reader_index, writer_index
+
+    property reader_index:
+        def __get__(self)
+        def __set__(self, value)
+
+    property writer_index:
+        def __get__(self)
+        def __set__(self, value)
 
     @staticmethod
     cdef Buffer wrap(shared_ptr[CBuffer] c_buffer)

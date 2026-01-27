@@ -43,10 +43,12 @@ cdef extern from "fory/util/error.h" namespace "fory" nogil:
         BufferOutOfBound = 18
 
     cdef cppclass CError "fory::Error":
+        c_bool ok() const
         CErrorCode code() const
         const c_string& message() const
         c_string to_string() const
         c_string code_as_string() const
+        void reset()
 
 cdef extern from "fory/util/result.h" namespace "fory" nogil:
     cdef cppclass CResultVoidError "fory::Result<void, fory::Error>":
@@ -64,7 +66,21 @@ cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
 
         inline c_bool own_data()
 
-        inline c_bool Reserve(uint32_t new_size)
+        inline uint32_t writer_index()
+
+        inline uint32_t reader_index()
+
+        inline void WriterIndex(uint32_t writer_index)
+
+        inline void IncreaseWriterIndex(uint32_t diff)
+
+        inline void ReaderIndex(uint32_t reader_index)
+
+        inline void IncreaseReaderIndex(uint32_t diff)
+
+        void Grow(uint32_t min_capacity)
+
+        void Reserve(uint32_t new_size)
 
         inline void UnsafePutByte(uint32_t offset, c_bool)
 
@@ -104,6 +120,76 @@ cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
         inline uint32_t PutVarUint32(uint32_t offset, int32_t value)
 
         inline int32_t GetVarUint32(uint32_t offset, uint32_t *readBytesLength)
+
+        void WriteUint8(uint8_t value)
+
+        void WriteInt8(int8_t value)
+
+        void WriteUint16(uint16_t value)
+
+        void WriteInt16(int16_t value)
+
+        void WriteUint32(uint32_t value)
+
+        void WriteInt32(int32_t value)
+
+        void WriteInt64(int64_t value)
+
+        void WriteFloat(float value)
+
+        void WriteDouble(double value)
+
+        void WriteVarUint32(uint32_t value)
+
+        void WriteVarInt32(int32_t value)
+
+        void WriteVarUint64(uint64_t value)
+
+        void WriteVarInt64(int64_t value)
+
+        void WriteTaggedInt64(int64_t value)
+
+        void WriteTaggedUint64(uint64_t value)
+
+        void WriteBytes(const void* data, uint32_t length)
+
+        uint8_t ReadUint8(CError& error)
+
+        int8_t ReadInt8(CError& error)
+
+        uint16_t ReadUint16(CError& error)
+
+        int16_t ReadInt16(CError& error)
+
+        uint32_t ReadUint32(CError& error)
+
+        int32_t ReadInt32(CError& error)
+
+        uint64_t ReadUint64(CError& error)
+
+        int64_t ReadInt64(CError& error)
+
+        float ReadFloat(CError& error)
+
+        double ReadDouble(CError& error)
+
+        uint32_t ReadVarUint32(CError& error)
+
+        int32_t ReadVarInt32(CError& error)
+
+        uint64_t ReadVarUint64(CError& error)
+
+        int64_t ReadVarInt64(CError& error)
+
+        int64_t ReadTaggedInt64(CError& error)
+
+        uint64_t ReadTaggedUint64(CError& error)
+
+        uint64_t ReadVarUint36Small(CError& error)
+
+        void ReadBytes(void* data, uint32_t length, CError& error)
+
+        void Skip(uint32_t length, CError& error)
 
         void Copy(uint32_t start, uint32_t nbytes,
                   uint8_t* out, uint32_t offset) const

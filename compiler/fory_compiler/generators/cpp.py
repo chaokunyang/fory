@@ -17,7 +17,7 @@
 
 """C++ code generator."""
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 import typing
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
@@ -120,15 +120,13 @@ class CppGenerator(BaseGenerator):
             return f"{namespace}::{qualified_name}"
         return qualified_name
 
-    def get_field_config_type_and_alias(
+    def get_field_config_type(
         self,
         type_name: str,
         parent_stack: List[Message],
-    ) -> Tuple[str, str]:
-        """Get type name and token-safe alias for FORY_FIELD_CONFIG."""
-        qualified_name = self.get_namespaced_type_name(type_name, parent_stack)
-        alias = f"ForyType_{qualified_name.replace('::', '_')}"
-        return qualified_name, alias
+    ) -> str:
+        """Get type name for FORY_FIELD_CONFIG."""
+        return self.get_namespaced_type_name(type_name, parent_stack)
 
     def generate_header(self) -> GeneratedFile:
         """Generate a C++ header file with all types."""
@@ -784,13 +782,11 @@ class CppGenerator(BaseGenerator):
             field_members = ", ".join(
                 self.get_field_member_name(f) for f in message.fields
             )
-            field_config_type_name = self.get_field_config_type_and_alias(
+            field_config_type_name = self.get_field_config_type(
                 message.name, parent_stack
             )
             field_config_macros.append(
-                self.generate_field_config_macro(
-                    message, field_config_type_name[0], field_config_type_name[1]
-                )
+                self.generate_field_config_macro(message, field_config_type_name)
             )
             lines.append(
                 f"{body_indent}FORY_STRUCT({struct_type_name}, {field_members});"
@@ -1348,7 +1344,6 @@ class CppGenerator(BaseGenerator):
         self,
         message: Message,
         qualified_name: str,
-        alias_name: str,
     ) -> str:
         """Generate FORY_FIELD_CONFIG macro for a message."""
         entries = []
@@ -1357,7 +1352,7 @@ class CppGenerator(BaseGenerator):
             meta = self.get_field_meta(field)
             entries.append(f"({field_name}, {meta})")
         joined = ", ".join(entries)
-        return f"FORY_FIELD_CONFIG({qualified_name}, {alias_name}, {joined});"
+        return f"FORY_FIELD_CONFIG({qualified_name}, {joined});"
 
     def get_field_meta(self, field: Field) -> str:
         """Build FieldMeta expression for a field."""

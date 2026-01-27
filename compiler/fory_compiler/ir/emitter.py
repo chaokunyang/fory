@@ -171,7 +171,9 @@ class FDLEmitter:
             key = self._emit_type(field_type.key_type)
             value = self._emit_type(field_type.value_type)
             if field_type.value_ref:
-                value = f"{self._emit_ref_modifier(field_type.value_ref_options)} {value}"
+                value = (
+                    f"{self._emit_ref_modifier(field_type.value_ref_options)} {value}"
+                )
             return f"map<{key}, {value}>"
         return "unknown"
 

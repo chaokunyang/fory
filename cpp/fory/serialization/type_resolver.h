@@ -497,8 +497,10 @@ constexpr bool compute_is_nullable() {
   } else if constexpr (::fory::detail::has_field_tags_v<T>) {
     return ::fory::detail::GetFieldTagEntry<T, Index>::is_nullable;
   } else if constexpr (::fory::detail::has_field_config_v<T> &&
-                       ::fory::detail::GetFieldConfigEntry<T, Index>::has_entry &&
-                       ::fory::detail::GetFieldConfigEntry<T, Index>::nullable) {
+                       ::fory::detail::GetFieldConfigEntry<T,
+                                                           Index>::has_entry &&
+                       ::fory::detail::GetFieldConfigEntry<T,
+                                                           Index>::nullable) {
     return true;
   } else {
     // Default: nullable if std::optional or smart pointers.
@@ -515,7 +517,8 @@ constexpr bool compute_track_ref() {
   } else if constexpr (::fory::detail::has_field_tags_v<T>) {
     return ::fory::detail::GetFieldTagEntry<T, Index>::track_ref;
   } else if constexpr (::fory::detail::has_field_config_v<T> &&
-                       ::fory::detail::GetFieldConfigEntry<T, Index>::has_entry &&
+                       ::fory::detail::GetFieldConfigEntry<T,
+                                                           Index>::has_entry &&
                        ::fory::detail::GetFieldConfigEntry<T, Index>::ref) {
     return true;
   } else {

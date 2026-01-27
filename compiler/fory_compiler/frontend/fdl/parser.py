@@ -631,7 +631,14 @@ class Parser:
             # Handle nullable option to set optional flag
             if field_options.get("nullable") is True:
                 optional = True
-            self.merge_ref_options(field_type, ref, element_ref, field_options, ref_options, element_ref_options)
+            self.merge_ref_options(
+                field_type,
+                ref,
+                element_ref,
+                field_options,
+                ref_options,
+                element_ref_options,
+            )
 
         self.consume(TokenType.SEMI, "Expected ';' after field declaration")
 

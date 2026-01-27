@@ -596,7 +596,9 @@ class CppGenerator(BaseGenerator):
         no_setter = is_collection or is_bytes or is_union
         value_getter = self.is_numeric_field(field) or is_enum
 
-        if self.is_message_type(field.field_type, parent_stack) and (field.ref or weak_ref):
+        if self.is_message_type(field.field_type, parent_stack) and (
+            field.ref or weak_ref
+        ):
             lines.append(f"{indent}bool has_{field_name}() const {{")
             if weak_ref:
                 lines.append(f"{indent}  return !{member_name}.expired();")
@@ -1288,9 +1290,7 @@ class CppGenerator(BaseGenerator):
                 type_name = f"{namespace}::{type_name}"
             if ref:
                 wrapper = (
-                    "fory::serialization::SharedWeak"
-                    if weak_ref
-                    else "std::shared_ptr"
+                    "fory::serialization::SharedWeak" if weak_ref else "std::shared_ptr"
                 )
                 type_name = f"{wrapper}<{type_name}>"
             if nullable:
@@ -1311,9 +1311,7 @@ class CppGenerator(BaseGenerator):
             list_type = f"std::vector<{element_type}>"
             if ref:
                 wrapper = (
-                    "fory::serialization::SharedWeak"
-                    if weak_ref
-                    else "std::shared_ptr"
+                    "fory::serialization::SharedWeak" if weak_ref else "std::shared_ptr"
                 )
                 list_type = f"{wrapper}<{list_type}>"
             if nullable:
@@ -1337,9 +1335,7 @@ class CppGenerator(BaseGenerator):
             map_type = f"std::map<{key_type}, {value_type}>"
             if ref:
                 wrapper = (
-                    "fory::serialization::SharedWeak"
-                    if weak_ref
-                    else "std::shared_ptr"
+                    "fory::serialization::SharedWeak" if weak_ref else "std::shared_ptr"
                 )
                 map_type = f"{wrapper}<{map_type}>"
             if nullable:
@@ -1462,9 +1458,7 @@ class CppGenerator(BaseGenerator):
             type_name = self.resolve_nested_type_name(field_type.name, parent_stack)
             if ref:
                 wrapper = (
-                    "fory::serialization::SharedWeak"
-                    if weak_ref
-                    else "std::shared_ptr"
+                    "fory::serialization::SharedWeak" if weak_ref else "std::shared_ptr"
                 )
                 type_name = f"{wrapper}<{type_name}>"
             if nullable:
@@ -1485,9 +1479,7 @@ class CppGenerator(BaseGenerator):
             list_type = f"std::vector<{element_type}>"
             if ref:
                 wrapper = (
-                    "fory::serialization::SharedWeak"
-                    if weak_ref
-                    else "std::shared_ptr"
+                    "fory::serialization::SharedWeak" if weak_ref else "std::shared_ptr"
                 )
                 list_type = f"{wrapper}<{list_type}>"
             if nullable:
@@ -1511,9 +1503,7 @@ class CppGenerator(BaseGenerator):
             map_type = f"std::map<{key_type}, {value_type}>"
             if ref:
                 wrapper = (
-                    "fory::serialization::SharedWeak"
-                    if weak_ref
-                    else "std::shared_ptr"
+                    "fory::serialization::SharedWeak" if weak_ref else "std::shared_ptr"
                 )
                 map_type = f"{wrapper}<{map_type}>"
             if nullable:

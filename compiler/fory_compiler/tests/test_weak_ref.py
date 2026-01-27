@@ -29,12 +29,12 @@ def parse_schema(source: str):
 def test_parse_weak_ref_option():
     source = """
     message Node {
-        ref Node parent = 1 [weak_ref = true];
+        ref(weak=true) Node parent = 1;
     }
     """
     schema = parse_schema(source)
     field = schema.messages[0].fields[0]
-    assert field.options.get("weak_ref") is True
+    assert field.ref_options.get("weak_ref") is True
 
 
 def test_weak_ref_requires_ref():
@@ -58,7 +58,7 @@ def test_weak_ref_requires_ref():
 def test_weak_ref_rejects_primitive():
     source = """
     message Foo {
-        ref int32 id = 1 [weak_ref = true];
+        ref(weak=true) int32 id = 1;
     }
     """
     schema = parse_schema(source)
@@ -77,7 +77,7 @@ def test_weak_ref_rejects_enum():
     }
 
     message Foo {
-        ref Status status = 1 [weak_ref = true];
+        ref(weak=true) Status status = 1;
     }
     """
     schema = parse_schema(source)
@@ -92,7 +92,7 @@ def test_weak_ref_rejects_enum():
 def test_repeated_ref_weak_ref_ok():
     source = """
     message Parent {
-        repeated ref Child children = 1 [weak_ref = true];
+        repeated ref(weak=true) Child children = 1;
     }
 
     message Child {

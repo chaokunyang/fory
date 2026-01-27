@@ -815,7 +815,7 @@ message Document {
 
 Modifiers can be combined:
 
-```protobuf
+```fdl
 message Example {
     optional repeated string tags = 1;  // Nullable list
     repeated optional string aliases = 2; // Elements may be null
@@ -1089,35 +1089,38 @@ enum Status {
 
 ### Field-Level Fory Options
 
-Field options are specified in brackets after the field number:
+Field options are specified in brackets after the field number (FDL uses `ref` modifiers instead
+of bracket options for reference settings):
 
 ```protobuf
 message Example {
-    MyType friend = 1 [(fory).ref = true];
-    string nickname = 2 [(fory).nullable = true];
-    MyType data = 3 [(fory).ref = true, (fory).nullable = true];
+    ref MyType friend = 1;
+    string nickname = 2 [nullable = true];
+    ref MyType data = 3 [nullable = true];
+    ref(weak = true) MyType parent = 4;
 }
 ```
 
 | Option                | Type | Description                                               |
 | --------------------- | ---- | --------------------------------------------------------- |
-| `ref`                 | bool | Enable reference tracking (sets ref flag)                 |
+| `ref`                 | bool | Enable reference tracking (protobuf extension option)     |
 | `nullable`            | bool | Mark field as nullable (sets optional flag)               |
 | `deprecated`          | bool | Mark this field as deprecated                             |
 | `thread_safe_pointer` | bool | Rust only: use `Arc` (true) or `Rc` (false) for ref types |
 | `weak_ref`            | bool | C++/Rust only: generate weak pointers for `ref` fields    |
 
-**Note:** `[(fory).ref = true]` is equivalent to using the `ref` modifier: `ref MyType friend = 1;`
-Field-level options always apply to the field/collection; use modifiers after
-`repeated` to control element behavior.
-`weak_ref` is a codegen hint for C++/Rust and is ignored by Java/Python/Go. It
-must be used with `ref` (or `repeated ref` for collections).
+**Note:** For FDL, use `ref` (and optional `ref(...)`) modifiers:
+`ref MyType friend = 1;`, `repeated ref(weak = true) Child children = 2;`,
+`map<string, ref(weak = true) Node> nodes = 3;`. For protobuf, use
+`[(fory).ref = true]` and `[(fory).weak_ref = true]`. `weak_ref` is a codegen
+hint for C++/Rust and is ignored by Java/Python/Go. It must be used with `ref`
+(`repeated ref` for collections, or `map<..., ref T>` for map values).
 
 To use `Rc` instead of `Arc` in Rust for a specific field:
 
-```protobuf
+```fdl
 message Graph {
-    ref Node root = 1 [(fory).thread_safe_pointer = false];
+    ref(thread_safe = false) Node root = 1;
 }
 ```
 

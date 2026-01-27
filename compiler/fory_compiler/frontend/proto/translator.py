@@ -180,6 +180,34 @@ class ProtoTranslator:
                 location=self._location(proto_field.line, proto_field.column),
             )
         optional = proto_field.label == "optional" or nullable
+        element_ref = False
+        ref_options = self._extract_ref_options(options)
+        field_ref_options: Dict[str, object] = {}
+        element_ref_options: Dict[str, object] = {}
+        if ref and isinstance(field_type, ListType):
+            element_ref = True
+            element_ref_options = ref_options
+            ref = False
+        if ref and isinstance(field_type, MapType):
+            field_type = MapType(
+                field_type.key_type,
+                field_type.value_type,
+                value_ref=True,
+                value_ref_options=ref_options,
+                location=field_type.location,
+            )
+            ref = False
+        elif isinstance(field_type, MapType) and ref_options:
+            field_type = MapType(
+                field_type.key_type,
+                field_type.value_type,
+                value_ref=field_type.value_ref,
+                value_ref_options=ref_options,
+                location=field_type.location,
+            )
+
+        if not isinstance(field_type, (ListType, MapType)) and ref_options:
+            field_ref_options = ref_options
 
         return Field(
             name=proto_field.name,
@@ -187,6 +215,9 @@ class ProtoTranslator:
             number=proto_field.number,
             optional=optional,
             ref=ref,
+            ref_options=field_ref_options,
+            element_ref=element_ref,
+            element_ref_options=element_ref_options,
             options=options,
             line=proto_field.line,
             column=proto_field.column,
@@ -307,6 +338,16 @@ class ProtoTranslator:
             elif name.startswith("fory."):
                 translated[name.removeprefix("fory.")] = value
         return ref, nullable, translated, type_override
+
+    def _extract_ref_options(self, options: Dict[str, object]) -> Dict[str, object]:
+        ref_options: Dict[str, object] = {}
+        weak_ref = options.get("weak_ref")
+        if weak_ref is not None:
+            ref_options["weak_ref"] = weak_ref
+        thread_safe = options.get("thread_safe_pointer")
+        if thread_safe is not None:
+            ref_options["thread_safe_pointer"] = thread_safe
+        return ref_options
 
     def _apply_type_override(
         self,

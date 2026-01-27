@@ -17,6 +17,7 @@
 
 """Python code generator."""
 
+import keyword
 from typing import List, Optional, Set
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
@@ -134,6 +135,12 @@ class PythonGenerator(BaseGenerator):
         PrimitiveKind.DATE: "None",
         PrimitiveKind.TIMESTAMP: "None",
     }
+
+    def safe_name(self, name: str) -> str:
+        """Return a Python-safe identifier."""
+        if keyword.iskeyword(name):
+            return f"{name}_"
+        return name
 
     def generate(self) -> List[GeneratedFile]:
         """Generate Python files for the schema."""
@@ -328,7 +335,7 @@ class PythonGenerator(BaseGenerator):
         lines.append("")
 
         for field in union.fields:
-            method_name = self.to_snake_case(field.name)
+            method_name = self.safe_name(self.to_snake_case(field.name))
             case_name = self.to_upper_snake_case(field.name)
             case_type = self.get_union_case_type(field, parent_stack)
             lines.append(f"{ind}    @classmethod")
@@ -366,8 +373,9 @@ class PythonGenerator(BaseGenerator):
                 lines.append(
                     f"{ind}        if self._case == {case_enum_ref}.{case_name} and not {check_expr}:"
                 )
+                safe_case = self.safe_name(self.to_snake_case(field.name))
                 lines.append(
-                    f'{ind}            raise TypeError("{union.name}.{self.to_snake_case(field.name)}(...) requires {case_type}")'
+                    f'{ind}            raise TypeError("{union.name}.{safe_case}(...) requires {case_type}")'
                 )
         if not union.fields or not has_checks:
             lines.append(f"{ind}        pass")
@@ -389,7 +397,7 @@ class PythonGenerator(BaseGenerator):
 
         for field in union.fields:
             case_name = self.to_upper_snake_case(field.name)
-            method_name = self.to_snake_case(field.name)
+            method_name = self.safe_name(self.to_snake_case(field.name))
             case_type = self.get_union_case_type(field, parent_stack)
             lines.append(f"{ind}    def is_{method_name}(self) -> bool:")
             lines.append(
@@ -459,7 +467,7 @@ class PythonGenerator(BaseGenerator):
             field.element_optional,
             parent_stack,
         )
-        field_name = self.to_snake_case(field.name)
+        field_name = self.safe_name(self.to_snake_case(field.name))
         default_factory = self.get_default_factory(field)
         default = self.get_default_value(field.field_type, field.optional)
         default_expr = default

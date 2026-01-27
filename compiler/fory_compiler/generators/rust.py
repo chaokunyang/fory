@@ -146,7 +146,7 @@ class RustGenerator(BaseGenerator):
     def collect_union_uses(self, union: Union, uses: Set[str]):
         """Collect uses for a union and its cases."""
         for field in union.fields:
-            if field.ref or field.element_ref:
+            if self.field_uses_pointer(field):
                 uses.add("use std::sync::Arc")
             self.collect_uses(field.field_type, uses)
 
@@ -356,6 +356,8 @@ class RustGenerator(BaseGenerator):
             attrs.append(f"id = {field.tag_id}")
         if field.optional:
             attrs.append("nullable = true")
+        if field.ref:
+            attrs.append("ref = true")
         encoding = self.get_encoding_attr(field.field_type)
         if encoding:
             attrs.append(encoding)
@@ -367,9 +369,16 @@ class RustGenerator(BaseGenerator):
         if attrs:
             lines.append(f"#[fory({', '.join(attrs)})]")
 
-        pointer_type = self.get_pointer_type(
-            field, field.options.get("weak_ref") is True
-        )
+        if isinstance(field.field_type, ListType) and field.element_ref:
+            ref_options = field.element_ref_options
+            weak_ref = ref_options.get("weak_ref") is True
+        elif isinstance(field.field_type, MapType) and field.field_type.value_ref:
+            ref_options = field.field_type.value_ref_options
+            weak_ref = ref_options.get("weak_ref") is True
+        else:
+            ref_options = field.ref_options
+            weak_ref = ref_options.get("weak_ref") is True
+        pointer_type = self.get_pointer_type(ref_options, weak_ref)
         rust_type = self.generate_type(
             field.field_type,
             nullable=field.optional,
@@ -484,7 +493,7 @@ class RustGenerator(BaseGenerator):
             value_type = self.generate_type(
                 field_type.value_type,
                 nullable=False,
-                ref=False,
+                ref=field_type.value_ref,
                 parent_stack=parent_stack,
                 pointer_type=pointer_type,
             )
@@ -543,23 +552,40 @@ class RustGenerator(BaseGenerator):
 
     def collect_uses_for_field(self, field: Field, uses: Set[str]):
         """Collect uses for a field, including ref tracking."""
-        weak_ref = field.options.get("weak_ref") is True
-        pointer_type = self.get_pointer_type(field, weak_ref)
-        if weak_ref and (field.ref or field.element_ref):
+        if isinstance(field.field_type, ListType) and field.element_ref:
+            ref_options = field.element_ref_options
+            weak_ref = ref_options.get("weak_ref") is True
+        elif isinstance(field.field_type, MapType) and field.field_type.value_ref:
+            ref_options = field.field_type.value_ref_options
+            weak_ref = ref_options.get("weak_ref") is True
+        else:
+            ref_options = field.ref_options
+            weak_ref = ref_options.get("weak_ref") is True
+        pointer_type = self.get_pointer_type(ref_options, weak_ref)
+        if weak_ref and self.field_uses_pointer(field):
             if pointer_type == "RcWeak":
                 uses.add("use fory::RcWeak")
             else:
                 uses.add("use fory::ArcWeak")
-        elif field.ref or field.element_ref:
+        elif self.field_uses_pointer(field):
             if pointer_type == "Rc":
                 uses.add("use std::rc::Rc")
             else:
                 uses.add("use std::sync::Arc")
         self.collect_uses(field.field_type, uses)
 
-    def get_pointer_type(self, field: Field, weak_ref: bool = False) -> str:
+    def field_uses_pointer(self, field: Field) -> bool:
+        if field.ref:
+            return True
+        if isinstance(field.field_type, ListType) and field.element_ref:
+            return True
+        if isinstance(field.field_type, MapType) and field.field_type.value_ref:
+            return True
+        return False
+
+    def get_pointer_type(self, ref_options: dict, weak_ref: bool = False) -> str:
         """Determine pointer type for ref tracking based on field options."""
-        thread_safe = field.options.get("thread_safe_pointer")
+        thread_safe = ref_options.get("thread_safe_pointer")
         if thread_safe is False:
             return "RcWeak" if weak_ref else "Rc"
         return "ArcWeak" if weak_ref else "Arc"

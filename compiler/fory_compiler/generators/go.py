@@ -618,8 +618,6 @@ class GoGenerator(BaseGenerator):
 
         if field.ref:
             ref_tag = True
-        elif is_list and field.element_ref:
-            ref_tag = False
 
         if nullable_tag is True:
             tags.append("nullable")
@@ -750,7 +748,7 @@ class GoGenerator(BaseGenerator):
             value_type = self.generate_type(
                 field_type.value_type,
                 False,
-                False,
+                field_type.value_ref,
                 False,
                 False,
                 parent_stack,

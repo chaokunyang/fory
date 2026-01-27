@@ -141,8 +141,10 @@ class CppGenerator(BaseGenerator):
 
         # Collect includes (including from nested types)
         includes.add("<cstdint>")
+        includes.add("<map>")
         includes.add("<memory>")
         includes.add("<string>")
+        includes.add("<vector>")
         includes.add("<utility>")
         includes.add('"fory/serialization/fory.h"')
         if self.schema_has_unions():
@@ -243,7 +245,10 @@ class CppGenerator(BaseGenerator):
     def collect_message_includes(self, message: Message, includes: Set[str]):
         """Collect includes for a message and its nested types recursively."""
         for field in message.fields:
-            weak_ref = self.is_weak_ref(field)
+            weak_ref = self.get_field_weak_ref(field)
+            element_weak_ref = self.get_element_weak_ref(field)
+            if isinstance(field.field_type, MapType):
+                weak_ref = self.get_map_value_weak_ref(field)
             self.collect_includes(
                 field.field_type,
                 field.optional,
@@ -252,7 +257,7 @@ class CppGenerator(BaseGenerator):
                 field.element_optional,
                 field.element_ref,
                 weak_ref,
-                weak_ref and field.element_ref,
+                element_weak_ref,
             )
         for nested_msg in message.nested_messages:
             self.collect_message_includes(nested_msg, includes)
@@ -330,6 +335,10 @@ class CppGenerator(BaseGenerator):
         """Collect top-level type dependencies for a message."""
         lineage = parent_stack + [message]
         for field in message.fields:
+            if field.ref or field.element_ref:
+                continue
+            if isinstance(field.field_type, MapType) and field.field_type.value_ref:
+                continue
             self.collect_type_dependencies(field.field_type, lineage, deps)
         for nested_union in message.nested_unions:
             self.collect_union_dependencies(nested_union, lineage, deps)
@@ -447,8 +456,19 @@ class CppGenerator(BaseGenerator):
         resolved = self.resolve_named_type(field_type.name, parent_stack)
         return isinstance(resolved, Message)
 
-    def is_weak_ref(self, field: Field) -> bool:
-        return field.options.get("weak_ref") is True
+    def is_weak_ref(self, options: dict) -> bool:
+        return options.get("weak_ref") is True
+
+    def get_field_weak_ref(self, field: Field) -> bool:
+        return self.is_weak_ref(field.ref_options)
+
+    def get_element_weak_ref(self, field: Field) -> bool:
+        return self.is_weak_ref(field.element_ref_options)
+
+    def get_map_value_weak_ref(self, field: Field) -> bool:
+        if isinstance(field.field_type, MapType):
+            return self.is_weak_ref(field.field_type.value_ref_options)
+        return False
 
     def is_union_type(
         self, field_type: FieldType, parent_stack: Optional[List[Message]]
@@ -472,7 +492,10 @@ class CppGenerator(BaseGenerator):
     def get_field_storage_type(
         self, field: Field, parent_stack: Optional[List[Message]]
     ) -> str:
-        weak_ref = self.is_weak_ref(field)
+        weak_ref = self.get_field_weak_ref(field)
+        element_weak_ref = self.get_element_weak_ref(field)
+        if isinstance(field.field_type, MapType):
+            weak_ref = self.get_map_value_weak_ref(field)
         if self.is_message_type(field.field_type, parent_stack) and not (
             field.ref or weak_ref
         ):
@@ -492,14 +515,17 @@ class CppGenerator(BaseGenerator):
             field.element_optional,
             field.element_ref,
             weak_ref,
-            weak_ref and field.element_ref,
+            element_weak_ref,
             parent_stack,
         )
 
     def get_field_value_type(
         self, field: Field, parent_stack: Optional[List[Message]]
     ) -> str:
-        weak_ref = self.is_weak_ref(field)
+        weak_ref = self.get_field_weak_ref(field)
+        element_weak_ref = self.get_element_weak_ref(field)
+        if isinstance(field.field_type, MapType):
+            weak_ref = self.get_map_value_weak_ref(field)
         if self.is_message_type(field.field_type, parent_stack) and not (
             field.ref or weak_ref
         ):
@@ -511,7 +537,7 @@ class CppGenerator(BaseGenerator):
             field.element_optional,
             field.element_ref,
             weak_ref,
-            weak_ref and field.element_ref,
+            element_weak_ref,
             parent_stack,
         )
 
@@ -520,14 +546,16 @@ class CppGenerator(BaseGenerator):
     ) -> str:
         member_name = self.get_field_member_name(field)
         other_member = f"other.{member_name}"
-        if self.is_message_type(field.field_type, parent_stack) and self.is_weak_ref(
-            field
-        ):
+        if self.is_message_type(
+            field.field_type, parent_stack
+        ) and self.get_field_weak_ref(field):
             return (
                 f"(([&]() {{ auto left = {member_name}.upgrade(); "
                 f"auto right = {other_member}.upgrade(); "
-                f"return (!left && !right) || (left && right && *left == *right); }})())"
+                f"return left == right; }})())"
             )
+        if self.is_message_type(field.field_type, parent_stack) and field.ref:
+            return f"{member_name} == {other_member}"
         if self.is_message_type(field.field_type, parent_stack):
             return (
                 f"(({member_name} && {other_member}) ? "
@@ -558,7 +586,7 @@ class CppGenerator(BaseGenerator):
         field_name = self.to_snake_case(field.name)
         member_name = self.get_field_member_name(field)
         value_type = self.get_field_value_type(field, parent_stack)
-        weak_ref = self.is_weak_ref(field)
+        weak_ref = self.get_field_weak_ref(field)
         is_union = self.is_union_type(field.field_type, parent_stack)
         is_enum = self.is_enum_type(field.field_type, parent_stack)
         is_collection = isinstance(field.field_type, (ListType, MapType))
@@ -1297,7 +1325,14 @@ class CppGenerator(BaseGenerator):
                 field_type.key_type, False, False, False, False, parent_stack
             )
             value_type = self.generate_namespaced_type(
-                field_type.value_type, False, False, False, False, parent_stack
+                field_type.value_type,
+                False,
+                field_type.value_ref,
+                False,
+                False,
+                weak_ref and field_type.value_ref,
+                False,
+                parent_stack,
             )
             map_type = f"std::map<{key_type}, {value_type}>"
             if ref:
@@ -1335,7 +1370,10 @@ class CppGenerator(BaseGenerator):
             meta += f".id({field.tag_id})"
         if field.optional:
             meta += ".nullable()"
-        if field.ref or field.element_ref or field.options.get("tracking_ref") is True:
+        if field.ref or (
+            field.options.get("tracking_ref") is True
+            and not isinstance(field.field_type, (ListType, MapType))
+        ):
             meta += ".ref()"
         encoding = self.get_encoding_config(field.field_type)
         if encoding:
@@ -1350,7 +1388,10 @@ class CppGenerator(BaseGenerator):
         meta = f"fory::F({field.number})"
         if field.optional:
             meta += ".nullable()"
-        if field.ref or field.element_ref or field.options.get("tracking_ref") is True:
+        if field.ref or (
+            field.options.get("tracking_ref") is True
+            and not isinstance(field.field_type, (ListType, MapType))
+        ):
             meta += ".ref()"
         encoding = self.get_encoding_config(field.field_type)
         if encoding:
@@ -1458,7 +1499,14 @@ class CppGenerator(BaseGenerator):
                 field_type.key_type, False, False, False, False, parent_stack
             )
             value_type = self.generate_type(
-                field_type.value_type, False, False, False, False, parent_stack
+                field_type.value_type,
+                False,
+                field_type.value_ref,
+                False,
+                False,
+                weak_ref and field_type.value_ref,
+                False,
+                parent_stack,
             )
             map_type = f"std::map<{key_type}, {value_type}>"
             if ref:
@@ -1557,8 +1605,21 @@ class CppGenerator(BaseGenerator):
 
         elif isinstance(field_type, MapType):
             includes.add("<map>")
+            if field_type.value_ref:
+                includes.add("<memory>")
+                if weak_ref:
+                    includes.add('"fory/serialization/weak_ptr_serializer.h"')
             self.collect_includes(field_type.key_type, False, False, includes)
-            self.collect_includes(field_type.value_type, False, False, includes)
+            self.collect_includes(
+                field_type.value_type,
+                False,
+                field_type.value_ref,
+                includes,
+                False,
+                False,
+                weak_ref and field_type.value_ref,
+                False,
+            )
 
     def generate_registration(self) -> List[str]:
         """Generate the Fory registration function."""

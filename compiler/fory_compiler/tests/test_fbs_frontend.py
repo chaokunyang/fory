@@ -82,3 +82,30 @@ def test_fbs_union_translation():
     assert union.name == "Event"
     assert [f.name for f in union.fields] == ["foo", "bar"]
     assert [f.number for f in union.fields] == [0, 1]
+
+
+def test_fbs_fory_ref_attributes():
+    source = """
+    namespace demo;
+
+    table Node {
+      parent: Node (fory_weak_ref: true);
+      children: [Node] (fory_ref: true);
+      cached: Node (fory_ref: true, fory_thread_safe_pointer: false);
+    }
+    """
+    schema = FBSFrontend().parse(source)
+    node = schema.messages[0]
+    fields = {f.name: f for f in node.fields}
+
+    parent = fields["parent"]
+    assert parent.ref is True
+    assert parent.ref_options["weak_ref"] is True
+
+    children = fields["children"]
+    assert children.element_ref is True
+    assert children.element_ref_options == {}
+
+    cached = fields["cached"]
+    assert cached.ref is True
+    assert cached.ref_options["thread_safe_pointer"] is False

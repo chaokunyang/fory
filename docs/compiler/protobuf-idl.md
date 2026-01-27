@@ -192,6 +192,17 @@ message TreeNode {
 }
 ```
 
+When using protobuf IDL with the Fory compiler, you can opt into reference
+tracking via Fory extension options. `weak_ref` implies `ref`, while
+`thread_safe_pointer` does not:
+
+```protobuf
+message TreeNode {
+  TreeNode parent = 1 [(fory).weak_ref = true];
+  TreeNode child = 2 [(fory).ref = true, (fory).thread_safe_pointer = false];
+}
+```
+
 ### Type System
 
 | Type       | Protocol Buffers                                                                                       | FDL                                                                                             |

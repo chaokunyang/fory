@@ -182,6 +182,8 @@ class ProtoTranslator:
         optional = proto_field.label == "optional" or nullable
         element_ref = False
         ref_options = self._extract_ref_options(options)
+        if ref_options.get("weak_ref") is True and not ref:
+            ref = True
         field_ref_options: Dict[str, object] = {}
         element_ref_options: Dict[str, object] = {}
         if ref and isinstance(field_type, ListType):

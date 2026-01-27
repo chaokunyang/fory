@@ -424,14 +424,27 @@ def test_generated_code_tree_ref_options_equivalent():
             string name = 2;
 
             repeated TreeNode children = 3 [(fory).ref = true];
-            TreeNode parent = 4 [(fory).ref = true, (fory).weak_ref = true];
+            TreeNode parent = 4 [(fory).weak_ref = true];
         }
         """
     )
-    # Tree ref options are only supported in FDL/proto frontends.
+    fbs = dedent(
+        """
+        namespace tree;
+
+        table TreeNode {
+            id: string;
+            name: string;
+            children: [TreeNode] (fory_ref: true);
+            parent: TreeNode (fory_weak_ref: true);
+        }
+        """
+    )
+    # Tree ref options should produce identical outputs across frontends.
     schemas = {
         "fdl": parse_fdl(fdl),
         "proto": parse_proto(proto),
+        "fbs": parse_fbs(fbs),
     }
     assert_all_languages_equal(schemas)
 

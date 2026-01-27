@@ -24,7 +24,6 @@ import (
 	"reflect"
 
 	"github.com/apache/fory/go/fory/meta"
-	"github.com/spaolacci/murmur3"
 )
 
 const (
@@ -1233,7 +1232,7 @@ func prependGlobalHeader(buffer *ByteBuffer, isCompressed bool, hasFieldsMeta bo
 	var header uint64
 	metaSize := buffer.WriterIndex()
 
-	hashValue := murmur3.Sum64WithSeed(buffer.GetByteSlice(0, metaSize), 47)
+	hashValue := Murmur3Sum64WithSeed(buffer.GetByteSlice(0, metaSize), 47)
 	header |= hashValue << (64 - NUM_HASH_BITS)
 
 	if hasFieldsMeta {

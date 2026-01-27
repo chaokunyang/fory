@@ -35,18 +35,16 @@ import complex_fbs.Note;
 import complex_fbs.Payload;
 import complex_fbs.ScalarPack;
 import complex_fbs.Status;
+import graph.Edge;
+import graph.Graph;
+import graph.GraphForyRegistration;
+import graph.Node;
 import optional_types.AllOptionalTypes;
 import optional_types.OptionalHolder;
 import optional_types.OptionalTypesForyRegistration;
 import optional_types.OptionalUnion;
-import ref_tests.Item;
-import ref_tests.Owner;
-import ref_tests.RefSuite;
-import ref_tests.RefTestsForyRegistration;
-import ref_tests.RepeatedHolder;
-import ref_tests.SharedHolder;
-import ref_tests.StrongHolder;
-import ref_tests.WeakHolder;
+import tree.TreeForyRegistration;
+import tree.TreeNode;
 import monster.Color;
 import monster.Monster;
 import monster.MonsterForyRegistration;
@@ -161,32 +159,62 @@ public class IdlRoundTripTest {
   }
 
   @Test
-  public void testRefRoundTrip() throws Exception {
+  public void testTreeRoundTrip() throws Exception {
     Fory fory = Fory.builder().withLanguage(Language.XLANG).withRefTracking(true).build();
-    RefTestsForyRegistration.register(fory);
+    TreeForyRegistration.register(fory);
 
-    RefSuite suite = buildRefSuite();
-    byte[] bytes = fory.serialize(suite);
+    TreeNode tree = buildTree();
+    byte[] bytes = fory.serialize(tree);
     Object decoded = fory.deserialize(bytes);
 
-    Assert.assertTrue(decoded instanceof RefSuite);
-    RefSuite roundTrip = (RefSuite) decoded;
-    assertRefSuite(roundTrip);
+    Assert.assertTrue(decoded instanceof TreeNode);
+    TreeNode roundTrip = (TreeNode) decoded;
+    assertTree(roundTrip);
 
     for (String peer : resolvePeers()) {
-      Path dataFile = Files.createTempFile("idl-ref-" + peer + "-", ".bin");
+      Path dataFile = Files.createTempFile("idl-tree-" + peer + "-", ".bin");
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
 
       Map<String, String> env = new HashMap<>();
-      env.put("DATA_FILE_REF", dataFile.toAbsolutePath().toString());
+      env.put("DATA_FILE_TREE", dataFile.toAbsolutePath().toString());
       PeerCommand command = buildPeerCommand(peer, env);
       runPeer(command, peer);
 
       byte[] peerBytes = Files.readAllBytes(dataFile);
       Object peerRoundTrip = fory.deserialize(peerBytes);
-      Assert.assertTrue(peerRoundTrip instanceof RefSuite);
-      assertRefSuite((RefSuite) peerRoundTrip);
+      Assert.assertTrue(peerRoundTrip instanceof TreeNode);
+      assertTree((TreeNode) peerRoundTrip);
+    }
+  }
+
+  @Test
+  public void testGraphRoundTrip() throws Exception {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).withRefTracking(true).build();
+    GraphForyRegistration.register(fory);
+
+    Graph graph = buildGraph();
+    byte[] bytes = fory.serialize(graph);
+    Object decoded = fory.deserialize(bytes);
+
+    Assert.assertTrue(decoded instanceof Graph);
+    Graph roundTrip = (Graph) decoded;
+    assertGraph(roundTrip);
+
+    for (String peer : resolvePeers()) {
+      Path dataFile = Files.createTempFile("idl-graph-" + peer + "-", ".bin");
+      dataFile.toFile().deleteOnExit();
+      Files.write(dataFile, bytes);
+
+      Map<String, String> env = new HashMap<>();
+      env.put("DATA_FILE_GRAPH", dataFile.toAbsolutePath().toString());
+      PeerCommand command = buildPeerCommand(peer, env);
+      runPeer(command, peer);
+
+      byte[] peerBytes = Files.readAllBytes(dataFile);
+      Object peerRoundTrip = fory.deserialize(peerBytes);
+      Assert.assertTrue(peerRoundTrip instanceof Graph);
+      assertGraph((Graph) peerRoundTrip);
     }
   }
 
@@ -459,52 +487,72 @@ public class IdlRoundTripTest {
     return holder;
   }
 
-  private RefSuite buildRefSuite() {
-    Item item = new Item();
-    item.setName("shared");
+  private TreeNode buildTree() {
+    TreeNode childA = new TreeNode();
+    childA.setId("child-a");
+    childA.setName("child-a");
+    childA.setChildren(Collections.emptyList());
 
-    SharedHolder shared = new SharedHolder();
-    shared.setFirst(item);
-    shared.setSecond(item);
+    TreeNode childB = new TreeNode();
+    childB.setId("child-b");
+    childB.setName("child-b");
+    childB.setChildren(Collections.emptyList());
 
-    RepeatedHolder repeated = new RepeatedHolder();
-    repeated.setItems(Arrays.asList(item, item));
+    childA.setParent(childB);
+    childB.setParent(childA);
 
-    Owner owner = new Owner();
-    owner.setName("owner");
-
-    StrongHolder strong = new StrongHolder();
-    strong.setOwner(owner);
-
-    WeakHolder weak = new WeakHolder();
-    weak.setOwner(owner);
-    weak.setCache(owner);
-
-    RefSuite suite = new RefSuite();
-    suite.setShared(shared);
-    suite.setRepeatedHolder(repeated);
-    suite.setStrong(strong);
-    suite.setWeakHolder(weak);
-    return suite;
+    TreeNode root = new TreeNode();
+    root.setId("root");
+    root.setName("root");
+    root.setChildren(Arrays.asList(childA, childA, childB));
+    return root;
   }
 
-  private void assertRefSuite(RefSuite suite) {
-    SharedHolder shared = suite.getShared();
-    Assert.assertNotNull(shared);
-    Assert.assertTrue(shared.getFirst() == shared.getSecond());
-    Assert.assertEquals(shared.getFirst().getName(), "shared");
+  private void assertTree(TreeNode root) {
+    List<TreeNode> children = root.getChildren();
+    Assert.assertNotNull(children);
+    Assert.assertEquals(children.size(), 3);
+    Assert.assertSame(children.get(0), children.get(1));
+    Assert.assertNotSame(children.get(0), children.get(2));
+    Assert.assertSame(children.get(0).getParent(), children.get(2));
+    Assert.assertSame(children.get(2).getParent(), children.get(0));
+  }
 
-    RepeatedHolder repeated = suite.getRepeatedHolder();
-    Assert.assertNotNull(repeated);
-    Assert.assertEquals(repeated.getItems().size(), 2);
-    Assert.assertTrue(repeated.getItems().get(0) == repeated.getItems().get(1));
+  private Graph buildGraph() {
+    Node nodeA = new Node();
+    nodeA.setId("node-a");
+    Node nodeB = new Node();
+    nodeB.setId("node-b");
 
-    StrongHolder strong = suite.getStrong();
-    WeakHolder weak = suite.getWeakHolder();
-    Assert.assertNotNull(strong);
-    Assert.assertNotNull(weak);
-    Assert.assertTrue(strong.getOwner() == weak.getOwner());
-    Assert.assertTrue(strong.getOwner() == weak.getCache());
+    Edge edge = new Edge();
+    edge.setId("edge-1");
+    edge.setWeight(1.5f);
+    edge.setFrom(nodeA);
+    edge.setTo(nodeB);
+
+    nodeA.setOutEdges(Collections.singletonList(edge));
+    nodeA.setInEdges(Collections.singletonList(edge));
+    nodeB.setInEdges(Collections.singletonList(edge));
+    nodeB.setOutEdges(Collections.emptyList());
+
+    Graph graph = new Graph();
+    graph.setNodes(Arrays.asList(nodeA, nodeB));
+    graph.setEdges(Collections.singletonList(edge));
+    return graph;
+  }
+
+  private void assertGraph(Graph graph) {
+    Assert.assertNotNull(graph.getNodes());
+    Assert.assertNotNull(graph.getEdges());
+    Assert.assertEquals(graph.getNodes().size(), 2);
+    Assert.assertEquals(graph.getEdges().size(), 1);
+    Node nodeA = graph.getNodes().get(0);
+    Node nodeB = graph.getNodes().get(1);
+    Edge edge = graph.getEdges().get(0);
+    Assert.assertSame(edge, nodeA.getOutEdges().get(0));
+    Assert.assertSame(edge, nodeA.getInEdges().get(0));
+    Assert.assertSame(edge.getFrom(), nodeA);
+    Assert.assertSame(edge.getTo(), nodeB);
   }
 
   private Container buildContainer() {

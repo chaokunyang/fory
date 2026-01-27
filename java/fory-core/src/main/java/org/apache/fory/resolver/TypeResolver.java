@@ -973,10 +973,6 @@ public abstract class TypeResolver {
       return getSerializerByTypeId(extMeta.typeId());
     }
     Class<?> rawType = typeRef.getRawType();
-    int typeId = Types.getTypeId(fory, rawType);
-    if (typeId != Types.UNKNOWN) {
-      return getSerializerByTypeId(typeId);
-    }
     return getSerializer(rawType);
   }
 

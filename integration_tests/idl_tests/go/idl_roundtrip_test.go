@@ -26,9 +26,10 @@ import (
 	fory "github.com/apache/fory/go/fory"
 	"github.com/apache/fory/go/fory/optional"
 	complexfbs "github.com/apache/fory/integration_tests/idl_tests/go/complex_fbs"
+	graphpkg "github.com/apache/fory/integration_tests/idl_tests/go/graph"
 	monster "github.com/apache/fory/integration_tests/idl_tests/go/monster"
 	optionaltypes "github.com/apache/fory/integration_tests/idl_tests/go/optional_types"
-	reftests "github.com/apache/fory/integration_tests/idl_tests/go/ref_tests"
+	treepkg "github.com/apache/fory/integration_tests/idl_tests/go/tree"
 )
 
 func buildAddressBook() AddressBook {
@@ -103,16 +104,22 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	runFileOptionalRoundTrip(t, f, holder)
 
 	refFory := fory.NewFory(fory.WithXlang(true), fory.WithRefTracking(true))
-	if err := reftests.RegisterTypes(refFory); err != nil {
-		t.Fatalf("register ref types: %v", err)
+	if err := treepkg.RegisterTypes(refFory); err != nil {
+		t.Fatalf("register tree types: %v", err)
 	}
-	refSuite := buildRefSuite()
-	runLocalRefRoundTrip(t, refFory, refSuite)
-	runFileRefRoundTrip(t, refFory, refSuite)
+	if err := graphpkg.RegisterTypes(refFory); err != nil {
+		t.Fatalf("register graph types: %v", err)
+	}
+	treeRoot := buildTree()
+	runLocalTreeRoundTrip(t, refFory, treeRoot)
+	runFileTreeRoundTrip(t, refFory, treeRoot)
+	graphValue := buildGraph()
+	runLocalGraphRoundTrip(t, refFory, graphValue)
+	runFileGraphRoundTrip(t, refFory, graphValue)
 }
 
 func runLocalRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
-	data, err := f.Serialize(book)
+	data, err := f.Serialize(&book)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -145,7 +152,7 @@ func runFileRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
 		t.Fatalf("peer payload mismatch: %#v != %#v", book, decoded)
 	}
 
-	out, err := f.Serialize(decoded)
+	out, err := f.Serialize(&decoded)
 	if err != nil {
 		t.Fatalf("serialize peer payload: %v", err)
 	}
@@ -180,7 +187,7 @@ func buildPrimitiveTypes() PrimitiveTypes {
 }
 
 func runLocalPrimitiveRoundTrip(t *testing.T, f *fory.Fory, types PrimitiveTypes) {
-	data, err := f.Serialize(types)
+	data, err := f.Serialize(&types)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -213,7 +220,7 @@ func runFilePrimitiveRoundTrip(t *testing.T, f *fory.Fory, types PrimitiveTypes)
 		t.Fatalf("peer payload mismatch: %#v != %#v", types, decoded)
 	}
 
-	out, err := f.Serialize(decoded)
+	out, err := f.Serialize(&decoded)
 	if err != nil {
 		t.Fatalf("serialize peer payload: %v", err)
 	}
@@ -240,7 +247,7 @@ func buildMonster() monster.Monster {
 }
 
 func runLocalMonsterRoundTrip(t *testing.T, f *fory.Fory, monsterValue monster.Monster) {
-	data, err := f.Serialize(monsterValue)
+	data, err := f.Serialize(&monsterValue)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -273,7 +280,7 @@ func runFileMonsterRoundTrip(t *testing.T, f *fory.Fory, monsterValue monster.Mo
 		t.Fatalf("peer payload mismatch: %#v != %#v", monsterValue, decoded)
 	}
 
-	out, err := f.Serialize(decoded)
+	out, err := f.Serialize(&decoded)
 	if err != nil {
 		t.Fatalf("serialize peer payload: %v", err)
 	}
@@ -311,7 +318,7 @@ func buildContainer() complexfbs.Container {
 }
 
 func runLocalContainerRoundTrip(t *testing.T, f *fory.Fory, container complexfbs.Container) {
-	data, err := f.Serialize(container)
+	data, err := f.Serialize(&container)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -344,7 +351,7 @@ func runFileContainerRoundTrip(t *testing.T, f *fory.Fory, container complexfbs.
 		t.Fatalf("peer payload mismatch: %#v != %#v", container, decoded)
 	}
 
-	out, err := f.Serialize(decoded)
+	out, err := f.Serialize(&decoded)
 	if err != nil {
 		t.Fatalf("serialize peer payload: %v", err)
 	}
@@ -394,7 +401,7 @@ func buildOptionalHolder() optionaltypes.OptionalHolder {
 }
 
 func runLocalOptionalRoundTrip(t *testing.T, f *fory.Fory, holder optionaltypes.OptionalHolder) {
-	data, err := f.Serialize(holder)
+	data, err := f.Serialize(&holder)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -423,7 +430,7 @@ func runFileOptionalRoundTrip(t *testing.T, f *fory.Fory, holder optionaltypes.O
 	}
 	assertOptionalHolderEqual(t, holder, decoded)
 
-	out, err := f.Serialize(decoded)
+	out, err := f.Serialize(&decoded)
 	if err != nil {
 		t.Fatalf("serialize peer payload: %v", err)
 	}
@@ -432,83 +439,141 @@ func runFileOptionalRoundTrip(t *testing.T, f *fory.Fory, holder optionaltypes.O
 	}
 }
 
-func buildRefSuite() reftests.RefSuite {
-	item := &reftests.Item{Name: "shared"}
-	shared := reftests.SharedHolder{
-		First:  item,
-		Second: item,
-	}
-	repeated := reftests.RepeatedHolder{
-		Items: []*reftests.Item{item, item},
-	}
-	owner := &reftests.Owner{Name: "owner"}
-	strong := reftests.StrongHolder{Owner: owner}
-	weak := reftests.WeakHolder{Owner: owner, Cache: owner}
-	return reftests.RefSuite{
-		Shared:         &shared,
-		RepeatedHolder: &repeated,
-		Strong:         &strong,
-		WeakHolder:     &weak,
+func buildTree() treepkg.TreeNode {
+	childA := &treepkg.TreeNode{Id: "child-a", Name: "child-a"}
+	childB := &treepkg.TreeNode{Id: "child-b", Name: "child-b"}
+	childA.Children = []*treepkg.TreeNode{}
+	childB.Children = []*treepkg.TreeNode{}
+	childA.Parent = childB
+	childB.Parent = childA
+
+	return treepkg.TreeNode{
+		Id:       "root",
+		Name:     "root",
+		Children: []*treepkg.TreeNode{childA, childA, childB},
 	}
 }
 
-func runLocalRefRoundTrip(t *testing.T, f *fory.Fory, suite reftests.RefSuite) {
-	data, err := f.Serialize(suite)
+func runLocalTreeRoundTrip(t *testing.T, f *fory.Fory, root treepkg.TreeNode) {
+	data, err := f.Serialize(&root)
 	if err != nil {
-		t.Fatalf("serialize ref suite: %v", err)
+		t.Fatalf("serialize tree: %v", err)
 	}
-	var out reftests.RefSuite
+	var out treepkg.TreeNode
 	if err := f.Deserialize(data, &out); err != nil {
-		t.Fatalf("deserialize ref suite: %v", err)
+		t.Fatalf("deserialize tree: %v", err)
 	}
-	assertRefSuite(t, out)
+	assertTree(t, out)
 }
 
-func runFileRefRoundTrip(t *testing.T, f *fory.Fory, suite reftests.RefSuite) {
-	dataFile := os.Getenv("DATA_FILE_REF")
+func runFileTreeRoundTrip(t *testing.T, f *fory.Fory, root treepkg.TreeNode) {
+	dataFile := os.Getenv("DATA_FILE_TREE")
 	if dataFile == "" {
 		return
 	}
 	payload, err := os.ReadFile(dataFile)
 	if err != nil {
-		t.Fatalf("read ref payload: %v", err)
+		t.Fatalf("read tree payload: %v", err)
 	}
-	var decoded reftests.RefSuite
+	var decoded treepkg.TreeNode
 	if err := f.Deserialize(payload, &decoded); err != nil {
-		t.Fatalf("deserialize ref payload: %v", err)
+		t.Fatalf("deserialize tree payload: %v", err)
 	}
-	assertRefSuite(t, decoded)
-	out, err := f.Serialize(decoded)
+	assertTree(t, decoded)
+	out, err := f.Serialize(&decoded)
 	if err != nil {
-		t.Fatalf("serialize ref payload: %v", err)
+		t.Fatalf("serialize tree payload: %v", err)
 	}
 	if err := os.WriteFile(dataFile, out, 0o644); err != nil {
-		t.Fatalf("write ref payload: %v", err)
+		t.Fatalf("write tree payload: %v", err)
 	}
 }
 
-func assertRefSuite(t *testing.T, suite reftests.RefSuite) {
+func assertTree(t *testing.T, root treepkg.TreeNode) {
 	t.Helper()
-	if suite.Shared == nil || suite.RepeatedHolder == nil || suite.Strong == nil || suite.WeakHolder == nil {
-		t.Fatalf("ref suite missing fields")
+	if len(root.Children) != 3 {
+		t.Fatalf("tree children size mismatch")
 	}
-	if suite.Shared.First != suite.Shared.Second {
-		t.Fatalf("shared holder mismatch")
+	if root.Children[0] != root.Children[1] {
+		t.Fatalf("tree shared child mismatch")
 	}
-	if suite.Shared.First == nil || suite.Shared.First.Name != "shared" {
-		t.Fatalf("shared item mismatch")
+	if root.Children[0] == root.Children[2] {
+		t.Fatalf("tree distinct child mismatch")
 	}
-	if len(suite.RepeatedHolder.Items) != 2 {
-		t.Fatalf("repeated holder size mismatch")
+	if root.Children[0].Parent != root.Children[2] {
+		t.Fatalf("tree parent back-pointer mismatch")
 	}
-	if suite.RepeatedHolder.Items[0] != suite.RepeatedHolder.Items[1] {
-		t.Fatalf("repeated holder identity mismatch")
+	if root.Children[2].Parent != root.Children[0] {
+		t.Fatalf("tree parent reverse mismatch")
 	}
-	if suite.Strong.Owner != suite.WeakHolder.Owner {
-		t.Fatalf("weak holder owner mismatch")
+}
+
+func buildGraph() graphpkg.Graph {
+	nodeA := &graphpkg.Node{Id: "node-a"}
+	nodeB := &graphpkg.Node{Id: "node-b"}
+	edge := &graphpkg.Edge{Id: "edge-1", Weight: 1.5, From: nodeA, To: nodeB}
+	nodeA.OutEdges = []*graphpkg.Edge{edge}
+	nodeA.InEdges = []*graphpkg.Edge{edge}
+	nodeB.InEdges = []*graphpkg.Edge{edge}
+	nodeB.OutEdges = []*graphpkg.Edge{}
+
+	return graphpkg.Graph{
+		Nodes: []*graphpkg.Node{nodeA, nodeB},
+		Edges: []*graphpkg.Edge{edge},
 	}
-	if suite.Strong.Owner != suite.WeakHolder.Cache {
-		t.Fatalf("weak holder cache mismatch")
+}
+
+func runLocalGraphRoundTrip(t *testing.T, f *fory.Fory, graphValue graphpkg.Graph) {
+	data, err := f.Serialize(&graphValue)
+	if err != nil {
+		t.Fatalf("serialize graph: %v", err)
+	}
+	var out graphpkg.Graph
+	if err := f.Deserialize(data, &out); err != nil {
+		t.Fatalf("deserialize graph: %v", err)
+	}
+	assertGraph(t, out)
+}
+
+func runFileGraphRoundTrip(t *testing.T, f *fory.Fory, graphValue graphpkg.Graph) {
+	dataFile := os.Getenv("DATA_FILE_GRAPH")
+	if dataFile == "" {
+		return
+	}
+	payload, err := os.ReadFile(dataFile)
+	if err != nil {
+		t.Fatalf("read graph payload: %v", err)
+	}
+	var decoded graphpkg.Graph
+	if err := f.Deserialize(payload, &decoded); err != nil {
+		t.Fatalf("deserialize graph payload: %v", err)
+	}
+	assertGraph(t, decoded)
+	out, err := f.Serialize(&decoded)
+	if err != nil {
+		t.Fatalf("serialize graph payload: %v", err)
+	}
+	if err := os.WriteFile(dataFile, out, 0o644); err != nil {
+		t.Fatalf("write graph payload: %v", err)
+	}
+}
+
+func assertGraph(t *testing.T, graphValue graphpkg.Graph) {
+	t.Helper()
+	if len(graphValue.Nodes) != 2 || len(graphValue.Edges) != 1 {
+		t.Fatalf("graph size mismatch")
+	}
+	nodeA := graphValue.Nodes[0]
+	nodeB := graphValue.Nodes[1]
+	edge := graphValue.Edges[0]
+	if nodeA.OutEdges[0] != nodeA.InEdges[0] {
+		t.Fatalf("graph shared edge mismatch")
+	}
+	if edge != nodeA.OutEdges[0] {
+		t.Fatalf("graph edge link mismatch")
+	}
+	if edge.From != nodeA || edge.To != nodeB {
+		t.Fatalf("graph edge endpoints mismatch")
 	}
 }
 

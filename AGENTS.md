@@ -303,9 +303,9 @@ sbt scalafmt
 - All commands must be executed within the `integration_tests` directory.
 - For java related integration tests, please install the java libraries first by `cd ../java && mvn -T16 install -DskipTests`. If no code changes after installed fory java, you can skip the installation step.
 - For mac, graalvm is installed at `/Library/Java/JavaVirtualMachines/graalvm-xxx` by default.
-- For `integration_tests/idl_tests`:
-  - you must install fory java first before runing tests under this dir if any code changes under `java` dir.
-  - you must install fory python first before runing tests under this dir if any code cython code changes under `python` dir.
+- For `integration_tests/idl_tests` (mandatory prerequisites):
+  - Always run `cd ../java && mvn -T16 install -DskipTests` before any `idl_tests` run **if** there were changes under `java/` since the last install. If unsure, run it.
+  - Always run `cd ../python && pip install -v -e .` (and rebuild Cython if needed) before any `idl_tests` run **if** there were changes to Cython-related code under `python/`. If unsure, run it.
 - You are never allowed to manual edit generated code by fory compiler for `IDL` files, you must invoke fory compiler to regenerate code.
 
 ```bash

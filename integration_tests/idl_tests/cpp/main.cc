@@ -29,9 +29,10 @@
 #include "addressbook.h"
 #include "complex_fbs.h"
 #include "fory/serialization/fory.h"
+#include "graph.h"
 #include "monster.h"
 #include "optional_types.h"
-#include "ref_tests.h"
+#include "tree.h"
 
 namespace {
 
@@ -62,67 +63,90 @@ fory::Result<void, fory::Error> WriteFile(const std::string &path,
   return fory::Result<void, fory::Error>();
 }
 
-ref_tests::RefSuite BuildRefSuite() {
-  auto item = std::make_shared<ref_tests::Item>();
-  item->set_name("shared");
+tree::TreeNode BuildTree() {
+  auto child_a = std::make_shared<tree::TreeNode>();
+  child_a->set_id("child-a");
+  child_a->set_name("child-a");
 
-  ref_tests::SharedHolder shared;
-  shared.set_first(item);
-  shared.set_second(item);
+  auto child_b = std::make_shared<tree::TreeNode>();
+  child_b->set_id("child-b");
+  child_b->set_name("child-b");
 
-  ref_tests::RepeatedHolder repeated;
-  *repeated.mutable_items() = {item, item};
+  child_a->set_parent(
+      fory::serialization::SharedWeak<tree::TreeNode>::from(child_b));
+  child_b->set_parent(
+      fory::serialization::SharedWeak<tree::TreeNode>::from(child_a));
 
-  auto owner = std::make_shared<ref_tests::Owner>();
-  owner->set_name("owner");
-
-  ref_tests::StrongHolder strong;
-  strong.set_owner(owner);
-
-  ref_tests::WeakHolder weak;
-  weak.set_owner(fory::serialization::SharedWeak<ref_tests::Owner>::from(owner));
-  weak.set_cache(fory::serialization::SharedWeak<ref_tests::Owner>::from(owner));
-
-  ref_tests::RefSuite suite;
-  *suite.mutable_shared() = shared;
-  *suite.mutable_repeated_holder() = repeated;
-  *suite.mutable_strong() = strong;
-  *suite.mutable_weak_holder() = weak;
-  return suite;
+  tree::TreeNode root;
+  root.set_id("root");
+  root.set_name("root");
+  *root.mutable_children() = {child_a, child_a, child_b};
+  return root;
 }
 
-fory::Result<void, fory::Error> ValidateRefSuite(
-    const ref_tests::RefSuite &suite) {
-  const auto &shared = suite.shared();
-  if (!shared.first() || !shared.second() || shared.first() != shared.second()) {
-    return fory::Unexpected(
-        fory::Error::invalid("ref shared holder mismatch"));
+fory::Result<void, fory::Error> ValidateTree(const tree::TreeNode &root) {
+  const auto &children = root.children();
+  if (children.size() != 3 || children[0] != children[1] ||
+      children[0] == children[2]) {
+    return fory::Unexpected(fory::Error::invalid("tree children mismatch"));
   }
-  if (shared.first()->name() != "shared") {
-    return fory::Unexpected(
-        fory::Error::invalid("ref shared item mismatch"));
+  auto parent_a = children[0]->parent().upgrade();
+  auto parent_b = children[2]->parent().upgrade();
+  if (!parent_a || !parent_b) {
+    return fory::Unexpected(fory::Error::invalid("tree parent upgrade failed"));
   }
+  if (parent_a != children[2] || parent_b != children[0]) {
+    return fory::Unexpected(fory::Error::invalid("tree parent mismatch"));
+  }
+  return fory::Result<void, fory::Error>();
+}
 
-  const auto &items = suite.repeated_holder().items();
-  if (items.size() != 2 || items[0] != items[1]) {
-    return fory::Unexpected(
-        fory::Error::invalid("ref repeated holder mismatch"));
-  }
+graph::Graph BuildGraph() {
+  auto node_a = std::make_shared<graph::Node>();
+  node_a->set_id("node-a");
+  auto node_b = std::make_shared<graph::Node>();
+  node_b->set_id("node-b");
 
-  const auto &strong = suite.strong();
-  const auto &weak = suite.weak_holder();
-  if (!strong.owner()) {
-    return fory::Unexpected(
-        fory::Error::invalid("ref weak holder missing owner"));
+  auto edge = std::make_shared<graph::Edge>();
+  edge->set_id("edge-1");
+  edge->set_weight(1.5F);
+  edge->set_from(fory::serialization::SharedWeak<graph::Node>::from(node_a));
+  edge->set_to(fory::serialization::SharedWeak<graph::Node>::from(node_b));
+
+  *node_a->mutable_out_edges() = {edge};
+  *node_a->mutable_in_edges() = {edge};
+  *node_b->mutable_in_edges() = {edge};
+
+  graph::Graph graph_value;
+  *graph_value.mutable_nodes() = {node_a, node_b};
+  *graph_value.mutable_edges() = {edge};
+  return graph_value;
+}
+
+fory::Result<void, fory::Error> ValidateGraph(const graph::Graph &graph_value) {
+  const auto &nodes = graph_value.nodes();
+  const auto &edges = graph_value.edges();
+  if (nodes.size() != 2 || edges.size() != 1) {
+    return fory::Unexpected(fory::Error::invalid("graph size mismatch"));
   }
-  auto upgraded = weak.owner().upgrade();
-  if (!upgraded || upgraded != strong.owner()) {
-    return fory::Unexpected(
-        fory::Error::invalid("ref weak holder owner mismatch"));
+  const auto &node_a = nodes[0];
+  const auto &node_b = nodes[1];
+  const auto &edge = edges[0];
+  if (node_a->out_edges().empty() || node_a->in_edges().empty()) {
+    return fory::Unexpected(fory::Error::invalid("graph edge list empty"));
   }
-  if (weak.cache().upgrade() != strong.owner()) {
+  if (node_a->out_edges()[0] != node_a->in_edges()[0] ||
+      node_a->out_edges()[0] != edge) {
+    return fory::Unexpected(fory::Error::invalid("graph shared edge mismatch"));
+  }
+  auto from = edge->from().upgrade();
+  auto to = edge->to().upgrade();
+  if (!from || !to) {
+    return fory::Unexpected(fory::Error::invalid("graph weak upgrade failed"));
+  }
+  if (from != node_a || to != node_b) {
     return fory::Unexpected(
-        fory::Error::invalid("ref weak holder cache mismatch"));
+        fory::Error::invalid("graph edge endpoints mismatch"));
   }
   return fory::Result<void, fory::Error>();
 }
@@ -387,22 +411,39 @@ fory::Result<void, fory::Error> RunRoundTrip() {
                       .check_struct_version(true)
                       .track_ref(true)
                       .build();
-  ref_tests::RegisterTypes(ref_fory);
+  tree::RegisterTypes(ref_fory);
+  graph::RegisterTypes(ref_fory);
 
-  ref_tests::RefSuite ref_suite = BuildRefSuite();
-  FORY_TRY(ref_bytes, ref_fory.serialize(ref_suite));
-  FORY_TRY(ref_roundtrip, ref_fory.deserialize<ref_tests::RefSuite>(
-                               ref_bytes.data(), ref_bytes.size()));
-  FORY_RETURN_IF_ERROR(ValidateRefSuite(ref_roundtrip));
+  tree::TreeNode tree_root = BuildTree();
+  FORY_TRY(tree_bytes, ref_fory.serialize(tree_root));
+  FORY_TRY(tree_roundtrip, ref_fory.deserialize<tree::TreeNode>(
+                               tree_bytes.data(), tree_bytes.size()));
+  FORY_RETURN_IF_ERROR(ValidateTree(tree_roundtrip));
 
-  const char *ref_file = std::getenv("DATA_FILE_REF");
-  if (ref_file != nullptr && ref_file[0] != '\0') {
-    FORY_TRY(payload, ReadFile(ref_file));
-    FORY_TRY(peer_suite, ref_fory.deserialize<ref_tests::RefSuite>(
-                             payload.data(), payload.size()));
-    FORY_RETURN_IF_ERROR(ValidateRefSuite(peer_suite));
-    FORY_TRY(peer_bytes, ref_fory.serialize(peer_suite));
-    FORY_RETURN_IF_ERROR(WriteFile(ref_file, peer_bytes));
+  const char *tree_file = std::getenv("DATA_FILE_TREE");
+  if (tree_file != nullptr && tree_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(tree_file));
+    FORY_TRY(peer_tree, ref_fory.deserialize<tree::TreeNode>(payload.data(),
+                                                             payload.size()));
+    FORY_RETURN_IF_ERROR(ValidateTree(peer_tree));
+    FORY_TRY(peer_bytes, ref_fory.serialize(peer_tree));
+    FORY_RETURN_IF_ERROR(WriteFile(tree_file, peer_bytes));
+  }
+
+  graph::Graph graph_value = BuildGraph();
+  FORY_TRY(graph_bytes, ref_fory.serialize(graph_value));
+  FORY_TRY(graph_roundtrip, ref_fory.deserialize<graph::Graph>(
+                                graph_bytes.data(), graph_bytes.size()));
+  FORY_RETURN_IF_ERROR(ValidateGraph(graph_roundtrip));
+
+  const char *graph_file = std::getenv("DATA_FILE_GRAPH");
+  if (graph_file != nullptr && graph_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(graph_file));
+    FORY_TRY(peer_graph, ref_fory.deserialize<graph::Graph>(payload.data(),
+                                                            payload.size()));
+    FORY_RETURN_IF_ERROR(ValidateGraph(peer_graph));
+    FORY_TRY(peer_bytes, ref_fory.serialize(peer_graph));
+    FORY_RETURN_IF_ERROR(WriteFile(graph_file, peer_bytes));
   }
 
   return fory::Result<void, fory::Error>();

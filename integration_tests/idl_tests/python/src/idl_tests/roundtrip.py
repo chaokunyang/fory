@@ -25,7 +25,8 @@ import addressbook
 import complex_fbs
 import monster
 import optional_types
-import ref_tests
+import graph
+import tree
 import numpy as np
 import pyfory
 
@@ -347,52 +348,84 @@ def file_roundtrip_optional_types(
     Path(data_file).write_bytes(fory.serialize(decoded))
 
 
-def build_ref_suite() -> "ref_tests.RefSuite":
-    item = ref_tests.Item(name="shared")
-    shared = ref_tests.SharedHolder(first=item, second=item)
-    repeated_holder = ref_tests.RepeatedHolder(items=[item, item])
+def build_tree() -> "tree.TreeNode":
+    child_a = tree.TreeNode(id="child-a", name="child-a")
+    child_b = tree.TreeNode(id="child-b", name="child-b")
+    child_a.parent = child_b
+    child_b.parent = child_a
 
-    owner = ref_tests.Owner(name="owner")
-    strong = ref_tests.StrongHolder(owner=owner)
-    weak = ref_tests.WeakHolder(owner=owner, cache=owner)
-    return ref_tests.RefSuite(
-        shared=shared,
-        repeated_holder=repeated_holder,
-        strong=strong,
-        weak_holder=weak,
-    )
+    root = tree.TreeNode(id="root", name="root")
+    root.children = [child_a, child_a, child_b]
+    return root
 
 
-def assert_ref_suite(suite: "ref_tests.RefSuite") -> None:
-    assert suite.shared is not None
-    assert suite.shared.first is suite.shared.second
-    assert suite.shared.first.name == "shared"
-
-    assert suite.repeated_holder is not None
-    assert len(suite.repeated_holder.items) == 2
-    assert suite.repeated_holder.items[0] is suite.repeated_holder.items[1]
-
-    assert suite.strong is not None
-    assert suite.weak_holder is not None
-    assert suite.strong.owner is suite.weak_holder.owner
-    assert suite.strong.owner is suite.weak_holder.cache
+def assert_tree(root: "tree.TreeNode") -> None:
+    children = root.children
+    assert len(children) == 3
+    assert children[0] is children[1]
+    assert children[0] is not children[2]
+    assert children[0].parent is children[2]
+    assert children[2].parent is children[0]
 
 
-def local_roundtrip_ref(fory: pyfory.Fory, suite: "ref_tests.RefSuite") -> None:
-    data = fory.serialize(suite)
+def local_roundtrip_tree(fory: pyfory.Fory, root: "tree.TreeNode") -> None:
+    data = fory.serialize(root)
     decoded = fory.deserialize(data)
-    assert isinstance(decoded, ref_tests.RefSuite)
-    assert_ref_suite(decoded)
+    assert isinstance(decoded, tree.TreeNode)
+    assert_tree(decoded)
 
 
-def file_roundtrip_ref(fory: pyfory.Fory, suite: "ref_tests.RefSuite") -> None:
-    data_file = os.environ.get("DATA_FILE_REF")
+def file_roundtrip_tree(fory: pyfory.Fory, root: "tree.TreeNode") -> None:
+    data_file = os.environ.get("DATA_FILE_TREE")
     if not data_file:
         return
     payload = Path(data_file).read_bytes()
     decoded = fory.deserialize(payload)
-    assert isinstance(decoded, ref_tests.RefSuite)
-    assert_ref_suite(decoded)
+    assert isinstance(decoded, tree.TreeNode)
+    assert_tree(decoded)
+    Path(data_file).write_bytes(fory.serialize(decoded))
+
+
+def build_graph() -> "graph.Graph":
+    node_a = graph.Node(id="node-a")
+    node_b = graph.Node(id="node-b")
+    edge = graph.Edge(id="edge-1", weight=1.5, from_=node_a, to=node_b)
+
+    node_a.out_edges = [edge]
+    node_a.in_edges = [edge]
+    node_b.in_edges = [edge]
+    node_b.out_edges = []
+
+    return graph.Graph(nodes=[node_a, node_b], edges=[edge])
+
+
+def assert_graph(value: "graph.Graph") -> None:
+    assert len(value.nodes) == 2
+    assert len(value.edges) == 1
+    node_a = value.nodes[0]
+    node_b = value.nodes[1]
+    edge = value.edges[0]
+    assert edge is node_a.out_edges[0]
+    assert edge is node_a.in_edges[0]
+    assert edge.from_ is node_a
+    assert edge.to is node_b
+
+
+def local_roundtrip_graph(fory: pyfory.Fory, graph_value: "graph.Graph") -> None:
+    data = fory.serialize(graph_value)
+    decoded = fory.deserialize(data)
+    assert isinstance(decoded, graph.Graph)
+    assert_graph(decoded)
+
+
+def file_roundtrip_graph(fory: pyfory.Fory, graph_value: "graph.Graph") -> None:
+    data_file = os.environ.get("DATA_FILE_GRAPH")
+    if not data_file:
+        return
+    payload = Path(data_file).read_bytes()
+    decoded = fory.deserialize(payload)
+    assert isinstance(decoded, graph.Graph)
+    assert_graph(decoded)
     Path(data_file).write_bytes(fory.serialize(decoded))
 
 
@@ -424,10 +457,14 @@ def main() -> int:
     file_roundtrip_optional_types(fory, holder)
 
     ref_fory = pyfory.Fory(xlang=True, ref=True)
-    ref_tests.register_ref_tests_types(ref_fory)
-    suite = build_ref_suite()
-    local_roundtrip_ref(ref_fory, suite)
-    file_roundtrip_ref(ref_fory, suite)
+    tree.register_tree_types(ref_fory)
+    graph.register_graph_types(ref_fory)
+    tree_root = build_tree()
+    local_roundtrip_tree(ref_fory, tree_root)
+    file_roundtrip_tree(ref_fory, tree_root)
+    graph_value = build_graph()
+    local_roundtrip_graph(ref_fory, graph_value)
+    file_roundtrip_graph(ref_fory, graph_value)
     return 0
 
 

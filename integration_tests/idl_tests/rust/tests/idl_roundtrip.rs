@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::{env, fs};
 
 use chrono::NaiveDate;
-use fory::{ArcWeak, Fory, RcWeak};
+use fory::{ArcWeak, Fory};
 use idl_tests::addressbook::{
     self,
     person::{PhoneNumber, PhoneType},
@@ -29,7 +29,7 @@ use idl_tests::addressbook::{
 use idl_tests::complex_fbs::{self, Container, Note, Payload, ScalarPack, Status};
 use idl_tests::monster::{self, Color, Monster, Vec3};
 use idl_tests::optional_types::{self, AllOptionalTypes, OptionalHolder, OptionalUnion};
-use idl_tests::ref_tests;
+use idl_tests::{graph, tree};
 
 fn build_address_book() -> AddressBook {
     let mobile = PhoneNumber {
@@ -185,60 +185,114 @@ fn build_optional_holder() -> OptionalHolder {
     }
 }
 
-fn build_ref_suite() -> ref_tests::RefSuite {
-    let item = Arc::new(ref_tests::Item {
-        name: "shared".to_string(),
+fn build_tree() -> tree::TreeNode {
+    let mut child_a = Arc::new(tree::TreeNode {
+        id: "child-a".to_string(),
+        name: "child-a".to_string(),
+        children: vec![],
+        parent: None,
     });
-    let shared = ref_tests::SharedHolder {
-        first: Some(Arc::clone(&item)),
-        second: Some(Arc::clone(&item)),
-    };
-    let repeated = ref_tests::RepeatedHolder {
-        items: vec![Arc::clone(&item), Arc::clone(&item)],
-    };
-
-    let owner = Arc::new(ref_tests::Owner {
-        name: "owner".to_string(),
+    let mut child_b = Arc::new(tree::TreeNode {
+        id: "child-b".to_string(),
+        name: "child-b".to_string(),
+        children: vec![],
+        parent: None,
     });
-    let strong = ref_tests::StrongHolder {
-        owner: Some(Arc::clone(&owner)),
-    };
-    let weak = ref_tests::WeakHolder {
-        owner: Some(ArcWeak::from(&owner)),
-        cache: Some(RcWeak::new()),
-    };
 
-    ref_tests::RefSuite {
-        shared: Some(shared),
-        repeated_holder: Some(repeated),
-        strong: Some(strong),
-        weak_holder: Some(weak),
+    let child_a_weak = ArcWeak::from(&child_a);
+    let child_b_weak = ArcWeak::from(&child_b);
+    Arc::get_mut(&mut child_a)
+        .expect("child a unique")
+        .parent = Some(child_b_weak);
+    Arc::get_mut(&mut child_b)
+        .expect("child b unique")
+        .parent = Some(child_a_weak);
+
+    tree::TreeNode {
+        id: "root".to_string(),
+        name: "root".to_string(),
+        children: vec![Arc::clone(&child_a), Arc::clone(&child_a), Arc::clone(&child_b)],
+        parent: None,
     }
 }
 
-fn assert_ref_suite(suite: &ref_tests::RefSuite) {
-    let shared = suite.shared.as_ref().expect("shared holder");
-    let first = shared.first.as_ref().expect("shared first");
-    let second = shared.second.as_ref().expect("shared second");
-    assert!(Arc::ptr_eq(first, second));
-    assert_eq!(first.name, "shared");
-
-    let repeated = suite
-        .repeated_holder
+fn assert_tree(root: &tree::TreeNode) {
+    assert_eq!(root.children.len(), 3);
+    assert!(Arc::ptr_eq(&root.children[0], &root.children[1]));
+    assert!(!Arc::ptr_eq(&root.children[0], &root.children[2]));
+    let parent_a = root.children[0]
+        .parent
         .as_ref()
-        .expect("repeated holder");
-    assert_eq!(repeated.items.len(), 2);
-    assert!(Arc::ptr_eq(&repeated.items[0], &repeated.items[1]));
+        .expect("child a parent")
+        .upgrade()
+        .expect("upgrade child a parent");
+    let parent_b = root.children[2]
+        .parent
+        .as_ref()
+        .expect("child b parent")
+        .upgrade()
+        .expect("upgrade child b parent");
+    assert!(Arc::ptr_eq(&parent_a, &root.children[2]));
+    assert!(Arc::ptr_eq(&parent_b, &root.children[0]));
+}
 
-    let strong = suite.strong.as_ref().expect("strong holder");
-    let weak = suite.weak_holder.as_ref().expect("weak holder");
-    let strong_owner = strong.owner.as_ref().expect("strong owner");
-    let weak_owner = weak.owner.as_ref().expect("weak owner");
-    let upgraded = weak_owner.upgrade().expect("weak owner upgrade");
-    assert!(Arc::ptr_eq(&upgraded, strong_owner));
-    if let Some(cache) = weak.cache.as_ref() {
-        assert!(cache.upgrade().is_none());
+fn build_graph() -> graph::Graph {
+    let mut node_a = Arc::new(graph::Node {
+        id: "node-a".to_string(),
+        out_edges: vec![],
+        in_edges: vec![],
+    });
+    let mut node_b = Arc::new(graph::Node {
+        id: "node-b".to_string(),
+        out_edges: vec![],
+        in_edges: vec![],
+    });
+
+    let edge = Arc::new(graph::Edge {
+        id: "edge-1".to_string(),
+        weight: 1.5_f32,
+        from: Some(ArcWeak::from(&node_a)),
+        to: Some(ArcWeak::from(&node_b)),
+    });
+
+    Arc::get_mut(&mut node_a)
+        .expect("node a unique")
+        .out_edges = vec![Arc::clone(&edge)];
+    Arc::get_mut(&mut node_a)
+        .expect("node a unique")
+        .in_edges = vec![Arc::clone(&edge)];
+    Arc::get_mut(&mut node_b)
+        .expect("node b unique")
+        .in_edges = vec![Arc::clone(&edge)];
+
+    graph::Graph {
+        nodes: vec![Arc::clone(&node_a), Arc::clone(&node_b)],
+        edges: vec![Arc::clone(&edge)],
     }
+}
+
+fn assert_graph(value: &graph::Graph) {
+    assert_eq!(value.nodes.len(), 2);
+    assert_eq!(value.edges.len(), 1);
+    let node_a = &value.nodes[0];
+    let node_b = &value.nodes[1];
+    let edge = &value.edges[0];
+    assert!(Arc::ptr_eq(&node_a.out_edges[0], &node_a.in_edges[0]));
+    assert!(Arc::ptr_eq(&node_a.out_edges[0], edge));
+    let from = edge
+        .from
+        .as_ref()
+        .expect("edge from")
+        .upgrade()
+        .expect("upgrade from");
+    let to = edge
+        .to
+        .as_ref()
+        .expect("edge to")
+        .upgrade()
+        .expect("upgrade to");
+    assert!(Arc::ptr_eq(&from, node_a));
+    assert!(Arc::ptr_eq(&to, node_b));
 }
 
 #[test]
@@ -336,21 +390,40 @@ fn test_address_book_roundtrip() {
     }
 
     let mut ref_fory = Fory::default().xlang(true).track_ref(true);
-    ref_tests::register_types(&mut ref_fory).expect("register ref types");
-    let suite = build_ref_suite();
-    let bytes = ref_fory.serialize(&suite).expect("serialize ref suite");
-    let roundtrip: ref_tests::RefSuite = ref_fory.deserialize(&bytes).expect("deserialize");
-    assert_ref_suite(&roundtrip);
+    tree::register_types(&mut ref_fory).expect("register tree types");
+    graph::register_types(&mut ref_fory).expect("register graph types");
 
-    if let Ok(data_file) = env::var("DATA_FILE_REF") {
-        let payload = fs::read(&data_file).expect("read ref data file");
-        let peer_suite: ref_tests::RefSuite = ref_fory
+    let tree_root = build_tree();
+    let bytes = ref_fory.serialize(&tree_root).expect("serialize tree");
+    let roundtrip: tree::TreeNode = ref_fory.deserialize(&bytes).expect("deserialize");
+    assert_tree(&roundtrip);
+
+    if let Ok(data_file) = env::var("DATA_FILE_TREE") {
+        let payload = fs::read(&data_file).expect("read tree data file");
+        let peer_tree: tree::TreeNode = ref_fory
             .deserialize(&payload)
-            .expect("deserialize peer ref payload");
-        assert_ref_suite(&peer_suite);
+            .expect("deserialize peer tree payload");
+        assert_tree(&peer_tree);
         let encoded = ref_fory
-            .serialize(&peer_suite)
-            .expect("serialize peer ref payload");
-        fs::write(data_file, encoded).expect("write ref data file");
+            .serialize(&peer_tree)
+            .expect("serialize peer tree payload");
+        fs::write(data_file, encoded).expect("write tree data file");
+    }
+
+    let graph_value = build_graph();
+    let bytes = ref_fory.serialize(&graph_value).expect("serialize graph");
+    let roundtrip: graph::Graph = ref_fory.deserialize(&bytes).expect("deserialize");
+    assert_graph(&roundtrip);
+
+    if let Ok(data_file) = env::var("DATA_FILE_GRAPH") {
+        let payload = fs::read(&data_file).expect("read graph data file");
+        let peer_graph: graph::Graph = ref_fory
+            .deserialize(&payload)
+            .expect("deserialize peer graph payload");
+        assert_graph(&peer_graph);
+        let encoded = ref_fory
+            .serialize(&peer_graph)
+            .expect("serialize peer graph payload");
+        fs::write(data_file, encoded).expect("write graph data file");
     }
 }

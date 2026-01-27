@@ -19,4 +19,5 @@ pub mod addressbook;
 pub mod complex_fbs;
 pub mod monster;
 pub mod optional_types;
-pub mod ref_tests;
+pub mod graph;
+pub mod tree;

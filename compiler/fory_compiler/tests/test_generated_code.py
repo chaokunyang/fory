@@ -55,7 +55,9 @@ def parse_fbs(source: str) -> Schema:
     return FBSFrontend().parse(source)
 
 
-def generate_files(schema: Schema, generator_cls: Type[BaseGenerator]) -> Dict[str, str]:
+def generate_files(
+    schema: Schema, generator_cls: Type[BaseGenerator]
+) -> Dict[str, str]:
     options = GeneratorOptions(output_dir=Path("/tmp"))
     generator = generator_cls(schema, options)
     return {item.path: item.content for item in generator.generate()}

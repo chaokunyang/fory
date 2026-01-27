@@ -171,8 +171,8 @@ public:
   }
 
   FORY_ALWAYS_INLINE int32_t GetInt24(uint32_t offset) {
-    FORY_CHECK(offset + 3 <= size_) << "Out of range " << offset
-                                    << " should be less than " << size_;
+    FORY_CHECK(offset + 3 <= size_)
+        << "Out of range " << offset << " should be less than " << size_;
     int32_t b0 = data_[offset];
     int32_t b1 = data_[offset + 1];
     int32_t b2 = data_[offset + 2];

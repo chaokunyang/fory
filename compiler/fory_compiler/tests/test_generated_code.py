@@ -357,7 +357,7 @@ def test_generated_code_map_types_equivalent():
     assert "Option<i32>" in rust_output
 
     cpp_output = render_files(generate_files(schemas["fdl"], CppGenerator))
-    assert "SharedWeak<gen::MapValue>" in cpp_output
+    assert "SharedWeak<MapValue>" in cpp_output
 
 
 def test_generated_code_nested_messages_equivalent():
@@ -452,4 +452,4 @@ def test_generated_code_tree_ref_options_equivalent():
     assert "ArcWeak<TreeNode>" in rust_output
 
     cpp_output = render_files(generate_files(schemas["fdl"], CppGenerator))
-    assert "SharedWeak<tree::TreeNode>" in cpp_output
+    assert "SharedWeak<TreeNode>" in cpp_output

@@ -61,10 +61,10 @@ def test_fbs_type_mapping_and_options():
     assert fields["inventory"].field_type.element_type.kind == PrimitiveKind.UINT8
     assert fields["friendly"].options["deprecated"] is True
     assert fields["friendly"].options["priority"] == 1
-    assert fields["pos"].number == 0
-    assert fields["mana"].number == 1
-    assert fields["pos"].tag_id == 0
-    assert fields["mana"].tag_id == 1
+    assert fields["pos"].number == 1
+    assert fields["mana"].number == 2
+    assert fields["pos"].tag_id == 1
+    assert fields["mana"].tag_id == 2
 
     enum_values = {v.name: v.value for v in schema.enums[0].values}
     assert enum_values["Green"] == 1
@@ -81,7 +81,7 @@ def test_fbs_union_translation():
     union = schema.unions[0]
     assert union.name == "Event"
     assert [f.name for f in union.fields] == ["foo", "bar"]
-    assert [f.number for f in union.fields] == [0, 1]
+    assert [f.number for f in union.fields] == [1, 2]
 
 
 def test_fbs_fory_ref_attributes():

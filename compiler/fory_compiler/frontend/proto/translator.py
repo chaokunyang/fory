@@ -215,6 +215,7 @@ class ProtoTranslator:
             name=proto_field.name,
             field_type=field_type,
             number=proto_field.number,
+            tag_id=proto_field.number,
             optional=optional,
             ref=ref,
             ref_options=field_ref_options,

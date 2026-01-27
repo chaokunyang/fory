@@ -233,8 +233,10 @@ any payload = 1;
 
 **Notes:**
 
-- `any` always writes a null flag (same as `nullable`) because values may be empty.
-- `ref` is not allowed on `any` fields. Wrap `any` in a message if you need reference tracking.
+- `any` always writes a null flag (same as `nullable`) because values may be empty; codegen treats `any` as nullable even without `optional`.
+- Allowed runtime values are limited to `bool`, `string`, `enum`, `message`, and `union`. Other primitives (numeric, bytes, date/time) and list/map are not supported; wrap them in a message or use explicit fields instead.
+- `ref` is not allowed on `any` fields (including repeated/map values). Wrap `any` in a message if you need reference tracking.
+- The runtime type must be registered in the target language schema/IDL registration; unknown types fail to deserialize.
 
 ## Enum Types
 

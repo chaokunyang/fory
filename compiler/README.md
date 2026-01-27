@@ -253,6 +253,7 @@ message Example {
     MyType friend = 1 [ref=true];
     string nickname = 2 [nullable=true];
     MyType data = 3 [ref=true, nullable=true];
+    MyType parent = 4 [ref=true, weak_ref=true];
 }
 ```
 

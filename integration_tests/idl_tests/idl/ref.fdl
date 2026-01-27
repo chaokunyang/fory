@@ -15,8 +15,37 @@
 // specific language governing permissions and limitations
 // under the License.
 
-pub mod addressbook;
-pub mod complex_fbs;
-pub mod monster;
-pub mod optional_types;
-pub mod ref_tests;
+package ref_tests;
+
+message Item {
+    string name = 1;
+}
+
+message SharedHolder {
+    ref Item first = 1;
+    ref Item second = 2;
+}
+
+message RepeatedHolder {
+    repeated ref Item items = 1;
+}
+
+message Owner {
+    string name = 1;
+}
+
+message StrongHolder {
+    ref Owner owner = 1;
+}
+
+message WeakHolder {
+    ref Owner owner = 1 [weak_ref = true];
+    ref Owner cache = 2 [weak_ref = true, thread_safe_pointer = false];
+}
+
+message RefSuite {
+    SharedHolder shared = 1;
+    RepeatedHolder repeated_holder = 2;
+    StrongHolder strong = 3;
+    WeakHolder weak_holder = 4;
+}

@@ -28,6 +28,7 @@ import (
 	complexfbs "github.com/apache/fory/integration_tests/idl_tests/go/complex_fbs"
 	monster "github.com/apache/fory/integration_tests/idl_tests/go/monster"
 	optionaltypes "github.com/apache/fory/integration_tests/idl_tests/go/optional_types"
+	reftests "github.com/apache/fory/integration_tests/idl_tests/go/ref_tests"
 )
 
 func buildAddressBook() AddressBook {
@@ -100,6 +101,14 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	holder := buildOptionalHolder()
 	runLocalOptionalRoundTrip(t, f, holder)
 	runFileOptionalRoundTrip(t, f, holder)
+
+	refFory := fory.NewFory(fory.WithXlang(true), fory.WithRefTracking(true))
+	if err := reftests.RegisterTypes(refFory); err != nil {
+		t.Fatalf("register ref types: %v", err)
+	}
+	refSuite := buildRefSuite()
+	runLocalRefRoundTrip(t, refFory, refSuite)
+	runFileRefRoundTrip(t, refFory, refSuite)
 }
 
 func runLocalRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {
@@ -420,6 +429,86 @@ func runFileOptionalRoundTrip(t *testing.T, f *fory.Fory, holder optionaltypes.O
 	}
 	if err := os.WriteFile(dataFile, out, 0o644); err != nil {
 		t.Fatalf("write data file: %v", err)
+	}
+}
+
+func buildRefSuite() reftests.RefSuite {
+	item := &reftests.Item{Name: "shared"}
+	shared := reftests.SharedHolder{
+		First:  item,
+		Second: item,
+	}
+	repeated := reftests.RepeatedHolder{
+		Items: []*reftests.Item{item, item},
+	}
+	owner := &reftests.Owner{Name: "owner"}
+	strong := reftests.StrongHolder{Owner: owner}
+	weak := reftests.WeakHolder{Owner: owner, Cache: owner}
+	return reftests.RefSuite{
+		Shared:         &shared,
+		RepeatedHolder: &repeated,
+		Strong:         &strong,
+		WeakHolder:     &weak,
+	}
+}
+
+func runLocalRefRoundTrip(t *testing.T, f *fory.Fory, suite reftests.RefSuite) {
+	data, err := f.Serialize(suite)
+	if err != nil {
+		t.Fatalf("serialize ref suite: %v", err)
+	}
+	var out reftests.RefSuite
+	if err := f.Deserialize(data, &out); err != nil {
+		t.Fatalf("deserialize ref suite: %v", err)
+	}
+	assertRefSuite(t, out)
+}
+
+func runFileRefRoundTrip(t *testing.T, f *fory.Fory, suite reftests.RefSuite) {
+	dataFile := os.Getenv("DATA_FILE_REF")
+	if dataFile == "" {
+		return
+	}
+	payload, err := os.ReadFile(dataFile)
+	if err != nil {
+		t.Fatalf("read ref payload: %v", err)
+	}
+	var decoded reftests.RefSuite
+	if err := f.Deserialize(payload, &decoded); err != nil {
+		t.Fatalf("deserialize ref payload: %v", err)
+	}
+	assertRefSuite(t, decoded)
+	out, err := f.Serialize(decoded)
+	if err != nil {
+		t.Fatalf("serialize ref payload: %v", err)
+	}
+	if err := os.WriteFile(dataFile, out, 0o644); err != nil {
+		t.Fatalf("write ref payload: %v", err)
+	}
+}
+
+func assertRefSuite(t *testing.T, suite reftests.RefSuite) {
+	t.Helper()
+	if suite.Shared == nil || suite.RepeatedHolder == nil || suite.Strong == nil || suite.WeakHolder == nil {
+		t.Fatalf("ref suite missing fields")
+	}
+	if suite.Shared.First != suite.Shared.Second {
+		t.Fatalf("shared holder mismatch")
+	}
+	if suite.Shared.First == nil || suite.Shared.First.Name != "shared" {
+		t.Fatalf("shared item mismatch")
+	}
+	if len(suite.RepeatedHolder.Items) != 2 {
+		t.Fatalf("repeated holder size mismatch")
+	}
+	if suite.RepeatedHolder.Items[0] != suite.RepeatedHolder.Items[1] {
+		t.Fatalf("repeated holder identity mismatch")
+	}
+	if suite.Strong.Owner != suite.WeakHolder.Owner {
+		t.Fatalf("weak holder owner mismatch")
+	}
+	if suite.Strong.Owner != suite.WeakHolder.Cache {
+		t.Fatalf("weak holder cache mismatch")
 	}
 }
 

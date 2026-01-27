@@ -25,6 +25,7 @@ import addressbook
 import complex_fbs
 import monster
 import optional_types
+import ref_tests
 import numpy as np
 import pyfory
 
@@ -346,6 +347,55 @@ def file_roundtrip_optional_types(
     Path(data_file).write_bytes(fory.serialize(decoded))
 
 
+def build_ref_suite() -> "ref_tests.RefSuite":
+    item = ref_tests.Item(name="shared")
+    shared = ref_tests.SharedHolder(first=item, second=item)
+    repeated_holder = ref_tests.RepeatedHolder(items=[item, item])
+
+    owner = ref_tests.Owner(name="owner")
+    strong = ref_tests.StrongHolder(owner=owner)
+    weak = ref_tests.WeakHolder(owner=owner, cache=owner)
+    return ref_tests.RefSuite(
+        shared=shared,
+        repeated_holder=repeated_holder,
+        strong=strong,
+        weak_holder=weak,
+    )
+
+
+def assert_ref_suite(suite: "ref_tests.RefSuite") -> None:
+    assert suite.shared is not None
+    assert suite.shared.first is suite.shared.second
+    assert suite.shared.first.name == "shared"
+
+    assert suite.repeated_holder is not None
+    assert len(suite.repeated_holder.items) == 2
+    assert suite.repeated_holder.items[0] is suite.repeated_holder.items[1]
+
+    assert suite.strong is not None
+    assert suite.weak_holder is not None
+    assert suite.strong.owner is suite.weak_holder.owner
+    assert suite.strong.owner is suite.weak_holder.cache
+
+
+def local_roundtrip_ref(fory: pyfory.Fory, suite: "ref_tests.RefSuite") -> None:
+    data = fory.serialize(suite)
+    decoded = fory.deserialize(data)
+    assert isinstance(decoded, ref_tests.RefSuite)
+    assert_ref_suite(decoded)
+
+
+def file_roundtrip_ref(fory: pyfory.Fory, suite: "ref_tests.RefSuite") -> None:
+    data_file = os.environ.get("DATA_FILE_REF")
+    if not data_file:
+        return
+    payload = Path(data_file).read_bytes()
+    decoded = fory.deserialize(payload)
+    assert isinstance(decoded, ref_tests.RefSuite)
+    assert_ref_suite(decoded)
+    Path(data_file).write_bytes(fory.serialize(decoded))
+
+
 def main() -> int:
     fory = pyfory.Fory(xlang=True)
     addressbook.register_addressbook_types(fory)
@@ -372,6 +422,12 @@ def main() -> int:
     holder = build_optional_holder()
     local_roundtrip_optional_types(fory, holder)
     file_roundtrip_optional_types(fory, holder)
+
+    ref_fory = pyfory.Fory(xlang=True, ref=True)
+    ref_tests.register_ref_tests_types(ref_fory)
+    suite = build_ref_suite()
+    local_roundtrip_ref(ref_fory, suite)
+    file_roundtrip_ref(ref_fory, suite)
     return 0
 
 

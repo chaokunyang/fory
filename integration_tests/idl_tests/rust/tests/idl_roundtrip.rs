@@ -16,10 +16,11 @@
 // under the License.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::{env, fs};
 
 use chrono::NaiveDate;
-use fory::Fory;
+use fory::{ArcWeak, Fory, RcWeak};
 use idl_tests::addressbook::{
     self,
     person::{PhoneNumber, PhoneType},
@@ -28,6 +29,7 @@ use idl_tests::addressbook::{
 use idl_tests::complex_fbs::{self, Container, Note, Payload, ScalarPack, Status};
 use idl_tests::monster::{self, Color, Monster, Vec3};
 use idl_tests::optional_types::{self, AllOptionalTypes, OptionalHolder, OptionalUnion};
+use idl_tests::ref_tests;
 
 fn build_address_book() -> AddressBook {
     let mobile = PhoneNumber {
@@ -183,6 +185,62 @@ fn build_optional_holder() -> OptionalHolder {
     }
 }
 
+fn build_ref_suite() -> ref_tests::RefSuite {
+    let item = Arc::new(ref_tests::Item {
+        name: "shared".to_string(),
+    });
+    let shared = ref_tests::SharedHolder {
+        first: Some(Arc::clone(&item)),
+        second: Some(Arc::clone(&item)),
+    };
+    let repeated = ref_tests::RepeatedHolder {
+        items: vec![Arc::clone(&item), Arc::clone(&item)],
+    };
+
+    let owner = Arc::new(ref_tests::Owner {
+        name: "owner".to_string(),
+    });
+    let strong = ref_tests::StrongHolder {
+        owner: Some(Arc::clone(&owner)),
+    };
+    let weak = ref_tests::WeakHolder {
+        owner: Some(ArcWeak::from(&owner)),
+        cache: Some(RcWeak::new()),
+    };
+
+    ref_tests::RefSuite {
+        shared: Some(shared),
+        repeated_holder: Some(repeated),
+        strong: Some(strong),
+        weak_holder: Some(weak),
+    }
+}
+
+fn assert_ref_suite(suite: &ref_tests::RefSuite) {
+    let shared = suite.shared.as_ref().expect("shared holder");
+    let first = shared.first.as_ref().expect("shared first");
+    let second = shared.second.as_ref().expect("shared second");
+    assert!(Arc::ptr_eq(first, second));
+    assert_eq!(first.name, "shared");
+
+    let repeated = suite
+        .repeated_holder
+        .as_ref()
+        .expect("repeated holder");
+    assert_eq!(repeated.items.len(), 2);
+    assert!(Arc::ptr_eq(&repeated.items[0], &repeated.items[1]));
+
+    let strong = suite.strong.as_ref().expect("strong holder");
+    let weak = suite.weak_holder.as_ref().expect("weak holder");
+    let strong_owner = strong.owner.as_ref().expect("strong owner");
+    let weak_owner = weak.owner.as_ref().expect("weak owner");
+    let upgraded = weak_owner.upgrade().expect("weak owner upgrade");
+    assert!(Arc::ptr_eq(&upgraded, strong_owner));
+    if let Some(cache) = weak.cache.as_ref() {
+        assert!(cache.upgrade().is_none());
+    }
+}
+
 #[test]
 fn test_address_book_roundtrip() {
     let mut fory = Fory::default().xlang(true);
@@ -275,5 +333,24 @@ fn test_address_book_roundtrip() {
             .serialize(&peer_holder)
             .expect("serialize peer payload");
         fs::write(data_file, encoded).expect("write data file");
+    }
+
+    let mut ref_fory = Fory::default().xlang(true).track_ref(true);
+    ref_tests::register_types(&mut ref_fory).expect("register ref types");
+    let suite = build_ref_suite();
+    let bytes = ref_fory.serialize(&suite).expect("serialize ref suite");
+    let roundtrip: ref_tests::RefSuite = ref_fory.deserialize(&bytes).expect("deserialize");
+    assert_ref_suite(&roundtrip);
+
+    if let Ok(data_file) = env::var("DATA_FILE_REF") {
+        let payload = fs::read(&data_file).expect("read ref data file");
+        let peer_suite: ref_tests::RefSuite = ref_fory
+            .deserialize(&payload)
+            .expect("deserialize peer ref payload");
+        assert_ref_suite(&peer_suite);
+        let encoded = ref_fory
+            .serialize(&peer_suite)
+            .expect("serialize peer ref payload");
+        fs::write(data_file, encoded).expect("write ref data file");
     }
 }

@@ -67,6 +67,7 @@ KNOWN_FIELD_OPTIONS: Set[str] = {
     "tracking_ref",
     "nullable",
     "thread_safe_pointer",
+    "weak_ref",
 }
 
 # Known type-level options for inline syntax

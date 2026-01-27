@@ -1105,10 +1105,13 @@ message Example {
 | `nullable`            | bool | Mark field as nullable (sets optional flag)               |
 | `deprecated`          | bool | Mark this field as deprecated                             |
 | `thread_safe_pointer` | bool | Rust only: use `Arc` (true) or `Rc` (false) for ref types |
+| `weak_ref`            | bool | C++/Rust only: generate weak pointers for `ref` fields    |
 
 **Note:** `[(fory).ref = true]` is equivalent to using the `ref` modifier: `ref MyType friend = 1;`
 Field-level options always apply to the field/collection; use modifiers after
 `repeated` to control element behavior.
+`weak_ref` is a codegen hint for C++/Rust and is ignored by Java/Python/Go. It
+must be used with `ref` (or `repeated ref` for collections).
 
 To use `Rc` instead of `Arc` in Rust for a specific field:
 
@@ -1169,6 +1172,7 @@ message ForyFieldOptions {
     optional bool ref = 1;
     optional bool nullable = 2;
     optional bool deprecated = 3;
+    optional bool weak_ref = 4;
 }
 ```
 

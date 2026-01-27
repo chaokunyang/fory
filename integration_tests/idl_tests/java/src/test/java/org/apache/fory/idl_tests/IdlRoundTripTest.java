@@ -39,6 +39,14 @@ import optional_types.AllOptionalTypes;
 import optional_types.OptionalHolder;
 import optional_types.OptionalTypesForyRegistration;
 import optional_types.OptionalUnion;
+import ref_tests.Item;
+import ref_tests.Owner;
+import ref_tests.RefSuite;
+import ref_tests.RefTestsForyRegistration;
+import ref_tests.RepeatedHolder;
+import ref_tests.SharedHolder;
+import ref_tests.StrongHolder;
+import ref_tests.WeakHolder;
 import monster.Color;
 import monster.Monster;
 import monster.MonsterForyRegistration;
@@ -149,6 +157,36 @@ public class IdlRoundTripTest {
       Object roundTrip = fory.deserialize(peerBytes);
       Assert.assertTrue(roundTrip instanceof OptionalHolder);
       Assert.assertEquals(roundTrip, holder);
+    }
+  }
+
+  @Test
+  public void testRefRoundTrip() throws Exception {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).withRefTracking(true).build();
+    RefTestsForyRegistration.register(fory);
+
+    RefSuite suite = buildRefSuite();
+    byte[] bytes = fory.serialize(suite);
+    Object decoded = fory.deserialize(bytes);
+
+    Assert.assertTrue(decoded instanceof RefSuite);
+    RefSuite roundTrip = (RefSuite) decoded;
+    assertRefSuite(roundTrip);
+
+    for (String peer : resolvePeers()) {
+      Path dataFile = Files.createTempFile("idl-ref-" + peer + "-", ".bin");
+      dataFile.toFile().deleteOnExit();
+      Files.write(dataFile, bytes);
+
+      Map<String, String> env = new HashMap<>();
+      env.put("DATA_FILE_REF", dataFile.toAbsolutePath().toString());
+      PeerCommand command = buildPeerCommand(peer, env);
+      runPeer(command, peer);
+
+      byte[] peerBytes = Files.readAllBytes(dataFile);
+      Object peerRoundTrip = fory.deserialize(peerBytes);
+      Assert.assertTrue(peerRoundTrip instanceof RefSuite);
+      assertRefSuite((RefSuite) peerRoundTrip);
     }
   }
 
@@ -419,6 +457,54 @@ public class IdlRoundTripTest {
     holder.setAllTypes(allTypes);
     holder.setChoice(OptionalUnion.ofNote("optional"));
     return holder;
+  }
+
+  private RefSuite buildRefSuite() {
+    Item item = new Item();
+    item.setName("shared");
+
+    SharedHolder shared = new SharedHolder();
+    shared.setFirst(item);
+    shared.setSecond(item);
+
+    RepeatedHolder repeated = new RepeatedHolder();
+    repeated.setItems(Arrays.asList(item, item));
+
+    Owner owner = new Owner();
+    owner.setName("owner");
+
+    StrongHolder strong = new StrongHolder();
+    strong.setOwner(owner);
+
+    WeakHolder weak = new WeakHolder();
+    weak.setOwner(owner);
+    weak.setCache(owner);
+
+    RefSuite suite = new RefSuite();
+    suite.setShared(shared);
+    suite.setRepeatedHolder(repeated);
+    suite.setStrong(strong);
+    suite.setWeakHolder(weak);
+    return suite;
+  }
+
+  private void assertRefSuite(RefSuite suite) {
+    SharedHolder shared = suite.getShared();
+    Assert.assertNotNull(shared);
+    Assert.assertTrue(shared.getFirst() == shared.getSecond());
+    Assert.assertEquals(shared.getFirst().getName(), "shared");
+
+    RepeatedHolder repeated = suite.getRepeatedHolder();
+    Assert.assertNotNull(repeated);
+    Assert.assertEquals(repeated.getItems().size(), 2);
+    Assert.assertTrue(repeated.getItems().get(0) == repeated.getItems().get(1));
+
+    StrongHolder strong = suite.getStrong();
+    WeakHolder weak = suite.getWeakHolder();
+    Assert.assertNotNull(strong);
+    Assert.assertNotNull(weak);
+    Assert.assertTrue(strong.getOwner() == weak.getOwner());
+    Assert.assertTrue(strong.getOwner() == weak.getCache());
   }
 
   private Container buildContainer() {

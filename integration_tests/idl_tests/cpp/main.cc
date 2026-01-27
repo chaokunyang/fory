@@ -22,6 +22,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@
 #include "fory/serialization/fory.h"
 #include "monster.h"
 #include "optional_types.h"
+#include "ref_tests.h"
 
 namespace {
 
@@ -56,6 +58,71 @@ fory::Result<void, fory::Error> WriteFile(const std::string &path,
                static_cast<std::streamsize>(data.size()));
   if (FORY_PREDICT_FALSE(!output)) {
     return fory::Unexpected(fory::Error::invalid("failed to write data file"));
+  }
+  return fory::Result<void, fory::Error>();
+}
+
+ref_tests::RefSuite BuildRefSuite() {
+  auto item = std::make_shared<ref_tests::Item>();
+  item->set_name("shared");
+
+  ref_tests::SharedHolder shared;
+  shared.set_first(item);
+  shared.set_second(item);
+
+  ref_tests::RepeatedHolder repeated;
+  *repeated.mutable_items() = {item, item};
+
+  auto owner = std::make_shared<ref_tests::Owner>();
+  owner->set_name("owner");
+
+  ref_tests::StrongHolder strong;
+  strong.set_owner(owner);
+
+  ref_tests::WeakHolder weak;
+  weak.set_owner(fory::serialization::SharedWeak<ref_tests::Owner>::from(owner));
+  weak.set_cache(fory::serialization::SharedWeak<ref_tests::Owner>::from(owner));
+
+  ref_tests::RefSuite suite;
+  *suite.mutable_shared() = shared;
+  *suite.mutable_repeated_holder() = repeated;
+  *suite.mutable_strong() = strong;
+  *suite.mutable_weak_holder() = weak;
+  return suite;
+}
+
+fory::Result<void, fory::Error> ValidateRefSuite(
+    const ref_tests::RefSuite &suite) {
+  const auto &shared = suite.shared();
+  if (!shared.first() || !shared.second() || shared.first() != shared.second()) {
+    return fory::Unexpected(
+        fory::Error::invalid("ref shared holder mismatch"));
+  }
+  if (shared.first()->name() != "shared") {
+    return fory::Unexpected(
+        fory::Error::invalid("ref shared item mismatch"));
+  }
+
+  const auto &items = suite.repeated_holder().items();
+  if (items.size() != 2 || items[0] != items[1]) {
+    return fory::Unexpected(
+        fory::Error::invalid("ref repeated holder mismatch"));
+  }
+
+  const auto &strong = suite.strong();
+  const auto &weak = suite.weak_holder();
+  if (!strong.owner()) {
+    return fory::Unexpected(
+        fory::Error::invalid("ref weak holder missing owner"));
+  }
+  auto upgraded = weak.owner().upgrade();
+  if (!upgraded || upgraded != strong.owner()) {
+    return fory::Unexpected(
+        fory::Error::invalid("ref weak holder owner mismatch"));
+  }
+  if (weak.cache().upgrade() != strong.owner()) {
+    return fory::Unexpected(
+        fory::Error::invalid("ref weak holder cache mismatch"));
   }
   return fory::Result<void, fory::Error>();
 }
@@ -313,6 +380,29 @@ fory::Result<void, fory::Error> RunRoundTrip() {
     }
     FORY_TRY(peer_bytes, fory.serialize(peer_holder));
     FORY_RETURN_IF_ERROR(WriteFile(optional_file, peer_bytes));
+  }
+
+  auto ref_fory = fory::serialization::Fory::builder()
+                      .xlang(true)
+                      .check_struct_version(true)
+                      .track_ref(true)
+                      .build();
+  ref_tests::RegisterTypes(ref_fory);
+
+  ref_tests::RefSuite ref_suite = BuildRefSuite();
+  FORY_TRY(ref_bytes, ref_fory.serialize(ref_suite));
+  FORY_TRY(ref_roundtrip, ref_fory.deserialize<ref_tests::RefSuite>(
+                               ref_bytes.data(), ref_bytes.size()));
+  FORY_RETURN_IF_ERROR(ValidateRefSuite(ref_roundtrip));
+
+  const char *ref_file = std::getenv("DATA_FILE_REF");
+  if (ref_file != nullptr && ref_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(ref_file));
+    FORY_TRY(peer_suite, ref_fory.deserialize<ref_tests::RefSuite>(
+                             payload.data(), payload.size()));
+    FORY_RETURN_IF_ERROR(ValidateRefSuite(peer_suite));
+    FORY_TRY(peer_bytes, ref_fory.serialize(peer_suite));
+    FORY_RETURN_IF_ERROR(WriteFile(ref_file, peer_bytes));
   }
 
   return fory::Result<void, fory::Error>();

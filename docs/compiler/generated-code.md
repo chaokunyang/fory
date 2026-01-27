@@ -619,7 +619,8 @@ pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {
 ```
 
 **Note:** Rust uses `Arc` by default for `ref` fields. Set
-`[(fory).thread_safe_pointer = false]` to generate `Rc` instead.
+`[(fory).thread_safe_pointer = false]` to generate `Rc` instead. Use
+`[(fory).weak_ref = true]` to generate `ArcWeak`/`RcWeak` for weak references.
 
 ### Usage
 
@@ -763,6 +764,10 @@ int main() {
     return 0;
 }
 ```
+
+**Note:** C++ uses `std::shared_ptr<T>` for `ref` fields. Set
+`[weak_ref = true]` or `[(fory).weak_ref = true]` to generate
+`fory::serialization::SharedWeak<T>` for weak references.
 
 ## Generated Annotations Summary
 

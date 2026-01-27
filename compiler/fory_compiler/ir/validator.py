@@ -62,6 +62,7 @@ class SchemaValidator:
         self._check_duplicate_type_ids()
         self._check_messages()
         self._check_type_references()
+        self._check_weak_refs()
         return not self.errors
 
     def _error(self, message: str, location: Optional[SourceLocation]) -> None:
@@ -309,6 +310,71 @@ class SchemaValidator:
         for union in self.schema.unions:
             for f in union.fields:
                 check_type_ref(f.field_type, f, None)
+
+    def _check_weak_refs(self) -> None:
+        def check_field(
+            field: Field,
+            enclosing_messages: Optional[List[Message]] = None,
+        ) -> None:
+            if field.options.get("weak_ref") is not True:
+                return
+
+            if isinstance(field.field_type, ListType):
+                if not field.element_ref:
+                    self._error(
+                        "weak_ref requires repeated ref fields (use `repeated ref`)",
+                        field.location,
+                    )
+                    return
+                target_type = field.field_type.element_type
+            else:
+                if not field.ref:
+                    self._error(
+                        "weak_ref requires ref tracking (use `ref` modifier or `ref = true`)",
+                        field.location,
+                    )
+                    return
+                target_type = field.field_type
+
+            if not isinstance(target_type, NamedType):
+                self._error(
+                    "weak_ref is only valid for named message types",
+                    field.location,
+                )
+                return
+
+            resolved = None
+            if enclosing_messages is not None:
+                resolved = self._resolve_named_type(
+                    target_type.name, enclosing_messages
+                )
+            else:
+                resolved = self._find_top_level_type(target_type.name)
+
+            if isinstance(resolved, Enum):
+                self._error(
+                    "weak_ref is only valid for message/union types, not enums",
+                    field.location,
+                )
+
+        def check_message_fields(
+            message: Message,
+            enclosing_messages: Optional[List[Message]] = None,
+        ) -> None:
+            lineage = (enclosing_messages or []) + [message]
+            for f in message.fields:
+                check_field(f, lineage)
+            for nested_msg in message.nested_messages:
+                check_message_fields(nested_msg, lineage)
+            for nested_union in message.nested_unions:
+                for f in nested_union.fields:
+                    check_field(f, lineage)
+
+        for message in self.schema.messages:
+            check_message_fields(message)
+        for union in self.schema.unions:
+            for f in union.fields:
+                check_field(f, None)
 
 
 def validate_schema(schema: Schema) -> List[str]:

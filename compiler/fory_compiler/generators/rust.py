@@ -367,7 +367,9 @@ class RustGenerator(BaseGenerator):
         if attrs:
             lines.append(f"#[fory({', '.join(attrs)})]")
 
-        pointer_type = self.get_pointer_type(field)
+        pointer_type = self.get_pointer_type(
+            field, field.options.get("weak_ref") is True
+        )
         rust_type = self.generate_type(
             field.field_type,
             nullable=field.optional,
@@ -541,20 +543,26 @@ class RustGenerator(BaseGenerator):
 
     def collect_uses_for_field(self, field: Field, uses: Set[str]):
         """Collect uses for a field, including ref tracking."""
-        pointer_type = self.get_pointer_type(field)
-        if field.ref or field.element_ref:
+        weak_ref = field.options.get("weak_ref") is True
+        pointer_type = self.get_pointer_type(field, weak_ref)
+        if weak_ref and (field.ref or field.element_ref):
+            if pointer_type == "RcWeak":
+                uses.add("use fory::RcWeak")
+            else:
+                uses.add("use fory::ArcWeak")
+        elif field.ref or field.element_ref:
             if pointer_type == "Rc":
                 uses.add("use std::rc::Rc")
             else:
                 uses.add("use std::sync::Arc")
         self.collect_uses(field.field_type, uses)
 
-    def get_pointer_type(self, field: Field) -> str:
+    def get_pointer_type(self, field: Field, weak_ref: bool = False) -> str:
         """Determine pointer type for ref tracking based on field options."""
         thread_safe = field.options.get("thread_safe_pointer")
         if thread_safe is False:
-            return "Rc"
-        return "Arc"
+            return "RcWeak" if weak_ref else "Rc"
+        return "ArcWeak" if weak_ref else "Arc"
 
     def generate_registration(self) -> List[str]:
         """Generate the Fory registration function."""

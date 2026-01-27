@@ -399,6 +399,9 @@ message TreeNode {
 \*Java uses `@ForyField(ref = true)` annotation.
 
 Rust uses `Arc` by default; set `[(fory).thread_safe_pointer = false]` to use `Rc`.
+Use `[weak_ref = true]` (or `[(fory).weak_ref = true]`) with `ref` to generate weak
+pointer types: `ArcWeak`/`RcWeak` in Rust and `fory::serialization::SharedWeak<T>`
+in C++. Java/Python/Go ignore `weak_ref`.
 
 ## Type Compatibility Matrix
 

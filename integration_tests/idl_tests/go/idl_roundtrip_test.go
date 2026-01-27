@@ -25,6 +25,7 @@ import (
 
 	fory "github.com/apache/fory/go/fory"
 	"github.com/apache/fory/go/fory/optional"
+	anyexample "github.com/apache/fory/integration_tests/idl_tests/go/any_example"
 	complexfbs "github.com/apache/fory/integration_tests/idl_tests/go/complex_fbs"
 	graphpkg "github.com/apache/fory/integration_tests/idl_tests/go/graph"
 	monster "github.com/apache/fory/integration_tests/idl_tests/go/monster"
@@ -82,6 +83,9 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	if err := optionaltypes.RegisterTypes(f); err != nil {
 		t.Fatalf("register optional types: %v", err)
 	}
+	if err := anyexample.RegisterTypes(f); err != nil {
+		t.Fatalf("register any example types: %v", err)
+	}
 
 	book := buildAddressBook()
 	runLocalRoundTrip(t, f, book)
@@ -103,6 +107,9 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	runLocalOptionalRoundTrip(t, f, holder)
 	runFileOptionalRoundTrip(t, f, holder)
 
+	anyHolder := buildAnyHolder()
+	runLocalAnyRoundTrip(t, f, anyHolder)
+
 	refFory := fory.NewFory(fory.WithXlang(true), fory.WithRefTracking(true))
 	if err := treepkg.RegisterTypes(refFory); err != nil {
 		t.Fatalf("register tree types: %v", err)
@@ -116,6 +123,204 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	graphValue := buildGraph()
 	runLocalGraphRoundTrip(t, refFory, graphValue)
 	runFileGraphRoundTrip(t, refFory, graphValue)
+}
+
+func buildAnyHolder() anyexample.AnyHolder {
+	inner := anyexample.AnyInner{Name: "inner"}
+	unionValue := anyexample.TextAnyUnion("union")
+	return anyexample.AnyHolder{
+		BoolValue:      true,
+		StringValue:    "hello",
+		DateValue:      fory.Date{Year: 2024, Month: time.January, Day: 2},
+		TimestampValue: time.Unix(1704164645, 0).UTC(),
+		MessageValue:   &inner,
+		UnionValue:     unionValue,
+		ListValue:      []string{"alpha", "beta"},
+		MapValue:       map[string]string{"k1": "v1", "k2": "v2"},
+	}
+}
+
+func runLocalAnyRoundTrip(t *testing.T, f *fory.Fory, holder anyexample.AnyHolder) {
+	data, err := f.Serialize(&holder)
+	if err != nil {
+		t.Fatalf("serialize any: %v", err)
+	}
+
+	var out anyexample.AnyHolder
+	if err := f.Deserialize(data, &out); err != nil {
+		t.Fatalf("deserialize any: %v", err)
+	}
+
+	assertAnyHolderEqual(t, holder, out)
+}
+
+func assertAnyHolderEqual(t *testing.T, expected, actual anyexample.AnyHolder) {
+	t.Helper()
+
+	if !anyBoolEqual(expected.BoolValue, actual.BoolValue) {
+		t.Fatalf("any bool mismatch: %#v != %#v", expected.BoolValue, actual.BoolValue)
+	}
+	if !anyStringEqual(expected.StringValue, actual.StringValue) {
+		t.Fatalf("any string mismatch: %#v != %#v", expected.StringValue, actual.StringValue)
+	}
+	if !anyDateEqual(expected.DateValue, actual.DateValue) {
+		t.Fatalf("any date mismatch: %#v != %#v", expected.DateValue, actual.DateValue)
+	}
+	if !anyTimeEqual(expected.TimestampValue, actual.TimestampValue) {
+		t.Fatalf("any timestamp mismatch: %#v != %#v", expected.TimestampValue, actual.TimestampValue)
+	}
+	if !anyInnerEqual(expected.MessageValue, actual.MessageValue) {
+		t.Fatalf("any message mismatch: %#v != %#v", expected.MessageValue, actual.MessageValue)
+	}
+	if !reflect.DeepEqual(expected.UnionValue, actual.UnionValue) {
+		t.Fatalf("any union mismatch: %#v != %#v", expected.UnionValue, actual.UnionValue)
+	}
+	if !anyStringSliceEqual(expected.ListValue, actual.ListValue) {
+		t.Fatalf("any list mismatch: %#v != %#v", expected.ListValue, actual.ListValue)
+	}
+	if !anyStringMapEqual(expected.MapValue, actual.MapValue) {
+		t.Fatalf("any map mismatch: %#v != %#v", expected.MapValue, actual.MapValue)
+	}
+}
+
+func anyBoolEqual(expected, actual any) bool {
+	expectedValue, ok := expected.(bool)
+	if !ok {
+		return false
+	}
+	actualValue, ok := actual.(bool)
+	if !ok {
+		return false
+	}
+	return expectedValue == actualValue
+}
+
+func anyStringEqual(expected, actual any) bool {
+	expectedValue, ok := expected.(string)
+	if !ok {
+		return false
+	}
+	actualValue, ok := actual.(string)
+	if !ok {
+		return false
+	}
+	return expectedValue == actualValue
+}
+
+func anyDateEqual(expected, actual any) bool {
+	expectedValue, ok := expected.(fory.Date)
+	if !ok {
+		return false
+	}
+	actualValue, ok := actual.(fory.Date)
+	if !ok {
+		return false
+	}
+	return expectedValue == actualValue
+}
+
+func anyTimeEqual(expected, actual any) bool {
+	expectedValue, ok := expected.(time.Time)
+	if !ok {
+		return false
+	}
+	actualValue, ok := actual.(time.Time)
+	if !ok {
+		return false
+	}
+	return expectedValue.Equal(actualValue)
+}
+
+func anyInnerEqual(expected, actual any) bool {
+	expectedValue, ok := normalizeAnyInner(expected)
+	if !ok {
+		return false
+	}
+	actualValue, ok := normalizeAnyInner(actual)
+	if !ok {
+		return false
+	}
+	return expectedValue == actualValue
+}
+
+func normalizeAnyInner(value any) (string, bool) {
+	switch typed := value.(type) {
+	case *anyexample.AnyInner:
+		if typed == nil {
+			return "", true
+		}
+		return typed.Name, true
+	case anyexample.AnyInner:
+		return typed.Name, true
+	default:
+		return "", false
+	}
+}
+
+func anyStringSliceEqual(expected, actual any) bool {
+	expectedValue, ok := normalizeStringSlice(expected)
+	if !ok {
+		return false
+	}
+	actualValue, ok := normalizeStringSlice(actual)
+	if !ok {
+		return false
+	}
+	return reflect.DeepEqual(expectedValue, actualValue)
+}
+
+func normalizeStringSlice(value any) ([]string, bool) {
+	switch typed := value.(type) {
+	case []string:
+		return typed, true
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			str, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, str)
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+func anyStringMapEqual(expected, actual any) bool {
+	expectedValue, ok := normalizeStringMap(expected)
+	if !ok {
+		return false
+	}
+	actualValue, ok := normalizeStringMap(actual)
+	if !ok {
+		return false
+	}
+	return reflect.DeepEqual(expectedValue, actualValue)
+}
+
+func normalizeStringMap(value any) (map[string]string, bool) {
+	switch typed := value.(type) {
+	case map[string]string:
+		return typed, true
+	case map[any]any:
+		out := make(map[string]string, len(typed))
+		for k, v := range typed {
+			key, ok := k.(string)
+			if !ok {
+				return nil, false
+			}
+			val, ok := v.(string)
+			if !ok {
+				return nil, false
+			}
+			out[key] = val
+		}
+		return out, true
+	default:
+		return nil, false
+	}
 }
 
 func runLocalRoundTrip(t *testing.T, f *fory.Fory, book AddressBook) {

@@ -17,6 +17,7 @@
  * under the License.
  */
 
+#include <any>
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
@@ -27,7 +28,9 @@
 #include <vector>
 
 #include "addressbook.h"
+#include "any_example.h"
 #include "complex_fbs.h"
+#include "fory/serialization/any_serializer.h"
 #include "fory/serialization/fory.h"
 #include "graph.h"
 #include "monster.h"
@@ -151,6 +154,8 @@ fory::Result<void, fory::Error> ValidateGraph(const graph::Graph &graph_value) {
   return fory::Result<void, fory::Error>();
 }
 
+using StringMap = std::map<std::string, std::string>;
+
 fory::Result<void, fory::Error> RunRoundTrip() {
   auto fory = fory::serialization::Fory::builder()
                   .xlang(true)
@@ -162,6 +167,30 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   monster::RegisterTypes(fory);
   complex_fbs::RegisterTypes(fory);
   optional_types::RegisterTypes(fory);
+  any_example::RegisterTypes(fory);
+
+  FORY_RETURN_IF_ERROR(
+      fory::serialization::register_any_type<bool>(fory.type_resolver()));
+  FORY_RETURN_IF_ERROR(
+      fory::serialization::register_any_type<std::string>(fory.type_resolver()));
+  FORY_RETURN_IF_ERROR(
+      fory::serialization::register_any_type<fory::serialization::Date>(
+          fory.type_resolver()));
+  FORY_RETURN_IF_ERROR(
+      fory::serialization::register_any_type<fory::serialization::Timestamp>(
+          fory.type_resolver()));
+  FORY_RETURN_IF_ERROR(
+      fory::serialization::register_any_type<any_example::AnyInner>(
+          fory.type_resolver()));
+  FORY_RETURN_IF_ERROR(
+      fory::serialization::register_any_type<any_example::AnyUnion>(
+          fory.type_resolver()));
+  FORY_RETURN_IF_ERROR(
+      fory::serialization::register_any_type<std::vector<std::string>>(
+          fory.type_resolver()));
+  FORY_RETURN_IF_ERROR(
+      fory::serialization::register_any_type<StringMap>(
+          fory.type_resolver()));
 
   addressbook::Person::PhoneNumber mobile;
   mobile.set_number("555-0100");
@@ -340,6 +369,30 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   if (!(optional_roundtrip == holder)) {
     return fory::Unexpected(
         fory::Error::invalid("optional types roundtrip mismatch"));
+  }
+
+  any_example::AnyInner any_inner;
+  any_inner.set_name("inner");
+
+  any_example::AnyHolder any_holder;
+  any_holder.set_bool_value(std::any(true));
+  any_holder.set_string_value(std::any(std::string("hello")));
+  any_holder.set_date_value(std::any(fory::serialization::Date(19724)));
+  any_holder.set_timestamp_value(std::any(
+      fory::serialization::Timestamp(std::chrono::seconds(1704164645))));
+  any_holder.set_message_value(std::any(any_inner));
+  any_holder.set_union_value(std::any(any_example::AnyUnion::text("union")));
+  any_holder.set_list_value(std::any(std::vector<std::string>{"alpha", "beta"}));
+  any_holder.set_map_value(
+      std::any(StringMap{{"k1", "v1"}, {"k2", "v2"}}));
+
+  FORY_TRY(any_bytes, fory.serialize(any_holder));
+  FORY_TRY(any_roundtrip, fory.deserialize<any_example::AnyHolder>(
+                              any_bytes.data(), any_bytes.size()));
+
+  if (!(any_roundtrip == any_holder)) {
+    return fory::Unexpected(
+        fory::Error::invalid("any holder roundtrip mismatch"));
   }
 
   const char *data_file = std::getenv("DATA_FILE");

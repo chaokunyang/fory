@@ -65,6 +65,7 @@ class PythonGenerator(BaseGenerator):
         PrimitiveKind.BYTES: "bytes",
         PrimitiveKind.DATE: "datetime.date",
         PrimitiveKind.TIMESTAMP: "datetime.datetime",
+        PrimitiveKind.ANY: "Any",
     }
 
     # Numpy dtype strings for primitive arrays
@@ -134,6 +135,7 @@ class PythonGenerator(BaseGenerator):
         PrimitiveKind.BYTES: 'b""',
         PrimitiveKind.DATE: "None",
         PrimitiveKind.TIMESTAMP: "None",
+        PrimitiveKind.ANY: "None",
     }
 
     def safe_name(self, name: str) -> str:
@@ -461,9 +463,14 @@ class PythonGenerator(BaseGenerator):
         """Generate a dataclass field."""
         lines = []
 
+        is_any = (
+            isinstance(field.field_type, PrimitiveType)
+            and field.field_type.kind == PrimitiveKind.ANY
+        )
+        nullable = field.optional or is_any
         python_type = self.generate_type(
             field.field_type,
-            field.optional,
+            nullable,
             field.element_optional,
             parent_stack,
         )
@@ -477,11 +484,11 @@ class PythonGenerator(BaseGenerator):
             trailing_comment = f"  # {comment}"
 
         tag_id = field.tag_id
-        if tag_id is not None or field.ref:
+        if tag_id is not None or field.ref or nullable:
             field_args = []
             if tag_id is not None:
                 field_args.append(f"id={tag_id}")
-            if field.optional:
+            if nullable:
                 field_args.append("nullable=True")
             if field.ref:
                 field_args.append("ref=True")
@@ -530,6 +537,8 @@ class PythonGenerator(BaseGenerator):
     ) -> str:
         """Generate Python type hint."""
         if isinstance(field_type, PrimitiveType):
+            if field_type.kind == PrimitiveKind.ANY:
+                return "Any"
             base_type = self.PRIMITIVE_MAP[field_type.kind]
             if nullable:
                 return f"Optional[{base_type}]"
@@ -685,6 +694,8 @@ class PythonGenerator(BaseGenerator):
         if isinstance(field_type, PrimitiveType):
             if field_type.kind in (PrimitiveKind.DATE, PrimitiveKind.TIMESTAMP):
                 imports.add("import datetime")
+            elif field_type.kind == PrimitiveKind.ANY:
+                imports.add("from typing import Any")
 
         elif isinstance(field_type, ListType):
             # Add numpy import for primitive arrays

@@ -65,6 +65,7 @@ class CppGenerator(BaseGenerator):
         PrimitiveKind.BYTES: "std::vector<uint8_t>",
         PrimitiveKind.DATE: "fory::serialization::Date",
         PrimitiveKind.TIMESTAMP: "fory::serialization::Timestamp",
+        PrimitiveKind.ANY: "std::any",
     }
     NUMERIC_PRIMITIVES = {
         PrimitiveKind.BOOL,
@@ -546,6 +547,13 @@ class CppGenerator(BaseGenerator):
     ) -> str:
         member_name = self.get_field_member_name(field)
         other_member = f"other.{member_name}"
+        if isinstance(field.field_type, PrimitiveType) and (
+            field.field_type.kind == PrimitiveKind.ANY
+        ):
+            return (
+                f"((!{member_name}.has_value() && !{other_member}.has_value()) || "
+                f"({member_name}.type() == {other_member}.type()))"
+            )
         if self.is_message_type(
             field.field_type, parent_stack
         ) and self.get_field_weak_ref(field):
@@ -1278,6 +1286,8 @@ class CppGenerator(BaseGenerator):
     ) -> str:
         """Generate C++ type string with package namespace."""
         if isinstance(field_type, PrimitiveType):
+            if field_type.kind == PrimitiveKind.ANY:
+                return self.PRIMITIVE_MAP[field_type.kind]
             base_type = self.PRIMITIVE_MAP[field_type.kind]
             if nullable:
                 return f"std::optional<{base_type}>"
@@ -1362,9 +1372,13 @@ class CppGenerator(BaseGenerator):
     def get_field_meta(self, field: Field) -> str:
         """Build FieldMeta expression for a field."""
         meta = "fory::F()"
+        is_any = (
+            isinstance(field.field_type, PrimitiveType)
+            and field.field_type.kind == PrimitiveKind.ANY
+        )
         if field.tag_id is not None:
             meta += f".id({field.tag_id})"
-        if field.optional:
+        if field.optional or is_any:
             meta += ".nullable()"
         if field.ref:
             meta += ".ref()"
@@ -1379,7 +1393,11 @@ class CppGenerator(BaseGenerator):
     def get_union_field_meta(self, field: Field) -> str:
         """Build FieldMeta expression for a union case."""
         meta = f"fory::F({field.number})"
-        if field.optional:
+        is_any = (
+            isinstance(field.field_type, PrimitiveType)
+            and field.field_type.kind == PrimitiveKind.ANY
+        )
+        if field.optional or is_any:
             meta += ".nullable()"
         if field.ref:
             meta += ".ref()"
@@ -1443,6 +1461,8 @@ class CppGenerator(BaseGenerator):
     ) -> str:
         """Generate C++ type string."""
         if isinstance(field_type, PrimitiveType):
+            if field_type.kind == PrimitiveKind.ANY:
+                return self.PRIMITIVE_MAP[field_type.kind]
             base_type = self.PRIMITIVE_MAP[field_type.kind]
             if nullable:
                 return f"std::optional<{base_type}>"
@@ -1573,6 +1593,8 @@ class CppGenerator(BaseGenerator):
                 includes.add("<vector>")
             elif field_type.kind in (PrimitiveKind.DATE, PrimitiveKind.TIMESTAMP):
                 includes.add('"fory/serialization/temporal_serializers.h"')
+            elif field_type.kind == PrimitiveKind.ANY:
+                includes.add("<any>")
 
         elif isinstance(field_type, ListType):
             includes.add("<vector>")

@@ -27,11 +27,13 @@ from fory_compiler.ir.ast import (
     Union,
     Field,
     FieldType,
+    PrimitiveType,
     NamedType,
     ListType,
     MapType,
     SourceLocation,
 )
+from fory_compiler.ir.types import PrimitiveKind
 
 
 @dataclass
@@ -313,6 +315,12 @@ class SchemaValidator:
                 check_type_ref(f.field_type, f, None)
 
     def _check_ref_rules(self) -> None:
+        def is_any_type(field_type: FieldType) -> bool:
+            return (
+                isinstance(field_type, PrimitiveType)
+                and field_type.kind == PrimitiveKind.ANY
+            )
+
         def resolve_target(
             target: NamedType,
             enclosing_messages: Optional[List[Message]],
@@ -344,6 +352,32 @@ class SchemaValidator:
             field: Field,
             enclosing_messages: Optional[List[Message]] = None,
         ) -> None:
+            if is_any_type(field.field_type) and field.ref:
+                self._error(
+                    "ref is not allowed on any fields",
+                    field.location,
+                )
+
+            if (
+                isinstance(field.field_type, ListType)
+                and is_any_type(field.field_type.element_type)
+                and field.element_ref
+            ):
+                self._error(
+                    "ref is not allowed on repeated any fields",
+                    field.location,
+                )
+
+            if (
+                isinstance(field.field_type, MapType)
+                and is_any_type(field.field_type.value_type)
+                and field.field_type.value_ref
+            ):
+                self._error(
+                    "ref is not allowed on map values of any type",
+                    field.location,
+                )
+
             if field.ref:
                 if isinstance(field.field_type, (ListType, MapType)):
                     self._error(

@@ -47,6 +47,7 @@ class PrimitiveKind(PyEnum):
     TIMESTAMP = "timestamp"
     DURATION = "duration"
     DECIMAL = "decimal"
+    ANY = "any"
 
 
 PRIMITIVE_TYPES = {
@@ -74,6 +75,7 @@ PRIMITIVE_TYPES = {
     "timestamp": PrimitiveKind.TIMESTAMP,
     "duration": PrimitiveKind.DURATION,
     "decimal": PrimitiveKind.DECIMAL,
+    "any": PrimitiveKind.ANY,
 }
 
 

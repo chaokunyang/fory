@@ -29,6 +29,8 @@ SCHEMAS = [
     IDL_DIR / "idl" / "optional_types.fdl",
     IDL_DIR / "idl" / "tree.fdl",
     IDL_DIR / "idl" / "graph.fdl",
+    IDL_DIR / "idl" / "any_example.fdl",
+    IDL_DIR / "idl" / "any_example.proto",
     IDL_DIR / "idl" / "monster.fbs",
     IDL_DIR / "idl" / "complex_fbs.fbs",
 ]
@@ -47,6 +49,8 @@ GO_OUTPUT_OVERRIDES = {
     "optional_types.fdl": IDL_DIR / "go" / "optional_types",
     "tree.fdl": IDL_DIR / "go" / "tree",
     "graph.fdl": IDL_DIR / "go" / "graph",
+    "any_example.fdl": IDL_DIR / "go" / "any_example",
+    "any_example.proto": IDL_DIR / "go" / "any_example_pb",
 }
 
 

@@ -74,6 +74,7 @@ class ProtoTranslator:
     WELL_KNOWN_TYPES: Dict[str, PrimitiveKind] = {
         "google.protobuf.Timestamp": PrimitiveKind.TIMESTAMP,
         "google.protobuf.Duration": PrimitiveKind.DURATION,
+        "google.protobuf.Any": PrimitiveKind.ANY,
     }
 
     TYPE_OVERRIDES: Dict[str, PrimitiveKind] = {

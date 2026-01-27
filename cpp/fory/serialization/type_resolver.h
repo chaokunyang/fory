@@ -930,11 +930,20 @@ namespace detail {
 template <typename T>
 inline void any_write_adapter(const std::any &value, WriteContext &ctx) {
   const T *ptr = std::any_cast<T>(&value);
-  if (FORY_PREDICT_FALSE(ptr == nullptr)) {
-    ctx.set_error(Error::type_error("std::any stored value type mismatch"));
+  if (ptr != nullptr) {
+    Serializer<T>::write_data(*ptr, ctx);
     return;
   }
-  Serializer<T>::write_data(*ptr, ctx);
+  const auto *shared_ptr = std::any_cast<std::shared_ptr<T>>(&value);
+  if (shared_ptr != nullptr) {
+    if (FORY_PREDICT_FALSE(!(*shared_ptr))) {
+      ctx.set_error(Error::invalid("std::any stored shared_ptr is null"));
+      return;
+    }
+    Serializer<T>::write_data(**shared_ptr, ctx);
+    return;
+  }
+  ctx.set_error(Error::type_error("std::any stored value type mismatch"));
 }
 
 template <typename T> inline std::any any_read_adapter(ReadContext &ctx) {
@@ -942,7 +951,10 @@ template <typename T> inline std::any any_read_adapter(ReadContext &ctx) {
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
     return std::any();
   }
-  return std::any(std::move(value));
+  if constexpr (std::is_copy_constructible<T>::value) {
+    return std::any(std::move(value));
+  }
+  return std::any(std::make_shared<T>(std::move(value)));
 }
 
 } // namespace detail

@@ -64,6 +64,7 @@ class RustGenerator(BaseGenerator):
         PrimitiveKind.BYTES: "Vec<u8>",
         PrimitiveKind.DATE: "chrono::NaiveDate",
         PrimitiveKind.TIMESTAMP: "chrono::NaiveDateTime",
+        PrimitiveKind.ANY: "Box<dyn Any>",
     }
 
     def generate(self) -> List[GeneratedFile]:
@@ -233,7 +234,11 @@ class RustGenerator(BaseGenerator):
         """Generate a Rust tagged union."""
         lines: List[str] = []
 
-        lines.append("#[derive(ForyObject, Debug, Clone, PartialEq)]")
+        has_any = any(self.field_type_has_any(field.field_type) for field in union.fields)
+        derives = ["ForyObject", "Debug"]
+        if not has_any:
+            derives.extend(["Clone", "PartialEq"])
+        lines.append(f"#[derive({', '.join(derives)})]")
         lines.append(f"pub enum {union.name} {{")
 
         for field in union.fields:
@@ -275,7 +280,10 @@ class RustGenerator(BaseGenerator):
         type_name = message.name
 
         # Derive macros
-        lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
+        derives = ["ForyObject", "Debug"]
+        if not self.message_has_any(message):
+            derives.extend(["Clone", "PartialEq", "Default"])
+        lines.append(f"#[derive({', '.join(derives)})]")
 
         lines.append(f"pub struct {type_name} {{")
 
@@ -289,6 +297,22 @@ class RustGenerator(BaseGenerator):
         lines.append("}")
 
         return lines
+
+    def message_has_any(self, message: Message) -> bool:
+        """Return True if a message contains any type fields."""
+        return any(self.field_type_has_any(field.field_type) for field in message.fields)
+
+    def field_type_has_any(self, field_type: FieldType) -> bool:
+        """Return True if field type or its children is any."""
+        if isinstance(field_type, PrimitiveType):
+            return field_type.kind == PrimitiveKind.ANY
+        if isinstance(field_type, ListType):
+            return self.field_type_has_any(field_type.element_type)
+        if isinstance(field_type, MapType):
+            return self.field_type_has_any(
+                field_type.key_type
+            ) or self.field_type_has_any(field_type.value_type)
+        return False
 
     def generate_nested_module(
         self,
@@ -354,7 +378,11 @@ class RustGenerator(BaseGenerator):
         attrs = []
         if field.tag_id is not None:
             attrs.append(f"id = {field.tag_id}")
-        if field.optional:
+        is_any = (
+            isinstance(field.field_type, PrimitiveType)
+            and field.field_type.kind == PrimitiveKind.ANY
+        )
+        if field.optional or is_any:
             attrs.append("nullable = true")
         if field.ref:
             attrs.append("ref = true")
@@ -454,6 +482,8 @@ class RustGenerator(BaseGenerator):
     ) -> str:
         """Generate Rust type string."""
         if isinstance(field_type, PrimitiveType):
+            if field_type.kind == PrimitiveKind.ANY:
+                return "Box<dyn Any>"
             base_type = self.PRIMITIVE_MAP[field_type.kind]
             if nullable:
                 return f"Option<{base_type}>"
@@ -538,6 +568,8 @@ class RustGenerator(BaseGenerator):
         if isinstance(field_type, PrimitiveType):
             if field_type.kind in (PrimitiveKind.DATE, PrimitiveKind.TIMESTAMP):
                 uses.add("use chrono")
+            if field_type.kind == PrimitiveKind.ANY:
+                uses.add("use std::any::Any")
 
         elif isinstance(field_type, NamedType):
             pass  # No additional uses needed

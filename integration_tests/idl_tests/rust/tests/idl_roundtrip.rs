@@ -29,6 +29,7 @@ use idl_tests::addressbook::{
 use idl_tests::complex_fbs::{self, Container, Note, Payload, ScalarPack, Status};
 use idl_tests::monster::{self, Color, Monster, Vec3};
 use idl_tests::optional_types::{self, AllOptionalTypes, OptionalHolder, OptionalUnion};
+use idl_tests::any_example::{self, AnyHolder, AnyInner, AnyUnion};
 use idl_tests::{graph, tree};
 
 fn build_address_book() -> AddressBook {
@@ -185,6 +186,85 @@ fn build_optional_holder() -> OptionalHolder {
     }
 }
 
+fn build_any_holder() -> AnyHolder {
+    AnyHolder {
+        bool_value: Box::new(true),
+        string_value: Box::new("hello".to_string()),
+        date_value: Box::new(NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()),
+        timestamp_value: Box::new(
+            NaiveDate::from_ymd_opt(2024, 1, 2)
+                .unwrap()
+                .and_hms_opt(3, 4, 5)
+                .expect("timestamp"),
+        ),
+        message_value: Box::new(AnyInner {
+            name: "inner".to_string(),
+        }),
+        union_value: Box::new(AnyUnion::Text("union".to_string())),
+        list_value: Box::new("list-placeholder".to_string()),
+        map_value: Box::new("map-placeholder".to_string()),
+    }
+}
+
+fn build_any_holder_with_collections() -> AnyHolder {
+    AnyHolder {
+        bool_value: Box::new(true),
+        string_value: Box::new("hello".to_string()),
+        date_value: Box::new(NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()),
+        timestamp_value: Box::new(
+            NaiveDate::from_ymd_opt(2024, 1, 2)
+                .unwrap()
+                .and_hms_opt(3, 4, 5)
+                .expect("timestamp"),
+        ),
+        message_value: Box::new(AnyInner {
+            name: "inner".to_string(),
+        }),
+        union_value: Box::new(AnyUnion::Text("union".to_string())),
+        list_value: Box::new(vec!["alpha".to_string(), "beta".to_string()]),
+        map_value: Box::new(HashMap::from([
+            ("k1".to_string(), "v1".to_string()),
+            ("k2".to_string(), "v2".to_string()),
+        ])),
+    }
+}
+
+fn assert_any_holder(holder: &AnyHolder) {
+    let bool_value = holder.bool_value.downcast_ref::<bool>().expect("bool any");
+    assert_eq!(*bool_value, true);
+    let string_value = holder
+        .string_value
+        .downcast_ref::<String>()
+        .expect("string any");
+    assert_eq!(string_value, "hello");
+    let date_value = holder
+        .date_value
+        .downcast_ref::<NaiveDate>()
+        .expect("date any");
+    assert_eq!(*date_value, NaiveDate::from_ymd_opt(2024, 1, 2).unwrap());
+    let timestamp_value = holder
+        .timestamp_value
+        .downcast_ref::<chrono::NaiveDateTime>()
+        .expect("timestamp any");
+    assert_eq!(
+        *timestamp_value,
+        NaiveDate::from_ymd_opt(2024, 1, 2)
+            .unwrap()
+            .and_hms_opt(3, 4, 5)
+            .expect("timestamp")
+    );
+    let message_value = holder
+        .message_value
+        .downcast_ref::<AnyInner>()
+        .expect("message any");
+    assert_eq!(message_value.name, "inner");
+    let union_value = holder
+        .union_value
+        .downcast_ref::<AnyUnion>()
+        .expect("union any");
+    assert_eq!(*union_value, AnyUnion::Text("union".to_string()));
+}
+
 fn build_tree() -> tree::TreeNode {
     let mut child_a = Arc::new(tree::TreeNode {
         id: "child-a".to_string(),
@@ -302,6 +382,7 @@ fn test_address_book_roundtrip() {
     monster::register_types(&mut fory).expect("register monster types");
     complex_fbs::register_types(&mut fory).expect("register flatbuffers types");
     optional_types::register_types(&mut fory).expect("register optional types");
+    any_example::register_types(&mut fory).expect("register any example types");
 
     let book = build_address_book();
     let bytes = fory.serialize(&book).expect("serialize");
@@ -388,6 +469,18 @@ fn test_address_book_roundtrip() {
             .expect("serialize peer payload");
         fs::write(data_file, encoded).expect("write data file");
     }
+
+    let any_holder = build_any_holder();
+    let bytes = fory.serialize(&any_holder).expect("serialize any");
+    let roundtrip: AnyHolder = fory.deserialize(&bytes).expect("deserialize any");
+    assert_any_holder(&roundtrip);
+
+    let any_holder_collections = build_any_holder_with_collections();
+    let bytes = fory
+        .serialize(&any_holder_collections)
+        .expect("serialize any collections");
+    let result: Result<AnyHolder, _> = fory.deserialize(&bytes);
+    assert!(result.is_err());
 
     let mut ref_fory = Fory::default().xlang(true).track_ref(true);
     tree::register_types(&mut ref_fory).expect("register tree types");

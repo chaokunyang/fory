@@ -28,6 +28,10 @@ import addressbook.Person;
 import addressbook.Person.PhoneNumber;
 import addressbook.Person.PhoneType;
 import addressbook.PrimitiveTypes;
+import any_example.AnyExampleForyRegistration;
+import any_example.AnyHolder;
+import any_example.AnyInner;
+import any_example.AnyUnion;
 import complex_fbs.ComplexFbsForyRegistration;
 import complex_fbs.Container;
 import complex_fbs.Metric;
@@ -156,6 +160,19 @@ public class IdlRoundTripTest {
       Assert.assertTrue(roundTrip instanceof OptionalHolder);
       Assert.assertEquals(roundTrip, holder);
     }
+  }
+
+  @Test
+  public void testAnyRoundTrip() {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
+    AnyExampleForyRegistration.register(fory);
+
+    AnyHolder holder = buildAnyHolder();
+    byte[] bytes = fory.serialize(holder);
+    Object decoded = fory.deserialize(bytes);
+
+    Assert.assertTrue(decoded instanceof AnyHolder);
+    Assert.assertEquals(decoded, holder);
   }
 
   @Test
@@ -484,6 +501,22 @@ public class IdlRoundTripTest {
     OptionalHolder holder = new OptionalHolder();
     holder.setAllTypes(allTypes);
     holder.setChoice(OptionalUnion.ofNote("optional"));
+    return holder;
+  }
+
+  private AnyHolder buildAnyHolder() {
+    AnyInner inner = new AnyInner();
+    inner.setName("inner");
+
+    AnyHolder holder = new AnyHolder();
+    holder.setBoolValue(Boolean.TRUE);
+    holder.setStringValue("hello");
+    holder.setDateValue(LocalDate.of(2024, 1, 2));
+    holder.setTimestampValue(Instant.ofEpochSecond(1704164645L));
+    holder.setMessageValue(inner);
+    holder.setUnionValue(AnyUnion.ofText("union"));
+    holder.setListValue(Arrays.asList("alpha", "beta"));
+    holder.setMapValue(new HashMap<>(Map.of("k1", "v1", "k2", "v2")));
     return holder;
   }
 

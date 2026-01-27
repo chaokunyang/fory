@@ -427,6 +427,8 @@ public abstract class TypeResolver {
       case Types.ENUM:
       case Types.STRUCT:
       case Types.EXT:
+      case Types.UNION:
+      case Types.TYPED_UNION:
         classInfo = requireUserTypeInfoByTypeId(header);
         break;
       case Types.LIST:
@@ -475,6 +477,8 @@ public abstract class TypeResolver {
       case Types.ENUM:
       case Types.STRUCT:
       case Types.EXT:
+      case Types.UNION:
+      case Types.TYPED_UNION:
         classInfo = requireUserTypeInfoByTypeId(header);
         break;
       case Types.LIST:
@@ -529,6 +533,8 @@ public abstract class TypeResolver {
       case Types.ENUM:
       case Types.STRUCT:
       case Types.EXT:
+      case Types.UNION:
+      case Types.TYPED_UNION:
         classInfo = requireUserTypeInfoByTypeId(header);
         break;
       case Types.LIST:
@@ -583,6 +589,8 @@ public abstract class TypeResolver {
       case Types.ENUM:
       case Types.STRUCT:
       case Types.EXT:
+      case Types.UNION:
+      case Types.TYPED_UNION:
         classInfo = requireUserTypeInfoByTypeId(header);
         break;
       case Types.LIST:

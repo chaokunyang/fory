@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 
 import addressbook
+import any_example
 import complex_fbs
 import monster
 import optional_types
@@ -137,6 +138,28 @@ def build_optional_holder() -> "optional_types.OptionalHolder":
     )
     union_value = optional_types.OptionalUnion.note("optional")
     return optional_types.OptionalHolder(all_types=all_types, choice=union_value)
+
+
+def build_any_holder() -> "any_example.AnyHolder":
+    inner = any_example.AnyInner(name="inner")
+    union_value = any_example.AnyUnion.text("union")
+    return any_example.AnyHolder(
+        bool_value=True,
+        string_value="hello",
+        date_value=datetime.date(2024, 1, 2),
+        timestamp_value=datetime.datetime.fromtimestamp(1704164645),
+        message_value=inner,
+        union_value=union_value,
+        list_value=["alpha", "beta"],
+        map_value={"k1": "v1", "k2": "v2"},
+    )
+
+
+def local_roundtrip_any(fory: pyfory.Fory, holder: "any_example.AnyHolder") -> None:
+    data = fory.serialize(holder)
+    decoded = fory.deserialize(data)
+    assert isinstance(decoded, any_example.AnyHolder)
+    assert decoded == holder
 
 
 def build_monster() -> "monster.Monster":
@@ -435,6 +458,7 @@ def main() -> int:
     monster.register_monster_types(fory)
     complex_fbs.register_complex_fbs_types(fory)
     optional_types.register_optional_types_types(fory)
+    any_example.register_any_example_types(fory)
 
     book = build_address_book()
     local_roundtrip(fory, book)
@@ -455,6 +479,9 @@ def main() -> int:
     holder = build_optional_holder()
     local_roundtrip_optional_types(fory, holder)
     file_roundtrip_optional_types(fory, holder)
+
+    any_holder = build_any_holder()
+    local_roundtrip_any(fory, any_holder)
 
     ref_fory = pyfory.Fory(xlang=True, ref=True)
     tree.register_tree_types(ref_fory)

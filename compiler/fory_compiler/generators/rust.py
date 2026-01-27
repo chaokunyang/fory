@@ -234,7 +234,9 @@ class RustGenerator(BaseGenerator):
         """Generate a Rust tagged union."""
         lines: List[str] = []
 
-        has_any = any(self.field_type_has_any(field.field_type) for field in union.fields)
+        has_any = any(
+            self.field_type_has_any(field.field_type) for field in union.fields
+        )
         derives = ["ForyObject", "Debug"]
         if not has_any:
             derives.extend(["Clone", "PartialEq"])
@@ -300,7 +302,9 @@ class RustGenerator(BaseGenerator):
 
     def message_has_any(self, message: Message) -> bool:
         """Return True if a message contains any type fields."""
-        return any(self.field_type_has_any(field.field_type) for field in message.fields)
+        return any(
+            self.field_type_has_any(field.field_type) for field in message.fields
+        )
 
     def field_type_has_any(self, field_type: FieldType) -> bool:
         """Return True if field type or its children is any."""

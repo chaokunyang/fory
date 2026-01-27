@@ -171,8 +171,8 @@ fory::Result<void, fory::Error> RunRoundTrip() {
 
   FORY_RETURN_IF_ERROR(
       fory::serialization::register_any_type<bool>(fory.type_resolver()));
-  FORY_RETURN_IF_ERROR(
-      fory::serialization::register_any_type<std::string>(fory.type_resolver()));
+  FORY_RETURN_IF_ERROR(fory::serialization::register_any_type<std::string>(
+      fory.type_resolver()));
   FORY_RETURN_IF_ERROR(
       fory::serialization::register_any_type<fory::serialization::Date>(
           fory.type_resolver()));
@@ -189,8 +189,7 @@ fory::Result<void, fory::Error> RunRoundTrip() {
       fory::serialization::register_any_type<std::vector<std::string>>(
           fory.type_resolver()));
   FORY_RETURN_IF_ERROR(
-      fory::serialization::register_any_type<StringMap>(
-          fory.type_resolver()));
+      fory::serialization::register_any_type<StringMap>(fory.type_resolver()));
 
   addressbook::Person::PhoneNumber mobile;
   mobile.set_number("555-0100");
@@ -382,9 +381,9 @@ fory::Result<void, fory::Error> RunRoundTrip() {
       fory::serialization::Timestamp(std::chrono::seconds(1704164645))));
   any_holder.set_message_value(std::any(any_inner));
   any_holder.set_union_value(std::any(any_example::AnyUnion::text("union")));
-  any_holder.set_list_value(std::any(std::vector<std::string>{"alpha", "beta"}));
-  any_holder.set_map_value(
-      std::any(StringMap{{"k1", "v1"}, {"k2", "v2"}}));
+  any_holder.set_list_value(
+      std::any(std::vector<std::string>{"alpha", "beta"}));
+  any_holder.set_map_value(std::any(StringMap{{"k1", "v1"}, {"k2", "v2"}}));
 
   FORY_TRY(any_bytes, fory.serialize(any_holder));
   FORY_TRY(any_roundtrip, fory.deserialize<any_example::AnyHolder>(

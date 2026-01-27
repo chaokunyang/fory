@@ -402,7 +402,24 @@ Fory uses binary protocols for efficient serialization and deserialization. Fory
 
 **`docs/specification/**` are the specification for the Fory protocol, please read those documents carefully and think hard and make sure you understand them before making changes to code and documentation.
 
-### Core Structure
+### Compiler Development (FDL/IDL)
+
+- **Primary references**: `docs/compiler/index.md`, `docs/compiler/compiler-guide.md`,
+  `docs/compiler/fdl-syntax.md`, `docs/compiler/type-system.md`,
+  `docs/compiler/generated-code.md`, `docs/compiler/protobuf-idl.md`,
+  `docs/compiler/flatbuffers-idl.md`.
+- **Location**: `compiler/` contains the Fory compiler, parser, IR, and code generators.
+- **Install & CLI**:
+  - `cd compiler && pip install -e .`
+  - `fory compile --help`
+  - `fory compile schema.fdl --lang <langs> --output <dir>`
+- **Generated code**: Never edit generated files manually; update the `.fdl`/`.proto`/`.fbs` and re-run the compiler.
+- **IDL tests**: Use `integration_tests/idl_tests/generate_idl.py` for test codegen.
+  - In `integration_tests/idl_tests`, keep package names aligned with the IDL filename.
+- **Protocol changes**: Update `docs/specification/**` and cross-language tests.
+- **Language targets**: FDL is the primary schema; protobuf/flatbuffers support should remain unchanged unless explicitly requested.
+
+### Core Runtime Structure
 
 Fory serialization for every language is implemented independently to minimize the object memory layout interoperability, object allocation, memory access cost, thus maximize the performance. There is no code reuse between languages except for `fory python`, which reused code from `fory c++`.
 

@@ -189,7 +189,6 @@ class FbsTranslator:
     ) -> Tuple[Dict[str, object], bool, bool, Dict[str, object]]:
         fory_keys = {
             "ref",
-            "tracking_ref",
             "nullable",
             "weak_ref",
             "thread_safe_pointer",
@@ -203,9 +202,6 @@ class FbsTranslator:
 
         if attributes.get("ref") is True:
             ref = True
-        if attributes.get("tracking_ref") is True:
-            ref = True
-            options["tracking_ref"] = True
         if attributes.get("nullable") is True:
             optional = True
 

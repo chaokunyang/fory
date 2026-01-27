@@ -64,7 +64,6 @@ KNOWN_FIELD_OPTIONS: Set[str] = {
     "edition_defaults",
     "features",
     "ref",
-    "tracking_ref",
     "nullable",
     "thread_safe_pointer",
     "weak_ref",
@@ -617,11 +616,8 @@ class Parser:
         field_options = {}
         if self.check(TokenType.LBRACKET):
             field_options = self.parse_field_options(name)
-            # Handle ref/tracking_ref options to set ref flag
-            if (
-                field_options.get("ref") is True
-                or field_options.get("tracking_ref") is True
-            ):
+            # Handle ref option to set ref flag
+            if field_options.get("ref") is True:
                 if isinstance(field_type, ListType):
                     element_ref = True
                 elif isinstance(field_type, MapType):

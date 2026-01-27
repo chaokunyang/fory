@@ -325,9 +325,6 @@ class ProtoTranslator:
         for name, value in options.items():
             if name == "fory.ref" and value:
                 ref = True
-            elif name == "fory.tracking_ref" and value:
-                ref = True
-                translated["tracking_ref"] = True
             elif name == "fory.nullable" and value:
                 nullable = True
             elif name == "fory.type":

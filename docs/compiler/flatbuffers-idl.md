@@ -45,8 +45,6 @@ FlatBuffers tooling, Fory options use the `fory_` prefix and are stripped during
 parsing:
 
 - `fory_ref:true` enables reference tracking for the field.
-- `fory_tracking_ref:true` enables reference tracking and preserves the tracking
-  flag in Fory options.
 - `fory_nullable:true` marks the field optional.
 - `fory_weak_ref:true` marks a weak reference and implies `ref`.
 - `fory_thread_safe_pointer:false` selects the non-thread-safe pointer flavor

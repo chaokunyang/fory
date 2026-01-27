@@ -1366,10 +1366,7 @@ class CppGenerator(BaseGenerator):
             meta += f".id({field.tag_id})"
         if field.optional:
             meta += ".nullable()"
-        if field.ref or (
-            field.options.get("tracking_ref") is True
-            and not isinstance(field.field_type, (ListType, MapType))
-        ):
+        if field.ref:
             meta += ".ref()"
         encoding = self.get_encoding_config(field.field_type)
         if encoding:
@@ -1384,10 +1381,7 @@ class CppGenerator(BaseGenerator):
         meta = f"fory::F({field.number})"
         if field.optional:
             meta += ".nullable()"
-        if field.ref or (
-            field.options.get("tracking_ref") is True
-            and not isinstance(field.field_type, (ListType, MapType))
-        ):
+        if field.ref:
             meta += ".ref()"
         encoding = self.get_encoding_config(field.field_type)
         if encoding:

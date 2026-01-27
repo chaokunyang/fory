@@ -496,6 +496,10 @@ constexpr bool compute_is_nullable() {
     return ActualFieldType::is_nullable;
   } else if constexpr (::fory::detail::has_field_tags_v<T>) {
     return ::fory::detail::GetFieldTagEntry<T, Index>::is_nullable;
+  } else if constexpr (::fory::detail::has_field_config_v<T> &&
+                       ::fory::detail::GetFieldConfigEntry<T, Index>::has_entry &&
+                       ::fory::detail::GetFieldConfigEntry<T, Index>::nullable) {
+    return true;
   } else {
     // Default: nullable if std::optional or smart pointers.
     return is_optional_v<UnwrappedFieldType> ||
@@ -510,6 +514,10 @@ constexpr bool compute_track_ref() {
     return ActualFieldType::track_ref;
   } else if constexpr (::fory::detail::has_field_tags_v<T>) {
     return ::fory::detail::GetFieldTagEntry<T, Index>::track_ref;
+  } else if constexpr (::fory::detail::has_field_config_v<T> &&
+                       ::fory::detail::GetFieldConfigEntry<T, Index>::has_entry &&
+                       ::fory::detail::GetFieldConfigEntry<T, Index>::ref) {
+    return true;
   } else {
     using UnwrappedFieldType = fory::unwrap_field_t<ActualFieldType>;
     return ::fory::detail::is_shared_ptr_v<UnwrappedFieldType> ||

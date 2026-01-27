@@ -457,8 +457,11 @@ func (f *Fory) Serialize(value any) ([]byte, error) {
 	reflValue := reflect.ValueOf(value)
 	// if it's struct kind, must be pointer to struct, otherwise error
 	if reflValue.Kind() == reflect.Struct {
-		return nil, fmt.Errorf("Serialize struct %s directly is disallowed, use pointer to struct (*%s) instead", 
-		reflValue.Type(), reflValue.Type())
+		reflType := reflValue.Type()
+		if reflType != dateReflectType && reflType != timeReflectType {
+			return nil, fmt.Errorf("Serialize struct %s directly is disallowed, use pointer to struct (*%s) instead",
+				reflValue.Type(), reflValue.Type())
+		}
 	}
 	f.writeCtx.WriteValue(reflValue, RefModeTracking, true)
 	if f.writeCtx.HasError() {

@@ -753,6 +753,8 @@ public:
   /// @return const pointer to TypeInfo if found, error otherwise
   template <typename T> Result<const TypeInfo *, Error> get_type_info() const;
 
+  template <typename T> Result<void, Error> register_any_type();
+
   /// Builds the final TypeResolver by completing all partial type infos
   /// created during registration.
   ///
@@ -923,6 +925,28 @@ inline void TypeResolver::check_registration_thread() {
       << "TypeResolver has been finalized, cannot register more types";
 }
 
+namespace detail {
+
+template <typename T>
+inline void any_write_adapter(const std::any &value, WriteContext &ctx) {
+  const T *ptr = std::any_cast<T>(&value);
+  if (FORY_PREDICT_FALSE(ptr == nullptr)) {
+    ctx.set_error(Error::type_error("std::any stored value type mismatch"));
+    return;
+  }
+  Serializer<T>::write_data(*ptr, ctx);
+}
+
+template <typename T> inline std::any any_read_adapter(ReadContext &ctx) {
+  T value = Serializer<T>::read_data(ctx);
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return std::any();
+  }
+  return std::any(std::move(value));
+}
+
+} // namespace detail
+
 template <typename T> const TypeMeta &TypeResolver::struct_meta() {
   constexpr uint64_t ctid = type_index<T>();
   TypeInfo *info = type_info_by_ctid_.get_or_default(ctid, nullptr);
@@ -958,6 +982,31 @@ Result<const TypeInfo *, Error> TypeResolver::get_type_info() const {
     return info;
   }
   return Unexpected(Error::type_error("Type not registered"));
+}
+
+template <typename T> Result<void, Error> TypeResolver::register_any_type() {
+  check_registration_thread();
+  constexpr uint32_t static_type_id =
+      static_cast<uint32_t>(Serializer<T>::type_id);
+  TypeInfo *type_info = nullptr;
+  if (is_internal_type(static_type_id)) {
+    type_info = type_info_by_id_.get_or_default(static_type_id, nullptr);
+    if (FORY_PREDICT_FALSE(type_info == nullptr)) {
+      return Unexpected(Error::type_error("TypeInfo not found for type_id: " +
+                                          std::to_string(static_type_id)));
+    }
+  } else {
+    constexpr uint64_t ctid = type_index<T>();
+    type_info = type_info_by_ctid_.get_or_default(ctid, nullptr);
+    if (FORY_PREDICT_FALSE(type_info == nullptr)) {
+      return Unexpected(Error::type_error("Type not registered"));
+    }
+  }
+
+  type_info->harness.any_write_fn = &detail::any_write_adapter<T>;
+  type_info->harness.any_read_fn = &detail::any_read_adapter<T>;
+  register_type_internal_runtime(std::type_index(typeid(T)), type_info);
+  return Result<void, Error>();
 }
 
 template <typename T>
@@ -1331,20 +1380,26 @@ TypeResolver::build_union_type_info(uint32_t type_id, std::string ns,
 }
 
 template <typename T> Harness TypeResolver::make_struct_harness() {
-  return Harness(&TypeResolver::harness_write_adapter<T>,
-                 &TypeResolver::harness_read_adapter<T>,
-                 &TypeResolver::harness_write_data_adapter<T>,
-                 &TypeResolver::harness_read_data_adapter<T>,
-                 &TypeResolver::harness_struct_sorted_fields<T>,
-                 &TypeResolver::harness_read_compatible_adapter<T>);
+  Harness harness(&TypeResolver::harness_write_adapter<T>,
+                  &TypeResolver::harness_read_adapter<T>,
+                  &TypeResolver::harness_write_data_adapter<T>,
+                  &TypeResolver::harness_read_data_adapter<T>,
+                  &TypeResolver::harness_struct_sorted_fields<T>,
+                  &TypeResolver::harness_read_compatible_adapter<T>);
+  harness.any_write_fn = &detail::any_write_adapter<T>;
+  harness.any_read_fn = &detail::any_read_adapter<T>;
+  return harness;
 }
 
 template <typename T> Harness TypeResolver::make_serializer_harness() {
-  return Harness(&TypeResolver::harness_write_adapter<T>,
-                 &TypeResolver::harness_read_adapter<T>,
-                 &TypeResolver::harness_write_data_adapter<T>,
-                 &TypeResolver::harness_read_data_adapter<T>,
-                 &TypeResolver::harness_empty_sorted_fields<T>);
+  Harness harness(&TypeResolver::harness_write_adapter<T>,
+                  &TypeResolver::harness_read_adapter<T>,
+                  &TypeResolver::harness_write_data_adapter<T>,
+                  &TypeResolver::harness_read_data_adapter<T>,
+                  &TypeResolver::harness_empty_sorted_fields<T>);
+  harness.any_write_fn = &detail::any_write_adapter<T>;
+  harness.any_read_fn = &detail::any_read_adapter<T>;
+  return harness;
 }
 
 template <typename T>

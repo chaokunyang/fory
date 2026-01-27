@@ -832,21 +832,40 @@ Modifiers before `repeated` apply to the field/collection. Modifiers after
 
 ### Primitive Types
 
-| Type        | Description                 | Size     |
-| ----------- | --------------------------- | -------- |
-| `bool`      | Boolean value               | 1 byte   |
-| `int8`      | Signed 8-bit integer        | 1 byte   |
-| `int16`     | Signed 16-bit integer       | 2 bytes  |
-| `int32`     | Signed 32-bit integer       | 4 bytes  |
-| `int64`     | Signed 64-bit integer       | 8 bytes  |
-| `float32`   | 32-bit floating point       | 4 bytes  |
-| `float64`   | 64-bit floating point       | 8 bytes  |
-| `string`    | UTF-8 string                | Variable |
-| `bytes`     | Binary data                 | Variable |
-| `date`      | Calendar date               | Variable |
-| `timestamp` | Date and time with timezone | Variable |
+| Type            | Description                               | Size     |
+| --------------- | ----------------------------------------- | -------- |
+| `bool`          | Boolean value                             | 1 byte   |
+| `int8`          | Signed 8-bit integer                      | 1 byte   |
+| `int16`         | Signed 16-bit integer                     | 2 bytes  |
+| `int32`         | Signed 32-bit integer (varint encoding)   | 4 bytes  |
+| `int64`         | Signed 64-bit integer (varint encoding)   | 8 bytes  |
+| `uint8`         | Unsigned 8-bit integer                    | 1 byte   |
+| `uint16`        | Unsigned 16-bit integer                   | 2 bytes  |
+| `uint32`        | Unsigned 32-bit integer (varint encoding) | 4 bytes  |
+| `uint64`        | Unsigned 64-bit integer (varint encoding) | 8 bytes  |
+| `fixed_int32`   | Signed 32-bit integer (fixed encoding)    | 4 bytes  |
+| `fixed_int64`   | Signed 64-bit integer (fixed encoding)    | 8 bytes  |
+| `fixed_uint32`  | Unsigned 32-bit integer (fixed encoding)  | 4 bytes  |
+| `fixed_uint64`  | Unsigned 64-bit integer (fixed encoding)  | 8 bytes  |
+| `tagged_int64`  | Signed 64-bit integer (tagged encoding)   | 8 bytes  |
+| `tagged_uint64` | Unsigned 64-bit integer (tagged encoding) | 8 bytes  |
+| `float16`       | 16-bit floating point                     | 2 bytes  |
+| `float32`       | 32-bit floating point                     | 4 bytes  |
+| `float64`       | 64-bit floating point                     | 8 bytes  |
+| `string`        | UTF-8 string                              | Variable |
+| `bytes`         | Binary data                               | Variable |
+| `date`          | Calendar date                             | Variable |
+| `timestamp`     | Date and time with timezone               | Variable |
+| `duration`      | Duration                                  | Variable |
+| `decimal`       | Decimal value                             | Variable |
 
 See [Type System](type-system.md) for complete type mappings.
+
+**Encoding notes:**
+
+- `int32`/`int64` and `uint32`/`uint64` use varint encoding by default.
+- Use `fixed_*` for fixed-width integer encoding.
+- Use `tagged_*` for tagged/hybrid encoding (64-bit only).
 
 ### Named Types
 
@@ -1214,9 +1233,14 @@ reserved_item := INTEGER | INTEGER 'to' INTEGER | INTEGER 'to' 'max' | STRING
 modifiers    := { 'optional' | 'ref' } ['repeated' { 'optional' | 'ref' }]
 
 field_type   := primitive_type | named_type | map_type
-primitive_type := 'bool' | 'int8' | 'int16' | 'int32' | 'int64'
-               | 'float32' | 'float64' | 'string' | 'bytes'
-               | 'date' | 'timestamp'
+primitive_type := 'bool'
+               | 'int8' | 'int16' | 'int32' | 'int64'
+               | 'uint8' | 'uint16' | 'uint32' | 'uint64'
+               | 'fixed_int32' | 'fixed_int64' | 'fixed_uint32' | 'fixed_uint64'
+               | 'tagged_int64' | 'tagged_uint64'
+               | 'float16' | 'float32' | 'float64'
+               | 'string' | 'bytes'
+               | 'date' | 'timestamp' | 'duration' | 'decimal'
 named_type   := qualified_name
 qualified_name := IDENTIFIER ('.' IDENTIFIER)*   // e.g., Parent.Child
 map_type     := 'map' '<' field_type ',' field_type '>'

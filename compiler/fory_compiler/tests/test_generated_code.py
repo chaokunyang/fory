@@ -93,10 +93,10 @@ def test_generated_code_scalar_types_equivalent():
 
         message ScalarTypes {
             bool active = 1;
-            varint32 i32 = 2;
-            varint64 i64 = 3;
-            var_uint32 u32 = 4;
-            var_uint64 u64 = 5;
+            int32 i32 = 2;
+            int64 i64 = 3;
+            uint32 u32 = 4;
+            uint64 u64 = 5;
             float32 f32 = 6;
             float64 f64 = 7;
             string name = 8;
@@ -144,6 +144,47 @@ def test_generated_code_scalar_types_equivalent():
     assert_all_languages_equal(schemas)
 
 
+def test_generated_code_integer_encoding_variants_equivalent():
+    fdl = dedent(
+        """
+        package gen;
+
+        message EncodingTypes {
+            fixed_int32 fi32 = 1;
+            fixed_int64 fi64 = 2;
+            fixed_uint32 fu32 = 3;
+            fixed_uint64 fu64 = 4;
+            tagged_int64 ti64 = 5;
+            tagged_uint64 tu64 = 6;
+        }
+        """
+    )
+    proto = dedent(
+        """
+        syntax = "proto3";
+        package gen;
+
+        message EncodingTypes {
+            sfixed32 fi32 = 1;
+            sfixed64 fi64 = 2;
+            fixed32 fu32 = 3;
+            fixed64 fu64 = 4;
+            int64 ti64 = 5 [(fory).type = "tagged_int64"];
+            uint64 tu64 = 6 [(fory).type = "tagged_uint64"];
+        }
+        """
+    )
+    schemas = {
+        "fdl": parse_fdl(fdl),
+        "proto": parse_proto(proto),
+    }
+    assert_all_languages_equal(schemas)
+
+    python_output = render_files(generate_files(schemas["fdl"], PythonGenerator))
+    assert "pyfory.tagged_int64" in python_output
+    assert "pyfory.tagged_uint64" in python_output
+
+
 def test_generated_code_primitive_arrays_equivalent():
     fdl = dedent(
         """
@@ -153,12 +194,12 @@ def test_generated_code_primitive_arrays_equivalent():
             repeated bool flags = 1;
             repeated int8 i8s = 2;
             repeated int16 i16s = 3;
-            repeated varint32 i32s = 4;
-            repeated varint64 i64s = 5;
+            repeated int32 i32s = 4;
+            repeated int64 i64s = 5;
             repeated uint8 u8s = 6;
             repeated uint16 u16s = 7;
-            repeated var_uint32 u32s = 8;
-            repeated var_uint64 u64s = 9;
+            repeated uint32 u32s = 8;
+            repeated uint64 u64s = 9;
             repeated float32 f32s = 10;
             repeated float64 f64s = 11;
         }
@@ -276,10 +317,10 @@ def test_generated_code_map_types_equivalent():
         }
 
         message MapTypes {
-            map<string, varint32> counts = 1;
+            map<string, int32> counts = 1;
             optional map<string, MapValue> entries = 2;
             map<string, ref(weak=true, thread_safe=false) MapValue> weak_entries = 3;
-            optional varint32 version = 4;
+            optional int32 version = 4;
         }
         """
     )

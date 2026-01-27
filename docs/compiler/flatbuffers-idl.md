@@ -46,10 +46,10 @@ already have FlatBuffers schemas but want Fory-native serialization and codegen.
 | `ubyte`     | `uint8`        |
 | `short`     | `int16`        |
 | `ushort`    | `uint16`       |
-| `int`       | `varint32`     |
-| `uint`      | `var_uint32`   |
-| `long`      | `varint64`     |
-| `ulong`     | `var_uint64`   |
+| `int`       | `int32`        |
+| `uint`      | `uint32`       |
+| `long`      | `int64`        |
+| `ulong`     | `uint64`       |
 | `float`     | `float32`      |
 | `double`    | `float64`      |
 | `bool`      | `bool`         |

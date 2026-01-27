@@ -22,8 +22,8 @@
 # cython: annotate = True
 
 from libc.stdint cimport *
-from libcpp.memory cimport shared_ptr
 from libcpp cimport bool as c_bool
+from libcpp.memory cimport shared_ptr
 from pyfory.includes.libutil cimport CBuffer, CError
 
 
@@ -32,10 +32,7 @@ cdef class Buffer:
     us to use it for calls into Python libraries without having to
     copy the data."""
     cdef:
-        shared_ptr[CBuffer] c_buffer
-        CBuffer* c_buffer_ptr
-        uint8_t* _c_address
-        int32_t _c_size
+        CBuffer c_buffer
         CError _error
         # hold python buffer reference count
         object data

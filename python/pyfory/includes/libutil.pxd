@@ -58,6 +58,7 @@ cdef extern from "fory/util/result.h" namespace "fory" nogil:
 
 cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
     cdef cppclass CBuffer "fory::Buffer":
+        CBuffer()
         CBuffer(uint8_t* data, uint32_t size, c_bool own_data=True)
 
         inline uint8_t* data()
@@ -107,6 +108,8 @@ cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
 
         inline int16_t GetInt16(uint32_t offset)
 
+        inline int32_t GetInt24(uint32_t offset)
+
         inline int32_t GetInt32(uint32_t offset)
 
         inline int64_t GetInt64(uint32_t offset)
@@ -121,6 +124,8 @@ cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
 
         inline int32_t GetVarUint32(uint32_t offset, uint32_t *readBytesLength)
 
+        inline void PutInt24(uint32_t offset, int32_t value)
+
         void WriteUint8(uint8_t value)
 
         void WriteInt8(int8_t value)
@@ -128,6 +133,8 @@ cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
         void WriteUint16(uint16_t value)
 
         void WriteInt16(int16_t value)
+
+        void WriteInt24(int32_t value)
 
         void WriteUint32(uint32_t value)
 
@@ -160,6 +167,8 @@ cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
         uint16_t ReadUint16(CError& error)
 
         int16_t ReadInt16(CError& error)
+
+        int32_t ReadInt24(CError& error)
 
         uint32_t ReadUint32(CError& error)
 

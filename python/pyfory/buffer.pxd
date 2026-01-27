@@ -39,16 +39,10 @@ cdef class Buffer:
         Py_ssize_t shape[1]
         Py_ssize_t stride[1]
 
-    property reader_index:
-        def __get__(self)
-        def __set__(self, value)
-
-    property writer_index:
-        def __get__(self)
-        def __set__(self, value)
-
     @staticmethod
     cdef Buffer wrap(shared_ptr[CBuffer] c_buffer)
+
+    cdef void _raise_if_error(self)
 
     cpdef inline check_bound(self, int32_t offset, int32_t length)
 

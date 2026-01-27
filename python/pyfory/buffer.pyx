@@ -23,6 +23,7 @@
 cimport cython
 from cpython cimport *
 from cpython.unicode cimport *
+from cpython.bytes cimport PyBytes_AsString, PyBytes_FromStringAndSize, PyBytes_AS_STRING
 from libcpp.memory cimport shared_ptr
 from libcpp.utility cimport move
 from cython.operator cimport dereference as deref
@@ -44,9 +45,6 @@ cdef c_bool _WINDOWS = os.name == 'nt'
 @cython.final
 cdef class _SharedBufferOwner:
     cdef shared_ptr[CBuffer] buffer
-
-    def __cinit__(self, shared_ptr[CBuffer] buffer):
-        self.buffer = buffer
 
 
 @cython.final
@@ -75,7 +73,9 @@ cdef class Buffer:
         cdef Buffer buffer = Buffer.__new__(Buffer)
         cdef CBuffer* ptr = c_buffer.get()
         buffer.c_buffer = CBuffer(ptr.data(), ptr.size(), False)
-        buffer.data = _SharedBufferOwner(c_buffer)
+        cdef _SharedBufferOwner owner = _SharedBufferOwner.__new__(_SharedBufferOwner)
+        owner.buffer = c_buffer
+        buffer.data = owner
         buffer.c_buffer.ReaderIndex(0)
         buffer.c_buffer.WriterIndex(0)
         return buffer
@@ -94,9 +94,11 @@ cdef class Buffer:
         return buffer
 
     cdef inline void _raise_if_error(self):
+        cdef CErrorCode code
+        cdef c_string message
         if not self._error.ok():
-            cdef CErrorCode code = self._error.code()
-            cdef c_string message = self._error.message()
+            code = self._error.code()
+            message = self._error.message()
             self._error.reset()
             raise_fory_error(code, message)
 
@@ -275,15 +277,14 @@ cdef class Buffer:
     cpdef inline bytes read_bytes(self, int32_t length):
         if length == 0:
             return b""
-        cdef PyObject* py_bytes = PyBytes_FromStringAndSize(NULL, length)
-        if py_bytes == NULL:
+        cdef bytes py_bytes = PyBytes_FromStringAndSize(NULL, length)
+        if py_bytes is None:
             raise MemoryError("out of memory")
         cdef char* buf = PyBytes_AS_STRING(py_bytes)
         self.c_buffer.ReadBytes(buf, length, self._error)
         if not self._error.ok():
-            Py_DECREF(py_bytes)
             self._raise_if_error()
-        return <bytes>py_bytes
+        return py_bytes
 
     cpdef inline int64_t read_bytes_as_int64(self, int32_t length):
         cdef int64_t result = 0

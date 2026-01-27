@@ -59,7 +59,7 @@ cdef extern from "fory/util/result.h" namespace "fory" nogil:
 cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
     cdef cppclass CBuffer "fory::Buffer":
         CBuffer()
-        CBuffer(uint8_t* data, uint32_t size, c_bool own_data=True)
+        CBuffer(uint8_t* data, uint32_t size, c_bool own_data)
 
         inline uint8_t* data()
 

@@ -20,10 +20,6 @@ class ForyError(Exception):
     pass
 
 
-class ForyOkError(ForyError):
-    pass
-
-
 class ForyOutOfMemoryError(ForyError):
     pass
 
@@ -109,7 +105,6 @@ class CompileError(ForyError):
 
 
 _ERROR_CODE_TO_EXCEPTION = {
-    0: ForyOkError,
     1: ForyOutOfMemoryError,
     2: ForyOutOfBoundError,
     3: ForyKeyError,

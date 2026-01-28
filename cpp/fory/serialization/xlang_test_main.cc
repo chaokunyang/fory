@@ -555,6 +555,28 @@ struct RefOuterCompatible {
 FORY_FIELD_TAGS(RefOuterCompatible, (inner1, 0, nullable, ref),
                 (inner2, 1, nullable, ref));
 
+// Element struct for collection element ref override test
+// Matches Java RefOverrideElement with type ID 701
+struct RefOverrideElement {
+  int32_t id;
+  std::string name;
+  bool operator==(const RefOverrideElement &other) const {
+    return id == other.id && name == other.name;
+  }
+  FORY_STRUCT(RefOverrideElement, id, name);
+};
+
+// Container struct for collection element ref override test
+// Matches Java RefOverrideContainer with type ID 702
+struct RefOverrideContainer {
+  std::vector<std::shared_ptr<RefOverrideElement>> list_field;
+  std::map<std::string, std::shared_ptr<RefOverrideElement>> map_field;
+  bool operator==(const RefOverrideContainer &other) const {
+    return list_field == other.list_field && map_field == other.map_field;
+  }
+  FORY_STRUCT(RefOverrideContainer, list_field, map_field);
+};
+
 // ============================================================================
 // Circular Reference Test Types - Self-referencing struct tests
 // ============================================================================
@@ -1006,6 +1028,8 @@ int main(int argc, char **argv) {
       RunTestRefSchemaConsistent(data_file);
     } else if (case_name == "test_ref_compatible") {
       RunTestRefCompatible(data_file);
+    } else if (case_name == "test_collection_element_ref_override") {
+      RunTestCollectionElementRefOverride(data_file);
     } else if (case_name == "test_circular_ref_schema_consistent") {
       RunTestCircularRefSchemaConsistent(data_file);
     } else if (case_name == "test_circular_ref_compatible") {
@@ -2506,6 +2530,30 @@ void RunTestRefCompatible(const std::string &data_file) {
   // Re-serialize and write back
   std::vector<uint8_t> out;
   AppendSerialized(fory, outer, out);
+  WriteFile(data_file, out);
+}
+
+void RunTestCollectionElementRefOverride(const std::string &data_file) {
+  auto bytes = ReadFile(data_file);
+  auto fory = BuildFory(false, true, true, true);
+  EnsureOk(fory.register_struct<RefOverrideElement>(701),
+           "register RefOverrideElement");
+  EnsureOk(fory.register_struct<RefOverrideContainer>(702),
+           "register RefOverrideContainer");
+
+  Buffer buffer = MakeBuffer(bytes);
+  auto outer = ReadNext<RefOverrideContainer>(fory, buffer);
+  if (outer.list_field.empty()) {
+    Fail("RefOverrideContainer: list_field should not be empty");
+  }
+
+  auto shared = outer.list_field.front();
+  RefOverrideContainer out_container;
+  out_container.list_field = {shared, shared};
+  out_container.map_field = {{"k1", shared}, {"k2", shared}};
+
+  std::vector<uint8_t> out;
+  AppendSerialized(fory, out_container, out);
   WriteFile(data_file, out);
 }
 

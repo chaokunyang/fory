@@ -230,8 +230,7 @@ fory::Result<void, fory::Error> RunRoundTrip() {
 
   addressbook::Animal animal = addressbook::Animal::dog(dog);
   FORY_TRY(animal_bytes, animal.to_bytes());
-  FORY_TRY(animal_roundtrip,
-           addressbook::Animal::from_bytes(animal_bytes));
+  FORY_TRY(animal_roundtrip, addressbook::Animal::from_bytes(animal_bytes));
   if (!(animal_roundtrip == animal)) {
     return fory::Unexpected(
         fory::Error::invalid("animal to_bytes roundtrip mismatch"));

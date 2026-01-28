@@ -91,7 +91,9 @@ class RustGenerator(BaseGenerator):
         if location is None or not location.file:
             return False
         try:
-            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            return (
+                Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            )
         except Exception:
             return location.file != self.schema.source_file
 
@@ -712,7 +714,9 @@ class RustGenerator(BaseGenerator):
         imported_messages, _ = self.split_imported_types(self.schema.messages)
         lines.append("mod detail {")
         lines.append("    use super::*;")
-        lines.append("    fn register_all_types(fory: &mut Fory) -> Result<(), fory::Error> {")
+        lines.append(
+            "    fn register_all_types(fory: &mut Fory) -> Result<(), fory::Error> {"
+        )
         for enum in imported_enums:
             self.generate_enum_registration(lines, enum, None)
         for union in imported_unions:

@@ -60,17 +60,10 @@ public class SimpleForyPool extends AbstractThreadSafeFory {
   }
 
   @Override
-  public Object deserialize(ByteBuffer byteBuffer) {
-    return execute(fory -> fory.deserialize(MemoryUtils.wrap(byteBuffer)));
-  }
+  public void setClassLoader(ClassLoader classLoader) {}
 
   @Override
-  public void setClassLoader(ClassLoader classLoader) {
-  }
-
-  @Override
-  public void setClassLoader(ClassLoader classLoader, LoaderBinding.StagingType stagingType) {
-  }
+  public void setClassLoader(ClassLoader classLoader, LoaderBinding.StagingType stagingType) {}
 
   @Override
   public ClassLoader getClassLoader() {
@@ -79,8 +72,7 @@ public class SimpleForyPool extends AbstractThreadSafeFory {
   }
 
   @Override
-  public void clearClassLoader(ClassLoader loader) {
-  }
+  public void clearClassLoader(ClassLoader loader) {}
 
   @Override
   public void registerCallback(Consumer<Fory> callback) {
@@ -147,6 +139,11 @@ public class SimpleForyPool extends AbstractThreadSafeFory {
           fory.serialize(outputStream, obj, callback);
           return null;
         });
+  }
+
+  @Override
+  public Object deserialize(ByteBuffer byteBuffer) {
+    return execute(fory -> fory.deserialize(MemoryUtils.wrap(byteBuffer)));
   }
 
   @Override

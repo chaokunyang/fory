@@ -138,7 +138,9 @@ class CppGenerator(BaseGenerator):
         if location is None or not location.file:
             return False
         try:
-            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            return (
+                Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            )
         except Exception:
             return location.file != self.schema.source_file
 
@@ -1679,7 +1681,9 @@ class CppGenerator(BaseGenerator):
 
         imported_enums, local_enums = self.split_imported_types(self.schema.enums)
         imported_unions, local_unions = self.split_imported_types(self.schema.unions)
-        imported_messages, local_messages = self.split_imported_types(self.schema.messages)
+        imported_messages, local_messages = self.split_imported_types(
+            self.schema.messages
+        )
 
         # Register enums (top-level)
         for enum in local_enums:
@@ -1709,12 +1713,8 @@ class CppGenerator(BaseGenerator):
         lines.append("    register_types(fory);")
         lines.append("}")
         lines.append("")
-        lines.append(
-            "inline fory::serialization::ThreadSafeFory& get_fory() {"
-        )
-        lines.append(
-            "  static fory::serialization::ThreadSafeFory fory = []() {"
-        )
+        lines.append("inline fory::serialization::ThreadSafeFory& get_fory() {")
+        lines.append("  static fory::serialization::ThreadSafeFory fory = []() {")
         lines.append(
             "    auto fory = fory::serialization::Fory::builder()"
             ".xlang(true).track_ref(true).compatible(true).build_thread_safe();"

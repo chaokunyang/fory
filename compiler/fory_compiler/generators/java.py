@@ -89,7 +89,9 @@ class JavaGenerator(BaseGenerator):
         if location is None or not location.file:
             return False
         try:
-            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            return (
+                Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            )
         except Exception:
             return location.file != self.schema.source_file
 
@@ -1289,7 +1291,9 @@ class JavaGenerator(BaseGenerator):
 
         imported_enums, local_enums = self.split_imported_types(self.schema.enums)
         imported_unions, local_unions = self.split_imported_types(self.schema.unions)
-        imported_messages, local_messages = self.split_imported_types(self.schema.messages)
+        imported_messages, local_messages = self.split_imported_types(
+            self.schema.messages
+        )
 
         # Register imported enums (top-level)
         for enum in imported_enums:

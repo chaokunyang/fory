@@ -153,7 +153,9 @@ class PythonGenerator(BaseGenerator):
         if location is None or not location.file:
             return False
         try:
-            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            return (
+                Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            )
         except Exception:
             return location.file != self.schema.source_file
 
@@ -176,9 +178,7 @@ class PythonGenerator(BaseGenerator):
         lines.append(f"{ind}        return _get_fory().serialize(self)")
         lines.append("")
         lines.append(f"{ind}    @classmethod")
-        lines.append(
-            f'{ind}    def from_bytes(cls, data: bytes) -> "{return_type}":'
-        )
+        lines.append(f'{ind}    def from_bytes(cls, data: bytes) -> "{return_type}":')
         lines.append(f"{ind}        return _get_fory().deserialize(data)")
         lines.append("")
         lines.append(f"{ind}    def __bytes__(self) -> bytes:")
@@ -333,7 +333,12 @@ class PythonGenerator(BaseGenerator):
             for line in field_lines:
                 lines.append(f"{ind}    {line}")
 
-        if message.fields or message.nested_enums or message.nested_unions or message.nested_messages:
+        if (
+            message.fields
+            or message.nested_enums
+            or message.nested_unions
+            or message.nested_messages
+        ):
             lines.append("")
 
         lines.extend(self.generate_bytes_methods(message.name, indent))

@@ -18,7 +18,8 @@
 """Python code generator."""
 
 import keyword
-from typing import List, Optional, Set
+from pathlib import Path
+from typing import List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
@@ -144,6 +145,47 @@ class PythonGenerator(BaseGenerator):
             return f"{name}_"
         return name
 
+    def is_imported_type(self, type_def: object) -> bool:
+        """Return True if a type definition comes from an imported IDL file."""
+        if not self.schema.source_file:
+            return False
+        location = getattr(type_def, "location", None)
+        if location is None or not location.file:
+            return False
+        try:
+            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+        except Exception:
+            return location.file != self.schema.source_file
+
+    def split_imported_types(
+        self, items: List[object]
+    ) -> Tuple[List[object], List[object]]:
+        imported: List[object] = []
+        local: List[object] = []
+        for item in items:
+            if self.is_imported_type(item):
+                imported.append(item)
+            else:
+                local.append(item)
+        return imported, local
+
+    def generate_bytes_methods(self, return_type: str, indent: int) -> List[str]:
+        ind = "    " * indent
+        lines = []
+        lines.append(f"{ind}    def to_bytes(self) -> bytes:")
+        lines.append(f"{ind}        return _get_fory().serialize(self)")
+        lines.append("")
+        lines.append(f"{ind}    @classmethod")
+        lines.append(
+            f'{ind}    def from_bytes(cls, data: bytes) -> "{return_type}":'
+        )
+        lines.append(f"{ind}        return _get_fory().deserialize(data)")
+        lines.append("")
+        lines.append(f"{ind}    def __bytes__(self) -> bytes:")
+        lines.append(f"{ind}        return self.to_bytes()")
+        lines.append("")
+        return lines
+
     def generate(self) -> List[GeneratedFile]:
         """Generate Python files for the schema."""
         files = []
@@ -169,6 +211,7 @@ class PythonGenerator(BaseGenerator):
         imports.add("from enum import Enum, IntEnum")
         imports.add("from typing import Dict, List, Optional, cast")
         imports.add("import pyfory")
+        imports.add("import threading")
 
         for message in self.schema.messages:
             self.collect_message_imports(message, imports)
@@ -207,6 +250,10 @@ class PythonGenerator(BaseGenerator):
 
         # Generate registration function
         lines.extend(self.generate_registration())
+        lines.append("")
+        lines.extend(self.generate_register_all_types())
+        lines.append("")
+        lines.extend(self.generate_fory_helpers())
         lines.append("")
 
         return GeneratedFile(
@@ -281,25 +328,15 @@ class PythonGenerator(BaseGenerator):
             lines.append("")
 
         # Generate fields
-        if (
-            not message.fields
-            and not message.nested_enums
-            and not message.nested_unions
-            and not message.nested_messages
-        ):
-            lines.append(f"{ind}    pass")
-            return lines
-
         for field in message.fields:
             field_lines = self.generate_field(field, lineage)
             for line in field_lines:
                 lines.append(f"{ind}    {line}")
 
-        # If there are nested types but no fields, add pass to avoid empty class body issues
-        if not message.fields and (
-            message.nested_enums or message.nested_unions or message.nested_messages
-        ):
-            lines.append(f"{ind}    pass")
+        if message.fields or message.nested_enums or message.nested_unions or message.nested_messages:
+            lines.append("")
+
+        lines.extend(self.generate_bytes_methods(message.name, indent))
 
         return lines
 
@@ -423,6 +460,8 @@ class PythonGenerator(BaseGenerator):
             lines.append(f"{ind}        self._value = v")
             lines.append(f"{ind}        self._validate()")
             lines.append("")
+
+        lines.extend(self.generate_bytes_methods(union_ref, indent))
 
         lines.extend(self.generate_union_serializer(union, indent, parent_stack))
 
@@ -733,16 +772,70 @@ class PythonGenerator(BaseGenerator):
 
         # Register enums (top-level)
         for enum in self.schema.enums:
+            if self.is_imported_type(enum):
+                continue
             self.generate_enum_registration(lines, enum, "")
 
         # Register unions (top-level)
         for union in self.schema.unions:
+            if self.is_imported_type(union):
+                continue
             self.generate_union_registration(lines, union, "")
 
         # Register messages (including nested types)
         for message in self.schema.messages:
+            if self.is_imported_type(message):
+                continue
             self.generate_message_registration(lines, message, "")
 
+        return lines
+
+    def generate_register_all_types(self) -> List[str]:
+        func_name = f"register_{self.get_module_name()}_types"
+        lines = []
+        lines.append("def _register_all_types(fory: pyfory.Fory):")
+
+        if (
+            not self.schema.enums
+            and not self.schema.messages
+            and not self.schema.unions
+        ):
+            lines.append("    pass")
+            return lines
+
+        imported_enums, _ = self.split_imported_types(self.schema.enums)
+        imported_unions, _ = self.split_imported_types(self.schema.unions)
+        imported_messages, _ = self.split_imported_types(self.schema.messages)
+
+        for enum in imported_enums:
+            self.generate_enum_registration(lines, enum, "")
+        for union in imported_unions:
+            self.generate_union_registration(lines, union, "")
+        for message in imported_messages:
+            self.generate_message_registration(lines, message, "")
+
+        lines.append(f"    {func_name}(fory)")
+        return lines
+
+    def generate_fory_helpers(self) -> List[str]:
+        lines = []
+        lines.append("_fory_lock = threading.Lock()")
+        lines.append("_threadsafe_fory = None")
+        lines.append("")
+        lines.append("def _create_fory() -> pyfory.Fory:")
+        lines.append("    fory = pyfory.Fory(xlang=True, ref=True, compatible=True)")
+        lines.append("    _register_all_types(fory)")
+        lines.append("    return fory")
+        lines.append("")
+        lines.append("def _get_fory() -> pyfory.ThreadSafeFory:")
+        lines.append("    global _threadsafe_fory")
+        lines.append("    if _threadsafe_fory is None:")
+        lines.append("        with _fory_lock:")
+        lines.append("            if _threadsafe_fory is None:")
+        lines.append(
+            "                _threadsafe_fory = pyfory.ThreadSafeFory(fory_factory=_create_fory)"
+        )
+        lines.append("    return _threadsafe_fory")
         return lines
 
     def generate_enum_registration(

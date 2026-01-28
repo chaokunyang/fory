@@ -69,6 +69,18 @@ def local_roundtrip(fory: pyfory.Fory, book: "addressbook.AddressBook") -> None:
     assert decoded == book
 
 
+def bytes_roundtrip_addressbook(book: "addressbook.AddressBook") -> None:
+    payload = book.to_bytes()
+    decoded = addressbook.AddressBook.from_bytes(payload)
+    assert decoded == book
+
+    dog = addressbook.Dog(name="Rex", bark_volume=5)
+    animal = addressbook.Animal.dog(dog)
+    animal_payload = animal.to_bytes()
+    decoded_animal = addressbook.Animal.from_bytes(animal_payload)
+    assert decoded_animal == animal
+
+
 def file_roundtrip(fory: pyfory.Fory, book: "addressbook.AddressBook") -> None:
     data_file = os.environ.get("DATA_FILE")
     if not data_file:
@@ -461,6 +473,7 @@ def main() -> int:
     any_example.register_any_example_types(fory)
 
     book = build_address_book()
+    bytes_roundtrip_addressbook(book)
     local_roundtrip(fory, book)
     file_roundtrip(fory, book)
 

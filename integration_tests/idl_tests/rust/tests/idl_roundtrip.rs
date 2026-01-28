@@ -68,6 +68,24 @@ fn build_address_book() -> AddressBook {
     }
 }
 
+#[test]
+fn test_to_bytes_from_bytes() {
+    let book = build_address_book();
+    let bytes = book.to_bytes().expect("serialize addressbook");
+    let decoded = AddressBook::from_bytes(&bytes).expect("deserialize addressbook");
+    assert_eq!(decoded, book);
+
+    let dog = Dog {
+        name: "Rex".to_string(),
+        bark_volume: 5,
+    };
+    let animal = Animal::Dog(dog);
+    let animal_bytes = animal.to_bytes().expect("serialize animal");
+    let decoded_animal =
+        Animal::from_bytes(&animal_bytes).expect("deserialize animal");
+    assert_eq!(decoded_animal, animal);
+}
+
 fn build_primitive_types() -> addressbook::PrimitiveTypes {
     let mut contact =
         addressbook::primitive_types::Contact::Email("alice@example.com".to_string());

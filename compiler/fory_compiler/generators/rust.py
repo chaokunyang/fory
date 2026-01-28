@@ -17,7 +17,8 @@
 
 """Rust code generator."""
 
-from typing import List, Optional, Set
+from pathlib import Path
+from typing import List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
@@ -82,6 +83,47 @@ class RustGenerator(BaseGenerator):
             return self.package.replace(".", "_")
         return "generated"
 
+    def is_imported_type(self, type_def: object) -> bool:
+        """Return True if a type definition comes from an imported IDL file."""
+        if not self.schema.source_file:
+            return False
+        location = getattr(type_def, "location", None)
+        if location is None or not location.file:
+            return False
+        try:
+            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+        except Exception:
+            return location.file != self.schema.source_file
+
+    def split_imported_types(
+        self, items: List[object]
+    ) -> Tuple[List[object], List[object]]:
+        imported: List[object] = []
+        local: List[object] = []
+        for item in items:
+            if self.is_imported_type(item):
+                imported.append(item)
+            else:
+                local.append(item)
+        return imported, local
+
+    def generate_bytes_impl(self, type_name: str) -> List[str]:
+        lines = []
+        lines.append(f"impl {type_name} {{")
+        lines.append("    pub fn to_bytes(&self) -> Result<Vec<u8>, fory::Error> {")
+        lines.append("        let fory = detail::get_fory();")
+        lines.append("        fory.serialize(self)")
+        lines.append("    }")
+        lines.append("")
+        lines.append(
+            f"    pub fn from_bytes(data: &[u8]) -> Result<{type_name}, fory::Error> {{"
+        )
+        lines.append("        let fory = detail::get_fory();")
+        lines.append("        fory.deserialize(data)")
+        lines.append("    }")
+        lines.append("}")
+        return lines
+
     def generate_module(self) -> GeneratedFile:
         """Generate a Rust module with all types."""
         lines = []
@@ -89,6 +131,7 @@ class RustGenerator(BaseGenerator):
 
         # Collect uses (including from nested types)
         uses.add("use fory::{Fory, ForyObject}")
+        uses.add("use std::sync::OnceLock")
 
         for message in self.schema.messages:
             self.collect_message_uses(message, uses)
@@ -128,6 +171,8 @@ class RustGenerator(BaseGenerator):
 
         # Generate registration function
         lines.extend(self.generate_registration())
+        lines.append("")
+        lines.extend(self.generate_fory_helpers())
         lines.append("")
 
         return GeneratedFile(
@@ -268,6 +313,9 @@ class RustGenerator(BaseGenerator):
             lines.append(f"        Self::{first_variant}(Default::default())")
             lines.append("    }")
             lines.append("}")
+            lines.append("")
+
+        lines.extend(self.generate_bytes_impl(union.name))
 
         return lines
 
@@ -297,6 +345,8 @@ class RustGenerator(BaseGenerator):
                 lines.append(f"    {line}")
 
         lines.append("}")
+        lines.append("")
+        lines.extend(self.generate_bytes_impl(type_name))
 
         return lines
 
@@ -634,21 +684,59 @@ class RustGenerator(BaseGenerator):
             "pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {"
         )
 
+        _, local_enums = self.split_imported_types(self.schema.enums)
+        _, local_unions = self.split_imported_types(self.schema.unions)
+        _, local_messages = self.split_imported_types(self.schema.messages)
+
         # Register enums (top-level)
-        for enum in self.schema.enums:
+        for enum in local_enums:
             self.generate_enum_registration(lines, enum, None)
 
         # Register unions (top-level)
-        for union in self.schema.unions:
+        for union in local_unions:
             self.generate_union_registration(lines, union, None)
 
         # Register messages (including nested types)
-        for message in self.schema.messages:
+        for message in local_messages:
             self.generate_message_registration(lines, message, None)
 
         lines.append("    Ok(())")
         lines.append("}")
 
+        return lines
+
+    def generate_fory_helpers(self) -> List[str]:
+        lines: List[str] = []
+        imported_enums, _ = self.split_imported_types(self.schema.enums)
+        imported_unions, _ = self.split_imported_types(self.schema.unions)
+        imported_messages, _ = self.split_imported_types(self.schema.messages)
+        lines.append("mod detail {")
+        lines.append("    use super::*;")
+        lines.append("    fn register_all_types(fory: &mut Fory) -> Result<(), fory::Error> {")
+        for enum in imported_enums:
+            self.generate_enum_registration(lines, enum, None)
+        for union in imported_unions:
+            self.generate_union_registration(lines, union, None)
+        for message in imported_messages:
+            self.generate_message_registration(lines, message, None)
+        lines.append("        register_types(fory)?;")
+        lines.append("        Ok(())")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    pub(super) fn get_fory() -> &'static Fory {")
+        lines.append("        static FORY: OnceLock<Fory> = OnceLock::new();")
+        lines.append("        FORY.get_or_init(|| {")
+        lines.append("            let mut fory = Fory::default()")
+        lines.append("                .xlang(true)")
+        lines.append("                .track_ref(true)")
+        lines.append("                .compatible(true);")
+        lines.append(
+            '            register_all_types(&mut fory).expect("failed to register fory types");'
+        )
+        lines.append("            fory")
+        lines.append("        })")
+        lines.append("    }")
+        lines.append("}")
         return lines
 
     def generate_enum_registration(

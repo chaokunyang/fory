@@ -125,6 +125,35 @@ func TestAddressBookRoundTrip(t *testing.T) {
 	runFileGraphRoundTrip(t, refFory, graphValue)
 }
 
+func TestToBytesFromBytes(t *testing.T) {
+	book := buildAddressBook()
+	data, err := book.ToBytes()
+	if err != nil {
+		t.Fatalf("addressbook to_bytes: %v", err)
+	}
+	var decodedBook AddressBook
+	if err := decodedBook.FromBytes(data); err != nil {
+		t.Fatalf("addressbook from_bytes: %v", err)
+	}
+	if !reflect.DeepEqual(book, decodedBook) {
+		t.Fatalf("addressbook to_bytes roundtrip mismatch")
+	}
+
+	dog := Dog{Name: "Rex", BarkVolume: 5}
+	animal := DogAnimal(&dog)
+	animalBytes, err := animal.ToBytes()
+	if err != nil {
+		t.Fatalf("animal to_bytes: %v", err)
+	}
+	var decodedAnimal Animal
+	if err := decodedAnimal.FromBytes(animalBytes); err != nil {
+		t.Fatalf("animal from_bytes: %v", err)
+	}
+	if !reflect.DeepEqual(animal, decodedAnimal) {
+		t.Fatalf("animal to_bytes roundtrip mismatch")
+	}
+}
+
 func buildAnyHolder() anyexample.AnyHolder {
 	inner := anyexample.AnyInner{Name: "inner"}
 	unionValue := anyexample.TextAnyUnion("union")

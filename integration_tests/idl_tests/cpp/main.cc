@@ -163,11 +163,11 @@ fory::Result<void, fory::Error> RunRoundTrip() {
                   .track_ref(false)
                   .build();
 
-  addressbook::RegisterTypes(fory);
-  monster::RegisterTypes(fory);
-  complex_fbs::RegisterTypes(fory);
-  optional_types::RegisterTypes(fory);
-  any_example::RegisterTypes(fory);
+  addressbook::register_types(fory);
+  monster::register_types(fory);
+  complex_fbs::register_types(fory);
+  optional_types::register_types(fory);
+  any_example::register_types(fory);
 
   FORY_RETURN_IF_ERROR(
       fory::serialization::register_any_type<bool>(fory.type_resolver()));
@@ -219,6 +219,23 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   addressbook::AddressBook book;
   *book.mutable_people() = {person};
   *book.mutable_people_by_name() = {{person.name(), person}};
+
+  FORY_TRY(book_bytes, book.to_bytes());
+  FORY_TRY(book_roundtrip_bytes,
+           addressbook::AddressBook::from_bytes(book_bytes));
+  if (!(book_roundtrip_bytes == book)) {
+    return fory::Unexpected(
+        fory::Error::invalid("addressbook to_bytes roundtrip mismatch"));
+  }
+
+  addressbook::Animal animal = addressbook::Animal::dog(dog);
+  FORY_TRY(animal_bytes, animal.to_bytes());
+  FORY_TRY(animal_roundtrip,
+           addressbook::Animal::from_bytes(animal_bytes));
+  if (!(animal_roundtrip == animal)) {
+    return fory::Unexpected(
+        fory::Error::invalid("animal to_bytes roundtrip mismatch"));
+  }
 
   FORY_TRY(bytes, fory.serialize(book));
   FORY_TRY(roundtrip, fory.deserialize<addressbook::AddressBook>(bytes.data(),
@@ -463,8 +480,8 @@ fory::Result<void, fory::Error> RunRoundTrip() {
                       .check_struct_version(true)
                       .track_ref(true)
                       .build();
-  tree::RegisterTypes(ref_fory);
-  graph::RegisterTypes(ref_fory);
+  tree::register_types(ref_fory);
+  graph::register_types(ref_fory);
 
   tree::TreeNode tree_root = BuildTree();
   FORY_TRY(tree_bytes, ref_fory.serialize(tree_root));

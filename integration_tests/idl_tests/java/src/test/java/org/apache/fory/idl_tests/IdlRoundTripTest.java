@@ -105,6 +105,22 @@ public class IdlRoundTripTest {
   }
 
   @Test
+  public void testToBytesFromBytes() {
+    AddressBook book = buildAddressBook();
+    byte[] bookBytes = book.toBytes();
+    AddressBook decodedBook = AddressBook.fromBytes(bookBytes);
+    Assert.assertEquals(decodedBook, book);
+
+    Dog dog = new Dog();
+    dog.setName("Rex");
+    dog.setBarkVolume(5);
+    Animal animal = Animal.ofDog(dog);
+    byte[] animalBytes = animal.toBytes();
+    Animal decodedAnimal = Animal.fromBytes(animalBytes);
+    Assert.assertEquals(decodedAnimal, animal);
+  }
+
+  @Test
   public void testPrimitiveTypesRoundTrip() throws Exception {
     Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
     AddressbookForyRegistration.register(fory);

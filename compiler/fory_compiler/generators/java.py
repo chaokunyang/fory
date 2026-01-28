@@ -17,7 +17,8 @@
 
 """Java code generator."""
 
-from typing import List, Optional, Set, Union as TypingUnion
+from pathlib import Path
+from typing import List, Optional, Set, Tuple, Union as TypingUnion
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
@@ -55,6 +56,14 @@ class JavaGenerator(BaseGenerator):
             return java_package
         return self.schema.package
 
+    def get_registration_class_name(self) -> str:
+        """Get the generated registration class name."""
+        java_package = self.get_java_package()
+        if java_package:
+            parts = java_package.split(".")
+            return self.to_pascal_case(parts[-1]) + "ForyRegistration"
+        return "ForyRegistration"
+
     def get_java_outer_classname(self) -> Optional[str]:
         """Get the Java outer classname if specified.
 
@@ -71,6 +80,45 @@ class JavaGenerator(BaseGenerator):
         """
         value = self.schema.get_option("java_multiple_files")
         return value is True
+
+    def is_imported_type(self, type_def: object) -> bool:
+        """Return True if a type definition comes from an imported IDL file."""
+        if not self.schema.source_file:
+            return False
+        location = getattr(type_def, "location", None)
+        if location is None or not location.file:
+            return False
+        try:
+            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+        except Exception:
+            return location.file != self.schema.source_file
+
+    def split_imported_types(
+        self, items: List[object]
+    ) -> Tuple[List[object], List[object]]:
+        imported: List[object] = []
+        local: List[object] = []
+        for item in items:
+            if self.is_imported_type(item):
+                imported.append(item)
+            else:
+                local.append(item)
+        return imported, local
+
+    def generate_bytes_methods(self, class_name: str) -> List[str]:
+        reg_class = self.get_registration_class_name()
+        lines = []
+        lines.append("public byte[] toBytes() {")
+        lines.append(f"    return {reg_class}.getFory().serialize(this);")
+        lines.append("}")
+        lines.append("")
+        lines.append(f"public static {class_name} fromBytes(byte[] bytes) {{")
+        lines.append(
+            f"    return {reg_class}.getFory().deserialize(bytes, {class_name}.class);"
+        )
+        lines.append("}")
+        lines.append("")
+        return lines
 
     # Mapping from FDL primitive types to Java types
     PRIMITIVE_MAP = {
@@ -320,6 +368,10 @@ class JavaGenerator(BaseGenerator):
             getter_setter = self.generate_getter_setter(field)
             for line in getter_setter:
                 lines.append(f"    {line}")
+
+        # toBytes/fromBytes
+        for line in self.generate_bytes_methods(message.name):
+            lines.append(f"    {line}")
 
         # equals method
         for line in self.generate_equals_method(message):
@@ -598,6 +650,9 @@ class JavaGenerator(BaseGenerator):
         lines.append(f"{ind}    }}")
         lines.append("")
 
+        for line in self.generate_bytes_methods(union.name):
+            lines.append(f"{ind}    {line}")
+
         lines.append(f"{ind}}}")
         lines.append("")
         return lines
@@ -775,6 +830,10 @@ class JavaGenerator(BaseGenerator):
             getter_setter = self.generate_getter_setter(field)
             for line in getter_setter:
                 lines.append(f"    {line}")
+
+        # toBytes/fromBytes
+        for line in self.generate_bytes_methods(message.name):
+            lines.append(f"    {line}")
 
         # equals method
         for line in self.generate_equals_method(message):
@@ -1187,11 +1246,7 @@ class JavaGenerator(BaseGenerator):
         java_package = self.get_java_package()
 
         # Determine class name
-        if java_package:
-            parts = java_package.split(".")
-            class_name = self.to_pascal_case(parts[-1]) + "ForyRegistration"
-        else:
-            class_name = "ForyRegistration"
+        class_name = self.get_registration_class_name()
 
         # License header
         lines.append(self.get_license_header())
@@ -1204,26 +1259,65 @@ class JavaGenerator(BaseGenerator):
 
         # Imports
         lines.append("import org.apache.fory.Fory;")
+        lines.append("import org.apache.fory.ThreadSafeFory;")
+        lines.append("import org.apache.fory.pool.SimpleForyPool;")
         lines.append("")
 
         # Class
         lines.append(f"public class {class_name} {{")
         lines.append("")
-        lines.append("    public static void register(Fory fory) {")
+        lines.append("    static ThreadSafeFory getFory() {")
+        lines.append("        return Holder.FORY;")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    private static ThreadSafeFory createFory() {")
+        lines.append(
+            "        ThreadSafeFory fory = new SimpleForyPool(c -> Fory.builder().withXlang(true).withRefTracking(true).build());"
+        )
+        lines.append("        fory.registerCallback(f -> registerAllTypes(f));")
+        lines.append("        return fory;")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    private static class Holder {")
+        lines.append("        private static final ThreadSafeFory FORY = createFory();")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    private static void registerAllTypes(Fory fory) {")
 
         # When outer_classname is set, all top-level types become inner classes
         type_prefix = outer_classname if outer_classname else ""
 
+        imported_enums, local_enums = self.split_imported_types(self.schema.enums)
+        imported_unions, local_unions = self.split_imported_types(self.schema.unions)
+        imported_messages, local_messages = self.split_imported_types(self.schema.messages)
+
+        # Register imported enums (top-level)
+        for enum in imported_enums:
+            self.generate_enum_registration(lines, enum, type_prefix)
+
+        # Register imported unions (top-level)
+        for union in imported_unions:
+            self.generate_union_registration(lines, union, type_prefix)
+
+        # Register imported messages (top-level and nested)
+        for message in imported_messages:
+            self.generate_message_registration(lines, message, type_prefix)
+
+        lines.append("        register(fory);")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    public static void register(Fory fory) {")
+
         # Register enums (top-level)
-        for enum in self.schema.enums:
+        for enum in local_enums:
             self.generate_enum_registration(lines, enum, type_prefix)
 
         # Register unions (top-level)
-        for union in self.schema.unions:
+        for union in local_unions:
             self.generate_union_registration(lines, union, type_prefix)
 
         # Register messages (top-level and nested)
-        for message in self.schema.messages:
+        for message in local_messages:
             self.generate_message_registration(lines, message, type_prefix)
 
         lines.append("    }")

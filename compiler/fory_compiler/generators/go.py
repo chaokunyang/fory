@@ -17,6 +17,7 @@
 
 """Go code generator."""
 
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union as TypingUnion
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
@@ -203,6 +204,30 @@ class GoGenerator(BaseGenerator):
         _, package_name = self.get_go_package_info()
         return package_name
 
+    def is_imported_type(self, type_def: object) -> bool:
+        """Return True if a type definition comes from an imported IDL file."""
+        if not self.schema.source_file:
+            return False
+        location = getattr(type_def, "location", None)
+        if location is None or not location.file:
+            return False
+        try:
+            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+        except Exception:
+            return location.file != self.schema.source_file
+
+    def split_imported_types(
+        self, items: List[object]
+    ) -> Tuple[List[object], List[object]]:
+        imported: List[object] = []
+        local: List[object] = []
+        for item in items:
+            if self.is_imported_type(item):
+                imported.append(item)
+            else:
+                local.append(item)
+        return imported, local
+
     def get_file_name(self) -> str:
         """Get the Go file name."""
         if self.package:
@@ -216,6 +241,8 @@ class GoGenerator(BaseGenerator):
 
         # Collect imports (including from nested types)
         imports.add('fory "github.com/apache/fory/go/fory"')
+        imports.add('threadsafe "github.com/apache/fory/go/fory/threadsafe"')
+        imports.add('"sync"')
 
         for message in self.schema.messages:
             self.collect_message_imports(message, imports)
@@ -258,6 +285,8 @@ class GoGenerator(BaseGenerator):
 
         # Generate registration function
         lines.extend(self.generate_registration())
+        lines.append("")
+        lines.extend(self.generate_fory_helpers())
         lines.append("")
 
         return GeneratedFile(
@@ -431,6 +460,14 @@ class GoGenerator(BaseGenerator):
         lines.append(f"\tu.case_ = {case_type}(caseId)")
         lines.append("\tu.value = value")
         lines.append("}")
+        lines.append("")
+        lines.append(f"func (u *{type_name}) ToBytes() ([]byte, error) {{")
+        lines.append("\treturn getFory().Serialize(u)")
+        lines.append("}")
+        lines.append("")
+        lines.append(f"func (u *{type_name}) FromBytes(data []byte) error {{")
+        lines.append("\treturn getFory().Deserialize(data, u)")
+        lines.append("}")
 
         return lines
 
@@ -549,6 +586,14 @@ class GoGenerator(BaseGenerator):
             for line in field_lines:
                 lines.append(f"\t{line}")
 
+        lines.append("}")
+        lines.append("")
+        lines.append(f"func (m *{type_name}) ToBytes() ([]byte, error) {{")
+        lines.append("\treturn getFory().Serialize(m)")
+        lines.append("}")
+        lines.append("")
+        lines.append(f"func (m *{type_name}) FromBytes(data []byte) error {{")
+        lines.append("\treturn getFory().Deserialize(data, m)")
         lines.append("}")
 
         return lines
@@ -832,21 +877,66 @@ class GoGenerator(BaseGenerator):
 
         lines.append("func RegisterTypes(f *fory.Fory) error {")
 
+        imported_enums, local_enums = self.split_imported_types(self.schema.enums)
+        imported_unions, local_unions = self.split_imported_types(self.schema.unions)
+        imported_messages, local_messages = self.split_imported_types(self.schema.messages)
+
         # Register enums (top-level)
-        for enum in self.schema.enums:
+        for enum in local_enums:
             self.generate_enum_registration(lines, enum, None)
 
         # Register unions (top-level)
-        for union in self.schema.unions:
+        for union in local_unions:
             self.generate_union_registration(lines, union, None)
 
         # Register messages (including nested types)
-        for message in self.schema.messages:
+        for message in local_messages:
             self.generate_message_registration(lines, message, None)
 
         lines.append("\treturn nil")
         lines.append("}")
 
+        return lines
+
+    def generate_fory_helpers(self) -> List[str]:
+        lines: List[str] = []
+        imported_enums, _ = self.split_imported_types(self.schema.enums)
+        imported_unions, _ = self.split_imported_types(self.schema.unions)
+        imported_messages, _ = self.split_imported_types(self.schema.messages)
+        lines.append("func registerAllTypes(f *fory.Fory) error {")
+        for enum in imported_enums:
+            self.generate_enum_registration(lines, enum, None)
+        for union in imported_unions:
+            self.generate_union_registration(lines, union, None)
+        for message in imported_messages:
+            self.generate_message_registration(lines, message, None)
+        lines.append("\tif err := RegisterTypes(f); err != nil {")
+        lines.append("\t\treturn err")
+        lines.append("\t}")
+        lines.append("\treturn nil")
+        lines.append("}")
+        lines.append("")
+        lines.append("func createFory() *fory.Fory {")
+        lines.append(
+            "\tf := fory.New(fory.WithXlang(true), fory.WithRefTracking(true), fory.WithCompatible(true))"
+        )
+        lines.append("\tif err := registerAllTypes(f); err != nil {")
+        lines.append("\t\tpanic(err)")
+        lines.append("\t}")
+        lines.append("\treturn f")
+        lines.append("}")
+        lines.append("")
+        lines.append("var (")
+        lines.append("\tforyOnce sync.Once")
+        lines.append("\tforyInstance *threadsafe.Fory")
+        lines.append(")")
+        lines.append("")
+        lines.append("func getFory() *threadsafe.Fory {")
+        lines.append("\tforyOnce.Do(func() {")
+        lines.append("\t\tforyInstance = threadsafe.NewWithFactory(createFory)")
+        lines.append("\t})")
+        lines.append("\treturn foryInstance")
+        lines.append("}")
         return lines
 
     def generate_enum_registration(

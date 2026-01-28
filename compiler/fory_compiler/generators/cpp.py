@@ -17,7 +17,8 @@
 
 """C++ code generator."""
 
-from typing import Dict, List, Optional, Set
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple
 import typing
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
@@ -128,6 +129,47 @@ class CppGenerator(BaseGenerator):
     ) -> str:
         """Get type name for FORY_FIELD_CONFIG."""
         return self.get_namespaced_type_name(type_name, parent_stack)
+
+    def is_imported_type(self, type_def: object) -> bool:
+        """Return True if a type definition comes from an imported IDL file."""
+        if not self.schema.source_file:
+            return False
+        location = getattr(type_def, "location", None)
+        if location is None or not location.file:
+            return False
+        try:
+            return Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+        except Exception:
+            return location.file != self.schema.source_file
+
+    def split_imported_types(
+        self, items: List[object]
+    ) -> Tuple[List[object], List[object]]:
+        imported: List[object] = []
+        local: List[object] = []
+        for item in items:
+            if self.is_imported_type(item):
+                imported.append(item)
+            else:
+                local.append(item)
+        return imported, local
+
+    def generate_bytes_methods(self, class_name: str, indent: str) -> List[str]:
+        lines: List[str] = []
+        lines.append(
+            f"{indent}fory::Result<std::vector<uint8_t>, fory::Error> to_bytes() const {{"
+        )
+        lines.append(f"{indent}  return detail::get_fory().serialize(*this);")
+        lines.append(f"{indent}}}")
+        lines.append("")
+        lines.append(
+            f"{indent}static fory::Result<{class_name}, fory::Error> from_bytes(const std::vector<uint8_t>& data) {{"
+        )
+        lines.append(
+            f"{indent}  return detail::get_fory().deserialize<{class_name}>(data);"
+        )
+        lines.append(f"{indent}}}")
+        return lines
 
     def generate_header(self) -> GeneratedFile:
         """Generate a C++ header file with all types."""
@@ -777,6 +819,9 @@ class CppGenerator(BaseGenerator):
             lines.append(f"{body_indent}  return true;")
         lines.append(f"{body_indent}}}")
 
+        lines.append("")
+        lines.extend(self.generate_bytes_methods(class_name, body_indent))
+
         struct_type_name = self.get_qualified_type_name(message.name, parent_stack)
         if message.fields:
             lines.append("")
@@ -922,6 +967,8 @@ class CppGenerator(BaseGenerator):
         lines.append(f"{body_indent}    return value_ == other.value_;")
         lines.append(f"{body_indent}  }}")
         lines.append("")
+
+        lines.extend(self.generate_bytes_methods(class_name, f"{body_indent}  "))
 
         lines.append(f"{body_indent}private:")
         lines.append(f"{body_indent}  {variant_type} value_;")
@@ -1626,21 +1673,58 @@ class CppGenerator(BaseGenerator):
         """Generate the Fory registration function."""
         lines = []
 
-        lines.append("inline void RegisterTypes(fory::serialization::Fory& fory) {")
+        lines.append(
+            "inline void register_types(fory::serialization::BaseFory& fory) {"
+        )
+
+        imported_enums, local_enums = self.split_imported_types(self.schema.enums)
+        imported_unions, local_unions = self.split_imported_types(self.schema.unions)
+        imported_messages, local_messages = self.split_imported_types(self.schema.messages)
 
         # Register enums (top-level)
-        for enum in self.schema.enums:
+        for enum in local_enums:
             self.generate_enum_registration(lines, enum, [])
 
         # Register unions (top-level)
-        for union in self.schema.unions:
+        for union in local_unions:
             self.generate_union_registration(lines, union, [])
 
         # Register messages (including nested types)
-        for message in self.schema.messages:
+        for message in local_messages:
             self.generate_message_registration(lines, message, [])
 
         lines.append("}")
+
+        lines.append("")
+        lines.append("namespace detail {")
+        lines.append(
+            "inline void register_all_types(fory::serialization::BaseFory& fory) {"
+        )
+        for enum in imported_enums:
+            self.generate_enum_registration(lines, enum, [])
+        for union in imported_unions:
+            self.generate_union_registration(lines, union, [])
+        for message in imported_messages:
+            self.generate_message_registration(lines, message, [])
+        lines.append("    register_types(fory);")
+        lines.append("}")
+        lines.append("")
+        lines.append(
+            "inline fory::serialization::ThreadSafeFory& get_fory() {"
+        )
+        lines.append(
+            "  static fory::serialization::ThreadSafeFory fory = []() {"
+        )
+        lines.append(
+            "    auto fory = fory::serialization::Fory::builder()"
+            ".xlang(true).track_ref(true).compatible(true).build_thread_safe();"
+        )
+        lines.append("    register_all_types(fory);")
+        lines.append("    return fory;")
+        lines.append("  }();")
+        lines.append("  return fory;")
+        lines.append("}")
+        lines.append("} // namespace detail")
 
         return lines
 

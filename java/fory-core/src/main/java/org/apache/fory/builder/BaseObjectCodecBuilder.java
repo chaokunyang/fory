@@ -1961,6 +1961,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
   }
 
+  private Expression deserializeForNotNullNoRef(
+      Expression buffer, TypeRef<?> typeRef, Expression serializer, InvokeHint invokeHint) {
+    Expression value = deserializeForNotNull(buffer, typeRef, serializer, invokeHint);
+    if (needWriteRef(typeRef)) {
+      Expression preserveStubRefId =
+          new Invoke(refResolverRef, "preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
+      return new ListExpression(preserveStubRefId, value);
+    }
+    return value;
+  }
+
   protected Expression deserializeField(
       Expression buffer, Descriptor descriptor, Function<Expression, Expression> callback) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
@@ -2194,12 +2205,21 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     walkPath.add(elementType.toString());
     boolean finalType = isMonomorphic(elemClass);
     boolean trackingRef = typeResolver(resolver -> resolver.needToWriteRef(elementType));
+    Literal trackingRefFlag = ofInt(CollectionFlags.TRACKING_REF);
+    Expression trackRef =
+        eq(new BitAnd(flags.inline(), trackingRefFlag), trackingRefFlag, "trackRef");
     if (finalType) {
+      Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
+      Expression hasNull = eq(new BitAnd(flags.inline(), hasNullFlag), hasNullFlag, "hasNull");
       if (trackingRef) {
-        builder.add(readContainerElements(elementType, true, null, null, buffer, collection, size));
+        builder.add(
+            trackRef,
+            new If(
+                trackRef,
+                readContainerElements(elementType, true, null, null, buffer, collection, size),
+                readContainerElements(elementType, false, null, hasNull, buffer, collection, size),
+                false));
       } else {
-        Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
-        Expression hasNull = eq(new BitAnd(flags.inline(), hasNullFlag), hasNullFlag, "hasNull");
         builder.add(
             hasNull,
             readContainerElements(elementType, false, null, hasNull, buffer, collection, size));
@@ -2245,7 +2265,28 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 readContainerElements(elementType, true, null, null, buffer, collection, size),
                 "differentTypeElemsRead",
                 false);
-        action = new If(sameElementClass, readBuilder, differentElemTypeRead);
+        Expression refAction = new If(sameElementClass, readBuilder, differentElemTypeRead);
+
+        Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
+        Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
+        // Same element class read start
+        ListExpression noRefReadBuilder = new ListExpression(elemSerializer);
+        noRefReadBuilder.add(
+            readContainerElements(
+                elementType, false, elemSerializer, hasNull, buffer, collection, size));
+        // Same element class read end
+        Set<Expression> noRefCutPoint = ofHashSet(buffer, collection, size, hasNull);
+        Expression noRefDifferentTypeElemsRead =
+            invokeGenerated(
+                ctx,
+                noRefCutPoint,
+                readContainerElements(elementType, false, null, hasNull, buffer, collection, size),
+                "differentTypeElemsNoRefRead",
+                false);
+        Expression noRefAction =
+            new If(sameElementClass, noRefReadBuilder, noRefDifferentTypeElemsRead);
+        builder.add(trackRef);
+        action = new If(trackRef, refAction, noRefAction, false);
       } else {
         Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
         Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
@@ -2329,7 +2370,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             new If(
                 hasNull,
                 deserializeFor(buffer, elementType, callback, invokeHint.copy()),
-                callback.apply(deserializeForNotNull(buffer, elementType, invokeHint.copy())));
+                callback.apply(
+                    deserializeForNotNullNoRef(buffer, elementType, null, invokeHint.copy())));
       }
     } else {
       invokeHint.add(elemSerializer);
@@ -2350,10 +2392,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                     elementType,
                     callback,
                     () ->
-                        deserializeForNotNull(
+                        deserializeForNotNullNoRef(
                             buffer, elementType, elemSerializer, invokeHint.copy())),
                 callback.apply(
-                    deserializeForNotNull(buffer, elementType, elemSerializer, invokeHint.copy())));
+                    deserializeForNotNullNoRef(
+                        buffer, elementType, elemSerializer, invokeHint.copy())));
       }
     }
     return read;
@@ -2531,7 +2574,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                             expr -> expr,
                             () ->
                                 deserializeForNotNull(buffer, keyType, keySerializerExpr, keyHint)),
-                        deserializeForNotNull(buffer, keyType, keySerializerExpr, keyHint),
+                        deserializeForNotNullNoRef(buffer, keyType, keySerializerExpr, keyHint),
                         false);
               } else {
                 keyAction = deserializeForNotNull(buffer, keyType, keySerializerExpr, keyHint);
@@ -2548,7 +2591,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                             () ->
                                 deserializeForNotNull(
                                     buffer, valueType, valueSerializerExpr, valueHint)),
-                        deserializeForNotNull(buffer, valueType, valueSerializerExpr, valueHint),
+                        deserializeForNotNullNoRef(
+                            buffer, valueType, valueSerializerExpr, valueHint),
                         false);
               } else {
                 valueAction =

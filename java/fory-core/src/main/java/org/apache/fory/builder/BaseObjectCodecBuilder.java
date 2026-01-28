@@ -77,6 +77,8 @@ import static org.apache.fory.type.TypeUtils.isBoxed;
 import static org.apache.fory.type.TypeUtils.isPrimitive;
 import static org.apache.fory.util.Preconditions.checkArgument;
 
+import java.lang.reflect.AnnotatedParameterizedType;
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.HashMap;
@@ -90,6 +92,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.Ref;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CodegenContext;
@@ -460,9 +463,23 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       }
       Expression action;
       if (useCollectionSerialization(typeRef)) {
-        action = serializeForCollection(buffer, inputObject, typeRef, serializer, false);
+        action =
+            serializeForCollection(
+                buffer,
+                inputObject,
+                typeRef,
+                serializer,
+                false,
+                getCollectionElementRefOverride(descriptor));
       } else if (useMapSerialization(typeRef)) {
-        action = serializeForMap(buffer, inputObject, typeRef, serializer, false);
+        action =
+            serializeForMap(
+                buffer,
+                inputObject,
+                typeRef,
+                serializer,
+                false,
+                getMapKeyValueRefOverride(descriptor));
       } else {
         action = serializeForNotNullObjectForField(inputObject, buffer, descriptor, serializer);
       }
@@ -996,6 +1013,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       TypeRef<?> typeRef,
       Expression serializer,
       boolean generateNewMethod) {
+    return serializeForCollection(
+        buffer, collection, typeRef, serializer, generateNewMethod, null);
+  }
+
+  protected Expression serializeForCollection(
+      Expression buffer,
+      Expression collection,
+      TypeRef<?> typeRef,
+      Expression serializer,
+      boolean generateNewMethod,
+      Boolean elementRefOverride) {
     // get serializer, write class info if necessary.
     if (serializer == null) {
       Class<?> clz = getRawType(typeRef);
@@ -1033,7 +1061,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression ifExpr =
         new If(
             inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE),
-            writeCollectionData(buffer, collection, serializer, elementType),
+            writeCollectionData(buffer, collection, serializer, elementType, elementRefOverride),
             new Invoke(serializer, writeMethodName, buffer, collection));
     // Wrap collection and ifExpr in a ListExpression to ensure collection is evaluated before the
     // If. This is necessary because 'collection' is used in both branches of the If expression.
@@ -1056,8 +1084,57 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return elementType;
   }
 
+  private boolean resolveTrackingRef(TypeRef<?> typeRef, Boolean refOverride) {
+    if (refOverride == null) {
+      return needWriteRef(typeRef);
+    }
+    return refOverride && fory.trackingRef();
+  }
+
+  private static Boolean getRefOverride(AnnotatedType annotatedType) {
+    if (annotatedType == null) {
+      return null;
+    }
+    Ref ref = annotatedType.getAnnotation(Ref.class);
+    return ref != null ? ref.enable() : null;
+  }
+
+  private static Boolean getCollectionElementRefOverride(Descriptor descriptor) {
+    if (descriptor == null || descriptor.getField() == null) {
+      return null;
+    }
+    AnnotatedType annotatedType = descriptor.getField().getAnnotatedType();
+    if (annotatedType instanceof AnnotatedParameterizedType) {
+      AnnotatedType[] args =
+          ((AnnotatedParameterizedType) annotatedType).getAnnotatedActualTypeArguments();
+      if (args.length == 1) {
+        return getRefOverride(args[0]);
+      }
+    }
+    return null;
+  }
+
+  private static Tuple2<Boolean, Boolean> getMapKeyValueRefOverride(Descriptor descriptor) {
+    if (descriptor == null || descriptor.getField() == null) {
+      return null;
+    }
+    AnnotatedType annotatedType = descriptor.getField().getAnnotatedType();
+    if (annotatedType instanceof AnnotatedParameterizedType) {
+      AnnotatedType[] args =
+          ((AnnotatedParameterizedType) annotatedType).getAnnotatedActualTypeArguments();
+      if (args.length >= 2) {
+        return Tuple2.of(getRefOverride(args[0]), getRefOverride(args[1]));
+      }
+    }
+    return null;
+  }
+
   protected Expression writeCollectionData(
-      Expression buffer, Expression collection, Expression serializer, TypeRef<?> elementType) {
+      Expression buffer,
+      Expression collection,
+      Expression serializer,
+      TypeRef<?> elementType,
+      Boolean elementRefOverride) {
     Invoke onCollectionWrite =
         new Invoke(
             serializer,
@@ -1072,7 +1149,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     walkPath.add(elementType.toString());
     ListExpression builder = new ListExpression();
     Class<?> elemClass = TypeUtils.getRawType(elementType);
-    boolean trackingRef = needWriteRef(elementType);
+    boolean trackingRef = resolveTrackingRef(elementType, elementRefOverride);
     Tuple2<Expression, Invoke> writeElementsHeader =
         writeElementsHeader(elemClass, trackingRef, serializer, buffer, collection);
     Expression flags = writeElementsHeader.f0;
@@ -1317,6 +1394,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       TypeRef<?> typeRef,
       Expression serializer,
       boolean generateNewMethod) {
+    return serializeForMap(buffer, map, typeRef, serializer, generateNewMethod, null);
+  }
+
+  protected Expression serializeForMap(
+      Expression buffer,
+      Expression map,
+      TypeRef<?> typeRef,
+      Expression serializer,
+      boolean generateNewMethod,
+      Tuple2<Boolean, Boolean> keyValueRefOverride) {
     if (serializer == null) {
       Class<?> clz = getRawType(typeRef);
       if (isMonomorphic(clz)) {
@@ -1348,7 +1435,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression ifExpr =
         new If(
             inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE),
-            jitWriteMap(buffer, map, serializer, typeRef),
+            jitWriteMap(buffer, map, serializer, typeRef, keyValueRefOverride),
             new Invoke(serializer, writeMethodName, buffer, map));
     // Wrap map and ifExpr in a ListExpression to ensure map is evaluated before the If.
     // This is necessary because 'map' is used in both branches of the If expression.
@@ -1375,10 +1462,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   private Expression jitWriteMap(
-      Expression buffer, Expression map, Expression serializer, TypeRef<?> typeRef) {
+      Expression buffer,
+      Expression map,
+      Expression serializer,
+      TypeRef<?> typeRef,
+      Tuple2<Boolean, Boolean> keyValueRefOverride) {
     Tuple2<TypeRef<?>, TypeRef<?>> keyValueType = getMapKeyValueType(typeRef);
     TypeRef<?> keyType = keyValueType.f0;
     TypeRef<?> valueType = keyValueType.f1;
+    Boolean keyRefOverride = keyValueRefOverride == null ? null : keyValueRefOverride.f0;
+    Boolean valueRefOverride = keyValueRefOverride == null ? null : keyValueRefOverride.f1;
     map = new Invoke(serializer, "onMapWrite", TypeUtils.mapOf(keyType, valueType), buffer, map);
     Expression iterator =
         new Invoke(inlineInvoke(map, "entrySet", SET_TYPE), "iterator", ITERATOR_TYPE);
@@ -1388,8 +1481,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean inline = keyMonomorphic && valueMonomorphic;
     Class<?> keyTypeRawType = keyType.getRawType();
     Class<?> valueTypeRawType = valueType.getRawType();
-    boolean trackingKeyRef = typeResolver(resolver -> resolver.needToWriteRef(keyType));
-    boolean trackingValueRef = typeResolver(resolver -> resolver.needToWriteRef(valueType));
+    boolean trackingKeyRef = resolveTrackingRef(keyType, keyRefOverride);
+    boolean trackingValueRef = resolveTrackingRef(valueType, valueRefOverride);
     Tuple2<Expression, Expression> mapKVSerializer =
         getMapKVSerializer(keyTypeRawType, valueTypeRawType);
     Expression keySerializer = mapKVSerializer.f0;
@@ -1437,7 +1530,15 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                         keySerializer,
                         valueSerializer);
               }
-              Expression writeChunk = writeChunk(buffer, entry, iterator, keyType, valueType);
+              Expression writeChunk =
+                  writeChunk(
+                      buffer,
+                      entry,
+                      iterator,
+                      keyType,
+                      valueType,
+                      keyRefOverride,
+                      valueRefOverride);
               return new ListExpression(
                   new Assign(entry, writeNullChunk),
                   new If(
@@ -1473,7 +1574,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression entry,
       Expression iterator,
       TypeRef<?> keyType,
-      TypeRef<?> valueType) {
+      TypeRef<?> valueType,
+      Boolean keyRefOverride,
+      Boolean valueRefOverride) {
     ListExpression expressions = new ListExpression();
     boolean keyMonomorphic = isMonomorphic(keyType);
     boolean valueMonomorphic = isMonomorphic(valueType);
@@ -1509,8 +1612,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
     Expression chunkHeader;
     Expression keySerializer, valueSerializer;
-    boolean trackingKeyRef = typeResolver(resolver -> resolver.needToWriteRef(keyType));
-    boolean trackingValueRef = typeResolver(resolver -> resolver.needToWriteRef(valueType));
+    boolean trackingKeyRef = resolveTrackingRef(keyType, keyRefOverride);
+    boolean trackingValueRef = resolveTrackingRef(valueType, valueRefOverride);
     Expression keyWriteRef = Literal.ofBoolean(trackingKeyRef);
     Expression valueWriteRef = Literal.ofBoolean(trackingValueRef);
     boolean inline = keyMonomorphic && valueMonomorphic;

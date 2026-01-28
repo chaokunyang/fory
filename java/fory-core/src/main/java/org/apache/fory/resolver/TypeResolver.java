@@ -23,6 +23,7 @@ import static org.apache.fory.type.TypeUtils.getSizeOfPrimitiveType;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Type;
@@ -1354,11 +1355,15 @@ public abstract class TypeResolver {
     for (Field field : ReflectionUtils.getFields(cls, true)) {
       Type type = field.getGenericType();
       GenericType genericType = buildGenericType(type);
+      AnnotatedType annotatedType = field.getAnnotatedType();
+      TypeUtils.applyRefTrackingOverride(genericType, annotatedType, fory.trackingRef());
       buildGenericMap(map, genericType);
       TypeRef<?> typeRef = TypeRef.of(type);
       buildGenericMap(map2, typeRef);
     }
-    map.putAll(map2);
+    for (Map.Entry<String, GenericType> entry : map2.entrySet()) {
+      map.putIfAbsent(entry.getKey(), entry.getValue());
+    }
     return map;
   }
 

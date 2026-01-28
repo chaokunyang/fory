@@ -49,15 +49,17 @@ class CollectionSerializer(Serializer):
         "elem_serializer",
         "is_py",
         "elem_tracking_ref",
+        "elem_tracking_ref_override",
         "elem_type",
         "elem_typeinfo",
     )
 
-    def __init__(self, fory, type_, elem_serializer=None):
+    def __init__(self, fory, type_, elem_serializer=None, elem_tracking_ref_override=None):
         super().__init__(fory, type_)
         self.type_resolver = fory.type_resolver
         self.ref_resolver = fory.ref_resolver
         self.elem_serializer = elem_serializer
+        self.elem_tracking_ref_override = elem_tracking_ref_override
         if elem_serializer is None:
             self.elem_type = None
             self.elem_typeinfo = self.type_resolver.get_typeinfo(None)
@@ -97,7 +99,10 @@ class CollectionSerializer(Serializer):
         if has_null:
             collect_flag |= COLL_HAS_NULL
         if self.fory.ref_tracking:
-            if self.elem_tracking_ref == 1:
+            if self.elem_tracking_ref_override is not None:
+                if self.elem_tracking_ref_override:
+                    collect_flag |= COLL_TRACKING_REF
+            elif self.elem_tracking_ref == 1:
                 collect_flag |= COLL_TRACKING_REF
             elif self.elem_tracking_ref == -1:
                 if not has_same_type or elem_typeinfo.serializer.need_to_write_ref:
@@ -382,12 +387,22 @@ NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF = VALUE_HAS_NULL | KEY_DECL_TYPE | TRACKIN
 
 
 class MapSerializer(Serializer):
-    def __init__(self, fory, type_, key_serializer=None, value_serializer=None):
+    def __init__(
+        self,
+        fory,
+        type_,
+        key_serializer=None,
+        value_serializer=None,
+        key_tracking_ref_override=None,
+        value_tracking_ref_override=None,
+    ):
         super().__init__(fory, type_)
         self.type_resolver = fory.type_resolver
         self.ref_resolver = fory.ref_resolver
         self.key_serializer = key_serializer
         self.value_serializer = value_serializer
+        self.key_tracking_ref_override = key_tracking_ref_override
+        self.value_tracking_ref_override = value_tracking_ref_override
 
     def write(self, buffer, o):
         obj = o
@@ -400,6 +415,8 @@ class MapSerializer(Serializer):
         ref_resolver = fory.ref_resolver
         key_serializer = self.key_serializer
         value_serializer = self.value_serializer
+        key_ref_override = self.key_tracking_ref_override
+        value_ref_override = self.value_tracking_ref_override
 
         items_iter = iter(obj.items())
         key, value = next(items_iter)
@@ -411,7 +428,10 @@ class MapSerializer(Serializer):
                     if value is not None:
                         break
                     if key_serializer is not None:
-                        if key_serializer.need_to_write_ref:
+                        key_write_ref = key_serializer.need_to_write_ref
+                        if key_ref_override is not None:
+                            key_write_ref = key_ref_override and self.fory.ref_tracking
+                        if key_write_ref:
                             buffer.write_int8(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF)
                             if not ref_resolver.write_ref_or_null(buffer, key):
                                 self._write_obj(key_serializer, buffer, key)
@@ -424,7 +444,10 @@ class MapSerializer(Serializer):
                 else:
                     if value is not None:
                         if value_serializer is not None:
-                            if value_serializer.need_to_write_ref:
+                            value_write_ref = value_serializer.need_to_write_ref
+                            if value_ref_override is not None:
+                                value_write_ref = value_ref_override and self.fory.ref_tracking
+                            if value_write_ref:
                                 buffer.write_int8(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF)
                                 if not ref_resolver.write_ref_or_null(buffer, key):
                                     value_serializer.write(buffer, key)
@@ -469,6 +492,10 @@ class MapSerializer(Serializer):
 
             key_write_ref = key_serializer.need_to_write_ref if key_serializer else False
             value_write_ref = value_serializer.need_to_write_ref if value_serializer else False
+            if key_serializer is not None and key_ref_override is not None:
+                key_write_ref = key_ref_override and self.fory.ref_tracking
+            if value_serializer is not None and value_ref_override is not None:
+                value_write_ref = value_ref_override and self.fory.ref_tracking
             if key_write_ref:
                 chunk_header |= TRACKING_KEY_REF
             if value_write_ref:

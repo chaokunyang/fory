@@ -887,11 +887,17 @@ class JavaGenerator(BaseGenerator):
                 ):
                     return self.PRIMITIVE_ARRAY_MAP[field_type.element_type.kind]
             element_type = self.generate_type(field_type.element_type, True)
+            if self.is_ref_target_type(field_type.element_type):
+                ref_annotation = "@Ref" if element_ref else "@Ref(enable=false)"
+                element_type = f"{ref_annotation} {element_type}"
             return f"List<{element_type}>"
 
         elif isinstance(field_type, MapType):
             key_type = self.generate_type(field_type.key_type, True)
             value_type = self.generate_type(field_type.value_type, True)
+            if self.is_ref_target_type(field_type.value_type):
+                ref_annotation = "@Ref" if field_type.value_ref else "@Ref(enable=false)"
+                value_type = f"{ref_annotation} {value_type}"
             return f"Map<{key_type}, {value_type}>"
 
         return "Object"
@@ -920,10 +926,14 @@ class JavaGenerator(BaseGenerator):
                 ):
                     return  # No import needed for primitive arrays
             imports.add("java.util.List")
+            if self.is_ref_target_type(field_type.element_type):
+                imports.add("org.apache.fory.annotation.Ref")
             self.collect_type_imports(field_type.element_type, imports)
 
         elif isinstance(field_type, MapType):
             imports.add("java.util.Map")
+            if self.is_ref_target_type(field_type.value_type):
+                imports.add("org.apache.fory.annotation.Ref")
             self.collect_type_imports(field_type.key_type, imports)
             self.collect_type_imports(field_type.value_type, imports)
 
@@ -943,6 +953,12 @@ class JavaGenerator(BaseGenerator):
         self.collect_array_imports(field, imports)
         if field.optional or field.ref or field.tag_id is not None or is_any:
             imports.add("org.apache.fory.annotation.ForyField")
+
+    def is_ref_target_type(self, field_type: FieldType) -> bool:
+        if not isinstance(field_type, NamedType):
+            return False
+        resolved = self.schema.get_type(field_type.name)
+        return isinstance(resolved, (Message, Union))
 
     def collect_array_imports(self, field: Field, imports: Set[str]) -> None:
         """Collect imports for primitive array type annotations."""

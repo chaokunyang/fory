@@ -154,6 +154,44 @@ func computeLocalNullable(typeResolver *TypeResolver, field reflect.StructField,
 	return nullableFlag
 }
 
+func applyNestedRefOverride(serializer Serializer, fieldType reflect.Type, foryTag ForyTag) Serializer {
+	if !foryTag.NestedRefSet || !foryTag.NestedRefValid {
+		return serializer
+	}
+	switch fieldType.Kind() {
+	case reflect.Slice:
+		if len(foryTag.NestedRef) < 1 {
+			return serializer
+		}
+		override := foryTag.NestedRef[0]
+		if sliceSer, ok := serializer.(*sliceSerializer); ok {
+			sliceSer.elemTrackRef = &override
+			return serializer
+		}
+		if sliceSer, ok := serializer.(sliceSerializer); ok {
+			sliceSer.elemTrackRef = &override
+			return sliceSer
+		}
+	case reflect.Map:
+		if len(foryTag.NestedRef) < 2 {
+			return serializer
+		}
+		keyOverride := foryTag.NestedRef[0]
+		valueOverride := foryTag.NestedRef[1]
+		if mapSer, ok := serializer.(*mapSerializer); ok {
+			mapSer.keyTrackRef = &keyOverride
+			mapSer.valueTrackRef = &valueOverride
+			return serializer
+		}
+		if mapSer, ok := serializer.(mapSerializer); ok {
+			mapSer.keyTrackRef = &keyOverride
+			mapSer.valueTrackRef = &valueOverride
+			return mapSer
+		}
+	}
+	return serializer
+}
+
 // initFields initializes fields from local struct type using TypeResolver
 func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 	// If we have fieldDefs from type_def (remote meta), use them
@@ -215,6 +253,7 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 			// For struct fields with interface element types, use sliceDynSerializer
 			fieldSerializer = mustNewSliceDynSerializer(fieldType.Elem())
 		}
+		fieldSerializer = applyNestedRefOverride(fieldSerializer, fieldType, foryTag)
 
 		// Get TypeId for the serializer, fallback to deriving from kind
 		fieldTypeId := typeResolver.getTypeIdByType(fieldType)

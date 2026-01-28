@@ -630,18 +630,20 @@ public class MapSerializersTest extends ForyTestBase {
     }
   }
 
-  @Test
-  public void testMapElementRefOverrideReadRespectsHeader() {
+  @Test(dataProvider = "enableCodegen")
+  public void testMapElementRefOverrideReadRespectsHeader(boolean enableCodegen) {
     Fory foryNoRef =
         builder()
             .withLanguage(Language.JAVA)
             .withRefTracking(true)
+            .withCodegen(enableCodegen)
             .requireClassRegistration(true)
             .build();
     Fory foryRef =
         builder()
             .withLanguage(Language.JAVA)
             .withRefTracking(true)
+            .withCodegen(enableCodegen)
             .requireClassRegistration(true)
             .build();
     foryNoRef.register(MapRefItem.class, 9101);

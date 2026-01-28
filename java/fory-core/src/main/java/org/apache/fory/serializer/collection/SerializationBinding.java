@@ -22,6 +22,7 @@ package org.apache.fory.serializer.collection;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassInfoHolder;
+import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.serializer.Serializer;
 
 // This polymorphic interface has cost, do not expose it as a public class
@@ -61,9 +62,11 @@ interface SerializationBinding {
 
   final class JavaSerializationBinding implements SerializationBinding {
     private final Fory fory;
+    private final RefResolver refResolver;
 
     JavaSerializationBinding(Fory fory) {
       this.fory = fory;
+      this.refResolver = fory.getRefResolver();
     }
 
     @Override
@@ -113,6 +116,10 @@ interface SerializationBinding {
 
     @Override
     public Object read(MemoryBuffer buffer, Serializer serializer) {
+      if (fory.trackingRef() && serializer.needToWriteRef()) {
+        // Preserve a dummy ref ID so serializer.read() can call reference() safely.
+        refResolver.preserveRefId(-1);
+      }
       return serializer.read(buffer);
     }
 
@@ -125,9 +132,11 @@ interface SerializationBinding {
   final class XlangSerializationBinding implements SerializationBinding {
 
     private final Fory fory;
+    private final RefResolver refResolver;
 
     XlangSerializationBinding(Fory fory) {
       this.fory = fory;
+      this.refResolver = fory.getRefResolver();
     }
 
     @Override
@@ -177,6 +186,10 @@ interface SerializationBinding {
 
     @Override
     public Object read(MemoryBuffer buffer, Serializer serializer) {
+      if (fory.trackingRef() && serializer.needToWriteRef()) {
+        // Preserve a dummy ref ID so serializer.xread() can call reference() safely.
+        refResolver.preserveRefId(-1);
+      }
       return serializer.xread(buffer);
     }
 

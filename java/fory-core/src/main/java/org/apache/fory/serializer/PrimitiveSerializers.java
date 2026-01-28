@@ -67,19 +67,19 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class Uint8Serializer extends Serializer<Integer> {
+  public static final class Uint8Serializer extends Serializers.CrossLanguageCompatibleSerializer<Integer> {
     public Uint8Serializer(Fory fory) {
       super(fory, Integer.class);
     }
 
     @Override
-    public void xwrite(MemoryBuffer buffer, Integer value) {
+    public void write(MemoryBuffer buffer, Integer value) {
       Preconditions.checkArgument(value >= 0 && value <= 255);
       buffer.writeByte(value.byteValue());
     }
 
     @Override
-    public Integer xread(MemoryBuffer buffer) {
+    public Integer read(MemoryBuffer buffer) {
       int b = buffer.readByte();
       return b >>> 24;
     }
@@ -91,13 +91,13 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public void xwrite(MemoryBuffer buffer, Integer value) {
+    public void write(MemoryBuffer buffer, Integer value) {
       Preconditions.checkArgument(value >= 0 && value <= 65535);
       buffer.writeByte(value.byteValue());
     }
 
     @Override
-    public Integer xread(MemoryBuffer buffer) {
+    public Integer read(MemoryBuffer buffer) {
       int b = buffer.readByte();
       return b >>> 16;
     }

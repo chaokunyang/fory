@@ -486,6 +486,39 @@ public interface Expression {
     }
   }
 
+  class EnumExpression extends AbstractExpression {
+    private final Enum<?> value;
+    private final TypeRef<?> type;
+
+    public EnumExpression(Enum<?> value) {
+      super(new Expression[0]);
+      Preconditions.checkNotNull(value, "Enum value must not be null");
+      this.value = value;
+      this.type = TypeRef.of(value.getDeclaringClass());
+    }
+
+    @Override
+    public TypeRef<?> type() {
+      return type;
+    }
+
+    @Override
+    public ExprCode doGenCode(CodegenContext ctx) {
+      String enumClassName = ReflectionUtils.getLiteralName(value.getDeclaringClass());
+      String enumValue = enumClassName + "." + value.name();
+      return new ExprCode(FalseLiteral, Code.exprValue(getRawType(type), enumValue));
+    }
+
+    public Enum<?> getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return value.getDeclaringClass().getName() + "." + value.name();
+    }
+  }
+
   class Null extends AbstractExpression {
     private TypeRef<?> type;
     private final boolean typedNull;

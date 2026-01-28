@@ -1248,8 +1248,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       if (trackingRef) {
         bitmap =
             new ListExpression(
-                new Invoke(buffer, "writeByte", ofInt(CollectionFlags.TRACKING_REF)),
-                ofInt(CollectionFlags.TRACKING_REF));
+                new Invoke(
+                    buffer, "writeByte", ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF)),
+                ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF));
       } else {
         bitmap =
             new Invoke(

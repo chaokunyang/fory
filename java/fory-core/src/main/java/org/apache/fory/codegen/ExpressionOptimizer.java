@@ -22,6 +22,7 @@ package org.apache.fory.codegen;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
 import static org.apache.fory.type.TypeUtils.getRawType;
 
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -29,6 +30,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import org.apache.fory.codegen.Expression.EnumExpression;
+import org.apache.fory.codegen.Expression.Literal;
 import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.SerializableSupplier;
@@ -90,6 +94,15 @@ public class ExpressionOptimizer {
     for (Expression expression : cutPoint) {
       if (expression == null) {
         continue;
+      }
+      if (expression instanceof Literal) {
+        continue;
+      }
+      if (expression instanceof EnumExpression) {
+        EnumExpression expr = (EnumExpression) expression;
+        if (Modifier.isPublic(expr.getEnumValue().getClass().getModifiers())) {
+          continue;
+        }
       }
       Preconditions.checkArgument(
           expression.type() != PRIMITIVE_VOID_TYPE, "Cut on block is not supported currently.");

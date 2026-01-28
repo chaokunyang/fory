@@ -497,6 +497,10 @@ public interface Expression {
       this.type = TypeRef.of(value.getDeclaringClass());
     }
 
+    public Enum<?> getEnumValue() {
+      return value;
+    }
+
     @Override
     public TypeRef<?> type() {
       return type;

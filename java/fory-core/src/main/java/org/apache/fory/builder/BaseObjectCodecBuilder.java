@@ -1190,6 +1190,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       elemSerializer = uninline(elemSerializer);
       Expression action;
       if (trackingRef) {
+        // declared elem type may be Object, but all actual elem are same type,
+        // and they don't track ref, so we still need actual ref flags.
         Literal trackingRefFlag = ofInt(CollectionFlags.TRACKING_REF);
         Expression trackRef = eq(new BitAnd(flags, trackingRefFlag), trackingRefFlag, "trackRef");
         Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
@@ -1222,6 +1224,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 invokeGenerated(ctx, cutPoint, writeBuilder, "sameElementClassWrite", false),
                 differentTypeWrite);
       } else {
+        // if declared elem type don't track ref, all elements must not write ref.
         Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
         Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
         builder.add(hasNull);

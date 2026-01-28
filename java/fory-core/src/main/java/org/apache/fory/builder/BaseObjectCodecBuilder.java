@@ -2204,13 +2204,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     walkPath.add(elementType.toString());
     boolean finalType = isMonomorphic(elemClass);
-    boolean trackingRef = typeResolver(resolver -> resolver.needToWriteRef(elementType));
+    boolean trackingRef = fory.trackingRef();
     Literal trackingRefFlag = ofInt(CollectionFlags.TRACKING_REF);
-    Expression trackRef =
-        eq(new BitAnd(flags.inline(), trackingRefFlag), trackingRefFlag, "trackRef");
+    Expression trackRef = eq(new BitAnd(flags, trackingRefFlag), trackingRefFlag, "trackRef");
     if (finalType) {
       Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
-      Expression hasNull = eq(new BitAnd(flags.inline(), hasNullFlag), hasNullFlag, "hasNull");
+      Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
       if (trackingRef) {
         builder.add(
             trackRef,
@@ -2251,12 +2250,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       builder.add(sameElementClass);
       Expression action;
       if (trackingRef) {
-        // Same element class read start
-        ListExpression readBuilder = new ListExpression(elemSerializer);
-        readBuilder.add(
-            readContainerElements(
-                elementType, true, elemSerializer, null, buffer, collection, size));
-        // Same element class read end
+        Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
+        Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
+        builder.add(hasNull);
         Set<Expression> cutPoint = ofHashSet(buffer, collection, size);
         Expression differentElemTypeRead =
             invokeGenerated(
@@ -2265,16 +2261,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 readContainerElements(elementType, true, null, null, buffer, collection, size),
                 "differentTypeElemsRead",
                 false);
-        Expression refAction = new If(sameElementClass, readBuilder, differentElemTypeRead);
-
-        Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
-        Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
-        // Same element class read start
-        ListExpression noRefReadBuilder = new ListExpression(elemSerializer);
-        noRefReadBuilder.add(
-            readContainerElements(
-                elementType, false, elemSerializer, hasNull, buffer, collection, size));
-        // Same element class read end
         Set<Expression> noRefCutPoint = ofHashSet(buffer, collection, size, hasNull);
         Expression noRefDifferentTypeElemsRead =
             invokeGenerated(
@@ -2283,10 +2269,19 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 readContainerElements(elementType, false, null, hasNull, buffer, collection, size),
                 "differentTypeElemsNoRefRead",
                 false);
-        Expression noRefAction =
-            new If(sameElementClass, noRefReadBuilder, noRefDifferentTypeElemsRead);
+        ListExpression sameTypeRead = new ListExpression(elemSerializer);
+        sameTypeRead.add(
+            new If(
+                trackRef,
+                readContainerElements(
+                    elementType, true, elemSerializer, null, buffer, collection, size),
+                readContainerElements(
+                    elementType, false, elemSerializer, hasNull, buffer, collection, size),
+                false));
+        Expression diffTypeRead =
+            new If(trackRef, differentElemTypeRead, noRefDifferentTypeElemsRead, false);
         builder.add(trackRef);
-        action = new If(trackRef, refAction, noRefAction, false);
+        action = new If(sameElementClass, sameTypeRead, diffTypeRead);
       } else {
         Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
         Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
@@ -2363,7 +2358,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression read;
     if (finalType) {
       if (trackingRef) {
-        read = deserializeFor(buffer, elementType, callback, invokeHint);
+        read =
+            readRef(
+                buffer,
+                callback,
+                () -> deserializeForNotNull(buffer, elementType, invokeHint));
       } else {
         invokeHint.add(hasNull);
         read =
@@ -2515,9 +2514,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean valueMonomorphic = isMonomorphic(valueType);
     Class<?> keyTypeRawType = keyType.getRawType();
     Class<?> valueTypeRawType = valueType.getRawType();
-    boolean trackingKeyRef = needWriteRef(keyType);
-    boolean trackingValueRef = needWriteRef(valueType);
-    boolean inline = keyMonomorphic && valueMonomorphic && (!trackingKeyRef || !trackingValueRef);
+    boolean trackingKeyRef = fory.trackingRef();
+    boolean trackingValueRef = fory.trackingRef();
+    boolean inline =
+        keyMonomorphic
+            && valueMonomorphic
+            && (!needWriteRef(keyType) || !needWriteRef(valueType));
     ListExpression expressions = new ListExpression(buffer);
     Expression trackKeyRef = neq(bitand(chunkHeader, ofInt(TRACKING_KEY_REF)), ofInt(0));
     Expression trackValueRef = neq(bitand(chunkHeader, ofInt(TRACKING_VALUE_REF)), ofInt(0));
@@ -2563,7 +2565,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 keyHint.add(keySerializerExpr);
               }
               if (genValueMethod) {
-                valueHint.add(valueSerializer);
+                valueHint.add(valueSerializerExpr);
               }
               if (trackingKeyRef) {
                 keyAction =

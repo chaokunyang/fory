@@ -928,6 +928,7 @@ void RunTestNullableFieldCompatibleNotNull(const std::string &data_file);
 void RunTestNullableFieldCompatibleNull(const std::string &data_file);
 void RunTestRefSchemaConsistent(const std::string &data_file);
 void RunTestRefCompatible(const std::string &data_file);
+void RunTestCollectionElementRefOverride(const std::string &data_file);
 void RunTestCircularRefSchemaConsistent(const std::string &data_file);
 void RunTestCircularRefCompatible(const std::string &data_file);
 void RunTestUnsignedSchemaConsistentSimple(const std::string &data_file);

@@ -662,9 +662,7 @@ public class MapSerializersTest extends ForyTestBase {
     MapOuterRef readNoRef = (MapOuterRef) foryRef.deserialize(noRefBytes);
     Map.Entry<MapRefItem, MapRefItem> entry = readNoRef.map.entrySet().iterator().next();
     Assert.assertNotSame(
-        entry.getKey(),
-        entry.getValue(),
-        "No-ref header should not preserve key/value identity");
+        entry.getKey(), entry.getValue(), "No-ref header should not preserve key/value identity");
 
     MapRefItem refShared = entry.getKey();
     MapOuterRef outerRef = new MapOuterRef();

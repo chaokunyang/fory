@@ -2396,8 +2396,7 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     // Java round-trip should not preserve element identity due to @Ref(enable=false)
     byte[] javaBytes = fory.serialize(container);
-    RefOverrideContainer javaResult =
-        (RefOverrideContainer) fory.deserialize(javaBytes);
+    RefOverrideContainer javaResult = (RefOverrideContainer) fory.deserialize(javaBytes);
     Assert.assertNotSame(
         javaResult.listField.get(0),
         javaResult.listField.get(1),
@@ -2418,17 +2417,11 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     RefOverrideElement shared = result.listField.get(0);
     Assert.assertSame(
-        result.listField.get(1),
-        shared,
-        "After xlang round-trip: list elements should share ref");
+        result.listField.get(1), shared, "After xlang round-trip: list elements should share ref");
     Assert.assertSame(
-        result.mapField.get("k1"),
-        shared,
-        "After xlang round-trip: map value k1 should share ref");
+        result.mapField.get("k1"), shared, "After xlang round-trip: map value k1 should share ref");
     Assert.assertSame(
-        result.mapField.get("k2"),
-        shared,
-        "After xlang round-trip: map value k2 should share ref");
+        result.mapField.get("k2"), shared, "After xlang round-trip: map value k2 should share ref");
     Assert.assertEquals(shared.id, 7);
     Assert.assertEquals(shared.name, "shared_element");
   }

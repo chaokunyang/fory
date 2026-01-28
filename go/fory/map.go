@@ -425,16 +425,20 @@ func (s mapSerializer) readSingleValue(ctx *ReadContext, buf *ByteBuffer, ctxErr
 			return reflect.Value{}
 		}
 
+		ser := ti.Serializer
 		valType := ti.Type
 		if valType == nil {
 			valType = staticType
 		}
+		valType, ser = wrapMapSerializerIfNeeded(staticType, valType, ser)
 		v := reflect.New(valType).Elem()
-		ti.Serializer.ReadData(ctx, v)
+		ser.ReadData(ctx, v)
 		if ctx.HasError() {
 			return reflect.Value{}
 		}
-		refResolver.Reference(v)
+		if _, ok := ser.(*ptrToValueSerializer); !ok {
+			refResolver.Reference(v)
+		}
 		return v
 	}
 
@@ -450,6 +454,7 @@ func (s mapSerializer) readSingleValue(ctx *ReadContext, buf *ByteBuffer, ctxErr
 		}
 		ser = typeInfo.Serializer
 		valType = typeInfo.Type
+		valType, ser = wrapMapSerializerIfNeeded(staticType, valType, ser)
 	} else {
 		ser = declaredSer
 		if ser == nil {
@@ -485,6 +490,8 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 	trackValRef := (header & TRACKING_VALUE_REF) != 0
 	keyDeclType := (header & KEY_DECL_TYPE) != 0
 	valDeclType := (header & VALUE_DECL_TYPE) != 0
+	declaredKeyType := keyType
+	declaredValueType := valueType
 
 	chunkSize := int(buf.ReadUint8(ctxErr))
 	if ctx.HasError() {
@@ -502,6 +509,7 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 		}
 		keySer = keyTypeInfo.Serializer
 		keyType = keyTypeInfo.Type
+		keyType, keySer = wrapMapSerializerIfNeeded(declaredKeyType, keyType, keySer)
 	} else {
 		keySer = s.keySerializer
 		if keySer == nil {
@@ -516,6 +524,7 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 		}
 		valSer = valueTypeInfo.Serializer
 		valueType = valueTypeInfo.Type
+		valueType, valSer = wrapMapSerializerIfNeeded(declaredValueType, valueType, valSer)
 	} else {
 		valSer = s.valueSerializer
 		if valSer == nil {
@@ -634,6 +643,30 @@ func unwrapInterface(v reflect.Value) reflect.Value {
 		return v.Elem()
 	}
 	return v
+}
+
+func wrapMapSerializerIfNeeded(declaredType, actualType reflect.Type, serializer Serializer) (reflect.Type, Serializer) {
+	if declaredType == nil || actualType == nil || serializer == nil {
+		return actualType, serializer
+	}
+	if declaredType.Kind() == reflect.Ptr {
+		if actualType.Kind() == reflect.Ptr {
+			return actualType, serializer
+		}
+		return reflect.PtrTo(actualType), &ptrToValueSerializer{valueSerializer: serializer}
+	}
+	if declaredType.Kind() == reflect.Interface {
+		if actualType.AssignableTo(declaredType) {
+			return actualType, serializer
+		}
+		if actualType.Kind() != reflect.Ptr {
+			ptrType := reflect.PtrTo(actualType)
+			if ptrType.AssignableTo(declaredType) {
+				return ptrType, &ptrToValueSerializer{valueSerializer: serializer}
+			}
+		}
+	}
+	return actualType, serializer
 }
 
 // UnwrapReflectValue is exported for use by other packages

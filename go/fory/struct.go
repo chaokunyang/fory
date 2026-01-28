@@ -168,10 +168,6 @@ func applyNestedRefOverride(serializer Serializer, fieldType reflect.Type, foryT
 			sliceSer.elemTrackRef = &override
 			return serializer
 		}
-		if sliceSer, ok := serializer.(sliceSerializer); ok {
-			sliceSer.elemTrackRef = &override
-			return sliceSer
-		}
 	case reflect.Map:
 		if len(foryTag.NestedRef) < 2 {
 			return serializer

@@ -201,7 +201,7 @@ func (s *sliceSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect
 	}
 
 	// WriteData elements
-	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	trackRefs = (collectFlag & CollectionTrackingRef) != 0
 	elemRefMode := RefModeNone
 	if trackRefs {
 		elemRefMode = RefModeTracking

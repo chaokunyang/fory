@@ -271,7 +271,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         binding.writeRef(buffer, key, keyClassInfoWriteCache);
       } else {
         buffer.writeByte(VALUE_HAS_NULL);
-        binding.writeNonRef(buffer, key, keyClassInfoWriteCache);
+        binding.writeNonRef(buffer, key);
       }
       return;
     }
@@ -302,7 +302,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         binding.writeRef(buffer, value, valueClassInfoWriteCache);
       } else {
         buffer.writeByte(KEY_HAS_NULL);
-        binding.writeNonRef(buffer, value, valueClassInfoWriteCache);
+        binding.writeNonRef(buffer, value);
       }
       return;
     }

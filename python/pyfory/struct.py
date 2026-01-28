@@ -1170,6 +1170,8 @@ class StructFieldSerializerVisitor(TypeVisitor):
         # Infer type recursively for type such as List[Dict[str, str]]
         elem_type, elem_ref_override = unwrap_ref(elem_type)
         elem_serializer = infer_field("item", elem_type, self, types_path=types_path)
+        if elem_ref_override is None:
+            return ListSerializer(self.fory, list, elem_serializer)
         return ListSerializer(self.fory, list, elem_serializer, elem_ref_override)
 
     def visit_set(self, field_name, elem_type, types_path=None):
@@ -1179,6 +1181,8 @@ class StructFieldSerializerVisitor(TypeVisitor):
         # Infer type recursively for type such as Set[Dict[str, str]]
         elem_type, elem_ref_override = unwrap_ref(elem_type)
         elem_serializer = infer_field("item", elem_type, self, types_path=types_path)
+        if elem_ref_override is None:
+            return SetSerializer(self.fory, set, elem_serializer)
         return SetSerializer(self.fory, set, elem_serializer, elem_ref_override)
 
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
@@ -1190,6 +1194,8 @@ class StructFieldSerializerVisitor(TypeVisitor):
         value_type, value_ref_override = unwrap_ref(value_type)
         key_serializer = infer_field("key", key_type, self, types_path=types_path)
         value_serializer = infer_field("value", value_type, self, types_path=types_path)
+        if key_ref_override is None and value_ref_override is None:
+            return MapSerializer(self.fory, dict, key_serializer, value_serializer)
         return MapSerializer(
             self.fory,
             dict,

@@ -17,6 +17,7 @@
 
 """C++ code generator."""
 
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 import typing
@@ -155,6 +156,93 @@ class CppGenerator(BaseGenerator):
             else:
                 local.append(item)
         return imported, local
+
+    def _normalize_import_path(self, path_str: str) -> str:
+        if not path_str:
+            return path_str
+        try:
+            return str(Path(path_str).resolve())
+        except Exception:
+            return path_str
+
+    def _import_group_name(self, import_path: str) -> str:
+        if not import_path:
+            return "imported"
+        base = Path(import_path).stem or import_path
+        safe = re.sub(r"[^0-9A-Za-z_]", "_", base).strip("_")
+        if not safe or not safe[0].isalpha():
+            safe = f"imported_{safe}" if safe else "imported"
+        return self.to_snake_case(safe)
+
+    def _collect_imported_groups(
+        self,
+    ) -> List[Tuple[str, List[Enum], List[Union], List[Message]]]:
+        if not self.schema.imports:
+            return []
+
+        groups: Dict[str, Dict[str, List[object]]] = {}
+
+        def add_group(item: object, key: str, bucket: str) -> None:
+            if not key:
+                return
+            entry = groups.setdefault(
+                key, {"enums": [], "unions": [], "messages": []}
+            )
+            entry[bucket].append(item)
+
+        def location_key(item: object) -> str:
+            location = getattr(item, "location", None)
+            file_path = getattr(location, "file", None) if location else None
+            return self._normalize_import_path(file_path or "")
+
+        for enum in self.schema.enums:
+            if self.is_imported_type(enum):
+                add_group(enum, location_key(enum), "enums")
+        for union in self.schema.unions:
+            if self.is_imported_type(union):
+                add_group(union, location_key(union), "unions")
+        for message in self.schema.messages:
+            if self.is_imported_type(message):
+                add_group(message, location_key(message), "messages")
+
+        ordered: List[Tuple[str, List[Enum], List[Union], List[Message]]] = []
+        used: Set[str] = set()
+
+        base_dir = None
+        if self.schema.source_file:
+            base_dir = Path(self.schema.source_file).resolve().parent
+
+        for imp in self.schema.imports:
+            if base_dir:
+                key = self._normalize_import_path(str((base_dir / imp.path).resolve()))
+            else:
+                key = self._normalize_import_path(imp.path)
+            if key in groups and key not in used:
+                group = groups[key]
+                ordered.append(
+                    (
+                        self._import_group_name(imp.path),
+                        group["enums"],
+                        group["unions"],
+                        group["messages"],
+                    )
+                )
+                used.add(key)
+
+        for key in sorted(groups.keys()):
+            if key in used:
+                continue
+            group = groups[key]
+            ordered.append(
+                (
+                    self._import_group_name(key),
+                    group["enums"],
+                    group["unions"],
+                    group["messages"],
+                )
+            )
+
+        return ordered
 
     def generate_bytes_methods(self, class_name: str, indent: str) -> List[str]:
         lines: List[str] = []
@@ -1701,25 +1789,28 @@ class CppGenerator(BaseGenerator):
 
         lines.append("")
         lines.append("namespace detail {")
-        lines.append(
-            "inline void register_all_types(fory::serialization::BaseFory& fory) {"
-        )
-        for enum in imported_enums:
-            self.generate_enum_registration(lines, enum, [])
-        for union in imported_unions:
-            self.generate_union_registration(lines, union, [])
-        for message in imported_messages:
-            self.generate_message_registration(lines, message, [])
-        lines.append("    register_types(fory);")
-        lines.append("}")
-        lines.append("")
+        imported_groups = self._collect_imported_groups()
+        for name, enums, unions, messages in imported_groups:
+            lines.append(
+                f"inline void register_imported_types_{name}(fory::serialization::BaseFory& fory) {{"
+            )
+            for enum in enums:
+                self.generate_enum_registration(lines, enum, [])
+            for union in unions:
+                self.generate_union_registration(lines, union, [])
+            for message in messages:
+                self.generate_message_registration(lines, message, [])
+            lines.append("}")
+            lines.append("")
         lines.append("inline fory::serialization::ThreadSafeFory& get_fory() {")
         lines.append("  static fory::serialization::ThreadSafeFory fory = []() {")
         lines.append(
             "    auto fory = fory::serialization::Fory::builder()"
             ".xlang(true).track_ref(true).compatible(true).build_thread_safe();"
         )
-        lines.append("    register_all_types(fory);")
+        for name, _, _, _ in imported_groups:
+            lines.append(f"    register_imported_types_{name}(fory);")
+        lines.append("    register_types(fory);")
         lines.append("    return fory;")
         lines.append("  }();")
         lines.append("  return fory;")

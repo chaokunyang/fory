@@ -1190,19 +1190,37 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       elemSerializer = uninline(elemSerializer);
       Expression action;
       if (trackingRef) {
+        Literal trackingRefFlag = ofInt(CollectionFlags.TRACKING_REF);
+        Expression trackRef = eq(new BitAnd(flags, trackingRefFlag), trackingRefFlag, "trackRef");
+        Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
+        Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
+        builder.add(trackRef);
+        builder.add(hasNull);
         ListExpression writeBuilder = new ListExpression(elemSerializer);
         writeBuilder.add(
-            writeContainerElements(
-                elementType, true, elemSerializer, null, buffer, collection, size));
-        Set<Expression> cutPoint = ofHashSet(buffer, collection, size);
+            new If(
+                trackRef,
+                writeContainerElements(
+                    elementType, true, elemSerializer, null, buffer, collection, size),
+                writeContainerElements(
+                    elementType, false, elemSerializer, hasNull, buffer, collection, size),
+                false));
+        Set<Expression> cutPoint = ofHashSet(buffer, collection, size, trackRef, hasNull);
         if (maybeDecl) {
           cutPoint.add(flags);
         }
+        Expression differentTypeWrite =
+            new If(
+                trackRef,
+                writeContainerElements(elementType, true, null, null, buffer, collection, size),
+                writeContainerElements(
+                    elementType, false, null, hasNull, buffer, collection, size),
+                false);
         action =
             new If(
                 sameElementClass,
                 invokeGenerated(ctx, cutPoint, writeBuilder, "sameElementClassWrite", false),
-                writeContainerElements(elementType, true, null, null, buffer, collection, size));
+                differentTypeWrite);
       } else {
         Literal hasNullFlag = ofInt(CollectionFlags.HAS_NULL);
         Expression hasNull = eq(new BitAnd(flags, hasNullFlag), hasNullFlag, "hasNull");
@@ -1354,8 +1372,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean finalType = isMonomorphic(rawType);
     elem = tryCastIfPublic(elem, elementType);
     Expression write;
-    if (finalType) {
-      if (trackingRef) {
+    if (trackingRef) {
+      if (finalType) {
         write =
             new If(
                 not(writeRefOrNull(buffer, elem)),
@@ -1363,22 +1381,35 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       } else {
         write =
             new If(
-                hasNull,
-                serializeFor(elem, buffer, elementType, generateNewMethod),
-                serializeForNotNull(elem, buffer, elementType));
-      }
-    } else {
-      if (trackingRef) {
-        write =
-            new If(
                 not(writeRefOrNull(buffer, elem)),
                 serializeForNotNull(elem, buffer, elementType, elemSerializer, generateNewMethod));
-      } else {
+      }
+    } else {
+      if (hasNull != null) {
+        Expression writeNotNullInNullBranch =
+            finalType
+                ? serializeForNotNull(elem, buffer, elementType, generateNewMethod)
+                : serializeForNotNull(elem, buffer, elementType, elemSerializer, generateNewMethod);
+        Expression writeNotNull =
+            finalType
+                ? serializeForNotNull(elem, buffer, elementType, generateNewMethod)
+                : serializeForNotNull(elem, buffer, elementType, elemSerializer, generateNewMethod);
         write =
             new If(
                 hasNull,
-                serializeFor(elem, buffer, elementType, elemSerializer, generateNewMethod),
-                serializeForNotNull(elem, buffer, elementType, elemSerializer, generateNewMethod));
+                new If(
+                    eqNull(elem),
+                    new Invoke(buffer, "writeByte", Literal.ofByte(Fory.NULL_FLAG)),
+                    new ListExpression(
+                        new Invoke(buffer, "writeByte", Literal.ofByte(Fory.NOT_NULL_VALUE_FLAG)),
+                        writeNotNullInNullBranch)),
+                writeNotNull,
+                false);
+      } else {
+        write =
+            finalType
+                ? serializeForNotNull(elem, buffer, elementType, generateNewMethod)
+                : serializeForNotNull(elem, buffer, elementType, elemSerializer, generateNewMethod);
       }
     }
     return new ListExpression(elem, write);

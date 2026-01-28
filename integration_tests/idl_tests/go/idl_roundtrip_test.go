@@ -30,6 +30,7 @@ import (
 	graphpkg "github.com/apache/fory/integration_tests/idl_tests/go/graph"
 	monster "github.com/apache/fory/integration_tests/idl_tests/go/monster"
 	optionaltypes "github.com/apache/fory/integration_tests/idl_tests/go/optional_types"
+	rootpkg "github.com/apache/fory/integration_tests/idl_tests/go/root"
 	treepkg "github.com/apache/fory/integration_tests/idl_tests/go/tree"
 )
 
@@ -66,6 +67,30 @@ func buildAddressBook() AddressBook {
 	return AddressBook{
 		People:       []Person{person},
 		PeopleByName: map[string]Person{person.Name: person},
+	}
+}
+
+func buildRootHolder() rootpkg.MultiHolder {
+	owner := rootpkg.Person{
+		Name: "Alice",
+		Id:   123,
+		Pet: rootpkg.DogAnimal(&rootpkg.Dog{
+			Name:       "Rex",
+			BarkVolume: 5,
+		}),
+	}
+	book := rootpkg.AddressBook{
+		People:       []rootpkg.Person{owner},
+		PeopleByName: map[string]rootpkg.Person{owner.Name: owner},
+	}
+	root := rootpkg.TreeNode{
+		Id:   "root",
+		Name: "root",
+	}
+	return rootpkg.MultiHolder{
+		Book:  book,
+		Root:  root,
+		Owner: owner,
 	}
 }
 
@@ -151,6 +176,19 @@ func TestToBytesFromBytes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(animal, decodedAnimal) {
 		t.Fatalf("animal to_bytes roundtrip mismatch")
+	}
+
+	multi := buildRootHolder()
+	multiBytes, err := multi.ToBytes()
+	if err != nil {
+		t.Fatalf("root to_bytes: %v", err)
+	}
+	var decodedMulti rootpkg.MultiHolder
+	if err := decodedMulti.FromBytes(multiBytes); err != nil {
+		t.Fatalf("root from_bytes: %v", err)
+	}
+	if !reflect.DeepEqual(multi, decodedMulti) {
+		t.Fatalf("root to_bytes roundtrip mismatch")
 	}
 }
 

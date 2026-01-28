@@ -43,6 +43,7 @@ import graph.Edge;
 import graph.Graph;
 import graph.GraphForyRegistration;
 import graph.Node;
+import root.MultiHolder;
 import optional_types.AllOptionalTypes;
 import optional_types.OptionalHolder;
 import optional_types.OptionalTypesForyRegistration;
@@ -118,6 +119,33 @@ public class IdlRoundTripTest {
     byte[] animalBytes = animal.toBytes();
     Animal decodedAnimal = Animal.fromBytes(animalBytes);
     Assert.assertEquals(decodedAnimal, animal);
+
+    root.Person owner = new root.Person();
+    owner.setName("Alice");
+    owner.setId(123);
+    root.Dog rootDog = new root.Dog();
+    rootDog.setName("Rex");
+    rootDog.setBarkVolume(5);
+    owner.setPet(root.Animal.ofDog(rootDog));
+
+    root.AddressBook multiBook = new root.AddressBook();
+    multiBook.setPeople(Arrays.asList(owner));
+    Map<String, root.Person> peopleByName = new HashMap<>();
+    peopleByName.put(owner.getName(), owner);
+    multiBook.setPeopleByName(peopleByName);
+
+    root.TreeNode rootNode = new root.TreeNode();
+    rootNode.setId("root");
+    rootNode.setName("root");
+
+    MultiHolder multi = new MultiHolder();
+    multi.setBook(multiBook);
+    multi.setRoot(rootNode);
+    multi.setOwner(owner);
+
+    byte[] multiBytes = multi.toBytes();
+    MultiHolder decodedMulti = MultiHolder.fromBytes(multiBytes);
+    Assert.assertEquals(decodedMulti, multi);
   }
 
   @Test

@@ -30,6 +30,7 @@ use idl_tests::complex_fbs::{self, Container, Note, Payload, ScalarPack, Status}
 use idl_tests::monster::{self, Color, Monster, Vec3};
 use idl_tests::optional_types::{self, AllOptionalTypes, OptionalHolder, OptionalUnion};
 use idl_tests::any_example::{self, AnyHolder, AnyInner, AnyUnion};
+use idl_tests::root;
 use idl_tests::{graph, tree};
 
 fn build_address_book() -> AddressBook {
@@ -68,6 +69,40 @@ fn build_address_book() -> AddressBook {
     }
 }
 
+fn build_root_holder() -> root::MultiHolder {
+    let owner = root::Person {
+        name: "Alice".to_string(),
+        id: 123,
+        email: String::new(),
+        tags: Vec::new(),
+        scores: HashMap::new(),
+        salary: 0.0,
+        phones: Vec::new(),
+        pet: root::Animal::Dog(root::Dog {
+            name: "Rex".to_string(),
+            bark_volume: 5,
+        }),
+    };
+
+    let book = root::AddressBook {
+        people: vec![owner.clone()],
+        people_by_name: HashMap::from([(owner.name.clone(), owner.clone())]),
+    };
+
+    let root_node = root::TreeNode {
+        id: "root".to_string(),
+        name: "root".to_string(),
+        children: Vec::new(),
+        parent: None,
+    };
+
+    root::MultiHolder {
+        book,
+        root: root_node,
+        owner,
+    }
+}
+
 #[test]
 fn test_to_bytes_from_bytes() {
     let book = build_address_book();
@@ -84,6 +119,12 @@ fn test_to_bytes_from_bytes() {
     let decoded_animal =
         Animal::from_bytes(&animal_bytes).expect("deserialize animal");
     assert_eq!(decoded_animal, animal);
+
+    let multi = build_root_holder();
+    let multi_bytes = multi.to_bytes().expect("serialize root");
+    let decoded_multi =
+        root::MultiHolder::from_bytes(&multi_bytes).expect("deserialize root");
+    assert_eq!(decoded_multi, multi);
 }
 
 fn build_primitive_types() -> addressbook::PrimitiveTypes {

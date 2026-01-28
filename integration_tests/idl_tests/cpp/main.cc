@@ -35,6 +35,7 @@
 #include "graph.h"
 #include "monster.h"
 #include "optional_types.h"
+#include "root.h"
 #include "tree.h"
 
 namespace {
@@ -234,6 +235,34 @@ fory::Result<void, fory::Error> RunRoundTrip() {
   if (!(animal_roundtrip == animal)) {
     return fory::Unexpected(
         fory::Error::invalid("animal to_bytes roundtrip mismatch"));
+  }
+
+  root::Person multi_owner;
+  multi_owner.set_name("Alice");
+  multi_owner.set_id(123);
+  root::Dog multi_dog;
+  multi_dog.set_name("Rex");
+  multi_dog.set_bark_volume(5);
+  *multi_owner.mutable_pet() = root::Animal::dog(multi_dog);
+
+  root::AddressBook multi_book;
+  *multi_book.mutable_people() = {multi_owner};
+  *multi_book.mutable_people_by_name() = {{multi_owner.name(), multi_owner}};
+
+  root::TreeNode multi_root;
+  multi_root.set_id("root");
+  multi_root.set_name("root");
+
+  root::MultiHolder multi;
+  *multi.mutable_book() = multi_book;
+  *multi.mutable_root() = multi_root;
+  *multi.mutable_owner() = multi_owner;
+
+  FORY_TRY(multi_bytes, multi.to_bytes());
+  FORY_TRY(multi_roundtrip, root::MultiHolder::from_bytes(multi_bytes));
+  if (!(multi_roundtrip == multi)) {
+    return fory::Unexpected(
+        fory::Error::invalid("root to_bytes roundtrip mismatch"));
   }
 
   FORY_TRY(bytes, fory.serialize(book));

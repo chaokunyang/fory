@@ -28,6 +28,7 @@ import monster
 import optional_types
 import graph
 import tree
+import root
 import numpy as np
 import pyfory
 
@@ -62,6 +63,34 @@ def build_address_book() -> "addressbook.AddressBook":
     )
 
 
+def build_root_holder() -> "root.MultiHolder":
+    owner = root.Person(
+        name="Alice",
+        id=123,
+        email="",
+        tags=[],
+        scores={},
+        salary=0.0,
+        phones=[],
+        pet=root.Animal.dog(root.Dog(name="Rex", bark_volume=5)),
+    )
+    book = root.AddressBook(
+        people=[owner],
+        people_by_name={owner.name: owner},
+    )
+    root_node = root.TreeNode(
+        id="root",
+        name="root",
+        children=[],
+        parent=None,
+    )
+    return root.MultiHolder(
+        book=book,
+        root=root_node,
+        owner=owner,
+    )
+
+
 def local_roundtrip(fory: pyfory.Fory, book: "addressbook.AddressBook") -> None:
     data = fory.serialize(book)
     decoded = fory.deserialize(data)
@@ -79,6 +108,12 @@ def bytes_roundtrip_addressbook(book: "addressbook.AddressBook") -> None:
     animal_payload = animal.to_bytes()
     decoded_animal = addressbook.Animal.from_bytes(animal_payload)
     assert decoded_animal == animal
+
+
+def bytes_roundtrip_root(multi: "root.MultiHolder") -> None:
+    payload = multi.to_bytes()
+    decoded = root.MultiHolder.from_bytes(payload)
+    assert decoded == multi
 
 
 def file_roundtrip(fory: pyfory.Fory, book: "addressbook.AddressBook") -> None:
@@ -474,6 +509,7 @@ def main() -> int:
 
     book = build_address_book()
     bytes_roundtrip_addressbook(book)
+    bytes_roundtrip_root(build_root_holder())
     local_roundtrip(fory, book)
     file_roundtrip(fory, book)
 

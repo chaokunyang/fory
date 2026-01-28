@@ -1812,7 +1812,10 @@ fn test_collection_element_ref_override() {
     fory.register::<RefOverrideContainer>(702).unwrap();
 
     let outer: RefOverrideContainer = fory.deserialize(&bytes).unwrap();
-    assert!(!outer.list_field.is_empty(), "list_field should not be empty");
+    assert!(
+        !outer.list_field.is_empty(),
+        "list_field should not be empty"
+    );
 
     let shared = outer.list_field[0].clone();
     let mut map = HashMap::new();

@@ -18,14 +18,13 @@
 """CLI entry point for the Fory IDL compiler."""
 
 import argparse
+import copy
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from fory_compiler.frontend.base import FrontendError
-from fory_compiler.frontend.fdl import FDLFrontend
-from fory_compiler.frontend.fbs import FBSFrontend
-from fory_compiler.frontend.proto import ProtoFrontend
+from fory_compiler.frontend.utils import parse_idl_file, resolve_import_path
 from fory_compiler.ir.ast import Schema
 from fory_compiler.ir.emitter import FDLEmitter
 from fory_compiler.ir.validator import SchemaValidator
@@ -37,55 +36,6 @@ class ImportError(Exception):
     """Error during import resolution."""
 
     pass
-
-
-def get_frontend(file_path: Path):
-    """Select the correct frontend for a file."""
-    frontends = [FDLFrontend(), ProtoFrontend(), FBSFrontend()]
-    for frontend in frontends:
-        if frontend.supports_file(file_path):
-            return frontend
-    raise ValueError(f"Unsupported file extension: {file_path.suffix}")
-
-
-def parse_idl_file(file_path: Path) -> Schema:
-    """Parse a single IDL file and return its schema."""
-    frontend = get_frontend(file_path)
-    return frontend.parse_file(file_path)
-
-
-def resolve_import_path(
-    import_stmt: str,
-    importing_file: Path,
-    import_paths: List[Path],
-) -> Optional[Path]:
-    """
-    Resolve an import path by searching in multiple directories.
-
-    Search order:
-    1. Relative to the importing file's directory
-    2. Each import path in order (from -I / --proto_path / --import_path)
-
-    Args:
-        import_stmt: The import path string from the import statement
-        importing_file: The file containing the import statement
-        import_paths: List of additional search directories
-
-    Returns:
-        Resolved Path if found, None otherwise
-    """
-    # First, try relative to the importing file
-    relative_path = (importing_file.parent / import_stmt).resolve()
-    if relative_path.exists():
-        return relative_path
-
-    # Then try each import path
-    for search_path in import_paths:
-        candidate = (search_path / import_stmt).resolve()
-        if candidate.exists():
-            return candidate
-
-    return None
 
 
 def resolve_imports(
@@ -122,7 +72,7 @@ def resolve_imports(
 
     # Return cached schema if available
     if file_path in cache:
-        return cache[file_path]
+        return copy.deepcopy(cache[file_path])
 
     visited.add(file_path)
 
@@ -172,8 +122,46 @@ def resolve_imports(
         source_format=schema.source_format,
     )
 
-    cache[file_path] = merged_schema
+    cache[file_path] = copy.deepcopy(merged_schema)
     return merged_schema
+
+
+def go_package_info(schema: Schema) -> Tuple[Optional[str], str]:
+    """Return (import_path, package_name) for Go."""
+    go_package = schema.get_option("go_package")
+    if go_package:
+        if ";" in go_package:
+            import_path, package_name = go_package.split(";", 1)
+            return import_path, package_name
+        import_path = go_package
+        package_name = import_path.rstrip("/").split("/")[-1]
+        return import_path, package_name
+    if schema.package:
+        return None, schema.package.split(".")[-1]
+    return None, ""
+
+
+def resolve_go_module_root(base_go_out: Path, schema: Schema) -> Path:
+    """Infer the Go module root for output layout."""
+    _, package_name = go_package_info(schema)
+    if package_name and base_go_out.name == package_name:
+        return base_go_out.parent
+    return base_go_out
+
+
+def resolve_go_output_dir(base_go_out: Path, schema: Schema) -> Path:
+    """Resolve Go output dir for a schema based on go_package/package."""
+    import_path, package_name = go_package_info(schema)
+    if package_name and base_go_out.name == package_name:
+        return base_go_out
+    if import_path:
+        last_segment = import_path.rstrip("/").split("/")[-1]
+        if package_name and last_segment == package_name:
+            return base_go_out / package_name
+        return base_go_out
+    if package_name:
+        return base_go_out / package_name
+    return base_go_out
 
 
 def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
@@ -323,6 +311,7 @@ def compile_file(
     go_nested_type_style: Optional[str] = None,
     emit_fdl: bool = False,
     emit_fdl_path: Optional[Path] = None,
+    resolve_cache: Optional[Dict[Path, Schema]] = None,
 ) -> bool:
     """Compile a single IDL file with import resolution.
 
@@ -336,7 +325,7 @@ def compile_file(
 
     # Parse and resolve imports
     try:
-        schema = resolve_imports(file_path, import_paths)
+        schema = resolve_imports(file_path, import_paths, cache=resolve_cache)
     except OSError as e:
         print(f"Error reading {file_path}: {e}", file=sys.stderr)
         return False
@@ -395,6 +384,95 @@ def compile_file(
             print(f"  Generated: {lang_output / f.path}")
 
     return True
+
+
+def compile_file_recursive(
+    file_path: Path,
+    lang_output_dirs: Dict[str, Path],
+    package_override: Optional[str],
+    import_paths: List[Path],
+    go_nested_type_style: Optional[str],
+    emit_fdl: bool,
+    emit_fdl_path: Optional[Path],
+    generated: Set[Path],
+    stack: Set[Path],
+    resolve_cache: Dict[Path, Schema],
+    go_module_root: Optional[Path],
+) -> bool:
+    file_path = file_path.resolve()
+    if file_path in generated:
+        return True
+    if file_path in stack:
+        raise ImportError(f"Circular import detected: {file_path}")
+
+    stack.add(file_path)
+    try:
+        schema = parse_idl_file(file_path)
+    except OSError as e:
+        print(f"Error reading {file_path}: {e}", file=sys.stderr)
+        stack.remove(file_path)
+        return False
+    except (FrontendError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        stack.remove(file_path)
+        return False
+
+    if "go" in lang_output_dirs and go_module_root is None:
+        go_module_root = resolve_go_module_root(lang_output_dirs["go"], schema)
+
+    effective_outputs = lang_output_dirs
+    if "go" in lang_output_dirs:
+        go_root = go_module_root or lang_output_dirs["go"]
+        go_out = resolve_go_output_dir(go_root, schema)
+        if go_out != lang_output_dirs["go"]:
+            effective_outputs = dict(lang_output_dirs)
+            effective_outputs["go"] = go_out
+
+    for imp in schema.imports:
+        import_path = resolve_import_path(imp.path, file_path, import_paths)
+        if import_path is None:
+            searched = [str(file_path.parent)]
+            searched.extend(str(p) for p in import_paths)
+            line = imp.location.line if imp.location else imp.line
+            column = imp.location.column if imp.location else imp.column
+            print(
+                f"Import error: Import not found: {imp.path}\n"
+                f"  at line {line}, column {column}\n"
+                f"  Searched in: {', '.join(searched)}",
+                file=sys.stderr,
+            )
+            stack.remove(file_path)
+            return False
+        if not compile_file_recursive(
+            import_path,
+            lang_output_dirs,
+            None,
+            import_paths,
+            go_nested_type_style,
+            emit_fdl,
+            emit_fdl_path,
+            generated,
+            stack,
+            resolve_cache,
+            go_module_root,
+        ):
+            stack.remove(file_path)
+            return False
+
+    stack.remove(file_path)
+    ok = compile_file(
+        file_path,
+        effective_outputs,
+        package_override,
+        import_paths,
+        go_nested_type_style,
+        emit_fdl,
+        emit_fdl_path,
+        resolve_cache,
+    )
+    if ok:
+        generated.add(file_path)
+    return ok
 
 
 def cmd_compile(args: argparse.Namespace) -> int:
@@ -458,21 +536,31 @@ def cmd_compile(args: argparse.Namespace) -> int:
         out_dir.mkdir(parents=True, exist_ok=True)
 
     success = True
+    generated: Set[Path] = set()
+    resolve_cache: Dict[Path, Schema] = {}
     for file_path in args.files:
         if not file_path.exists():
             print(f"Error: File not found: {file_path}", file=sys.stderr)
             success = False
             continue
 
-        if not compile_file(
-            file_path,
-            lang_output_dirs,
-            args.package,
-            import_paths,
-            args.go_nested_type_style,
-            args.emit_fdl,
-            args.emit_fdl_path,
-        ):
+        try:
+            if not compile_file_recursive(
+                file_path,
+                lang_output_dirs,
+                args.package,
+                import_paths,
+                args.go_nested_type_style,
+                args.emit_fdl,
+                args.emit_fdl_path,
+                generated,
+                set(),
+                resolve_cache,
+                None,
+            ):
+                success = False
+        except ImportError as e:
+            print(f"Import error: {e}", file=sys.stderr)
             success = False
 
     return 0 if success else 1

@@ -53,6 +53,7 @@ GO_OUTPUT_OVERRIDES = {
     "root.idl": IDL_DIR / "go" / "root",
     "any_example.fdl": IDL_DIR / "go" / "any_example",
     "any_example.proto": IDL_DIR / "go" / "any_example_pb",
+    "complex_pb.proto": IDL_DIR / "go" / "complex_pb",
 }
 
 

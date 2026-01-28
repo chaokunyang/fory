@@ -17,11 +17,11 @@
 
 """Rust code generator."""
 
-import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
+from fory_compiler.frontend.utils import parse_idl_file
 from fory_compiler.ir.ast import (
     Message,
     Enum,
@@ -32,6 +32,7 @@ from fory_compiler.ir.ast import (
     NamedType,
     ListType,
     MapType,
+    Schema,
 )
 from fory_compiler.ir.types import PrimitiveKind
 
@@ -110,92 +111,70 @@ class RustGenerator(BaseGenerator):
                 local.append(item)
         return imported, local
 
-    def _normalize_import_path(self, path_str: str) -> str:
-        if not path_str:
-            return path_str
+    def _load_schema(self, file_path: str) -> Optional[Schema]:
+        if not file_path:
+            return None
+        if not hasattr(self, "_schema_cache"):
+            self._schema_cache = {}
+        cache: Dict[Path, Schema] = self._schema_cache
+        path = Path(file_path).resolve()
+        if path in cache:
+            return cache[path]
         try:
-            return str(Path(path_str).resolve())
+            schema = parse_idl_file(path)
         except Exception:
-            return path_str
+            return None
+        cache[path] = schema
+        return schema
 
-    def _import_group_name(self, import_path: str) -> str:
-        if not import_path:
-            return "imported"
-        base = Path(import_path).stem or import_path
-        safe = re.sub(r"[^0-9A-Za-z_]", "_", base).strip("_")
-        if not safe or not safe[0].isalpha():
-            safe = f"imported_{safe}" if safe else "imported"
-        return self.to_snake_case(safe)
+    def _module_name_for_schema(self, schema: Schema) -> str:
+        if schema.package:
+            return schema.package.replace(".", "_")
+        return "generated"
 
-    def _collect_imported_groups(
-        self,
-    ) -> List[Tuple[str, List[Enum], List[Union], List[Message]]]:
-        if not self.schema.imports:
-            return []
+    def _module_name_for_type(self, type_def: object) -> Optional[str]:
+        location = getattr(type_def, "location", None)
+        file_path = getattr(location, "file", None) if location else None
+        schema = self._load_schema(file_path)
+        if schema is None:
+            return None
+        return self._module_name_for_schema(schema)
 
-        groups: Dict[str, Dict[str, List[object]]] = {}
-
-        def add_group(item: object, key: str, bucket: str) -> None:
-            if not key:
-                return
-            entry = groups.setdefault(
-                key, {"enums": [], "unions": [], "messages": []}
-            )
-            entry[bucket].append(item)
-
-        def location_key(item: object) -> str:
-            location = getattr(item, "location", None)
-            file_path = getattr(location, "file", None) if location else None
-            return self._normalize_import_path(file_path or "")
-
-        for enum in self.schema.enums:
-            if self.is_imported_type(enum):
-                add_group(enum, location_key(enum), "enums")
-        for union in self.schema.unions:
-            if self.is_imported_type(union):
-                add_group(union, location_key(union), "unions")
-        for message in self.schema.messages:
-            if self.is_imported_type(message):
-                add_group(message, location_key(message), "messages")
-
-        ordered: List[Tuple[str, List[Enum], List[Union], List[Message]]] = []
+    def _collect_imported_modules(self) -> List[str]:
+        modules: Set[str] = set()
+        for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
+            if not self.is_imported_type(type_def):
+                continue
+            module = self._module_name_for_type(type_def)
+            if module:
+                modules.add(module)
+        ordered: List[str] = []
         used: Set[str] = set()
-
-        base_dir = None
         if self.schema.source_file:
             base_dir = Path(self.schema.source_file).resolve().parent
-
-        for imp in self.schema.imports:
-            if base_dir:
-                key = self._normalize_import_path(str((base_dir / imp.path).resolve()))
-            else:
-                key = self._normalize_import_path(imp.path)
-            if key in groups and key not in used:
-                group = groups[key]
-                ordered.append(
-                    (
-                        self._import_group_name(imp.path),
-                        group["enums"],
-                        group["unions"],
-                        group["messages"],
-                    )
-                )
-                used.add(key)
-
-        for key in sorted(groups.keys()):
-            if key in used:
+            for imp in self.schema.imports:
+                candidate = (base_dir / imp.path).resolve()
+                schema = self._load_schema(str(candidate))
+                if schema is None:
+                    continue
+                module = self._module_name_for_schema(schema)
+                if module in used:
+                    continue
+                ordered.append(module)
+                used.add(module)
+        for module in sorted(modules):
+            if module in used:
                 continue
-            group = groups[key]
-            ordered.append(
-                (
-                    self._import_group_name(key),
-                    group["enums"],
-                    group["unions"],
-                    group["messages"],
-                )
-            )
-
+            ordered.append(module)
         return ordered
+
+    def _format_imported_type_name(self, type_name: str, module: str) -> str:
+        if "." in type_name:
+            parts = type_name.split(".")
+            parents = [self.to_snake_case(name) for name in parts[:-1]]
+            path = "::".join(parents + [parts[-1]])
+            return f"crate::{module}::{path}"
+        return f"crate::{module}::{type_name}"
 
     def generate_bytes_impl(self, type_name: str) -> List[str]:
         lines = []
@@ -239,16 +218,22 @@ class RustGenerator(BaseGenerator):
 
         # Generate enums (top-level)
         for enum in self.schema.enums:
+            if self.is_imported_type(enum):
+                continue
             lines.extend(self.generate_enum(enum))
             lines.append("")
 
         # Generate unions (top-level)
         for union in self.schema.unions:
+            if self.is_imported_type(union):
+                continue
             lines.extend(self.generate_union(union))
             lines.append("")
 
         # Generate modules for nested types
         for message in self.schema.messages:
+            if self.is_imported_type(message):
+                continue
             module_lines = self.generate_nested_module(message)
             if module_lines:
                 lines.extend(module_lines)
@@ -256,6 +241,8 @@ class RustGenerator(BaseGenerator):
 
         # Generate messages (top-level only)
         for message in self.schema.messages:
+            if self.is_imported_type(message):
+                continue
             lines.extend(self.generate_message(message))
             lines.append("")
 
@@ -635,6 +622,13 @@ class RustGenerator(BaseGenerator):
 
         elif isinstance(field_type, NamedType):
             type_name = self.resolve_nested_type_name(field_type.name, parent_stack)
+            named_type = self.schema.get_type(field_type.name)
+            if named_type is not None and self.is_imported_type(named_type):
+                module = self._module_name_for_type(named_type)
+                if module:
+                    type_name = self._format_imported_type_name(
+                        field_type.name, module
+                    )
             if ref:
                 type_name = f"{pointer_type}<{type_name}>"
             if nullable:
@@ -774,41 +768,26 @@ class RustGenerator(BaseGenerator):
             "pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {"
         )
 
-        imported_enums, local_enums = self.split_imported_types(self.schema.enums)
-        imported_unions, local_unions = self.split_imported_types(self.schema.unions)
-        imported_messages, local_messages = self.split_imported_types(
-            self.schema.messages
-        )
-
         # Register enums (top-level)
-        for enum in local_enums:
+        for enum in self.schema.enums:
+            if self.is_imported_type(enum):
+                continue
             self.generate_enum_registration(lines, enum, None)
 
         # Register unions (top-level)
-        for union in local_unions:
+        for union in self.schema.unions:
+            if self.is_imported_type(union):
+                continue
             self.generate_union_registration(lines, union, None)
 
         # Register messages (including nested types)
-        for message in local_messages:
+        for message in self.schema.messages:
+            if self.is_imported_type(message):
+                continue
             self.generate_message_registration(lines, message, None)
 
         lines.append("    Ok(())")
         lines.append("}")
-
-        imported_groups = self._collect_imported_groups()
-        for name, enums, unions, messages in imported_groups:
-            lines.append("")
-            lines.append(
-                f"fn register_imported_types_{name}(fory: &mut Fory) -> Result<(), fory::Error> {{"
-            )
-            for enum in enums:
-                self.generate_enum_registration(lines, enum, None)
-            for union in unions:
-                self.generate_union_registration(lines, union, None)
-            for message in messages:
-                self.generate_message_registration(lines, message, None)
-            lines.append("    Ok(())")
-            lines.append("}")
 
         return lines
 
@@ -824,9 +803,9 @@ class RustGenerator(BaseGenerator):
         lines.append("                .xlang(true)")
         lines.append("                .track_ref(true)")
         lines.append("                .compatible(true);")
-        for name, _, _, _ in self._collect_imported_groups():
+        for module in self._collect_imported_modules():
             lines.append(
-                f'            register_imported_types_{name}(&mut fory).expect("failed to register fory types");'
+                f'            crate::{module}::register_types(&mut fory).expect("failed to register fory types");'
             )
         lines.append(
             '            register_types(&mut fory).expect("failed to register fory types");'

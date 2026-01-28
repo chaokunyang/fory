@@ -16,12 +16,11 @@
 # under the License.
 
 """Java code generator."""
-
-import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union as TypingUnion
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
+from fory_compiler.frontend.utils import parse_idl_file
 from fory_compiler.ir.ast import (
     Message,
     Enum,
@@ -32,6 +31,7 @@ from fory_compiler.ir.ast import (
     NamedType,
     ListType,
     MapType,
+    Schema,
 )
 from fory_compiler.ir.types import PrimitiveKind
 
@@ -116,83 +116,81 @@ class JavaGenerator(BaseGenerator):
         except Exception:
             return path_str
 
-    def _import_group_name(self, import_path: str) -> str:
-        if not import_path:
-            return "Imported"
-        base = Path(import_path).stem or import_path
-        safe = re.sub(r"[^0-9A-Za-z_]", "_", base).strip("_")
-        if not safe or not safe[0].isalpha():
-            safe = f"imported_{safe}" if safe else "imported"
-        return self.to_pascal_case(safe)
+    def _load_schema(self, file_path: str) -> Optional[Schema]:
+        if not file_path:
+            return None
+        if not hasattr(self, "_schema_cache"):
+            self._schema_cache = {}
+        cache: Dict[Path, Schema] = self._schema_cache
+        path = Path(file_path).resolve()
+        if path in cache:
+            return cache[path]
+        try:
+            schema = parse_idl_file(path)
+        except Exception:
+            return None
+        cache[path] = schema
+        return schema
 
-    def _collect_imported_groups(
-        self,
-    ) -> List[Tuple[str, List[Enum], List[Union], List[Message]]]:
-        if not self.schema.imports:
-            return []
+    def _java_package_for_schema(self, schema: Schema) -> Optional[str]:
+        java_package = schema.get_option("java_package")
+        if java_package:
+            return java_package
+        return schema.package
 
-        groups: Dict[str, Dict[str, List[object]]] = {}
+    def _registration_class_name_for_schema(self, schema: Schema) -> str:
+        java_package = self._java_package_for_schema(schema)
+        if java_package:
+            parts = java_package.split(".")
+            return self.to_pascal_case(parts[-1]) + "ForyRegistration"
+        return "ForyRegistration"
 
-        def add_group(item: object, key: str, bucket: str) -> None:
-            if not key:
-                return
-            entry = groups.setdefault(
-                key, {"enums": [], "unions": [], "messages": []}
+    def _java_package_for_type(self, type_def: object) -> Optional[str]:
+        location = getattr(type_def, "location", None)
+        file_path = getattr(location, "file", None) if location else None
+        schema = self._load_schema(file_path)
+        if schema is None:
+            return None
+        return self._java_package_for_schema(schema)
+
+    def _collect_imported_packages(self) -> List[Tuple[str, str]]:
+        packages: Dict[str, str] = {}
+        for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
+            if not self.is_imported_type(type_def):
+                continue
+            java_package = self._java_package_for_type(type_def)
+            if not java_package:
+                continue
+            if java_package in packages:
+                continue
+            schema = self._load_schema(
+                getattr(getattr(type_def, "location", None), "file", None)
             )
-            entry[bucket].append(item)
+            if schema is None:
+                continue
+            packages[java_package] = self._registration_class_name_for_schema(schema)
 
-        def location_key(item: object) -> str:
-            location = getattr(item, "location", None)
-            file_path = getattr(location, "file", None) if location else None
-            return self._normalize_import_path(file_path or "")
-
-        for enum in self.schema.enums:
-            if self.is_imported_type(enum):
-                add_group(enum, location_key(enum), "enums")
-        for union in self.schema.unions:
-            if self.is_imported_type(union):
-                add_group(union, location_key(union), "unions")
-        for message in self.schema.messages:
-            if self.is_imported_type(message):
-                add_group(message, location_key(message), "messages")
-
-        ordered: List[Tuple[str, List[Enum], List[Union], List[Message]]] = []
+        ordered: List[Tuple[str, str]] = []
         used: Set[str] = set()
-
-        base_dir = None
         if self.schema.source_file:
             base_dir = Path(self.schema.source_file).resolve().parent
-
-        for imp in self.schema.imports:
-            if base_dir:
-                key = self._normalize_import_path(str((base_dir / imp.path).resolve()))
-            else:
-                key = self._normalize_import_path(imp.path)
-            if key in groups and key not in used:
-                group = groups[key]
-                ordered.append(
-                    (
-                        self._import_group_name(imp.path),
-                        group["enums"],
-                        group["unions"],
-                        group["messages"],
-                    )
+            for imp in self.schema.imports:
+                candidate = self._normalize_import_path(
+                    str((base_dir / imp.path).resolve())
                 )
-                used.add(key)
-
-        for key in sorted(groups.keys()):
-            if key in used:
+                schema = self._load_schema(candidate)
+                if schema is None:
+                    continue
+                java_package = self._java_package_for_schema(schema)
+                if not java_package or java_package in used:
+                    continue
+                reg_class = self._registration_class_name_for_schema(schema)
+                ordered.append((java_package, reg_class))
+                used.add(java_package)
+        for pkg, reg in sorted(packages.items()):
+            if pkg in used:
                 continue
-            group = groups[key]
-            ordered.append(
-                (
-                    self._import_group_name(key),
-                    group["enums"],
-                    group["unions"],
-                    group["messages"],
-                )
-            )
-
+            ordered.append((pkg, reg))
         return ordered
 
     def generate_bytes_methods(self, class_name: str) -> List[str]:
@@ -306,14 +304,20 @@ class JavaGenerator(BaseGenerator):
             # Generate separate files for each type
             # Generate enum files (top-level only, nested enums go inside message files)
             for enum in self.schema.enums:
+                if self.is_imported_type(enum):
+                    continue
                 files.append(self.generate_enum_file(enum))
 
             # Generate union files (top-level only, nested unions go inside message files)
             for union in self.schema.unions:
+                if self.is_imported_type(union):
+                    continue
                 files.append(self.generate_union_file(union))
 
             # Generate message files (includes nested types as inner classes)
             for message in self.schema.messages:
+                if self.is_imported_type(message):
+                    continue
                 files.append(self.generate_message_file(message))
 
             # Generate registration helper
@@ -525,16 +529,22 @@ class JavaGenerator(BaseGenerator):
 
         # Generate all top-level enums as static inner classes
         for enum in self.schema.enums:
+            if self.is_imported_type(enum):
+                continue
             for line in self.generate_nested_enum(enum):
                 lines.append(f"    {line}")
 
         # Generate all top-level unions as static inner classes
         for union in self.schema.unions:
+            if self.is_imported_type(union):
+                continue
             for line in self.generate_union_class(union, indent=0, nested=True):
                 lines.append(f"    {line}")
 
         # Generate all top-level messages as static inner classes
         for message in self.schema.messages:
+            if self.is_imported_type(message):
+                continue
             for line in self.generate_nested_message(message, indent=1):
                 lines.append(f"    {line}")
 
@@ -1024,6 +1034,11 @@ class JavaGenerator(BaseGenerator):
             return self.PRIMITIVE_MAP[field_type.kind]
 
         elif isinstance(field_type, NamedType):
+            named_type = self.schema.get_type(field_type.name)
+            if named_type is not None and self.is_imported_type(named_type):
+                java_package = self._java_package_for_type(named_type)
+                if java_package:
+                    return f"{java_package}.{field_type.name}"
             return field_type.name
 
         elif isinstance(field_type, ListType):
@@ -1364,11 +1379,11 @@ class JavaGenerator(BaseGenerator):
         lines.append(
             "        ThreadSafeFory fory = new SimpleForyPool(c -> Fory.builder().withXlang(true).withRefTracking(true).build());"
         )
-        imported_groups = self._collect_imported_groups()
-        if imported_groups:
+        imported_packages = self._collect_imported_packages()
+        if imported_packages:
             lines.append("        fory.registerCallback(f -> {")
-            for name, _, _, _ in imported_groups:
-                lines.append(f"            registerImportedTypes{name}(f);")
+            for java_package, reg_class in imported_packages:
+                lines.append(f"            {java_package}.{reg_class}.register(f);")
             lines.append("            register(f);")
             lines.append("        });")
         else:
@@ -1383,22 +1398,11 @@ class JavaGenerator(BaseGenerator):
         # When outer_classname is set, all top-level types become inner classes
         type_prefix = outer_classname if outer_classname else ""
 
-        imported_enums, local_enums = self.split_imported_types(self.schema.enums)
-        imported_unions, local_unions = self.split_imported_types(self.schema.unions)
-        imported_messages, local_messages = self.split_imported_types(
-            self.schema.messages
-        )
-
-        for name, enums, unions, messages in imported_groups:
-            lines.append(f"    private static void registerImportedTypes{name}(Fory fory) {{")
-            for enum in enums:
-                self.generate_enum_registration(lines, enum, type_prefix)
-            for union in unions:
-                self.generate_union_registration(lines, union, type_prefix)
-            for message in messages:
-                self.generate_message_registration(lines, message, type_prefix)
-            lines.append("    }")
-            lines.append("")
+        local_enums = [e for e in self.schema.enums if not self.is_imported_type(e)]
+        local_unions = [u for u in self.schema.unions if not self.is_imported_type(u)]
+        local_messages = [
+            m for m in self.schema.messages if not self.is_imported_type(m)
+        ]
         lines.append("    public static void register(Fory fory) {")
 
         # Register enums (top-level)

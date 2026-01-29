@@ -309,19 +309,15 @@ class CollectionFieldType(FieldType):
         self.element_type = element_type
 
     def create_serializer(self, resolver, type_):
-        from pyfory.serializer import ListSerializer, SetSerializer, override_ref_tracking
+        from pyfory.serializer import ListSerializer, SetSerializer
 
         elem_type = type_[1] if type_ and len(type_) >= 2 else None
         elem_serializer = self.element_type.create_serializer(resolver, elem_type)
         elem_override = getattr(self.element_type, "tracking_ref_override", None)
         if self.type_id == TypeId.LIST:
-            if elem_override is not None:
-                elem_serializer = override_ref_tracking(elem_serializer, elem_override)
-            return ListSerializer(resolver.fory, list, elem_serializer)
+            return ListSerializer(resolver.fory, list, elem_serializer, elem_override)
         elif self.type_id == TypeId.SET:
-            if elem_override is not None:
-                elem_serializer = override_ref_tracking(elem_serializer, elem_override)
-            return SetSerializer(resolver.fory, set, elem_serializer)
+            return SetSerializer(resolver.fory, set, elem_serializer, elem_override)
         else:
             raise ValueError(f"Unknown collection type: {self.type_id}")
 
@@ -350,13 +346,16 @@ class MapFieldType(FieldType):
         value_serializer = self.value_type.create_serializer(resolver, value_type)
         key_override = getattr(self.key_type, "tracking_ref_override", None)
         value_override = getattr(self.value_type, "tracking_ref_override", None)
-        from pyfory.serializer import MapSerializer, override_ref_tracking
+        from pyfory.serializer import MapSerializer
 
-        if key_override is not None:
-            key_serializer = override_ref_tracking(key_serializer, key_override)
-        if value_override is not None:
-            value_serializer = override_ref_tracking(value_serializer, value_override)
-        return MapSerializer(resolver.fory, dict, key_serializer, value_serializer)
+        return MapSerializer(
+            resolver.fory,
+            dict,
+            key_serializer,
+            value_serializer,
+            key_override,
+            value_override,
+        )
 
     def __repr__(self):
         return (

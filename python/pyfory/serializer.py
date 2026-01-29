@@ -1379,39 +1379,6 @@ class UnsupportedSerializer(Serializer):
         raise NotImplementedError(f"{self.type_} is not supported for xread")
 
 
-class RefTrackingOverrideSerializer(Serializer):
-    __slots__ = ("_inner",)
-
-    def __init__(self, inner: Serializer):
-        super().__init__(inner.fory, inner.type_)
-        self._inner = inner
-        self.need_to_write_ref = False
-
-    def write(self, buffer, value):
-        self._inner.write(buffer, value)
-
-    def read(self, buffer):
-        return self._inner.read(buffer)
-
-    def xwrite(self, buffer, value):
-        self._inner.xwrite(buffer, value)
-
-    def xread(self, buffer):
-        return self._inner.xread(buffer)
-
-
-def override_ref_tracking(serializer: Serializer, enabled):
-    if serializer is None or enabled is None:
-        return serializer
-    if enabled:
-        return serializer
-    if not serializer.need_to_write_ref:
-        return serializer
-    if isinstance(serializer, RefTrackingOverrideSerializer):
-        return serializer
-    return RefTrackingOverrideSerializer(serializer)
-
-
 __all__ = [
     # Base serializers (imported)
     "Serializer",
@@ -1484,6 +1451,4 @@ __all__ = [
     # Constants
     "typecode_dict",
     "typeid_code",
-    # Internal helpers
-    "override_ref_tracking",
 ]

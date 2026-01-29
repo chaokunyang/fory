@@ -34,8 +34,7 @@ import org.apache.fory.util.Preconditions;
 /** Serializers for java primitive types. */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class PrimitiveSerializers {
-  public static final class BooleanSerializer
-      extends CrossLanguageCompatibleSerializer<Boolean> {
+  public static final class BooleanSerializer extends CrossLanguageCompatibleSerializer<Boolean> {
     public BooleanSerializer(Fory fory, Class<?> cls) {
       super(fory, (Class) cls, false, true);
     }
@@ -51,8 +50,7 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class ByteSerializer
-      extends CrossLanguageCompatibleSerializer<Byte> {
+  public static final class ByteSerializer extends CrossLanguageCompatibleSerializer<Byte> {
     public ByteSerializer(Fory fory, Class<?> cls) {
       super(fory, (Class) cls, false, true);
     }
@@ -120,8 +118,7 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class ShortSerializer
-      extends CrossLanguageCompatibleSerializer<Short> {
+  public static final class ShortSerializer extends CrossLanguageCompatibleSerializer<Short> {
     public ShortSerializer(Fory fory, Class<?> cls) {
       super(fory, (Class) cls, false, true);
     }
@@ -137,8 +134,7 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class IntSerializer
-      extends CrossLanguageCompatibleSerializer<Integer> {
+  public static final class IntSerializer extends CrossLanguageCompatibleSerializer<Integer> {
     private final boolean compressNumber;
 
     public IntSerializer(Fory fory, Class<?> cls) {
@@ -204,8 +200,7 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class LongSerializer
-      extends CrossLanguageCompatibleSerializer<Long> {
+  public static final class LongSerializer extends CrossLanguageCompatibleSerializer<Long> {
     private final LongEncoding longEncoding;
 
     public LongSerializer(Fory fory, Class<?> cls) {
@@ -315,8 +310,7 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class FloatSerializer
-      extends CrossLanguageCompatibleSerializer<Float> {
+  public static final class FloatSerializer extends CrossLanguageCompatibleSerializer<Float> {
     public FloatSerializer(Fory fory, Class<?> cls) {
       super(fory, (Class) cls, false, true);
     }
@@ -332,8 +326,7 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class DoubleSerializer
-      extends CrossLanguageCompatibleSerializer<Double> {
+  public static final class DoubleSerializer extends CrossLanguageCompatibleSerializer<Double> {
     public DoubleSerializer(Fory fory, Class<?> cls) {
       super(fory, (Class) cls, false, true);
     }

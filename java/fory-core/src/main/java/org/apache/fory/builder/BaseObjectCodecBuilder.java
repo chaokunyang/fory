@@ -463,12 +463,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       }
       Expression action;
       if (useCollectionSerialization(typeRef)) {
-        action =
-            serializeForCollection(
-                buffer, inputObject, typeRef, serializer, false);
+        action = serializeForCollection(buffer, inputObject, typeRef, serializer, false);
       } else if (useMapSerialization(typeRef)) {
-        action =
-            serializeForMap(buffer, inputObject, typeRef, serializer, false);
+        action = serializeForMap(buffer, inputObject, typeRef, serializer, false);
       } else {
         action = serializeForNotNullObjectForField(inputObject, buffer, descriptor, serializer);
       }
@@ -1063,10 +1060,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   protected Expression writeCollectionData(
-      Expression buffer,
-      Expression collection,
-      Expression serializer,
-      TypeRef<?> elementType) {
+      Expression buffer, Expression collection, Expression serializer, TypeRef<?> elementType) {
     Invoke onCollectionWrite =
         new Invoke(
             serializer,
@@ -1147,8 +1141,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             new If(
                 trackRef,
                 writeContainerElements(elementType, true, null, null, buffer, collection, size),
-                writeContainerElements(
-                    elementType, false, null, hasNull, buffer, collection, size),
+                writeContainerElements(elementType, false, null, hasNull, buffer, collection, size),
                 false);
         action =
             new If(
@@ -1201,8 +1194,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       if (trackingRef) {
         bitmap =
             new ListExpression(
-                new Invoke(
-                    buffer, "writeByte", ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF)),
+                new Invoke(buffer, "writeByte", ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF)),
                 ofInt(CollectionFlags.DECL_SAME_TYPE_TRACKING_REF));
       } else {
         bitmap =
@@ -1481,13 +1473,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                         keySerializer,
                         valueSerializer);
               }
-              Expression writeChunk =
-                  writeChunk(
-                      buffer,
-                      entry,
-                      iterator,
-                      keyType,
-                      valueType);
+              Expression writeChunk = writeChunk(buffer, entry, iterator, keyType, valueType);
               return new ListExpression(
                   new Assign(entry, writeNullChunk),
                   new If(
@@ -1873,10 +1859,14 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       }
       if (useCollectionSerialization(typeRef)) {
         return readRef(
-            buffer, Function.identity(), () -> deserializeForCollection(buffer, typeRef, serializer, invokeHint));
+            buffer,
+            Function.identity(),
+            () -> deserializeForCollection(buffer, typeRef, serializer, invokeHint));
       } else if (useMapSerialization(typeRef)) {
         return readRef(
-            buffer, Function.identity(), () -> deserializeForMap(buffer, typeRef, serializer, invokeHint));
+            buffer,
+            Function.identity(),
+            () -> deserializeForMap(buffer, typeRef, serializer, invokeHint));
       } else {
         if (serializer != null) {
           return read(serializer, buffer, RefMode.TRACKING, OBJECT_TYPE);
@@ -2108,7 +2098,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return read(serializer, buffer, RefMode.NONE, returnType);
   }
 
-  protected Expression read(Expression serializer, Expression buffer, RefMode refMode, TypeRef<?> returnType) {
+  protected Expression read(
+      Expression serializer, Expression buffer, RefMode refMode, TypeRef<?> returnType) {
     Class<?> type = returnType.getRawType();
     Expression read;
     if (refMode == RefMode.NONE) {
@@ -2465,14 +2456,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               return exprs;
             });
     Set<Expression> chunkLoopCutPoints =
-        ofHashSet(
-            buffer,
-            newMap,
-            chunkHeader,
-            size,
-            mapSerializer,
-            keySerializer,
-            valueSerializer);
+        ofHashSet(buffer, newMap, chunkHeader, size, mapSerializer, keySerializer, valueSerializer);
     Expression chunkLoopExpr =
         invokeGenerated(ctx, chunkLoopCutPoints, chunksLoop, "readMapChunks", false);
     expressions.add(chunkLoopExpr, newMap);
@@ -2500,10 +2484,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return false;
     }
     // 1. for xlang, other language may send serialized string with ref tracking, we skip string ref
-    // because string is used commonly, we don't want introduce extra check ref header in data, because the
+    // because string is used commonly, we don't want introduce extra check ref header in data,
+    // because the
     // writer is also java, and it won't write string ref if `StringRefIgnored`.
     // 2. we can't use `needWriteRef`, the collection/map read must follow ref track header
-    // in serialized data. other language may write ref for elements even `needWriteRef` return false
+    // in serialized data. other language may write ref for elements even `needWriteRef` return
+    // false
     return fory.isCrossLanguage() || !fory.getConfig().isStringRefIgnored();
   }
 
@@ -2521,9 +2507,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean trackingKeyRef = mayTrackRefForCollectionRead(keyTypeRawType);
     boolean trackingValueRef = mayTrackRefForCollectionRead(valueTypeRawType);
     boolean inline =
-        keyMonomorphic
-            && valueMonomorphic
-            && (!needWriteRef(keyType) || !needWriteRef(valueType));
+        keyMonomorphic && valueMonomorphic && (!needWriteRef(keyType) || !needWriteRef(valueType));
     ListExpression expressions = new ListExpression(buffer);
     Expression trackKeyRefRaw = neq(bitand(chunkHeader, ofInt(TRACKING_KEY_REF)), ofInt(0));
     Expression trackValueRefRaw = neq(bitand(chunkHeader, ofInt(TRACKING_VALUE_REF)), ofInt(0));
@@ -2596,7 +2580,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                     new If(
                         trackValueRef,
                         deserializeRef(buffer, valueType, valueSerializerExpr, valueHint),
-                        deserializeForNotNullNoRef(buffer, valueType, valueSerializerExpr, valueHint),
+                        deserializeForNotNullNoRef(
+                            buffer, valueType, valueSerializerExpr, valueHint),
                         false);
               } else {
                 valueAction =

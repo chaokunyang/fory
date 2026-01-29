@@ -500,8 +500,7 @@ public class TypeUtils {
       List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
       if (typeArguments.size() == 1) {
         Class<?> rawType = getRawType(typeRef);
-        if (Iterable.class.isAssignableFrom(rawType)
-            && rawType.getTypeParameters().length == 1) {
+        if (Iterable.class.isAssignableFrom(rawType) && rawType.getTypeParameters().length == 1) {
           return typeArguments.get(0);
         }
       }

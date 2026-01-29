@@ -30,7 +30,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
 import org.apache.fory.codegen.Expression.EnumExpression;
 import org.apache.fory.codegen.Expression.Literal;
 import org.apache.fory.codegen.Expression.Reference;

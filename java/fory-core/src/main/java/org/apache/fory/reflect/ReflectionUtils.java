@@ -283,9 +283,8 @@ public class ReflectionUtils {
       if (returnTypes.size() == 1) {
         return returnTypes.iterator().next();
       } else {
-        throw new IllegalStateException(String.format(
-            "Methods %s has incompatible return types: %s", methods, returnTypes
-        ));
+        throw new IllegalStateException(
+            String.format("Methods %s has incompatible return types: %s", methods, returnTypes));
       }
     }
     Preconditions.checkArgument(returnTypes.size() == 1);

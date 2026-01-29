@@ -50,7 +50,10 @@ public abstract class Serializer<T> {
   protected final boolean immutable;
 
   public Serializer(Fory fory, Class<T> type) {
-    this(fory, type, fory.trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
+    this(
+        fory,
+        type,
+        fory.trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
         TypeUtils.isPrimitive(type) || TypeUtils.isBoxed(type));
   }
 
@@ -69,10 +72,9 @@ public abstract class Serializer<T> {
   }
 
   /**
-   * Write value to buffer, this method may write ref/null flags based passed {@code refMode},
-   * and the passed value can be null.
-   * Note that this method don't write type info, this method is mostly be used in cases the context
-   * has already knows the value type when deserialization.
+   * Write value to buffer, this method may write ref/null flags based passed {@code refMode}, and
+   * the passed value can be null. Note that this method don't write type info, this method is
+   * mostly be used in cases the context has already knows the value type when deserialization.
    */
   public void write(MemoryBuffer buffer, RefMode refMode, T value) {
     // noinspection Duplicates
@@ -84,7 +86,7 @@ public abstract class Serializer<T> {
       if (value == null) {
         buffer.writeByte(Fory.NULL_FLAG);
         return;
-      } else  {
+      } else {
         buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
       }
     }
@@ -92,17 +94,17 @@ public abstract class Serializer<T> {
   }
 
   /**
-   * Write value to buffer, this method do not write ref/null flags and the passed value must not be null
+   * Write value to buffer, this method do not write ref/null flags and the passed value must not be
+   * null
    */
   public void write(MemoryBuffer buffer, T value) {
     throw new UnsupportedOperationException("Please implement serialization for " + type);
   }
 
   /**
-   * Read value from buffer, this method may read ref/null flags based passed {@code refMode},
-   * and the read value can be null.
-   * Note that this method don't read type info, this method is mostly be used in cases the context
-   * has already knows the value type for deserialization.
+   * Read value from buffer, this method may read ref/null flags based passed {@code refMode}, and
+   * the read value can be null. Note that this method don't read type info, this method is mostly
+   * be used in cases the context has already knows the value type for deserialization.
    */
   public T read(MemoryBuffer buffer, RefMode refMode) {
     if (refMode == RefMode.TRACKING) {
@@ -134,10 +136,9 @@ public abstract class Serializer<T> {
   }
 
   /**
-   * Write value to buffer, this method may write ref/null flags based passed {@code refMode},
-   * and the passed value can be null.
-   * Note that this method don't write type info, this method is mostly be used in cases the context
-   * has already knows the value type when deserialization.
+   * Write value to buffer, this method may write ref/null flags based passed {@code refMode}, and
+   * the passed value can be null. Note that this method don't write type info, this method is
+   * mostly be used in cases the context has already knows the value type when deserialization.
    */
   public void xwrite(MemoryBuffer buffer, RefMode refMode, T value) {
     // noinspection Duplicates
@@ -149,7 +150,7 @@ public abstract class Serializer<T> {
       if (value == null) {
         buffer.writeByte(Fory.NULL_FLAG);
         return;
-      } else  {
+      } else {
         buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
       }
     }
@@ -157,17 +158,17 @@ public abstract class Serializer<T> {
   }
 
   /**
-   * Write value to buffer, this method do not write ref/null flags and the passed value must not be null
+   * Write value to buffer, this method do not write ref/null flags and the passed value must not be
+   * null
    */
   public void xwrite(MemoryBuffer buffer, T value) {
     throw new UnsupportedOperationException("Please implement xlang serialization for " + type);
   }
 
   /**
-   * Read value from buffer, this method may read ref/null flags based passed {@code refMode},
-   * and the read value can be null.
-   * Note that this method don't read type info, this method is mostly be used in cases the context
-   * has already knows the value type for deserialization.
+   * Read value from buffer, this method may read ref/null flags based passed {@code refMode}, and
+   * the read value can be null. Note that this method don't read type info, this method is mostly
+   * be used in cases the context has already knows the value type for deserialization.
    */
   public T xread(MemoryBuffer buffer, RefMode refMode) {
     if (refMode == RefMode.TRACKING) {

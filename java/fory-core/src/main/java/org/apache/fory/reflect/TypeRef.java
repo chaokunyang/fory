@@ -38,8 +38,8 @@ import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.meta.TypeExtMeta;
-import org.apache.fory.type.Types;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 
 // Mostly derived from Guava 32.1.2 com.google.common.reflect.TypeToken
 // https://github.com/google/guava/blob/9f6a3840/guava/src/com/google/common/reflect/TypeToken.java
@@ -93,7 +93,10 @@ public class TypeRef<T> {
   }
 
   private TypeRef(
-      Type type, TypeExtMeta typeExtMeta, List<TypeRef<?>> typeArguments, TypeRef<?> componentType) {
+      Type type,
+      TypeExtMeta typeExtMeta,
+      List<TypeRef<?>> typeArguments,
+      TypeRef<?> componentType) {
     this.type = type;
     this.typeExtMeta = typeExtMeta;
     this.typeArguments = typeArguments;

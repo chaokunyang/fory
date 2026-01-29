@@ -109,7 +109,8 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "codecConfig")
-  public void testSeqCodec(boolean xlang, boolean referenceTracking, boolean compressNumber, int fieldsRepeat) {
+  public void testSeqCodec(
+      boolean xlang, boolean referenceTracking, boolean compressNumber, int fieldsRepeat) {
     Class<?> structClass = Struct.createStructClass("Struct" + fieldsRepeat, fieldsRepeat);
     Fory fory =
         Fory.builder()

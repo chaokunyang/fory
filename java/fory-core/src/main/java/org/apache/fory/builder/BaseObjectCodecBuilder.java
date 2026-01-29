@@ -40,6 +40,7 @@ import static org.apache.fory.codegen.ExpressionUtils.neq;
 import static org.apache.fory.codegen.ExpressionUtils.neqNull;
 import static org.apache.fory.codegen.ExpressionUtils.not;
 import static org.apache.fory.codegen.ExpressionUtils.nullValue;
+import static org.apache.fory.codegen.ExpressionUtils.ofEnum;
 import static org.apache.fory.codegen.ExpressionUtils.or;
 import static org.apache.fory.codegen.ExpressionUtils.shift;
 import static org.apache.fory.codegen.ExpressionUtils.subtract;
@@ -72,6 +73,7 @@ import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_VOID_TYPE;
 import static org.apache.fory.type.TypeUtils.SET_TYPE;
 import static org.apache.fory.type.TypeUtils.SHORT_TYPE;
+import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 import static org.apache.fory.type.TypeUtils.getRawType;
 import static org.apache.fory.type.TypeUtils.isBoxed;
 import static org.apache.fory.type.TypeUtils.isPrimitive;
@@ -118,6 +120,7 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassInfo;
 import org.apache.fory.resolver.ClassInfoHolder;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.DeferedLazySerializer.DeferredLazyObjectSerializer;
@@ -1741,10 +1744,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return expressions;
   }
 
-  protected Expression readRefOrNull(Expression buffer) {
-    return new Invoke(refResolverRef, "readRefOrNull", "tag", PRIMITIVE_BYTE_TYPE, false, buffer);
-  }
-
   protected Expression tryPreserveRefId(Expression buffer) {
     return new Invoke(
         refResolverRef, "tryPreserveRefId", "refId", PRIMITIVE_INT_TYPE, false, buffer);
@@ -1860,6 +1859,38 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     } else {
       Expression value = deserializeForNotNull.get();
       return callback.apply(value);
+    }
+  }
+
+  private Expression deserializeRef(
+      Expression buffer, TypeRef<?> typeRef, Expression serializer, InvokeHint invokeHint) {
+    Class<?> cls = getRawType(typeRef);
+    if (isPrimitive(cls) || isBoxed(cls)) {
+      throw new IllegalStateException("Primitive type don't track ref: " + typeRef);
+    } else {
+      if (cls == String.class) {
+        return read(stringSerializerRef, buffer, RefMode.TRACKING, STRING_TYPE);
+      }
+      if (useCollectionSerialization(typeRef)) {
+        return readRef(
+            buffer, Function.identity(), () -> deserializeForCollection(buffer, typeRef, serializer, invokeHint));
+      } else if (useMapSerialization(typeRef)) {
+        return readRef(
+            buffer, Function.identity(), () -> deserializeForMap(buffer, typeRef, serializer, invokeHint));
+      } else {
+        if (serializer != null) {
+          return read(serializer, buffer, RefMode.TRACKING, OBJECT_TYPE);
+        }
+        if (isMonomorphic(cls)) {
+          Expression newSerializer = getOrCreateSerializer(cls);
+          Class<?> returnType =
+              ReflectionUtils.getReturnType(getRawType(newSerializer.type()), readMethodName);
+          return read(newSerializer, buffer, RefMode.TRACKING, TypeRef.of(returnType));
+        } else {
+          return readRef(
+              buffer, Function.identity(), () -> readForNotNullNonFinal(buffer, typeRef, null));
+        }
+      }
     }
   }
 
@@ -2074,8 +2105,19 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   protected Expression read(Expression serializer, Expression buffer, TypeRef<?> returnType) {
+    return read(serializer, buffer, RefMode.NONE, returnType);
+  }
+
+  protected Expression read(Expression serializer, Expression buffer, RefMode refMode, TypeRef<?> returnType) {
     Class<?> type = returnType.getRawType();
-    Expression read = new Invoke(serializer, readMethodName, returnType, buffer);
+    Expression read;
+    if (refMode == RefMode.NONE) {
+      read = new Invoke(serializer, readMethodName, returnType, buffer);
+    } else {
+      // janino take inherited generic method return type as return type of erased `T`.
+      read = new Invoke(serializer, readMethodName, OBJECT_TYPE, buffer, ofEnum(refMode));
+      read = cast(inline(read), returnType);
+    }
     if (ReflectionUtils.isMonomorphic(type) && !TypeUtils.hasExpandableLeafs(type)) {
       return read;
     }
@@ -2302,11 +2344,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression read;
     if (finalType) {
       if (trackingRef) {
-        read =
-            readRef(
-                buffer,
-                callback,
-                () -> deserializeForNotNull(buffer, elementType, invokeHint));
+        read = callback.apply(deserializeRef(buffer, elementType, null, invokeHint));
       } else {
         invokeHint.add(hasNull);
         read =
@@ -2320,11 +2358,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       invokeHint.add(elemSerializer);
       if (trackingRef) {
         // eager callback, no need to use ExprHolder.
-        read =
-            readRef(
-                buffer,
-                callback,
-                () -> deserializeForNotNull(buffer, elementType, elemSerializer, invokeHint));
+        read = callback.apply(deserializeRef(buffer, elementType, elemSerializer, invokeHint));
       } else {
         invokeHint.add(hasNull);
         read =
@@ -2525,11 +2559,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 keyAction =
                     new If(
                         trackKeyRef,
-                        readRef(
-                            buffer,
-                            expr -> expr,
-                            () ->
-                                deserializeForNotNull(buffer, keyType, keySerializerExpr, keyHint)),
+                        deserializeRef(buffer, keyType, keySerializerExpr, keyHint),
                         deserializeForNotNullNoRef(buffer, keyType, keySerializerExpr, keyHint),
                         false);
               } else {
@@ -2591,10 +2621,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression valueRead =
         new If(
             trackValueRef,
-            readRef(
-                buffer,
-                expr -> expr,
-                () -> deserializeForNotNull(buffer, valueType, valueSerializerExpr, valueHint)),
+            deserializeRef(buffer, valueType, valueSerializerExpr, valueHint),
             deserializeForNotNullNoRef(buffer, valueType, valueSerializerExpr, valueHint),
             false);
     valueRead = uninline(valueRead);

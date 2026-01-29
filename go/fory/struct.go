@@ -158,30 +158,60 @@ func applyNestedRefOverride(serializer Serializer, fieldType reflect.Type, foryT
 	if !foryTag.NestedRefSet || !foryTag.NestedRefValid {
 		return serializer
 	}
+	return applyNestedRefOverrideWithPath(serializer, fieldType, foryTag.NestedRef)
+}
+
+func applyNestedRefOverrideWithPath(serializer Serializer, fieldType reflect.Type, nestedRefs []bool) Serializer {
+	if serializer == nil || len(nestedRefs) == 0 {
+		return serializer
+	}
 	switch fieldType.Kind() {
 	case reflect.Slice:
-		if len(foryTag.NestedRef) < 1 {
+		if len(nestedRefs) < 1 {
 			return serializer
 		}
-		override := foryTag.NestedRef[0]
 		if sliceSer, ok := serializer.(*sliceSerializer); ok {
-			sliceSer.elemTrackRef = &override
-			return serializer
+			override := nestedRefs[0]
+			newSer := *sliceSer
+			newSer.referencable = newSer.referencable && override
+			if len(nestedRefs) > 1 && newSer.elemSerializer != nil {
+				newSer.elemSerializer = applyNestedRefOverrideWithPath(
+					newSer.elemSerializer,
+					fieldType.Elem(),
+					nestedRefs[1:],
+				)
+			}
+			return &newSer
 		}
 	case reflect.Map:
-		if len(foryTag.NestedRef) < 2 {
+		if len(nestedRefs) < 2 {
 			return serializer
 		}
-		keyOverride := foryTag.NestedRef[0]
-		valueOverride := foryTag.NestedRef[1]
+		keyOverride := nestedRefs[0]
+		valueOverride := nestedRefs[1]
 		if mapSer, ok := serializer.(*mapSerializer); ok {
-			mapSer.keyTrackRef = &keyOverride
-			mapSer.valueTrackRef = &valueOverride
-			return serializer
+			newSer := *mapSer
+			newSer.keyReferencable = newSer.keyReferencable && keyOverride
+			newSer.valueReferencable = newSer.valueReferencable && valueOverride
+			if len(nestedRefs) > 2 && newSer.valueSerializer != nil {
+				newSer.valueSerializer = applyNestedRefOverrideWithPath(
+					newSer.valueSerializer,
+					fieldType.Elem(),
+					nestedRefs[2:],
+				)
+			}
+			return &newSer
 		}
 		if mapSer, ok := serializer.(mapSerializer); ok {
-			mapSer.keyTrackRef = &keyOverride
-			mapSer.valueTrackRef = &valueOverride
+			mapSer.keyReferencable = mapSer.keyReferencable && keyOverride
+			mapSer.valueReferencable = mapSer.valueReferencable && valueOverride
+			if len(nestedRefs) > 2 && mapSer.valueSerializer != nil {
+				mapSer.valueSerializer = applyNestedRefOverrideWithPath(
+					mapSer.valueSerializer,
+					fieldType.Elem(),
+					nestedRefs[2:],
+				)
+			}
 			return mapSer
 		}
 	}

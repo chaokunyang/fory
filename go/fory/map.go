@@ -49,8 +49,6 @@ type mapSerializer struct {
 	keyReferencable   bool
 	valueReferencable bool
 	hasGenerics       bool // True when map is a struct field with declared key/value types
-	keyTrackRef       *bool
-	valueTrackRef     *bool
 }
 
 // Write handles ref tracking and type writing, then delegates to WriteData
@@ -125,11 +123,7 @@ func (s mapSerializer) writeNullValueEntry(ctx *WriteContext, key reflect.Value,
 	buf := ctx.Buffer()
 
 	if s.hasGenerics && s.keySerializer != nil {
-		keyTrackRef := s.keyReferencable
-		if s.keyTrackRef != nil {
-			keyTrackRef = s.keyReferencable && *s.keyTrackRef
-		}
-		if keyTrackRef && trackRef {
+		if s.keyReferencable && trackRef {
 			buf.WriteInt8(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF)
 			s.keySerializer.Write(ctx, RefModeTracking, false, false, key)
 		} else {
@@ -147,7 +141,7 @@ func (s mapSerializer) writeNullValueEntry(ctx *WriteContext, key reflect.Value,
 	}
 
 	header := int8(VALUE_HAS_NULL)
-	writeKeyRef := trackRef && keyTypeInfo.NeedWriteRef
+	writeKeyRef := trackRef && s.keyReferencable && keyTypeInfo.NeedWriteRef
 	if writeKeyRef {
 		header |= TRACKING_KEY_REF
 	}
@@ -166,11 +160,7 @@ func (s mapSerializer) writeNullKeyEntry(ctx *WriteContext, value reflect.Value,
 	buf := ctx.Buffer()
 
 	if s.hasGenerics && s.valueSerializer != nil {
-		valueTrackRef := s.valueReferencable
-		if s.valueTrackRef != nil {
-			valueTrackRef = s.valueReferencable && *s.valueTrackRef
-		}
-		if valueTrackRef && trackRef {
+		if s.valueReferencable && trackRef {
 			buf.WriteInt8(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF)
 			s.valueSerializer.Write(ctx, RefModeTracking, false, false, value)
 		} else {
@@ -188,7 +178,7 @@ func (s mapSerializer) writeNullKeyEntry(ctx *WriteContext, value reflect.Value,
 	}
 
 	header := int8(KEY_HAS_NULL)
-	writeValueRef := trackRef && valueTypeInfo.NeedWriteRef
+	writeValueRef := trackRef && s.valueReferencable && valueTypeInfo.NeedWriteRef
 	if writeValueRef {
 		header |= TRACKING_VALUE_REF
 	}
@@ -225,7 +215,7 @@ func (s mapSerializer) writeChunk(ctx *WriteContext, iter *reflect.MapIter, entr
 		keyTypeInfo, _ := getTypeInfoForValue(*entryKey, resolver)
 		resolver.WriteTypeInfo(buf, keyTypeInfo, ctx.Err())
 		keySer = keyTypeInfo.Serializer
-		keyWriteRef = keyTypeInfo.NeedWriteRef
+		keyWriteRef = s.keyReferencable && keyTypeInfo.NeedWriteRef
 	}
 
 	// Determine value serializer and write type info if needed
@@ -236,14 +226,7 @@ func (s mapSerializer) writeChunk(ctx *WriteContext, iter *reflect.MapIter, entr
 		valueTypeInfo, _ := getTypeInfoForValue(*entryVal, resolver)
 		resolver.WriteTypeInfo(buf, valueTypeInfo, ctx.Err())
 		valSer = valueTypeInfo.Serializer
-		valueWriteRef = valueTypeInfo.NeedWriteRef
-	}
-
-	if s.hasGenerics && s.keySerializer != nil && s.keyTrackRef != nil {
-		keyWriteRef = keyWriteRef && *s.keyTrackRef
-	}
-	if s.hasGenerics && s.valueSerializer != nil && s.valueTrackRef != nil {
-		valueWriteRef = valueWriteRef && *s.valueTrackRef
+		valueWriteRef = s.valueReferencable && valueTypeInfo.NeedWriteRef
 	}
 
 	// Set ref tracking flags

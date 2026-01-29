@@ -115,7 +115,6 @@ type sliceSerializer struct {
 	type_          reflect.Type
 	elemSerializer Serializer
 	referencable   bool
-	elemTrackRef   *bool
 }
 
 // newSliceSerializer creates a sliceSerializer for slices with concrete element types.
@@ -185,9 +184,6 @@ func (s *sliceSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect
 		collectFlag |= CollectionHasNull
 	}
 	trackRefs := ctx.TrackRef() && s.referencable
-	if s.elemTrackRef != nil {
-		trackRefs = ctx.TrackRef() && s.referencable && *s.elemTrackRef
-	}
 	if trackRefs {
 		collectFlag |= CollectionTrackingRef
 	}

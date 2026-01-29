@@ -26,6 +26,7 @@ use idl_tests::addressbook::{
     person::{PhoneNumber, PhoneType},
     AddressBook, Animal, Cat, Dog, Person,
 };
+use idl_tests::complex_pb::{self, PrimitiveTypes};
 use idl_tests::complex_fbs::{self, Container, Note, Payload, ScalarPack, Status};
 use idl_tests::monster::{self, Color, Monster, Vec3};
 use idl_tests::optional_types::{self, AllOptionalTypes, OptionalHolder, OptionalUnion};
@@ -70,7 +71,7 @@ fn build_address_book() -> AddressBook {
 }
 
 fn build_root_holder() -> root::MultiHolder {
-    let owner = root::Person {
+    let owner = Person {
         name: "Alice".to_string(),
         id: 123,
         email: String::new(),
@@ -78,18 +79,18 @@ fn build_root_holder() -> root::MultiHolder {
         scores: HashMap::new(),
         salary: 0.0,
         phones: Vec::new(),
-        pet: root::Animal::Dog(root::Dog {
+        pet: Animal::Dog(Dog {
             name: "Rex".to_string(),
             bark_volume: 5,
         }),
     };
 
-    let book = root::AddressBook {
+    let book = AddressBook {
         people: vec![owner.clone()],
         people_by_name: HashMap::from([(owner.name.clone(), owner.clone())]),
     };
 
-    let root_node = root::TreeNode {
+    let root_node = tree::TreeNode {
         id: "root".to_string(),
         name: "root".to_string(),
         children: Vec::new(),
@@ -97,9 +98,9 @@ fn build_root_holder() -> root::MultiHolder {
     };
 
     root::MultiHolder {
-        book,
-        root: root_node,
-        owner,
+        book: Some(book),
+        root: Some(root_node),
+        owner: Some(owner),
     }
 }
 
@@ -127,12 +128,12 @@ fn test_to_bytes_from_bytes() {
     assert_eq!(decoded_multi, multi);
 }
 
-fn build_primitive_types() -> addressbook::PrimitiveTypes {
+fn build_primitive_types() -> PrimitiveTypes {
     let mut contact =
-        addressbook::primitive_types::Contact::Email("alice@example.com".to_string());
-    contact = addressbook::primitive_types::Contact::Phone(12345);
+        complex_pb::primitive_types::Contact::Email("alice@example.com".to_string());
+    contact = complex_pb::primitive_types::Contact::Phone(12345);
 
-    addressbook::PrimitiveTypes {
+    PrimitiveTypes {
         bool_value: true,
         int8_value: 12,
         int16_value: 1234,
@@ -437,6 +438,7 @@ fn assert_graph(value: &graph::Graph) {
 #[test]
 fn test_address_book_roundtrip() {
     let mut fory = Fory::default().xlang(true);
+    complex_pb::register_types(&mut fory).expect("register complex pb types");
     addressbook::register_types(&mut fory).expect("register types");
     monster::register_types(&mut fory).expect("register monster types");
     complex_fbs::register_types(&mut fory).expect("register flatbuffers types");
@@ -463,7 +465,7 @@ fn test_address_book_roundtrip() {
 
     let types = build_primitive_types();
     let bytes = fory.serialize(&types).expect("serialize");
-    let roundtrip: addressbook::PrimitiveTypes = fory.deserialize(&bytes).expect("deserialize");
+    let roundtrip: PrimitiveTypes = fory.deserialize(&bytes).expect("deserialize");
     assert_eq!(types, roundtrip);
 
     let primitive_file = match env::var("DATA_FILE_PRIMITIVES") {
@@ -471,7 +473,7 @@ fn test_address_book_roundtrip() {
         Err(_) => return,
     };
     let payload = fs::read(&primitive_file).expect("read data file");
-    let peer_types: addressbook::PrimitiveTypes = fory
+    let peer_types: PrimitiveTypes = fory
         .deserialize(&payload)
         .expect("deserialize peer payload");
     assert_eq!(types, peer_types);

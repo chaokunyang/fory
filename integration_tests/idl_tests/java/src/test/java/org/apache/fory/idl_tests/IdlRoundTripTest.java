@@ -27,7 +27,8 @@ import addressbook.Dog;
 import addressbook.Person;
 import addressbook.Person.PhoneNumber;
 import addressbook.Person.PhoneType;
-import addressbook.PrimitiveTypes;
+import complex_pb.ComplexPbForyRegistration;
+import complex_pb.PrimitiveTypes;
 import any_example.AnyExampleForyRegistration;
 import any_example.AnyHolder;
 import any_example.AnyInner;
@@ -120,23 +121,29 @@ public class IdlRoundTripTest {
     Animal decodedAnimal = Animal.fromBytes(animalBytes);
     Assert.assertEquals(decodedAnimal, animal);
 
-    root.Person owner = new root.Person();
+    Person owner = new Person();
     owner.setName("Alice");
     owner.setId(123);
-    root.Dog rootDog = new root.Dog();
+    owner.setEmail("");
+    owner.setTags(Collections.emptyList());
+    owner.setScores(new HashMap<>());
+    owner.setSalary(0.0);
+    owner.setPhones(Collections.emptyList());
+    Dog rootDog = new Dog();
     rootDog.setName("Rex");
     rootDog.setBarkVolume(5);
-    owner.setPet(root.Animal.ofDog(rootDog));
+    owner.setPet(Animal.ofDog(rootDog));
 
-    root.AddressBook multiBook = new root.AddressBook();
+    AddressBook multiBook = new AddressBook();
     multiBook.setPeople(Arrays.asList(owner));
-    Map<String, root.Person> peopleByName = new HashMap<>();
+    Map<String, Person> peopleByName = new HashMap<>();
     peopleByName.put(owner.getName(), owner);
     multiBook.setPeopleByName(peopleByName);
 
-    root.TreeNode rootNode = new root.TreeNode();
+    TreeNode rootNode = new TreeNode();
     rootNode.setId("root");
     rootNode.setName("root");
+    rootNode.setChildren(Collections.emptyList());
 
     MultiHolder multi = new MultiHolder();
     multi.setBook(multiBook);
@@ -152,6 +159,7 @@ public class IdlRoundTripTest {
   public void testPrimitiveTypesRoundTrip() throws Exception {
     Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
     AddressbookForyRegistration.register(fory);
+    ComplexPbForyRegistration.register(fory);
 
     PrimitiveTypes types = buildPrimitiveTypes();
     byte[] bytes = fory.serialize(types);

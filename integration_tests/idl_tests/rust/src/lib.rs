@@ -17,7 +17,9 @@
 
 pub mod addressbook;
 pub mod any_example;
+pub mod any_example_pb;
 pub mod complex_fbs;
+pub mod complex_pb;
 pub mod monster;
 pub mod root;
 pub mod optional_types;

@@ -875,10 +875,20 @@ func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	if keyInfo.Type != nil && valueInfo.Type != nil {
 		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
 	}
+	keyReferencable := true
+	if keyInfo.Type != nil {
+		keyReferencable = isRefType(keyInfo.Type, f.config.IsXlang)
+	}
+	valueReferencable := true
+	if valueInfo.Type != nil {
+		valueReferencable = isRefType(valueInfo.Type, f.config.IsXlang)
+	}
 	mapSerializer := &mapSerializer{
-		keySerializer:   keyInfo.Serializer,
-		valueSerializer: valueInfo.Serializer,
-		hasGenerics:     true,
+		keySerializer:     keyInfo.Serializer,
+		valueSerializer:   valueInfo.Serializer,
+		keyReferencable:   keyReferencable,
+		valueReferencable: valueReferencable,
+		hasGenerics:       true,
 	}
 	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
 }
@@ -896,10 +906,20 @@ func (m *MapFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo
 	if keyInfo.Type != nil && valueInfo.Type != nil {
 		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
 	}
+	keyReferencable := true
+	if keyInfo.Type != nil {
+		keyReferencable = isRefType(keyInfo.Type, resolver.isXlang)
+	}
+	valueReferencable := true
+	if valueInfo.Type != nil {
+		valueReferencable = isRefType(valueInfo.Type, resolver.isXlang)
+	}
 	mapSerializer := &mapSerializer{
-		keySerializer:   keyInfo.Serializer,
-		valueSerializer: valueInfo.Serializer,
-		hasGenerics:     true,
+		keySerializer:     keyInfo.Serializer,
+		valueSerializer:   valueInfo.Serializer,
+		keyReferencable:   keyReferencable,
+		valueReferencable: valueReferencable,
+		hasGenerics:       true,
 	}
 	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
 }

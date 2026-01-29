@@ -200,6 +200,12 @@ public class PythonXlangTest extends XlangTestBase {
 
   @Override
   @Test(dataProvider = "enableCodegen")
+  public void testCollectionElementRefOverride(boolean enableCodegen) throws IOException {
+    super.testCollectionElementRefOverride(enableCodegen);
+  }
+
+  @Override
+  @Test(dataProvider = "enableCodegen")
   public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen) throws IOException {
     super.testNullableFieldSchemaConsistentNotNull(enableCodegen);
   }

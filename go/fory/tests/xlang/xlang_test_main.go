@@ -264,6 +264,16 @@ type StructWithMap struct {
 	Data map[string]string
 }
 
+type RefOverrideElement struct {
+	Id   int32
+	Name string
+}
+
+type RefOverrideContainer struct {
+	ListField []*RefOverrideElement
+	MapField  map[string]*RefOverrideElement
+}
+
 type MyExt struct {
 	Id int32 `fory:"id"`
 }
@@ -1939,6 +1949,17 @@ func getRefOuterCompatible(obj any) RefOuterCompatible {
 	}
 }
 
+func getRefOverrideContainer(obj any) RefOverrideContainer {
+	switch v := obj.(type) {
+	case RefOverrideContainer:
+		return v
+	case *RefOverrideContainer:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected RefOverrideContainer, got %T", obj))
+	}
+}
+
 // ============================================================================
 // Circular Reference Test Types
 // ============================================================================
@@ -2055,6 +2076,47 @@ func testRefCompatible() {
 		Inner1: result.Inner1,
 		Inner2: result.Inner1, // Use same reference
 	}
+	serialized, err := f.Serialize(outer)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+// ============================================================================
+// Collection Element Reference Override Test
+// ============================================================================
+
+func testCollectionElementRefOverride() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false), fory.WithRefTracking(true))
+	f.RegisterStruct(RefOverrideElement{}, 701)
+	f.RegisterStruct(RefOverrideContainer{}, 702)
+
+	buf := fory.NewByteBuffer(data)
+	var obj any
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getRefOverrideContainer(obj)
+	if len(result.ListField) < 1 {
+		panic("ListField is empty")
+	}
+
+	shared := result.ListField[0]
+	outer := &RefOverrideContainer{
+		ListField: []*RefOverrideElement{shared, shared},
+		MapField: map[string]*RefOverrideElement{
+			"k1": shared,
+			"k2": shared,
+		},
+	}
+
 	serialized, err := f.Serialize(outer)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
@@ -2452,6 +2514,8 @@ func main() {
 		testRefSchemaConsistent()
 	case "test_ref_compatible":
 		testRefCompatible()
+	case "test_collection_element_ref_override":
+		testCollectionElementRefOverride()
 	case "test_circular_ref_schema_consistent":
 		testCircularRefSchemaConsistent()
 	case "test_circular_ref_compatible":

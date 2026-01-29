@@ -177,6 +177,12 @@ public class JavaScriptXlangTest extends XlangTestBase {
     super.testPolymorphicMap(enableCodegen);
   }
 
+  @Override
+  @Test(dataProvider = "enableCodegen")
+  public void testCollectionElementRefOverride(boolean enableCodegen) throws java.io.IOException {
+    throw new SkipException("Skipping: JavaScript xlang test not implemented for this case");
+  }
+
   @Test(dataProvider = "enableCodegen")
   public void testOneStringFieldSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
     super.testOneStringFieldSchemaConsistent(enableCodegen);

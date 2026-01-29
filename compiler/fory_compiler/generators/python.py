@@ -271,6 +271,8 @@ class PythonGenerator(BaseGenerator):
         imports.add("from typing import Dict, List, Optional, cast")
         imports.add("import pyfory")
         imports.add("import threading")
+        if self.schema_has_ref_elements():
+            imports.add("from pyfory import Ref")
 
         for message in self.schema.messages:
             self.collect_message_imports(message, imports)
@@ -579,6 +581,7 @@ class PythonGenerator(BaseGenerator):
             field.field_type,
             nullable,
             field.element_optional,
+            field.element_ref,
             parent_stack,
         )
         field_name = self.safe_name(self.to_snake_case(field.name))
@@ -640,6 +643,7 @@ class PythonGenerator(BaseGenerator):
         field_type: FieldType,
         nullable: bool = False,
         element_optional: bool = False,
+        element_ref: bool = False,
         parent_stack: Optional[List[Message]] = None,
     ) -> str:
         """Generate Python type hint."""
@@ -672,23 +676,50 @@ class PythonGenerator(BaseGenerator):
                     else:
                         element_type = self.generate_type(
                             field_type.element_type,
-                            element_optional,
+                            False,
+                            False,
+                            False,
                             parent_stack,
                         )
+                        element_type = self.wrap_ref_type(
+                            field_type.element_type,
+                            element_type,
+                            element_ref=element_ref,
+                        )
+                        if element_optional:
+                            element_type = f"Optional[{element_type}]"
                         list_type = f"List[{element_type}]"
                 else:
                     element_type = self.generate_type(
                         field_type.element_type,
-                        element_optional,
+                        False,
+                        False,
+                        False,
                         parent_stack,
                     )
+                    element_type = self.wrap_ref_type(
+                        field_type.element_type,
+                        element_type,
+                        element_ref=element_ref,
+                    )
+                    if element_optional:
+                        element_type = f"Optional[{element_type}]"
                     list_type = f"List[{element_type}]"
             else:
                 element_type = self.generate_type(
                     field_type.element_type,
-                    element_optional,
+                    False,
+                    False,
+                    False,
                     parent_stack,
                 )
+                element_type = self.wrap_ref_type(
+                    field_type.element_type,
+                    element_type,
+                    element_ref=element_ref,
+                )
+                if element_optional:
+                    element_type = f"Optional[{element_type}]"
                 list_type = f"List[{element_type}]"
             if nullable:
                 return f"Optional[{list_type}]"
@@ -696,10 +727,15 @@ class PythonGenerator(BaseGenerator):
 
         elif isinstance(field_type, MapType):
             key_type = self.generate_type(
-                field_type.key_type, False, False, parent_stack
+                field_type.key_type, False, False, False, parent_stack
             )
             value_type = self.generate_type(
-                field_type.value_type, False, False, parent_stack
+                field_type.value_type, False, False, False, parent_stack
+            )
+            value_type = self.wrap_ref_type(
+                field_type.value_type,
+                value_type,
+                element_ref=field_type.value_ref,
             )
             map_type = f"Dict[{key_type}, {value_type}]"
             if nullable:
@@ -707,6 +743,54 @@ class PythonGenerator(BaseGenerator):
             return map_type
 
         return "object"
+
+    def schema_has_ref_elements(self) -> bool:
+        for message in self.schema.messages:
+            if self.message_has_ref_elements(message):
+                return True
+        for union in self.schema.unions:
+            for field in union.fields:
+                if self.field_uses_ref_type(field):
+                    return True
+        return False
+
+    def message_has_ref_elements(self, message: Message) -> bool:
+        for field in message.fields:
+            if self.field_uses_ref_type(field):
+                return True
+        for nested_msg in message.nested_messages:
+            if self.message_has_ref_elements(nested_msg):
+                return True
+        for nested_union in message.nested_unions:
+            for field in nested_union.fields:
+                if self.field_uses_ref_type(field):
+                    return True
+        return False
+
+    def field_uses_ref_type(self, field: Field) -> bool:
+        if isinstance(field.field_type, ListType):
+            return self.is_ref_target_type(field.field_type.element_type)
+        if isinstance(field.field_type, MapType):
+            return self.is_ref_target_type(field.field_type.value_type)
+        return False
+
+    def is_ref_target_type(self, field_type: FieldType) -> bool:
+        if not isinstance(field_type, NamedType):
+            return False
+        resolved = self.schema.get_type(field_type.name)
+        return isinstance(resolved, (Message, Union))
+
+    def wrap_ref_type(
+        self,
+        field_type: FieldType,
+        element_type: str,
+        element_ref: bool,
+    ) -> str:
+        if not self.is_ref_target_type(field_type):
+            return element_type
+        if element_ref:
+            return f"Ref[{element_type}]"
+        return f"Ref[{element_type}, False]"
 
     def get_union_case_type(
         self, field: Field, parent_stack: Optional[List[Message]] = None
@@ -716,6 +800,7 @@ class PythonGenerator(BaseGenerator):
             field.field_type,
             nullable=False,
             element_optional=field.element_optional,
+            element_ref=field.element_ref,
             parent_stack=parent_stack,
         )
 

@@ -208,6 +208,11 @@ public class CPPXlangTest extends XlangTestBase {
   }
 
   @Test(dataProvider = "enableCodegen")
+  public void testCollectionElementRefOverride(boolean enableCodegen) throws java.io.IOException {
+    super.testCollectionElementRefOverride(enableCodegen);
+  }
+
+  @Test(dataProvider = "enableCodegen")
   public void testSkipIdCustom(boolean enableCodegen) throws java.io.IOException {
     super.testSkipIdCustom(enableCodegen);
   }

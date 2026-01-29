@@ -325,7 +325,7 @@ func (r *TypeResolver) initialize() {
 		// Register interface types first so typeIDToTypeInfo maps to generic types
 		// that can hold any element type when deserializing into any
 		{interfaceSliceType, LIST, sliceDynSerializer{}},
-		{interfaceMapType, MAP, mapSerializer{}},
+		{interfaceMapType, MAP, mapSerializer{type_: interfaceMapType, keyReferencable: true, valueReferencable: true}},
 		// stringSliceType uses dedicated stringSliceSerializer for optimized serialization
 		// This ensures CollectionIsDeclElementType is set for Java compatibility
 		{stringSliceType, LIST, stringSliceSerializer{}},
@@ -1585,6 +1585,9 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 			return setSerializer{}, nil
 		}
 		hasKeySerializer, hasValueSerializer := !isDynamicType(type_.Key()), !isDynamicType(type_.Elem())
+		// Determine key/value referencability using isRefType which handles xlang mode
+		keyReferencable := isRefType(type_.Key(), r.isXlang)
+		valueReferencable := isRefType(type_.Elem(), r.isXlang)
 		if hasKeySerializer || hasValueSerializer {
 			var keySerializer, valueSerializer Serializer
 			/*
@@ -1604,9 +1607,6 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 					return nil, err
 				}
 			}
-			// Determine key/value referencability using isRefType which handles xlang mode
-			keyReferencable := isRefType(type_.Key(), r.isXlang)
-			valueReferencable := isRefType(type_.Elem(), r.isXlang)
 			return &mapSerializer{
 				type_:             type_,
 				keySerializer:     keySerializer,
@@ -1615,9 +1615,13 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 				valueReferencable: valueReferencable,
 				hasGenerics:       mapInStruct,
 			}, nil
-		} else {
-			return mapSerializer{hasGenerics: mapInStruct}, nil
 		}
+		return mapSerializer{
+			type_:             type_,
+			keyReferencable:   keyReferencable,
+			valueReferencable: valueReferencable,
+			hasGenerics:       mapInStruct,
+		}, nil
 	case reflect.Struct:
 		serializer := r.typeToSerializers[type_]
 		if serializer == nil {

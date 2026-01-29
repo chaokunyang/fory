@@ -183,7 +183,8 @@ func (s *sliceSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect
 	if hasNull {
 		collectFlag |= CollectionHasNull
 	}
-	if ctx.TrackRef() && s.referencable {
+	trackRefs := ctx.TrackRef() && s.referencable
+	if trackRefs {
 		collectFlag |= CollectionTrackingRef
 	}
 	buf.WriteInt8(int8(collectFlag))
@@ -196,7 +197,7 @@ func (s *sliceSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect
 	}
 
 	// WriteData elements
-	trackRefs := (collectFlag & CollectionTrackingRef) != 0
+	trackRefs = (collectFlag & CollectionTrackingRef) != 0
 	elemRefMode := RefModeNone
 	if trackRefs {
 		elemRefMode = RefModeTracking

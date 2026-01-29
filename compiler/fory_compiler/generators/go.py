@@ -856,6 +856,10 @@ class GoGenerator(BaseGenerator):
         if array_tag:
             tags.append(array_tag)
 
+        nested_ref_tag = self.get_nested_ref_tag(field)
+        if nested_ref_tag:
+            tags.append(nested_ref_tag)
+
         if tags:
             tag_str = ",".join(tags)
             lines.append(f'{field_name} {go_type} `fory:"{tag_str}"`')
@@ -895,6 +899,25 @@ class GoGenerator(BaseGenerator):
         if element_type.kind == PrimitiveKind.UINT8:
             return "type=uint8_array"
         return None
+
+    def get_nested_ref_tag(self, field: Field) -> Optional[str]:
+        if isinstance(field.field_type, ListType):
+            if not self.is_ref_target_type(field.field_type.element_type):
+                return None
+            entry = "[true]" if field.element_ref else "[]"
+            return f"nested_ref=[{entry}]"
+        if isinstance(field.field_type, MapType):
+            if not self.is_ref_target_type(field.field_type.value_type):
+                return None
+            value_entry = "[true]" if field.field_type.value_ref else "[]"
+            return f"nested_ref=[[],{value_entry}]"
+        return None
+
+    def is_ref_target_type(self, field_type: FieldType) -> bool:
+        if not isinstance(field_type, NamedType):
+            return False
+        resolved = self.schema.get_type(field_type.name)
+        return isinstance(resolved, (Message, Union))
 
     def field_uses_option(self, field: Field) -> bool:
         """Return True if field should use optional.Optional in generated Go code."""

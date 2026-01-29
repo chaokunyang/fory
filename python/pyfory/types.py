@@ -216,6 +216,7 @@ class Ref:
             return target
         return annotated[target, RefMeta(enable)]
 
+
 _primitive_types = {
     int,
     float,

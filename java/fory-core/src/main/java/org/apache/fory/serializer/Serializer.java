@@ -95,7 +95,7 @@ public abstract class Serializer<T> {
 
   /**
    * Write value to buffer, this method do not write ref/null flags and the passed value must not be
-   * null
+   * null.
    */
   public void write(MemoryBuffer buffer, T value) {
     throw new UnsupportedOperationException("Please implement serialization for " + type);
@@ -159,7 +159,7 @@ public abstract class Serializer<T> {
 
   /**
    * Write value to buffer, this method do not write ref/null flags and the passed value must not be
-   * null
+   * null.
    */
   public void xwrite(MemoryBuffer buffer, T value) {
     throw new UnsupportedOperationException("Please implement xlang serialization for " + type);

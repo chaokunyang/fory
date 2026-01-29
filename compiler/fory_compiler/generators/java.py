@@ -896,7 +896,9 @@ class JavaGenerator(BaseGenerator):
             key_type = self.generate_type(field_type.key_type, True)
             value_type = self.generate_type(field_type.value_type, True)
             if self.is_ref_target_type(field_type.value_type):
-                ref_annotation = "@Ref" if field_type.value_ref else "@Ref(enable=false)"
+                ref_annotation = (
+                    "@Ref" if field_type.value_ref else "@Ref(enable=false)"
+                )
                 value_type = f"{ref_annotation} {value_type}"
             return f"Map<{key_type}, {value_type}>"
 

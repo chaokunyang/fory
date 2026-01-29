@@ -1012,6 +1012,9 @@ public interface Expression {
       this.functionName = functionName;
       this.type = type;
       this.arguments = arguments;
+      for (Expression argument : arguments) {
+        Preconditions.checkNotNull(argument);
+      }
       this.returnNamePrefix = returnNamePrefix;
       this.returnNullable = returnNullable;
       inlineCall = inline;
@@ -2258,6 +2261,9 @@ public interface Expression {
       this.predicate = predicate;
       this.action = action;
       this.cutPoints = cutPoints;
+      for (Expression cutPoint : cutPoints) {
+        Preconditions.checkNotNull(cutPoint);
+      }
     }
 
     @Override

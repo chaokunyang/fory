@@ -273,6 +273,11 @@ public class ExpressionVisitor {
       Expression expr, Expression[] expressions, Function<ExprSite, Boolean> func) {
     for (int i = 0; i < expressions.length; i++) {
       Expression childExpr = expressions[i];
+      if (childExpr == null) {
+        throw new IllegalStateException(String.format(
+            "Expression [%s] of type %s has null elements", expr, expr.getClass()
+        ));
+      }
       int index = i;
       Boolean continueVisit =
           func.apply(

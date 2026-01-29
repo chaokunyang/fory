@@ -116,7 +116,9 @@ public class ExpressionOptimizer {
             exprSite -> {
               if (cutPoint.contains((exprSite.current))) {
                 Reference newExpr = cutExprMap.get(exprSite.current);
-                if (exprSite.current != newExpr) {
+                // cutpoint may pass null, or we remove some expr from cutpoint if we think
+                // it's ok to use original expr such as Literal or Enum expr.
+                if (exprSite.current != newExpr && newExpr != null) {
                   exprSite.update(newExpr);
                 }
                 return false;
@@ -141,6 +143,7 @@ public class ExpressionOptimizer {
       Reference ref = entry.getValue();
       formalParams.add(getRawType(ref.type()));
       formalParams.add(ref.name());
+      Preconditions.checkNotNull(expr);
       actualParams.add(expr);
     }
     ctx.addMethod(

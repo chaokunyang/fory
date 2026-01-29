@@ -2464,22 +2464,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               }
               return exprs;
             });
+    Set<Expression> chunkLoopCutPoints =
+        ofHashSet(
+            buffer,
+            newMap,
+            chunkHeader,
+            size,
+            mapSerializer,
+            keySerializer,
+            valueSerializer);
     Expression chunkLoopExpr =
-        invokeGenerated(
-            ctx,
-            ofHashSet(
-                new Expression[] {
-                  buffer,
-                  newMap,
-                  chunkHeader,
-                  size,
-                  mapSerializer,
-                  keySerializer,
-                  valueSerializer
-                }),
-            chunksLoop,
-            "readMapChunks",
-            false);
+        invokeGenerated(ctx, chunkLoopCutPoints, chunksLoop, "readMapChunks", false);
     expressions.add(chunkLoopExpr, newMap);
     // first newMap to create map, last newMap as expr value
     Expression map = inlineInvoke(serializer, "onMapRead", OBJECT_TYPE, expressions);

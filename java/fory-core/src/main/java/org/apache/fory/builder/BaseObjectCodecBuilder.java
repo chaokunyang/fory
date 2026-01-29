@@ -2492,6 +2492,21 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return action;
   }
 
+  private boolean mayTrackRefForCollectionRead(Class<?> type) {
+    if (!fory.trackingRef()) {
+      return false;
+    }
+    if (type.isPrimitive() || isBoxed(type)) {
+      return false;
+    }
+    // 1. for xlang, other language may send serialized string with ref tracking, we skip string ref
+    // because string is used commonly, we don't want introduce extra check ref header in data, because the
+    // writer is also java, and it won't write string ref if `StringRefIgnored`.
+    // 2. we can't use `needWriteRef`, the collection/map read must follow ref track header
+    // in serialized data. other language may write ref for elements even `needWriteRef` return false
+    return fory.isCrossLanguage() || !fory.getConfig().isStringRefIgnored();
+  }
+
   private Expression readChunk(
       Expression buffer,
       Expression map,
@@ -2503,10 +2518,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean valueMonomorphic = isMonomorphic(valueType);
     Class<?> keyTypeRawType = keyType.getRawType();
     Class<?> valueTypeRawType = valueType.getRawType();
-    boolean trackingKeyRef =
-        fory.trackingRef() && !(isPrimitive(keyTypeRawType) || isBoxed(keyTypeRawType));
-    boolean trackingValueRef =
-        fory.trackingRef() && !(isPrimitive(valueTypeRawType) || isBoxed(valueTypeRawType));
+    boolean trackingKeyRef = mayTrackRefForCollectionRead(keyTypeRawType);
+    boolean trackingValueRef = mayTrackRefForCollectionRead(valueTypeRawType);
     boolean inline =
         keyMonomorphic
             && valueMonomorphic

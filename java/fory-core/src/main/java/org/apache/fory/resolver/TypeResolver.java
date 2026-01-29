@@ -253,14 +253,19 @@ public abstract class TypeResolver {
    * ignored too.
    */
   public final boolean needToWriteRef(TypeRef<?> typeRef) {
-    TypeExtMeta meta = typeRef.getTypeExtMeta();
-    if (meta != null) {
-      return meta.trackingRef();
-    }
     if (!fory.trackingRef()) {
       return false;
     }
     Class<?> cls = typeRef.getRawType();
+    if (cls == String.class && !fory.isCrossLanguage()) {
+      // for string, ignore `TypeExtMeta` for java native mode
+      return !fory.getConfig().isStringRefIgnored();
+    }
+    TypeExtMeta meta = typeRef.getTypeExtMeta();
+    if (meta != null) {
+      return meta.trackingRef();
+    }
+
     ClassInfo classInfo = classInfoMap.get(cls);
     if (classInfo == null || classInfo.serializer == null) {
       // TODO group related logic together for extendability and consistency.

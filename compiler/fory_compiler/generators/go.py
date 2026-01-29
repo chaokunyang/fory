@@ -153,9 +153,12 @@ class GoGenerator(BaseGenerator):
 
     def schema_has_unions(self) -> bool:
         """Return True if schema contains any unions (including nested)."""
-        if self.schema.unions:
-            return True
+        for union in self.schema.unions:
+            if not self.is_imported_type(union):
+                return True
         for message in self.schema.messages:
+            if self.is_imported_type(message):
+                continue
             if self.message_has_unions(message):
                 return True
         return False
@@ -398,6 +401,14 @@ class GoGenerator(BaseGenerator):
         if self.schema_has_unions():
             imports.add('"fmt"')
             imports.add('"reflect"')
+
+        for alias, import_path, package_name in self._collect_imported_type_infos():
+            if not import_path:
+                continue
+            if alias == package_name:
+                imports.add(f"\"{import_path}\"")
+            else:
+                imports.add(f"{alias} \"{import_path}\"")
 
         # License header
         lines.append(self.get_license_header("//"))
@@ -670,8 +681,13 @@ class GoGenerator(BaseGenerator):
                     return "fory.NAMED_UNION"
                 return "fory.UNION"
             if isinstance(type_def, Message):
+                evolving = bool(type_def.options.get("evolving"))
                 if type_def.type_id is None:
+                    if evolving:
+                        return "fory.NAMED_COMPATIBLE_STRUCT"
                     return "fory.NAMED_STRUCT"
+                if evolving:
+                    return "fory.COMPATIBLE_STRUCT"
                 return "fory.STRUCT"
         return "fory.UNKNOWN"
 
@@ -1203,7 +1219,7 @@ class GoGenerator(BaseGenerator):
             cases.append(
                 f"fory.UnionCase{{ID: {field.number}, Type: {type_expr}, TypeID: {type_id_expr}}}"
             )
-        serializer_expr = f"fory.NewUnionSerializer({', '.join(cases)})"
+        serializer_expr = f"fory.NewUnionSerializer(f, {', '.join(cases)})"
 
         if union.type_id is not None:
             lines.append(

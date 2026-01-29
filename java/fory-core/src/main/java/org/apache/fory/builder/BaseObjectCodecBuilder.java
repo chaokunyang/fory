@@ -2464,7 +2464,23 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               }
               return exprs;
             });
-    expressions.add(chunksLoop, newMap);
+    Expression chunkLoopExpr =
+        invokeGenerated(
+            ctx,
+            ofHashSet(
+                new Expression[] {
+                  buffer,
+                  newMap,
+                  chunkHeader,
+                  size,
+                  mapSerializer,
+                  keySerializer,
+                  valueSerializer
+                }),
+            chunksLoop,
+            "readMapChunks",
+            false);
+    expressions.add(chunkLoopExpr, newMap);
     // first newMap to create map, last newMap as expr value
     Expression map = inlineInvoke(serializer, "onMapRead", OBJECT_TYPE, expressions);
     Expression action = new If(supportHook, map, read(serializer, buffer, OBJECT_TYPE), false);

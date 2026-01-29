@@ -2490,7 +2490,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     // 2. we can't use `needWriteRef`, the collection/map read must follow ref track header
     // in serialized data. other language may write ref for elements even `needWriteRef` return
     // false
-    return fory.isCrossLanguage() || !fory.getConfig().isStringRefIgnored();
+    if (type == String.class && !fory.isCrossLanguage()) {
+      return !fory.getConfig().isStringRefIgnored();
+    }
+    return true;
   }
 
   private Expression readChunk(

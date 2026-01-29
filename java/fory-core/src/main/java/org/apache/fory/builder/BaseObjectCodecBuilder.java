@@ -2585,8 +2585,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               walkPath.add("value:" + valueType);
               if (trackingValueRef) {
                 valueAction =
-                    readMapValueWithRef(
-                        buffer, valueType, valueSerializerExpr, trackValueRef, valueHint);
+                    new If(
+                        trackValueRef,
+                        deserializeRef(buffer, valueType, valueSerializerExpr, valueHint),
+                        deserializeForNotNullNoRef(buffer, valueType, valueSerializerExpr, valueHint),
+                        false);
               } else {
                 valueAction =
                     deserializeForNotNull(buffer, valueType, valueSerializerExpr, valueHint);
@@ -2626,27 +2629,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Set<Expression> params = ofHashSet(buffer, size, chunkHeader, map);
       return invokeGenerated(ctx, params, expressions, "readChunk", false);
     }
-  }
-
-  private Expression readMapValueWithRef(
-      Expression buffer,
-      TypeRef<?> valueType,
-      Expression valueSerializerExpr,
-      Expression trackValueRef,
-      InvokeHint valueHint) {
-    Expression valueRead =
-        new If(
-            trackValueRef,
-            deserializeRef(buffer, valueType, valueSerializerExpr, valueHint),
-            deserializeForNotNullNoRef(buffer, valueType, valueSerializerExpr, valueHint),
-            false);
-    valueRead = uninline(valueRead);
-    Set<Expression> cutPoint = ofHashSet(buffer, valueSerializerExpr, trackValueRef);
-    if (valueHint != null && valueHint.genNewMethod) {
-      cutPoint.addAll(valueHint.cutPoints);
-    }
-    ListExpression body = new ListExpression(valueRead, new Return(valueRead));
-    return invokeGenerated(ctx, cutPoint, body, "readMapValue", false);
   }
 
   private Expression readOrGetSerializerForDeclaredType(

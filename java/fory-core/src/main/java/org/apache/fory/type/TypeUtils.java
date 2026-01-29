@@ -496,6 +496,16 @@ public class TypeUtils {
 
   /** Returns element type of iterable. */
   public static TypeRef<?> getElementType(TypeRef<?> typeRef) {
+    if (typeRef.hasTypeExtMeta() && typeRef.hasExplicitTypeArguments()) {
+      List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
+      if (typeArguments.size() == 1) {
+        Class<?> rawType = getRawType(typeRef);
+        if (Iterable.class.isAssignableFrom(rawType)
+            && rawType.getTypeParameters().length == 1) {
+          return typeArguments.get(0);
+        }
+      }
+    }
     Type type = typeRef.getType();
     if (type instanceof ParameterizedType) {
       ParameterizedType parameterizedType = (ParameterizedType) type;
@@ -523,6 +533,15 @@ public class TypeUtils {
 
   /** Returns key/value type of map. */
   public static Tuple2<TypeRef<?>, TypeRef<?>> getMapKeyValueType(TypeRef<?> typeRef) {
+    if (typeRef.hasTypeExtMeta() && typeRef.hasExplicitTypeArguments()) {
+      List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
+      if (typeArguments.size() == 2) {
+        Class<?> rawType = getRawType(typeRef);
+        if (Map.class.isAssignableFrom(rawType) && rawType.getTypeParameters().length == 2) {
+          return Tuple2.of(typeArguments.get(0), typeArguments.get(1));
+        }
+      }
+    }
     Type type = typeRef.getType();
     if (type instanceof ParameterizedType) {
       ParameterizedType parameterizedType = (ParameterizedType) type;
@@ -866,6 +885,9 @@ public class TypeUtils {
 
   /** Returns generic type arguments of <code>typeToken</code>. */
   public static List<TypeRef<?>> getTypeArguments(TypeRef<?> typeRef) {
+    if (typeRef.hasExplicitTypeArguments()) {
+      return typeRef.getTypeArguments();
+    }
     if (typeRef.getType() instanceof ParameterizedType) {
       ParameterizedType parameterizedType = (ParameterizedType) typeRef.getType();
       return Arrays.stream(parameterizedType.getActualTypeArguments())

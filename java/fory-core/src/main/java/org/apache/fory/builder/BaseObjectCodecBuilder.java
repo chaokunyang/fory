@@ -77,8 +77,6 @@ import static org.apache.fory.type.TypeUtils.isBoxed;
 import static org.apache.fory.type.TypeUtils.isPrimitive;
 import static org.apache.fory.util.Preconditions.checkArgument;
 
-import java.lang.reflect.AnnotatedParameterizedType;
-import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.HashMap;
@@ -92,7 +90,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.apache.fory.Fory;
-import org.apache.fory.annotation.Ref;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CodegenContext;
@@ -465,21 +462,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       if (useCollectionSerialization(typeRef)) {
         action =
             serializeForCollection(
-                buffer,
-                inputObject,
-                typeRef,
-                serializer,
-                false,
-                getCollectionElementRefOverride(descriptor));
+                buffer, inputObject, typeRef, serializer, false);
       } else if (useMapSerialization(typeRef)) {
         action =
-            serializeForMap(
-                buffer,
-                inputObject,
-                typeRef,
-                serializer,
-                false,
-                getMapKeyValueRefOverride(descriptor));
+            serializeForMap(buffer, inputObject, typeRef, serializer, false);
       } else {
         action = serializeForNotNullObjectForField(inputObject, buffer, descriptor, serializer);
       }
@@ -1013,17 +999,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       TypeRef<?> typeRef,
       Expression serializer,
       boolean generateNewMethod) {
-    return serializeForCollection(
-        buffer, collection, typeRef, serializer, generateNewMethod, null);
-  }
-
-  protected Expression serializeForCollection(
-      Expression buffer,
-      Expression collection,
-      TypeRef<?> typeRef,
-      Expression serializer,
-      boolean generateNewMethod,
-      Boolean elementRefOverride) {
     // get serializer, write class info if necessary.
     if (serializer == null) {
       Class<?> clz = getRawType(typeRef);
@@ -1061,7 +1036,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression ifExpr =
         new If(
             inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE),
-            writeCollectionData(buffer, collection, serializer, elementType, elementRefOverride),
+            writeCollectionData(buffer, collection, serializer, elementType),
             new Invoke(serializer, writeMethodName, buffer, collection));
     // Wrap collection and ifExpr in a ListExpression to ensure collection is evaluated before the
     // If. This is necessary because 'collection' is used in both branches of the If expression.
@@ -1084,57 +1059,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return elementType;
   }
 
-  private boolean resolveTrackingRef(TypeRef<?> typeRef, Boolean refOverride) {
-    if (refOverride == null) {
-      return needWriteRef(typeRef);
-    }
-    return refOverride && fory.trackingRef();
-  }
-
-  private static Boolean getRefOverride(AnnotatedType annotatedType) {
-    if (annotatedType == null) {
-      return null;
-    }
-    Ref ref = annotatedType.getAnnotation(Ref.class);
-    return ref != null ? ref.enable() : null;
-  }
-
-  private static Boolean getCollectionElementRefOverride(Descriptor descriptor) {
-    if (descriptor == null || descriptor.getField() == null) {
-      return null;
-    }
-    AnnotatedType annotatedType = descriptor.getField().getAnnotatedType();
-    if (annotatedType instanceof AnnotatedParameterizedType) {
-      AnnotatedType[] args =
-          ((AnnotatedParameterizedType) annotatedType).getAnnotatedActualTypeArguments();
-      if (args.length == 1) {
-        return getRefOverride(args[0]);
-      }
-    }
-    return null;
-  }
-
-  private static Tuple2<Boolean, Boolean> getMapKeyValueRefOverride(Descriptor descriptor) {
-    if (descriptor == null || descriptor.getField() == null) {
-      return null;
-    }
-    AnnotatedType annotatedType = descriptor.getField().getAnnotatedType();
-    if (annotatedType instanceof AnnotatedParameterizedType) {
-      AnnotatedType[] args =
-          ((AnnotatedParameterizedType) annotatedType).getAnnotatedActualTypeArguments();
-      if (args.length >= 2) {
-        return Tuple2.of(getRefOverride(args[0]), getRefOverride(args[1]));
-      }
-    }
-    return null;
-  }
-
   protected Expression writeCollectionData(
       Expression buffer,
       Expression collection,
       Expression serializer,
-      TypeRef<?> elementType,
-      Boolean elementRefOverride) {
+      TypeRef<?> elementType) {
     Invoke onCollectionWrite =
         new Invoke(
             serializer,
@@ -1149,7 +1078,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     walkPath.add(elementType.toString());
     ListExpression builder = new ListExpression();
     Class<?> elemClass = TypeUtils.getRawType(elementType);
-    boolean trackingRef = resolveTrackingRef(elementType, elementRefOverride);
+    boolean trackingRef = needWriteRef(elementType);
     Tuple2<Expression, Invoke> writeElementsHeader =
         writeElementsHeader(elemClass, trackingRef, serializer, buffer, collection);
     Expression flags = writeElementsHeader.f0;
@@ -1429,16 +1358,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       TypeRef<?> typeRef,
       Expression serializer,
       boolean generateNewMethod) {
-    return serializeForMap(buffer, map, typeRef, serializer, generateNewMethod, null);
-  }
-
-  protected Expression serializeForMap(
-      Expression buffer,
-      Expression map,
-      TypeRef<?> typeRef,
-      Expression serializer,
-      boolean generateNewMethod,
-      Tuple2<Boolean, Boolean> keyValueRefOverride) {
     if (serializer == null) {
       Class<?> clz = getRawType(typeRef);
       if (isMonomorphic(clz)) {
@@ -1470,7 +1389,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression ifExpr =
         new If(
             inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE),
-            jitWriteMap(buffer, map, serializer, typeRef, keyValueRefOverride),
+            jitWriteMap(buffer, map, serializer, typeRef),
             new Invoke(serializer, writeMethodName, buffer, map));
     // Wrap map and ifExpr in a ListExpression to ensure map is evaluated before the If.
     // This is necessary because 'map' is used in both branches of the If expression.
@@ -1497,16 +1416,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   private Expression jitWriteMap(
-      Expression buffer,
-      Expression map,
-      Expression serializer,
-      TypeRef<?> typeRef,
-      Tuple2<Boolean, Boolean> keyValueRefOverride) {
+      Expression buffer, Expression map, Expression serializer, TypeRef<?> typeRef) {
     Tuple2<TypeRef<?>, TypeRef<?>> keyValueType = getMapKeyValueType(typeRef);
     TypeRef<?> keyType = keyValueType.f0;
     TypeRef<?> valueType = keyValueType.f1;
-    Boolean keyRefOverride = keyValueRefOverride == null ? null : keyValueRefOverride.f0;
-    Boolean valueRefOverride = keyValueRefOverride == null ? null : keyValueRefOverride.f1;
     map = new Invoke(serializer, "onMapWrite", TypeUtils.mapOf(keyType, valueType), buffer, map);
     Expression iterator =
         new Invoke(inlineInvoke(map, "entrySet", SET_TYPE), "iterator", ITERATOR_TYPE);
@@ -1516,8 +1429,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean inline = keyMonomorphic && valueMonomorphic;
     Class<?> keyTypeRawType = keyType.getRawType();
     Class<?> valueTypeRawType = valueType.getRawType();
-    boolean trackingKeyRef = resolveTrackingRef(keyType, keyRefOverride);
-    boolean trackingValueRef = resolveTrackingRef(valueType, valueRefOverride);
+    boolean trackingKeyRef = needWriteRef(keyType);
+    boolean trackingValueRef = needWriteRef(valueType);
     Tuple2<Expression, Expression> mapKVSerializer =
         getMapKVSerializer(keyTypeRawType, valueTypeRawType);
     Expression keySerializer = mapKVSerializer.f0;
@@ -1571,9 +1484,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                       entry,
                       iterator,
                       keyType,
-                      valueType,
-                      keyRefOverride,
-                      valueRefOverride);
+                      valueType);
               return new ListExpression(
                   new Assign(entry, writeNullChunk),
                   new If(
@@ -1609,9 +1520,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression entry,
       Expression iterator,
       TypeRef<?> keyType,
-      TypeRef<?> valueType,
-      Boolean keyRefOverride,
-      Boolean valueRefOverride) {
+      TypeRef<?> valueType) {
     ListExpression expressions = new ListExpression();
     boolean keyMonomorphic = isMonomorphic(keyType);
     boolean valueMonomorphic = isMonomorphic(valueType);
@@ -1647,8 +1556,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
     Expression chunkHeader;
     Expression keySerializer, valueSerializer;
-    boolean trackingKeyRef = resolveTrackingRef(keyType, keyRefOverride);
-    boolean trackingValueRef = resolveTrackingRef(valueType, valueRefOverride);
+    boolean trackingKeyRef = needWriteRef(keyType);
+    boolean trackingValueRef = needWriteRef(valueType);
     Expression keyWriteRef = Literal.ofBoolean(trackingKeyRef);
     Expression valueWriteRef = Literal.ofBoolean(trackingValueRef);
     boolean inline = keyMonomorphic && valueMonomorphic;
@@ -1999,7 +1908,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   private Expression deserializeForNotNullNoRef(
       Expression buffer, TypeRef<?> typeRef, Expression serializer, InvokeHint invokeHint) {
     Expression value = deserializeForNotNull(buffer, typeRef, serializer, invokeHint);
-    if (needWriteRef(typeRef)) {
+    if (needWriteRef(TypeRef.of(typeRef.getRawType()))) {
       Expression preserveStubRefId =
           new Invoke(refResolverRef, "preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
       return new ListExpression(preserveStubRefId, value);
@@ -2239,7 +2148,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     walkPath.add(elementType.toString());
     boolean finalType = isMonomorphic(elemClass);
-    boolean trackingRef = fory.trackingRef();
+    boolean trackingRef = fory.trackingRef() && !(isPrimitive(elemClass) || isBoxed(elemClass));
     Literal trackingRefFlag = ofInt(CollectionFlags.TRACKING_REF);
     Expression trackRef = eq(new BitAnd(flags, trackingRefFlag), trackingRefFlag, "trackRef");
     if (finalType) {
@@ -2549,19 +2458,29 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean valueMonomorphic = isMonomorphic(valueType);
     Class<?> keyTypeRawType = keyType.getRawType();
     Class<?> valueTypeRawType = valueType.getRawType();
-    boolean trackingKeyRef = fory.trackingRef();
-    boolean trackingValueRef = fory.trackingRef();
+    boolean trackingKeyRef =
+        fory.trackingRef() && !(isPrimitive(keyTypeRawType) || isBoxed(keyTypeRawType));
+    boolean trackingValueRef =
+        fory.trackingRef() && !(isPrimitive(valueTypeRawType) || isBoxed(valueTypeRawType));
     boolean inline =
         keyMonomorphic
             && valueMonomorphic
             && (!needWriteRef(keyType) || !needWriteRef(valueType));
     ListExpression expressions = new ListExpression(buffer);
-    Expression trackKeyRef = neq(bitand(chunkHeader, ofInt(TRACKING_KEY_REF)), ofInt(0));
-    Expression trackValueRef = neq(bitand(chunkHeader, ofInt(TRACKING_VALUE_REF)), ofInt(0));
+    Expression trackKeyRefRaw = neq(bitand(chunkHeader, ofInt(TRACKING_KEY_REF)), ofInt(0));
+    Expression trackValueRefRaw = neq(bitand(chunkHeader, ofInt(TRACKING_VALUE_REF)), ofInt(0));
+    Expression trackKeyRef = trackingKeyRef ? uninline(trackKeyRefRaw) : trackKeyRefRaw;
+    Expression trackValueRef = trackingValueRef ? uninline(trackValueRefRaw) : trackValueRefRaw;
     Expression keyIsDeclaredType = neq(bitand(chunkHeader, ofInt(KEY_DECL_TYPE)), ofInt(0));
     Expression valueIsDeclaredType = neq(bitand(chunkHeader, ofInt(VALUE_DECL_TYPE)), ofInt(0));
     Expression chunkSize = new Invoke(buffer, "readUnsignedByte", "chunkSize", PRIMITIVE_INT_TYPE);
     expressions.add(chunkSize);
+    if (trackingKeyRef) {
+      expressions.add(trackKeyRef);
+    }
+    if (trackingValueRef) {
+      expressions.add(trackValueRef);
+    }
 
     Expression keySerializer, valueSerializer;
     if (!keyMonomorphic && !valueMonomorphic) {
@@ -2620,17 +2539,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               walkPath.add("value:" + valueType);
               if (trackingValueRef) {
                 valueAction =
-                    new If(
-                        trackValueRef,
-                        readRef(
-                            buffer,
-                            expr -> expr,
-                            () ->
-                                deserializeForNotNull(
-                                    buffer, valueType, valueSerializerExpr, valueHint)),
-                        deserializeForNotNullNoRef(
-                            buffer, valueType, valueSerializerExpr, valueHint),
-                        false);
+                    readMapValueWithRef(
+                        buffer, valueType, valueSerializerExpr, trackValueRef, valueHint);
               } else {
                 valueAction =
                     deserializeForNotNull(buffer, valueType, valueSerializerExpr, valueHint);
@@ -2670,6 +2580,30 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Set<Expression> params = ofHashSet(buffer, size, chunkHeader, map);
       return invokeGenerated(ctx, params, expressions, "readChunk", false);
     }
+  }
+
+  private Expression readMapValueWithRef(
+      Expression buffer,
+      TypeRef<?> valueType,
+      Expression valueSerializerExpr,
+      Expression trackValueRef,
+      InvokeHint valueHint) {
+    Expression valueRead =
+        new If(
+            trackValueRef,
+            readRef(
+                buffer,
+                expr -> expr,
+                () -> deserializeForNotNull(buffer, valueType, valueSerializerExpr, valueHint)),
+            deserializeForNotNullNoRef(buffer, valueType, valueSerializerExpr, valueHint),
+            false);
+    valueRead = uninline(valueRead);
+    Set<Expression> cutPoint = ofHashSet(buffer, valueSerializerExpr, trackValueRef);
+    if (valueHint != null && valueHint.genNewMethod) {
+      cutPoint.addAll(valueHint.cutPoints);
+    }
+    ListExpression body = new ListExpression(valueRead, new Return(valueRead));
+    return invokeGenerated(ctx, cutPoint, body, "readMapValue", false);
   }
 
   private Expression readOrGetSerializerForDeclaredType(

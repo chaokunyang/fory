@@ -257,17 +257,17 @@ public abstract class TypeResolver {
     if (meta != null) {
       return meta.trackingRef();
     }
-    Class<?> cls = typeRef.getRawType();
-    if (fory.trackingRef()) {
-      ClassInfo classInfo = classInfoMap.get(cls);
-      if (classInfo == null || classInfo.serializer == null) {
-        // TODO group related logic together for extendability and consistency.
-        return !cls.isEnum();
-      } else {
-        return classInfo.serializer.needToWriteRef();
-      }
+    if (!fory.trackingRef()) {
+      return false;
     }
-    return false;
+    Class<?> cls = typeRef.getRawType();
+    ClassInfo classInfo = classInfoMap.get(cls);
+    if (classInfo == null || classInfo.serializer == null) {
+      // TODO group related logic together for extendability and consistency.
+      return !cls.isEnum();
+    } else {
+      return classInfo.serializer.needToWriteRef();
+    }
   }
 
   public final boolean needToWriteClassDef(Serializer serializer) {

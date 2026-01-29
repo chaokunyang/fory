@@ -779,7 +779,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     }
   }
 
-  private long readJavaChunk(
+  @CodegenInvoke
+  public long readJavaChunk(
       Fory fory,
       MemoryBuffer buffer,
       Map map,

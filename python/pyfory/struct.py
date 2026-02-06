@@ -25,6 +25,7 @@ import itertools
 import logging
 import os
 import typing
+import weakref
 from typing import List, Dict
 
 from pyfory.lib.mmh3 import hash_buffer
@@ -85,6 +86,7 @@ from pyfory import (
     Float32Serializer,
     Float64Serializer,
     StringSerializer,
+    ENABLE_FORY_CYTHON_SERIALIZATION,
 )
 
 logger = logging.getLogger(__name__)
@@ -294,6 +296,14 @@ def _extract_field_infos(
 
 
 _jit_context = locals()
+
+def _maybe_weak_proxy(obj):
+    if not ENABLE_FORY_CYTHON_SERIALIZATION:
+        return obj
+    try:
+        return weakref.proxy(obj)
+    except TypeError:
+        return obj
 
 
 _ENABLE_FORY_PYTHON_JIT = os.environ.get("ENABLE_FORY_PYTHON_JIT", "True").lower() in (
@@ -578,7 +588,7 @@ class DataClassSerializer(Serializer):
         context = {}
         counter = itertools.count(0)
         buffer, fory, value, value_dict = "buffer", "fory", "value", "value_dict"
-        context[fory] = self.fory
+        context[fory] = _maybe_weak_proxy(self.fory)
         context["_serializers"] = self._serializers
 
         stmts = [
@@ -663,9 +673,8 @@ class DataClassSerializer(Serializer):
             "obj_dict",
         )
         ref_resolver = "ref_resolver"
-        context[fory] = self.fory
+        context[fory] = _maybe_weak_proxy(self.fory)
         context[obj_class] = self.type_
-        context[ref_resolver] = self.fory.ref_resolver
         context["_serializers"] = self._serializers
         current_class_field_names = set(self._get_field_names(self.type_))
 
@@ -691,6 +700,7 @@ class DataClassSerializer(Serializer):
 
         stmts.extend(
             [
+                f"{ref_resolver} = {fory}.ref_resolver",
                 f"{obj} = {obj_class}.__new__({obj_class})",
                 f"{ref_resolver}.reference({obj})",
             ]
@@ -777,7 +787,7 @@ class DataClassSerializer(Serializer):
         context = {}
         counter = itertools.count(0)
         buffer, fory, value, value_dict = "buffer", "fory", "value", "value_dict"
-        context[fory] = self.fory
+        context[fory] = _maybe_weak_proxy(self.fory)
         context["_serializers"] = self._serializers
         stmts = [
             f'"""xwrite method for {self.type_}"""',
@@ -875,9 +885,8 @@ class DataClassSerializer(Serializer):
             "obj_dict",
         )
         ref_resolver = "ref_resolver"
-        context[fory] = self.fory
+        context[fory] = _maybe_weak_proxy(self.fory)
         context[obj_class] = self.type_
-        context[ref_resolver] = self.fory.ref_resolver
         context["_serializers"] = self._serializers
         current_class_field_names = set(self._get_field_names(self.type_))
         stmts = [
@@ -897,6 +906,7 @@ class DataClassSerializer(Serializer):
             )
         stmts.extend(
             [
+                f"{ref_resolver} = {fory}.ref_resolver",
                 f"{obj} = {obj_class}.__new__({obj_class})",
                 f"{ref_resolver}.reference({obj})",
             ]

@@ -153,6 +153,7 @@ class Fory:
         "depth",
         "field_nullable",
         "policy",
+        "__weakref__",
     )
 
     def __init__(

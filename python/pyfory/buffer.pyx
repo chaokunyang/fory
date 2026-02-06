@@ -22,6 +22,7 @@
 
 cimport cython
 from cpython cimport *
+from cpython.pycapsule cimport PyCapsule_New
 from cpython.unicode cimport *
 from cpython.bytes cimport PyBytes_AsString, PyBytes_FromStringAndSize, PyBytes_AS_STRING
 from libcpp.memory cimport shared_ptr
@@ -118,6 +119,9 @@ cdef class Buffer:
         if value < 0:
             raise ValueError("writer_index must be >= 0")
         self.c_buffer.writer_index(<uint32_t>value)
+
+    cpdef object _c_buffer_capsule(self):
+        return PyCapsule_New(<void *> &self.c_buffer, b"fory.Buffer", NULL)
 
     cpdef c_bool own_data(self):
         return self.c_buffer.own_data()
@@ -757,3 +761,7 @@ def set_bit_to(Buffer buffer,
                c_bool bit_is_set):
     return c_set_bit_to(
         buffer.c_buffer.data() + base_offset, index, bit_is_set)
+
+
+def _c_buffer_capsule(Buffer buffer):
+    return PyCapsule_New(<void *> &buffer.c_buffer, b"fory.Buffer", NULL)

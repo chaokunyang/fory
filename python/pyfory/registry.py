@@ -24,6 +24,7 @@ import logging
 import pickle
 import types
 import typing
+import weakref
 from typing import TypeVar, Union
 from enum import Enum
 
@@ -177,7 +178,7 @@ else:
 
 class TypeResolver:
     __slots__ = (
-        "fory",
+        "_fory_ref",
         "_metastr_to_str",
         "_type_id_counter",
         "_types_info",
@@ -204,11 +205,15 @@ class TypeResolver:
         "meta_share",
         "serialization_context",
         "_internal_py_serializer_map",
+        "__weakref__",
     )
 
     def __init__(self, fory, meta_share=False, meta_compressor=None):
-        self.fory = fory
-        self.metastring_resolver = fory.metastring_resolver
+        self._fory_ref = weakref.ref(fory)
+        if ENABLE_FORY_CYTHON_SERIALIZATION:
+            self.metastring_resolver = None
+        else:
+            self.metastring_resolver = fory.metastring_resolver
         self.require_registration = fory.strict
         self._metastr_to_str = dict()
         self._metastr_to_type = dict()
@@ -235,13 +240,33 @@ class TypeResolver:
         self.meta_share = meta_share
         self._internal_py_serializer_map = {}
 
+    @property
+    def fory(self):
+        fory = self._fory_ref()
+        if fory is None:
+            raise RuntimeError("Fory has been garbage collected")
+        return fory
+
     def initialize(self):
         self._initialize_common()
         if not self.fory.xlang:
             self._initialize_py()
         else:
             self._initialize_xlang()
-        self.serialization_context = self.fory.serialization_context
+        if ENABLE_FORY_CYTHON_SERIALIZATION:
+            self.serialization_context = None
+        else:
+            self.serialization_context = self.fory.serialization_context
+
+    def _get_metastring_resolver(self):
+        if ENABLE_FORY_CYTHON_SERIALIZATION:
+            return self.fory.metastring_resolver
+        return self.metastring_resolver
+
+    def _get_serialization_context(self):
+        if ENABLE_FORY_CYTHON_SERIALIZATION:
+            return self.fory.serialization_context
+        return self.serialization_context
 
     def _initialize_py(self):
         register = functools.partial(self._register_type, internal=True)
@@ -572,10 +597,11 @@ class TypeResolver:
                     namespace, typename = splits
                 else:
                     namespace = ""  # Use empty string for consistency with lookup
+            metastring_resolver = self._get_metastring_resolver()
             ns_metastr = self.namespace_encoder.encode(namespace or "")
-            ns_meta_bytes = self.metastring_resolver.get_metastr_bytes(ns_metastr)
+            ns_meta_bytes = metastring_resolver.get_metastr_bytes(ns_metastr)
             type_metastr = self.typename_encoder.encode(typename)
-            type_meta_bytes = self.metastring_resolver.get_metastr_bytes(type_metastr)
+            type_meta_bytes = metastring_resolver.get_metastr_bytes(type_metastr)
             typeinfo = TypeInfo(cls, type_id, user_type_id, serializer, ns_meta_bytes, type_meta_bytes, dynamic_type)
             self._named_type_to_type_info[(namespace, typename)] = typeinfo
             self._ns_type_to_type_info[(ns_meta_bytes, type_meta_bytes)] = typeinfo
@@ -841,18 +867,22 @@ class TypeResolver:
             if self.meta_share:
                 self.write_shared_type_meta(buffer, typeinfo)
             else:
-                self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.namespace_bytes)
-                self.metastring_resolver.write_meta_string_bytes(buffer, typeinfo.typename_bytes)
+                metastring_resolver = self._get_metastring_resolver()
+                metastring_resolver.write_meta_string_bytes(buffer, typeinfo.namespace_bytes)
+                metastring_resolver.write_meta_string_bytes(buffer, typeinfo.typename_bytes)
 
     def read_type_info(self, buffer):
         type_id = buffer.read_uint8()
         if type_id in {TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT}:
-            return self.serialization_context.meta_context.read_shared_type_info_with_type_id(buffer, type_id)
+            serialization_context = self._get_serialization_context()
+            return serialization_context.meta_context.read_shared_type_info_with_type_id(buffer, type_id)
         if TypeId.is_namespaced_type(type_id):
             if self.meta_share:
-                return self.serialization_context.meta_context.read_shared_type_info_with_type_id(buffer, type_id)
-            ns_metabytes = self.metastring_resolver.read_meta_string_bytes(buffer)
-            type_metabytes = self.metastring_resolver.read_meta_string_bytes(buffer)
+                serialization_context = self._get_serialization_context()
+                return serialization_context.meta_context.read_shared_type_info_with_type_id(buffer, type_id)
+            metastring_resolver = self._get_metastring_resolver()
+            ns_metabytes = metastring_resolver.read_meta_string_bytes(buffer)
+            type_metabytes = metastring_resolver.read_meta_string_bytes(buffer)
             typeinfo = self._ns_type_to_type_info.get((ns_metabytes, type_metabytes))
             if typeinfo is None:
                 ns = ns_metabytes.decode(self.namespace_decoder)
@@ -924,12 +954,12 @@ class TypeResolver:
 
     def write_shared_type_meta(self, buffer, typeinfo):
         """Write shared type meta information."""
-        meta_context = self.fory.serialization_context.meta_context
+        meta_context = self._get_serialization_context().meta_context
         meta_context.write_shared_type_info(buffer, typeinfo)
 
     def read_shared_type_meta(self, buffer):
         """Read shared type meta information."""
-        meta_context = self.serialization_context.meta_context
+        meta_context = self._get_serialization_context().meta_context
         assert meta_context is not None, "Meta context must be set when meta share is enabled"
         return meta_context.read_shared_type_info(buffer)
 
@@ -938,9 +968,10 @@ class TypeResolver:
         # Create serializer using TypeDef's create_serializer method
         serializer = type_def.create_serializer(self)
         ns_metastr = self.namespace_encoder.encode(type_def.namespace or "")
-        ns_meta_bytes = self.metastring_resolver.get_metastr_bytes(ns_metastr)
+        metastring_resolver = self._get_metastring_resolver()
+        ns_meta_bytes = metastring_resolver.get_metastr_bytes(ns_metastr)
         type_metastr = self.typename_encoder.encode(type_def.typename)
-        type_meta_bytes = self.metastring_resolver.get_metastr_bytes(type_metastr)
+        type_meta_bytes = metastring_resolver.get_metastr_bytes(type_metastr)
         typeinfo = TypeInfo(
             type_def.cls,
             type_def.type_id,

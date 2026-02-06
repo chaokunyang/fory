@@ -52,7 +52,6 @@ class UnionSerializer(Serializer):
     """
 
     __slots__ = (
-        "type_resolver",
         "_typing_union",
         "_alternative_types",
         "_alternative_serializers",
@@ -62,7 +61,6 @@ class UnionSerializer(Serializer):
 
     def __init__(self, fory, type_, alternative_types):
         super().__init__(fory, type_)
-        self.type_resolver = fory.type_resolver
         if isinstance(alternative_types, dict):
             self._typing_union = False
             self._case_types = alternative_types
@@ -111,7 +109,7 @@ class UnionSerializer(Serializer):
                 buffer.write_int8(NULL_FLAG)
                 return
             buffer.write_int8(NOT_NULL_VALUE_FLAG)
-        self.type_resolver.write_type_info(buffer, typeinfo)
+        self.fory.type_resolver.write_type_info(buffer, typeinfo)
         serializer.xwrite(buffer, value._value)
 
     def xread(self, buffer):
@@ -127,7 +125,7 @@ class UnionSerializer(Serializer):
             case_type = self._case_types.get(case_id)
             if case_type is None:
                 raise ValueError(f"unknown union case id: {case_id}")
-            typeinfo = self.type_resolver.get_type_info(case_type)
+            typeinfo = self.fory.type_resolver.get_type_info(case_type)
             self._case_type_infos[case_id] = typeinfo
         return typeinfo
 
@@ -178,13 +176,13 @@ class UnionSerializer(Serializer):
             raise TypeError(f"Value {value} of type {type(value)} doesn't match any alternative in Union{self._alternative_types}")
 
         buffer.write_var_uint32(active_index)
-        typeinfo = self.type_resolver.get_type_info(active_type)
-        self.type_resolver.write_type_info(buffer, typeinfo)
+        typeinfo = self.fory.type_resolver.get_type_info(active_type)
+        self.fory.type_resolver.write_type_info(buffer, typeinfo)
         active_serializer.xwrite(buffer, value)
 
     def _xread_typing_union(self, buffer):
         stored_index = buffer.read_var_uint32()
         if stored_index >= len(self._alternative_serializers):
             raise ValueError(f"Union index out of bounds: {stored_index} (max: {len(self._alternative_serializers) - 1})")
-        typeinfo = self.type_resolver.read_type_info(buffer)
+        typeinfo = self.fory.type_resolver.read_type_info(buffer)
         return typeinfo.serializer.xread(buffer)

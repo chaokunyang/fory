@@ -60,6 +60,8 @@ cdef class Buffer:
 
     cpdef inline void set_writer_index(self, int32_t value)
 
+    cpdef object _c_buffer_capsule(self)
+
     cpdef inline int32_t size(self)
 
     cpdef inline grow(self, int32_t needed_size)

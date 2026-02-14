@@ -18,40 +18,8 @@
  */
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/resolver/spec_lookup.dart';
 
 part '../generated/xlang_test_models.g.dart';
-
-bool _xlangSpecLookupReady = false;
-
-void _ensureXlangSpecLookupReady() {
-  if (_xlangSpecLookupReady) {
-    return;
-  }
-  SpecLookup.register($TestEnum);
-  SpecLookup.register($TwoEnumFieldStructEvolution);
-  SpecLookup.register($RefOverrideElement);
-  SpecLookup.register($RefOverrideContainer);
-  SpecLookup.register($NullableComprehensiveCompatible);
-  SpecLookup.register($Color);
-  SpecLookup.register($Item);
-  SpecLookup.register($SimpleStruct);
-  SpecLookup.register($Item1);
-  SpecLookup.register($StructWithList);
-  SpecLookup.register($StructWithMap);
-  SpecLookup.register($VersionCheckStruct);
-  SpecLookup.register($OneStringFieldStruct);
-  SpecLookup.register($TwoStringFieldStruct);
-  SpecLookup.register($OneEnumFieldStruct);
-  SpecLookup.register($TwoEnumFieldStruct);
-  SpecLookup.register($NullableComprehensiveSchemaConsistent);
-  SpecLookup.register($RefInnerSchemaConsistent);
-  SpecLookup.register($RefOuterSchemaConsistent);
-  SpecLookup.register($RefInnerCompatible);
-  SpecLookup.register($RefOuterCompatible);
-  SpecLookup.register($CircularRefStruct);
-  _xlangSpecLookupReady = true;
-}
 
 void registerXlangStruct(
   Fory fory,
@@ -60,7 +28,6 @@ void registerXlangStruct(
   String? namespace,
   String? typename,
 }) {
-  _ensureXlangSpecLookupReady();
   fory.registerStruct(
     type,
     typeId: typeId,
@@ -76,7 +43,6 @@ void registerXlangEnum(
   String? namespace,
   String? typename,
 }) {
-  _ensureXlangSpecLookupReady();
   fory.registerEnum(
     type,
     typeId: typeId,

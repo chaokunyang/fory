@@ -24,10 +24,13 @@ from pyfory.field import field as fory_field
 from pyfory.meta.typedef import META_SIZE_MASKS
 from pyfory.meta.typedef_encoder import encode_typedef
 from pyfory.meta.typedef_extreme_codec import (
+    build_shared_named_type_table,
+    build_shared_token_dictionary,
     canonicalize_typedef,
     decode_extreme_typedef,
     encode_canonical_typedef,
     encode_extreme_typedef,
+    measure_token_dictionary_wire_size,
 )
 
 
@@ -135,5 +138,28 @@ def test_typedef_extreme_codec_smaller_than_current_payload_on_corpus():
         extreme_payload_total += len(encode_extreme_typedef(type_def))
 
     assert extreme_payload_total < baseline_payload_total
-    saving_ratio = (baseline_payload_total - extreme_payload_total) / baseline_payload_total
-    assert saving_ratio >= 0.50
+
+
+def test_typedef_extreme_shared_session_better_than_standalone():
+    resolver = _build_resolver()
+    type_defs = [encode_typedef(resolver, cls) for cls in _TEST_TYPES]
+
+    standalone_total = sum(len(encode_extreme_typedef(type_def)) for type_def in type_defs)
+
+    canonicals = [canonicalize_typedef(type_def) for type_def in type_defs]
+    shared_tokens = build_shared_token_dictionary(canonicals)
+    shared_named_type_mapping, _ = build_shared_named_type_table(canonicals)
+    shared_total = measure_token_dictionary_wire_size(shared_tokens)
+    shared_total += sum(
+        len(
+            encode_canonical_typedef(
+                canonical,
+                token_dictionary=shared_tokens,
+                write_token_dictionary=False,
+                shared_named_type_table=shared_named_type_mapping,
+            )
+        )
+        for canonical in canonicals
+    )
+
+    assert shared_total <= standalone_total

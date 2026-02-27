@@ -61,118 +61,9 @@ _TOKEN_STYLE_SNAKE = 0b01
 _TOKEN_STYLE_UPPER_CAMEL = 0b10
 _TOKEN_STYLE_LOWER_CAMEL = 0b11
 
-_COMMON_TOKENS = [
-    "id",
-    "name",
-    "type",
-    "user",
-    "profile",
-    "tagged",
-    "metric",
-    "email",
-    "age",
-    "is",
-    "active",
-    "created",
-    "updated",
-    "at",
-    "time",
-    "timestamp",
-    "date",
-    "session",
-    "state",
-    "start",
-    "started",
-    "end",
-    "expires",
-    "attribute",
-    "attributes",
-    "metadata",
-    "meta",
-    "data",
-    "order",
-    "line",
-    "product",
-    "catalog",
-    "item",
-    "items",
-    "count",
-    "counts",
-    "price",
-    "prices",
-    "unit",
-    "quantity",
-    "inventory",
-    "available",
-    "reserved",
-    "warehouse",
-    "sku",
-    "code",
-    "audit",
-    "event",
-    "actor",
-    "target",
-    "region",
-    "geo",
-    "envelope",
-    "min",
-    "max",
-    "lat",
-    "lng",
-    "latitude",
-    "longitude",
-    "feature",
-    "rollout",
-    "switch",
-    "enabled",
-    "ratio",
-    "owner",
-    "team",
-    "model",
-    "serving",
-    "config",
-    "version",
-    "batch",
-    "size",
-    "timeout",
-    "label",
-    "labels",
-    "request",
-    "success",
-    "error",
-    "latency",
-    "p99",
-    "service",
-    "trace",
-    "span",
-    "parent",
-    "duration",
-    "ns",
-    "ms",
-    "status",
-    "counter",
-    "window",
-    "source",
-    "total",
-    "cart",
-    "snapshot",
-    "tags",
-    "ids",
-    "bench",
-    "fory",
-    "struct",
-    "map",
-    "list",
-    "set",
-    "key",
-    "value",
-    "object",
-    "class",
-    "field",
-    "namespace",
-    "typeinfo",
-]
-_TOKEN_TO_INDEX = {token: i for i, token in enumerate(_COMMON_TOKENS)}
+_COMMON_TOKENS: Tuple[str, ...] = ()
+_TOKEN_TO_INDEX: Dict[str, int] = {}
+_TOKEN_INDEX_WIDTH = 0
 
 # Fixed prefix codebook tuned for common struct metadata type IDs.
 _TYPE_ID_CODES = {
@@ -340,20 +231,52 @@ def canonicalize_typedef(type_def: TypeDef) -> CanonicalTypeDef:
     )
 
 
-def encode_extreme_typedef(type_def: TypeDef) -> bytes:
-    return encode_canonical_typedef(canonicalize_typedef(type_def))
+def encode_extreme_typedef(
+    type_def: TypeDef,
+    token_dictionary: Sequence[str] | None = None,
+    write_token_dictionary: bool = True,
+    shared_named_type_table: Dict[Tuple[str, str], int] | None = None,
+) -> bytes:
+    return encode_canonical_typedef(
+        canonicalize_typedef(type_def),
+        token_dictionary=token_dictionary,
+        write_token_dictionary=write_token_dictionary,
+        shared_named_type_table=shared_named_type_table,
+    )
 
 
-def encode_canonical_typedef(canonical: CanonicalTypeDef) -> bytes:
+def encode_canonical_typedef(
+    canonical: CanonicalTypeDef,
+    token_dictionary: Sequence[str] | None = None,
+    write_token_dictionary: bool = True,
+    shared_named_type_table: Dict[Tuple[str, str], int] | None = None,
+) -> bytes:
     writer = _BitWriter()
     writer.write_bits(_CODEC_VERSION, 2)
     writer.write_bit(1 if canonical.register_by_name else 0)
     writer.write_ue(len(canonical.fields))
+    if token_dictionary is None:
+        if write_token_dictionary:
+            _write_token_dictionary(writer, canonical)
+        else:
+            _set_token_dictionary(_build_token_dictionary(canonical))
+    else:
+        _set_token_dictionary(tuple(token_dictionary))
+        if write_token_dictionary:
+            writer.write_ue(len(_COMMON_TOKENS))
+            for token in _COMMON_TOKENS:
+                _write_raw_name(writer, token)
 
     _write_type_id(writer, canonical.type_id)
     if canonical.register_by_name:
-        _write_name(writer, canonical.namespace)
-        _write_name(writer, canonical.typename)
+        if shared_named_type_table is None:
+            _write_name(writer, canonical.namespace)
+            _write_name(writer, canonical.typename)
+        else:
+            key = (canonical.namespace, canonical.typename)
+            if key not in shared_named_type_table:
+                raise ValueError(f"Missing shared named type entry for {key}")
+            writer.write_ue(shared_named_type_table[key])
     else:
         writer.write_ue(canonical.user_type_id + 1)
 
@@ -367,10 +290,16 @@ def encode_canonical_typedef(canonical: CanonicalTypeDef) -> bytes:
     _write_tag_ids(writer, canonical.fields, tag_mask)
     _write_type_nodes(writer, canonical.fields)
     _write_field_names(writer, canonical.fields, tag_mask)
+    _reset_token_dictionary()
     return writer.to_bytes()
 
 
-def decode_extreme_typedef(data: bytes) -> CanonicalTypeDef:
+def decode_extreme_typedef(
+    data: bytes,
+    token_dictionary: Sequence[str] | None = None,
+    read_token_dictionary: bool = True,
+    shared_named_type_table: Sequence[Tuple[str, str]] | None = None,
+) -> CanonicalTypeDef:
     reader = _BitReader(data)
     version = reader.read_bits(2)
     if version != _CODEC_VERSION:
@@ -378,11 +307,27 @@ def decode_extreme_typedef(data: bytes) -> CanonicalTypeDef:
 
     register_by_name = bool(reader.read_bit())
     field_count = reader.read_ue()
+    if token_dictionary is None:
+        if read_token_dictionary:
+            _read_token_dictionary(reader)
+        else:
+            _set_token_dictionary(())
+    else:
+        _set_token_dictionary(tuple(token_dictionary))
+        if read_token_dictionary:
+            # Keep stream compatibility if caller still wants inline dictionary.
+            _read_token_dictionary(reader)
 
     type_id = _read_type_id(reader)
     if register_by_name:
-        namespace = _read_name(reader)
-        typename = _read_name(reader)
+        if shared_named_type_table is None:
+            namespace = _read_name(reader)
+            typename = _read_name(reader)
+        else:
+            named_type_index = reader.read_ue()
+            if named_type_index >= len(shared_named_type_table):
+                raise ValueError(f"Invalid shared named type index {named_type_index}")
+            namespace, typename = shared_named_type_table[named_type_index]
         user_type_id = NO_USER_TYPE_ID
     else:
         namespace = ""
@@ -411,7 +356,7 @@ def decode_extreme_typedef(data: bytes) -> CanonicalTypeDef:
                 type_node=field_nodes[i],
             )
         )
-    return CanonicalTypeDef(
+    result = CanonicalTypeDef(
         register_by_name=register_by_name,
         namespace=namespace,
         typename=typename,
@@ -419,6 +364,124 @@ def decode_extreme_typedef(data: bytes) -> CanonicalTypeDef:
         user_type_id=user_type_id,
         fields=tuple(fields),
     )
+    _reset_token_dictionary()
+    return result
+
+
+def _write_token_dictionary(writer: _BitWriter, canonical: CanonicalTypeDef) -> None:
+    tokens = _build_token_dictionary(canonical)
+    writer.write_ue(len(tokens))
+    for token in tokens:
+        _write_raw_name(writer, token)
+    _set_token_dictionary(tokens)
+
+
+def _read_token_dictionary(reader: _BitReader) -> None:
+    token_count = reader.read_ue()
+    tokens = [_read_raw_name(reader) for _ in range(token_count)]
+    _set_token_dictionary(tokens)
+
+
+def _set_token_dictionary(tokens: Sequence[str]) -> None:
+    global _COMMON_TOKENS, _TOKEN_TO_INDEX, _TOKEN_INDEX_WIDTH
+    _COMMON_TOKENS = tuple(tokens)
+    _TOKEN_TO_INDEX = {token: i for i, token in enumerate(_COMMON_TOKENS)}
+    _TOKEN_INDEX_WIDTH = _bit_width(len(_COMMON_TOKENS) - 1) if _COMMON_TOKENS else 0
+
+
+def _reset_token_dictionary() -> None:
+    _set_token_dictionary(())
+
+
+def _build_token_dictionary(canonical: CanonicalTypeDef) -> Tuple[str, ...]:
+    return _build_token_dictionary_from_names(_names_for_dictionary(canonical))
+
+
+def build_shared_token_dictionary(canonicals: Sequence[CanonicalTypeDef]) -> Tuple[str, ...]:
+    names: List[str] = []
+    for canonical in canonicals:
+        names.extend(_names_for_dictionary(canonical))
+    return _build_token_dictionary_from_names(names)
+
+
+def build_shared_named_type_table(canonicals: Sequence[CanonicalTypeDef]) -> Tuple[Dict[Tuple[str, str], int], Tuple[Tuple[str, str], ...]]:
+    ordered: List[Tuple[str, str]] = []
+    seen = set()
+    for canonical in canonicals:
+        if not canonical.register_by_name:
+            continue
+        key = (canonical.namespace, canonical.typename)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(key)
+    mapping = {key: i for i, key in enumerate(ordered)}
+    return mapping, tuple(ordered)
+
+
+def measure_token_dictionary_wire_size(tokens: Sequence[str]) -> int:
+    writer = _BitWriter()
+    writer.write_ue(len(tokens))
+    for token in tokens:
+        _write_raw_name(writer, token)
+    return len(writer.to_bytes())
+
+
+def _build_token_dictionary_from_names(names: Sequence[str]) -> Tuple[str, ...]:
+    frequencies: Dict[str, int] = {}
+    for name in names:
+        for token in _candidate_tokens_from_name(name):
+            frequencies[token] = frequencies.get(token, 0) + 1
+    if not frequencies:
+        return ()
+
+    candidates = sorted(
+        frequencies.keys(),
+        key=lambda token: (frequencies[token] * _raw_name_bits(token), frequencies[token], len(token), token),
+        reverse=True,
+    )
+    max_tokens = min(127, len(candidates))
+    best_net = 0
+    best_tokens: Tuple[str, ...] = ()
+    for size in range(1, max_tokens + 1):
+        selected = candidates[:size]
+        width = _bit_width(size - 1) if size > 0 else 0
+        dict_bits = _ue_bit_length(size) + sum(_raw_name_bits(token) for token in selected)
+        gain_bits = 0
+        for token in selected:
+            raw_bits = _raw_name_bits(token)
+            use_dict_bits = 1 + width
+            gain_bits += frequencies[token] * (raw_bits - use_dict_bits)
+        net = gain_bits - dict_bits
+        if net > best_net:
+            best_net = net
+            best_tokens = tuple(selected)
+    return best_tokens
+
+
+def _names_for_dictionary(canonical: CanonicalTypeDef) -> List[str]:
+    names: List[str] = []
+    if canonical.register_by_name:
+        names.append(canonical.namespace)
+        names.append(canonical.typename)
+    for field in canonical.fields:
+        if field.tag_id < 0:
+            names.append(field.name)
+    return names
+
+
+def _candidate_tokens_from_name(name: str) -> List[str]:
+    tokens = []
+    for piece_type, piece_value in _tokenize_name(name):
+        if piece_type != "tok":
+            continue
+        normalized = piece_value.lower()
+        if not normalized:
+            continue
+        if normalized[0].isdigit() and len(normalized) == 1:
+            continue
+        tokens.append(normalized)
+    return tokens
 
 
 def _to_type_node(field_type) -> TypeNode:
@@ -814,21 +877,35 @@ def _write_field_names(writer: _BitWriter, fields: Sequence[CanonicalField], tag
     names = [fields[i].name for i in range(len(fields)) if not tag_mask[i]]
     if not names:
         return
-    use_lcp = _field_name_lcp_bits(names) <= _field_name_plain_bits(names)
-    writer.write_bit(1 if use_lcp else 0)
-    if use_lcp:
+    plain_bits = _field_name_plain_bits(names)
+    lcp_bits = _field_name_lcp_bits(names)
+    snake_bits = _field_name_snake_bits(names)
+    if snake_bits <= plain_bits and snake_bits <= lcp_bits:
+        writer.write_bits(0b10, 2)
+        _write_field_names_snake(writer, names)
+        return
+    if lcp_bits <= plain_bits:
+        writer.write_bits(0b01, 2)
         _write_field_names_lcp(writer, names)
-    else:
-        for name in names:
-            _write_name(writer, name)
+        return
+    writer.write_bits(0b00, 2)
+    for name in names:
+        _write_name(writer, name)
 
 
 def _read_field_names(reader: _BitReader, tag_mask: Sequence[bool]) -> List[str]:
     non_tag_count = sum(1 for is_tag in tag_mask if not is_tag)
     if non_tag_count == 0:
         return ["" for _ in tag_mask]
-    use_lcp = reader.read_bit() == 1
-    decoded_names = _read_field_names_lcp(reader, non_tag_count) if use_lcp else [_read_name(reader) for _ in range(non_tag_count)]
+    mode = reader.read_bits(2)
+    if mode == 0b00:
+        decoded_names = [_read_name(reader) for _ in range(non_tag_count)]
+    elif mode == 0b01:
+        decoded_names = _read_field_names_lcp(reader, non_tag_count)
+    elif mode == 0b10:
+        decoded_names = _read_field_names_snake(reader, non_tag_count)
+    else:
+        raise ValueError(f"Unsupported field-name stream mode {mode:02b}")
 
     names: List[str] = []
     non_tag_index = 0
@@ -884,6 +961,37 @@ def _field_name_lcp_bits(names: Sequence[str]) -> int:
         bits += _name_body_bits(suffix, mode)
         previous_name = name
     return bits
+
+
+def _field_name_snake_bits(names: Sequence[str]) -> int:
+    bits = 0
+    for name in names:
+        tokens = _split_snake_tokens(name)
+        if tokens is None:
+            return 1 << 60
+        bits += _ue_bit_length(len(tokens))
+        for token in tokens:
+            bits += _token_base_bits(token)
+    return bits
+
+
+def _write_field_names_snake(writer: _BitWriter, names: Sequence[str]) -> None:
+    for name in names:
+        tokens = _split_snake_tokens(name)
+        if tokens is None:
+            raise ValueError(f"Snake field-name mode selected for non-snake name {name}")
+        writer.write_ue(len(tokens))
+        for token in tokens:
+            _write_token_base(writer, token)
+
+
+def _read_field_names_snake(reader: _BitReader, count: int) -> List[str]:
+    names = []
+    for _ in range(count):
+        token_count = reader.read_ue()
+        tokens = [_read_token_base(reader) for _ in range(token_count)]
+        names.append("_".join(tokens))
+    return names
 
 
 def _name_payload_bits(value: str, mode: int) -> int:
@@ -1237,31 +1345,16 @@ def _read_token_base(reader: _BitReader) -> str:
 
 
 def _token_index_bits(index: int) -> int:
-    if index < 16:
-        return 1 + 4
-    if index < 80:
-        return 2 + 6
-    return 2 + _ue_bit_length(index - 80)
+    _ = index
+    return _TOKEN_INDEX_WIDTH
 
 
 def _write_token_index(writer: _BitWriter, index: int) -> None:
-    if index < 16:
-        writer.write_bit(0)
-        writer.write_bits(index, 4)
-        return
-    if index < 80:
-        writer.write_bits(0b10, 2)
-        writer.write_bits(index - 16, 6)
-        return
-    writer.write_bits(0b11, 2)
-    writer.write_ue(index - 80)
+    if _TOKEN_INDEX_WIDTH > 0:
+        writer.write_bits(index, _TOKEN_INDEX_WIDTH)
 
 
 def _read_token_index(reader: _BitReader) -> int:
-    first = reader.read_bit()
-    if first == 0:
-        return reader.read_bits(4)
-    second = reader.read_bit()
-    if second == 0:
-        return 16 + reader.read_bits(6)
-    return 80 + reader.read_ue()
+    if _TOKEN_INDEX_WIDTH == 0:
+        return 0
+    return reader.read_bits(_TOKEN_INDEX_WIDTH)

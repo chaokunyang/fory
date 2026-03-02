@@ -140,6 +140,11 @@ class DataClassObject:
         )
 
 
+@dataclass
+class BoolCoercionObject:
+    b: bool
+
+
 def test_sort_fields():
     @dataclass
     class TestClass:
@@ -173,6 +178,30 @@ def test_sort_fields():
     # 6. Map types by type_id, then name: dict => f3, f9
     # 7. Other types (polymorphic/any) by name: any => f8
     assert serializer._field_names == ["f13", "f5", "f11", "f7", "f12", "f1", "f4", "f15", "f6", "f10", "f2", "f14", "f3", "f9", "f8"]
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (1, True),
+        (0, False),
+    ],
+)
+def test_bool_field_coercion(value, expected):
+    fory = Fory(xlang=False, ref=True, strict=False)
+    result = ser_de(fory, BoolCoercionObject(value))
+    assert result.b is expected
+
+
+def test_bool_field_coercion_numpy_bool():
+    np = pytest.importorskip("numpy")
+    fory = Fory(xlang=False, ref=True, strict=False)
+
+    result_true = ser_de(fory, BoolCoercionObject(np.bool_(True)))
+    assert result_true.b is True
+
+    result_false = ser_de(fory, BoolCoercionObject(np.bool_(False)))
+    assert result_false.b is False
 
 
 def test_data_class_serializer_xlang():

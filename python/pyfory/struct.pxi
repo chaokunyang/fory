@@ -45,7 +45,6 @@ cdef class DataClassSerializer(Serializer):
     cdef object _dynamic_flag_list
     cdef object _field_exists_list
     cdef vector[uint8_t] _basic_type_ids
-    cdef vector[int32_t] _slot_indexes
 
     def __init__(
         self,
@@ -220,7 +219,6 @@ cdef class DataClassSerializer(Serializer):
         cdef object field_name
         cdef object serializer
         cdef set current_fields
-        cdef dict slot_index
         cdef list nullable_flags
         cdef list dynamic_flags
         cdef list field_exists
@@ -228,20 +226,11 @@ cdef class DataClassSerializer(Serializer):
         cdef object is_nullable
 
         self._basic_type_ids.clear()
-        self._slot_indexes.clear()
 
         current_fields = set(self._get_field_names(self.type_))
         nullable_flags = []
         dynamic_flags = []
         field_exists = []
-
-        if self._has_slots:
-            slots = self.type_.__slots__
-            if type(slots) is str:
-                slots = (slots,)
-            slot_index = {name: index for index, name in enumerate(slots)}
-        else:
-            slot_index = {}
 
         for i in range(len(self._field_names)):
             field_name = self._field_names[i]
@@ -253,9 +242,6 @@ cdef class DataClassSerializer(Serializer):
             dynamic_flags.append(bool(is_dynamic))
             self._basic_type_ids.push_back(self._resolve_basic_type_id(serializer, bool(is_dynamic)))
             field_exists.append(field_name in current_fields)
-
-            if self._has_slots:
-                self._slot_indexes.push_back(slot_index.get(field_name, -1))
 
         self._nullable_flag_list = tuple(nullable_flags)
         self._dynamic_flag_list = tuple(dynamic_flags)

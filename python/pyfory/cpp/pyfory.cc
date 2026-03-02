@@ -685,15 +685,20 @@ static int write_primitive_item(Buffer *buffer, PyObject *value,
     return 0;
   }
   case TypeId::BOOL:
-    if (FORY_PREDICT_FALSE(value != Py_True && value != Py_False)) {
-      if (FORY_PREDICT_FALSE(!PyBool_Check(value))) {
-        PyErr_Format(PyExc_TypeError, "expected bool, got %.200s",
-                     Py_TYPE(value)->tp_name);
+    if (value == Py_True) {
+      buffer->write_int8(1);
+      return 0;
+    }
+    if (value == Py_False) {
+      buffer->write_int8(0);
+      return 0;
+    }
+    {
+      const int truthy = PyObject_IsTrue(value);
+      if (FORY_PREDICT_FALSE(truthy < 0)) {
         return -1;
       }
-      buffer->write_int8(PyObject_IsTrue(value) ? 1 : 0);
-    } else {
-      buffer->write_int8(value == Py_True ? 1 : 0);
+      buffer->write_int8(truthy ? 1 : 0);
     }
     return 0;
   case TypeId::FLOAT32:

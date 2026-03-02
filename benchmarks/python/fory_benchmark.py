@@ -31,7 +31,7 @@ Benchmark Options:
     --benchmarks BENCHMARK_LIST
         Comma-separated list of benchmarks to run. Default: all
         Available: dict, large_dict, dict_group, tuple, large_tuple,
-                   large_float_tuple, large_boolean_tuple, list, large_list, struct
+                   large_float_tuple, large_boolean_tuple, list, large_list, struct, slots_struct
 
     --serializers SERIALIZER_LIST
         Comma-separated list of serializers to benchmark. Default: all
@@ -67,7 +67,7 @@ Examples:
     python fory_benchmark.py --operation deserialize
 
     # Run specific benchmarks with both serializers
-    python fory_benchmark.py --benchmarks dict,large_dict,struct
+    python fory_benchmark.py --benchmarks dict,large_dict,struct,slots_struct
 
     # Compare only Fory performance
     python fory_benchmark.py --serializers fory
@@ -90,7 +90,7 @@ Examples:
 
 import argparse
 import array
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 import datetime
 import pickle
 import random
@@ -217,7 +217,38 @@ class Struct2:
     f2: Dict[pyfory.int8, pyfory.int32]
 
 
+@pyfory.dataslots
+@dataclass
+class SlotsStruct:
+    f1: Any = None
+    f2: str = None
+    f3: List[str] = None
+    f4: Dict[pyfory.int8, pyfory.int32] = None
+    f5: pyfory.int8 = None
+    f6: pyfory.int16 = None
+    f7: pyfory.int32 = None
+    f8: pyfory.int64 = None
+    f9: pyfory.float32 = None
+    f10: pyfory.float64 = None
+    f11: pyfory.int16_array = None
+    f12: List[pyfory.int16] = None
+
+
 STRUCT_OBJECT = Struct1(
+    f1=Struct2(f1=True, f2={-1: 2}),
+    f2="abc",
+    f3=["abc", "abc"],
+    f4={1: 2},
+    f5=2**7 - 1,
+    f6=2**15 - 1,
+    f7=2**31 - 1,
+    f8=2**63 - 1,
+    f9=1.0 / 2,
+    f10=1 / 3.0,
+    f11=array.array("h", [-1, 4]),
+    f12=[-1, 4],
+)
+SLOTS_STRUCT_OBJECT = SlotsStruct(
     f1=Struct2(f1=True, f2={-1: 2}),
     f2="abc",
     f3=["abc", "abc"],
@@ -240,6 +271,7 @@ fory_without_ref = pyfory.Fory(ref=False)
 for fory_instance in (fory_with_ref, fory_without_ref):
     fory_instance.register_type(Struct1)
     fory_instance.register_type(Struct2)
+    fory_instance.register_type(SlotsStruct)
 
 
 def fory_roundtrip(ref, obj):
@@ -307,7 +339,9 @@ def make_msgpack_compatible(obj):
     if isinstance(obj, array.array):
         return obj.tolist()
     if is_dataclass(obj):
-        return {k: make_msgpack_compatible(v) for k, v in vars(obj).items()}
+        return {
+            f.name: make_msgpack_compatible(getattr(obj, f.name)) for f in fields(obj)
+        }
     if isinstance(obj, dict):
         return {
             make_msgpack_compatible(k): make_msgpack_compatible(v)
@@ -401,7 +435,7 @@ def benchmark_args():
         default="all",
         help="Comma-separated list of benchmarks to run. Available: dict, large_dict, "
         "dict_group, tuple, large_tuple, large_float_tuple, large_boolean_tuple, "
-        "list, large_list, struct. Default: all",
+        "list, large_list, struct, slots_struct. Default: all",
     )
     parser.add_argument(
         "--serializers",
@@ -496,6 +530,7 @@ def micro_benchmark():
         "list": LIST,
         "large_list": LARGE_LIST,
         "struct": STRUCT_OBJECT,
+        "slots_struct": SLOTS_STRUCT_OBJECT,
     }
 
     # Determine which benchmarks to run

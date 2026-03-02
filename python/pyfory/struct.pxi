@@ -16,14 +16,12 @@
 # under the License.
 
 import dataclasses
-import enum
 import typing
 
 from cpython.unicode cimport PyUnicode_InternFromString
 
 
 cdef uint8_t _BASIC_FIELD_UNSUPPORTED = 0xFF
-cdef object _NO_MISSING_FIELD_DEFAULT = object()
 
 
 @cython.final
@@ -41,6 +39,7 @@ cdef class DataClassSerializer(Serializer):
     cdef public object _unwrapped_hints
     cdef public int32_t _hash
     cdef public tuple _field_name_interned
+    cdef public object _default_values_factory
     cdef object _missing_field_defaults
     cdef object _nullable_flag_list
     cdef object _dynamic_flag_list
@@ -62,6 +61,7 @@ cdef class DataClassSerializer(Serializer):
         from pyfory.lib.mmh3 import hash_buffer
         from pyfory.struct import (
             _extract_field_infos,
+            build_default_values_factory,
             compute_struct_fingerprint,
             compute_struct_meta,
             StructFieldSerializerVisitor,
@@ -140,6 +140,10 @@ cdef class DataClassSerializer(Serializer):
             )
 
         self._field_name_interned = tuple(self._intern_field_name(name) for name in self._field_names)
+        if dataclasses.is_dataclass(clz):
+            self._default_values_factory = build_default_values_factory(self.fory, self._type_hints, dataclasses.fields(clz))
+        else:
+            self._default_values_factory = {}
         self._build_fastpath_metadata()
         self._build_missing_field_defaults()
 
@@ -262,13 +266,11 @@ cdef class DataClassSerializer(Serializer):
         cdef object current_class_field_names
         cdef object missing_fields
         cdef list defaults
-        cdef object dc_field
-        cdef object resolved_default
-        cdef object default_value
+        cdef object field_name
         cdef object default_factory
 
         self._missing_field_defaults = ()
-        if not self.fory.compatible:
+        if not self.fory.compatible or not self._default_values_factory:
             return
 
         read_field_names = set(self._field_names)
@@ -276,59 +278,13 @@ cdef class DataClassSerializer(Serializer):
         missing_fields = current_class_field_names - read_field_names
         if not missing_fields:
             return
-        if not dataclasses.is_dataclass(self.type_):
-            return
 
         defaults = []
-        for dc_field in dataclasses.fields(self.type_):
-            if dc_field.name not in missing_fields:
+        for field_name, default_factory in self._default_values_factory.items():
+            if field_name not in missing_fields:
                 continue
-            resolved_default = self._resolve_missing_field_default(dc_field)
-            if resolved_default is _NO_MISSING_FIELD_DEFAULT:
-                continue
-            default_value, default_factory = resolved_default
-            defaults.append((self._intern_field_name(dc_field.name), default_value, default_factory))
+            defaults.append((self._intern_field_name(field_name), default_factory))
         self._missing_field_defaults = tuple(defaults)
-
-    cdef inline object _resolve_missing_field_default(self, object dc_field):
-        cdef object type_hint
-        cdef object unwrapped_type
-        cdef bint is_optional
-        cdef object meta
-        cdef bint effective_nullable
-        cdef object default_value
-        cdef tuple members
-
-        from pyfory.field import extract_field_meta
-        from pyfory.type_util import unwrap_optional
-
-        type_hint = self._type_hints.get(dc_field.name, typing.Any)
-        unwrapped_type, is_optional = unwrap_optional(type_hint)
-        meta = extract_field_meta(dc_field)
-        effective_nullable = (meta.nullable if meta is not None else self.fory.field_nullable) or is_optional
-
-        if dc_field.default is not dataclasses.MISSING:
-            default_value = dc_field.default
-            if default_value is None and (not effective_nullable) and self._is_enum_type(unwrapped_type):
-                members = tuple(unwrapped_type)
-                if members:
-                    default_value = members[0]
-            return (default_value, None)
-
-        if dc_field.default_factory is not dataclasses.MISSING:
-            return (None, dc_field.default_factory)
-
-        if (not effective_nullable) and self._is_enum_type(unwrapped_type):
-            members = tuple(unwrapped_type)
-            if members:
-                return (members[0], None)
-        return _NO_MISSING_FIELD_DEFAULT
-
-    cdef inline bint _is_enum_type(self, object type_obj):
-        try:
-            return isinstance(type_obj, type) and issubclass(type_obj, enum.Enum)
-        except TypeError:
-            return False
 
     cpdef inline write(self, Buffer buffer, value):
         if not self.fory.compatible:
@@ -470,24 +426,14 @@ cdef class DataClassSerializer(Serializer):
 
     cdef inline void _apply_missing_defaults_dict(self, dict obj_dict):
         cdef object field_name
-        cdef object default_value
         cdef object default_factory
-        cdef object value
 
-        for field_name, default_value, default_factory in self._missing_field_defaults:
-            if default_factory is None:
-                value = default_value
-            else:
-                value = default_factory()
-            obj_dict[field_name] = value
+        for field_name, default_factory in self._missing_field_defaults:
+            obj_dict[field_name] = default_factory()
 
     cdef inline void _apply_missing_defaults_slots(self, object obj):
         cdef object field_name
-        cdef object default_value
         cdef object default_factory
 
-        for field_name, default_value, default_factory in self._missing_field_defaults:
-            if default_factory is None:
-                setattr(obj, field_name, default_value)
-            else:
-                setattr(obj, field_name, default_factory())
+        for field_name, default_factory in self._missing_field_defaults:
+            setattr(obj, field_name, default_factory())

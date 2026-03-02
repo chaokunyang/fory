@@ -15,8 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import dataclasses
 from dataclasses import dataclass
 import datetime
+import enum
 from typing import Dict, Any, List, Set, Optional
 
 import pytest
@@ -25,7 +27,7 @@ import typing
 import pyfory
 from pyfory import Fory
 from pyfory.error import TypeUnregisteredError
-from pyfory.struct import DataClassSerializer
+from pyfory.struct import DataClassSerializer, build_default_values_factory
 from pyfory.types import TypeId
 
 
@@ -319,6 +321,43 @@ def test_data_class_serializer_xlang_vs_non_xlang():
     assert serializer_xlang._hash == serializer_python._hash
 
 
+class MissingDefaultEnum(enum.Enum):
+    A = 1
+    B = 2
+
+
+@dataclass
+class MissingDefaultFactoryFields:
+    required: int
+    plain_default: int = 7
+    list_default: List[int] = dataclasses.field(default_factory=list)
+    enum_default_none: MissingDefaultEnum = None
+
+
+def test_build_default_values_factory():
+    fory = Fory(xlang=False, ref=True, strict=False)
+    type_hints = typing.get_type_hints(MissingDefaultFactoryFields)
+    default_factories = build_default_values_factory(
+        fory,
+        type_hints,
+        dataclasses.fields(MissingDefaultFactoryFields),
+    )
+
+    assert callable(default_factories["required"])
+    assert callable(default_factories["plain_default"])
+    assert callable(default_factories["list_default"])
+    assert callable(default_factories["enum_default_none"])
+
+    assert default_factories["required"]() is None
+    assert default_factories["plain_default"]() == 7
+    assert default_factories["enum_default_none"]() is MissingDefaultEnum.A
+    list_one = default_factories["list_default"]()
+    list_two = default_factories["list_default"]()
+    assert list_one == []
+    assert list_two == []
+    assert list_one is not list_two
+
+
 @dataclass
 class OptionalFieldsObject:
     f1: Optional[int] = None
@@ -432,6 +471,17 @@ class CompatibleV3:
     f2: str = ""
 
 
+@dataclass
+class CompatibleRequiredFieldV1:
+    f1: int
+
+
+@dataclass
+class CompatibleRequiredFieldV2:
+    f1: int
+    f2: int
+
+
 @pytest.mark.parametrize("xlang", [False, True])
 def test_compatible_mode_add_field(xlang):
     """Test that adding a field with default value works in compatible mode."""
@@ -498,6 +548,27 @@ def test_compatible_mode_bidirectional(xlang):
     assert v1_result.f1 == 200
     assert v1_result.f2 == "hello"
     assert v1_result.f3 == 2.71
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_compatible_mode_add_required_field_without_default_uses_none(xlang):
+    fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
+    fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
+
+    fory_v1.register_type(CompatibleRequiredFieldV1, typename="example.CompatibleRequiredField")
+    fory_v2.register_type(CompatibleRequiredFieldV2, typename="example.CompatibleRequiredField")
+
+    v1_binary = fory_v1.serialize(CompatibleRequiredFieldV1(f1=321))
+    v2_result = fory_v2.deserialize(v1_binary)
+
+    assert v2_result.f1 == 321
+    assert hasattr(v2_result, "f2")
+    assert v2_result.f2 is None
+
+    serializer_v2 = fory_v2.type_resolver.get_serializer(CompatibleRequiredFieldV2)
+    assert hasattr(serializer_v2, "_default_values_factory")
+    assert callable(serializer_v2._default_values_factory["f2"])
+    assert serializer_v2._default_values_factory["f2"]() is None
 
 
 @dataclass

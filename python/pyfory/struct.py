@@ -83,7 +83,6 @@ from pyfory import (
 )
 
 logger = logging.getLogger(__name__)
-_NO_MISSING_FIELD_DEFAULT = object()
 
 
 @dataclasses.dataclass
@@ -260,6 +259,43 @@ def _extract_field_infos(
     return field_infos, field_metas
 
 
+def resolve_missing_field_default(
+    dc_field: dataclasses.Field,
+    fory,
+    type_hints: dict[str, typing.Any],
+) -> typing.Callable[[], typing.Any]:
+    type_hint = type_hints.get(dc_field.name, typing.Any)
+    unwrapped_type, is_optional = unwrap_optional(type_hint)
+    meta = extract_field_meta(dc_field)
+    effective_nullable = (meta.nullable if meta is not None else fory.field_nullable) or is_optional
+
+    if dc_field.default is not dataclasses.MISSING:
+        default_value = dc_field.default
+        if default_value is None and not effective_nullable and is_subclass(unwrapped_type, enum.Enum):
+            members = tuple(unwrapped_type)
+            if members:
+                default_value = members[0]
+        return lambda value=default_value: value
+
+    if dc_field.default_factory is not dataclasses.MISSING:
+        return dc_field.default_factory
+
+    if not effective_nullable and is_subclass(unwrapped_type, enum.Enum):
+        members = tuple(unwrapped_type)
+        if members:
+            default_value = members[0]
+            return lambda value=default_value: value
+    return lambda: None
+
+
+def _resolve_missing_field_default(dc_field, fory, type_hints):
+    return resolve_missing_field_default(dc_field, fory, type_hints)
+
+
+def build_default_values_factory(fory, type_hints, dc_fields=()):
+    return {dc_field.name: _resolve_missing_field_default(dc_field, fory, type_hints) for dc_field in dc_fields}
+
+
 class DataClassSerializer(Serializer):
     _BASIC_SERIALIZERS = (
         BooleanSerializer,
@@ -339,6 +375,9 @@ class DataClassSerializer(Serializer):
 
         self._field_name_interned = {name: sys.intern(name) for name in self._field_names}
         self._current_class_field_names = set(self._get_field_names(self.type_))
+        self._default_values_factory = (
+            build_default_values_factory(self.fory, self._type_hints, dataclasses.fields(self.type_)) if dataclasses.is_dataclass(self.type_) else {}
+        )
         self._missing_field_defaults = self._build_missing_field_defaults()
         self._basic_field_flags = [
             (not self._dynamic_fields.get(field_name, False)) and isinstance(self._serializers[index], self._BASIC_SERIALIZERS)
@@ -361,44 +400,12 @@ class DataClassSerializer(Serializer):
         return {field_name: unwrap_optional(hint)[0] for field_name, hint in self._type_hints.items()}
 
     def _build_missing_field_defaults(self):
-        if not self.fory.compatible or not dataclasses.is_dataclass(self.type_):
+        if not self.fory.compatible or not self._default_values_factory:
             return []
         missing_fields = self._current_class_field_names - set(self._field_names)
         if not missing_fields:
             return []
-        defaults = []
-        for dc_field in dataclasses.fields(self.type_):
-            if dc_field.name not in missing_fields:
-                continue
-            resolved_default = self._resolve_missing_field_default(dc_field)
-            if resolved_default is _NO_MISSING_FIELD_DEFAULT:
-                continue
-            default_value, default_factory = resolved_default
-            defaults.append((dc_field.name, default_value, default_factory))
-        return defaults
-
-    def _resolve_missing_field_default(self, dc_field):
-        type_hint = self._type_hints.get(dc_field.name, typing.Any)
-        unwrapped_type, is_optional = unwrap_optional(type_hint)
-        meta = extract_field_meta(dc_field)
-        effective_nullable = (meta.nullable if meta is not None else self.fory.field_nullable) or is_optional
-
-        if dc_field.default is not dataclasses.MISSING:
-            default_value = dc_field.default
-            if default_value is None and not effective_nullable and is_subclass(unwrapped_type, enum.Enum):
-                members = tuple(unwrapped_type)
-                if members:
-                    default_value = members[0]
-            return default_value, None
-
-        if dc_field.default_factory is not dataclasses.MISSING:
-            return None, dc_field.default_factory
-
-        if not effective_nullable and is_subclass(unwrapped_type, enum.Enum):
-            members = tuple(unwrapped_type)
-            if members:
-                return members[0], None
-        return _NO_MISSING_FIELD_DEFAULT
+        return [(field_name, default_factory) for field_name, default_factory in self._default_values_factory.items() if field_name in missing_fields]
 
     def _write_field_value(self, buffer, serializer, field_value, is_nullable, is_dynamic, is_basic):
         if is_nullable:
@@ -480,8 +487,8 @@ class DataClassSerializer(Serializer):
                 setattr(obj, interned_name, field_value)
 
         if self._missing_field_defaults:
-            for field_name, default_value, default_factory in self._missing_field_defaults:
-                value = default_value if default_factory is None else default_factory()
+            for field_name, default_factory in self._missing_field_defaults:
+                value = default_factory()
                 if obj_dict is not None:
                     obj_dict[field_name] = value
                 else:

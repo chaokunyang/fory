@@ -442,23 +442,44 @@ class DataClassSerializer(Serializer):
         if not self.fory.compatible:
             buffer.write_int32(self._hash)
         value_dict = value.__dict__ if not self._has_slots else None
-        for index, field_name in enumerate(self._field_names):
-            interned_name = self._field_name_interned[field_name]
-            if value_dict is not None:
-                if self.fory.compatible:
+        if value_dict is not None:
+            if self.fory.compatible:
+                for index, field_name in enumerate(self._field_names):
+                    interned_name = self._field_name_interned[field_name]
                     field_value = value_dict.get(interned_name)
-                else:
-                    field_value = value_dict[interned_name]
+                    serializer = self._serializers[index]
+                    is_nullable = self._nullable_fields.get(field_name, False)
+                    is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_basic = self._basic_field_flags[index]
+                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
             else:
-                if self.fory.compatible:
+                for index, field_name in enumerate(self._field_names):
+                    interned_name = self._field_name_interned[field_name]
+                    field_value = value_dict[interned_name]
+                    serializer = self._serializers[index]
+                    is_nullable = self._nullable_fields.get(field_name, False)
+                    is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_basic = self._basic_field_flags[index]
+                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
+        else:
+            if self.fory.compatible:
+                for index, field_name in enumerate(self._field_names):
+                    interned_name = self._field_name_interned[field_name]
                     field_value = getattr(value, interned_name, None)
-                else:
+                    serializer = self._serializers[index]
+                    is_nullable = self._nullable_fields.get(field_name, False)
+                    is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_basic = self._basic_field_flags[index]
+                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
+            else:
+                for index, field_name in enumerate(self._field_names):
+                    interned_name = self._field_name_interned[field_name]
                     field_value = getattr(value, interned_name)
-            serializer = self._serializers[index]
-            is_nullable = self._nullable_fields.get(field_name, False)
-            is_dynamic = self._dynamic_fields.get(field_name, False)
-            is_basic = self._basic_field_flags[index]
-            self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
+                    serializer = self._serializers[index]
+                    is_nullable = self._nullable_fields.get(field_name, False)
+                    is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_basic = self._basic_field_flags[index]
+                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
 
     def read(self, buffer):
         if not self.fory.strict:

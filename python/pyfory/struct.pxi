@@ -24,6 +24,15 @@ from cpython.unicode cimport PyUnicode_InternFromString
 cdef uint8_t _BASIC_FIELD_UNSUPPORTED = 0xFF
 
 
+cdef struct FieldRuntimeInfo:
+    uint8_t basic_type_id
+    uint8_t is_nullable
+    uint8_t is_dynamic
+    uint8_t field_exists
+    PyObject *field_name
+    PyObject *serializer
+
+
 @cython.final
 cdef class DataClassSerializer(Serializer):
     cdef public object _type_hints
@@ -39,12 +48,10 @@ cdef class DataClassSerializer(Serializer):
     cdef public object _unwrapped_hints
     cdef public int32_t _hash
     cdef public tuple _field_name_interned
+    cdef tuple _serializer_owner
     cdef public object _default_values_factory
     cdef object _missing_field_defaults
-    cdef object _nullable_flag_list
-    cdef object _dynamic_flag_list
-    cdef object _field_exists_list
-    cdef vector[uint8_t] _basic_type_ids
+    cdef vector[FieldRuntimeInfo] _field_runtime_infos
 
     def __init__(
         self,
@@ -139,6 +146,7 @@ cdef class DataClassSerializer(Serializer):
             )
 
         self._field_name_interned = tuple(self._intern_field_name(name) for name in self._field_names)
+        self._serializer_owner = tuple(self._serializers)
         if dataclasses.is_dataclass(clz):
             self._default_values_factory = build_default_values_factory(self.fory, self._type_hints, dataclasses.fields(clz))
         else:
@@ -219,33 +227,28 @@ cdef class DataClassSerializer(Serializer):
         cdef object field_name
         cdef object serializer
         cdef set current_fields
-        cdef list nullable_flags
-        cdef list dynamic_flags
-        cdef list field_exists
-        cdef object is_dynamic
-        cdef object is_nullable
+        cdef bint is_dynamic
+        cdef bint is_nullable
+        cdef FieldRuntimeInfo runtime_info
 
-        self._basic_type_ids.clear()
+        self._field_runtime_infos.clear()
 
         current_fields = set(self._get_field_names(self.type_))
-        nullable_flags = []
-        dynamic_flags = []
-        field_exists = []
+        self._field_runtime_infos.reserve(len(self._field_names))
 
         for i in range(len(self._field_names)):
             field_name = self._field_names[i]
-            serializer = self._serializers[i]
-            is_nullable = self._nullable_fields.get(field_name, False)
-            is_dynamic = self._dynamic_fields.get(field_name, False)
+            serializer = self._serializer_owner[i]
+            is_nullable = bool(self._nullable_fields.get(field_name, False))
+            is_dynamic = bool(self._dynamic_fields.get(field_name, False))
 
-            nullable_flags.append(bool(is_nullable))
-            dynamic_flags.append(bool(is_dynamic))
-            self._basic_type_ids.push_back(self._resolve_basic_type_id(serializer, bool(is_dynamic)))
-            field_exists.append(field_name in current_fields)
-
-        self._nullable_flag_list = tuple(nullable_flags)
-        self._dynamic_flag_list = tuple(dynamic_flags)
-        self._field_exists_list = tuple(field_exists)
+            runtime_info.basic_type_id = self._resolve_basic_type_id(serializer, is_dynamic)
+            runtime_info.is_nullable = 1 if is_nullable else 0
+            runtime_info.is_dynamic = 1 if is_dynamic else 0
+            runtime_info.field_exists = 1 if field_name in current_fields else 0
+            runtime_info.field_name = <PyObject *> self._field_name_interned[i]
+            runtime_info.serializer = <PyObject *> serializer
+            self._field_runtime_infos.push_back(runtime_info)
 
     cdef void _build_missing_field_defaults(self):
         cdef object read_field_names
@@ -283,34 +286,48 @@ cdef class DataClassSerializer(Serializer):
     cdef inline void _write_dict(self, Buffer buffer, object value):
         cdef dict value_dict = value.__dict__
         cdef Py_ssize_t i
+        cdef Py_ssize_t field_count = self._field_runtime_infos.size()
         cdef object field_value
         cdef object field_name
+        cdef FieldRuntimeInfo *field_info
 
-        for i in range(len(self._field_names)):
-            field_name = self._field_name_interned[i]
-            if self.fory.compatible:
+        if self.fory.compatible:
+            for i in range(field_count):
+                field_info = &self._field_runtime_infos[i]
+                field_name = <object> field_info.field_name
                 field_value = value_dict.get(field_name)
-            else:
+                self._write_field_value(buffer, field_info, field_value)
+        else:
+            for i in range(field_count):
+                field_info = &self._field_runtime_infos[i]
+                field_name = <object> field_info.field_name
                 field_value = value_dict[field_name]
-            self._write_field_value(buffer, i, field_value)
+                self._write_field_value(buffer, field_info, field_value)
 
     cdef inline void _write_slots(self, Buffer buffer, object value):
         cdef Py_ssize_t i
+        cdef Py_ssize_t field_count = self._field_runtime_infos.size()
         cdef object field_name
         cdef object field_value
+        cdef FieldRuntimeInfo *field_info
 
-        for i in range(len(self._field_names)):
-            field_name = self._field_name_interned[i]
-            if self.fory.compatible:
+        if self.fory.compatible:
+            for i in range(field_count):
+                field_info = &self._field_runtime_infos[i]
+                field_name = <object> field_info.field_name
                 field_value = getattr(value, field_name, None)
-            else:
+                self._write_field_value(buffer, field_info, field_value)
+        else:
+            for i in range(field_count):
+                field_info = &self._field_runtime_infos[i]
+                field_name = <object> field_info.field_name
                 field_value = getattr(value, field_name)
-            self._write_field_value(buffer, i, field_value)
+                self._write_field_value(buffer, field_info, field_value)
 
-    cdef inline void _write_field_value(self, Buffer buffer, Py_ssize_t index, object field_value):
-        cdef uint8_t type_id = self._basic_type_ids[index]
-        cdef bint is_nullable = bool(self._nullable_flag_list[index])
-        cdef bint is_dynamic = bool(self._dynamic_flag_list[index])
+    cdef inline void _write_field_value(self, Buffer buffer, FieldRuntimeInfo *field_info, object field_value):
+        cdef uint8_t type_id = field_info.basic_type_id
+        cdef bint is_nullable = field_info.is_nullable != 0
+        cdef bint is_dynamic = field_info.is_dynamic != 0
         cdef Serializer serializer
 
         if type_id != _BASIC_FIELD_UNSUPPORTED:
@@ -324,7 +341,7 @@ cdef class DataClassSerializer(Serializer):
                 Fory_PyWriteBasicFieldToBuffer(field_value, &buffer.c_buffer, type_id)
             return
 
-        serializer = self._serializers[index]
+        serializer = <object> field_info.serializer
         if is_nullable:
             if is_dynamic:
                 self.fory.write_ref(buffer, field_value)
@@ -367,32 +384,38 @@ cdef class DataClassSerializer(Serializer):
     cdef inline void _read_dict(self, Buffer buffer, object obj):
         cdef dict obj_dict = obj.__dict__
         cdef Py_ssize_t i
+        cdef Py_ssize_t field_count = self._field_runtime_infos.size()
         cdef object field_value
         cdef object field_name
+        cdef FieldRuntimeInfo *field_info
 
-        for i in range(len(self._field_names)):
-            field_value = self._read_field_value(buffer, i)
-            if not self._field_exists_list[i]:
+        for i in range(field_count):
+            field_info = &self._field_runtime_infos[i]
+            field_value = self._read_field_value(buffer, field_info)
+            if field_info.field_exists == 0:
                 continue
-            field_name = self._field_name_interned[i]
+            field_name = <object> field_info.field_name
             obj_dict[field_name] = field_value
 
     cdef inline void _read_slots(self, Buffer buffer, object obj):
         cdef Py_ssize_t i
+        cdef Py_ssize_t field_count = self._field_runtime_infos.size()
         cdef object field_value
         cdef object field_name
+        cdef FieldRuntimeInfo *field_info
 
-        for i in range(len(self._field_names)):
-            field_value = self._read_field_value(buffer, i)
-            if not self._field_exists_list[i]:
+        for i in range(field_count):
+            field_info = &self._field_runtime_infos[i]
+            field_value = self._read_field_value(buffer, field_info)
+            if field_info.field_exists == 0:
                 continue
-            field_name = self._field_name_interned[i]
+            field_name = <object> field_info.field_name
             setattr(obj, field_name, field_value)
 
-    cdef inline object _read_field_value(self, Buffer buffer, Py_ssize_t index):
-        cdef uint8_t type_id = self._basic_type_ids[index]
-        cdef bint is_nullable = bool(self._nullable_flag_list[index])
-        cdef bint is_dynamic = bool(self._dynamic_flag_list[index])
+    cdef inline object _read_field_value(self, Buffer buffer, FieldRuntimeInfo *field_info):
+        cdef uint8_t type_id = field_info.basic_type_id
+        cdef bint is_nullable = field_info.is_nullable != 0
+        cdef bint is_dynamic = field_info.is_dynamic != 0
         cdef Serializer serializer
 
         if type_id != _BASIC_FIELD_UNSUPPORTED:
@@ -400,7 +423,7 @@ cdef class DataClassSerializer(Serializer):
                 return None
             return Fory_PyReadBasicFieldFromBuffer(&buffer.c_buffer, type_id)
 
-        serializer = self._serializers[index]
+        serializer = <object> field_info.serializer
         if is_nullable:
             if is_dynamic:
                 return self.fory.read_ref(buffer)

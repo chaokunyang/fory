@@ -204,6 +204,33 @@ def test_bool_field_coercion_numpy_bool():
     assert result_false.b is False
 
 
+@pytest.mark.parametrize(
+    "numeric_type",
+    [
+        pyfory.int8,
+        pyfory.int16,
+        pyfory.int32,
+        pyfory.fixed_int32,
+        pyfory.int64,
+        pyfory.fixed_int64,
+        pyfory.tagged_int64,
+        pyfory.uint8,
+        pyfory.uint16,
+        pyfory.uint32,
+        pyfory.fixed_uint32,
+        pyfory.uint64,
+        pyfory.fixed_uint64,
+        pyfory.tagged_uint64,
+        pyfory.float32,
+        pyfory.float64,
+    ],
+)
+def test_numeric_serializer_need_to_write_ref_disabled(numeric_type):
+    fory = Fory(xlang=False, ref=True, strict=False)
+    serializer = fory.type_resolver.get_serializer(numeric_type)
+    assert serializer.need_to_write_ref is False
+
+
 def test_data_class_serializer_xlang():
     fory = Fory(xlang=True, ref=True)
     fory.register_type(ComplexObject, typename="example.ComplexObject")

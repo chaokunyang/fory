@@ -54,6 +54,18 @@ class RefNode:
     self_ref: Any = pyfory.field(default=None, ref=True, nullable=True)
 
 
+@dataclass
+class RefOverrideDisabled:
+    left: Any = pyfory.field(default=None, ref=False, nullable=True)
+    right: Any = pyfory.field(default=None, ref=False, nullable=True)
+
+
+@dataclass
+class RefOverrideEnabled:
+    left: Any = pyfory.field(default=None, ref=True, nullable=True)
+    right: Any = pyfory.field(default=None, ref=True, nullable=True)
+
+
 @pytest.mark.parametrize("xlang", [False, True])
 def test_collection_list_mixed_type_shared_reference(xlang):
     fory = pyfory.Fory(xlang=xlang, ref=True, strict=False)
@@ -135,6 +147,29 @@ def test_struct_shared_fields_and_cross_container_alias_python_mode():
     assert restored.left is restored.right
     assert restored.items[0] is restored.left
     assert restored.mapping["alias"] is restored.left
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_struct_field_ref_override_controls_alias_preservation(xlang):
+    fory = pyfory.Fory(xlang=xlang, ref=True, strict=False)
+    if xlang:
+        fory.register_type(RefOverrideDisabled, typename="example.RefOverrideDisabled")
+        fory.register_type(RefOverrideEnabled, typename="example.RefOverrideEnabled")
+    else:
+        fory.register(RefOverrideDisabled)
+        fory.register(RefOverrideEnabled)
+
+    shared = {"v": [1, 2, 3]}
+
+    disabled = _roundtrip(fory, RefOverrideDisabled(shared, shared))
+    assert disabled.left == shared
+    assert disabled.right == shared
+    assert disabled.left is not disabled.right
+
+    enabled = _roundtrip(fory, RefOverrideEnabled(shared, shared))
+    assert enabled.left == shared
+    assert enabled.right == shared
+    assert enabled.left is enabled.right
 
 
 def test_struct_self_cycle_and_nested_alias_python_mode():

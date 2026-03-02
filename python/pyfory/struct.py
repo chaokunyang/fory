@@ -316,6 +316,7 @@ class DataClassSerializer(Serializer):
         serializers: List[Serializer] = None,
         nullable_fields: Dict[str, bool] = None,
         dynamic_fields: Dict[str, bool] = None,
+        ref_fields: Dict[str, bool] = None,
     ):
         super().__init__(fory, clz)
 
@@ -327,7 +328,7 @@ class DataClassSerializer(Serializer):
             self._field_names = list(field_names)
             self._serializers = list(serializers)
             self._nullable_fields = nullable_fields or {}
-            self._ref_fields = {}
+            self._ref_fields = ref_fields or {}
             self._dynamic_fields = dynamic_fields or {}
             self._field_infos = []
             self._field_metas = {}
@@ -407,33 +408,41 @@ class DataClassSerializer(Serializer):
             return []
         return [(field_name, default_factory) for field_name, default_factory in self._default_values_factory.items() if field_name in missing_fields]
 
-    def _write_field_value(self, buffer, serializer, field_value, is_nullable, is_dynamic, is_basic):
-        if is_nullable:
-            if is_basic:
+    def _write_field_value(self, buffer, serializer, field_value, is_nullable, is_dynamic, is_basic, is_tracking_ref):
+        if is_basic:
+            if is_nullable:
                 if field_value is None:
                     buffer.write_int8(NULL_FLAG)
                 else:
                     buffer.write_int8(NOT_NULL_VALUE_FLAG)
                     serializer.write(buffer, field_value)
             else:
-                self.fory.write_ref(buffer, field_value, serializer=None if is_dynamic else serializer)
+                serializer.write(buffer, field_value)
             return
-        if is_basic:
-            serializer.write(buffer, field_value)
-        elif is_dynamic:
+        if is_tracking_ref:
+            self.fory.write_ref(buffer, field_value, serializer=None if is_dynamic else serializer)
+            return
+        if is_nullable:
+            if field_value is None:
+                buffer.write_int8(NULL_FLAG)
+                return
+            buffer.write_int8(NOT_NULL_VALUE_FLAG)
+        if is_dynamic:
             self.fory.write_no_ref(buffer, field_value)
         else:
             self.fory.write_no_ref(buffer, field_value, serializer=serializer)
 
-    def _read_field_value(self, buffer, serializer, is_nullable, is_dynamic, is_basic):
-        if is_nullable:
-            if is_basic:
-                if buffer.read_int8() == NULL_FLAG:
-                    return None
-                return serializer.read(buffer)
-            return self.fory.read_ref(buffer, serializer=None if is_dynamic else serializer)
+    def _read_field_value(self, buffer, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref):
+        if is_nullable and is_basic:
+            if buffer.read_int8() == NULL_FLAG:
+                return None
+            return serializer.read(buffer)
         if is_basic:
             return serializer.read(buffer)
+        if is_tracking_ref:
+            return self.fory.read_ref(buffer, serializer=None if is_dynamic else serializer)
+        if is_nullable and buffer.read_int8() == NULL_FLAG:
+            return None
         if is_dynamic:
             return self.fory.read_no_ref(buffer)
         return self.fory.read_no_ref(buffer, serializer=serializer)
@@ -450,8 +459,9 @@ class DataClassSerializer(Serializer):
                     serializer = self._serializers[index]
                     is_nullable = self._nullable_fields.get(field_name, False)
                     is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_tracking_ref = self._ref_fields.get(field_name, False)
                     is_basic = self._basic_field_flags[index]
-                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
+                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic, is_tracking_ref)
             else:
                 for index, field_name in enumerate(self._field_names):
                     interned_name = self._field_name_interned[field_name]
@@ -459,8 +469,9 @@ class DataClassSerializer(Serializer):
                     serializer = self._serializers[index]
                     is_nullable = self._nullable_fields.get(field_name, False)
                     is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_tracking_ref = self._ref_fields.get(field_name, False)
                     is_basic = self._basic_field_flags[index]
-                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
+                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic, is_tracking_ref)
         else:
             if self.fory.compatible:
                 for index, field_name in enumerate(self._field_names):
@@ -469,8 +480,9 @@ class DataClassSerializer(Serializer):
                     serializer = self._serializers[index]
                     is_nullable = self._nullable_fields.get(field_name, False)
                     is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_tracking_ref = self._ref_fields.get(field_name, False)
                     is_basic = self._basic_field_flags[index]
-                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
+                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic, is_tracking_ref)
             else:
                 for index, field_name in enumerate(self._field_names):
                     interned_name = self._field_name_interned[field_name]
@@ -478,8 +490,9 @@ class DataClassSerializer(Serializer):
                     serializer = self._serializers[index]
                     is_nullable = self._nullable_fields.get(field_name, False)
                     is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_tracking_ref = self._ref_fields.get(field_name, False)
                     is_basic = self._basic_field_flags[index]
-                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic)
+                    self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic, is_tracking_ref)
 
     def read(self, buffer):
         if not self.fory.strict:
@@ -497,8 +510,9 @@ class DataClassSerializer(Serializer):
             serializer = self._serializers[index]
             is_nullable = self._nullable_fields.get(field_name, False)
             is_dynamic = self._dynamic_fields.get(field_name, False)
+            is_tracking_ref = self._ref_fields.get(field_name, False)
             is_basic = self._basic_field_flags[index]
-            field_value = self._read_field_value(buffer, serializer, is_nullable, is_dynamic, is_basic)
+            field_value = self._read_field_value(buffer, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
             if field_name not in self._current_class_field_names:
                 continue
             interned_name = self._field_name_interned[field_name]

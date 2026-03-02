@@ -27,6 +27,7 @@ cdef uint8_t _BASIC_FIELD_UNSUPPORTED = 0xFF
 cdef struct FieldRuntimeInfo:
     uint8_t basic_type_id
     uint8_t is_nullable
+    uint8_t track_ref
     uint8_t is_dynamic
     uint8_t field_exists
     PyObject *field_name
@@ -61,6 +62,7 @@ cdef class DataClassSerializer(Serializer):
         serializers: list = None,
         nullable_fields: dict = None,
         dynamic_fields: dict = None,
+        ref_fields: dict = None,
     ):
         super().__init__(fory, clz)
 
@@ -83,7 +85,7 @@ cdef class DataClassSerializer(Serializer):
             self._field_names = list(field_names)
             self._serializers = list(serializers)
             self._nullable_fields = dict(nullable_fields) if nullable_fields is not None else {}
-            self._ref_fields = {}
+            self._ref_fields = dict(ref_fields) if ref_fields is not None else {}
             self._dynamic_fields = dict(dynamic_fields) if dynamic_fields is not None else {}
             self._field_infos = []
             self._field_metas = {}
@@ -229,6 +231,7 @@ cdef class DataClassSerializer(Serializer):
         cdef set current_fields
         cdef bint is_dynamic
         cdef bint is_nullable
+        cdef bint is_tracking_ref
         cdef FieldRuntimeInfo runtime_info
 
         self._field_runtime_infos.clear()
@@ -240,10 +243,12 @@ cdef class DataClassSerializer(Serializer):
             field_name = self._field_names[i]
             serializer = self._serializer_owner[i]
             is_nullable = bool(self._nullable_fields.get(field_name, False))
+            is_tracking_ref = bool(self._ref_fields.get(field_name, False))
             is_dynamic = bool(self._dynamic_fields.get(field_name, False))
 
             runtime_info.basic_type_id = self._resolve_basic_type_id(serializer, is_dynamic)
             runtime_info.is_nullable = 1 if is_nullable else 0
+            runtime_info.track_ref = 1 if is_tracking_ref else 0
             runtime_info.is_dynamic = 1 if is_dynamic else 0
             runtime_info.field_exists = 1 if field_name in current_fields else 0
             runtime_info.field_name = <PyObject *> self._field_name_interned[i]
@@ -327,6 +332,7 @@ cdef class DataClassSerializer(Serializer):
     cdef inline void _write_field_value(self, Buffer buffer, FieldRuntimeInfo *field_info, object field_value):
         cdef uint8_t type_id = field_info.basic_type_id
         cdef bint is_nullable = field_info.is_nullable != 0
+        cdef bint is_tracking_ref = field_info.track_ref != 0
         cdef bint is_dynamic = field_info.is_dynamic != 0
         cdef Serializer serializer
 
@@ -342,12 +348,17 @@ cdef class DataClassSerializer(Serializer):
             return
 
         serializer = <object> field_info.serializer
-        if is_nullable:
+        if is_tracking_ref:
             if is_dynamic:
                 self.fory.write_ref(buffer, field_value)
             else:
                 self.fory.write_ref(buffer, field_value, serializer=serializer)
         else:
+            if is_nullable:
+                if field_value is None:
+                    buffer.write_int8(NULL_FLAG)
+                    return
+                buffer.write_int8(NOT_NULL_VALUE_FLAG)
             if is_dynamic:
                 self.fory.write_no_ref(buffer, field_value)
             else:
@@ -415,6 +426,7 @@ cdef class DataClassSerializer(Serializer):
     cdef inline object _read_field_value(self, Buffer buffer, FieldRuntimeInfo *field_info):
         cdef uint8_t type_id = field_info.basic_type_id
         cdef bint is_nullable = field_info.is_nullable != 0
+        cdef bint is_tracking_ref = field_info.track_ref != 0
         cdef bint is_dynamic = field_info.is_dynamic != 0
         cdef Serializer serializer
 
@@ -424,10 +436,13 @@ cdef class DataClassSerializer(Serializer):
             return Fory_PyReadBasicFieldFromBuffer(&buffer.c_buffer, type_id)
 
         serializer = <object> field_info.serializer
-        if is_nullable:
+        if is_tracking_ref:
             if is_dynamic:
                 return self.fory.read_ref(buffer)
             return self.fory.read_ref(buffer, serializer=serializer)
+
+        if is_nullable and buffer.read_int8() == NULL_FLAG:
+            return None
 
         if is_dynamic:
             return self.fory.read_no_ref(buffer)

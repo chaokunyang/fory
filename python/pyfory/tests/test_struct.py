@@ -385,6 +385,12 @@ class MissingDefaultEnum(enum.Enum):
 @dataclass
 class MissingDefaultFactoryFields:
     required: int
+    required_float: float
+    required_str: str
+    required_bytes: bytes
+    required_list: List[int]
+    required_set: Set[int]
+    required_dict: Dict[str, int]
     plain_default: int = 7
     list_default: List[int] = dataclasses.field(default_factory=list)
     enum_default_none: MissingDefaultEnum = None
@@ -400,11 +406,35 @@ def test_build_default_values_factory():
     )
 
     assert callable(default_factories["required"])
+    assert callable(default_factories["required_float"])
+    assert callable(default_factories["required_str"])
+    assert callable(default_factories["required_bytes"])
+    assert callable(default_factories["required_list"])
+    assert callable(default_factories["required_set"])
+    assert callable(default_factories["required_dict"])
     assert callable(default_factories["plain_default"])
     assert callable(default_factories["list_default"])
     assert callable(default_factories["enum_default_none"])
 
-    assert default_factories["required"]() is None
+    assert default_factories["required"]() == 0
+    assert default_factories["required_float"]() == 0.0
+    assert default_factories["required_str"]() == ""
+    assert default_factories["required_bytes"]() == b""
+    list_required_one = default_factories["required_list"]()
+    list_required_two = default_factories["required_list"]()
+    assert list_required_one == []
+    assert list_required_two == []
+    assert list_required_one is not list_required_two
+    set_required_one = default_factories["required_set"]()
+    set_required_two = default_factories["required_set"]()
+    assert set_required_one == set()
+    assert set_required_two == set()
+    assert set_required_one is not set_required_two
+    dict_required_one = default_factories["required_dict"]()
+    dict_required_two = default_factories["required_dict"]()
+    assert dict_required_one == {}
+    assert dict_required_two == {}
+    assert dict_required_one is not dict_required_two
     assert default_factories["plain_default"]() == 7
     assert default_factories["enum_default_none"]() is MissingDefaultEnum.A
     list_one = default_factories["list_default"]()
@@ -538,6 +568,23 @@ class CompatibleRequiredFieldV2:
     f2: int
 
 
+@dataclass
+class CompatibleRequiredDefaultsV1:
+    f1: int
+
+
+@dataclass
+class CompatibleRequiredDefaultsV2:
+    f1: int
+    f_int: int
+    f_float: float
+    f_str: str
+    f_bytes: bytes
+    f_list: List[int]
+    f_set: Set[int]
+    f_dict: Dict[str, int]
+
+
 @pytest.mark.parametrize("xlang", [False, True])
 def test_compatible_mode_add_field(xlang):
     """Test that adding a field with default value works in compatible mode."""
@@ -607,7 +654,7 @@ def test_compatible_mode_bidirectional(xlang):
 
 
 @pytest.mark.parametrize("xlang", [False, True])
-def test_compatible_mode_add_required_field_without_default_uses_none(xlang):
+def test_compatible_mode_add_required_field_without_default_uses_zero_value(xlang):
     fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
     fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
 
@@ -619,12 +666,35 @@ def test_compatible_mode_add_required_field_without_default_uses_none(xlang):
 
     assert v2_result.f1 == 321
     assert hasattr(v2_result, "f2")
-    assert v2_result.f2 is None
+    assert v2_result.f2 == 0
 
     serializer_v2 = fory_v2.type_resolver.get_serializer(CompatibleRequiredFieldV2)
     assert hasattr(serializer_v2, "_default_values_factory")
     assert callable(serializer_v2._default_values_factory["f2"])
-    assert serializer_v2._default_values_factory["f2"]() is None
+    assert serializer_v2._default_values_factory["f2"]() == 0
+    assert ser_de(fory_v2, v2_result) == v2_result
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_compatible_mode_add_required_fields_use_type_defaults(xlang):
+    fory_v1 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
+    fory_v2 = Fory(xlang=xlang, ref=True, compatible=True, strict=False)
+
+    fory_v1.register_type(CompatibleRequiredDefaultsV1, typename="example.CompatibleRequiredDefaults")
+    fory_v2.register_type(CompatibleRequiredDefaultsV2, typename="example.CompatibleRequiredDefaults")
+
+    v1_binary = fory_v1.serialize(CompatibleRequiredDefaultsV1(f1=11))
+    v2_result = fory_v2.deserialize(v1_binary)
+
+    assert v2_result.f1 == 11
+    assert v2_result.f_int == 0
+    assert v2_result.f_float == 0.0
+    assert v2_result.f_str == ""
+    assert v2_result.f_bytes == b""
+    assert v2_result.f_list == []
+    assert v2_result.f_set == set()
+    assert v2_result.f_dict == {}
+    assert ser_de(fory_v2, v2_result) == v2_result
 
 
 @dataclass

@@ -84,6 +84,30 @@ from pyfory import (
 
 logger = logging.getLogger(__name__)
 
+_MISSING_DEFAULT_INT_TYPES = {
+    int,
+    int8,
+    int16,
+    int32,
+    fixed_int32,
+    int64,
+    fixed_int64,
+    tagged_int64,
+    uint8,
+    uint16,
+    uint32,
+    fixed_uint32,
+    uint64,
+    fixed_uint64,
+    tagged_uint64,
+}
+
+_MISSING_DEFAULT_FLOAT_TYPES = {
+    float,
+    float32,
+    float64,
+}
+
 
 @dataclasses.dataclass
 class FieldInfo:
@@ -280,11 +304,30 @@ def resolve_missing_field_default(
     if dc_field.default_factory is not dataclasses.MISSING:
         return dc_field.default_factory
 
-    if not effective_nullable and is_subclass(unwrapped_type, enum.Enum):
-        members = tuple(unwrapped_type)
-        if members:
-            default_value = members[0]
-            return lambda value=default_value: value
+    if not effective_nullable:
+        origin = typing.get_origin(unwrapped_type) if hasattr(typing, "get_origin") else getattr(unwrapped_type, "__origin__", None)
+        origin = origin or unwrapped_type
+        if is_subclass(unwrapped_type, enum.Enum):
+            members = tuple(unwrapped_type)
+            if members:
+                default_value = members[0]
+                return lambda value=default_value: value
+        if origin is list or origin == typing.List:
+            return lambda: []
+        if origin is set or origin == typing.Set:
+            return lambda: set()
+        if origin is dict or origin == typing.Dict:
+            return lambda: {}
+        if unwrapped_type is bool:
+            return lambda: False
+        if unwrapped_type in _MISSING_DEFAULT_INT_TYPES:
+            return lambda: 0
+        if unwrapped_type in _MISSING_DEFAULT_FLOAT_TYPES:
+            return lambda: 0.0
+        if unwrapped_type is str:
+            return lambda: ""
+        if unwrapped_type is bytes:
+            return lambda: b""
     return lambda: None
 
 

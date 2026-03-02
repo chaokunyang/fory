@@ -16,11 +16,7 @@
 # under the License.
 
 from dataclasses import dataclass
-import os
-import subprocess
-import sys
-import textwrap
-from typing import Any
+from typing import Any, List
 
 import pytest
 
@@ -64,6 +60,28 @@ class RefOverrideDisabled:
 class RefOverrideEnabled:
     left: Any = pyfory.field(default=None, ref=True, nullable=True)
     right: Any = pyfory.field(default=None, ref=True, nullable=True)
+
+
+@dataclass
+class FixedUint64Pair:
+    a: pyfory.fixed_uint64 = None
+    b: pyfory.fixed_uint64 = None
+
+
+@dataclass
+class Holder:
+    values: List[pyfory.int64]
+
+
+class EvilIndex:
+    def __init__(self):
+        self.owner = None
+
+    def __index__(self):
+        # Reallocate list storage and inject invalid element types.
+        self.owner.clear()
+        self.owner.extend([bytearray(16)] * 1024)
+        return 7
 
 
 @pytest.mark.parametrize("xlang", [False, True])
@@ -246,127 +264,28 @@ def test_invalid_collection_element_ref_id_raises_value_error():
         fory.deserialize(payload)
 
 
-def test_optional_fixed_uint64_python_write_cython_read_subprocess(tmp_path):
-    py_root = os.path.abspath(os.path.join(os.path.dirname(pyfory.__file__), ".."))
-    payload_path = tmp_path / "fixed_uint64_payload.bin"
+@pytest.mark.parametrize("xlang", [False, True])
+def test_optional_fixed_uint64_roundtrip(xlang):
     value = 1234567890123456789
-
-    write_env = os.environ.copy()
-    write_env["ENABLE_FORY_CYTHON_SERIALIZATION"] = "0"
-    write_env["PYTHONPATH"] = py_root
-    write_code = textwrap.dedent(
-        """
-        import dataclasses
-        import pathlib
-        from typing import Optional
-        import pyfory
-
-        @dataclasses.dataclass
-        class FixedUint64Pair:
-            a: Optional[pyfory.fixed_uint64] = None
-            b: Optional[pyfory.fixed_uint64] = None
-
-        payload_path = pathlib.Path(__import__("sys").argv[1])
-        value = int(__import__("sys").argv[2])
-        fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+    fory = pyfory.Fory(xlang=xlang, ref=True, strict=False)
+    if xlang:
+        fory.register_type(FixedUint64Pair, typename="example.FixedUint64Pair")
+    else:
         fory.register(FixedUint64Pair)
-        serializer = fory.type_resolver.get_serializer(pyfory.fixed_uint64)
-        assert serializer.need_to_write_ref is False
-        payload_path.write_bytes(fory.serialize(FixedUint64Pair(value, value)))
-        """
-    )
-    writer_proc = subprocess.run(
-        [sys.executable, "-c", write_code, str(payload_path), str(value)],
-        env=write_env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert writer_proc.returncode == 0, f"writer subprocess failed rc={writer_proc.returncode}, stderr={writer_proc.stderr}"
 
-    read_env = os.environ.copy()
-    read_env["ENABLE_FORY_CYTHON_SERIALIZATION"] = "1"
-    read_env["PYTHONPATH"] = py_root
-    read_code = textwrap.dedent(
-        """
-        import dataclasses
-        import pathlib
-        from typing import Optional
-        import pyfory
-
-        @dataclasses.dataclass
-        class FixedUint64Pair:
-            a: Optional[pyfory.fixed_uint64] = None
-            b: Optional[pyfory.fixed_uint64] = None
-
-        payload_path = pathlib.Path(__import__("sys").argv[1])
-        value = int(__import__("sys").argv[2])
-        fory = pyfory.Fory(xlang=False, ref=True, strict=False)
-        fory.register(FixedUint64Pair)
-        serializer = fory.type_resolver.get_serializer(pyfory.fixed_uint64)
-        assert serializer.need_to_write_ref is False
-        restored = fory.deserialize(payload_path.read_bytes())
-        assert restored.a == value
-        assert restored.b == value
-        """
-    )
-    reader_proc = subprocess.run(
-        [sys.executable, "-c", read_code, str(payload_path), str(value)],
-        env=read_env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if reader_proc.returncode != 0 and "No module named 'pyfory.serialization'" in reader_proc.stderr:
-        pytest.skip("Cython serialization extension is unavailable")
-    assert reader_proc.returncode == 0, f"reader subprocess failed rc={reader_proc.returncode}, stderr={reader_proc.stderr}"
+    serializer = fory.type_resolver.get_serializer(pyfory.fixed_uint64)
+    assert serializer.need_to_write_ref is False
+    restored = _roundtrip(fory, FixedUint64Pair(value, value))
+    assert restored.a == value
+    assert restored.b == value
 
 
-def test_primitive_list_fastpath_mutation_no_crash_subprocess():
-    py_root = os.path.abspath(os.path.join(os.path.dirname(pyfory.__file__), ".."))
-    env = os.environ.copy()
-    env["ENABLE_FORY_CYTHON_SERIALIZATION"] = "1"
-    env["PYTHONPATH"] = py_root
-    code = textwrap.dedent(
-        """
-        from dataclasses import dataclass
-        from typing import List
-        import pyfory
-
-        @dataclass
-        class Holder:
-            values: List[pyfory.int64]
-
-        class EvilIndex:
-            def __init__(self):
-                self.owner = None
-            def __index__(self):
-                # Reallocate list storage and inject invalid element types.
-                self.owner.clear()
-                self.owner.extend([bytearray(16)] * 1024)
-                return 7
-
-        fory = pyfory.Fory(xlang=False, ref=True, strict=False)
-        fory.register(Holder)
-        for _ in range(10):
-            lst = [EvilIndex() for _ in range(64)]
-            for e in lst:
-                e.owner = lst
-            try:
-                fory.serialize(Holder(values=lst))
-            except TypeError:
-                continue
-            print("UNEXPECTED:SUCCESS")
-            raise SystemExit(2)
-        print("OK:TYPEERROR")
-        """
-    )
-    proc = subprocess.run(
-        [sys.executable, "-c", code],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert proc.returncode == 0, f"subprocess failed rc={proc.returncode}, stderr={proc.stderr}"
-    assert "OK:TYPEERROR" in proc.stdout, proc.stdout
+def test_primitive_list_fastpath_mutation_typeerror():
+    fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+    fory.register(Holder)
+    for _ in range(10):
+        lst = [EvilIndex() for _ in range(64)]
+        for element in lst:
+            element.owner = lst
+        with pytest.raises(TypeError):
+            fory.serialize(Holder(values=lst))

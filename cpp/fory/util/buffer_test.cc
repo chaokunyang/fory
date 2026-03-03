@@ -70,7 +70,7 @@ private:
   OneByteStreamBuf buf_;
 };
 
-class CountingStreamWriter final : public StreamWriter {
+class CountingOutputStream final : public OutputStream {
 public:
   Result<void, Error> write_to_stream(const uint8_t *src,
                                       uint32_t length) override {
@@ -253,7 +253,7 @@ TEST(Buffer, StreamReadFromOneByteSource) {
 
   raw.resize(writer.writer_index());
   OneByteIStream one_byte_stream(raw);
-  ForyInputStream stream(one_byte_stream, 8);
+  StdInputStream stream(one_byte_stream, 8);
   Buffer reader(stream);
   Error error;
 
@@ -274,7 +274,7 @@ TEST(Buffer, StreamReadFromOneByteSource) {
 TEST(Buffer, StreamGetAndReaderIndexFromOneByteSource) {
   std::vector<uint8_t> raw{0x11, 0x22, 0x33, 0x44, 0x55};
   OneByteIStream one_byte_stream(raw);
-  ForyInputStream stream(one_byte_stream, 2);
+  StdInputStream stream(one_byte_stream, 2);
   Buffer reader(stream);
   Error error;
   ASSERT_TRUE(reader.ensure_readable(4, error)) << error.to_string();
@@ -288,7 +288,7 @@ TEST(Buffer, StreamGetAndReaderIndexFromOneByteSource) {
 TEST(Buffer, StreamReadBytesAndSkipAdvanceReaderIndex) {
   std::vector<uint8_t> raw{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   OneByteIStream one_byte_stream(raw);
-  ForyInputStream stream(one_byte_stream, 2);
+  StdInputStream stream(one_byte_stream, 2);
   Buffer reader(stream);
   Error error;
   uint8_t out[5] = {0};
@@ -309,7 +309,7 @@ TEST(Buffer, StreamReadBytesAndSkipAdvanceReaderIndex) {
 TEST(Buffer, StreamSkipAndUnread) {
   std::vector<uint8_t> raw{0x01, 0x02, 0x03, 0x04, 0x05};
   OneByteIStream one_byte_stream(raw);
-  ForyInputStream stream(one_byte_stream, 2);
+  StdInputStream stream(one_byte_stream, 2);
   auto fill_result = stream.fill_buffer(4);
   ASSERT_TRUE(fill_result.ok()) << fill_result.error().to_string();
 
@@ -333,7 +333,7 @@ TEST(Buffer, StreamSkipAndUnread) {
 TEST(Buffer, StreamReadErrorWhenInsufficientData) {
   std::vector<uint8_t> raw{0x01, 0x02, 0x03};
   OneByteIStream one_byte_stream(raw);
-  ForyInputStream stream(one_byte_stream, 2);
+  StdInputStream stream(one_byte_stream, 2);
   Buffer reader(stream);
   Error error;
   EXPECT_EQ(reader.read_uint32(error), 0U);
@@ -341,8 +341,8 @@ TEST(Buffer, StreamReadErrorWhenInsufficientData) {
   EXPECT_EQ(error.code(), ErrorCode::BufferOutOfBound);
 }
 
-TEST(Buffer, StreamWriterThresholdFlushOnWriteBytes) {
-  CountingStreamWriter writer;
+TEST(Buffer, OutputStreamThresholdFlushOnWriteBytes) {
+  CountingOutputStream writer;
   Buffer *buffer = writer.get_buffer();
   ASSERT_NE(buffer, nullptr);
 
@@ -354,8 +354,8 @@ TEST(Buffer, StreamWriterThresholdFlushOnWriteBytes) {
   EXPECT_GE(writer.write_calls(), 1U);
 }
 
-TEST(Buffer, StreamWriterThresholdFlushCanBeTemporarilyDisabled) {
-  CountingStreamWriter writer;
+TEST(Buffer, OutputStreamThresholdFlushCanBeTemporarilyDisabled) {
+  CountingOutputStream writer;
   Buffer *buffer = writer.get_buffer();
   ASSERT_NE(buffer, nullptr);
   writer.enter_flush_barrier();
@@ -373,8 +373,8 @@ TEST(Buffer, StreamWriterThresholdFlushCanBeTemporarilyDisabled) {
   EXPECT_EQ(writer.data().size(), payload.size());
 }
 
-TEST(Buffer, StreamWriterForceFlush) {
-  CountingStreamWriter writer;
+TEST(Buffer, OutputStreamForceFlush) {
+  CountingOutputStream writer;
   Buffer *buffer = writer.get_buffer();
   ASSERT_NE(buffer, nullptr);
 

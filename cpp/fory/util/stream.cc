@@ -28,7 +28,7 @@
 
 namespace fory {
 
-StreamWriter::StreamWriter(uint32_t buffer_size)
+OutputStream::OutputStream(uint32_t buffer_size)
     : buffer_(std::make_unique<Buffer>()) {
   const uint32_t actual_size = std::max<uint32_t>(buffer_size, 1U);
   buffer_->reserve(actual_size);
@@ -38,7 +38,7 @@ StreamWriter::StreamWriter(uint32_t buffer_size)
   active_buffer_ = buffer_.get();
 }
 
-StreamWriter::~StreamWriter() {
+OutputStream::~OutputStream() {
   if (active_buffer_ != nullptr && active_buffer_ != buffer_.get()) {
     active_buffer_->clear_stream_writer();
   }
@@ -48,7 +48,7 @@ StreamWriter::~StreamWriter() {
   active_buffer_ = nullptr;
 }
 
-void StreamWriter::reset() {
+void OutputStream::reset() {
   flushed_bytes_ = 0;
   flush_barrier_depth_ = 0;
   error_.reset();
@@ -59,12 +59,12 @@ void StreamWriter::reset() {
   }
 }
 
-bool StreamWriter::should_try_flush() {
+bool OutputStream::should_try_flush() {
   Buffer *buffer = active_buffer();
   return buffer != nullptr && buffer->writer_index() > 4096;
 }
 
-void StreamWriter::flush_buffer_data() {
+void OutputStream::flush_buffer_data() {
   Buffer *buffer = active_buffer();
   if (buffer == nullptr || buffer->writer_index() == 0) {
     return;
@@ -80,7 +80,7 @@ void StreamWriter::flush_buffer_data() {
   buffer->reader_index(0);
 }
 
-ForyInputStream::ForyInputStream(std::istream &stream, uint32_t buffer_size)
+StdInputStream::StdInputStream(std::istream &stream, uint32_t buffer_size)
     : stream_(&stream),
       data_(std::max<uint32_t>(buffer_size, static_cast<uint32_t>(1))),
       initial_buffer_size_(
@@ -89,8 +89,8 @@ ForyInputStream::ForyInputStream(std::istream &stream, uint32_t buffer_size)
   bind_buffer(owned_buffer_.get());
 }
 
-ForyInputStream::ForyInputStream(std::shared_ptr<std::istream> stream,
-                                 uint32_t buffer_size)
+StdInputStream::StdInputStream(std::shared_ptr<std::istream> stream,
+                               uint32_t buffer_size)
     : stream_owner_(std::move(stream)), stream_(stream_owner_.get()),
       data_(std::max<uint32_t>(buffer_size, static_cast<uint32_t>(1))),
       initial_buffer_size_(
@@ -100,9 +100,9 @@ ForyInputStream::ForyInputStream(std::shared_ptr<std::istream> stream,
   bind_buffer(owned_buffer_.get());
 }
 
-ForyInputStream::~ForyInputStream() = default;
+StdInputStream::~StdInputStream() = default;
 
-Result<void, Error> ForyInputStream::fill_buffer(uint32_t min_fill_size) {
+Result<void, Error> StdInputStream::fill_buffer(uint32_t min_fill_size) {
   if (min_fill_size == 0 || remaining_size() >= min_fill_size) {
     return Result<void, Error>();
   }
@@ -144,7 +144,7 @@ Result<void, Error> ForyInputStream::fill_buffer(uint32_t min_fill_size) {
   return Result<void, Error>();
 }
 
-Result<void, Error> ForyInputStream::read_to(uint8_t *dst, uint32_t length) {
+Result<void, Error> StdInputStream::read_to(uint8_t *dst, uint32_t length) {
   if (length == 0) {
     return Result<void, Error>();
   }
@@ -158,7 +158,7 @@ Result<void, Error> ForyInputStream::read_to(uint8_t *dst, uint32_t length) {
   return Result<void, Error>();
 }
 
-Result<void, Error> ForyInputStream::skip(uint32_t size) {
+Result<void, Error> StdInputStream::skip(uint32_t size) {
   if (size == 0) {
     return Result<void, Error>();
   }
@@ -170,7 +170,7 @@ Result<void, Error> ForyInputStream::skip(uint32_t size) {
   return Result<void, Error>();
 }
 
-Result<void, Error> ForyInputStream::unread(uint32_t size) {
+Result<void, Error> StdInputStream::unread(uint32_t size) {
   if (FORY_PREDICT_FALSE(size > buffer_->reader_index_)) {
     return Unexpected(Error::buffer_out_of_bound(buffer_->reader_index_, size,
                                                  buffer_->size_));
@@ -179,7 +179,7 @@ Result<void, Error> ForyInputStream::unread(uint32_t size) {
   return Result<void, Error>();
 }
 
-void ForyInputStream::shrink_buffer() {
+void StdInputStream::shrink_buffer() {
   if (buffer_ == nullptr) {
     return;
   }
@@ -219,18 +219,18 @@ void ForyInputStream::shrink_buffer() {
   }
 }
 
-Buffer &ForyInputStream::get_buffer() { return *buffer_; }
+Buffer &StdInputStream::get_buffer() { return *buffer_; }
 
-uint32_t ForyInputStream::remaining_size() const {
+uint32_t StdInputStream::remaining_size() const {
   return buffer_->size_ - buffer_->reader_index_;
 }
 
-void ForyInputStream::reserve(uint32_t new_size) {
+void StdInputStream::reserve(uint32_t new_size) {
   data_.resize(new_size);
   buffer_->data_ = data_.data();
 }
 
-void ForyInputStream::bind_buffer(Buffer *buffer) {
+void StdInputStream::bind_buffer(Buffer *buffer) {
   Buffer *target = buffer == nullptr ? owned_buffer_.get() : buffer;
   if (target == nullptr) {
     if (buffer_ != nullptr) {
@@ -267,17 +267,17 @@ void ForyInputStream::bind_buffer(Buffer *buffer) {
   buffer_->stream_reader_ = this;
 }
 
-ForyOutputStream::ForyOutputStream(std::ostream &stream) : stream_(&stream) {}
+StdOutputStream::StdOutputStream(std::ostream &stream) : stream_(&stream) {}
 
-ForyOutputStream::ForyOutputStream(std::shared_ptr<std::ostream> stream)
+StdOutputStream::StdOutputStream(std::shared_ptr<std::ostream> stream)
     : stream_owner_(std::move(stream)), stream_(stream_owner_.get()) {
   FORY_CHECK(stream_owner_ != nullptr) << "stream must not be null";
 }
 
-ForyOutputStream::~ForyOutputStream() = default;
+StdOutputStream::~StdOutputStream() = default;
 
-Result<void, Error> ForyOutputStream::write_to_stream(const uint8_t *src,
-                                                      uint32_t length) {
+Result<void, Error> StdOutputStream::write_to_stream(const uint8_t *src,
+                                                     uint32_t length) {
   if (length == 0) {
     return Result<void, Error>();
   }
@@ -295,7 +295,7 @@ Result<void, Error> ForyOutputStream::write_to_stream(const uint8_t *src,
   return Result<void, Error>();
 }
 
-Result<void, Error> ForyOutputStream::flush_stream() {
+Result<void, Error> StdOutputStream::flush_stream() {
   if (stream_ == nullptr) {
     return Unexpected(Error::io_error("output stream is null"));
   }

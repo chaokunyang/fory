@@ -32,11 +32,11 @@ namespace fory {
 
 class Buffer;
 
-class StreamWriter {
+class OutputStream {
 public:
-  explicit StreamWriter(uint32_t buffer_size = 4096);
+  explicit OutputStream(uint32_t buffer_size = 4096);
 
-  virtual ~StreamWriter();
+  virtual ~OutputStream();
 
   FORY_ALWAYS_INLINE Buffer *get_buffer() { return buffer_.get(); }
 
@@ -122,9 +122,9 @@ private:
   friend class Buffer;
 };
 
-class StreamReader : public std::enable_shared_from_this<StreamReader> {
+class InputStream : public std::enable_shared_from_this<InputStream> {
 public:
-  virtual ~StreamReader() = default;
+  virtual ~InputStream() = default;
 
   virtual Result<void, Error> fill_buffer(uint32_t min_fill_size) = 0;
 
@@ -143,14 +143,14 @@ public:
   virtual void bind_buffer(Buffer *buffer) = 0;
 };
 
-class ForyInputStream final : public StreamReader {
+class StdInputStream final : public InputStream {
 public:
-  explicit ForyInputStream(std::istream &stream, uint32_t buffer_size = 4096);
+  explicit StdInputStream(std::istream &stream, uint32_t buffer_size = 4096);
 
-  explicit ForyInputStream(std::shared_ptr<std::istream> stream,
-                           uint32_t buffer_size = 4096);
+  explicit StdInputStream(std::shared_ptr<std::istream> stream,
+                          uint32_t buffer_size = 4096);
 
-  ~ForyInputStream() override;
+  ~StdInputStream() override;
 
   Result<void, Error> fill_buffer(uint32_t min_fill_size) override;
 
@@ -179,13 +179,13 @@ private:
   std::unique_ptr<Buffer> owned_buffer_;
 };
 
-class ForyOutputStream final : public StreamWriter {
+class StdOutputStream final : public OutputStream {
 public:
-  explicit ForyOutputStream(std::ostream &stream);
+  explicit StdOutputStream(std::ostream &stream);
 
-  explicit ForyOutputStream(std::shared_ptr<std::ostream> stream);
+  explicit StdOutputStream(std::shared_ptr<std::ostream> stream);
 
-  ~ForyOutputStream() override;
+  ~StdOutputStream() override;
 
 protected:
   Result<void, Error> write_to_stream(const uint8_t *src,

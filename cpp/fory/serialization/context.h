@@ -118,7 +118,7 @@ public:
   /// get const reference to internal output buffer.
   inline const Buffer &buffer() const { return buffer_; }
 
-  inline void set_stream_writer(StreamWriter *stream_writer) {
+  inline void set_stream_writer(OutputStream *stream_writer) {
     stream_writer_ = stream_writer;
   }
 
@@ -370,7 +370,7 @@ private:
   std::unique_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_dyn_depth_;
-  StreamWriter *stream_writer_ = nullptr;
+  OutputStream *stream_writer_ = nullptr;
 
   // Meta sharing state (for streaming inline TypeMeta)
   // Maps TypeInfo* to index for reference tracking - uses map size as counter

@@ -214,7 +214,7 @@ cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
     c_bool allocate_buffer(uint32_t size, shared_ptr[CBuffer]* out)
 
 cdef extern from "fory/util/stream.h" namespace "fory" nogil:
-    cdef cppclass CStreamWriter "fory::StreamWriter":
+    cdef cppclass COutputStream "fory::OutputStream":
         CBuffer* get_buffer()
         void enter_flush_barrier()
         void exit_flush_barrier()

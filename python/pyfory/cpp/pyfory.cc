@@ -160,15 +160,15 @@ static bool resolve_python_stream_write_method(PyObject *stream,
   return true;
 }
 
-class PythonStreamWriter final : public StreamWriter {
+class PyOutputStream final : public OutputStream {
 public:
-  explicit PythonStreamWriter(PyObject *stream, uint32_t buffer_size = 4096)
-      : StreamWriter(buffer_size), stream_(stream) {
+  explicit PyOutputStream(PyObject *stream, uint32_t buffer_size = 4096)
+      : OutputStream(buffer_size), stream_(stream) {
     FORY_CHECK(stream_ != nullptr) << "stream must not be null";
     Py_INCREF(stream_);
   }
 
-  ~PythonStreamWriter() override {
+  ~PyOutputStream() override {
     if (stream_ != nullptr) {
       PyGILState_STATE gil_state = PyGILState_Ensure();
       Py_DECREF(stream_);
@@ -267,10 +267,10 @@ private:
   PyObject *stream_ = nullptr;
 };
 
-class PythonStreamReader final : public StreamReader {
+class PyInputStream final : public InputStream {
 public:
-  explicit PythonStreamReader(PyObject *stream, uint32_t buffer_size,
-                              PythonStreamReadMethod read_method)
+  explicit PyInputStream(PyObject *stream, uint32_t buffer_size,
+                         PythonStreamReadMethod read_method)
       : stream_(stream), read_method_(read_method),
         read_method_name_(python_stream_read_method_name(read_method)),
         data_(std::max<uint32_t>(buffer_size, static_cast<uint32_t>(1))),
@@ -282,7 +282,7 @@ public:
     bind_buffer(owned_buffer_.get());
   }
 
-  ~PythonStreamReader() override {
+  ~PyInputStream() override {
     if (stream_ != nullptr) {
       PyGILState_STATE gil_state = PyGILState_Ensure();
       Py_DECREF(stream_);
@@ -1542,7 +1542,7 @@ int Fory_PyCreateBufferFromStream(PyObject *stream, uint32_t buffer_size,
   }
   try {
     auto stream_reader =
-        std::make_shared<PythonStreamReader>(stream, buffer_size, read_method);
+        std::make_shared<PyInputStream>(stream, buffer_size, read_method);
     *out = new Buffer(*stream_reader);
     return 0;
   } catch (const std::exception &e) {
@@ -1551,7 +1551,7 @@ int Fory_PyCreateBufferFromStream(PyObject *stream, uint32_t buffer_size,
   }
 }
 
-int Fory_PyCreateStreamWriter(PyObject *stream, StreamWriter **out,
+int Fory_PyCreateOutputStream(PyObject *stream, OutputStream **out,
                               std::string *error_message) {
   if (stream == nullptr) {
     *error_message = "stream must not be null";
@@ -1561,7 +1561,7 @@ int Fory_PyCreateStreamWriter(PyObject *stream, StreamWriter **out,
     return -1;
   }
   try {
-    *out = new PythonStreamWriter(stream, 4096);
+    *out = new PyOutputStream(stream, 4096);
     return 0;
   } catch (const std::exception &e) {
     *error_message = e.what();

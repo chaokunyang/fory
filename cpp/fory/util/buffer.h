@@ -35,8 +35,8 @@
 
 namespace fory {
 
-class ForyInputStream;
-class PythonStreamReader;
+class StdInputStream;
+class PyInputStream;
 
 // A buffer class for storing raw bytes with various methods for reading and
 // writing the bytes.
@@ -62,14 +62,14 @@ public:
         reader_index_(0), wrapped_vector_(&vec), stream_reader_(nullptr),
         stream_writer_(nullptr) {}
 
-  explicit Buffer(StreamReader &stream_reader)
+  explicit Buffer(InputStream &stream_reader)
       : data_(nullptr), size_(0), own_data_(false), writer_index_(0),
         reader_index_(0), wrapped_vector_(nullptr),
         stream_reader_(&stream_reader), stream_writer_(nullptr) {
     stream_reader_->bind_buffer(this);
     stream_reader_owner_ = stream_reader_->weak_from_this().lock();
     FORY_CHECK(&stream_reader_->get_buffer() == this)
-        << "StreamReader must hold and return the same Buffer instance";
+        << "InputStream must hold and return the same Buffer instance";
   }
 
   Buffer(Buffer &&buffer) noexcept;
@@ -114,7 +114,7 @@ public:
     return stream_writer_ != nullptr;
   }
 
-  FORY_ALWAYS_INLINE void bind_stream_writer(StreamWriter *stream_writer) {
+  FORY_ALWAYS_INLINE void bind_stream_writer(OutputStream *stream_writer) {
     if (stream_writer_ == stream_writer) {
       return;
     }
@@ -1255,9 +1255,9 @@ public:
   std::string hex() const;
 
 private:
-  friend class ForyInputStream;
-  friend class PythonStreamReader;
-  friend class StreamWriter;
+  friend class StdInputStream;
+  friend class PyInputStream;
+  friend class OutputStream;
 
   FORY_ALWAYS_INLINE void rebind_stream_reader_to_this() {
     if (stream_reader_ == nullptr) {
@@ -1265,7 +1265,7 @@ private:
     }
     stream_reader_->bind_buffer(this);
     FORY_CHECK(&stream_reader_->get_buffer() == this)
-        << "StreamReader must hold and return the same Buffer instance";
+        << "InputStream must hold and return the same Buffer instance";
   }
 
   FORY_ALWAYS_INLINE void detach_stream_reader_from_this() {
@@ -1395,9 +1395,9 @@ private:
   uint32_t writer_index_;
   uint32_t reader_index_;
   std::vector<uint8_t> *wrapped_vector_ = nullptr;
-  StreamReader *stream_reader_ = nullptr;
-  std::shared_ptr<StreamReader> stream_reader_owner_;
-  StreamWriter *stream_writer_ = nullptr;
+  InputStream *stream_reader_ = nullptr;
+  std::shared_ptr<InputStream> stream_reader_owner_;
+  OutputStream *stream_writer_ = nullptr;
 };
 
 /// \brief Allocate a fixed-size mutable buffer from the default memory pool

@@ -509,7 +509,7 @@ public:
   /// @param obj The object to serialize.
   /// @return Number of bytes written, or error.
   template <typename T>
-  Result<size_t, Error> serialize(StreamWriter &stream_writer, const T &obj) {
+  Result<size_t, Error> serialize(OutputStream &stream_writer, const T &obj) {
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
@@ -544,7 +544,7 @@ public:
   /// @return Number of bytes written, or error.
   template <typename T>
   Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
-    ForyOutputStream output_stream(ostream);
+    StdOutputStream output_stream(ostream);
     return serialize(output_stream, obj);
   }
 
@@ -683,9 +683,9 @@ public:
   /// @param stream_reader Stream reader to read from.
   /// @return Deserialized object, or error.
   template <typename T>
-  Result<T, Error> deserialize(StreamReader &stream_reader) {
+  Result<T, Error> deserialize(InputStream &stream_reader) {
     struct StreamShrinkGuard {
-      StreamReader *stream_reader = nullptr;
+      InputStream *stream_reader = nullptr;
       ~StreamShrinkGuard() {
         if (stream_reader != nullptr) {
           stream_reader->shrink_buffer();
@@ -697,13 +697,13 @@ public:
     return deserialize<T>(buffer);
   }
 
-  /// Deserialize an object from ForyInputStream.
+  /// Deserialize an object from StdInputStream.
   ///
   /// @tparam T The type of object to deserialize.
   /// @param stream Input stream wrapper to read from.
   /// @return Deserialized object, or error.
-  template <typename T> Result<T, Error> deserialize(ForyInputStream &stream) {
-    return deserialize<T>(static_cast<StreamReader &>(stream));
+  template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {
+    return deserialize<T>(static_cast<InputStream &>(stream));
   }
 
   // ==========================================================================
@@ -853,7 +853,7 @@ public:
   }
 
   template <typename T>
-  Result<size_t, Error> serialize(StreamWriter &stream_writer, const T &obj) {
+  Result<size_t, Error> serialize(OutputStream &stream_writer, const T &obj) {
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(stream_writer, obj);
   }
@@ -889,12 +889,12 @@ public:
   }
 
   template <typename T>
-  Result<T, Error> deserialize(StreamReader &stream_reader) {
+  Result<T, Error> deserialize(InputStream &stream_reader) {
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(stream_reader);
   }
 
-  template <typename T> Result<T, Error> deserialize(ForyInputStream &stream) {
+  template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->template deserialize<T>(stream);
   }

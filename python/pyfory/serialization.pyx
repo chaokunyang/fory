@@ -1398,33 +1398,33 @@ cdef class Fory:
         return buffer
 
     cpdef inline enter_flush_barrier(self):
-        cdef PyStreamWriter stream_writer
+        cdef PyOutputStream stream_writer
         if self._stream_writer is None:
             return
-        stream_writer = <PyStreamWriter>self._stream_writer
+        stream_writer = <PyOutputStream>self._stream_writer
         stream_writer.enter_flush_barrier()
 
     cpdef inline exit_flush_barrier(self):
-        cdef PyStreamWriter stream_writer
+        cdef PyOutputStream stream_writer
         if self._stream_writer is None:
             return
-        stream_writer = <PyStreamWriter>self._stream_writer
+        stream_writer = <PyOutputStream>self._stream_writer
         stream_writer.exit_flush_barrier()
 
     cpdef inline try_flush(self, Buffer buffer):
-        cdef PyStreamWriter stream_writer
+        cdef PyOutputStream stream_writer
         if buffer.get_writer_index() <= 4096:
             return
         if self._stream_writer is None:
             return
-        stream_writer = <PyStreamWriter>self._stream_writer
+        stream_writer = <PyOutputStream>self._stream_writer
         stream_writer.try_flush(buffer)
 
     cpdef inline force_flush(self, Buffer buffer):
-        cdef PyStreamWriter stream_writer
+        cdef PyOutputStream stream_writer
         if self._stream_writer is None:
             return
-        stream_writer = <PyStreamWriter>self._stream_writer
+        stream_writer = <PyOutputStream>self._stream_writer
         stream_writer.force_flush(buffer)
 
     cpdef inline write_ref(

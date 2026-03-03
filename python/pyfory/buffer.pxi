@@ -21,10 +21,10 @@ from libcpp.string cimport string as c_string
 from libc.stdint cimport *
 from libcpp cimport bool as c_bool
 from pyfory.includes.libutil cimport(
-    CBuffer, CStreamWriter, allocate_buffer, get_bit as c_get_bit, set_bit as c_set_bit, clear_bit as c_clear_bit,
+    CBuffer, COutputStream, allocate_buffer, get_bit as c_get_bit, set_bit as c_set_bit, clear_bit as c_clear_bit,
     set_bit_to as c_set_bit_to, CError, CErrorCode, CResultVoidError, utf16_has_surrogate_pairs
 )
-from pyfory.includes.libpyfory cimport Fory_PyCreateBufferFromStream, Fory_PyCreateStreamWriter
+from pyfory.includes.libpyfory cimport Fory_PyCreateBufferFromStream, Fory_PyCreateOutputStream
 import os
 from pyfory.error import raise_fory_error
 
@@ -43,62 +43,62 @@ cdef class Buffer
 
 
 @cython.final
-cdef class PyStreamWriter:
+cdef class PyOutputStream:
     cdef object stream
-    cdef unique_ptr[CStreamWriter] c_stream_writer
+    cdef unique_ptr[COutputStream] c_stream_writer
 
     @staticmethod
-    cdef inline PyStreamWriter from_stream(object stream):
+    cdef inline PyOutputStream from_stream(object stream):
         cdef c_string stream_error
-        cdef CStreamWriter* raw_writer = NULL
+        cdef COutputStream* raw_writer = NULL
         if stream is None:
             raise ValueError("stream must not be None")
-        if Fory_PyCreateStreamWriter(
+        if Fory_PyCreateOutputStream(
             <PyObject*>stream, &raw_writer, &stream_error
         ) != 0:
             raise ValueError(stream_error.decode("UTF-8"))
-        cdef PyStreamWriter writer = PyStreamWriter.__new__(PyStreamWriter)
+        cdef PyOutputStream writer = PyOutputStream.__new__(PyOutputStream)
         writer.stream = stream
         writer.c_stream_writer.reset(raw_writer)
         if raw_writer != NULL:
             raw_writer.reset()
         return writer
 
-    cdef inline CStreamWriter* get_c_stream_writer(self):
+    cdef inline COutputStream* get_c_stream_writer(self):
         return self.c_stream_writer.get()
 
     cpdef inline object get_stream(self):
         return self.stream
 
     cpdef inline void reset(self):
-        cdef CStreamWriter* stream_writer = self.c_stream_writer.get()
+        cdef COutputStream* stream_writer = self.c_stream_writer.get()
         if stream_writer == NULL:
-            raise ValueError("StreamWriter is null")
+            raise ValueError("OutputStream is null")
         stream_writer.reset()
 
     cpdef inline void enter_flush_barrier(self):
-        cdef CStreamWriter* stream_writer = self.c_stream_writer.get()
+        cdef COutputStream* stream_writer = self.c_stream_writer.get()
         if stream_writer == NULL:
-            raise ValueError("StreamWriter is null")
+            raise ValueError("OutputStream is null")
         stream_writer.enter_flush_barrier()
 
     cpdef inline void exit_flush_barrier(self):
-        cdef CStreamWriter* stream_writer = self.c_stream_writer.get()
+        cdef COutputStream* stream_writer = self.c_stream_writer.get()
         if stream_writer == NULL:
-            raise ValueError("StreamWriter is null")
+            raise ValueError("OutputStream is null")
         stream_writer.exit_flush_barrier()
 
     cpdef inline void try_flush(self, Buffer buffer):
-        cdef CStreamWriter* stream_writer = self.c_stream_writer.get()
+        cdef COutputStream* stream_writer = self.c_stream_writer.get()
         cdef CBuffer* writer_buffer
         cdef uint32_t writer_index = buffer.c_buffer.writer_index()
         if writer_index == 0:
             return
         if stream_writer == NULL:
-            raise ValueError("StreamWriter is null")
+            raise ValueError("OutputStream is null")
         writer_buffer = stream_writer.get_buffer()
         if writer_buffer == NULL:
-            raise ValueError("StreamWriter returned null buffer")
+            raise ValueError("OutputStream returned null buffer")
         writer_buffer.write_bytes(buffer.c_buffer.data(), writer_index)
         stream_writer.try_flush()
         if stream_writer.has_error():
@@ -106,14 +106,14 @@ cdef class PyStreamWriter:
         buffer.c_buffer.writer_index(0)
 
     cpdef inline void force_flush(self, Buffer buffer):
-        cdef CStreamWriter* stream_writer = self.c_stream_writer.get()
+        cdef COutputStream* stream_writer = self.c_stream_writer.get()
         cdef CBuffer* writer_buffer
         cdef uint32_t writer_index = buffer.c_buffer.writer_index()
         if stream_writer == NULL:
-            raise ValueError("StreamWriter is null")
+            raise ValueError("OutputStream is null")
         writer_buffer = stream_writer.get_buffer()
         if writer_buffer == NULL:
-            raise ValueError("StreamWriter returned null buffer")
+            raise ValueError("OutputStream returned null buffer")
         if writer_index != 0:
             writer_buffer.write_bytes(buffer.c_buffer.data(), writer_index)
         stream_writer.force_flush()
@@ -123,8 +123,8 @@ cdef class PyStreamWriter:
             buffer.c_buffer.writer_index(0)
 
 
-cpdef inline PyStreamWriter wrap_stream_writer(object stream):
-    return PyStreamWriter.from_stream(stream)
+cpdef inline PyOutputStream wrap_stream_writer(object stream):
+    return PyOutputStream.from_stream(stream)
 
 
 @cython.final
@@ -209,12 +209,12 @@ cdef class Buffer:
         return wrap_stream_writer(stream)
 
     cpdef inline void bind_stream_writer(self, object writer):
-        cdef PyStreamWriter stream_writer
+        cdef PyOutputStream stream_writer
         if writer is None:
             self.stream_writer = None
             return
-        if isinstance(writer, PyStreamWriter):
-            stream_writer = <PyStreamWriter>writer
+        if isinstance(writer, PyOutputStream):
+            stream_writer = <PyOutputStream>writer
         else:
             stream_writer = wrap_stream_writer(writer)
         stream_writer.reset()

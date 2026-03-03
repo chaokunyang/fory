@@ -71,6 +71,6 @@ int Fory_PyWriteBasicFieldToBuffer(PyObject *value, Buffer *buffer,
 PyObject *Fory_PyReadBasicFieldFromBuffer(Buffer *buffer, uint8_t type_id);
 int Fory_PyCreateBufferFromStream(PyObject *stream, uint32_t buffer_size,
                                   Buffer **out, std::string *error_message);
-int Fory_PyCreateStreamWriter(PyObject *stream, StreamWriter **out,
+int Fory_PyCreateOutputStream(PyObject *stream, OutputStream **out,
                               std::string *error_message);
 } // namespace fory

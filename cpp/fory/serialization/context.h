@@ -167,6 +167,41 @@ public:
     }
   }
 
+  inline uint32_t flush_barrier_depth() const { return flush_barrier_depth_; }
+
+  inline void enter_flush_barrier() {
+    flush_barrier_depth_++;
+    if (flush_barrier_depth_ == 1) {
+      buffer_.set_auto_flush_enabled(false);
+    }
+  }
+
+  inline void leave_flush_barrier() {
+    if (flush_barrier_depth_ > 0) {
+      flush_barrier_depth_--;
+      if (flush_barrier_depth_ == 0) {
+        buffer_.set_auto_flush_enabled(true);
+      }
+    }
+  }
+
+  inline void try_flush() {
+    if (flush_barrier_depth_ != 0) {
+      return;
+    }
+    auto flush_result = buffer_.try_flush();
+    if (FORY_PREDICT_FALSE(!flush_result.ok())) {
+      set_error(std::move(flush_result).error());
+    }
+  }
+
+  inline void force_flush() {
+    auto flush_result = buffer_.force_flush();
+    if (FORY_PREDICT_FALSE(!flush_result.ok())) {
+      set_error(std::move(flush_result).error());
+    }
+  }
+
   /// write uint8_t value to buffer.
   FORY_ALWAYS_INLINE void write_uint8(uint8_t value) {
     buffer().write_uint8(value);
@@ -329,6 +364,7 @@ private:
   std::unique_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_dyn_depth_;
+  uint32_t flush_barrier_depth_;
 
   // Meta sharing state (for streaming inline TypeMeta)
   // Maps TypeInfo* to index for reference tracking - uses map size as counter

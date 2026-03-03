@@ -32,6 +32,9 @@ Buffer::Buffer() {
   reader_index_ = 0;
   wrapped_vector_ = nullptr;
   stream_reader_ = nullptr;
+  stream_writer_ = nullptr;
+  flushed_bytes_ = 0;
+  auto_flush_enabled_ = true;
 }
 
 Buffer::Buffer(Buffer &&buffer) noexcept {
@@ -43,8 +46,15 @@ Buffer::Buffer(Buffer &&buffer) noexcept {
   wrapped_vector_ = buffer.wrapped_vector_;
   stream_reader_ = buffer.stream_reader_;
   stream_reader_owner_ = std::move(buffer.stream_reader_owner_);
+  stream_writer_ = buffer.stream_writer_;
+  stream_writer_owner_ = std::move(buffer.stream_writer_owner_);
+  flushed_bytes_ = buffer.flushed_bytes_;
+  auto_flush_enabled_ = buffer.auto_flush_enabled_;
   rebind_stream_reader_to_this();
   buffer.stream_reader_ = nullptr;
+  buffer.stream_writer_ = nullptr;
+  buffer.flushed_bytes_ = 0;
+  buffer.auto_flush_enabled_ = true;
   buffer.data_ = nullptr;
   buffer.size_ = 0;
   buffer.own_data_ = false;
@@ -65,8 +75,15 @@ Buffer &Buffer::operator=(Buffer &&buffer) noexcept {
   wrapped_vector_ = buffer.wrapped_vector_;
   stream_reader_ = buffer.stream_reader_;
   stream_reader_owner_ = std::move(buffer.stream_reader_owner_);
+  stream_writer_ = buffer.stream_writer_;
+  stream_writer_owner_ = std::move(buffer.stream_writer_owner_);
+  flushed_bytes_ = buffer.flushed_bytes_;
+  auto_flush_enabled_ = buffer.auto_flush_enabled_;
   rebind_stream_reader_to_this();
   buffer.stream_reader_ = nullptr;
+  buffer.stream_writer_ = nullptr;
+  buffer.flushed_bytes_ = 0;
+  buffer.auto_flush_enabled_ = true;
   buffer.data_ = nullptr;
   buffer.size_ = 0;
   buffer.own_data_ = false;

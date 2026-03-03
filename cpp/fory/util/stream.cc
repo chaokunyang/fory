@@ -215,4 +215,43 @@ void ForyInputStream::bind_buffer(Buffer *buffer) {
   buffer_->stream_reader_ = this;
 }
 
+ForyOutputStream::ForyOutputStream(std::ostream &stream) : stream_(&stream) {}
+
+ForyOutputStream::ForyOutputStream(std::shared_ptr<std::ostream> stream)
+    : stream_owner_(std::move(stream)), stream_(stream_owner_.get()) {
+  FORY_CHECK(stream_owner_ != nullptr) << "stream must not be null";
+}
+
+ForyOutputStream::~ForyOutputStream() = default;
+
+Result<void, Error> ForyOutputStream::write(const uint8_t *src,
+                                            uint32_t length) {
+  if (length == 0) {
+    return Result<void, Error>();
+  }
+  if (src == nullptr) {
+    return Unexpected(Error::invalid("output source pointer is null"));
+  }
+  if (stream_ == nullptr) {
+    return Unexpected(Error::io_error("output stream is null"));
+  }
+  stream_->write(reinterpret_cast<const char *>(src),
+                 static_cast<std::streamsize>(length));
+  if (!(*stream_)) {
+    return Unexpected(Error::io_error("failed to write to output stream"));
+  }
+  return Result<void, Error>();
+}
+
+Result<void, Error> ForyOutputStream::flush() {
+  if (stream_ == nullptr) {
+    return Unexpected(Error::io_error("output stream is null"));
+  }
+  stream_->flush();
+  if (!(*stream_)) {
+    return Unexpected(Error::io_error("failed to flush output stream"));
+  }
+  return Result<void, Error>();
+}
+
 } // namespace fory

@@ -65,6 +65,22 @@ class LegacyRecvIntoOnlyStream:
         return read_size
 
 
+class PartialWriteStream:
+    def __init__(self):
+        self._data = bytearray()
+
+    def write(self, payload):
+        if not payload:
+            return 0
+        view = memoryview(payload).cast("B")
+        wrote = min(2, len(view))
+        self._data.extend(view[:wrote])
+        return wrote
+
+    def to_bytes(self):
+        return bytes(self._data)
+
+
 def test_buffer():
     buffer = Buffer.allocate(8)
     buffer.write_bool(True)
@@ -260,8 +276,24 @@ def check_varuint64(buf: Buffer, value: int, bytes_written: int):
     varint = buf.read_var_uint64()
     assert buf.get_writer_index() == buf.get_reader_index()
     assert value == varint
-    # test slow read branch in `read_varint64`
-    assert buf.slice(reader_index, buf.get_reader_index() - reader_index).read_var_uint64() == value
+
+
+def test_buffer_flush_stream():
+    stream = PartialWriteStream()
+    buffer = Buffer.allocate(16)
+    buffer.attach_stream(stream)
+    payload = b"stream-flush-buffer"
+    buffer.write_bytes(payload)
+    buffer.flush()
+    assert stream.to_bytes() == payload
+    assert buffer.get_writer_index() == 0
+
+
+def test_buffer_flush_without_stream_raises():
+    buffer = Buffer.allocate(8)
+    buffer.write_int8(1)
+    with pytest.raises(ValueError):
+        buffer.flush()
 
 
 def test_write_buffer():

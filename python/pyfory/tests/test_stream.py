@@ -68,6 +68,21 @@ class OneByteStream:
         return self.recv_into(buffer, size)
 
 
+class OneByteWriteStream:
+    def __init__(self):
+        self._data = bytearray()
+
+    def write(self, payload):
+        if not payload:
+            return 0
+        view = memoryview(payload).cast("B")
+        self._data.append(view[0])
+        return 1
+
+    def to_bytes(self):
+        return bytes(self._data)
+
+
 @pytest.mark.parametrize("xlang", [False, True])
 def test_stream_roundtrip_primitives_and_strings(xlang):
     fory = pyfory.Fory(xlang=xlang, ref=True)
@@ -148,3 +163,32 @@ def test_stream_deserialize_truncated_error(xlang):
 
     with pytest.raises(Exception):
         fory.deserialize(Buffer.from_stream(OneByteStream(truncated)))
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_dump_matches_dumps_bytes(xlang):
+    fory = pyfory.Fory(xlang=xlang, ref=True)
+    value = {
+        "k": [1, 2, 3, 4],
+        "nested": {"x": True, "y": "hello"},
+        "f": 3.14,
+    }
+
+    sink = OneByteWriteStream()
+    fory.dump(value, sink)
+    expected = fory.dumps(value)
+    assert sink.to_bytes() == expected
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_dump_map_chunk_path_matches_dumps(xlang):
+    fory = pyfory.Fory(xlang=xlang, ref=True)
+    value = {f"k{i}": i for i in range(300)}
+
+    sink = OneByteWriteStream()
+    fory.dump(value, sink)
+    expected = fory.dumps(value)
+    assert sink.to_bytes() == expected
+
+    restored = fory.deserialize(Buffer.from_stream(OneByteStream(sink.to_bytes())))
+    assert restored == value

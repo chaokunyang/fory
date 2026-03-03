@@ -1078,6 +1078,7 @@ cdef class Fory:
     cdef public bint is_peer_out_of_band_enabled
     cdef int32_t max_depth
     cdef int32_t depth
+    cdef int32_t flush_barrier_depth
 
     def __init__(
             self,
@@ -1156,6 +1157,7 @@ cdef class Fory:
         self.is_peer_out_of_band_enabled = False
         self.depth = 0
         self.max_depth = max_depth
+        self.flush_barrier_depth = 0
 
     def register_serializer(self, cls: Union[type, TypeVar], Serializer serializer):
         """
@@ -1289,6 +1291,28 @@ cdef class Fory:
         """
         return self.serialize(obj, buffer, buffer_callback, unsupported_callback)
 
+    def dump(self, obj, stream):
+        """
+        Serialize an object directly to a writable stream.
+
+        Args:
+            obj: The object to serialize
+            stream: Writable stream implementing write(...)
+        """
+        try:
+            self.buffer.set_writer_index(0)
+            self.buffer.attach_stream(stream)
+            self._serialize(
+                obj,
+                self.buffer,
+                buffer_callback=None,
+                unsupported_callback=None,
+            )
+            self.force_flush(self.buffer)
+        finally:
+            self.buffer.attach_stream(None)
+            self.reset_write()
+
     def loads(
         self,
         buffer: Union[Buffer, bytes],
@@ -1365,8 +1389,28 @@ cdef class Fory:
 
         if buffer is not self.buffer:
             return buffer
-        else:
-            return buffer.to_bytes(0, buffer.get_writer_index())
+        if buffer.get_stream() is not None:
+            return buffer
+        return buffer.to_bytes(0, buffer.get_writer_index())
+
+    cpdef inline enter_flush_barrier(self):
+        self.flush_barrier_depth += 1
+
+    cpdef inline leave_flush_barrier(self):
+        if self.flush_barrier_depth > 0:
+            self.flush_barrier_depth -= 1
+
+    cpdef inline try_flush(self, Buffer buffer):
+        if self.flush_barrier_depth != 0:
+            return
+        if buffer.get_stream() is None:
+            return
+        buffer.flush()
+
+    cpdef inline force_flush(self, Buffer buffer):
+        if buffer.get_stream() is None:
+            return
+        buffer.flush()
 
     cpdef inline write_ref(
             self, Buffer buffer, obj, TypeInfo typeinfo=None, Serializer serializer=None):
@@ -1623,6 +1667,7 @@ cdef class Fory:
         self.metastring_resolver.reset_write()
         self.serialization_context.reset_write()
         self._unsupported_callback = None
+        self.flush_barrier_depth = 0
 
     cpdef inline reset_read(self):
         """

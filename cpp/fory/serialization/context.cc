@@ -60,7 +60,8 @@ static const std::vector<MetaEncoding> k_type_name_encodings = {
 WriteContext::WriteContext(const Config &config,
                            std::unique_ptr<TypeResolver> type_resolver)
     : buffer_(), config_(&config), type_resolver_(std::move(type_resolver)),
-      current_dyn_depth_(0), write_type_info_index_map_(8) {}
+      current_dyn_depth_(0), flush_barrier_depth_(0),
+      write_type_info_index_map_(8) {}
 
 WriteContext::~WriteContext() = default;
 
@@ -406,9 +407,13 @@ void WriteContext::reset() {
   has_first_type_info_ = false;
   type_info_index_map_active_ = false;
   current_dyn_depth_ = 0;
+  flush_barrier_depth_ = 0;
   // reset buffer indices for reuse - no memory operations needed
   buffer_.writer_index(0);
   buffer_.reader_index(0);
+  buffer_.set_auto_flush_enabled(true);
+  buffer_.reset_flushed_bytes();
+  buffer_.clear_stream_writer();
 }
 
 uint32_t WriteContext::get_type_id_for_cache(const std::type_index &type_idx) {

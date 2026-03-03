@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <istream>
 #include <memory>
+#include <ostream>
 #include <vector>
 
 #include "fory/util/error.h"
@@ -30,6 +31,15 @@
 namespace fory {
 
 class Buffer;
+
+class StreamWriter {
+public:
+  virtual ~StreamWriter() = default;
+
+  virtual Result<void, Error> write(const uint8_t *src, uint32_t length) = 0;
+
+  virtual Result<void, Error> flush() = 0;
+};
 
 class StreamReader : public std::enable_shared_from_this<StreamReader> {
 public:
@@ -86,6 +96,23 @@ private:
   uint32_t initial_buffer_size_ = 1;
   Buffer *buffer_ = nullptr;
   std::unique_ptr<Buffer> owned_buffer_;
+};
+
+class ForyOutputStream final : public StreamWriter {
+public:
+  explicit ForyOutputStream(std::ostream &stream);
+
+  explicit ForyOutputStream(std::shared_ptr<std::ostream> stream);
+
+  ~ForyOutputStream() override;
+
+  Result<void, Error> write(const uint8_t *src, uint32_t length) override;
+
+  Result<void, Error> flush() override;
+
+private:
+  std::shared_ptr<std::ostream> stream_owner_;
+  std::ostream *stream_ = nullptr;
 };
 
 } // namespace fory

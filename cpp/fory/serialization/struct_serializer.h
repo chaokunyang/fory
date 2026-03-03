@@ -2997,6 +2997,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     constexpr size_t field_count = FieldDescriptor::Size;
     detail::write_struct_fields_impl(
         obj, ctx, std::make_index_sequence<field_count>{}, false);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+    ctx.try_flush();
   }
 
   static void write_data_generic(const T &obj, WriteContext &ctx,
@@ -3025,6 +3029,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     constexpr size_t field_count = FieldDescriptor::Size;
     detail::write_struct_fields_impl(
         obj, ctx, std::make_index_sequence<field_count>{}, has_generics);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+    ctx.try_flush();
   }
 
   static T read(ReadContext &ctx, RefMode ref_mode, bool read_type) {

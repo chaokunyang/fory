@@ -41,6 +41,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <ostream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -501,6 +502,42 @@ public:
     return result;
   }
 
+  /// Serialize an object to a stream writer.
+  ///
+  /// @tparam T The type of object to serialize.
+  /// @param stream_writer The output stream writer.
+  /// @param obj The object to serialize.
+  /// @return Number of bytes written, or error.
+  template <typename T>
+  Result<size_t, Error> serialize(StreamWriter &stream_writer, const T &obj) {
+    if (FORY_PREDICT_FALSE(!finalized_)) {
+      ensure_finalized();
+    }
+    WriteContextGuard guard(*write_ctx_);
+    Buffer &buffer = write_ctx_->buffer();
+    buffer.reset_flushed_bytes();
+    buffer.bind_stream_writer(&stream_writer);
+
+    FORY_RETURN_NOT_OK(serialize_impl(obj, buffer));
+    write_ctx_->force_flush();
+    if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
+      return Unexpected(write_ctx_->take_error());
+    }
+    return buffer.flushed_bytes();
+  }
+
+  /// Serialize an object to a std::ostream.
+  ///
+  /// @tparam T The type of object to serialize.
+  /// @param ostream The output stream.
+  /// @param obj The object to serialize.
+  /// @return Number of bytes written, or error.
+  template <typename T>
+  Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
+    ForyOutputStream output_stream(ostream);
+    return serialize(output_stream, obj);
+  }
+
   /// Serialize an object to an existing Buffer (fastest path).
   ///
   /// @tparam T The type of object to serialize.
@@ -803,6 +840,18 @@ public:
   Result<std::vector<uint8_t>, Error> serialize(const T &obj) {
     auto fory_handle = fory_pool_.acquire();
     return fory_handle->serialize(obj);
+  }
+
+  template <typename T>
+  Result<size_t, Error> serialize(StreamWriter &stream_writer, const T &obj) {
+    auto fory_handle = fory_pool_.acquire();
+    return fory_handle->serialize(stream_writer, obj);
+  }
+
+  template <typename T>
+  Result<size_t, Error> serialize(std::ostream &ostream, const T &obj) {
+    auto fory_handle = fory_pool_.acquire();
+    return fory_handle->serialize(ostream, obj);
   }
 
   template <typename T>

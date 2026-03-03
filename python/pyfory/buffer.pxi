@@ -46,6 +46,8 @@ cdef class Buffer:
         CError _error
         # hold python buffer reference count
         object data
+        # writable stream target for streaming serialization output
+        object stream
         Py_ssize_t shape[1]
         Py_ssize_t stride[1]
 
@@ -67,6 +69,7 @@ cdef class Buffer:
         self.c_buffer = CBuffer(address, length_, False)
         self.c_buffer.reader_index(0)
         self.c_buffer.writer_index(0)
+        self.stream = None
 
     @classmethod
     def from_stream(cls, stream not None, uint32_t buffer_size=4096):
@@ -82,6 +85,7 @@ cdef class Buffer:
         buffer.c_buffer = move(deref(stream_buffer))
         del stream_buffer
         buffer.data = stream
+        buffer.stream = None
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
@@ -94,6 +98,7 @@ cdef class Buffer:
         cdef _SharedBufferOwner owner = _SharedBufferOwner.__new__(_SharedBufferOwner)
         owner.buffer = c_buffer
         buffer.data = owner
+        buffer.stream = None
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
@@ -107,9 +112,38 @@ cdef class Buffer:
         buffer.c_buffer = move(deref(buf))
         del buf
         buffer.data = None
+        buffer.stream = None
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
+
+    cpdef inline void attach_stream(self, object stream):
+        self.stream = stream
+
+    cpdef inline object get_stream(self):
+        return self.stream
+
+    cpdef flush(self):
+        cdef uint32_t writer_index = self.c_buffer.writer_index()
+        if writer_index == 0:
+            return
+        if self.stream is None:
+            raise ValueError("No stream is attached to this buffer")
+        cdef memoryview view = memoryview(self)
+        cdef object pending = view[:writer_index]
+        cdef uint32_t total_written = 0
+        cdef object wrote
+        cdef uint32_t wrote_size
+        while total_written < writer_index:
+            wrote = self.stream.write(pending[total_written:])
+            if wrote is None:
+                total_written = writer_index
+                break
+            wrote_size = <uint32_t>wrote
+            if wrote_size == 0:
+                raise ValueError("Stream write returned 0 bytes while flushing buffer")
+            total_written += wrote_size
+        self.c_buffer.writer_index(0)
 
     cdef inline void _raise_if_error(self):
         cdef CErrorCode code

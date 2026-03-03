@@ -189,7 +189,7 @@ public:
   }
 
   inline void try_flush() {
-    if (stream_writer_ == nullptr) {
+    if (stream_writer_ == nullptr || buffer_.writer_index() <= 4096) {
       return;
     }
     stream_writer_->try_flush();

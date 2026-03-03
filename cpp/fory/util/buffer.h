@@ -835,7 +835,7 @@ public:
     grow(length);
     unsafe_put(writer_index_, data, length);
     increase_writer_index(length);
-    if (FORY_PREDICT_FALSE(length > 4096 && stream_writer_ != nullptr)) {
+    if (FORY_PREDICT_FALSE(stream_writer_ != nullptr)) {
       stream_writer_->try_flush();
     }
   }

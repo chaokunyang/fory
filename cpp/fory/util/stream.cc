@@ -59,6 +59,11 @@ void StreamWriter::reset() {
   }
 }
 
+bool StreamWriter::should_try_flush() {
+  Buffer *buffer = active_buffer();
+  return buffer != nullptr && buffer->writer_index() > 4096;
+}
+
 void StreamWriter::flush_buffer_data() {
   Buffer *buffer = active_buffer();
   if (buffer == nullptr || buffer->writer_index() == 0) {

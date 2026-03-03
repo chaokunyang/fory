@@ -50,6 +50,9 @@ public:
     if (FORY_PREDICT_FALSE(!error_.ok() || flush_barrier_depth_ != 0)) {
       return;
     }
+    if (FORY_PREDICT_FALSE(!should_try_flush())) {
+      return;
+    }
     flush_buffer_data();
   }
 
@@ -99,6 +102,8 @@ private:
   FORY_ALWAYS_INLINE Buffer *active_buffer() {
     return active_buffer_ == nullptr ? buffer_.get() : active_buffer_;
   }
+
+  bool should_try_flush();
 
   void flush_buffer_data();
 

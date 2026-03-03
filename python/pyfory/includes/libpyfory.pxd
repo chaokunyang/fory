@@ -26,3 +26,6 @@ cdef extern from "fory/python/pyfory.h" namespace "fory":
                                       CBuffer** out, c_string* error_message)
     int Fory_PyCreateOutputStream(PyObject* stream, COutputStream** out,
                                   c_string* error_message)
+    int Fory_PyBindBufferToOutputStream(CBuffer* buffer, COutputStream* output_stream,
+                                        c_string* error_message)
+    int Fory_PyClearBufferOutputStream(CBuffer* buffer, c_string* error_message)

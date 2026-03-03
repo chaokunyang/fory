@@ -1568,4 +1568,27 @@ int Fory_PyCreateOutputStream(PyObject *stream, OutputStream **out,
     return -1;
   }
 }
+
+int Fory_PyBindBufferToOutputStream(Buffer *buffer, OutputStream *output_stream,
+                                    std::string *error_message) {
+  if (buffer == nullptr) {
+    *error_message = "buffer must not be null";
+    return -1;
+  }
+  if (output_stream == nullptr) {
+    *error_message = "output stream must not be null";
+    return -1;
+  }
+  buffer->bind_output_stream(output_stream);
+  return 0;
+}
+
+int Fory_PyClearBufferOutputStream(Buffer *buffer, std::string *error_message) {
+  if (buffer == nullptr) {
+    *error_message = "buffer must not be null";
+    return -1;
+  }
+  buffer->clear_output_stream();
+  return 0;
+}
 } // namespace fory

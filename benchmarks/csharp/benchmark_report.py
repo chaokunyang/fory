@@ -143,6 +143,7 @@ def preferred_ordered_values(values, preferred):
 
 def process_benchmark_rows(rows):
     raw_timings = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    raw_throughputs = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     raw_sizes = defaultdict(lambda: defaultdict(list))
 
     for row in rows:
@@ -152,17 +153,27 @@ def process_benchmark_rows(rows):
         if not serializer or not data_type or not operation:
             continue
 
-        avg_ns = row.get("AverageNanoseconds")
-        if avg_ns is None:
-            ops = float(row.get("OperationsPerSecond", 0))
-            avg_ns = 1e9 / ops if ops > 0 else 0.0
-        raw_timings[data_type][operation][serializer].append(float(avg_ns))
+        avg_ns_raw = row.get("AverageNanoseconds")
+        ops_raw = row.get("OperationsPerSecond")
+        avg_ns = float(avg_ns_raw) if avg_ns_raw is not None else 0.0
+        ops = float(ops_raw) if ops_raw is not None else 0.0
+
+        if avg_ns <= 0.0 and ops > 0.0:
+            avg_ns = 1e9 / ops
+        if ops <= 0.0 and avg_ns > 0.0:
+            ops = 1e9 / avg_ns
+
+        if avg_ns > 0.0:
+            raw_timings[data_type][operation][serializer].append(avg_ns)
+        if ops > 0.0:
+            raw_throughputs[data_type][operation][serializer].append(ops)
 
         serialized_size = row.get("SerializedSize")
         if serialized_size is not None:
             raw_sizes[data_type][serializer].append(int(round(serialized_size)))
 
     timings = defaultdict(lambda: defaultdict(dict))
+    throughputs = defaultdict(lambda: defaultdict(dict))
     sizes = defaultdict(dict)
 
     for data_type, op_values in raw_timings.items():
@@ -170,27 +181,31 @@ def process_benchmark_rows(rows):
             for serializer, values in serializer_values.items():
                 timings[data_type][operation][serializer] = sum(values) / len(values)
 
+    for data_type, op_values in raw_throughputs.items():
+        for operation, serializer_values in op_values.items():
+            for serializer, values in serializer_values.items():
+                throughputs[data_type][operation][serializer] = sum(values) / len(values)
+
     for data_type, serializer_values in raw_sizes.items():
         for serializer, values in serializer_values.items():
             sizes[data_type][serializer] = sum(values) / len(values)
 
-    return timings, sizes
+    return timings, throughputs, sizes
 
 
-def plot_datatype(ax, timings: dict, datatype: str, operation: str) -> None:
-    if datatype not in timings or operation not in timings[datatype]:
+def plot_datatype(ax, throughputs: dict, datatype: str, operation: str) -> None:
+    if datatype not in throughputs or operation not in throughputs[datatype]:
         ax.set_title(f"{datatype} {operation} - No Data")
         ax.axis("off")
         return
 
-    libs = set(timings[datatype][operation].keys())
+    libs = set(throughputs[datatype][operation].keys())
     lib_order = [lib for lib in SERIALIZER_ORDER if lib in libs]
     if not lib_order:
         ax.set_title(f"{datatype} {operation} - No Supported Serializer Data")
         ax.axis("off")
         return
-    times = [timings[datatype][operation].get(lib, 0) for lib in lib_order]
-    throughput = [1e9 / t if t > 0 else 0 for t in times]
+    throughput = [throughputs[datatype][operation].get(lib, 0) for lib in lib_order]
     colors = [COLORS.get(lib, "#888888") for lib in lib_order]
 
     x = np.arange(len(lib_order))
@@ -216,7 +231,7 @@ def plot_datatype(ax, timings: dict, datatype: str, operation: str) -> None:
         )
 
 
-def plot_combined_tps_subplot(ax, timings, grouped_datatypes, operation, title):
+def plot_combined_tps_subplot(ax, throughputs, grouped_datatypes, operation, title):
     if not grouped_datatypes:
         ax.set_title(f"{title}\nNo Data")
         ax.axis("off")
@@ -226,7 +241,7 @@ def plot_combined_tps_subplot(ax, timings, grouped_datatypes, operation, title):
     available_libs = [
         lib
         for lib in SERIALIZER_ORDER
-        if any(timings[dt][operation].get(lib, 0) > 0 for dt in grouped_datatypes)
+        if any(throughputs[dt][operation].get(lib, 0) > 0 for dt in grouped_datatypes)
     ]
     if not available_libs:
         ax.set_title(f"{title}\nNo Data")
@@ -235,8 +250,7 @@ def plot_combined_tps_subplot(ax, timings, grouped_datatypes, operation, title):
 
     width = 0.8 / len(available_libs)
     for idx, lib in enumerate(available_libs):
-        times = [timings[dt][operation].get(lib, 0) for dt in grouped_datatypes]
-        tps = [1e9 / t if t > 0 else 0 for t in times]
+        tps = [throughputs[dt][operation].get(lib, 0) for dt in grouped_datatypes]
         offset = (idx - (len(available_libs) - 1) / 2) * width
         ax.bar(
             x + offset,
@@ -258,6 +272,7 @@ def build_markdown(
     args,
     system_info,
     timings,
+    throughputs,
     sizes,
     datatypes,
     operations,
@@ -332,11 +347,11 @@ def build_markdown(
 
     for datatype in datatypes:
         for operation in operations:
-            times = {
-                lib: timings[datatype][operation].get(lib, 0) for lib in SERIALIZER_ORDER
+            tps_values = {
+                lib: throughputs[datatype][operation].get(lib, 0)
+                for lib in SERIALIZER_ORDER
             }
-            throughputs = {lib: (1e9 / t if t > 0 else 0) for lib, t in times.items()}
-            positive_tps = {lib: v for lib, v in throughputs.items() if v > 0}
+            positive_tps = {lib: v for lib, v in tps_values.items() if v > 0}
             fastest = "N/A"
             if positive_tps:
                 fastest_lib = max(positive_tps, key=positive_tps.get)
@@ -345,7 +360,7 @@ def build_markdown(
                 "| "
                 + f"{format_datatype_table_label(datatype)} | {operation.capitalize()} | "
                 + " | ".join(
-                    f"{throughputs[lib]:,.0f}" if throughputs[lib] > 0 else "N/A"
+                    f"{tps_values[lib]:,.0f}" if tps_values[lib] > 0 else "N/A"
                     for lib in SERIALIZER_ORDER
                 )
                 + f" | {fastest} |\n"
@@ -385,7 +400,7 @@ def main() -> None:
         output_dir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     os.makedirs(output_dir, exist_ok=True)
 
-    timings, sizes = process_benchmark_rows(benchmark_data.get("Results", []))
+    timings, throughputs, sizes = process_benchmark_rows(benchmark_data.get("Results", []))
     datatypes = preferred_ordered_values(list(timings.keys()), PREFERRED_DATATYPE_ORDER)
     operations_present = set()
     for datatype in datatypes:
@@ -396,7 +411,7 @@ def main() -> None:
     for datatype in datatypes:
         fig, axes = plt.subplots(1, 2, figsize=(12, 5))
         for index, operation in enumerate(PREFERRED_OPERATION_ORDER):
-            plot_datatype(axes[index], timings, datatype, operation)
+            plot_datatype(axes[index], throughputs, datatype, operation)
         fig.suptitle(f"{format_datatype_table_label(datatype)} Throughput", fontsize=14)
         fig.tight_layout(rect=[0, 0, 1, 0.95])
         plot_path = os.path.join(output_dir, f"{datatype}.png")
@@ -415,7 +430,7 @@ def main() -> None:
         (axes[3], list_datatypes, "deserialize", "Deserialize Throughput (*List, higher is better)"),
     ]
     for ax, grouped_datatypes, operation, title in combined_subplots:
-        plot_combined_tps_subplot(ax, timings, grouped_datatypes, operation, title)
+        plot_combined_tps_subplot(ax, throughputs, grouped_datatypes, operation, title)
     fig.tight_layout()
     throughput_path = os.path.join(output_dir, "throughput.png")
     plt.savefig(throughput_path, dpi=150)
@@ -426,11 +441,15 @@ def main() -> None:
         args=args,
         system_info=get_system_info(benchmark_data),
         timings=timings,
+        throughputs=throughputs,
         sizes=sizes,
         datatypes=datatypes,
         operations=operations,
         plot_images=plot_images,
     )
+    legacy_report_path = os.path.join(output_dir, "REPORT.md")
+    if os.path.exists(legacy_report_path):
+        os.remove(legacy_report_path)
     report_path = os.path.join(output_dir, "README.md")
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report)

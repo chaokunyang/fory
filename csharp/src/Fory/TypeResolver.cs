@@ -17,6 +17,7 @@
 
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Reflection;
 
 namespace Apache.Fory;
@@ -94,6 +95,8 @@ public sealed class TypeResolver
     private readonly Dictionary<(string NamespaceName, string TypeName), TypeInfo> _byTypeName = [];
 
     private readonly Dictionary<Type, TypeInfo> _typeInfos = [];
+    private ulong _versionHash;
+    private bool _finalized;
 
     public static void RegisterGenerated<T, TSerializer>()
         where TSerializer : Serializer<T>, new()
@@ -196,6 +199,7 @@ public sealed class TypeResolver
         }
 
         _typeInfos[type] = typeInfo;
+        InvalidateFinalizedVersion();
         return typeInfo;
     }
 
@@ -217,6 +221,7 @@ public sealed class TypeResolver
         TypeInfo typeInfo = GetOrCreateTypeInfo(type, explicitTypeInfo);
         typeInfo.RegisterByTypeId(id);
         _byUserTypeId[id] = typeInfo;
+        InvalidateFinalizedVersion();
     }
 
     internal void Register(Type type, string namespaceName, string typeName, TypeInfo? explicitTypeInfo = null)
@@ -226,6 +231,167 @@ public sealed class TypeResolver
         MetaString typeNameMeta = MetaStringEncoder.TypeName.Encode(typeName, TypeMetaEncodings.TypeNameMetaStringEncodings);
         typeInfo.RegisterByTypeName(namespaceMeta, typeNameMeta);
         _byTypeName[(namespaceName, typeName)] = typeInfo;
+        InvalidateFinalizedVersion();
+    }
+
+    /// <summary>
+    /// Returns a stable hash representing the finalized resolver registration state.
+    /// The hash is computed lazily and invalidated whenever type registrations change.
+    /// </summary>
+    /// <returns>Resolver version hash.</returns>
+    public ulong VersionHash()
+    {
+        EnsureFinalizedVersion();
+        return _versionHash;
+    }
+
+    /// <summary>
+    /// Returns compatible TypeMeta header hash for a registered struct type.
+    /// </summary>
+    /// <typeparam name="T">Registered struct type.</typeparam>
+    /// <param name="trackRef">Whether the TypeMeta should be generated with tracked references.</param>
+    /// <returns>TypeMeta header hash bits used for exact-schema fast path checks.</returns>
+    public ulong GetCompatibleTypeMetaHeaderHash<T>(bool trackRef)
+    {
+        return GetCompatibleTypeMetaHeaderHash(typeof(T), trackRef);
+    }
+
+    /// <summary>
+    /// Returns compatible TypeMeta header hash for a registered struct type.
+    /// </summary>
+    /// <param name="type">Registered struct type.</param>
+    /// <param name="trackRef">Whether the TypeMeta should be generated with tracked references.</param>
+    /// <returns>TypeMeta header hash bits used for exact-schema fast path checks.</returns>
+    public ulong GetCompatibleTypeMetaHeaderHash(Type type, bool trackRef)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        EnsureFinalizedVersion();
+
+        TypeInfo info = RequireRegisteredTypeInfo(type);
+        if (!info.UserTypeKind.HasValue || info.UserTypeKind.Value != UserTypeKind.Struct)
+        {
+            throw new InvalidDataException(
+                $"compatible TypeMeta hash is only available for registered struct types, got {type}");
+        }
+
+        TypeId wireTypeId = ResolveWireTypeId(info.UserTypeKind.Value, info.RegisterByName, compatible: true);
+        TypeInfo.CompatibleTypeMetaCacheEntry typeMeta = BuildCompatibleTypeMeta(info, wireTypeId, trackRef);
+        return typeMeta.HeaderHash;
+    }
+
+    private void InvalidateFinalizedVersion()
+    {
+        _finalized = false;
+        _versionHash = 0;
+    }
+
+    private void EnsureFinalizedVersion()
+    {
+        if (_finalized)
+        {
+            return;
+        }
+
+        _versionHash = ComputeVersionHash();
+        _finalized = true;
+    }
+
+    private ulong ComputeVersionHash()
+    {
+        const ulong offsetBasis = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+
+        static ulong MixByte(ulong hash, byte value)
+        {
+            const ulong p = 1099511628211UL;
+            return (hash ^ value) * p;
+        }
+
+        static ulong MixBool(ulong hash, bool value)
+        {
+            return MixByte(hash, value ? (byte)1 : (byte)0);
+        }
+
+        static ulong MixUInt32(ulong hash, uint value)
+        {
+            hash = MixByte(hash, unchecked((byte)(value & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 8) & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 16) & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 24) & 0xFF)));
+            return hash;
+        }
+
+        static ulong MixUInt64(ulong hash, ulong value)
+        {
+            hash = MixByte(hash, unchecked((byte)(value & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 8) & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 16) & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 24) & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 32) & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 40) & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 48) & 0xFF)));
+            hash = MixByte(hash, unchecked((byte)((value >> 56) & 0xFF)));
+            return hash;
+        }
+
+        static ulong MixString(ulong hash, string? value)
+        {
+            if (value is null)
+            {
+                return MixUInt32(hash, uint.MaxValue);
+            }
+
+            hash = MixUInt32(hash, unchecked((uint)value.Length));
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                hash = MixByte(hash, unchecked((byte)(c & 0xFF)));
+                hash = MixByte(hash, unchecked((byte)(c >> 8)));
+            }
+
+            return hash;
+        }
+
+        ulong hash = offsetBasis;
+        hash = MixBool(hash, true);
+
+        List<TypeInfo> registeredTypeInfos = _typeInfos.Values
+            .Where(static info => info.IsRegistered)
+            .OrderBy(
+                static info => info.Type.AssemblyQualifiedName ?? info.Type.FullName ?? info.Type.Name,
+                StringComparer.Ordinal)
+            .ToList();
+        hash = MixUInt32(hash, unchecked((uint)registeredTypeInfos.Count));
+        foreach (TypeInfo info in registeredTypeInfos)
+        {
+            hash = MixString(hash, info.Type.AssemblyQualifiedName ?? info.Type.FullName ?? info.Type.Name);
+            hash = MixBool(hash, info.RegisterByName);
+            hash = MixUInt32(hash, info.UserTypeKind.HasValue ? (uint)info.UserTypeKind.Value + 1u : 0u);
+            if (info.RegisterByName)
+            {
+                hash = MixString(hash, info.NamespaceName?.Value);
+                hash = MixString(hash, info.TypeName?.Value);
+            }
+            else
+            {
+                hash = MixUInt32(hash, info.UserTypeId ?? 0u);
+            }
+
+            if (info.UserTypeKind.HasValue && info.UserTypeKind.Value == UserTypeKind.Struct)
+            {
+                TypeId wireTypeId = ResolveWireTypeId(info.UserTypeKind.Value, info.RegisterByName, compatible: true);
+                hash = MixUInt32(hash, (uint)wireTypeId);
+                hash = MixUInt64(hash, BuildCompatibleTypeMeta(info, wireTypeId, trackRef: false).HeaderHash);
+                hash = MixUInt64(hash, BuildCompatibleTypeMeta(info, wireTypeId, trackRef: true).HeaderHash);
+            }
+        }
+
+        if (hash == 0)
+        {
+            hash = prime;
+        }
+
+        return hash;
     }
 
     internal TypeInfo? GetRegisteredTypeInfo(Type type)

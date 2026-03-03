@@ -19,17 +19,49 @@ namespace Apache.Fory;
 
 public sealed class CompatibleTypeDefWriteState
 {
-    private readonly Dictionary<Type, uint> _typeIndexByType = [];
+    private Dictionary<Type, uint>? _typeIndexByType;
+    private Type? _firstType;
     private uint _nextIndex;
 
     public uint? LookupIndex(Type type)
     {
-        return _typeIndexByType.TryGetValue(type, out uint idx) ? idx : null;
+        if (_nextIndex == 0)
+        {
+            return null;
+        }
+
+        if (ReferenceEquals(_firstType, type))
+        {
+            return 0;
+        }
+
+        if (_typeIndexByType is not null && _typeIndexByType.TryGetValue(type, out uint idx))
+        {
+            return idx;
+        }
+
+        return null;
     }
 
     public (uint Index, bool IsNew) AssignIndexIfAbsent(Type type)
     {
-        if (_typeIndexByType.TryGetValue(type, out uint existing))
+        if (_nextIndex == 0)
+        {
+            _firstType = type;
+            _nextIndex = 1;
+            return (0, true);
+        }
+
+        if (ReferenceEquals(_firstType, type))
+        {
+            return (0, false);
+        }
+
+        if (_typeIndexByType is null)
+        {
+            _typeIndexByType = new Dictionary<Type, uint>();
+        }
+        else if (_typeIndexByType.TryGetValue(type, out uint existing))
         {
             return (existing, false);
         }
@@ -42,7 +74,8 @@ public sealed class CompatibleTypeDefWriteState
 
     public void Reset()
     {
-        _typeIndexByType.Clear();
+        _firstType = null;
+        _typeIndexByType?.Clear();
         _nextIndex = 0;
     }
 }
@@ -52,13 +85,26 @@ public sealed class CompatibleTypeDefReadState
     private const int MaxParsedTypeDefEntries = 8192;
     private readonly List<TypeMeta> _typeMetas = [];
     private readonly Dictionary<ulong, TypeMeta> _cachedTypeMetasByHeader = [];
+    private TypeMeta? _firstTypeMeta;
+    private bool _hasFirstTypeMeta;
     private ulong _lastMetaHeader;
     private TypeMeta? _lastTypeMeta;
     private bool _hasLastMetaHeader;
 
     public TypeMeta? TypeMetaAt(int index)
     {
-        return index >= 0 && index < _typeMetas.Count ? _typeMetas[index] : null;
+        if (index < 0)
+        {
+            return null;
+        }
+
+        if (index == 0)
+        {
+            return _hasFirstTypeMeta ? _firstTypeMeta : null;
+        }
+
+        int listIndex = index - 1;
+        return listIndex >= 0 && listIndex < _typeMetas.Count ? _typeMetas[listIndex] : null;
     }
 
     public void StoreTypeMeta(TypeMeta typeMeta, int index)
@@ -68,20 +114,34 @@ public sealed class CompatibleTypeDefReadState
             throw new InvalidDataException("negative compatible type definition index");
         }
 
-        if (index == _typeMetas.Count)
+        if (index == 0)
+        {
+            _firstTypeMeta = typeMeta;
+            _hasFirstTypeMeta = true;
+            return;
+        }
+
+        if (!_hasFirstTypeMeta)
+        {
+            throw new InvalidDataException(
+                $"compatible type definition index gap: index={index}, missing index 0");
+        }
+
+        int listIndex = index - 1;
+        if (listIndex == _typeMetas.Count)
         {
             _typeMetas.Add(typeMeta);
             return;
         }
 
-        if (index < _typeMetas.Count)
+        if (listIndex < _typeMetas.Count)
         {
-            _typeMetas[index] = typeMeta;
+            _typeMetas[listIndex] = typeMeta;
             return;
         }
 
         throw new InvalidDataException(
-            $"compatible type definition index gap: index={index}, count={_typeMetas.Count}");
+            $"compatible type definition index gap: index={index}, count={_typeMetas.Count + 1}");
     }
 
     public TypeMeta? CachedTypeMeta(ulong header)
@@ -115,6 +175,8 @@ public sealed class CompatibleTypeDefReadState
 
     public void Reset()
     {
+        _firstTypeMeta = null;
+        _hasFirstTypeMeta = false;
         _typeMetas.Clear();
     }
 }
@@ -272,6 +334,7 @@ public sealed class ReadContext
     private Type? _lastCompatibleType;
     private TypeMeta? _lastCompatibleTypeMeta;
     private int _currentDynamicReadDepth;
+    private bool _shouldConsumeCompatibleTypeMeta;
 
     public ReadContext(
         ByteReader reader,
@@ -308,6 +371,8 @@ public sealed class ReadContext
     public bool Compatible { get; }
 
     public bool CheckStructVersion { get; }
+
+    public bool ShouldConsumeCompatibleTypeMeta => _shouldConsumeCompatibleTypeMeta;
 
     public RefReader RefReader { get; }
 
@@ -372,21 +437,34 @@ public sealed class ReadContext
         _lastCompatibleTypeMeta = typeMeta;
     }
 
-    public TypeMeta ConsumeCompatibleTypeMeta(Type type)
+    public bool TryConsumeCompatibleTypeMeta(Type type, out TypeMeta? typeMeta)
     {
         if (_lastCompatibleType == type && _lastCompatibleTypeMeta is not null)
         {
-            return _lastCompatibleTypeMeta;
+            typeMeta = _lastCompatibleTypeMeta;
+            return true;
         }
 
-        if (!_pendingCompatibleTypeMeta.TryGetValue(type, out TypeMeta? typeMeta) || typeMeta is null)
+        if (!_pendingCompatibleTypeMeta.TryGetValue(type, out TypeMeta? pendingTypeMeta) || pendingTypeMeta is null)
         {
-            throw new InvalidDataException($"missing compatible type metadata for {type}");
+            typeMeta = null;
+            return false;
         }
 
         _lastCompatibleType = type;
-        _lastCompatibleTypeMeta = typeMeta;
-        return typeMeta;
+        _lastCompatibleTypeMeta = pendingTypeMeta;
+        typeMeta = pendingTypeMeta;
+        return true;
+    }
+
+    public TypeMeta ConsumeCompatibleTypeMeta(Type type)
+    {
+        if (TryConsumeCompatibleTypeMeta(type, out TypeMeta? typeMeta) && typeMeta is not null)
+        {
+            return typeMeta;
+        }
+
+        throw new InvalidDataException($"missing compatible type metadata for {type}");
     }
 
     public void SetDynamicTypeInfo(Type type, DynamicTypeInfo typeInfo)
@@ -402,6 +480,18 @@ public sealed class ReadContext
     public void ClearDynamicTypeInfo(Type type)
     {
         _pendingDynamicTypeInfo.Remove(type);
+    }
+
+    internal bool ReplaceCompatibleTypeMetaExpectation(bool expected)
+    {
+        bool previous = _shouldConsumeCompatibleTypeMeta;
+        _shouldConsumeCompatibleTypeMeta = expected;
+        return previous;
+    }
+
+    internal void RestoreCompatibleTypeMetaExpectation(bool previous)
+    {
+        _shouldConsumeCompatibleTypeMeta = previous;
     }
 
     public void IncreaseDynamicReadDepth()
@@ -463,6 +553,7 @@ public sealed class ReadContext
         _canonicalReferenceCache.Clear();
         _lastCompatibleType = null;
         _lastCompatibleTypeMeta = null;
+        _shouldConsumeCompatibleTypeMeta = false;
         _currentDynamicReadDepth = 0;
     }
 

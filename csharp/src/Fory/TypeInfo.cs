@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Reflection;
@@ -33,7 +34,7 @@ public sealed class TypeInfo
 {
     private readonly record struct CompatibleTypeMetaCacheKey(TypeId WireTypeId, bool TrackRef);
 
-    internal readonly record struct CompatibleTypeMetaCacheEntry(TypeMeta TypeMeta, byte[] EncodedBytes);
+    internal readonly record struct CompatibleTypeMetaCacheEntry(TypeMeta TypeMeta, byte[] EncodedBytes, ulong HeaderHash);
 
     private readonly object _serializer;
     private readonly Action<WriteContext, object?, bool> _writeDataObject;
@@ -52,6 +53,7 @@ public sealed class TypeInfo
         bool isDynamicType,
         bool isNullableType,
         bool isReferenceTrackableType,
+        bool supportsCompatibleReadWithoutTypeMeta,
         object? defaultObject,
         Action<WriteContext, object?, bool> writeDataObject,
         Func<ReadContext, object?> readDataObject,
@@ -66,6 +68,7 @@ public sealed class TypeInfo
         IsDynamicType = isDynamicType;
         IsNullableType = isNullableType;
         IsReferenceTrackableType = isReferenceTrackableType;
+        SupportsCompatibleReadWithoutTypeMeta = supportsCompatibleReadWithoutTypeMeta;
         DefaultObject = defaultObject;
         _writeDataObject = writeDataObject;
         _readDataObject = readDataObject;
@@ -83,6 +86,7 @@ public sealed class TypeInfo
             hasCompatibleTypeMetaFieldsProvider);
         bool isNullableType = !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
         bool isReferenceTrackableType = type != typeof(string) && !type.IsValueType;
+        bool supportsCompatibleReadWithoutTypeMeta = ResolveSupportsCompatibleReadWithoutTypeMeta(serializer);
         return new TypeInfo(
             type,
             serializer,
@@ -91,6 +95,7 @@ public sealed class TypeInfo
             isDynamicType,
             isNullableType,
             isReferenceTrackableType,
+            supportsCompatibleReadWithoutTypeMeta,
             serializer.DefaultObject,
             (context, value, hasGenerics) => WriteDataObject(serializer, context, value, hasGenerics),
             context => serializer.ReadData(context),
@@ -132,6 +137,29 @@ public sealed class TypeInfo
     private static IReadOnlyList<TypeMetaFieldInfo> EmptyCompatibleTypeMetaFields(bool _)
     {
         return EmptyTypeMetaFields;
+    }
+
+    private static bool ResolveSupportsCompatibleReadWithoutTypeMeta(object serializer)
+    {
+        MethodInfo? method = serializer.GetType().GetMethod(
+            "SupportsCompatibleReadWithoutTypeMeta",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            null,
+            Type.EmptyTypes,
+            null);
+        if (method is null || method.ReturnType != typeof(bool))
+        {
+            return false;
+        }
+
+        try
+        {
+            return (bool)method.Invoke(serializer, null)!;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void WriteDataObject<T>(Serializer<T> serializer, WriteContext context, object? value, bool hasGenerics)
@@ -428,6 +456,8 @@ public sealed class TypeInfo
 
     public bool IsReferenceTrackableType { get; }
 
+    public bool SupportsCompatibleReadWithoutTypeMeta { get; }
+
     public object? DefaultObject { get; }
 
     public bool NeedsTypeInfoForField()
@@ -492,7 +522,10 @@ public sealed class TypeInfo
         }
 
         TypeMeta typeMeta = factory();
-        CompatibleTypeMetaCacheEntry entry = new(typeMeta, typeMeta.Encode());
+        byte[] encoded = typeMeta.Encode();
+        ulong header = BinaryPrimitives.ReadUInt64LittleEndian(encoded);
+        ulong headerHash = header >> (int)(64 - TypeMetaConstants.TypeMetaNumHashBits);
+        CompatibleTypeMetaCacheEntry entry = new(typeMeta, encoded, headerHash);
         _compatibleTypeMetaCache[key] = entry;
         return entry;
     }

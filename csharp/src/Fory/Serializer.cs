@@ -120,7 +120,18 @@ public abstract class Serializer<T>
                             context.TypeResolver.ReadTypeInfo(this, context);
                         }
 
-                        T value = ReadData(context);
+                        bool expectCompatibleTypeMeta = context.Compatible && readTypeInfo;
+                        bool previousExpectation = context.ReplaceCompatibleTypeMetaExpectation(expectCompatibleTypeMeta);
+                        T value;
+                        try
+                        {
+                            value = ReadData(context);
+                        }
+                        finally
+                        {
+                            context.RestoreCompatibleTypeMetaExpectation(previousExpectation);
+                        }
+
                         context.RefReader.FinishPendingReferenceIfNeeded(value);
                         context.RefReader.PopPendingReference();
                         return value;
@@ -137,6 +148,15 @@ public abstract class Serializer<T>
             context.TypeResolver.ReadTypeInfo(this, context);
         }
 
-        return ReadData(context);
+        bool expectCompatibleMeta = context.Compatible && readTypeInfo;
+        bool previousCompatibleMetaExpectation = context.ReplaceCompatibleTypeMetaExpectation(expectCompatibleMeta);
+        try
+        {
+            return ReadData(context);
+        }
+        finally
+        {
+            context.RestoreCompatibleTypeMetaExpectation(previousCompatibleMetaExpectation);
+        }
     }
 }

@@ -82,7 +82,8 @@ internal static class CollectionCodec
             context.Compatible &&
             declaredElementType &&
             !dynamicElementType &&
-            elementTypeInfo.NeedsTypeInfoForField();
+            elementTypeInfo.NeedsTypeInfoForField() &&
+            !elementTypeInfo.SupportsCompatibleReadWithoutTypeMeta;
 
         byte header = dynamicElementType ? (byte)0 : CollectionBits.SameType;
         if (trackRef)
@@ -170,7 +171,8 @@ internal static class CollectionCodec
             context.Compatible &&
             declared &&
             !elementTypeInfo.IsDynamicType &&
-            elementTypeInfo.NeedsTypeInfoForField();
+            elementTypeInfo.NeedsTypeInfoForField() &&
+            !elementTypeInfo.SupportsCompatibleReadWithoutTypeMeta;
 
         List<T> values = new(length);
         if (!sameType)

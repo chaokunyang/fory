@@ -409,7 +409,7 @@ class Fory:
         try:
             self.buffer.set_writer_index(0)
             self._wrapped_stream_writer = Buffer.wrap_stream(stream)
-            self.buffer.attach_stream(self._wrapped_stream_writer)
+            self.buffer.bind_stream_writer(self._wrapped_stream_writer)
             self._serialize(
                 obj,
                 self.buffer,
@@ -418,7 +418,7 @@ class Fory:
             )
             self.force_flush(self.buffer)
         finally:
-            self.buffer.attach_stream(None)
+            self.buffer.bind_stream_writer(None)
             self._wrapped_stream_writer = None
             self.reset_write()
 

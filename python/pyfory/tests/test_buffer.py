@@ -281,7 +281,7 @@ def test_buffer_flush_stream():
     stream = PartialWriteStream()
     buffer = Buffer.allocate(16)
     wrapped_stream = Buffer.wrap_stream(stream)
-    buffer.attach_stream(wrapped_stream)
+    buffer.bind_stream_writer(wrapped_stream)
     payload = b"stream-flush-buffer"
     buffer.write_bytes(payload)
     wrapped_stream.force_flush(buffer)

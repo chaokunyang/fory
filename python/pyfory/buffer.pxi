@@ -196,7 +196,7 @@ cdef class Buffer:
     def wrap_stream(stream):
         return wrap_stream_writer(stream)
 
-    cpdef inline void attach_stream(self, object stream_writer):
+    cpdef inline void bind_stream_writer(self, object stream_writer):
         cdef WrappedStreamWriter wrapped_stream_writer
         if stream_writer is None:
             self.stream_writer = None

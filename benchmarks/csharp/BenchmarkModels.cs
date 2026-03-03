@@ -26,35 +26,35 @@ namespace Apache.Fory.Benchmarks.CSharp;
 [ProtoContract]
 public sealed class NumericStruct
 {
-    [Field(Encoding = FieldEncoding.Fixed, Id = 1)]
+    [Field(Id = 1)]
     [ProtoMember(1)]
     public int F1 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 2)]
+    [Field(Id = 2)]
     [ProtoMember(2)]
     public int F2 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 3)]
+    [Field(Id = 3)]
     [ProtoMember(3)]
     public int F3 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 4)]
+    [Field(Id = 4)]
     [ProtoMember(4)]
     public int F4 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 5)]
+    [Field(Id = 5)]
     [ProtoMember(5)]
     public int F5 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 6)]
+    [Field(Id = 6)]
     [ProtoMember(6)]
     public int F6 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 7)]
+    [Field(Id = 7)]
     [ProtoMember(7)]
     public int F7 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 8)]
+    [Field(Id = 8)]
     [ProtoMember(8)]
     public int F8 { get; set; }
 }
@@ -74,11 +74,11 @@ public sealed class StructList
 [ProtoContract]
 public sealed class Sample
 {
-    [Field(Encoding = FieldEncoding.Fixed, Id = 1)]
+    [Field(Id = 1)]
     [ProtoMember(1)]
     public int IntValue { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 2)]
+    [Field(Id = 2)]
     [ProtoMember(2)]
     public long LongValue { get; set; }
 
@@ -90,11 +90,11 @@ public sealed class Sample
     [ProtoMember(4)]
     public double DoubleValue { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 5)]
+    [Field(Id = 5)]
     [ProtoMember(5)]
     public int ShortValue { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 6)]
+    [Field(Id = 6)]
     [ProtoMember(6)]
     public int CharValue { get; set; }
 
@@ -102,11 +102,11 @@ public sealed class Sample
     [ProtoMember(7)]
     public bool BooleanValue { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 8)]
+    [Field(Id = 8)]
     [ProtoMember(8)]
     public int IntValueBoxed { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 9)]
+    [Field(Id = 9)]
     [ProtoMember(9)]
     public long LongValueBoxed { get; set; }
 
@@ -118,11 +118,11 @@ public sealed class Sample
     [ProtoMember(11)]
     public double DoubleValueBoxed { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 12)]
+    [Field(Id = 12)]
     [ProtoMember(12)]
     public int ShortValueBoxed { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 13)]
+    [Field(Id = 13)]
     [ProtoMember(13)]
     public int CharValueBoxed { get; set; }
 
@@ -206,11 +206,11 @@ public sealed class Media
     [ProtoMember(2)]
     public string Title { get; set; } = string.Empty;
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 3)]
+    [Field(Id = 3)]
     [ProtoMember(3)]
     public int Width { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 4)]
+    [Field(Id = 4)]
     [ProtoMember(4)]
     public int Height { get; set; }
 
@@ -218,15 +218,15 @@ public sealed class Media
     [ProtoMember(5)]
     public string Format { get; set; } = string.Empty;
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 6)]
+    [Field(Id = 6)]
     [ProtoMember(6)]
     public long Duration { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 7)]
+    [Field(Id = 7)]
     [ProtoMember(7)]
     public long Size { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 8)]
+    [Field(Id = 8)]
     [ProtoMember(8)]
     public int Bitrate { get; set; }
 
@@ -260,11 +260,11 @@ public sealed class Image
     [ProtoMember(2)]
     public string Title { get; set; } = string.Empty;
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 3)]
+    [Field(Id = 3)]
     [ProtoMember(3)]
     public int Width { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed, Id = 4)]
+    [Field(Id = 4)]
     [ProtoMember(4)]
     public int Height { get; set; }
 
@@ -351,35 +351,43 @@ public static class BenchmarkDataFactory
         {
             Media = new Media
             {
-                Uri = "https://apache.org/fory/video/123",
-                Title = "Apache Fory: Cross-language serialization benchmark",
-                Width = 1920,
-                Height = 1080,
-                Format = "video/mp4",
-                Duration = 145_000,
-                Size = 58_000_000,
-                Bitrate = 3_200,
-                HasBitrate = true,
-                Persons = ["alice", "bob", "charlie", "david"],
-                Player = Player.Java,
-                Copyright = "Apache Software Foundation",
+                Uri = "http://javaone.com/keynote.ogg",
+                Title = string.Empty,
+                Width = 641,
+                Height = 481,
+                Format = "video/theora\u1234",
+                Duration = 18_000_001,
+                Size = 58_982_401,
+                Bitrate = 0,
+                HasBitrate = false,
+                Persons = ["Bill Gates, Jr.", "Steven Jobs"],
+                Player = Player.Flash,
+                Copyright = "Copyright (c) 2009, Scooby Dooby Doo",
             },
             Images =
             [
                 new Image
                 {
-                    Uri = "https://apache.org/fory/image/1",
-                    Title = "cover",
-                    Width = 1920,
-                    Height = 1080,
+                    Uri = "http://javaone.com/keynote_huge.jpg",
+                    Title = "Javaone Keynote\u1234",
+                    Width = 32_000,
+                    Height = 24_000,
                     Size = MediaSize.Large,
                 },
                 new Image
                 {
-                    Uri = "https://apache.org/fory/image/2",
-                    Title = "thumbnail",
+                    Uri = "http://javaone.com/keynote_large.jpg",
+                    Title = string.Empty,
+                    Width = 1_024,
+                    Height = 768,
+                    Size = MediaSize.Large,
+                },
+                new Image
+                {
+                    Uri = "http://javaone.com/keynote_small.jpg",
+                    Title = string.Empty,
                     Width = 320,
-                    Height = 180,
+                    Height = 240,
                     Size = MediaSize.Small,
                 },
             ],
@@ -388,22 +396,10 @@ public static class BenchmarkDataFactory
 
     public static StructList CreateStructList()
     {
-        NumericStruct value = CreateNumericStruct();
         StructList list = new();
         for (int i = 0; i < ListSize; i++)
         {
-            list.Values.Add(
-                new NumericStruct
-                {
-                    F1 = value.F1 + i,
-                    F2 = value.F2 - i,
-                    F3 = value.F3 + i,
-                    F4 = value.F4 - i,
-                    F5 = value.F5 + i,
-                    F6 = value.F6 - i,
-                    F7 = value.F7 + i,
-                    F8 = value.F8 + i,
-                });
+            list.Values.Add(CreateNumericStruct());
         }
 
         return list;
@@ -411,35 +407,10 @@ public static class BenchmarkDataFactory
 
     public static SampleList CreateSampleList()
     {
-        Sample sample = CreateSample();
         SampleList list = new();
         for (int i = 0; i < ListSize; i++)
         {
-            list.Values.Add(new Sample
-            {
-                IntValue = sample.IntValue + i,
-                LongValue = sample.LongValue + i,
-                FloatValue = sample.FloatValue,
-                DoubleValue = sample.DoubleValue,
-                ShortValue = sample.ShortValue,
-                CharValue = sample.CharValue,
-                BooleanValue = sample.BooleanValue,
-                IntValueBoxed = sample.IntValueBoxed,
-                LongValueBoxed = sample.LongValueBoxed,
-                FloatValueBoxed = sample.FloatValueBoxed,
-                DoubleValueBoxed = sample.DoubleValueBoxed,
-                ShortValueBoxed = sample.ShortValueBoxed,
-                CharValueBoxed = sample.CharValueBoxed,
-                BooleanValueBoxed = sample.BooleanValueBoxed,
-                IntArray = sample.IntArray,
-                LongArray = sample.LongArray,
-                FloatArray = sample.FloatArray,
-                DoubleArray = sample.DoubleArray,
-                ShortArray = sample.ShortArray,
-                CharArray = sample.CharArray,
-                BooleanArray = sample.BooleanArray,
-                String = sample.String,
-            });
+            list.Values.Add(CreateSample());
         }
 
         return list;
@@ -447,39 +418,10 @@ public static class BenchmarkDataFactory
 
     public static MediaContentList CreateMediaContentList()
     {
-        MediaContent content = CreateMediaContent();
         MediaContentList list = new();
         for (int i = 0; i < ListSize; i++)
         {
-            list.Values.Add(new MediaContent
-            {
-                Media = new Media
-                {
-                    Uri = content.Media.Uri,
-                    Title = content.Media.Title,
-                    Width = content.Media.Width,
-                    Height = content.Media.Height,
-                    Format = content.Media.Format,
-                    Duration = content.Media.Duration,
-                    Size = content.Media.Size,
-                    Bitrate = content.Media.Bitrate,
-                    HasBitrate = content.Media.HasBitrate,
-                    Persons = [.. content.Media.Persons],
-                    Player = content.Media.Player,
-                    Copyright = content.Media.Copyright,
-                },
-                Images =
-                [
-                    .. content.Images.Select(image => new Image
-                    {
-                        Uri = image.Uri,
-                        Title = image.Title,
-                        Width = image.Width,
-                        Height = image.Height,
-                        Size = image.Size,
-                    }),
-                ],
-            });
+            list.Values.Add(CreateMediaContent());
         }
 
         return list;

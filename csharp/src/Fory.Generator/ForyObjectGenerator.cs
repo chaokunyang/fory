@@ -1212,6 +1212,21 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         if (TryGetListElementType(unwrapped, out ITypeSymbol? listElementType))
         {
             bool elementNullable = GenericNullable(listElementType!);
+            if (!elementNullable &&
+                TryResolvePackedArrayTypeIdForElement(listElementType!) is uint packedArrayTypeId &&
+                explicitTypeId == packedArrayTypeId)
+            {
+                // Align compatible TypeMeta with C++ vector arithmetic handling:
+                // when the wire type is already classified as a packed array (e.g. int[]),
+                // use the specialized array TypeId directly instead of LIST<elem>.
+                // This keeps schema/type-meta bytes consistent across languages.
+                return new TypeMetaFieldTypeModel(
+                    packedArrayTypeId.ToString(),
+                    nullable,
+                    false,
+                    ImmutableArray<TypeMetaFieldTypeModel>.Empty);
+            }
+
             TypeMetaFieldTypeModel element = BuildTypeMetaFieldTypeModel(
                 listElementType!,
                 elementNullable,
@@ -1581,22 +1596,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
         if (type is IArrayTypeSymbol arrayType)
         {
-            TypeClassification elem = ClassifyType(arrayType.ElementType);
-            uint typeId = elem.TypeId switch
-            {
-                9 => 41,
-                1 => 43,
-                2 => 44,
-                3 => 45,
-                5 => 46,
-                7 => 47,
-                10 => 49,
-                12 => 50,
-                14 => 51,
-                19 => 55,
-                20 => 56,
-                _ => 22,
-            };
+            uint typeId = TryResolvePackedArrayTypeIdForElement(arrayType.ElementType) ?? 22;
             return new TypeClassification(typeId, false, true, true, false, false, 0);
         }
 
@@ -1755,6 +1755,32 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         }
 
         return false;
+    }
+
+    private static uint? TryResolvePackedArrayTypeIdForElement(ITypeSymbol elementType)
+    {
+        (bool isNullable, ITypeSymbol unwrapped) = UnwrapNullable(elementType);
+        if (isNullable)
+        {
+            return null;
+        }
+
+        uint elementTypeId = ClassifyType(unwrapped).TypeId;
+        return elementTypeId switch
+        {
+            9 => 41,  // byte -> binary
+            1 => 43,  // bool -> bool array
+            2 => 44,  // sbyte -> int8 array
+            3 => 45,  // short -> int16 array
+            5 => 46,  // int -> int32 array
+            7 => 47,  // long -> int64 array
+            10 => 49, // ushort -> uint16 array
+            12 => 50, // uint -> uint32 array
+            14 => 51, // ulong -> uint64 array
+            19 => 55, // float -> float32 array
+            20 => 56, // double -> float64 array
+            _ => null,
+        };
     }
 
     private static (bool, ITypeSymbol) UnwrapNullable(ITypeSymbol type)

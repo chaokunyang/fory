@@ -157,6 +157,111 @@ class StructList:
     struct_list: List[Struct] = fory_field(id=1)
 
 
+@dataclass
+class FooNoId:
+    f1: Optional[str]
+    f2: Dict[str, int]
+
+
+@dataclass
+class BarNoId:
+    f1: Optional[FooNoId]
+    f2: Optional[str]
+    f3: List[FooNoId]
+    f4: Dict[int, FooNoId]
+    f5: Optional[int]
+    f6: Optional[int]
+    f7: Optional[float]
+    f8: Optional[float]
+    f9: List[int]
+    f10: List[int]
+
+
+@dataclass
+class SampleNoId:
+    int_value: int
+    long_value: int
+    float_value: float
+    double_value: float
+    short_value: int
+    char_value: int
+    boolean_value: bool
+    int_value_boxed: int
+    long_value_boxed: int
+    float_value_boxed: float
+    double_value_boxed: float
+    short_value_boxed: int
+    char_value_boxed: int
+    boolean_value_boxed: bool
+    int_array: List[int]
+    long_array: List[int]
+    float_array: List[float]
+    double_array: List[float]
+    short_array: List[int]
+    char_array: List[int]
+    boolean_array: List[bool]
+    string: str
+
+
+@dataclass
+class SampleListNoId:
+    sample_list: List[SampleNoId]
+
+
+@dataclass
+class MediaNoId:
+    uri: str
+    title: Optional[str]
+    width: int
+    height: int
+    format: str
+    duration: int
+    size: int
+    bitrate: int
+    has_bitrate: bool
+    persons: List[str]
+    player: Player
+    copyright: str
+
+
+@dataclass
+class ImageNoId:
+    uri: str
+    title: Optional[str]
+    width: int
+    height: int
+    size: Size
+    media: Optional[MediaNoId]
+
+
+@dataclass
+class MediaContentNoId:
+    media: MediaNoId
+    images: List[ImageNoId]
+
+
+@dataclass
+class MediaContentListNoId:
+    media_content_list: List[MediaContentNoId]
+
+
+@dataclass
+class StructNoId:
+    f1: int
+    f2: int
+    f3: int
+    f4: int
+    f5: int
+    f6: int
+    f7: int
+    f8: int
+
+
+@dataclass
+class StructListNoId:
+    struct_list: List[StructNoId]
+
+
 _MESSAGE_CLASSES = [
     Foo,
     Bar,
@@ -172,6 +277,42 @@ _MESSAGE_CLASSES = [
 
 _AUX_CLASSES = [Player, Size]
 
+_MESSAGE_CLASSES_NO_FIELD_ID = [
+    FooNoId,
+    BarNoId,
+    SampleNoId,
+    SampleListNoId,
+    MediaNoId,
+    ImageNoId,
+    MediaContentNoId,
+    MediaContentListNoId,
+    StructNoId,
+    StructListNoId,
+]
+
+_PROTO_TYPENAME = {
+    Foo: "Foo",
+    Bar: "Bar",
+    Sample: "Sample",
+    SampleList: "SampleList",
+    Media: "Media",
+    Image: "Image",
+    MediaContent: "MediaContent",
+    MediaContentList: "MediaContentList",
+    Struct: "Struct",
+    StructList: "StructList",
+    FooNoId: "Foo",
+    BarNoId: "Bar",
+    SampleNoId: "Sample",
+    SampleListNoId: "SampleList",
+    MediaNoId: "Media",
+    ImageNoId: "Image",
+    MediaContentNoId: "MediaContent",
+    MediaContentListNoId: "MediaContentList",
+    StructNoId: "Struct",
+    StructListNoId: "StructList",
+}
+
 
 def _typedef_payload_size(encoded_typedef: bytes) -> int:
     buffer = Buffer(encoded_typedef)
@@ -183,13 +324,13 @@ def _typedef_payload_size(encoded_typedef: bytes) -> int:
     return payload_size
 
 
-def run_compare() -> str:
+def _run_compare_for_classes(label: str, message_classes: List[type]) -> str:
     fory = Fory(xlang=True)
 
     for aux in _AUX_CLASSES:
         fory.register(aux, namespace="protobuf", typename=aux.__name__)
-    for cls in _MESSAGE_CLASSES:
-        fory.register(cls, namespace="protobuf", typename=cls.__name__)
+    for cls in message_classes:
+        fory.register(cls, namespace="protobuf", typename=_PROTO_TYPENAME[cls])
 
     resolver = fory.type_resolver
     rows = []
@@ -199,7 +340,7 @@ def run_compare() -> str:
     total_extreme_shared_body = 0
     canonicals = []
 
-    for cls in _MESSAGE_CLASSES:
+    for cls in message_classes:
         type_def = encode_typedef(resolver, cls)
         canonical = canonicalize_typedef(type_def)
         wire_size = len(type_def.encoded)
@@ -211,7 +352,7 @@ def run_compare() -> str:
         canonicals.append(canonical)
         rows.append(
             {
-                "name": cls.__name__,
+                "name": _PROTO_TYPENAME[cls],
                 "wire": wire_size,
                 "payload": payload_size,
                 "extreme_standalone": extreme_standalone,
@@ -235,6 +376,8 @@ def run_compare() -> str:
         total_extreme_shared_body += shared_body
 
     lines = []
+    lines.append(f"# {label}")
+    lines.append("")
     lines.append("## Standalone TypeDef Compression")
     lines.append("")
     lines.append("| Message | Current Wire B | Current Payload B | Extreme B | Payload Delta | Payload Saving |")
@@ -280,6 +423,12 @@ def run_compare() -> str:
     lines.append(f"Total shared payload delta: {total_shared_delta:+d}")
     lines.append(f"Total shared payload saving: {total_shared_saving:.2f}%")
     return "\n".join(lines)
+
+
+def run_compare() -> str:
+    with_field_id = _run_compare_for_classes("With Field ID", _MESSAGE_CLASSES)
+    without_field_id = _run_compare_for_classes("Without Field ID", _MESSAGE_CLASSES_NO_FIELD_ID)
+    return f"{with_field_id}\n\n{without_field_id}"
 
 
 if __name__ == "__main__":

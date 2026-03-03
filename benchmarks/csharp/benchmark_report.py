@@ -193,6 +193,35 @@ def process_benchmark_rows(rows):
     return timings, throughputs, sizes
 
 
+def build_coverage(rows):
+    cases = set()
+    serializers = set()
+    datatypes = set()
+    operations = set()
+    for row in rows:
+        serializer = str(row.get("Serializer", "")).lower()
+        data_type = str(row.get("DataType", "")).lower()
+        operation = str(row.get("Operation", "")).lower()
+        if not serializer or not data_type or not operation:
+            continue
+        cases.add((serializer, data_type, operation))
+        serializers.add(serializer)
+        datatypes.add(data_type)
+        operations.add(operation)
+
+    expected_cases = (
+        len(SERIALIZER_ORDER) * len(PREFERRED_DATATYPE_ORDER) * len(PREFERRED_OPERATION_ORDER)
+    )
+    return {
+        "case_count": len(cases),
+        "expected_case_count": expected_cases,
+        "serializers": sorted(serializers),
+        "datatypes": preferred_ordered_values(list(datatypes), PREFERRED_DATATYPE_ORDER),
+        "operations": preferred_ordered_values(list(operations), PREFERRED_OPERATION_ORDER),
+        "is_partial": len(cases) < expected_cases,
+    }
+
+
 def plot_datatype(ax, throughputs: dict, datatype: str, operation: str) -> None:
     if datatype not in throughputs or operation not in throughputs[datatype]:
         ax.set_title(f"{datatype} {operation} - No Data")
@@ -271,6 +300,7 @@ def plot_combined_tps_subplot(ax, throughputs, grouped_datatypes, operation, tit
 def build_markdown(
     args,
     system_info,
+    coverage,
     timings,
     throughputs,
     sizes,
@@ -294,6 +324,20 @@ def build_markdown(
 
     for key, value in system_info.items():
         report_lines.append(f"| {key} | {value} |\n")
+
+    report_lines.append("\n## Benchmark Coverage\n\n")
+    report_lines.append("| Key | Value |\n")
+    report_lines.append("|-----|-------|\n")
+    report_lines.append(
+        f"| Cases in input JSON | {coverage['case_count']} / {coverage['expected_case_count']} |\n"
+    )
+    report_lines.append(f"| Serializers | {', '.join(coverage['serializers']) or 'N/A'} |\n")
+    report_lines.append(f"| Datatypes | {', '.join(coverage['datatypes']) or 'N/A'} |\n")
+    report_lines.append(f"| Operations | {', '.join(coverage['operations']) or 'N/A'} |\n")
+    if coverage["is_partial"]:
+        report_lines.append(
+            "\n> Warning: benchmark input is partial; plots/tables only show available cases.\n"
+        )
 
     report_lines.append("\n## Benchmark Plots\n")
     report_lines.append("\nAll class-level plots below show throughput (ops/sec).\n")
@@ -400,11 +444,16 @@ def main() -> None:
         output_dir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     os.makedirs(output_dir, exist_ok=True)
 
-    timings, throughputs, sizes = process_benchmark_rows(benchmark_data.get("Results", []))
-    datatypes = preferred_ordered_values(list(timings.keys()), PREFERRED_DATATYPE_ORDER)
+    rows = benchmark_data.get("Results", [])
+    timings, throughputs, sizes = process_benchmark_rows(rows)
+    coverage = build_coverage(rows)
+
+    datatype_candidates = set(timings.keys()) | set(throughputs.keys()) | set(sizes.keys())
+    datatypes = preferred_ordered_values(list(datatype_candidates), PREFERRED_DATATYPE_ORDER)
     operations_present = set()
     for datatype in datatypes:
         operations_present.update(timings[datatype].keys())
+        operations_present.update(throughputs[datatype].keys())
     operations = preferred_ordered_values(list(operations_present), PREFERRED_OPERATION_ORDER)
 
     plot_images = []
@@ -440,6 +489,7 @@ def main() -> None:
     report = build_markdown(
         args=args,
         system_info=get_system_info(benchmark_data),
+        coverage=coverage,
         timings=timings,
         throughputs=throughputs,
         sizes=sizes,
@@ -454,6 +504,11 @@ def main() -> None:
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report)
 
+    if coverage["is_partial"]:
+        print(
+            "Warning: partial benchmark input detected "
+            f"({coverage['case_count']}/{coverage['expected_case_count']} cases)."
+        )
     print(f"Plots saved in: {output_dir}")
     print(f"Markdown report generated at: {report_path}")
 

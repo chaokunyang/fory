@@ -48,39 +48,6 @@ StreamWriter::~StreamWriter() {
   active_buffer_ = nullptr;
 }
 
-Buffer *StreamWriter::get_buffer() { return buffer_.get(); }
-
-const Buffer *StreamWriter::get_buffer() const { return buffer_.get(); }
-
-void StreamWriter::enter_flush_barrier() { flush_barrier_depth_++; }
-
-void StreamWriter::exit_flush_barrier() {
-  if (flush_barrier_depth_ > 0) {
-    flush_barrier_depth_--;
-  }
-}
-
-void StreamWriter::try_flush() {
-  if (FORY_PREDICT_FALSE(!error_.ok() || flush_barrier_depth_ != 0)) {
-    return;
-  }
-  flush_buffer_data();
-}
-
-void StreamWriter::force_flush() {
-  if (FORY_PREDICT_FALSE(!error_.ok())) {
-    return;
-  }
-  flush_buffer_data();
-  if (FORY_PREDICT_FALSE(!error_.ok())) {
-    return;
-  }
-  auto flush_result = flush_stream();
-  if (FORY_PREDICT_FALSE(!flush_result.ok())) {
-    set_error(std::move(flush_result).error());
-  }
-}
-
 void StreamWriter::reset() {
   flushed_bytes_ = 0;
   flush_barrier_depth_ = 0;
@@ -106,26 +73,6 @@ void StreamWriter::flush_buffer_data() {
   flushed_bytes_ += bytes_to_flush;
   buffer->writer_index(0);
   buffer->reader_index(0);
-}
-
-void StreamWriter::set_error(Error error) {
-  if (error_.ok()) {
-    error_ = std::move(error);
-  }
-}
-
-void StreamWriter::bind_buffer(Buffer *buffer) {
-  active_buffer_ = buffer == nullptr ? buffer_.get() : buffer;
-}
-
-void StreamWriter::unbind_buffer(Buffer *buffer) {
-  if (active_buffer_ == buffer) {
-    active_buffer_ = buffer_.get();
-  }
-}
-
-Buffer *StreamWriter::active_buffer() {
-  return active_buffer_ == nullptr ? buffer_.get() : active_buffer_;
 }
 
 ForyInputStream::ForyInputStream(std::istream &stream, uint32_t buffer_size)

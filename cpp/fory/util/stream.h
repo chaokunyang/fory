@@ -38,17 +38,38 @@ public:
 
   virtual ~StreamWriter();
 
-  Buffer *get_buffer();
+  FORY_ALWAYS_INLINE Buffer *get_buffer() { return buffer_.get(); }
 
-  const Buffer *get_buffer() const;
+  FORY_ALWAYS_INLINE const Buffer *get_buffer() const { return buffer_.get(); }
 
-  void enter_flush_barrier();
+  FORY_ALWAYS_INLINE void enter_flush_barrier() { flush_barrier_depth_++; }
 
-  void exit_flush_barrier();
+  FORY_ALWAYS_INLINE void exit_flush_barrier() {
+    if (flush_barrier_depth_ > 0) {
+      flush_barrier_depth_--;
+    }
+  }
 
-  void try_flush();
+  FORY_ALWAYS_INLINE void try_flush() {
+    if (FORY_PREDICT_FALSE(!error_.ok() || flush_barrier_depth_ != 0)) {
+      return;
+    }
+    flush_buffer_data();
+  }
 
-  void force_flush();
+  FORY_ALWAYS_INLINE void force_flush() {
+    if (FORY_PREDICT_FALSE(!error_.ok())) {
+      return;
+    }
+    flush_buffer_data();
+    if (FORY_PREDICT_FALSE(!error_.ok())) {
+      return;
+    }
+    auto flush_result = flush_stream();
+    if (FORY_PREDICT_FALSE(!flush_result.ok())) {
+      set_error(std::move(flush_result).error());
+    }
+  }
 
   FORY_ALWAYS_INLINE uint32_t flush_barrier_depth() const {
     return flush_barrier_depth_;
@@ -69,15 +90,27 @@ protected:
   virtual Result<void, Error> flush_stream() = 0;
 
 private:
-  void bind_buffer(Buffer *buffer);
+  FORY_ALWAYS_INLINE void bind_buffer(Buffer *buffer) {
+    active_buffer_ = buffer == nullptr ? buffer_.get() : buffer;
+  }
 
-  void unbind_buffer(Buffer *buffer);
+  FORY_ALWAYS_INLINE void unbind_buffer(Buffer *buffer) {
+    if (active_buffer_ == buffer) {
+      active_buffer_ = buffer_.get();
+    }
+  }
 
-  Buffer *active_buffer();
+  FORY_ALWAYS_INLINE Buffer *active_buffer() {
+    return active_buffer_ == nullptr ? buffer_.get() : active_buffer_;
+  }
 
   void flush_buffer_data();
 
-  void set_error(Error error);
+  FORY_ALWAYS_INLINE void set_error(Error error) {
+    if (error_.ok()) {
+      error_ = std::move(error);
+    }
+  }
 
   std::unique_ptr<Buffer> buffer_;
   Buffer *active_buffer_ = nullptr;

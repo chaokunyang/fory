@@ -17,6 +17,11 @@
 
 namespace Apache.Fory;
 
+public interface ICompatibleNoTypeMetaReader<T>
+{
+    T ReadDataCompatibleNoTypeMeta(ReadContext context);
+}
+
 /// <summary>
 /// Base class for custom serializers.
 /// </summary>
@@ -120,17 +125,7 @@ public abstract class Serializer<T>
                             context.TypeResolver.ReadTypeInfo(this, context);
                         }
 
-                        bool expectCompatibleTypeMeta = context.Compatible && readTypeInfo;
-                        bool previousExpectation = context.ReplaceCompatibleTypeMetaExpectation(expectCompatibleTypeMeta);
-                        T value;
-                        try
-                        {
-                            value = ReadData(context);
-                        }
-                        finally
-                        {
-                            context.RestoreCompatibleTypeMetaExpectation(previousExpectation);
-                        }
+                        T value = ReadData(context);
 
                         context.RefReader.FinishPendingReferenceIfNeeded(value);
                         context.RefReader.PopPendingReference();
@@ -148,15 +143,6 @@ public abstract class Serializer<T>
             context.TypeResolver.ReadTypeInfo(this, context);
         }
 
-        bool expectCompatibleMeta = context.Compatible && readTypeInfo;
-        bool previousCompatibleMetaExpectation = context.ReplaceCompatibleTypeMetaExpectation(expectCompatibleMeta);
-        try
-        {
-            return ReadData(context);
-        }
-        finally
-        {
-            context.RestoreCompatibleTypeMetaExpectation(previousCompatibleMetaExpectation);
-        }
+        return ReadData(context);
     }
 }

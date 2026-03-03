@@ -43,6 +43,7 @@ public sealed class TypeInfo
     private readonly Func<ReadContext, RefMode, bool, object?> _readObject;
     private readonly Func<bool, IReadOnlyList<TypeMetaFieldInfo>> _compatibleTypeMetaFields;
     private readonly Dictionary<CompatibleTypeMetaCacheKey, CompatibleTypeMetaCacheEntry> _compatibleTypeMetaCache = [];
+    private TypeMeta? _lastValidatedCompatibleTypeMeta;
     private static readonly IReadOnlyList<TypeMetaFieldInfo> EmptyTypeMetaFields = Array.Empty<TypeMetaFieldInfo>();
 
     private TypeInfo(
@@ -530,6 +531,16 @@ public sealed class TypeInfo
         return entry;
     }
 
+    internal bool IsValidatedCompatibleTypeMeta(TypeMeta typeMeta)
+    {
+        return ReferenceEquals(_lastValidatedCompatibleTypeMeta, typeMeta);
+    }
+
+    internal void MarkValidatedCompatibleTypeMeta(TypeMeta typeMeta)
+    {
+        _lastValidatedCompatibleTypeMeta = typeMeta;
+    }
+
     internal bool IsRegistered { get; private set; }
 
     internal uint? UserTypeId { get; private set; }
@@ -547,7 +558,7 @@ public sealed class TypeInfo
         RegisterByName = false;
         NamespaceName = null;
         TypeName = null;
-        _compatibleTypeMetaCache.Clear();
+        ClearCompatibleTypeMetaCaches();
     }
 
     internal void RegisterByTypeName(MetaString namespaceName, MetaString typeName)
@@ -557,7 +568,7 @@ public sealed class TypeInfo
         RegisterByName = true;
         NamespaceName = namespaceName;
         TypeName = typeName;
-        _compatibleTypeMetaCache.Clear();
+        ClearCompatibleTypeMetaCaches();
     }
 
     internal void CopyRegistrationFrom(TypeInfo source)
@@ -567,6 +578,12 @@ public sealed class TypeInfo
         RegisterByName = source.RegisterByName;
         NamespaceName = source.NamespaceName;
         TypeName = source.TypeName;
+        ClearCompatibleTypeMetaCaches();
+    }
+
+    private void ClearCompatibleTypeMetaCaches()
+    {
         _compatibleTypeMetaCache.Clear();
+        _lastValidatedCompatibleTypeMeta = null;
     }
 }

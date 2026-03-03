@@ -46,6 +46,36 @@ internal static class CollectionCodec
         return typeof(T).IsSealed;
     }
 
+    private static bool CanDeclareRuntimeElementType<T>(List<T> list, TypeInfo typeInfo)
+    {
+        if (list.Count == 0 ||
+            typeInfo.IsDynamicType ||
+            typeInfo.IsBuiltinType ||
+            !typeInfo.NeedsTypeInfoForField() ||
+            typeof(T).IsSealed)
+        {
+            return false;
+        }
+
+        Type declaredType = typeof(T);
+        bool nullable = typeInfo.IsNullableType;
+        for (int i = 0; i < list.Count; i++)
+        {
+            T value = list[i];
+            if (nullable && value is null)
+            {
+                continue;
+            }
+
+            if (value is null || value.GetType() != declaredType)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static void WriteCollectionData<T>(
         IEnumerable<T> values,
         Serializer<T> elementSerializer,
@@ -76,7 +106,9 @@ internal static class CollectionCodec
         }
 
         bool trackRef = context.TrackRef && elementTypeInfo.IsReferenceTrackableType;
-        bool declaredElementType = hasGenerics && CanDeclareElementType<T>(elementTypeInfo);
+        bool declaredElementType = hasGenerics &&
+                                   (CanDeclareElementType<T>(elementTypeInfo) ||
+                                    CanDeclareRuntimeElementType(list, elementTypeInfo));
         bool dynamicElementType = elementTypeInfo.IsDynamicType;
         bool writeDeclaredCompatibleTypeInfo =
             context.Compatible &&
@@ -237,6 +269,13 @@ internal static class CollectionCodec
             return values;
         }
 
+        ICompatibleNoTypeMetaReader<T>? compatibleNoTypeMetaReader =
+            context.Compatible &&
+            !readDeclaredCompatibleTypeInfo &&
+            elementSerializer is ICompatibleNoTypeMetaReader<T> noTypeMetaReader
+                ? noTypeMetaReader
+                : null;
+
         if (hasNull)
         {
             for (int i = 0; i < length; i++)
@@ -248,7 +287,12 @@ internal static class CollectionCodec
                 }
                 else
                 {
-                    values.Add(ReadCollectionElementDataWithCanonicalization(elementSerializer, context, canonicalizeElements));
+                    values.Add(
+                        ReadCollectionElementDataWithCanonicalization(
+                            elementSerializer,
+                            compatibleNoTypeMetaReader,
+                            context,
+                            canonicalizeElements));
                 }
             }
         }
@@ -256,7 +300,12 @@ internal static class CollectionCodec
         {
             for (int i = 0; i < length; i++)
             {
-                values.Add(ReadCollectionElementDataWithCanonicalization(elementSerializer, context, canonicalizeElements));
+                values.Add(
+                    ReadCollectionElementDataWithCanonicalization(
+                        elementSerializer,
+                        compatibleNoTypeMetaReader,
+                        context,
+                        canonicalizeElements));
             }
         }
 
@@ -287,16 +336,21 @@ internal static class CollectionCodec
 
     private static T ReadCollectionElementDataWithCanonicalization<T>(
         Serializer<T> elementSerializer,
+        ICompatibleNoTypeMetaReader<T>? compatibleNoTypeMetaReader,
         ReadContext context,
         bool canonicalize)
     {
         if (!canonicalize)
         {
-            return elementSerializer.ReadData(context);
+            return compatibleNoTypeMetaReader is null
+                ? elementSerializer.ReadData(context)
+                : compatibleNoTypeMetaReader.ReadDataCompatibleNoTypeMeta(context);
         }
 
         int start = context.Reader.Cursor;
-        T value = elementSerializer.ReadData(context);
+        T value = compatibleNoTypeMetaReader is null
+            ? elementSerializer.ReadData(context)
+            : compatibleNoTypeMetaReader.ReadDataCompatibleNoTypeMeta(context);
         int end = context.Reader.Cursor;
         return context.CanonicalizeNonTrackingReference(value, start, end);
     }

@@ -136,7 +136,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
     private static void EmitObjectSerializer(StringBuilder sb, TypeModel model)
     {
         sb.AppendLine(
-            $"file sealed class {model.SerializerName} : global::Apache.Fory.Serializer<{model.TypeName}>");
+            $"file sealed class {model.SerializerName} : global::Apache.Fory.Serializer<{model.TypeName}>, global::Apache.Fory.ICompatibleNoTypeMetaReader<{model.TypeName}>");
         sb.AppendLine("{");
         foreach (MemberModel member in model.Members.Where(m => m.UseDictionaryTypeInfoCache))
         {
@@ -376,7 +376,6 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine(
             "    private bool __ForyCachedExactCompatibleSchema(global::Apache.Fory.TypeMeta typeMeta, bool trackRef, global::Apache.Fory.TypeResolver typeResolver)");
         sb.AppendLine("    {");
-        sb.AppendLine("        __ForyEnsureCompatibleSchemaCache(typeResolver);");
         sb.AppendLine("        if (trackRef)");
         sb.AppendLine("        {");
         sb.AppendLine(
@@ -384,6 +383,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("            {");
         sb.AppendLine("                return __ForyLastCompatibleSchemaMatchedTrackRef;");
         sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            __ForyEnsureCompatibleSchemaCache(typeResolver);");
         sb.AppendLine();
         sb.AppendLine("            bool matched = false;");
         sb.AppendLine("            if (typeMeta.HeaderHash == __ForyCompatibleSchemaHashTrackRef)");
@@ -401,6 +402,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         sb.AppendLine("            return __ForyLastCompatibleSchemaMatchedNoTrackRef;");
         sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        __ForyEnsureCompatibleSchemaCache(typeResolver);");
         sb.AppendLine();
         sb.AppendLine("        bool noTrackMatched = false;");
         sb.AppendLine("        if (typeMeta.HeaderHash == __ForyCompatibleSchemaHashNoTrackRef)");
@@ -491,16 +494,12 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    public override {model.TypeName} ReadData(global::Apache.Fory.ReadContext context)");
+        sb.AppendLine($"    public {model.TypeName} ReadDataCompatibleNoTypeMeta(global::Apache.Fory.ReadContext context)");
         sb.AppendLine("    {");
-        sb.AppendLine("        if (context.Compatible)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            if (!context.ShouldConsumeCompatibleTypeMeta)");
-        sb.AppendLine("            {");
-        sb.AppendLine($"                {model.TypeName} valueNoTypeMeta = new {model.TypeName}();");
+        sb.AppendLine($"        {model.TypeName} valueNoTypeMeta = new {model.TypeName}();");
         if (model.Kind == DeclKind.Class)
         {
-            sb.AppendLine("                context.RefReader.BindPendingReference(valueNoTypeMeta);");
+            sb.AppendLine("        context.RefReader.BindPendingReference(valueNoTypeMeta);");
         }
 
         foreach (MemberModel member in model.SortedMembers)
@@ -512,14 +511,24 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                 "false",
                 "valueNoTypeMeta",
                 "CompatNoTypeMeta",
-                8,
+                4,
                 true);
         }
 
-        sb.AppendLine("                return valueNoTypeMeta;");
+        sb.AppendLine("        return valueNoTypeMeta;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine($"    public override {model.TypeName} ReadData(global::Apache.Fory.ReadContext context)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (context.Compatible)");
+        sb.AppendLine("        {");
+        sb.AppendLine(
+            $"            if (!context.TryConsumeCompatibleTypeMeta(typeof({model.TypeName}), out global::Apache.Fory.TypeMeta? maybeTypeMeta) || maybeTypeMeta is null)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                return ReadDataCompatibleNoTypeMeta(context);");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine($"            global::Apache.Fory.TypeMeta typeMeta = context.ConsumeCompatibleTypeMeta(typeof({model.TypeName}));");
+        sb.AppendLine("            global::Apache.Fory.TypeMeta typeMeta = maybeTypeMeta;");
         sb.AppendLine($"            {model.TypeName} value = new {model.TypeName}();");
         if (model.Kind == DeclKind.Class)
         {

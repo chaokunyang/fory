@@ -25,7 +25,6 @@ namespace Apache.Fory;
 public sealed class TypeResolver
 {
     private static readonly ConcurrentDictionary<Type, Func<TypeResolver, TypeInfo>> GeneratedFactories = new();
-    private static readonly ConcurrentDictionary<TypeId, HashSet<TypeId>> SingleAllowedWireTypes = new();
     private static readonly MethodInfo CreateTypeInfoFromSerializerTypedMethod =
         typeof(TypeResolver).GetMethod(
             nameof(CreateTypeInfoFromSerializerTyped),
@@ -34,13 +33,14 @@ public sealed class TypeResolver
         typeof(TypeResolver).GetMethod(
             nameof(CreateNullableSerializerTypeInfo),
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-    private static readonly HashSet<TypeId> CompatibleStructAllowedWireTypes =
-    [
-        TypeId.Struct,
-        TypeId.NamedStruct,
-        TypeId.CompatibleStruct,
-        TypeId.NamedCompatibleStruct,
-    ];
+
+    private static class GenericTypeCache<T>
+    {
+        public static TypeResolver? Resolver;
+        public static ulong ResolverVersion;
+        public static TypeInfo? TypeInfo;
+        public static Serializer<T>? Serializer;
+    }
     private static readonly Dictionary<Type, Type> PrimitiveStringKeyDictionaryCodecs = new()
     {
         [typeof(string)] = typeof(StringPrimitiveDictionaryCodec),
@@ -107,7 +107,28 @@ public sealed class TypeResolver
 
     public Serializer<T> GetSerializer<T>()
     {
-        return GetTypeInfo<T>().RequireSerializer<T>();
+        if (_finalized)
+        {
+            ulong version = _versionHash;
+            if (ReferenceEquals(GenericTypeCache<T>.Resolver, this) &&
+                GenericTypeCache<T>.ResolverVersion == version &&
+                GenericTypeCache<T>.Serializer is not null)
+            {
+                return GenericTypeCache<T>.Serializer;
+            }
+        }
+
+        TypeInfo typeInfo = GetTypeInfo<T>();
+        Serializer<T> serializer = typeInfo.RequireSerializer<T>();
+        if (_finalized)
+        {
+            GenericTypeCache<T>.Resolver = this;
+            GenericTypeCache<T>.ResolverVersion = _versionHash;
+            GenericTypeCache<T>.TypeInfo = typeInfo;
+            GenericTypeCache<T>.Serializer = serializer;
+        }
+
+        return serializer;
     }
 
     public TypeInfo GetTypeInfo(Type type)
@@ -117,7 +138,24 @@ public sealed class TypeResolver
 
     public TypeInfo GetTypeInfo<T>()
     {
-        return GetTypeInfo(typeof(T));
+        if (_finalized)
+        {
+            ulong version = _versionHash;
+            if (ReferenceEquals(GenericTypeCache<T>.Resolver, this) &&
+                GenericTypeCache<T>.ResolverVersion == version &&
+                GenericTypeCache<T>.TypeInfo is not null)
+            {
+                return GenericTypeCache<T>.TypeInfo;
+            }
+        }
+
+        TypeInfo typeInfo = GetTypeInfo(typeof(T));
+        EnsureFinalizedVersion();
+        GenericTypeCache<T>.Resolver = this;
+        GenericTypeCache<T>.ResolverVersion = _versionHash;
+        GenericTypeCache<T>.TypeInfo = typeInfo;
+        GenericTypeCache<T>.Serializer = typeInfo.RequireSerializer<T>();
+        return typeInfo;
     }
 
     internal bool IsNoneObject(TypeInfo typeInfo, object? value)
@@ -447,7 +485,12 @@ public sealed class TypeResolver
             throw new InvalidDataException($"type {type} has runtime-only type info");
         }
 
-        TypeInfo info = RequireRegisteredTypeInfo(type);
+        TypeInfo info = typeInfo;
+        if (!info.IsRegistered)
+        {
+            throw new TypeNotRegisteredException($"{type} is not registered");
+        }
+
         if (!info.UserTypeKind.HasValue)
         {
             throw new InvalidDataException($"registered type {type} is not a user type");
@@ -535,8 +578,8 @@ public sealed class TypeResolver
 
     private void ReadTypeInfoCore(Type type, TypeInfo typeInfo, ReadContext context)
     {
-        uint rawTypeId = context.Reader.ReadVarUInt32();
-        if (!Enum.IsDefined(typeof(TypeId), rawTypeId))
+        uint rawTypeId = context.Reader.ReadUInt8();
+        if (!IsKnownTypeId(rawTypeId))
         {
             throw new InvalidDataException($"unknown type id {rawTypeId}");
         }
@@ -557,23 +600,50 @@ public sealed class TypeResolver
             throw new InvalidDataException($"type {type} has runtime-only type info");
         }
 
-        TypeInfo info = RequireRegisteredTypeInfo(type);
+        TypeInfo info = typeInfo;
+        if (!info.IsRegistered)
+        {
+            throw new TypeNotRegisteredException($"{type} is not registered");
+        }
+
         if (!info.UserTypeKind.HasValue)
         {
             throw new InvalidDataException($"registered type {type} is not a user type");
         }
 
-        HashSet<TypeId> allowed = AllowedWireTypeIds(info.UserTypeKind.Value, info.RegisterByName, context.Compatible);
-        if (!allowed.Contains(typeId))
+        if (context.Compatible &&
+            info.UserTypeKind.Value == UserTypeKind.Struct &&
+            !info.RegisterByName &&
+            typeId == TypeId.CompatibleStruct)
         {
-            uint expected = 0;
-            foreach (TypeId allowedType in allowed)
+            TypeMeta remoteTypeMeta = context.ReadCompatibleTypeMeta();
+            if (!info.IsValidatedCompatibleTypeMeta(remoteTypeMeta))
             {
-                expected = (uint)allowedType;
-                break;
+                if (!remoteTypeMeta.UserTypeId.HasValue || !info.UserTypeId.HasValue)
+                {
+                    throw new InvalidDataException("missing user type id in compatible type metadata");
+                }
+
+                if (remoteTypeMeta.UserTypeId.Value != info.UserTypeId.Value)
+                {
+                    throw new TypeMismatchException(info.UserTypeId.Value, remoteTypeMeta.UserTypeId.Value);
+                }
+
+                remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
+                info.MarkValidatedCompatibleTypeMeta(remoteTypeMeta);
             }
 
-            throw new TypeMismatchException(expected, rawTypeId);
+            context.PushCompatibleTypeMeta(type, remoteTypeMeta);
+            return;
+        }
+
+        UserTypeKind declaredKind = info.UserTypeKind.Value;
+        bool registerByName = info.RegisterByName;
+        bool compatible = context.Compatible;
+        if (!IsAllowedWireType(typeId, declaredKind, registerByName, compatible))
+        {
+            TypeId expected = ResolveWireTypeId(declaredKind, registerByName, compatible);
+            throw new TypeMismatchException((uint)expected, rawTypeId);
         }
 
         switch (typeId)
@@ -582,8 +652,19 @@ public sealed class TypeResolver
             case TypeId.NamedCompatibleStruct:
                 {
                     TypeMeta remoteTypeMeta = context.ReadCompatibleTypeMeta();
-                    ValidateCompatibleTypeMeta(remoteTypeMeta, info, allowed, typeId);
-                    remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
+                    if (!info.IsValidatedCompatibleTypeMeta(remoteTypeMeta))
+                    {
+                        ValidateCompatibleTypeMeta(
+                            remoteTypeMeta,
+                            info,
+                            declaredKind,
+                            registerByName,
+                            compatible,
+                            typeId);
+                        remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
+                        info.MarkValidatedCompatibleTypeMeta(remoteTypeMeta);
+                    }
+
                     context.PushCompatibleTypeMeta(type, remoteTypeMeta);
                     return;
                 }
@@ -595,10 +676,25 @@ public sealed class TypeResolver
                     if (context.Compatible)
                     {
                         TypeMeta remoteTypeMeta = context.ReadCompatibleTypeMeta();
-                        ValidateCompatibleTypeMeta(remoteTypeMeta, info, allowed, typeId);
+                        if (!info.IsValidatedCompatibleTypeMeta(remoteTypeMeta))
+                        {
+                            ValidateCompatibleTypeMeta(
+                                remoteTypeMeta,
+                                info,
+                                declaredKind,
+                                registerByName,
+                                compatible,
+                                typeId);
+                            if (typeId == TypeId.NamedStruct)
+                            {
+                                remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
+                            }
+
+                            info.MarkValidatedCompatibleTypeMeta(remoteTypeMeta);
+                        }
+
                         if (typeId == TypeId.NamedStruct)
                         {
-                            remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
                             context.PushCompatibleTypeMeta(type, remoteTypeMeta);
                         }
                     }
@@ -669,15 +765,28 @@ public sealed class TypeResolver
         };
     }
 
-    internal static HashSet<TypeId> AllowedWireTypeIds(UserTypeKind declaredKind, bool registerByName, bool compatible)
+    private static bool IsKnownTypeId(uint rawTypeId)
+    {
+        return rawTypeId <= (uint)TypeId.Float64Array;
+    }
+
+    private static bool IsAllowedWireType(
+        TypeId actualWireType,
+        UserTypeKind declaredKind,
+        bool registerByName,
+        bool compatible)
     {
         if (declaredKind == UserTypeKind.Struct && compatible)
         {
-            return CompatibleStructAllowedWireTypes;
+            return actualWireType is
+                TypeId.Struct or
+                TypeId.NamedStruct or
+                TypeId.CompatibleStruct or
+                TypeId.NamedCompatibleStruct;
         }
 
         TypeId expected = ResolveWireTypeId(declaredKind, registerByName, compatible);
-        return SingleAllowedWireTypes.GetOrAdd(expected, static typeId => [typeId]);
+        return actualWireType == expected;
     }
 
     public object? ReadByUserTypeId(
@@ -723,8 +832,8 @@ public sealed class TypeResolver
 
     public DynamicTypeInfo ReadDynamicTypeInfo(ReadContext context)
     {
-        uint rawTypeId = context.Reader.ReadVarUInt32();
-        if (!Enum.IsDefined(typeof(TypeId), rawTypeId))
+        uint rawTypeId = context.Reader.ReadUInt8();
+        if (!IsKnownTypeId(rawTypeId))
         {
             throw new InvalidDataException($"unknown dynamic type id {rawTypeId}");
         }
@@ -1129,7 +1238,9 @@ public sealed class TypeResolver
     private static void ValidateCompatibleTypeMeta(
         TypeMeta remoteTypeMeta,
         TypeInfo localInfo,
-        HashSet<TypeId> expectedWireTypes,
+        UserTypeKind declaredKind,
+        bool registerByName,
+        bool compatible,
         TypeId actualWireTypeId)
     {
         if (remoteTypeMeta.RegisterByName)
@@ -1177,10 +1288,10 @@ public sealed class TypeResolver
         }
 
         if (remoteTypeMeta.TypeId.HasValue &&
-            Enum.IsDefined(typeof(TypeId), remoteTypeMeta.TypeId.Value))
+            IsKnownTypeId(remoteTypeMeta.TypeId.Value))
         {
             TypeId remoteWireTypeId = (TypeId)remoteTypeMeta.TypeId.Value;
-            if (!expectedWireTypes.Contains(remoteWireTypeId))
+            if (!IsAllowedWireType(remoteWireTypeId, declaredKind, registerByName, compatible))
             {
                 throw new TypeMismatchException((uint)actualWireTypeId, remoteTypeMeta.TypeId.Value);
             }

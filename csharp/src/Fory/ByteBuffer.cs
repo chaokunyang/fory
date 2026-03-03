@@ -90,6 +90,13 @@ public sealed class ByteWriter
     public void WriteVarUInt32(uint value)
     {
         EnsureCapacity(5);
+        if (value < 0x80)
+        {
+            _storage[_count] = (byte)value;
+            _count += 1;
+            return;
+        }
+
         uint remaining = value;
         while (remaining >= 0x80)
         {
@@ -105,6 +112,13 @@ public sealed class ByteWriter
     public void WriteVarUInt64(ulong value)
     {
         EnsureCapacity(10);
+        if (value < 0x80)
+        {
+            _storage[_count] = (byte)value;
+            _count += 1;
+            return;
+        }
+
         ulong remaining = value;
         for (var i = 0; i < 8; i++)
         {
@@ -373,8 +387,21 @@ public sealed class ByteReader
         byte[] storage = _storage;
         int cursor = _cursor;
         int length = _length;
-        uint result = 0;
-        int shift = 0;
+        if (cursor >= length)
+        {
+            throw new OutOfBoundsException(cursor, 1, length);
+        }
+
+        byte first = storage[cursor];
+        if ((first & 0x80) == 0)
+        {
+            _cursor = cursor + 1;
+            return first;
+        }
+
+        cursor += 1;
+        uint result = (uint)(first & 0x7F);
+        int shift = 7;
         while (true)
         {
             if (cursor >= length)
@@ -404,9 +431,22 @@ public sealed class ByteReader
         byte[] storage = _storage;
         int cursor = _cursor;
         int length = _length;
-        ulong result = 0;
-        int shift = 0;
-        for (var i = 0; i < 8; i++)
+        if (cursor >= length)
+        {
+            throw new OutOfBoundsException(cursor, 1, length);
+        }
+
+        byte first = storage[cursor];
+        if ((first & 0x80) == 0)
+        {
+            _cursor = cursor + 1;
+            return first;
+        }
+
+        cursor += 1;
+        ulong result = (ulong)(first & 0x7F);
+        int shift = 7;
+        for (var i = 1; i < 8; i++)
         {
             if (cursor >= length)
             {

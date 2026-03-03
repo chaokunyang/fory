@@ -84,12 +84,14 @@ public sealed class CompatibleTypeDefReadState
 {
     private const int MaxParsedTypeDefEntries = 8192;
     private readonly List<TypeMeta> _typeMetas = [];
-    private readonly Dictionary<ulong, TypeMeta> _cachedTypeMetasByHeader = [];
+    private readonly Dictionary<ulong, CachedTypeMetaEntry> _cachedTypeMetasByHeader = [];
     private TypeMeta? _firstTypeMeta;
     private bool _hasFirstTypeMeta;
     private ulong _lastMetaHeader;
-    private TypeMeta? _lastTypeMeta;
+    private CachedTypeMetaEntry _lastTypeMeta;
     private bool _hasLastMetaHeader;
+
+    private readonly record struct CachedTypeMetaEntry(TypeMeta TypeMeta, int SkipBytesAfterHeader);
 
     public TypeMeta? TypeMetaAt(int index)
     {
@@ -144,32 +146,39 @@ public sealed class CompatibleTypeDefReadState
             $"compatible type definition index gap: index={index}, count={_typeMetas.Count + 1}");
     }
 
-    public TypeMeta? CachedTypeMeta(ulong header)
+    public bool TryGetCachedTypeMeta(ulong header, out TypeMeta typeMeta, out int skipBytesAfterHeader)
     {
         if (_hasLastMetaHeader && _lastMetaHeader == header)
         {
-            return _lastTypeMeta;
+            typeMeta = _lastTypeMeta.TypeMeta;
+            skipBytesAfterHeader = _lastTypeMeta.SkipBytesAfterHeader;
+            return true;
         }
 
-        if (_cachedTypeMetasByHeader.TryGetValue(header, out TypeMeta? cached))
+        if (_cachedTypeMetasByHeader.TryGetValue(header, out CachedTypeMetaEntry cached))
         {
             _lastMetaHeader = header;
             _lastTypeMeta = cached;
             _hasLastMetaHeader = true;
-            return cached;
+            typeMeta = cached.TypeMeta;
+            skipBytesAfterHeader = cached.SkipBytesAfterHeader;
+            return true;
         }
 
-        return null;
+        typeMeta = null!;
+        skipBytesAfterHeader = 0;
+        return false;
     }
 
-    public void CacheTypeMeta(ulong header, TypeMeta typeMeta)
+    public void CacheTypeMeta(ulong header, TypeMeta typeMeta, int skipBytesAfterHeader)
     {
+        CachedTypeMetaEntry cached = new(typeMeta, skipBytesAfterHeader);
         _lastMetaHeader = header;
-        _lastTypeMeta = typeMeta;
+        _lastTypeMeta = cached;
         _hasLastMetaHeader = true;
         if (_cachedTypeMetasByHeader.Count < MaxParsedTypeDefEntries)
         {
-            _cachedTypeMetasByHeader.TryAdd(header, typeMeta);
+            _cachedTypeMetasByHeader.TryAdd(header, cached);
         }
     }
 
@@ -327,10 +336,12 @@ internal sealed class CanonicalReferenceEntry
 
 public sealed class ReadContext
 {
-    private readonly Dictionary<Type, TypeMeta> _pendingCompatibleTypeMeta = [];
     private readonly Dictionary<Type, DynamicTypeInfo> _pendingDynamicTypeInfo = [];
     private readonly Dictionary<CanonicalReferenceSignature, List<CanonicalReferenceEntry>> _canonicalReferenceCache = [];
     private readonly int _maxDynamicReadDepth;
+    private Type? _pendingCompatibleType;
+    private TypeMeta? _pendingCompatibleTypeMeta;
+    private Dictionary<Type, TypeMeta>? _pendingCompatibleTypeMetaMap;
     private Type? _lastCompatibleType;
     private TypeMeta? _lastCompatibleTypeMeta;
     private int _currentDynamicReadDepth;
@@ -403,36 +414,74 @@ public sealed class ReadContext
         }
 
         ulong header = Reader.ReadUInt64();
-        TypeMeta? cachedTypeMeta = CompatibleTypeDefState.CachedTypeMeta(header);
-        if (cachedTypeMeta is not null)
+        if (CompatibleTypeDefState.TryGetCachedTypeMeta(
+                header,
+                out TypeMeta cachedTypeMeta,
+                out int skipBytesAfterHeader))
         {
-            int bodySize = ReadTypeMetaBodySize(Reader, header);
-            Reader.Skip(bodySize);
+            Reader.Skip(skipBytesAfterHeader);
             CompatibleTypeDefState.StoreTypeMeta(cachedTypeMeta, index);
             return cachedTypeMeta;
         }
 
+        int headerStartCursor = Reader.Cursor - sizeof(ulong);
         Reader.MoveBack(sizeof(ulong));
         TypeMeta typeMeta = TypeMeta.Decode(Reader);
+        int consumedTypeMetaBytes = Reader.Cursor - headerStartCursor;
+        int parsedSkipBytesAfterHeader = consumedTypeMetaBytes - sizeof(ulong);
         CompatibleTypeDefState.StoreTypeMeta(typeMeta, index);
-        CompatibleTypeDefState.CacheTypeMeta(header, typeMeta);
+        CompatibleTypeDefState.CacheTypeMeta(header, typeMeta, parsedSkipBytesAfterHeader);
         return typeMeta;
-    }
-
-    private static int ReadTypeMetaBodySize(ByteReader reader, ulong header)
-    {
-        int bodySize = (int)(header & TypeMetaConstants.TypeMetaSizeMask);
-        if (bodySize == (int)TypeMetaConstants.TypeMetaSizeMask)
-        {
-            bodySize += checked((int)reader.ReadVarUInt32());
-        }
-
-        return bodySize;
     }
 
     public void PushCompatibleTypeMeta(Type type, TypeMeta typeMeta)
     {
-        _pendingCompatibleTypeMeta[type] = typeMeta;
+        if (_lastCompatibleType == type && ReferenceEquals(_lastCompatibleTypeMeta, typeMeta))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_pendingCompatibleType, type))
+        {
+            if (ReferenceEquals(_pendingCompatibleTypeMeta, typeMeta))
+            {
+                _lastCompatibleType = type;
+                _lastCompatibleTypeMeta = typeMeta;
+                return;
+            }
+
+            _pendingCompatibleTypeMeta = typeMeta;
+            _lastCompatibleType = type;
+            _lastCompatibleTypeMeta = typeMeta;
+            return;
+        }
+
+        if (_pendingCompatibleType is null)
+        {
+            _pendingCompatibleType = type;
+            _pendingCompatibleTypeMeta = typeMeta;
+            _lastCompatibleType = type;
+            _lastCompatibleTypeMeta = typeMeta;
+            return;
+        }
+
+        if (_pendingCompatibleTypeMetaMap is null)
+        {
+            _pendingCompatibleTypeMetaMap = new Dictionary<Type, TypeMeta>();
+            if (_pendingCompatibleTypeMeta is not null)
+            {
+                _pendingCompatibleTypeMetaMap[_pendingCompatibleType] = _pendingCompatibleTypeMeta;
+            }
+        }
+        else if (_pendingCompatibleTypeMetaMap.TryGetValue(type, out TypeMeta? existing) &&
+                 ReferenceEquals(existing, typeMeta))
+        {
+            _lastCompatibleType = type;
+            _lastCompatibleTypeMeta = typeMeta;
+            return;
+        }
+
+        _pendingCompatibleTypeMetaMap[type] = typeMeta;
         _lastCompatibleType = type;
         _lastCompatibleTypeMeta = typeMeta;
     }
@@ -445,7 +494,18 @@ public sealed class ReadContext
             return true;
         }
 
-        if (!_pendingCompatibleTypeMeta.TryGetValue(type, out TypeMeta? pendingTypeMeta) || pendingTypeMeta is null)
+        if (ReferenceEquals(_pendingCompatibleType, type) &&
+            _pendingCompatibleTypeMeta is not null)
+        {
+            _lastCompatibleType = type;
+            _lastCompatibleTypeMeta = _pendingCompatibleTypeMeta;
+            typeMeta = _pendingCompatibleTypeMeta;
+            return true;
+        }
+
+        if (_pendingCompatibleTypeMetaMap is null ||
+            !_pendingCompatibleTypeMetaMap.TryGetValue(type, out TypeMeta? pendingTypeMeta) ||
+            pendingTypeMeta is null)
         {
             typeMeta = null;
             return false;
@@ -548,7 +608,9 @@ public sealed class ReadContext
     public void ResetObjectState()
     {
         RefReader.Reset();
-        _pendingCompatibleTypeMeta.Clear();
+        _pendingCompatibleType = null;
+        _pendingCompatibleTypeMeta = null;
+        _pendingCompatibleTypeMetaMap?.Clear();
         _pendingDynamicTypeInfo.Clear();
         _canonicalReferenceCache.Clear();
         _lastCompatibleType = null;

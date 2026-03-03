@@ -98,7 +98,9 @@ def get_system_info() -> Dict[str, str]:
     if HAS_PSUTIL:
         info["CPU Cores (Physical)"] = str(psutil.cpu_count(logical=False))
         info["CPU Cores (Logical)"] = str(psutil.cpu_count(logical=True))
-        info["Total RAM (GB)"] = str(round(psutil.virtual_memory().total / (1024**3), 2))
+        info["Total RAM (GB)"] = str(
+            round(psutil.virtual_memory().total / (1024**3), 2)
+        )
     return info
 
 
@@ -203,7 +205,9 @@ def plot_combined_subplot(ax, data, datatypes, operation: str, title: str):
     available_libs = [
         lib
         for lib in SERIALIZER_ORDER
-        if any(data.get(dt, {}).get(operation, {}).get(lib, 0) > 0 for dt in available_dts)
+        if any(
+            data.get(dt, {}).get(operation, {}).get(lib, 0) > 0 for dt in available_dts
+        )
     ]
     if not available_libs:
         ax.set_title(f"{title}\nNo Data")
@@ -212,7 +216,9 @@ def plot_combined_subplot(ax, data, datatypes, operation: str, title: str):
 
     width = 0.8 / len(available_libs)
     for idx, lib in enumerate(available_libs):
-        times = [data.get(dt, {}).get(operation, {}).get(lib, 0) for dt in available_dts]
+        times = [
+            data.get(dt, {}).get(operation, {}).get(lib, 0) for dt in available_dts
+        ]
         tps = [1e9 / val if val > 0 else 0 for val in times]
         offset = (idx - (len(available_libs) - 1) / 2) * width
         ax.bar(
@@ -276,7 +282,9 @@ def generate_plots(data, output_dir: Path):
     return plot_images
 
 
-def generate_markdown_report(raw, data, sizes, plot_images, output_dir: Path, plot_prefix: str):
+def generate_markdown_report(
+    raw, data, sizes, plot_images, output_dir: Path, plot_prefix: str
+):
     context = raw.get("context", {})
     system_info = get_system_info()
 
@@ -321,16 +329,16 @@ def generate_markdown_report(raw, data, sizes, plot_images, output_dir: Path, pl
         image_name = os.path.basename(image_path)
         image_ref = f"{plot_prefix}{image_name}"
         md.append(f"\n### {datatype.replace('_', ' ').title()}\n\n")
-        md.append(
-            f'<p align="center">\n<img src="{image_ref}" width="90%" />\n</p>\n'
-        )
+        md.append(f'<p align="center">\n<img src="{image_ref}" width="90%" />\n</p>\n')
 
     md.append("\n## Benchmark Results\n\n")
     md.append("### Timing Results (nanoseconds)\n\n")
     md.append(
         "| Datatype | Operation | fory (ns) | pickle (ns) | protobuf (ns) | Fastest |\n"
     )
-    md.append("|----------|-----------|-----------|-------------|---------------|---------|\n")
+    md.append(
+        "|----------|-----------|-----------|-------------|---------------|---------|\n"
+    )
 
     for datatype in datatypes:
         for operation in operations:
@@ -354,7 +362,9 @@ def generate_markdown_report(raw, data, sizes, plot_images, output_dir: Path, pl
     md.append(
         "| Datatype | Operation | fory TPS | pickle TPS | protobuf TPS | Fastest |\n"
     )
-    md.append("|----------|-----------|----------|------------|--------------|---------|\n")
+    md.append(
+        "|----------|-----------|----------|------------|--------------|---------|\n"
+    )
 
     for datatype in datatypes:
         for operation in operations:

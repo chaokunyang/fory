@@ -458,7 +458,9 @@ def to_pb_mediacontentlist(bench_pb2, obj: MediaContentList):
 
 def from_pb_mediacontentlist(pb_obj) -> MediaContentList:
     return MediaContentList(
-        media_content_list=[from_pb_mediacontent(item) for item in pb_obj.media_content_list]
+        media_content_list=[
+            from_pb_mediacontent(item) for item in pb_obj.media_content_list
+        ]
     )
 
 
@@ -574,7 +576,9 @@ def build_case(
     if serializer == "pickle":
         if operation == "serialize":
             return pickle_serialize, (obj,)
-        return pickle_deserialize, (pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL),)
+        return pickle_deserialize, (
+            pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL),
+        )
 
     if serializer == "protobuf":
         if operation == "serialize":
@@ -599,7 +603,9 @@ def calculate_serialized_sizes(
         datatype_sizes: Dict[str, int] = {}
 
         datatype_sizes["fory"] = len(fory.serialize(obj))
-        datatype_sizes["pickle"] = len(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
+        datatype_sizes["pickle"] = len(
+            pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
+        )
 
         to_pb, _, _ = PROTO_CONVERTERS[datatype]
         datatype_sizes["protobuf"] = len(to_pb(bench_pb2, obj).SerializeToString())

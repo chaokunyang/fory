@@ -269,7 +269,6 @@ def test_write_var_uint64():
 
 
 def check_varuint64(buf: Buffer, value: int, bytes_written: int):
-    reader_index = buf.get_reader_index()
     assert buf.get_writer_index() == buf.get_reader_index()
     actual_bytes_written = buf.write_var_uint64(value)
     assert actual_bytes_written == bytes_written

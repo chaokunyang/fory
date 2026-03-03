@@ -105,8 +105,15 @@ echo -e "${YELLOW}[2/3] Running benchmark...${NC}"
 dotnet run -c Release --project ./Fory.CSharpBenchmark.csproj -- "${RUN_ARGS[@]}"
 
 echo -e "${YELLOW}[3/3] Generating report...${NC}"
+# Check for Python dependencies needed for plotting.
+if ! python3 -c "import matplotlib" 2>/dev/null; then
+    echo -e "${YELLOW}Installing required Python packages...${NC}"
+    pip3 install matplotlib numpy psutil
+fi
+
 python3 benchmark_report.py --json-file "$RESULT_JSON" --output-dir report
 
 echo ""
 echo -e "${GREEN}=== All done! ===${NC}"
-echo "Report generated at: $SCRIPT_DIR/report/REPORT.md"
+echo "Report generated at: $SCRIPT_DIR/report/README.md"
+echo "Plots saved in: $SCRIPT_DIR/report/"

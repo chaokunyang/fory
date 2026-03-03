@@ -113,15 +113,10 @@ public:
   FORY_ALWAYS_INLINE Error &error() { return error_; }
 
   /// get reference to internal output buffer.
-  inline Buffer &buffer() { return *buffer_; }
+  inline Buffer &buffer() { return buffer_; }
 
   /// get const reference to internal output buffer.
-  inline const Buffer &buffer() const { return *buffer_; }
-
-  inline void set_buffer(Buffer *buffer) {
-    FORY_CHECK(buffer != nullptr) << "WriteContext buffer must not be null";
-    buffer_ = buffer;
-  }
+  inline const Buffer &buffer() const { return buffer_; }
 
   inline void set_stream_writer(StreamWriter *stream_writer) {
     stream_writer_ = stream_writer;
@@ -215,68 +210,68 @@ public:
 
   /// write uint8_t value to buffer.
   FORY_ALWAYS_INLINE void write_uint8(uint8_t value) {
-    buffer_->write_uint8(value);
+    buffer_.write_uint8(value);
   }
 
   /// write int8_t value to buffer.
   FORY_ALWAYS_INLINE void write_int8(int8_t value) {
-    buffer_->write_int8(value);
+    buffer_.write_int8(value);
   }
 
   /// write uint16_t value to buffer.
   FORY_ALWAYS_INLINE void write_uint16(uint16_t value) {
-    buffer_->write_uint16(value);
+    buffer_.write_uint16(value);
   }
 
   /// write uint32_t value to buffer.
   FORY_ALWAYS_INLINE void write_uint32(uint32_t value) {
-    buffer_->write_uint32(value);
+    buffer_.write_uint32(value);
   }
 
   /// write int64_t value to buffer.
   FORY_ALWAYS_INLINE void write_int64(int64_t value) {
-    buffer_->write_int64(value);
+    buffer_.write_int64(value);
   }
 
   /// write uint32_t value as varint to buffer.
   FORY_ALWAYS_INLINE void write_var_uint32(uint32_t value) {
-    buffer_->write_var_uint32(value);
+    buffer_.write_var_uint32(value);
   }
 
   /// write int32_t value as zigzag varint to buffer.
   FORY_ALWAYS_INLINE void write_varint32(int32_t value) {
-    buffer_->write_var_int32(value);
+    buffer_.write_var_int32(value);
   }
 
   /// write uint64_t value as varint to buffer.
   FORY_ALWAYS_INLINE void write_var_uint64(uint64_t value) {
-    buffer_->write_var_uint64(value);
+    buffer_.write_var_uint64(value);
   }
 
   /// write int64_t value as zigzag varint to buffer.
   FORY_ALWAYS_INLINE void write_varint64(int64_t value) {
-    buffer_->write_var_int64(value);
+    buffer_.write_var_int64(value);
   }
 
   /// write uint64_t value using tagged encoding to buffer.
   FORY_ALWAYS_INLINE void write_tagged_uint64(uint64_t value) {
-    buffer_->write_tagged_uint64(value);
+    buffer_.write_tagged_uint64(value);
   }
 
   /// write int64_t value using tagged encoding to buffer.
   FORY_ALWAYS_INLINE void write_tagged_int64(int64_t value) {
-    buffer_->write_tagged_int64(value);
+    buffer_.write_tagged_int64(value);
   }
 
   /// write uint64_t value as varuint36small to buffer.
   /// This is the special variable-length encoding used for string headers.
   FORY_ALWAYS_INLINE void write_var_uint36_small(uint64_t value) {
-    buffer_->write_var_uint36_small(value);
+    buffer_.write_var_uint36_small(value);
   }
 
   /// write raw bytes to buffer.
   FORY_ALWAYS_INLINE void write_bytes(const void *data, uint32_t length) {
-    buffer_->write_bytes(data, length);
+    buffer_.write_bytes(data, length);
   }
 
   /// write TypeMeta inline using streaming protocol.
@@ -331,7 +326,7 @@ public:
   /// @param type_id The pre-computed Fory type_id
   inline void write_struct_type_id_direct(uint32_t type_id,
                                           uint32_t user_type_id) {
-    buffer_->write_uint8(static_cast<uint8_t>(type_id));
+    buffer_.write_uint8(static_cast<uint8_t>(type_id));
     switch (static_cast<TypeId>(type_id)) {
     case TypeId::ENUM:
     case TypeId::STRUCT:
@@ -340,7 +335,7 @@ public:
     case TypeId::TYPED_UNION:
       FORY_CHECK(user_type_id != kInvalidUserTypeId)
           << "User type id is required for struct type";
-      buffer_->write_var_uint32(user_type_id);
+      buffer_.write_var_uint32(user_type_id);
       break;
     default:
       break;
@@ -370,8 +365,7 @@ private:
   // Error state - accumulated during serialization, checked at the end
   Error error_;
 
-  Buffer internal_buffer_;
-  Buffer *buffer_;
+  Buffer buffer_;
   const Config *config_;
   std::unique_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;

@@ -516,19 +516,16 @@ public:
     WriteContextGuard guard(*write_ctx_);
     stream_writer.reset();
     write_ctx_->set_stream_writer(&stream_writer);
-    Buffer *stream_buffer = stream_writer.get_buffer();
-    if (FORY_PREDICT_FALSE(stream_buffer == nullptr)) {
-      return Unexpected(Error::invalid("StreamWriter returned null buffer"));
-    }
-    Buffer *original_buffer = &write_ctx_->buffer();
-    write_ctx_->set_buffer(stream_buffer);
-    auto serialize_result = serialize_impl(obj, *stream_buffer);
-    write_ctx_->set_buffer(original_buffer);
+    Buffer &buffer = write_ctx_->buffer();
+    buffer.bind_stream_writer(&stream_writer);
+    auto serialize_result = serialize_impl(obj, buffer);
     if (FORY_PREDICT_FALSE(!serialize_result.ok())) {
+      buffer.clear_stream_writer();
       write_ctx_->set_stream_writer(nullptr);
       return Unexpected(std::move(serialize_result).error());
     }
     stream_writer.force_flush();
+    buffer.clear_stream_writer();
     write_ctx_->set_stream_writer(nullptr);
     if (FORY_PREDICT_FALSE(stream_writer.has_error())) {
       return Unexpected(stream_writer.error());

@@ -34,13 +34,18 @@ StreamWriter::StreamWriter(uint32_t buffer_size)
   buffer_->reserve(actual_size);
   buffer_->writer_index(0);
   buffer_->reader_index(0);
-  buffer_->stream_writer_ = this;
+  buffer_->bind_stream_writer(this);
+  active_buffer_ = buffer_.get();
 }
 
 StreamWriter::~StreamWriter() {
-  if (buffer_ != nullptr) {
-    buffer_->stream_writer_ = nullptr;
+  if (active_buffer_ != nullptr && active_buffer_ != buffer_.get()) {
+    active_buffer_->clear_stream_writer();
   }
+  if (buffer_ != nullptr) {
+    buffer_->clear_stream_writer();
+  }
+  active_buffer_ = nullptr;
 }
 
 Buffer *StreamWriter::get_buffer() { return buffer_.get(); }
@@ -80,31 +85,47 @@ void StreamWriter::reset() {
   flushed_bytes_ = 0;
   flush_barrier_depth_ = 0;
   error_.reset();
-  if (buffer_ != nullptr) {
-    buffer_->writer_index(0);
-    buffer_->reader_index(0);
+  Buffer *buffer = active_buffer();
+  if (buffer != nullptr) {
+    buffer->writer_index(0);
+    buffer->reader_index(0);
   }
 }
 
 void StreamWriter::flush_buffer_data() {
-  if (buffer_ == nullptr || buffer_->writer_index() == 0) {
+  Buffer *buffer = active_buffer();
+  if (buffer == nullptr || buffer->writer_index() == 0) {
     return;
   }
-  const uint32_t bytes_to_flush = buffer_->writer_index();
-  auto write_result = write_to_stream(buffer_->data(), bytes_to_flush);
+  const uint32_t bytes_to_flush = buffer->writer_index();
+  auto write_result = write_to_stream(buffer->data(), bytes_to_flush);
   if (FORY_PREDICT_FALSE(!write_result.ok())) {
     set_error(std::move(write_result).error());
     return;
   }
   flushed_bytes_ += bytes_to_flush;
-  buffer_->writer_index(0);
-  buffer_->reader_index(0);
+  buffer->writer_index(0);
+  buffer->reader_index(0);
 }
 
 void StreamWriter::set_error(Error error) {
   if (error_.ok()) {
     error_ = std::move(error);
   }
+}
+
+void StreamWriter::bind_buffer(Buffer *buffer) {
+  active_buffer_ = buffer == nullptr ? buffer_.get() : buffer;
+}
+
+void StreamWriter::unbind_buffer(Buffer *buffer) {
+  if (active_buffer_ == buffer) {
+    active_buffer_ = buffer_.get();
+  }
+}
+
+Buffer *StreamWriter::active_buffer() {
+  return active_buffer_ == nullptr ? buffer_.get() : active_buffer_;
 }
 
 ForyInputStream::ForyInputStream(std::istream &stream, uint32_t buffer_size)

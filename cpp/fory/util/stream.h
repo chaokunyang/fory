@@ -69,14 +69,23 @@ protected:
   virtual Result<void, Error> flush_stream() = 0;
 
 private:
+  void bind_buffer(Buffer *buffer);
+
+  void unbind_buffer(Buffer *buffer);
+
+  Buffer *active_buffer();
+
   void flush_buffer_data();
 
   void set_error(Error error);
 
   std::unique_ptr<Buffer> buffer_;
+  Buffer *active_buffer_ = nullptr;
   size_t flushed_bytes_ = 0;
   uint32_t flush_barrier_depth_ = 0;
   Error error_;
+
+  friend class Buffer;
 };
 
 class StreamReader : public std::enable_shared_from_this<StreamReader> {

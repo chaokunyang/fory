@@ -114,6 +114,27 @@ public:
     return stream_writer_ != nullptr;
   }
 
+  FORY_ALWAYS_INLINE void bind_stream_writer(StreamWriter *stream_writer) {
+    if (stream_writer_ == stream_writer) {
+      return;
+    }
+    if (stream_writer_ != nullptr) {
+      stream_writer_->unbind_buffer(this);
+    }
+    stream_writer_ = stream_writer;
+    if (stream_writer_ != nullptr) {
+      stream_writer_->bind_buffer(this);
+    }
+  }
+
+  FORY_ALWAYS_INLINE void clear_stream_writer() {
+    if (stream_writer_ == nullptr) {
+      return;
+    }
+    stream_writer_->unbind_buffer(this);
+    stream_writer_ = nullptr;
+  }
+
   FORY_ALWAYS_INLINE void shrink_stream_buffer() {
     if (stream_reader_ != nullptr) {
       stream_reader_->shrink_buffer();

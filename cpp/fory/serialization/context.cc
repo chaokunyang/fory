@@ -59,9 +59,8 @@ static const std::vector<MetaEncoding> k_type_name_encodings = {
 
 WriteContext::WriteContext(const Config &config,
                            std::unique_ptr<TypeResolver> type_resolver)
-    : internal_buffer_(), buffer_(&internal_buffer_), config_(&config),
-      type_resolver_(std::move(type_resolver)), current_dyn_depth_(0),
-      write_type_info_index_map_(8) {}
+    : buffer_(), config_(&config), type_resolver_(std::move(type_resolver)),
+      current_dyn_depth_(0), write_type_info_index_map_(8) {}
 
 WriteContext::~WriteContext() = default;
 
@@ -82,13 +81,13 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
     if (!has_first_type_info_) {
       has_first_type_info_ = true;
       first_type_info_ = type_info;
-      buffer_->write_uint8(0); // (index << 1), index=0
-      buffer_->write_bytes(type_info->type_def.data(),
-                           type_info->type_def.size());
+      buffer_.write_uint8(0); // (index << 1), index=0
+      buffer_.write_bytes(type_info->type_def.data(),
+                          type_info->type_def.size());
       return;
     }
     if (type_info == first_type_info_) {
-      buffer_->write_uint8(1); // (index << 1) | 1, index=0
+      buffer_.write_uint8(1); // (index << 1) | 1, index=0
       return;
     }
     type_info_index_map_active_ = true;
@@ -97,7 +96,7 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
         static_cast<uint64_t>(reinterpret_cast<uintptr_t>(first_type_info_));
     write_type_info_index_map_.put(first_key, 0);
   } else if (type_info == first_type_info_) {
-    buffer_->write_uint8(1); // (index << 1) | 1, index=0
+    buffer_.write_uint8(1); // (index << 1) | 1, index=0
     return;
   }
 
@@ -105,9 +104,9 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
     // Reference to previously written type: (index << 1) | 1, LSB=1
     uint32_t marker = static_cast<uint32_t>((entry->value << 1) | 1);
     if (marker < 0x80) {
-      buffer_->write_uint8(static_cast<uint8_t>(marker));
+      buffer_.write_uint8(static_cast<uint8_t>(marker));
     } else {
-      buffer_->write_var_uint32(marker);
+      buffer_.write_var_uint32(marker);
     }
     return;
   }
@@ -116,14 +115,14 @@ void WriteContext::write_type_meta(const TypeInfo *type_info) {
   uint32_t index = static_cast<uint32_t>(write_type_info_index_map_.size());
   uint32_t marker = static_cast<uint32_t>(index << 1);
   if (marker < 0x80) {
-    buffer_->write_uint8(static_cast<uint8_t>(marker));
+    buffer_.write_uint8(static_cast<uint8_t>(marker));
   } else {
-    buffer_->write_var_uint32(marker);
+    buffer_.write_var_uint32(marker);
   }
   write_type_info_index_map_.put(key, index);
 
   // write TypeDef bytes inline
-  buffer_->write_bytes(type_info->type_def.data(), type_info->type_def.size());
+  buffer_.write_bytes(type_info->type_def.data(), type_info->type_def.size());
 }
 
 /// write pre-encoded meta string to buffer (avoids re-encoding on each write)
@@ -150,12 +149,12 @@ Result<void, Error>
 WriteContext::write_enum_type_info(const std::type_index &type) {
   FORY_TRY(type_info, type_resolver_->get_type_info(type));
   uint32_t type_id = type_info->type_id;
-  buffer_->write_uint8(static_cast<uint8_t>(type_id));
+  buffer_.write_uint8(static_cast<uint8_t>(type_id));
   if (type_id == static_cast<uint32_t>(TypeId::ENUM)) {
     if (type_info->user_type_id == kInvalidUserTypeId) {
       return Unexpected(Error::type_error("User type id is required for enum"));
     }
-    buffer_->write_var_uint32(type_info->user_type_id);
+    buffer_.write_var_uint32(type_info->user_type_id);
   } else if (type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
     if (config_->compatible) {
       // write type meta inline using streaming protocol
@@ -163,8 +162,8 @@ WriteContext::write_enum_type_info(const std::type_index &type) {
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
-        write_encoded_meta_string(*buffer_, *type_info->encoded_namespace);
-        write_encoded_meta_string(*buffer_, *type_info->encoded_type_name);
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for enum"));
@@ -184,12 +183,12 @@ WriteContext::write_enum_type_info(const TypeInfo *type_info) {
 
   uint32_t type_id = type_info->type_id;
 
-  buffer_->write_uint8(static_cast<uint8_t>(type_id));
+  buffer_.write_uint8(static_cast<uint8_t>(type_id));
   if (type_id == static_cast<uint32_t>(TypeId::ENUM)) {
     if (type_info->user_type_id == kInvalidUserTypeId) {
       return Unexpected(Error::type_error("User type id is required for enum"));
     }
-    buffer_->write_var_uint32(type_info->user_type_id);
+    buffer_.write_var_uint32(type_info->user_type_id);
   } else if (type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
     if (config_->compatible) {
       // write type meta inline using streaming protocol
@@ -197,8 +196,8 @@ WriteContext::write_enum_type_info(const TypeInfo *type_info) {
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
-        write_encoded_meta_string(*buffer_, *type_info->encoded_namespace);
-        write_encoded_meta_string(*buffer_, *type_info->encoded_type_name);
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for enum"));
@@ -216,7 +215,7 @@ WriteContext::write_any_type_info(uint32_t fory_type_id,
   // Check if it's an internal type
   if (is_internal_type(fory_type_id)) {
     // write type_id
-    buffer_->write_uint8(static_cast<uint8_t>(fory_type_id));
+    buffer_.write_uint8(static_cast<uint8_t>(fory_type_id));
     FORY_TRY(type_info, type_resolver_->get_type_info_by_id(fory_type_id));
     return type_info;
   }
@@ -226,7 +225,7 @@ WriteContext::write_any_type_info(uint32_t fory_type_id,
   uint32_t type_id = type_info->type_id;
 
   // write type_id
-  buffer_->write_uint8(static_cast<uint8_t>(type_id));
+  buffer_.write_uint8(static_cast<uint8_t>(type_id));
 
   // Handle different type categories based on low byte
   switch (static_cast<TypeId>(type_id)) {
@@ -234,7 +233,7 @@ WriteContext::write_any_type_info(uint32_t fory_type_id,
   case TypeId::STRUCT:
   case TypeId::EXT:
   case TypeId::TYPED_UNION:
-    buffer_->write_var_uint32(type_info->user_type_id);
+    buffer_.write_var_uint32(type_info->user_type_id);
     break;
   case TypeId::COMPATIBLE_STRUCT:
   case TypeId::NAMED_COMPATIBLE_STRUCT:
@@ -251,8 +250,8 @@ WriteContext::write_any_type_info(uint32_t fory_type_id,
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
-        write_encoded_meta_string(*buffer_, *type_info->encoded_namespace);
-        write_encoded_meta_string(*buffer_, *type_info->encoded_type_name);
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for type"));
@@ -273,14 +272,14 @@ WriteContext::write_any_type_info(const TypeInfo *type_info) {
     return Unexpected(Error::invalid("TypeInfo is null"));
   }
   uint32_t type_id = type_info->type_id;
-  buffer_->write_uint8(static_cast<uint8_t>(type_id));
+  buffer_.write_uint8(static_cast<uint8_t>(type_id));
 
   switch (static_cast<TypeId>(type_id)) {
   case TypeId::ENUM:
   case TypeId::STRUCT:
   case TypeId::EXT:
   case TypeId::TYPED_UNION:
-    buffer_->write_var_uint32(type_info->user_type_id);
+    buffer_.write_var_uint32(type_info->user_type_id);
     break;
   case TypeId::COMPATIBLE_STRUCT:
   case TypeId::NAMED_COMPATIBLE_STRUCT:
@@ -297,8 +296,8 @@ WriteContext::write_any_type_info(const TypeInfo *type_info) {
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
-        write_encoded_meta_string(*buffer_, *type_info->encoded_namespace);
-        write_encoded_meta_string(*buffer_, *type_info->encoded_type_name);
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for type"));
@@ -320,13 +319,13 @@ WriteContext::write_struct_type_info(const std::type_index &type_id) {
   uint32_t fory_type_id = type_info->type_id;
 
   // write type_id
-  buffer_->write_uint8(static_cast<uint8_t>(fory_type_id));
+  buffer_.write_uint8(static_cast<uint8_t>(fory_type_id));
   switch (static_cast<TypeId>(fory_type_id)) {
   case TypeId::ENUM:
   case TypeId::STRUCT:
   case TypeId::EXT:
   case TypeId::TYPED_UNION:
-    buffer_->write_var_uint32(type_info->user_type_id);
+    buffer_.write_var_uint32(type_info->user_type_id);
     break;
   case TypeId::COMPATIBLE_STRUCT:
   case TypeId::NAMED_COMPATIBLE_STRUCT:
@@ -340,8 +339,8 @@ WriteContext::write_struct_type_info(const std::type_index &type_id) {
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
-        write_encoded_meta_string(*buffer_, *type_info->encoded_namespace);
-        write_encoded_meta_string(*buffer_, *type_info->encoded_type_name);
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for struct"));
@@ -361,13 +360,13 @@ WriteContext::write_struct_type_info(const TypeInfo *type_info) {
   uint32_t fory_type_id = type_info->type_id;
 
   // write type_id
-  buffer_->write_uint8(static_cast<uint8_t>(fory_type_id));
+  buffer_.write_uint8(static_cast<uint8_t>(fory_type_id));
   switch (static_cast<TypeId>(fory_type_id)) {
   case TypeId::ENUM:
   case TypeId::STRUCT:
   case TypeId::EXT:
   case TypeId::TYPED_UNION:
-    buffer_->write_var_uint32(type_info->user_type_id);
+    buffer_.write_var_uint32(type_info->user_type_id);
     break;
   case TypeId::COMPATIBLE_STRUCT:
   case TypeId::NAMED_COMPATIBLE_STRUCT:
@@ -381,8 +380,8 @@ WriteContext::write_struct_type_info(const TypeInfo *type_info) {
     } else {
       // write pre-encoded namespace and type_name
       if (type_info->encoded_namespace && type_info->encoded_type_name) {
-        write_encoded_meta_string(*buffer_, *type_info->encoded_namespace);
-        write_encoded_meta_string(*buffer_, *type_info->encoded_type_name);
+        write_encoded_meta_string(buffer_, *type_info->encoded_namespace);
+        write_encoded_meta_string(buffer_, *type_info->encoded_type_name);
       } else {
         return Unexpected(
             Error::invalid("Encoded meta strings not initialized for struct"));
@@ -407,11 +406,11 @@ void WriteContext::reset() {
   has_first_type_info_ = false;
   type_info_index_map_active_ = false;
   current_dyn_depth_ = 0;
-  buffer_ = &internal_buffer_;
+  buffer_.clear_stream_writer();
   stream_writer_ = nullptr;
   // reset buffer indices for reuse - no memory operations needed
-  internal_buffer_.writer_index(0);
-  internal_buffer_.reader_index(0);
+  buffer_.writer_index(0);
+  buffer_.reader_index(0);
 }
 
 uint32_t WriteContext::get_type_id_for_cache(const std::type_index &type_idx) {

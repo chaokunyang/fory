@@ -86,6 +86,7 @@ Buffer &Buffer::operator=(Buffer &&buffer) noexcept {
 }
 
 Buffer::~Buffer() {
+  clear_stream_writer();
   detach_stream_reader_from_this();
   if (own_data_) {
     free(data_);

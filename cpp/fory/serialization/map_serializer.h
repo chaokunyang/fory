@@ -244,7 +244,6 @@ inline void write_map_data_slow(const MapType &map, WriteContext &ctx,
       if (pair_counter > 0) {
         write_chunk_size(ctx, header_offset, pair_counter);
         ctx.exit_flush_barrier();
-        ctx.try_flush();
         pair_counter = 0;
         need_write_header = true;
       }

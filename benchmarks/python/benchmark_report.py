@@ -44,14 +44,12 @@ COLORS = {
     "fory": "#FF6F01",
     "pickle": "#4C78A8",
     "protobuf": "#55BCC2",
-    "msgpack": "#9C755F",
 }
-SERIALIZER_ORDER = ["fory", "pickle", "protobuf", "msgpack"]
+SERIALIZER_ORDER = ["fory", "pickle", "protobuf"]
 SERIALIZER_LABELS = {
     "fory": "fory",
     "pickle": "pickle",
     "protobuf": "protobuf",
-    "msgpack": "msgpack",
 }
 DATATYPE_ORDER = [
     "struct",
@@ -330,11 +328,9 @@ def generate_markdown_report(raw, data, sizes, plot_images, output_dir: Path, pl
     md.append("\n## Benchmark Results\n\n")
     md.append("### Timing Results (nanoseconds)\n\n")
     md.append(
-        "| Datatype | Operation | fory (ns) | pickle (ns) | protobuf (ns) | msgpack (ns) | Fastest |\n"
+        "| Datatype | Operation | fory (ns) | pickle (ns) | protobuf (ns) | Fastest |\n"
     )
-    md.append(
-        "|----------|-----------|-----------|-------------|---------------|--------------|---------|\n"
-    )
+    md.append("|----------|-----------|-----------|-------------|---------------|---------|\n")
 
     for datatype in datatypes:
         for operation in operations:
@@ -356,11 +352,9 @@ def generate_markdown_report(raw, data, sizes, plot_images, output_dir: Path, pl
 
     md.append("\n### Throughput Results (ops/sec)\n\n")
     md.append(
-        "| Datatype | Operation | fory TPS | pickle TPS | protobuf TPS | msgpack TPS | Fastest |\n"
+        "| Datatype | Operation | fory TPS | pickle TPS | protobuf TPS | Fastest |\n"
     )
-    md.append(
-        "|----------|-----------|----------|------------|--------------|-------------|---------|\n"
-    )
+    md.append("|----------|-----------|----------|------------|--------------|---------|\n")
 
     for datatype in datatypes:
         for operation in operations:
@@ -383,8 +377,8 @@ def generate_markdown_report(raw, data, sizes, plot_images, output_dir: Path, pl
 
     if sizes:
         md.append("\n### Serialized Data Sizes (bytes)\n\n")
-        md.append("| Datatype | fory | pickle | protobuf | msgpack |\n")
-        md.append("|----------|------|--------|----------|---------|\n")
+        md.append("| Datatype | fory | pickle | protobuf |\n")
+        md.append("|----------|------|--------|----------|\n")
 
         for datatype in datatypes:
             datatype_sizes = sizes.get(datatype, {})

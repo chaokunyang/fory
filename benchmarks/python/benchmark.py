@@ -21,7 +21,7 @@
 This script mirrors `benchmarks/cpp/benchmark.cc` coverage and benchmarks:
 - Data types: Struct, Sample, MediaContent and corresponding *List variants.
 - Operations: serialize / deserialize.
-- Serializers: fory / pickle / protobuf / msgpack.
+- Serializers: fory / pickle / protobuf.
 
 Results are written as JSON and consumed by `benchmark_report.py`.
 """
@@ -29,7 +29,7 @@ Results are written as JSON and consumed by `benchmark_report.py`.
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, fields, is_dataclass
+from dataclasses import dataclass
 import json
 import os
 import pickle
@@ -42,11 +42,6 @@ from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 import pyfory
 
-try:
-    import msgpack
-except ImportError:
-    msgpack = None
-
 
 LIST_SIZE = 5
 DATA_TYPE_ORDER = [
@@ -57,7 +52,7 @@ DATA_TYPE_ORDER = [
     "samplelist",
     "mediacontentlist",
 ]
-SERIALIZER_ORDER = ["fory", "pickle", "protobuf", "msgpack"]
+SERIALIZER_ORDER = ["fory", "pickle", "protobuf"]
 OPERATION_ORDER = ["serialize", "deserialize"]
 
 DATA_LABELS = {
@@ -72,7 +67,6 @@ SERIALIZER_LABELS = {
     "fory": "Fory",
     "pickle": "Pickle",
     "protobuf": "Protobuf",
-    "msgpack": "Msgpack",
 }
 
 
@@ -482,34 +476,6 @@ PROTO_CONVERTERS = {
 }
 
 
-def dataclass_to_msgpack_dict(obj: Any) -> Any:
-    if is_dataclass(obj):
-        # Base conversion via dataclasses.asdict as requested.
-        converted = asdict(obj)
-
-        # Explicitly rewrite nested dataclass fields with recursive conversion to ensure
-        # nested objects are represented as dict payloads expected by msgpack.
-        for field in fields(obj):
-            field_value = getattr(obj, field.name)
-            if is_dataclass(field_value):
-                converted[field.name] = dataclass_to_msgpack_dict(field_value)
-            elif isinstance(field_value, list):
-                converted[field.name] = [
-                    dataclass_to_msgpack_dict(item) for item in field_value
-                ]
-            elif isinstance(field_value, dict):
-                converted[field.name] = {
-                    key: dataclass_to_msgpack_dict(value)
-                    for key, value in field_value.items()
-                }
-        return converted
-    if isinstance(obj, list):
-        return [dataclass_to_msgpack_dict(item) for item in obj]
-    if isinstance(obj, dict):
-        return {key: dataclass_to_msgpack_dict(value) for key, value in obj.items()}
-    return obj
-
-
 def build_fory() -> pyfory.Fory:
     fory = pyfory.Fory(xlang=True, compatible=True, ref=False)
     fory.register_type(NumericStruct, type_id=1)
@@ -587,18 +553,6 @@ def protobuf_deserialize(bench_pb2, datatype: str, binary: bytes) -> None:
     from_pb(pb_obj)
 
 
-def msgpack_serialize_dict(obj: Dict[str, Any]) -> None:
-    if msgpack is None:
-        raise RuntimeError("msgpack is not installed")
-    msgpack.packb(obj, use_bin_type=True)
-
-
-def msgpack_deserialize_dict(binary: bytes) -> None:
-    if msgpack is None:
-        raise RuntimeError("msgpack is not installed")
-    msgpack.unpackb(binary, raw=False, strict_map_key=False)
-
-
 def benchmark_name(serializer: str, datatype: str, operation: str) -> str:
     return f"BM_{SERIALIZER_LABELS[serializer]}_{DATA_LABELS[datatype]}_{operation.capitalize()}"
 
@@ -608,7 +562,6 @@ def build_case(
     operation: str,
     datatype: str,
     obj: Any,
-    msgpack_obj: Dict[str, Any],
     *,
     fory: pyfory.Fory,
     bench_pb2,
@@ -630,21 +583,12 @@ def build_case(
         pb_binary = to_pb(bench_pb2, obj).SerializeToString()
         return protobuf_deserialize, (bench_pb2, datatype, pb_binary)
 
-    if serializer == "msgpack":
-        if msgpack is None:
-            raise RuntimeError("msgpack is not installed. Install with: pip install msgpack")
-        if operation == "serialize":
-            return msgpack_serialize_dict, (msgpack_obj,)
-        binary = msgpack.packb(msgpack_obj, use_bin_type=True)
-        return msgpack_deserialize_dict, (binary,)
-
     raise ValueError(f"Unsupported serializer: {serializer}")
 
 
 def calculate_serialized_sizes(
     benchmark_data: Dict[str, Any],
     selected_datatypes: Iterable[str],
-    msgpack_data: Dict[str, Dict[str, Any]],
     *,
     fory: pyfory.Fory,
     bench_pb2,
@@ -659,14 +603,6 @@ def calculate_serialized_sizes(
 
         to_pb, _, _ = PROTO_CONVERTERS[datatype]
         datatype_sizes["protobuf"] = len(to_pb(bench_pb2, obj).SerializeToString())
-
-        if msgpack is not None:
-            msgpack_payload = msgpack_data[datatype]
-            datatype_sizes["msgpack"] = len(
-                msgpack.packb(msgpack_payload, use_bin_type=True)
-            )
-        else:
-            datatype_sizes["msgpack"] = -1
 
         sizes[datatype] = datatype_sizes
     return sizes
@@ -699,7 +635,7 @@ def benchmark_number(base_number: int, datatype: str) -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Comprehensive Fory/Pickle/Protobuf/Msgpack benchmark for Python"
+        description="Comprehensive Fory/Pickle/Protobuf benchmark for Python"
     )
     parser.add_argument(
         "--operation",
@@ -715,7 +651,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--serializer",
         default="all",
-        help="Comma-separated serializers: fory,pickle,protobuf,msgpack or all",
+        help="Comma-separated serializers: fory,pickle,protobuf or all",
     )
     parser.add_argument(
         "--warmup",
@@ -768,14 +704,7 @@ def main() -> int:
         OPERATION_ORDER if args.operation == "all" else [args.operation]
     )
 
-    if msgpack is None and "msgpack" in selected_serializers:
-        raise RuntimeError("msgpack is not installed. Install with: pip install msgpack")
-
     benchmark_data = create_benchmark_data()
-    msgpack_data = {
-        datatype: dataclass_to_msgpack_dict(obj)
-        for datatype, obj in benchmark_data.items()
-    }
     fory = build_fory()
 
     print(
@@ -792,7 +721,6 @@ def main() -> int:
 
     for datatype in selected_datatypes:
         obj = benchmark_data[datatype]
-        msgpack_obj = msgpack_data[datatype]
         call_number = benchmark_number(args.number, datatype)
         for operation in selected_operations:
             for serializer in selected_serializers:
@@ -804,7 +732,6 @@ def main() -> int:
                     operation,
                     datatype,
                     obj,
-                    msgpack_obj,
                     fory=fory,
                     bench_pb2=bench_pb2,
                 )
@@ -835,7 +762,6 @@ def main() -> int:
     sizes = calculate_serialized_sizes(
         benchmark_data,
         selected_datatypes,
-        msgpack_data,
         fory=fory,
         bench_pb2=bench_pb2,
     )

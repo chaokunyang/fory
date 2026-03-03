@@ -6,7 +6,7 @@ This directory contains two benchmark entrypoints:
    - `Struct`, `Sample`, `MediaContent`
    - `StructList`, `SampleList`, `MediaContentList`
    - operations: `serialize`, `deserialize`
-   - serializers: `fory`, `pickle`, `protobuf`, `msgpack`
+   - serializers: `fory`, `pickle`, `protobuf`
 2. `fory_benchmark.py` (legacy): existing CPython microbench script kept intact.
 
 ## Quick Start (Comprehensive Suite)
@@ -42,7 +42,7 @@ cd benchmarks/python
 Supported values:
 
 - `--data`: `struct,sample,mediacontent,structlist,samplelist,mediacontentlist`
-- `--serializer`: `fory,pickle,protobuf,msgpack`
+- `--serializer`: `fory,pickle,protobuf`
 - `--operation`: `all|serialize|deserialize`
 
 ## Legacy Script (Unchanged)
@@ -60,4 +60,4 @@ For its original options and behavior, refer to `python fory_benchmark.py --help
 
 - `pyfory` must be installed in your current Python environment.
 - `protoc` is required by `run.sh` to generate `bench_pb2.py`.
-- `msgpack` benchmarks run directly on prebuilt dict payloads derived from dataclasses.
+- `protobuf` benchmarks include dataclass <-> protobuf conversion in the timed path.

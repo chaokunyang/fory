@@ -45,7 +45,7 @@ Run Python comprehensive benchmarks for struct/sample/mediacontent and list vari
 
 Options:
   --data <type>          Filter by data type: struct,sample,mediacontent,structlist,samplelist,mediacontentlist
-  --serializer <name>    Filter by serializer: fory,pickle,protobuf,msgpack
+  --serializer <name>    Filter by serializer: fory,pickle,protobuf
   --operation <op>       all|serialize|deserialize (default: all)
   --warmup <n>           Warmup iterations (default: 3)
   --iterations <n>       Measurement iterations (default: 15)
@@ -129,9 +129,9 @@ if ! "$PYTHON_BIN" -c "import pyfory" >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! "$PYTHON_BIN" -c "import msgpack, google.protobuf" >/dev/null 2>&1; then
-  echo "Installing benchmark dependencies: msgpack protobuf"
-  "$PYTHON_BIN" -m pip install msgpack protobuf
+if ! "$PYTHON_BIN" -c "import google.protobuf" >/dev/null 2>&1; then
+  echo "Installing benchmark dependency: protobuf"
+  "$PYTHON_BIN" -m pip install protobuf
 fi
 
 if ! "$PYTHON_BIN" -c "import matplotlib, numpy" >/dev/null 2>&1; then

@@ -175,7 +175,7 @@ inline void write_map_data_fast(const MapType &map, WriteContext &ctx,
     pair_counter++;
     if (pair_counter == MAX_CHUNK_SIZE) {
       write_chunk_size(ctx, header_offset, pair_counter);
-      ctx.leave_flush_barrier();
+      ctx.exit_flush_barrier();
       ctx.try_flush();
       pair_counter = 0;
       need_write_header = true;
@@ -185,7 +185,7 @@ inline void write_map_data_fast(const MapType &map, WriteContext &ctx,
   // write final chunk size
   if (pair_counter > 0) {
     write_chunk_size(ctx, header_offset, pair_counter);
-    ctx.leave_flush_barrier();
+    ctx.exit_flush_barrier();
     ctx.try_flush();
   }
 }
@@ -243,7 +243,7 @@ inline void write_map_data_slow(const MapType &map, WriteContext &ctx,
       // Finish current chunk if any
       if (pair_counter > 0) {
         write_chunk_size(ctx, header_offset, pair_counter);
-        ctx.leave_flush_barrier();
+        ctx.exit_flush_barrier();
         ctx.try_flush();
         pair_counter = 0;
         need_write_header = true;
@@ -401,7 +401,7 @@ inline void write_map_data_slow(const MapType &map, WriteContext &ctx,
       // Finish previous chunk if types changed
       if (types_changed && pair_counter > 0) {
         write_chunk_size(ctx, header_offset, pair_counter);
-        ctx.leave_flush_barrier();
+        ctx.exit_flush_barrier();
         ctx.try_flush();
         pair_counter = 0;
       }
@@ -523,7 +523,7 @@ inline void write_map_data_slow(const MapType &map, WriteContext &ctx,
     pair_counter++;
     if (pair_counter == MAX_CHUNK_SIZE) {
       write_chunk_size(ctx, header_offset, pair_counter);
-      ctx.leave_flush_barrier();
+      ctx.exit_flush_barrier();
       ctx.try_flush();
       pair_counter = 0;
       need_write_header = true;
@@ -535,7 +535,7 @@ inline void write_map_data_slow(const MapType &map, WriteContext &ctx,
   // write final chunk size
   if (pair_counter > 0) {
     write_chunk_size(ctx, header_offset, pair_counter);
-    ctx.leave_flush_barrier();
+    ctx.exit_flush_barrier();
     ctx.try_flush();
   }
 }

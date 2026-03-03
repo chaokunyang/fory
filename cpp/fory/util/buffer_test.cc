@@ -72,7 +72,8 @@ private:
 
 class CountingStreamWriter final : public StreamWriter {
 public:
-  Result<void, Error> write(const uint8_t *src, uint32_t length) override {
+  Result<void, Error> write_to_stream(const uint8_t *src,
+                                      uint32_t length) override {
     write_calls_++;
     if (length == 0) {
       return Result<void, Error>();
@@ -81,7 +82,7 @@ public:
     return Result<void, Error>();
   }
 
-  Result<void, Error> flush() override {
+  Result<void, Error> flush_stream() override {
     flush_calls_++;
     return Result<void, Error>();
   }
@@ -341,49 +342,49 @@ TEST(Buffer, StreamReadErrorWhenInsufficientData) {
 }
 
 TEST(Buffer, StreamWriterThresholdFlushOnWriteBytes) {
-  Buffer buffer;
   CountingStreamWriter writer;
-  buffer.bind_stream_writer(&writer);
+  Buffer *buffer = writer.get_buffer();
+  ASSERT_NE(buffer, nullptr);
 
   std::vector<uint8_t> payload(5000, 7);
-  buffer.write_bytes(payload.data(), static_cast<uint32_t>(payload.size()));
+  buffer->write_bytes(payload.data(), static_cast<uint32_t>(payload.size()));
 
-  EXPECT_EQ(buffer.writer_index(), 0U);
+  EXPECT_EQ(buffer->writer_index(), 0U);
   EXPECT_EQ(writer.data().size(), payload.size());
   EXPECT_GE(writer.write_calls(), 1U);
 }
 
 TEST(Buffer, StreamWriterThresholdFlushCanBeTemporarilyDisabled) {
-  Buffer buffer;
   CountingStreamWriter writer;
-  buffer.bind_stream_writer(&writer);
-  buffer.set_auto_flush_enabled(false);
+  Buffer *buffer = writer.get_buffer();
+  ASSERT_NE(buffer, nullptr);
+  writer.enter_flush_barrier();
 
   std::vector<uint8_t> payload(5000, 7);
-  buffer.write_bytes(payload.data(), static_cast<uint32_t>(payload.size()));
+  buffer->write_bytes(payload.data(), static_cast<uint32_t>(payload.size()));
 
-  EXPECT_EQ(buffer.writer_index(), payload.size());
+  EXPECT_EQ(buffer->writer_index(), payload.size());
   EXPECT_EQ(writer.data().size(), 0U);
 
-  buffer.set_auto_flush_enabled(true);
-  auto flush_result = buffer.try_flush();
-  ASSERT_TRUE(flush_result.ok()) << flush_result.error().to_string();
-  EXPECT_EQ(buffer.writer_index(), 0U);
+  writer.exit_flush_barrier();
+  writer.try_flush();
+  ASSERT_FALSE(writer.has_error()) << writer.error().to_string();
+  EXPECT_EQ(buffer->writer_index(), 0U);
   EXPECT_EQ(writer.data().size(), payload.size());
 }
 
 TEST(Buffer, StreamWriterForceFlush) {
-  Buffer buffer;
   CountingStreamWriter writer;
-  buffer.bind_stream_writer(&writer);
+  Buffer *buffer = writer.get_buffer();
+  ASSERT_NE(buffer, nullptr);
 
   std::vector<uint8_t> payload{1, 2, 3, 4, 5};
-  buffer.write_bytes(payload.data(), static_cast<uint32_t>(payload.size()));
-  EXPECT_EQ(buffer.writer_index(), payload.size());
+  buffer->write_bytes(payload.data(), static_cast<uint32_t>(payload.size()));
+  EXPECT_EQ(buffer->writer_index(), payload.size());
 
-  auto flush_result = buffer.force_flush();
-  ASSERT_TRUE(flush_result.ok()) << flush_result.error().to_string();
-  EXPECT_EQ(buffer.writer_index(), 0U);
+  writer.force_flush();
+  ASSERT_FALSE(writer.has_error()) << writer.error().to_string();
+  EXPECT_EQ(buffer->writer_index(), 0U);
   EXPECT_EQ(writer.data(), payload);
   EXPECT_EQ(writer.flush_calls(), 1U);
 }

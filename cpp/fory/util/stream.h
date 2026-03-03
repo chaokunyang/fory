@@ -34,11 +34,49 @@ class Buffer;
 
 class StreamWriter {
 public:
-  virtual ~StreamWriter() = default;
+  explicit StreamWriter(uint32_t buffer_size = 4096);
 
-  virtual Result<void, Error> write(const uint8_t *src, uint32_t length) = 0;
+  virtual ~StreamWriter();
 
-  virtual Result<void, Error> flush() = 0;
+  Buffer *get_buffer();
+
+  const Buffer *get_buffer() const;
+
+  void enter_flush_barrier();
+
+  void exit_flush_barrier();
+
+  void try_flush();
+
+  void force_flush();
+
+  FORY_ALWAYS_INLINE uint32_t flush_barrier_depth() const {
+    return flush_barrier_depth_;
+  }
+
+  FORY_ALWAYS_INLINE size_t flushed_bytes() const { return flushed_bytes_; }
+
+  void reset();
+
+  FORY_ALWAYS_INLINE bool has_error() const { return !error_.ok(); }
+
+  FORY_ALWAYS_INLINE const Error &error() const { return error_; }
+
+protected:
+  virtual Result<void, Error> write_to_stream(const uint8_t *src,
+                                              uint32_t length) = 0;
+
+  virtual Result<void, Error> flush_stream() = 0;
+
+private:
+  void flush_buffer_data();
+
+  void set_error(Error error);
+
+  std::unique_ptr<Buffer> buffer_;
+  size_t flushed_bytes_ = 0;
+  uint32_t flush_barrier_depth_ = 0;
+  Error error_;
 };
 
 class StreamReader : public std::enable_shared_from_this<StreamReader> {
@@ -106,9 +144,11 @@ public:
 
   ~ForyOutputStream() override;
 
-  Result<void, Error> write(const uint8_t *src, uint32_t length) override;
+protected:
+  Result<void, Error> write_to_stream(const uint8_t *src,
+                                      uint32_t length) override;
 
-  Result<void, Error> flush() override;
+  Result<void, Error> flush_stream() override;
 
 private:
   std::shared_ptr<std::ostream> stream_owner_;

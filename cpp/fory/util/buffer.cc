@@ -33,11 +33,11 @@ Buffer::Buffer() {
   wrapped_vector_ = nullptr;
   stream_reader_ = nullptr;
   stream_writer_ = nullptr;
-  flushed_bytes_ = 0;
-  auto_flush_enabled_ = true;
 }
 
 Buffer::Buffer(Buffer &&buffer) noexcept {
+  FORY_CHECK(buffer.stream_writer_ == nullptr)
+      << "Cannot move stream-writer-owned Buffer";
   data_ = buffer.data_;
   size_ = buffer.size_;
   own_data_ = buffer.own_data_;
@@ -47,14 +47,9 @@ Buffer::Buffer(Buffer &&buffer) noexcept {
   stream_reader_ = buffer.stream_reader_;
   stream_reader_owner_ = std::move(buffer.stream_reader_owner_);
   stream_writer_ = buffer.stream_writer_;
-  stream_writer_owner_ = std::move(buffer.stream_writer_owner_);
-  flushed_bytes_ = buffer.flushed_bytes_;
-  auto_flush_enabled_ = buffer.auto_flush_enabled_;
   rebind_stream_reader_to_this();
   buffer.stream_reader_ = nullptr;
   buffer.stream_writer_ = nullptr;
-  buffer.flushed_bytes_ = 0;
-  buffer.auto_flush_enabled_ = true;
   buffer.data_ = nullptr;
   buffer.size_ = 0;
   buffer.own_data_ = false;
@@ -62,6 +57,10 @@ Buffer::Buffer(Buffer &&buffer) noexcept {
 }
 
 Buffer &Buffer::operator=(Buffer &&buffer) noexcept {
+  FORY_CHECK(buffer.stream_writer_ == nullptr)
+      << "Cannot move stream-writer-owned Buffer";
+  FORY_CHECK(stream_writer_ == nullptr)
+      << "Cannot assign to stream-writer-owned Buffer";
   detach_stream_reader_from_this();
   if (own_data_) {
     free(data_);
@@ -76,14 +75,9 @@ Buffer &Buffer::operator=(Buffer &&buffer) noexcept {
   stream_reader_ = buffer.stream_reader_;
   stream_reader_owner_ = std::move(buffer.stream_reader_owner_);
   stream_writer_ = buffer.stream_writer_;
-  stream_writer_owner_ = std::move(buffer.stream_writer_owner_);
-  flushed_bytes_ = buffer.flushed_bytes_;
-  auto_flush_enabled_ = buffer.auto_flush_enabled_;
   rebind_stream_reader_to_this();
   buffer.stream_reader_ = nullptr;
   buffer.stream_writer_ = nullptr;
-  buffer.flushed_bytes_ = 0;
-  buffer.auto_flush_enabled_ = true;
   buffer.data_ = nullptr;
   buffer.size_ = 0;
   buffer.own_data_ = false;

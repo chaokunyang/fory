@@ -135,6 +135,138 @@ static bool resolve_python_stream_read_method(PyObject *stream,
   return false;
 }
 
+static bool resolve_python_stream_write_method(PyObject *stream,
+                                               std::string *error_message) {
+  const int has_write = PyObject_HasAttrString(stream, "write");
+  if (has_write < 0) {
+    *error_message = fetch_python_error_message();
+    return false;
+  }
+  if (has_write == 0) {
+    *error_message = "stream object must provide write(data) method";
+    return false;
+  }
+  PyObject *method_obj = PyObject_GetAttrString(stream, "write");
+  if (method_obj == nullptr) {
+    *error_message = fetch_python_error_message();
+    return false;
+  }
+  const bool is_callable = PyCallable_Check(method_obj) != 0;
+  Py_DECREF(method_obj);
+  if (!is_callable) {
+    *error_message = "stream.write must be callable";
+    return false;
+  }
+  return true;
+}
+
+class PythonStreamWriter final : public StreamWriter {
+public:
+  explicit PythonStreamWriter(PyObject *stream, uint32_t buffer_size = 4096)
+      : StreamWriter(buffer_size), stream_(stream) {
+    FORY_CHECK(stream_ != nullptr) << "stream must not be null";
+    Py_INCREF(stream_);
+  }
+
+  ~PythonStreamWriter() override {
+    if (stream_ != nullptr) {
+      PyGILState_STATE gil_state = PyGILState_Ensure();
+      Py_DECREF(stream_);
+      PyGILState_Release(gil_state);
+      stream_ = nullptr;
+    }
+  }
+
+protected:
+  Result<void, Error> write_to_stream(const uint8_t *src,
+                                      uint32_t length) override {
+    if (length == 0) {
+      return Result<void, Error>();
+    }
+    if (src == nullptr) {
+      return Unexpected(Error::invalid("output source pointer is null"));
+    }
+    if (stream_ == nullptr) {
+      return Unexpected(Error::io_error("output stream is null"));
+    }
+    PyGILState_STATE gil_state = PyGILState_Ensure();
+    uint32_t total_written = 0;
+    while (total_written < length) {
+      const uint32_t remaining = length - total_written;
+      PyObject *chunk = PyMemoryView_FromMemory(
+          reinterpret_cast<char *>(
+              const_cast<uint8_t *>(src + static_cast<size_t>(total_written))),
+          static_cast<Py_ssize_t>(remaining), PyBUF_READ);
+      if (chunk == nullptr) {
+        const std::string message = fetch_python_error_message();
+        PyGILState_Release(gil_state);
+        return Unexpected(Error::io_error(message));
+      }
+      PyObject *written_obj = PyObject_CallMethod(stream_, "write", "O", chunk);
+      Py_DECREF(chunk);
+      if (written_obj == nullptr) {
+        const std::string message = fetch_python_error_message();
+        PyGILState_Release(gil_state);
+        return Unexpected(Error::io_error(message));
+      }
+      if (written_obj == Py_None) {
+        Py_DECREF(written_obj);
+        total_written = length;
+        break;
+      }
+      const long long wrote_value = PyLong_AsLongLong(written_obj);
+      Py_DECREF(written_obj);
+      if (wrote_value == -1 && PyErr_Occurred() != nullptr) {
+        const std::string message = fetch_python_error_message();
+        PyGILState_Release(gil_state);
+        return Unexpected(Error::io_error(message));
+      }
+      if (wrote_value <= 0) {
+        PyGILState_Release(gil_state);
+        return Unexpected(
+            Error::io_error("stream write returned non-positive bytes"));
+      }
+      const uint64_t wrote_u64 = static_cast<uint64_t>(wrote_value);
+      if (wrote_u64 >= remaining) {
+        total_written = length;
+      } else {
+        total_written += static_cast<uint32_t>(wrote_u64);
+      }
+    }
+    PyGILState_Release(gil_state);
+    return Result<void, Error>();
+  }
+
+  Result<void, Error> flush_stream() override {
+    if (stream_ == nullptr) {
+      return Unexpected(Error::io_error("output stream is null"));
+    }
+    PyGILState_STATE gil_state = PyGILState_Ensure();
+    const int has_flush = PyObject_HasAttrString(stream_, "flush");
+    if (has_flush < 0) {
+      const std::string message = fetch_python_error_message();
+      PyGILState_Release(gil_state);
+      return Unexpected(Error::io_error(message));
+    }
+    if (has_flush == 0) {
+      PyGILState_Release(gil_state);
+      return Result<void, Error>();
+    }
+    PyObject *result = PyObject_CallMethod(stream_, "flush", nullptr);
+    if (result == nullptr) {
+      const std::string message = fetch_python_error_message();
+      PyGILState_Release(gil_state);
+      return Unexpected(Error::io_error(message));
+    }
+    Py_DECREF(result);
+    PyGILState_Release(gil_state);
+    return Result<void, Error>();
+  }
+
+private:
+  PyObject *stream_ = nullptr;
+};
+
 class PythonStreamReader final : public StreamReader {
 public:
   explicit PythonStreamReader(PyObject *stream, uint32_t buffer_size,
@@ -1412,6 +1544,24 @@ int Fory_PyCreateBufferFromStream(PyObject *stream, uint32_t buffer_size,
     auto stream_reader =
         std::make_shared<PythonStreamReader>(stream, buffer_size, read_method);
     *out = new Buffer(*stream_reader);
+    return 0;
+  } catch (const std::exception &e) {
+    *error_message = e.what();
+    return -1;
+  }
+}
+
+int Fory_PyCreateStreamWriter(PyObject *stream, StreamWriter **out,
+                              std::string *error_message) {
+  if (stream == nullptr) {
+    *error_message = "stream must not be null";
+    return -1;
+  }
+  if (!resolve_python_stream_write_method(stream, error_message)) {
+    return -1;
+  }
+  try {
+    *out = new PythonStreamWriter(stream, 4096);
     return 0;
   } catch (const std::exception &e) {
     *error_message = e.what();

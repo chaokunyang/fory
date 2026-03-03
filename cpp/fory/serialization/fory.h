@@ -514,16 +514,20 @@ public:
       ensure_finalized();
     }
     WriteContextGuard guard(*write_ctx_);
-    Buffer &buffer = write_ctx_->buffer();
-    buffer.reset_flushed_bytes();
-    buffer.bind_stream_writer(&stream_writer);
+    stream_writer.reset();
+    write_ctx_->set_stream_writer(&stream_writer);
+    Buffer *stream_buffer = stream_writer.get_buffer();
+    if (FORY_PREDICT_FALSE(stream_buffer == nullptr)) {
+      return Unexpected(Error::invalid("StreamWriter returned null buffer"));
+    }
+    Buffer &buffer = *stream_buffer;
 
     FORY_RETURN_NOT_OK(serialize_impl(obj, buffer));
     write_ctx_->force_flush();
     if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
       return Unexpected(write_ctx_->take_error());
     }
-    return buffer.flushed_bytes();
+    return stream_writer.flushed_bytes();
   }
 
   /// Serialize an object to a std::ostream.

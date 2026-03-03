@@ -46,8 +46,7 @@ public:
 
   Buffer(uint8_t *data, uint32_t size, bool own_data = true)
       : data_(data), size_(size), own_data_(own_data), wrapped_vector_(nullptr),
-        stream_reader_(nullptr), stream_writer_(nullptr), flushed_bytes_(0),
-        auto_flush_enabled_(true) {
+        stream_reader_(nullptr), stream_writer_(nullptr) {
     writer_index_ = 0;
     reader_index_ = 0;
   }
@@ -61,13 +60,12 @@ public:
       : data_(vec.data()), size_(static_cast<uint32_t>(vec.size())),
         own_data_(false), writer_index_(static_cast<uint32_t>(vec.size())),
         reader_index_(0), wrapped_vector_(&vec), stream_reader_(nullptr),
-        stream_writer_(nullptr), flushed_bytes_(0), auto_flush_enabled_(true) {}
+        stream_writer_(nullptr) {}
 
   explicit Buffer(StreamReader &stream_reader)
       : data_(nullptr), size_(0), own_data_(false), writer_index_(0),
         reader_index_(0), wrapped_vector_(nullptr),
-        stream_reader_(&stream_reader), stream_writer_(nullptr),
-        flushed_bytes_(0), auto_flush_enabled_(true) {
+        stream_reader_(&stream_reader), stream_writer_(nullptr) {
     stream_reader_->bind_buffer(this);
     stream_reader_owner_ = stream_reader_->weak_from_this().lock();
     FORY_CHECK(&stream_reader_->get_buffer() == this)
@@ -84,6 +82,8 @@ public:
     if (this == &other) {
       return;
     }
+    FORY_CHECK(stream_writer_ == nullptr && other.stream_writer_ == nullptr)
+        << "Cannot swap stream-writer-owned Buffer";
     using std::swap;
     swap(data_, other.data_);
     swap(size_, other.size_);
@@ -94,9 +94,6 @@ public:
     swap(stream_reader_, other.stream_reader_);
     swap(stream_reader_owner_, other.stream_reader_owner_);
     swap(stream_writer_, other.stream_writer_);
-    swap(stream_writer_owner_, other.stream_writer_owner_);
-    swap(flushed_bytes_, other.flushed_bytes_);
-    swap(auto_flush_enabled_, other.auto_flush_enabled_);
     rebind_stream_reader_to_this();
     other.rebind_stream_reader_to_this();
   }
@@ -116,60 +113,6 @@ public:
   FORY_ALWAYS_INLINE bool is_stream_write_backed() const {
     return stream_writer_ != nullptr;
   }
-
-  FORY_ALWAYS_INLINE void bind_stream_writer(StreamWriter *stream_writer) {
-    stream_writer_owner_.reset();
-    stream_writer_ = stream_writer;
-  }
-
-  FORY_ALWAYS_INLINE void
-  bind_stream_writer(std::shared_ptr<StreamWriter> stream_writer) {
-    stream_writer_owner_ = std::move(stream_writer);
-    stream_writer_ = stream_writer_owner_.get();
-  }
-
-  FORY_ALWAYS_INLINE void clear_stream_writer() {
-    stream_writer_ = nullptr;
-    stream_writer_owner_.reset();
-  }
-
-  FORY_ALWAYS_INLINE void set_auto_flush_enabled(bool enabled) {
-    auto_flush_enabled_ = enabled;
-  }
-
-  FORY_ALWAYS_INLINE Result<void, Error> try_flush() {
-    if (stream_writer_ == nullptr || writer_index_ == 0) {
-      return Result<void, Error>();
-    }
-    const uint32_t bytes_to_flush = writer_index_;
-    auto write_result = stream_writer_->write(data_, writer_index_);
-    if (FORY_PREDICT_FALSE(!write_result.ok())) {
-      return Unexpected(std::move(write_result).error());
-    }
-    flushed_bytes_ += bytes_to_flush;
-    writer_index_ = 0;
-    reader_index_ = 0;
-    return Result<void, Error>();
-  }
-
-  FORY_ALWAYS_INLINE Result<void, Error> force_flush() {
-    auto flush_result = try_flush();
-    if (FORY_PREDICT_FALSE(!flush_result.ok())) {
-      return Unexpected(std::move(flush_result).error());
-    }
-    if (stream_writer_ == nullptr) {
-      return Result<void, Error>();
-    }
-    auto writer_flush = stream_writer_->flush();
-    if (FORY_PREDICT_FALSE(!writer_flush.ok())) {
-      return Unexpected(std::move(writer_flush).error());
-    }
-    return Result<void, Error>();
-  }
-
-  FORY_ALWAYS_INLINE size_t flushed_bytes() const { return flushed_bytes_; }
-
-  FORY_ALWAYS_INLINE void reset_flushed_bytes() { flushed_bytes_ = 0; }
 
   FORY_ALWAYS_INLINE void shrink_stream_buffer() {
     if (stream_reader_ != nullptr) {
@@ -871,12 +814,8 @@ public:
     grow(length);
     unsafe_put(writer_index_, data, length);
     increase_writer_index(length);
-    if (FORY_PREDICT_FALSE(length > 4096 && stream_writer_ != nullptr &&
-                           auto_flush_enabled_)) {
-      auto flush_result = try_flush();
-      FORY_CHECK(flush_result.ok())
-          << "Failed to flush stream-backed buffer after large write_bytes: "
-          << flush_result.error().to_string();
+    if (FORY_PREDICT_FALSE(length > 4096 && stream_writer_ != nullptr)) {
+      stream_writer_->try_flush();
     }
   }
 
@@ -1297,6 +1236,7 @@ public:
 private:
   friend class ForyInputStream;
   friend class PythonStreamReader;
+  friend class StreamWriter;
 
   FORY_ALWAYS_INLINE void rebind_stream_reader_to_this() {
     if (stream_reader_ == nullptr) {
@@ -1437,9 +1377,6 @@ private:
   StreamReader *stream_reader_ = nullptr;
   std::shared_ptr<StreamReader> stream_reader_owner_;
   StreamWriter *stream_writer_ = nullptr;
-  std::shared_ptr<StreamWriter> stream_writer_owner_;
-  size_t flushed_bytes_ = 0;
-  bool auto_flush_enabled_ = true;
 };
 
 /// \brief Allocate a fixed-size mutable buffer from the default memory pool

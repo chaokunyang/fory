@@ -14,17 +14,17 @@ from cpython.unicode cimport (
     PyUnicode_DecodeUTF8,
 )
 from cpython.bytes cimport PyBytes_AsString, PyBytes_FromStringAndSize, PyBytes_AS_STRING
-from libcpp.memory cimport shared_ptr
+from libcpp.memory cimport shared_ptr, unique_ptr
 from libcpp.utility cimport move
 from cython.operator cimport dereference as deref
 from libcpp.string cimport string as c_string
 from libc.stdint cimport *
 from libcpp cimport bool as c_bool
 from pyfory.includes.libutil cimport(
-    CBuffer, allocate_buffer, get_bit as c_get_bit, set_bit as c_set_bit, clear_bit as c_clear_bit,
+    CBuffer, CStreamWriter, allocate_buffer, get_bit as c_get_bit, set_bit as c_set_bit, clear_bit as c_clear_bit,
     set_bit_to as c_set_bit_to, CError, CErrorCode, CResultVoidError, utf16_has_surrogate_pairs
 )
-from pyfory.includes.libpyfory cimport Fory_PyCreateBufferFromStream
+from pyfory.includes.libpyfory cimport Fory_PyCreateBufferFromStream, Fory_PyCreateStreamWriter
 import os
 from pyfory.error import raise_fory_error
 
@@ -48,6 +48,7 @@ cdef class Buffer:
         object data
         # writable stream target for streaming serialization output
         object stream
+        unique_ptr[CStreamWriter] c_stream_writer
         Py_ssize_t shape[1]
         Py_ssize_t stride[1]
 
@@ -86,6 +87,7 @@ cdef class Buffer:
         del stream_buffer
         buffer.data = stream
         buffer.stream = None
+        buffer.c_stream_writer.reset(NULL)
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
@@ -99,6 +101,7 @@ cdef class Buffer:
         owner.buffer = c_buffer
         buffer.data = owner
         buffer.stream = None
+        buffer.c_stream_writer.reset(NULL)
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
@@ -113,11 +116,25 @@ cdef class Buffer:
         del buf
         buffer.data = None
         buffer.stream = None
+        buffer.c_stream_writer.reset(NULL)
         buffer.c_buffer.reader_index(0)
         buffer.c_buffer.writer_index(0)
         return buffer
 
     cpdef inline void attach_stream(self, object stream):
+        cdef c_string stream_error
+        cdef CStreamWriter* raw_writer = NULL
+        if stream is None:
+            self.stream = None
+            self.c_stream_writer.reset(NULL)
+            return
+        if Fory_PyCreateStreamWriter(
+            <PyObject*>stream, &raw_writer, &stream_error
+        ) != 0:
+            raise ValueError(stream_error.decode("UTF-8"))
+        self.c_stream_writer.reset(raw_writer)
+        if raw_writer != NULL:
+            raw_writer.reset()
         self.stream = stream
 
     cpdef inline object get_stream(self):
@@ -126,6 +143,18 @@ cdef class Buffer:
     cpdef flush(self):
         cdef uint32_t writer_index = self.c_buffer.writer_index()
         if writer_index == 0:
+            return
+        cdef CStreamWriter* stream_writer = self.c_stream_writer.get()
+        cdef CBuffer* writer_buffer
+        if stream_writer != NULL:
+            writer_buffer = stream_writer.get_buffer()
+            if writer_buffer == NULL:
+                raise ValueError("StreamWriter returned null buffer")
+            writer_buffer.write_bytes(self.c_buffer.data(), writer_index)
+            stream_writer.force_flush()
+            if stream_writer.has_error():
+                raise ValueError(stream_writer.error().to_string().decode("UTF-8"))
+            self.c_buffer.writer_index(0)
             return
         if self.stream is None:
             raise ValueError("No stream is attached to this buffer")

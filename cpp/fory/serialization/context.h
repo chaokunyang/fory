@@ -113,10 +113,21 @@ public:
   FORY_ALWAYS_INLINE Error &error() { return error_; }
 
   /// get reference to internal output buffer.
-  inline Buffer &buffer() { return buffer_; }
+  inline Buffer &buffer() { return *write_buffer_; }
 
   /// get const reference to internal output buffer.
-  inline const Buffer &buffer() const { return buffer_; }
+  inline const Buffer &buffer() const { return *write_buffer_; }
+
+  inline void set_stream_writer(StreamWriter *stream_writer) {
+    stream_writer_ = stream_writer;
+    if (stream_writer_ == nullptr) {
+      write_buffer_ = &buffer_;
+      return;
+    }
+    Buffer *stream_buffer = stream_writer_->get_buffer();
+    FORY_CHECK(stream_buffer != nullptr) << "StreamWriter returned null buffer";
+    write_buffer_ = stream_buffer;
+  }
 
   /// get reference writer for tracking shared references.
   inline RefWriter &ref_writer() { return ref_writer_; }
@@ -167,38 +178,40 @@ public:
     }
   }
 
-  inline uint32_t flush_barrier_depth() const { return flush_barrier_depth_; }
+  inline uint32_t flush_barrier_depth() const {
+    return stream_writer_ == nullptr ? 0
+                                     : stream_writer_->flush_barrier_depth();
+  }
 
   inline void enter_flush_barrier() {
-    flush_barrier_depth_++;
-    if (flush_barrier_depth_ == 1) {
-      buffer_.set_auto_flush_enabled(false);
+    if (stream_writer_ != nullptr) {
+      stream_writer_->enter_flush_barrier();
     }
   }
 
-  inline void leave_flush_barrier() {
-    if (flush_barrier_depth_ > 0) {
-      flush_barrier_depth_--;
-      if (flush_barrier_depth_ == 0) {
-        buffer_.set_auto_flush_enabled(true);
-      }
+  inline void exit_flush_barrier() {
+    if (stream_writer_ != nullptr) {
+      stream_writer_->exit_flush_barrier();
     }
   }
 
   inline void try_flush() {
-    if (flush_barrier_depth_ != 0) {
+    if (stream_writer_ == nullptr) {
       return;
     }
-    auto flush_result = buffer_.try_flush();
-    if (FORY_PREDICT_FALSE(!flush_result.ok())) {
-      set_error(std::move(flush_result).error());
+    stream_writer_->try_flush();
+    if (FORY_PREDICT_FALSE(stream_writer_->has_error())) {
+      set_error(stream_writer_->error());
     }
   }
 
   inline void force_flush() {
-    auto flush_result = buffer_.force_flush();
-    if (FORY_PREDICT_FALSE(!flush_result.ok())) {
-      set_error(std::move(flush_result).error());
+    if (stream_writer_ == nullptr) {
+      return;
+    }
+    stream_writer_->force_flush();
+    if (FORY_PREDICT_FALSE(stream_writer_->has_error())) {
+      set_error(stream_writer_->error());
     }
   }
 
@@ -320,7 +333,7 @@ public:
   /// @param type_id The pre-computed Fory type_id
   inline void write_struct_type_id_direct(uint32_t type_id,
                                           uint32_t user_type_id) {
-    buffer_.write_uint8(static_cast<uint8_t>(type_id));
+    buffer().write_uint8(static_cast<uint8_t>(type_id));
     switch (static_cast<TypeId>(type_id)) {
     case TypeId::ENUM:
     case TypeId::STRUCT:
@@ -329,7 +342,7 @@ public:
     case TypeId::TYPED_UNION:
       FORY_CHECK(user_type_id != kInvalidUserTypeId)
           << "User type id is required for struct type";
-      buffer_.write_var_uint32(user_type_id);
+      buffer().write_var_uint32(user_type_id);
       break;
     default:
       break;
@@ -360,11 +373,12 @@ private:
   Error error_;
 
   Buffer buffer_;
+  Buffer *write_buffer_;
   const Config *config_;
   std::unique_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_dyn_depth_;
-  uint32_t flush_barrier_depth_;
+  StreamWriter *stream_writer_ = nullptr;
 
   // Meta sharing state (for streaming inline TypeMeta)
   // Maps TypeInfo* to index for reference tracking - uses map size as counter

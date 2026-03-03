@@ -280,11 +280,11 @@ def check_varuint64(buf: Buffer, value: int, bytes_written: int):
 def test_buffer_flush_stream():
     stream = PartialWriteStream()
     buffer = Buffer.allocate(16)
-    wrapped_stream = Buffer.wrap_stream(stream)
-    buffer.bind_stream_writer(wrapped_stream)
+    stream_writer = Buffer.wrap_stream(stream)
+    buffer.bind_stream_writer(stream_writer)
     payload = b"stream-flush-buffer"
     buffer.write_bytes(payload)
-    wrapped_stream.force_flush(buffer)
+    stream_writer.force_flush(buffer)
     assert stream.to_bytes() == payload
     assert buffer.get_writer_index() == 0
 

@@ -31,12 +31,17 @@ internal enum UserTypeKind
 
 public sealed class TypeInfo
 {
+    private readonly record struct CompatibleTypeMetaCacheKey(TypeId WireTypeId, bool TrackRef);
+
+    internal readonly record struct CompatibleTypeMetaCacheEntry(TypeMeta TypeMeta, byte[] EncodedBytes);
+
     private readonly object _serializer;
     private readonly Action<WriteContext, object?, bool> _writeDataObject;
     private readonly Func<ReadContext, object?> _readDataObject;
     private readonly Action<WriteContext, object?, RefMode, bool, bool> _writeObject;
     private readonly Func<ReadContext, RefMode, bool, object?> _readObject;
     private readonly Func<bool, IReadOnlyList<TypeMetaFieldInfo>> _compatibleTypeMetaFields;
+    private readonly Dictionary<CompatibleTypeMetaCacheKey, CompatibleTypeMetaCacheEntry> _compatibleTypeMetaCache = [];
     private static readonly IReadOnlyList<TypeMetaFieldInfo> EmptyTypeMetaFields = Array.Empty<TypeMetaFieldInfo>();
 
     private TypeInfo(
@@ -475,6 +480,23 @@ public sealed class TypeInfo
         return _compatibleTypeMetaFields(trackRef);
     }
 
+    internal CompatibleTypeMetaCacheEntry GetOrCreateCompatibleTypeMeta(
+        TypeId wireTypeId,
+        bool trackRef,
+        Func<TypeMeta> factory)
+    {
+        CompatibleTypeMetaCacheKey key = new(wireTypeId, trackRef);
+        if (_compatibleTypeMetaCache.TryGetValue(key, out CompatibleTypeMetaCacheEntry cached))
+        {
+            return cached;
+        }
+
+        TypeMeta typeMeta = factory();
+        CompatibleTypeMetaCacheEntry entry = new(typeMeta, typeMeta.Encode());
+        _compatibleTypeMetaCache[key] = entry;
+        return entry;
+    }
+
     internal bool IsRegistered { get; private set; }
 
     internal uint? UserTypeId { get; private set; }
@@ -492,6 +514,7 @@ public sealed class TypeInfo
         RegisterByName = false;
         NamespaceName = null;
         TypeName = null;
+        _compatibleTypeMetaCache.Clear();
     }
 
     internal void RegisterByTypeName(MetaString namespaceName, MetaString typeName)
@@ -501,6 +524,7 @@ public sealed class TypeInfo
         RegisterByName = true;
         NamespaceName = namespaceName;
         TypeName = typeName;
+        _compatibleTypeMetaCache.Clear();
     }
 
     internal void CopyRegistrationFrom(TypeInfo source)
@@ -510,5 +534,6 @@ public sealed class TypeInfo
         RegisterByName = source.RegisterByName;
         NamespaceName = source.NamespaceName;
         TypeName = source.TypeName;
+        _compatibleTypeMetaCache.Clear();
     }
 }

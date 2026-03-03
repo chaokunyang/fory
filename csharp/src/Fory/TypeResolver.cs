@@ -294,8 +294,9 @@ public sealed class TypeResolver
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
                 {
-                    TypeMeta typeMeta = BuildCompatibleTypeMeta(info, wireTypeId, context.TrackRef);
-                    context.WriteCompatibleTypeMeta(type, typeMeta);
+                    TypeInfo.CompatibleTypeMetaCacheEntry typeMeta =
+                        BuildCompatibleTypeMeta(info, wireTypeId, context.TrackRef);
+                    context.WriteCompatibleTypeMeta(type, typeMeta.EncodedBytes);
                     return;
                 }
             case TypeId.NamedEnum:
@@ -305,8 +306,9 @@ public sealed class TypeResolver
                 {
                     if (context.Compatible)
                     {
-                        TypeMeta typeMeta = BuildCompatibleTypeMeta(info, wireTypeId, context.TrackRef);
-                        context.WriteCompatibleTypeMeta(type, typeMeta);
+                        TypeInfo.CompatibleTypeMetaCacheEntry typeMeta =
+                            BuildCompatibleTypeMeta(info, wireTypeId, context.TrackRef);
+                        context.WriteCompatibleTypeMeta(type, typeMeta.EncodedBytes);
                     }
                     else
                     {
@@ -887,7 +889,18 @@ public sealed class TypeResolver
         return typeId is TypeId.Enum or TypeId.Struct or TypeId.Ext or TypeId.TypedUnion;
     }
 
-    private TypeMeta BuildCompatibleTypeMeta(
+    private TypeInfo.CompatibleTypeMetaCacheEntry BuildCompatibleTypeMeta(
+        TypeInfo info,
+        TypeId wireTypeId,
+        bool trackRef)
+    {
+        return info.GetOrCreateCompatibleTypeMeta(
+            wireTypeId,
+            trackRef,
+            () => BuildCompatibleTypeMetaUncached(info, wireTypeId, trackRef));
+    }
+
+    private TypeMeta BuildCompatibleTypeMetaUncached(
         TypeInfo info,
         TypeId wireTypeId,
         bool trackRef)

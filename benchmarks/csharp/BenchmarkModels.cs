@@ -26,35 +26,35 @@ namespace Apache.Fory.Benchmarks.CSharp;
 [ProtoContract]
 public sealed class NumericStruct
 {
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 1)]
     [ProtoMember(1)]
     public int F1 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 2)]
     [ProtoMember(2)]
     public int F2 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 3)]
     [ProtoMember(3)]
     public int F3 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 4)]
     [ProtoMember(4)]
     public int F4 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 5)]
     [ProtoMember(5)]
     public int F5 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 6)]
     [ProtoMember(6)]
     public int F6 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 7)]
     [ProtoMember(7)]
     public int F7 { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 8)]
     [ProtoMember(8)]
     public int F8 { get; set; }
 }
@@ -64,6 +64,7 @@ public sealed class NumericStruct
 [ProtoContract]
 public sealed class StructList
 {
+    [Field(Id = 1)]
     [ProtoMember(1)]
     public List<NumericStruct> Values { get; set; } = [];
 }
@@ -73,77 +74,91 @@ public sealed class StructList
 [ProtoContract]
 public sealed class Sample
 {
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 1)]
     [ProtoMember(1)]
     public int IntValue { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 2)]
     [ProtoMember(2)]
     public long LongValue { get; set; }
 
+    [Field(Id = 3)]
     [ProtoMember(3)]
     public float FloatValue { get; set; }
 
+    [Field(Id = 4)]
     [ProtoMember(4)]
     public double DoubleValue { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 5)]
     [ProtoMember(5)]
     public int ShortValue { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 6)]
     [ProtoMember(6)]
     public int CharValue { get; set; }
 
+    [Field(Id = 7)]
     [ProtoMember(7)]
     public bool BooleanValue { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 8)]
     [ProtoMember(8)]
     public int IntValueBoxed { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 9)]
     [ProtoMember(9)]
     public long LongValueBoxed { get; set; }
 
+    [Field(Id = 10)]
     [ProtoMember(10)]
     public float FloatValueBoxed { get; set; }
 
+    [Field(Id = 11)]
     [ProtoMember(11)]
     public double DoubleValueBoxed { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 12)]
     [ProtoMember(12)]
     public int ShortValueBoxed { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 13)]
     [ProtoMember(13)]
     public int CharValueBoxed { get; set; }
 
+    [Field(Id = 14)]
     [ProtoMember(14)]
     public bool BooleanValueBoxed { get; set; }
 
+    [Field(Id = 15)]
     [ProtoMember(15)]
     public int[] IntArray { get; set; } = [];
 
+    [Field(Id = 16)]
     [ProtoMember(16)]
     public long[] LongArray { get; set; } = [];
 
+    [Field(Id = 17)]
     [ProtoMember(17)]
     public float[] FloatArray { get; set; } = [];
 
+    [Field(Id = 18)]
     [ProtoMember(18)]
     public double[] DoubleArray { get; set; } = [];
 
+    [Field(Id = 19)]
     [ProtoMember(19)]
     public int[] ShortArray { get; set; } = [];
 
+    [Field(Id = 20)]
     [ProtoMember(20)]
     public int[] CharArray { get; set; } = [];
 
+    [Field(Id = 21)]
     [ProtoMember(21)]
     public bool[] BooleanArray { get; set; } = [];
 
+    [Field(Id = 22)]
     [ProtoMember(22)]
     public string String { get; set; } = string.Empty;
 }
@@ -153,6 +168,7 @@ public sealed class Sample
 [ProtoContract]
 public sealed class SampleList
 {
+    [Field(Id = 1)]
     [ProtoMember(1)]
     public List<Sample> Values { get; set; } = [];
 }
@@ -182,44 +198,51 @@ public enum MediaSize
 [ProtoContract]
 public sealed class Media
 {
+    [Field(Id = 1)]
     [ProtoMember(1)]
     public string Uri { get; set; } = string.Empty;
 
+    [Field(Id = 2)]
     [ProtoMember(2)]
     public string Title { get; set; } = string.Empty;
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 3)]
     [ProtoMember(3)]
     public int Width { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 4)]
     [ProtoMember(4)]
     public int Height { get; set; }
 
+    [Field(Id = 5)]
     [ProtoMember(5)]
     public string Format { get; set; } = string.Empty;
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 6)]
     [ProtoMember(6)]
     public long Duration { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 7)]
     [ProtoMember(7)]
     public long Size { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 8)]
     [ProtoMember(8)]
     public int Bitrate { get; set; }
 
+    [Field(Id = 9)]
     [ProtoMember(9)]
     public bool HasBitrate { get; set; }
 
+    [Field(Id = 10)]
     [ProtoMember(10)]
     public List<string> Persons { get; set; } = [];
 
+    [Field(Id = 11)]
     [ProtoMember(11)]
     public Player Player { get; set; }
 
+    [Field(Id = 12)]
     [ProtoMember(12)]
     public string Copyright { get; set; } = string.Empty;
 }
@@ -229,20 +252,23 @@ public sealed class Media
 [ProtoContract]
 public sealed class Image
 {
+    [Field(Id = 1)]
     [ProtoMember(1)]
     public string Uri { get; set; } = string.Empty;
 
+    [Field(Id = 2)]
     [ProtoMember(2)]
     public string Title { get; set; } = string.Empty;
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 3)]
     [ProtoMember(3)]
     public int Width { get; set; }
 
-    [Field(Encoding = FieldEncoding.Fixed)]
+    [Field(Encoding = FieldEncoding.Fixed, Id = 4)]
     [ProtoMember(4)]
     public int Height { get; set; }
 
+    [Field(Id = 5)]
     [ProtoMember(5)]
     public MediaSize Size { get; set; }
 }
@@ -252,9 +278,11 @@ public sealed class Image
 [ProtoContract]
 public sealed class MediaContent
 {
+    [Field(Id = 1)]
     [ProtoMember(1)]
     public Media Media { get; set; } = new();
 
+    [Field(Id = 2)]
     [ProtoMember(2)]
     public List<Image> Images { get; set; } = [];
 }
@@ -264,6 +292,7 @@ public sealed class MediaContent
 [ProtoContract]
 public sealed class MediaContentList
 {
+    [Field(Id = 1)]
     [ProtoMember(1)]
     public List<MediaContent> Values { get; set; } = [];
 }

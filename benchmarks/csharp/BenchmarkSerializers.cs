@@ -35,7 +35,7 @@ internal interface IBenchmarkSerializer<T>
 
 internal sealed class ForySerializer<T> : IBenchmarkSerializer<T>
 {
-    private readonly ForyRuntime _fory = ForyRuntime.Builder().Build();
+    private readonly ForyRuntime _fory = ForyRuntime.Builder().Compatible(true).Build();
 
     public ForySerializer()
     {

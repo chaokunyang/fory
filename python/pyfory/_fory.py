@@ -158,6 +158,7 @@ class Fory:
         "max_depth",
         "depth",
         "flush_barrier_depth",
+        "_wrapped_stream_writer",
         "field_nullable",
         "policy",
     )
@@ -244,6 +245,7 @@ class Fory:
         self.max_depth = max_depth
         self.depth = 0
         self.flush_barrier_depth = 0
+        self._wrapped_stream_writer = None
 
     def register(
         self,
@@ -406,7 +408,8 @@ class Fory:
         """
         try:
             self.buffer.set_writer_index(0)
-            self.buffer.attach_stream(stream)
+            self._wrapped_stream_writer = Buffer.wrap_stream(stream)
+            self.buffer.attach_stream(self._wrapped_stream_writer)
             self._serialize(
                 obj,
                 self.buffer,
@@ -416,6 +419,7 @@ class Fory:
             self.force_flush(self.buffer)
         finally:
             self.buffer.attach_stream(None)
+            self._wrapped_stream_writer = None
             self.reset_write()
 
     def loads(
@@ -459,12 +463,17 @@ class Fory:
             <class 'bytes'>
         """
         try:
-            return self._serialize(
+            write_buffer = self._serialize(
                 obj,
                 buffer,
                 buffer_callback=buffer_callback,
                 unsupported_callback=unsupported_callback,
             )
+            if write_buffer is not self.buffer:
+                return write_buffer
+            if write_buffer.get_stream() is not None:
+                return write_buffer
+            return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
             self.reset_write()
 
@@ -474,7 +483,7 @@ class Fory:
         buffer: Buffer = None,
         buffer_callback=None,
         unsupported_callback=None,
-    ) -> Union[Buffer, bytes]:
+    ) -> Buffer:
         assert self.depth == 0, "Nested serialization should use write_ref/write_no_ref."
         self.depth += 1
         self.buffer_callback = buffer_callback
@@ -501,30 +510,31 @@ class Fory:
         # Type definitions are now written inline (streaming) instead of deferred to end
 
         self.write_ref(buffer, obj)
-        if buffer is not self.buffer:
-            return buffer
-        if buffer.get_stream() is not None:
-            return buffer
-        return buffer.to_bytes(0, buffer.get_writer_index())
+        return buffer
 
     def enter_flush_barrier(self):
         self.flush_barrier_depth += 1
 
-    def leave_flush_barrier(self):
-        if self.flush_barrier_depth > 0:
-            self.flush_barrier_depth -= 1
+    def exit_flush_barrier(self):
+        self.flush_barrier_depth -= 1
 
     def try_flush(self, buffer: Buffer):
         if self.flush_barrier_depth != 0:
             return
-        if buffer.get_stream() is None:
-            return
-        buffer.flush()
+        wrapped_stream_writer = self._wrapped_stream_writer
+        if wrapped_stream_writer is None:
+            wrapped_stream_writer = buffer.get_stream()
+            if wrapped_stream_writer is None:
+                return
+        wrapped_stream_writer.try_flush(buffer)
 
     def force_flush(self, buffer: Buffer):
-        if buffer.get_stream() is None:
-            return
-        buffer.flush()
+        wrapped_stream_writer = self._wrapped_stream_writer
+        if wrapped_stream_writer is None:
+            wrapped_stream_writer = buffer.get_stream()
+            if wrapped_stream_writer is None:
+                return
+        wrapped_stream_writer.force_flush(buffer)
 
     def write_ref(self, buffer, obj, typeinfo=None, serializer=None):
         if serializer is None and typeinfo is not None:
@@ -733,6 +743,7 @@ class Fory:
         self.buffer_callback = None
         self._unsupported_callback = None
         self.flush_barrier_depth = 0
+        self._wrapped_stream_writer = None
 
     def reset_read(self):
         """

@@ -889,7 +889,7 @@ cdef class MapSerializer(Serializer):
             key_serializer = self.key_serializer
             value_serializer = self.value_serializer
             buffer.put_int8(chunk_size_offset, chunk_size)
-            fory.leave_flush_barrier()
+            fory.exit_flush_barrier()
             fory.try_flush(buffer)
 
     cpdef inline read(self, Buffer buffer):

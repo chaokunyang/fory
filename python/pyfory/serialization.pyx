@@ -1079,6 +1079,7 @@ cdef class Fory:
     cdef int32_t max_depth
     cdef int32_t depth
     cdef int32_t flush_barrier_depth
+    cdef object _wrapped_stream_writer
 
     def __init__(
             self,
@@ -1158,6 +1159,7 @@ cdef class Fory:
         self.depth = 0
         self.max_depth = max_depth
         self.flush_barrier_depth = 0
+        self._wrapped_stream_writer = None
 
     def register_serializer(self, cls: Union[type, TypeVar], Serializer serializer):
         """
@@ -1301,7 +1303,8 @@ cdef class Fory:
         """
         try:
             self.buffer.set_writer_index(0)
-            self.buffer.attach_stream(stream)
+            self._wrapped_stream_writer = Buffer.wrap_stream(stream)
+            self.buffer.attach_stream(self._wrapped_stream_writer)
             self._serialize(
                 obj,
                 self.buffer,
@@ -1311,6 +1314,7 @@ cdef class Fory:
             self.force_flush(self.buffer)
         finally:
             self.buffer.attach_stream(None)
+            self._wrapped_stream_writer = None
             self.reset_write()
 
     def loads(
@@ -1352,12 +1356,18 @@ cdef class Fory:
             >>> print(type(data))
             <class 'bytes'>
         """
+        cdef Buffer write_buffer
         try:
-            return self._serialize(
+            write_buffer = self._serialize(
                 obj,
                 buffer,
                 buffer_callback=buffer_callback,
                 unsupported_callback=unsupported_callback)
+            if write_buffer is not self.buffer:
+                return write_buffer
+            if write_buffer.get_stream() is not None:
+                return write_buffer
+            return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
             self.reset_write()
 
@@ -1387,31 +1397,35 @@ cdef class Fory:
         else:
             clear_bit(buffer, mask_index, 2)
         self.write_ref(buffer, obj)
-
-        if buffer is not self.buffer:
-            return buffer
-        if buffer.get_stream() is not None:
-            return buffer
-        return buffer.to_bytes(0, buffer.get_writer_index())
+        return buffer
 
     cpdef inline enter_flush_barrier(self):
         self.flush_barrier_depth += 1
 
-    cpdef inline leave_flush_barrier(self):
-        if self.flush_barrier_depth > 0:
-            self.flush_barrier_depth -= 1
+    cpdef inline exit_flush_barrier(self):
+        self.flush_barrier_depth -= 1
 
     cpdef inline try_flush(self, Buffer buffer):
+        cdef WrappedStreamWriter wrapped_stream_writer
         if self.flush_barrier_depth != 0:
             return
-        if buffer.get_stream() is None:
-            return
-        buffer.flush()
+        if self._wrapped_stream_writer is not None:
+            wrapped_stream_writer = <WrappedStreamWriter>self._wrapped_stream_writer
+        else:
+            wrapped_stream_writer = <WrappedStreamWriter>buffer.get_stream()
+            if wrapped_stream_writer is None:
+                return
+        wrapped_stream_writer.try_flush(buffer)
 
     cpdef inline force_flush(self, Buffer buffer):
-        if buffer.get_stream() is None:
-            return
-        buffer.flush()
+        cdef WrappedStreamWriter wrapped_stream_writer
+        if self._wrapped_stream_writer is not None:
+            wrapped_stream_writer = <WrappedStreamWriter>self._wrapped_stream_writer
+        else:
+            wrapped_stream_writer = <WrappedStreamWriter>buffer.get_stream()
+            if wrapped_stream_writer is None:
+                return
+        wrapped_stream_writer.force_flush(buffer)
 
     cpdef inline write_ref(
             self, Buffer buffer, obj, TypeInfo typeinfo=None, Serializer serializer=None):
@@ -1669,6 +1683,7 @@ cdef class Fory:
         self.serialization_context.reset_write()
         self._unsupported_callback = None
         self.flush_barrier_depth = 0
+        self._wrapped_stream_writer = None
 
     cpdef inline reset_read(self):
         """

@@ -38,7 +38,7 @@ import statistics
 import sys
 import timeit
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Type, TypeVar, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 import pyfory
 
@@ -158,16 +158,6 @@ class SampleList:
 @dataclass
 class MediaContentList:
     media_content_list: List[MediaContent]
-
-
-BENCHMARK_TYPES: Dict[str, Type[Any]] = {
-    "struct": NumericStruct,
-    "sample": Sample,
-    "mediacontent": MediaContent,
-    "structlist": StructList,
-    "samplelist": SampleList,
-    "mediacontentlist": MediaContentList,
-}
 
 
 def create_numeric_struct() -> NumericStruct:
@@ -492,9 +482,6 @@ PROTO_CONVERTERS = {
 }
 
 
-T = TypeVar("T")
-
-
 def dataclass_to_msgpack_dict(obj: Any) -> Any:
     if is_dataclass(obj):
         # Base conversion via dataclasses.asdict as requested.
@@ -521,51 +508,6 @@ def dataclass_to_msgpack_dict(obj: Any) -> Any:
     if isinstance(obj, dict):
         return {key: dataclass_to_msgpack_dict(value) for key, value in obj.items()}
     return obj
-
-
-def _is_dataclass_type(tp: Any) -> bool:
-    return isinstance(tp, type) and is_dataclass(tp)
-
-
-def _convert_value_to_type(expected_type: Any, value: Any) -> Any:
-    if value is None:
-        return None
-
-    origin = get_origin(expected_type)
-    args = get_args(expected_type)
-
-    if origin in (list, List):
-        item_type = args[0] if args else Any
-        return [_convert_value_to_type(item_type, item) for item in value]
-
-    if origin in (dict, Dict):
-        key_type = args[0] if len(args) > 0 else Any
-        value_type = args[1] if len(args) > 1 else Any
-        return {
-            _convert_value_to_type(key_type, key): _convert_value_to_type(value_type, val)
-            for key, val in value.items()
-        }
-
-    if _is_dataclass_type(expected_type) and isinstance(value, dict):
-        return dict_to_dataclass(expected_type, value)
-
-    return value
-
-
-def dict_to_dataclass(cls: Type[T], payload: Dict[str, Any]) -> T:
-    type_hints = get_type_hints(cls)
-    mutable_payload = dict(payload)
-
-    # For nested object fields: create nested dataclass objects first, then update map,
-    # then materialize top-level dataclass.
-    for field in fields(cls):
-        if field.name not in mutable_payload:
-            continue
-        field_type = type_hints.get(field.name, field.type)
-        nested_or_value = _convert_value_to_type(field_type, mutable_payload[field.name])
-        mutable_payload[field.name] = nested_or_value
-
-    return cls(**mutable_payload)
 
 
 def build_fory() -> pyfory.Fory:
@@ -645,18 +587,16 @@ def protobuf_deserialize(bench_pb2, datatype: str, binary: bytes) -> None:
     from_pb(pb_obj)
 
 
-def msgpack_serialize_dataclass(obj: Any) -> None:
+def msgpack_serialize_dict(obj: Dict[str, Any]) -> None:
     if msgpack is None:
         raise RuntimeError("msgpack is not installed")
-    payload = dataclass_to_msgpack_dict(obj)
-    msgpack.packb(payload, use_bin_type=True)
+    msgpack.packb(obj, use_bin_type=True)
 
 
-def msgpack_deserialize_dataclass(binary: bytes, cls: Type[Any]) -> None:
+def msgpack_deserialize_dict(binary: bytes) -> None:
     if msgpack is None:
         raise RuntimeError("msgpack is not installed")
-    payload = msgpack.unpackb(binary, raw=False, strict_map_key=False)
-    dict_to_dataclass(cls, payload)
+    msgpack.unpackb(binary, raw=False, strict_map_key=False)
 
 
 def benchmark_name(serializer: str, datatype: str, operation: str) -> str:
@@ -668,6 +608,7 @@ def build_case(
     operation: str,
     datatype: str,
     obj: Any,
+    msgpack_obj: Dict[str, Any],
     *,
     fory: pyfory.Fory,
     bench_pb2,
@@ -693,10 +634,9 @@ def build_case(
         if msgpack is None:
             raise RuntimeError("msgpack is not installed. Install with: pip install msgpack")
         if operation == "serialize":
-            return msgpack_serialize_dataclass, (obj,)
-        payload = dataclass_to_msgpack_dict(obj)
-        binary = msgpack.packb(payload, use_bin_type=True)
-        return msgpack_deserialize_dataclass, (binary, BENCHMARK_TYPES[datatype])
+            return msgpack_serialize_dict, (msgpack_obj,)
+        binary = msgpack.packb(msgpack_obj, use_bin_type=True)
+        return msgpack_deserialize_dict, (binary,)
 
     raise ValueError(f"Unsupported serializer: {serializer}")
 
@@ -704,6 +644,7 @@ def build_case(
 def calculate_serialized_sizes(
     benchmark_data: Dict[str, Any],
     selected_datatypes: Iterable[str],
+    msgpack_data: Dict[str, Dict[str, Any]],
     *,
     fory: pyfory.Fory,
     bench_pb2,
@@ -720,7 +661,7 @@ def calculate_serialized_sizes(
         datatype_sizes["protobuf"] = len(to_pb(bench_pb2, obj).SerializeToString())
 
         if msgpack is not None:
-            msgpack_payload = dataclass_to_msgpack_dict(obj)
+            msgpack_payload = msgpack_data[datatype]
             datatype_sizes["msgpack"] = len(
                 msgpack.packb(msgpack_payload, use_bin_type=True)
             )
@@ -831,6 +772,10 @@ def main() -> int:
         raise RuntimeError("msgpack is not installed. Install with: pip install msgpack")
 
     benchmark_data = create_benchmark_data()
+    msgpack_data = {
+        datatype: dataclass_to_msgpack_dict(obj)
+        for datatype, obj in benchmark_data.items()
+    }
     fory = build_fory()
 
     print(
@@ -847,6 +792,7 @@ def main() -> int:
 
     for datatype in selected_datatypes:
         obj = benchmark_data[datatype]
+        msgpack_obj = msgpack_data[datatype]
         call_number = benchmark_number(args.number, datatype)
         for operation in selected_operations:
             for serializer in selected_serializers:
@@ -858,6 +804,7 @@ def main() -> int:
                     operation,
                     datatype,
                     obj,
+                    msgpack_obj,
                     fory=fory,
                     bench_pb2=bench_pb2,
                 )
@@ -888,6 +835,7 @@ def main() -> int:
     sizes = calculate_serialized_sizes(
         benchmark_data,
         selected_datatypes,
+        msgpack_data,
         fory=fory,
         bench_pb2=bench_pb2,
     )

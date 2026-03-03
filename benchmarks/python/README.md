@@ -1,27 +1,8 @@
-<!--
- Licensed to the Apache Software Foundation (ASF) under one
- or more contributor license agreements.  See the NOTICE file
- distributed with this work for additional information
- regarding copyright ownership.  The ASF licenses this file
- to you under the Apache License, Version 2.0 (the
- "License"); you may not use this file except in compliance
- with the License.  You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing,
- software distributed under the License is distributed on an
- "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- KIND, either express or implied.  See the License for the
- specific language governing permissions and limitations
- under the License.
--->
-
 # Apache Fory Python Benchmarks
 
 This directory contains two benchmark entrypoints:
 
-1. `comprehensive_benchmark.py` + `run.sh` (new): C++-parity benchmark matrix covering:
+1. `benchmark.py` + `run.sh` (new): C++-parity benchmark matrix covering:
    - `Struct`, `Sample`, `MediaContent`
    - `StructList`, `SampleList`, `MediaContentList`
    - operations: `serialize`, `deserialize`
@@ -38,7 +19,7 @@ cd benchmarks/python
 `run.sh` will:
 
 1. Generate Python protobuf bindings from `benchmarks/proto/bench.proto`
-2. Run `comprehensive_benchmark.py`
+2. Run `benchmark.py`
 3. Generate plots + markdown report via `benchmark_report.py`
 4. Copy report/plots to `docs/benchmarks/python`
 
@@ -79,4 +60,4 @@ For its original options and behavior, refer to `python fory_benchmark.py --help
 
 - `pyfory` must be installed in your current Python environment.
 - `protoc` is required by `run.sh` to generate `bench_pb2.py`.
-- `msgpack` uses explicit dataclass<->dict conversion in the comprehensive benchmark.
+- `msgpack` benchmarks run directly on prebuilt dict payloads derived from dataclasses.

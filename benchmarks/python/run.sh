@@ -153,7 +153,7 @@ protoc \
 
 BENCH_JSON="$OUTPUT_DIR/benchmark_results.json"
 BENCH_CMD=(
-  "$PYTHON_BIN" "$SCRIPT_DIR/comprehensive_benchmark.py"
+  "$PYTHON_BIN" "$SCRIPT_DIR/benchmark.py"
   --proto-dir "$PROTO_DIR"
   --output-json "$BENCH_JSON"
   --operation "$OPERATION"

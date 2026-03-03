@@ -70,7 +70,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--json-file",
         default="results/benchmark_results.json",
-        help="Benchmark JSON file produced by comprehensive_benchmark.py",
+        help="Benchmark JSON file produced by benchmark.py",
     )
     parser.add_argument(
         "--output-dir",

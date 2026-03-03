@@ -59,26 +59,9 @@ void OutputStream::reset() {
   }
 }
 
-bool OutputStream::try_flush() {
-  if (FORY_PREDICT_FALSE(!error_.ok() || flush_barrier_depth_ != 0)) {
-    return false;
-  }
-  if (FORY_PREDICT_FALSE(!should_try_flush())) {
-    return false;
-  }
+uint32_t OutputStream::active_buffer_writer_index() {
   Buffer *buffer = active_buffer();
-  const uint32_t bytes_before_flush =
-      buffer == nullptr ? 0U : buffer->writer_index();
-  flush_buffer_data();
-  if (FORY_PREDICT_FALSE(!error_.ok())) {
-    return false;
-  }
-  return bytes_before_flush != 0;
-}
-
-bool OutputStream::should_try_flush() {
-  Buffer *buffer = active_buffer();
-  return buffer != nullptr && buffer->writer_index() > 4096;
+  return buffer == nullptr ? 0U : buffer->writer_index();
 }
 
 void OutputStream::flush_buffer_data() {

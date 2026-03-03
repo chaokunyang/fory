@@ -46,7 +46,20 @@ public:
 
   FORY_ALWAYS_INLINE void exit_flush_barrier() { flush_barrier_depth_--; }
 
-  bool try_flush();
+  FORY_ALWAYS_INLINE bool try_flush() {
+    if (FORY_PREDICT_FALSE(flush_barrier_depth_ != 0)) {
+      return false;
+    }
+    const uint32_t bytes_before_flush = active_buffer_writer_index();
+    if (FORY_PREDICT_FALSE(bytes_before_flush <= 4096)) {
+      return false;
+    }
+    flush_buffer_data();
+    if (FORY_PREDICT_FALSE(!error_.ok())) {
+      return false;
+    }
+    return bytes_before_flush != 0;
+  }
 
   FORY_ALWAYS_INLINE void force_flush() {
     if (FORY_PREDICT_FALSE(!error_.ok())) {
@@ -95,9 +108,9 @@ private:
     return active_buffer_ == nullptr ? buffer_.get() : active_buffer_;
   }
 
-  bool should_try_flush();
-
   void flush_buffer_data();
+
+  uint32_t active_buffer_writer_index();
 
   FORY_ALWAYS_INLINE void set_error(Error error) {
     if (error_.ok()) {

@@ -1413,7 +1413,7 @@ cdef class Fory:
 
     cpdef inline try_flush(self):
         cdef PyOutputStream output_stream
-        if self._output_stream is None:
+        if self._output_stream is None or self.buffer.get_writer_index() <= 4096:
             return
         output_stream = <PyOutputStream>self._output_stream
         output_stream.try_flush()

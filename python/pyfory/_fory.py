@@ -521,9 +521,9 @@ class Fory:
             output_stream.exit_flush_barrier()
 
     def try_flush(self):
-        output_stream = self._output_stream
-        if output_stream is None:
+        if self._output_stream is None or self.buffer.get_writer_index() <= 4096:
             return
+        output_stream = self._output_stream
         output_stream.try_flush()
 
     def force_flush(self):

@@ -278,11 +278,7 @@ TEST(StreamSerializationTest, SerializeToStreamWriterRoundTrip) {
   register_stream_types(fory);
 
   StreamEnvelope original{
-      "writer-roundtrip",
-      {2, 4, 6, 8},
-      {{"x", 1}, {"y", 2}},
-      {5, -9},
-      true,
+      "writer-roundtrip", {2, 4, 6, 8}, {{"x", 1}, {"y", 2}}, {5, -9}, true,
   };
 
   OneByteOStream out;
@@ -302,11 +298,7 @@ TEST(StreamSerializationTest, SerializeToOStreamOverloadParity) {
   register_stream_types(fory);
 
   StreamEnvelope original{
-      "ostream-overload",
-      {11, 22, 33},
-      {{"k", 99}},
-      {1, 2},
-      false,
+      "ostream-overload", {11, 22, 33}, {{"k", 99}}, {1, 2}, false,
   };
 
   auto expected = fory.serialize(original);

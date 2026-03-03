@@ -417,6 +417,7 @@ public sealed class TypeResolver
                 {
                     TypeMeta remoteTypeMeta = context.ReadCompatibleTypeMeta();
                     ValidateCompatibleTypeMeta(remoteTypeMeta, info, allowed, typeId);
+                    remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
                     context.PushCompatibleTypeMeta(type, remoteTypeMeta);
                     return;
                 }
@@ -431,6 +432,7 @@ public sealed class TypeResolver
                         ValidateCompatibleTypeMeta(remoteTypeMeta, info, allowed, typeId);
                         if (typeId == TypeId.NamedStruct)
                         {
+                            remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
                             context.PushCompatibleTypeMeta(type, remoteTypeMeta);
                         }
                     }
@@ -512,7 +514,10 @@ public sealed class TypeResolver
         return SingleAllowedWireTypes.GetOrAdd(expected, static typeId => [typeId]);
     }
 
-    public object? ReadByUserTypeId(uint userTypeId, ReadContext context, TypeMeta? compatibleTypeMeta = null)
+    public object? ReadByUserTypeId(
+        uint userTypeId,
+        ReadContext context,
+        TypeMeta? compatibleTypeMeta = null)
     {
         if (!_byUserTypeId.TryGetValue(userTypeId, out TypeInfo? typeInfo))
         {
@@ -522,7 +527,11 @@ public sealed class TypeResolver
         return ReadRegisteredValue(typeInfo, context, compatibleTypeMeta);
     }
 
-    public object? ReadByTypeName(string namespaceName, string typeName, ReadContext context, TypeMeta? compatibleTypeMeta = null)
+    public object? ReadByTypeName(
+        string namespaceName,
+        string typeName,
+        ReadContext context,
+        TypeMeta? compatibleTypeMeta = null)
     {
         if (!_byTypeName.TryGetValue((namespaceName, typeName), out TypeInfo? typeInfo))
         {
@@ -532,10 +541,14 @@ public sealed class TypeResolver
         return ReadRegisteredValue(typeInfo, context, compatibleTypeMeta);
     }
 
-    private object? ReadRegisteredValue(TypeInfo typeInfo, ReadContext context, TypeMeta? compatibleTypeMeta)
+    private object? ReadRegisteredValue(
+        TypeInfo typeInfo,
+        ReadContext context,
+        TypeMeta? compatibleTypeMeta)
     {
         if (compatibleTypeMeta is not null)
         {
+            compatibleTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(typeInfo, context.TrackRef));
             context.PushCompatibleTypeMeta(typeInfo.Type, compatibleTypeMeta);
         }
 
@@ -559,7 +572,12 @@ public sealed class TypeResolver
                     TypeMeta typeMeta = context.ReadCompatibleTypeMeta();
                     if (typeMeta.RegisterByName)
                     {
-                        return new DynamicTypeInfo(wireTypeId, null, typeMeta.NamespaceName, typeMeta.TypeName, typeMeta);
+                        return new DynamicTypeInfo(
+                            wireTypeId,
+                            null,
+                            typeMeta.NamespaceName,
+                            typeMeta.TypeName,
+                            typeMeta);
                     }
 
                     return new DynamicTypeInfo(wireTypeId, typeMeta.UserTypeId, null, null, typeMeta);
@@ -709,7 +727,10 @@ public sealed class TypeResolver
                         throw new InvalidDataException("missing user type id in compatible dynamic type meta");
                     }
 
-                    return ReadByUserTypeId(compatibleTypeMeta.UserTypeId.Value, context, compatibleTypeMeta);
+                    return ReadByUserTypeId(
+                        compatibleTypeMeta.UserTypeId.Value,
+                        context,
+                        compatibleTypeMeta);
                 }
             case TypeId.None:
                 return null;

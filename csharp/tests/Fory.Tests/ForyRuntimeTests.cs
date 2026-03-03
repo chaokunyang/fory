@@ -930,6 +930,80 @@ public sealed class ForyRuntimeTests
         Assert.Equal(value, decoded);
     }
 
+    [Fact]
+    public void TypeMetaAssignFieldIdsPrefersIdAndFallsBackToName()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(1, "int_value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+            new TypeMetaFieldInfo(2, "name", new TypeMetaFieldType((uint)TypeId.String, true)),
+        ];
+        List<TypeMetaFieldInfo> remoteFields =
+        [
+            new TypeMetaFieldInfo(2, "$tag2", new TypeMetaFieldType((uint)TypeId.String, true)),
+            new TypeMetaFieldInfo(null, "intValue", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+            new TypeMetaFieldInfo(99, "$tag99", new TypeMetaFieldType((uint)TypeId.String, true)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            500,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            remoteFields);
+
+        TypeMeta.AssignFieldIds(remoteTypeMeta, localFields);
+        Assert.Equal(1, remoteTypeMeta.Fields[0].AssignedFieldId);
+        Assert.Equal(0, remoteTypeMeta.Fields[1].AssignedFieldId);
+        Assert.Equal(-1, remoteTypeMeta.Fields[2].AssignedFieldId);
+    }
+
+    [Fact]
+    public void TypeMetaAssignFieldIdsSkipsTypeMismatchedField()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(1, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+        ];
+        List<TypeMetaFieldInfo> remoteFields =
+        [
+            new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.String, false)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            501,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            remoteFields);
+
+        TypeMeta.AssignFieldIds(remoteTypeMeta, localFields);
+        Assert.Equal(-1, remoteTypeMeta.Fields[0].AssignedFieldId);
+    }
+
+    [Fact]
+    public void TypeMetaAssignFieldIdsNormalizesStructLikeTypeIds()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(1, "payload", new TypeMetaFieldType((uint)TypeId.Struct, true)),
+        ];
+        List<TypeMetaFieldInfo> remoteFields =
+        [
+            new TypeMetaFieldInfo(1, "$tag1", new TypeMetaFieldType((uint)TypeId.Unknown, true)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            502,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            remoteFields);
+
+        TypeMeta.AssignFieldIds(remoteTypeMeta, localFields);
+        Assert.Equal(0, remoteTypeMeta.Fields[0].AssignedFieldId);
+    }
+
     private static (ulong Encoding, string Decoded) WriteAndReadString(string value)
     {
         ByteWriter writer = new();

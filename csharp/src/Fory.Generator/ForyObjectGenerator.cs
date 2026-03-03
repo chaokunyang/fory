@@ -147,14 +147,10 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
         sb.AppendLine(
             "    private readonly global::System.Collections.Generic.Dictionary<global::Apache.Fory.TypeMeta, bool> __ForyCompatibleSchemaMatchCache = new(global::System.Collections.Generic.ReferenceEqualityComparer.Instance);");
-        sb.AppendLine(
-            "    private readonly global::System.Collections.Generic.Dictionary<global::Apache.Fory.TypeMeta, int[]> __ForyCompatibleFieldIdCache = new(global::System.Collections.Generic.ReferenceEqualityComparer.Instance);");
         sb.AppendLine("    private global::Apache.Fory.TypeMeta? __ForyLastCompatibleSchemaTypeMeta;");
         sb.AppendLine("    private bool __ForyLastCompatibleSchemaTrackRef;");
         sb.AppendLine("    private bool __ForyLastCompatibleSchemaMatched;");
         sb.AppendLine("    private bool __ForyHasLastCompatibleSchema;");
-        sb.AppendLine("    private global::Apache.Fory.TypeMeta? __ForyLastCompatibleFieldIdsTypeMeta;");
-        sb.AppendLine("    private int[]? __ForyLastCompatibleFieldIds;");
         sb.AppendLine(
             $"    private const bool __ForyAllFieldsBuiltIn = {BoolLiteral(model.SortedMembers.All(m => m.DynamicAnyKind == DynamicAnyKind.None && m.Classification.IsBuiltIn))};");
         sb.AppendLine(
@@ -388,65 +384,6 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("        return matched;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    private int[] __ForyAssignedFieldIds(global::Apache.Fory.TypeMeta typeMeta)");
-        sb.AppendLine("    {");
-        sb.AppendLine(
-            "        if (__ForyLastCompatibleFieldIds is not null && global::System.Object.ReferenceEquals(__ForyLastCompatibleFieldIdsTypeMeta, typeMeta))");
-        sb.AppendLine("        {");
-        sb.AppendLine("            return __ForyLastCompatibleFieldIds;");
-        sb.AppendLine("        }");
-        sb.AppendLine();
-        sb.AppendLine("        if (__ForyCompatibleFieldIdCache.TryGetValue(typeMeta, out int[]? cached))");
-        sb.AppendLine("        {");
-        sb.AppendLine("            __ForyLastCompatibleFieldIdsTypeMeta = typeMeta;");
-        sb.AppendLine("            __ForyLastCompatibleFieldIds = cached;");
-        sb.AppendLine("            return cached;");
-        sb.AppendLine("        }");
-        sb.AppendLine();
-        sb.AppendLine("        int[] assignedFieldIds = new int[typeMeta.Fields.Count];");
-        sb.AppendLine("        for (int i = 0; i < typeMeta.Fields.Count; i++)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            global::Apache.Fory.TypeMetaFieldInfo remoteField = typeMeta.Fields[i];");
-        sb.AppendLine("            short? remoteFieldId = remoteField.FieldId;");
-        sb.AppendLine("            if (remoteFieldId.HasValue)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                assignedFieldIds[i] = remoteFieldId.Value switch");
-        sb.AppendLine("                {");
-        for (int idx = 0; idx < model.SortedMembers.Length; idx++)
-        {
-            MemberModel member = model.SortedMembers[idx];
-            if (member.FieldId.HasValue)
-            {
-                sb.AppendLine($"                    {member.FieldId.Value} => {idx},");
-            }
-        }
-
-        sb.AppendLine("                    _ => -1,");
-        sb.AppendLine("                };");
-        sb.AppendLine("                if (assignedFieldIds[i] >= 0)");
-        sb.AppendLine("                {");
-        sb.AppendLine("                    continue;");
-        sb.AppendLine("                }");
-        sb.AppendLine("            }");
-        sb.AppendLine();
-        sb.AppendLine("            assignedFieldIds[i] = remoteField.FieldName switch");
-        sb.AppendLine("            {");
-        for (int idx = 0; idx < model.SortedMembers.Length; idx++)
-        {
-            MemberModel member = model.SortedMembers[idx];
-            sb.AppendLine($"                \"{EscapeString(member.FieldIdentifier)}\" => {idx},");
-        }
-
-        sb.AppendLine("                _ => -1,");
-        sb.AppendLine("            };");
-        sb.AppendLine("        }");
-        sb.AppendLine();
-        sb.AppendLine("        __ForyCompatibleFieldIdCache[typeMeta] = assignedFieldIds;");
-        sb.AppendLine("        __ForyLastCompatibleFieldIdsTypeMeta = typeMeta;");
-        sb.AppendLine("        __ForyLastCompatibleFieldIds = assignedFieldIds;");
-        sb.AppendLine("        return assignedFieldIds;");
-        sb.AppendLine("    }");
-        sb.AppendLine();
         sb.AppendLine("    private static uint? __ForySchemaHashNoTrackRef;");
         sb.AppendLine();
         sb.AppendLine("    private static uint __ForySchemaHash(bool trackRef, global::Apache.Fory.TypeResolver typeResolver)");
@@ -568,13 +505,12 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("                return value;");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            int[] assignedFieldIds = __ForyAssignedFieldIds(typeMeta);");
         sb.AppendLine("            for (int i = 0; i < typeMeta.Fields.Count; i++)");
         sb.AppendLine("            {");
         sb.AppendLine("                global::Apache.Fory.TypeMetaFieldInfo remoteField = typeMeta.Fields[i];");
         sb.AppendLine("                global::Apache.Fory.RefMode remoteRefMode = __ForyRefMode(remoteField.FieldType.Nullable, remoteField.FieldType.TrackRef);");
         sb.AppendLine("                bool remoteReadTypeInfo = __ForyNeedsTypeInfoForField((global::Apache.Fory.TypeId)remoteField.FieldType.TypeId);");
-        sb.AppendLine("                switch (assignedFieldIds[i])");
+        sb.AppendLine("                switch (remoteField.AssignedFieldId)");
         sb.AppendLine("                {");
         for (int idx = 0; idx < model.SortedMembers.Length; idx++)
         {

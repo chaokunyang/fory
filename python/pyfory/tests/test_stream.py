@@ -225,10 +225,7 @@ def test_dump_map_chunk_path_matches_dumps(xlang):
 def test_dump_large_list_of_structs_multiple_flushes_matches_dumps():
     fory = pyfory.Fory(xlang=False, ref=True, strict=False)
     fory.register(StreamStructValue)
-    value = [
-        StreamStructValue(i, f"item-{i}-{'x' * 56}", [i, i + 1, i + 2, i + 3, i + 4])
-        for i in range(1800)
-    ]
+    value = [StreamStructValue(i, f"item-{i}-{'x' * 56}", [i, i + 1, i + 2, i + 3, i + 4]) for i in range(1800)]
 
     sink = CountingWriteStream()
     fory.dump(value, sink)
@@ -244,10 +241,7 @@ def test_dump_large_list_of_structs_multiple_flushes_matches_dumps():
 def test_dump_large_map_with_struct_values_matches_dumps():
     fory = pyfory.Fory(xlang=False, ref=True, strict=False)
     fory.register(StreamStructValue)
-    value = {
-        f"k{i}": StreamStructValue(i, "y" * 96, [i, i + 1, i + 2, i + 3])
-        for i in range(900)
-    }
+    value = {f"k{i}": StreamStructValue(i, "y" * 96, [i, i + 1, i + 2, i + 3]) for i in range(900)}
 
     sink = OneByteWriteStream()
     fory.dump(value, sink)

@@ -34,16 +34,16 @@ OutputStream::OutputStream(uint32_t buffer_size)
   buffer_->reserve(actual_size);
   buffer_->writer_index(0);
   buffer_->reader_index(0);
-  buffer_->bind_stream_writer(this);
+  buffer_->bind_output_stream(this);
   active_buffer_ = buffer_.get();
 }
 
 OutputStream::~OutputStream() {
   if (active_buffer_ != nullptr && active_buffer_ != buffer_.get()) {
-    active_buffer_->clear_stream_writer();
+    active_buffer_->clear_output_stream();
   }
   if (buffer_ != nullptr) {
-    buffer_->clear_stream_writer();
+    buffer_->clear_output_stream();
   }
   active_buffer_ = nullptr;
 }
@@ -57,6 +57,23 @@ void OutputStream::reset() {
     buffer->writer_index(0);
     buffer->reader_index(0);
   }
+}
+
+bool OutputStream::try_flush() {
+  if (FORY_PREDICT_FALSE(!error_.ok() || flush_barrier_depth_ != 0)) {
+    return false;
+  }
+  if (FORY_PREDICT_FALSE(!should_try_flush())) {
+    return false;
+  }
+  Buffer *buffer = active_buffer();
+  const uint32_t bytes_before_flush =
+      buffer == nullptr ? 0U : buffer->writer_index();
+  flush_buffer_data();
+  if (FORY_PREDICT_FALSE(!error_.ok())) {
+    return false;
+  }
+  return bytes_before_flush != 0;
 }
 
 bool OutputStream::should_try_flush() {
@@ -234,7 +251,7 @@ void StdInputStream::bind_buffer(Buffer *buffer) {
   Buffer *target = buffer == nullptr ? owned_buffer_.get() : buffer;
   if (target == nullptr) {
     if (buffer_ != nullptr) {
-      buffer_->stream_reader_ = nullptr;
+      buffer_->input_stream_ = nullptr;
     }
     buffer_ = nullptr;
     return;
@@ -244,7 +261,7 @@ void StdInputStream::bind_buffer(Buffer *buffer) {
     buffer_->data_ = data_.data();
     buffer_->own_data_ = false;
     buffer_->wrapped_vector_ = nullptr;
-    buffer_->stream_reader_ = this;
+    buffer_->input_stream_ = this;
     return;
   }
 
@@ -253,7 +270,7 @@ void StdInputStream::bind_buffer(Buffer *buffer) {
     target->size_ = source->size_;
     target->writer_index_ = source->writer_index_;
     target->reader_index_ = source->reader_index_;
-    source->stream_reader_ = nullptr;
+    source->input_stream_ = nullptr;
   } else {
     target->size_ = 0;
     target->writer_index_ = 0;
@@ -264,7 +281,7 @@ void StdInputStream::bind_buffer(Buffer *buffer) {
   buffer_->data_ = data_.data();
   buffer_->own_data_ = false;
   buffer_->wrapped_vector_ = nullptr;
-  buffer_->stream_reader_ = this;
+  buffer_->input_stream_ = this;
 }
 
 StdOutputStream::StdOutputStream(std::ostream &stream) : stream_(&stream) {}

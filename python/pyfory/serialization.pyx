@@ -1078,7 +1078,7 @@ cdef class Fory:
     cdef public bint is_peer_out_of_band_enabled
     cdef int32_t max_depth
     cdef int32_t depth
-    cdef object _stream_writer
+    cdef object _output_stream
 
     def __init__(
             self,
@@ -1157,7 +1157,7 @@ cdef class Fory:
         self.is_peer_out_of_band_enabled = False
         self.depth = 0
         self.max_depth = max_depth
-        self._stream_writer = None
+        self._output_stream = None
 
     def register_serializer(self, cls: Union[type, TypeVar], Serializer serializer):
         """
@@ -1301,8 +1301,8 @@ cdef class Fory:
         """
         try:
             self.buffer.set_writer_index(0)
-            self._stream_writer = Buffer.wrap_stream(stream)
-            self.buffer.bind_stream_writer(self._stream_writer)
+            self._output_stream = Buffer.wrap_output_stream(stream)
+            self.buffer.bind_output_stream(self._output_stream)
             self._serialize(
                 obj,
                 self.buffer,
@@ -1311,8 +1311,8 @@ cdef class Fory:
             )
             self.force_flush(self.buffer)
         finally:
-            self.buffer.bind_stream_writer(None)
-            self._stream_writer = None
+            self.buffer.bind_output_stream(None)
+            self._output_stream = None
             self.reset_write()
 
     def loads(
@@ -1363,7 +1363,7 @@ cdef class Fory:
                 unsupported_callback=unsupported_callback)
             if write_buffer is not self.buffer:
                 return write_buffer
-            if write_buffer.get_stream() is not None:
+            if write_buffer.get_output_stream() is not None:
                 return write_buffer
             return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
@@ -1398,34 +1398,34 @@ cdef class Fory:
         return buffer
 
     cpdef inline enter_flush_barrier(self):
-        cdef PyOutputStream stream_writer
-        if self._stream_writer is None:
+        cdef PyOutputStream output_stream
+        if self._output_stream is None:
             return
-        stream_writer = <PyOutputStream>self._stream_writer
-        stream_writer.enter_flush_barrier()
+        output_stream = <PyOutputStream>self._output_stream
+        output_stream.enter_flush_barrier()
 
     cpdef inline exit_flush_barrier(self):
-        cdef PyOutputStream stream_writer
-        if self._stream_writer is None:
+        cdef PyOutputStream output_stream
+        if self._output_stream is None:
             return
-        stream_writer = <PyOutputStream>self._stream_writer
-        stream_writer.exit_flush_barrier()
+        output_stream = <PyOutputStream>self._output_stream
+        output_stream.exit_flush_barrier()
 
     cpdef inline try_flush(self, Buffer buffer):
-        cdef PyOutputStream stream_writer
+        cdef PyOutputStream output_stream
         if buffer.get_writer_index() <= 4096:
             return
-        if self._stream_writer is None:
+        if self._output_stream is None:
             return
-        stream_writer = <PyOutputStream>self._stream_writer
-        stream_writer.try_flush(buffer)
+        output_stream = <PyOutputStream>self._output_stream
+        output_stream.try_flush(buffer)
 
     cpdef inline force_flush(self, Buffer buffer):
-        cdef PyOutputStream stream_writer
-        if self._stream_writer is None:
+        cdef PyOutputStream output_stream
+        if self._output_stream is None:
             return
-        stream_writer = <PyOutputStream>self._stream_writer
-        stream_writer.force_flush(buffer)
+        output_stream = <PyOutputStream>self._output_stream
+        output_stream.force_flush(buffer)
 
     cpdef inline write_ref(
             self, Buffer buffer, obj, TypeInfo typeinfo=None, Serializer serializer=None):
@@ -1682,7 +1682,7 @@ cdef class Fory:
         self.metastring_resolver.reset_write()
         self.serialization_context.reset_write()
         self._unsupported_callback = None
-        self._stream_writer = None
+        self._output_stream = None
 
     cpdef inline reset_read(self):
         """

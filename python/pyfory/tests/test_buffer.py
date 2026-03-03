@@ -280,18 +280,54 @@ def check_varuint64(buf: Buffer, value: int, bytes_written: int):
 def test_buffer_flush_stream():
     stream = PartialWriteStream()
     buffer = Buffer.allocate(16)
-    stream_writer = Buffer.wrap_stream(stream)
-    buffer.bind_stream_writer(stream_writer)
+    output_stream = Buffer.wrap_output_stream(stream)
+    buffer.bind_output_stream(output_stream)
     payload = b"stream-flush-buffer"
     buffer.write_bytes(payload)
-    stream_writer.force_flush(buffer)
+    output_stream.force_flush(buffer)
     assert stream.to_bytes() == payload
     assert buffer.get_writer_index() == 0
 
 
-def test_wrap_stream_invalid_target_raises():
+def test_wrap_output_stream_invalid_target_raises():
     with pytest.raises(ValueError):
-        Buffer.wrap_stream(object())
+        Buffer.wrap_output_stream(object())
+
+
+def test_output_stream_try_flush_preserves_source_buffer_when_barrier_active():
+    stream = PartialWriteStream()
+    output_stream = Buffer.wrap_output_stream(stream)
+    source_buffer = Buffer.allocate(32)
+    payload = b"x" * 5000
+    source_buffer.write_bytes(payload)
+
+    output_stream.enter_flush_barrier()
+    output_stream.try_flush(source_buffer)
+    output_stream.try_flush(source_buffer)
+    assert source_buffer.get_writer_index() == len(payload)
+
+    output_stream.exit_flush_barrier()
+    output_stream.try_flush(source_buffer)
+    assert source_buffer.get_writer_index() == 0
+
+    output_stream.force_flush(source_buffer)
+    assert stream.to_bytes() == payload
+
+
+def test_output_stream_try_flush_small_payload_needs_force_flush():
+    stream = PartialWriteStream()
+    output_stream = Buffer.wrap_output_stream(stream)
+    source_buffer = Buffer.allocate(32)
+    payload = b"small-payload"
+    source_buffer.write_bytes(payload)
+
+    output_stream.try_flush(source_buffer)
+    assert source_buffer.get_writer_index() == len(payload)
+    assert stream.to_bytes() == b""
+
+    output_stream.force_flush(source_buffer)
+    assert source_buffer.get_writer_index() == 0
+    assert stream.to_bytes() == payload
 
 
 def test_write_buffer():

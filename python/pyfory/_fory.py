@@ -157,7 +157,7 @@ class Fory:
         "is_peer_out_of_band_enabled",
         "max_depth",
         "depth",
-        "_stream_writer",
+        "_output_stream",
         "field_nullable",
         "policy",
     )
@@ -243,7 +243,7 @@ class Fory:
         self.is_peer_out_of_band_enabled = False
         self.max_depth = max_depth
         self.depth = 0
-        self._stream_writer = None
+        self._output_stream = None
 
     def register(
         self,
@@ -406,8 +406,8 @@ class Fory:
         """
         try:
             self.buffer.set_writer_index(0)
-            self._stream_writer = Buffer.wrap_stream(stream)
-            self.buffer.bind_stream_writer(self._stream_writer)
+            self._output_stream = Buffer.wrap_output_stream(stream)
+            self.buffer.bind_output_stream(self._output_stream)
             self._serialize(
                 obj,
                 self.buffer,
@@ -416,8 +416,8 @@ class Fory:
             )
             self.force_flush(self.buffer)
         finally:
-            self.buffer.bind_stream_writer(None)
-            self._stream_writer = None
+            self.buffer.bind_output_stream(None)
+            self._output_stream = None
             self.reset_write()
 
     def loads(
@@ -469,7 +469,7 @@ class Fory:
             )
             if write_buffer is not self.buffer:
                 return write_buffer
-            if write_buffer.get_stream() is not None:
+            if write_buffer.get_output_stream() is not None:
                 return write_buffer
             return write_buffer.to_bytes(0, write_buffer.get_writer_index())
         finally:
@@ -511,28 +511,28 @@ class Fory:
         return buffer
 
     def enter_flush_barrier(self):
-        stream_writer = self._stream_writer
-        if stream_writer is not None:
-            stream_writer.enter_flush_barrier()
+        output_stream = self._output_stream
+        if output_stream is not None:
+            output_stream.enter_flush_barrier()
 
     def exit_flush_barrier(self):
-        stream_writer = self._stream_writer
-        if stream_writer is not None:
-            stream_writer.exit_flush_barrier()
+        output_stream = self._output_stream
+        if output_stream is not None:
+            output_stream.exit_flush_barrier()
 
     def try_flush(self, buffer: Buffer):
         if buffer.get_writer_index() <= 4096:
             return
-        stream_writer = self._stream_writer
-        if stream_writer is None:
+        output_stream = self._output_stream
+        if output_stream is None:
             return
-        stream_writer.try_flush(buffer)
+        output_stream.try_flush(buffer)
 
     def force_flush(self, buffer: Buffer):
-        stream_writer = self._stream_writer
-        if stream_writer is None:
+        output_stream = self._output_stream
+        if output_stream is None:
             return
-        stream_writer.force_flush(buffer)
+        output_stream.force_flush(buffer)
 
     def write_ref(self, buffer, obj, typeinfo=None, serializer=None):
         if serializer is None and typeinfo is not None:
@@ -740,7 +740,7 @@ class Fory:
         self.metastring_resolver.reset_write()
         self.buffer_callback = None
         self._unsupported_callback = None
-        self._stream_writer = None
+        self._output_stream = None
 
     def reset_read(self):
         """

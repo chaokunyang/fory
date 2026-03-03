@@ -502,38 +502,38 @@ public:
     return result;
   }
 
-  /// Serialize an object to a stream writer.
+  /// Serialize an object to an output stream.
   ///
   /// @tparam T The type of object to serialize.
-  /// @param stream_writer The output stream writer.
+  /// @param output_stream The output stream.
   /// @param obj The object to serialize.
   /// @return Number of bytes written, or error.
   template <typename T>
-  Result<size_t, Error> serialize(OutputStream &stream_writer, const T &obj) {
+  Result<size_t, Error> serialize(OutputStream &output_stream, const T &obj) {
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
     WriteContextGuard guard(*write_ctx_);
-    stream_writer.reset();
-    write_ctx_->set_stream_writer(&stream_writer);
+    output_stream.reset();
+    write_ctx_->set_output_stream(&output_stream);
     Buffer &buffer = write_ctx_->buffer();
-    buffer.bind_stream_writer(&stream_writer);
+    buffer.bind_output_stream(&output_stream);
     auto serialize_result = serialize_impl(obj, buffer);
     if (FORY_PREDICT_FALSE(!serialize_result.ok())) {
-      buffer.clear_stream_writer();
-      write_ctx_->set_stream_writer(nullptr);
+      buffer.clear_output_stream();
+      write_ctx_->set_output_stream(nullptr);
       return Unexpected(std::move(serialize_result).error());
     }
-    stream_writer.force_flush();
-    buffer.clear_stream_writer();
-    write_ctx_->set_stream_writer(nullptr);
-    if (FORY_PREDICT_FALSE(stream_writer.has_error())) {
-      return Unexpected(stream_writer.error());
+    output_stream.force_flush();
+    buffer.clear_output_stream();
+    write_ctx_->set_output_stream(nullptr);
+    if (FORY_PREDICT_FALSE(output_stream.has_error())) {
+      return Unexpected(output_stream.error());
     }
     if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
       return Unexpected(write_ctx_->take_error());
     }
-    return stream_writer.flushed_bytes();
+    return output_stream.flushed_bytes();
   }
 
   /// Serialize an object to a std::ostream.
@@ -674,26 +674,26 @@ public:
     return deserialize_impl<T>(buffer);
   }
 
-  /// Deserialize an object from a stream reader.
+  /// Deserialize an object from an input stream.
   ///
   /// This overload obtains the reader-owned Buffer via get_buffer() and
   /// continues deserialization on that buffer.
   ///
   /// @tparam T The type of object to deserialize.
-  /// @param stream_reader Stream reader to read from.
+  /// @param input_stream Input stream to read from.
   /// @return Deserialized object, or error.
   template <typename T>
-  Result<T, Error> deserialize(InputStream &stream_reader) {
+  Result<T, Error> deserialize(InputStream &input_stream) {
     struct StreamShrinkGuard {
-      InputStream *stream_reader = nullptr;
+      InputStream *input_stream = nullptr;
       ~StreamShrinkGuard() {
-        if (stream_reader != nullptr) {
-          stream_reader->shrink_buffer();
+        if (input_stream != nullptr) {
+          input_stream->shrink_buffer();
         }
       }
     };
-    StreamShrinkGuard shrink_guard{&stream_reader};
-    Buffer &buffer = stream_reader.get_buffer();
+    StreamShrinkGuard shrink_guard{&input_stream};
+    Buffer &buffer = input_stream.get_buffer();
     return deserialize<T>(buffer);
   }
 
@@ -853,9 +853,9 @@ public:
   }
 
   template <typename T>
-  Result<size_t, Error> serialize(OutputStream &stream_writer, const T &obj) {
+  Result<size_t, Error> serialize(OutputStream &output_stream, const T &obj) {
     auto fory_handle = fory_pool_.acquire();
-    return fory_handle->serialize(stream_writer, obj);
+    return fory_handle->serialize(output_stream, obj);
   }
 
   template <typename T>
@@ -889,9 +889,9 @@ public:
   }
 
   template <typename T>
-  Result<T, Error> deserialize(InputStream &stream_reader) {
+  Result<T, Error> deserialize(InputStream &input_stream) {
     auto fory_handle = fory_pool_.acquire();
-    return fory_handle->template deserialize<T>(stream_reader);
+    return fory_handle->template deserialize<T>(input_stream);
   }
 
   template <typename T> Result<T, Error> deserialize(StdInputStream &stream) {

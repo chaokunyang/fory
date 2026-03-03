@@ -218,7 +218,7 @@ cdef extern from "fory/util/stream.h" namespace "fory" nogil:
         CBuffer* get_buffer()
         void enter_flush_barrier()
         void exit_flush_barrier()
-        void try_flush()
+        c_bool try_flush()
         void force_flush()
         size_t flushed_bytes() const
         void reset()

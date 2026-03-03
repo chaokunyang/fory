@@ -46,15 +46,7 @@ public:
 
   FORY_ALWAYS_INLINE void exit_flush_barrier() { flush_barrier_depth_--; }
 
-  FORY_ALWAYS_INLINE void try_flush() {
-    if (FORY_PREDICT_FALSE(!error_.ok() || flush_barrier_depth_ != 0)) {
-      return;
-    }
-    if (FORY_PREDICT_FALSE(!should_try_flush())) {
-      return;
-    }
-    flush_buffer_data();
-  }
+  bool try_flush();
 
   FORY_ALWAYS_INLINE void force_flush() {
     if (FORY_PREDICT_FALSE(!error_.ok())) {

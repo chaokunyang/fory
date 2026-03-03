@@ -118,8 +118,8 @@ public:
   /// get const reference to internal output buffer.
   inline const Buffer &buffer() const { return buffer_; }
 
-  inline void set_stream_writer(OutputStream *stream_writer) {
-    stream_writer_ = stream_writer;
+  inline void set_output_stream(OutputStream *output_stream) {
+    output_stream_ = output_stream;
   }
 
   /// get reference writer for tracking shared references.
@@ -172,39 +172,39 @@ public:
   }
 
   inline uint32_t flush_barrier_depth() const {
-    return stream_writer_ == nullptr ? 0
-                                     : stream_writer_->flush_barrier_depth();
+    return output_stream_ == nullptr ? 0
+                                     : output_stream_->flush_barrier_depth();
   }
 
   inline void enter_flush_barrier() {
-    if (stream_writer_ != nullptr) {
-      stream_writer_->enter_flush_barrier();
+    if (output_stream_ != nullptr) {
+      output_stream_->enter_flush_barrier();
     }
   }
 
   inline void exit_flush_barrier() {
-    if (stream_writer_ != nullptr) {
-      stream_writer_->exit_flush_barrier();
+    if (output_stream_ != nullptr) {
+      output_stream_->exit_flush_barrier();
     }
   }
 
   inline void try_flush() {
-    if (stream_writer_ == nullptr || buffer_.writer_index() <= 4096) {
+    if (output_stream_ == nullptr || buffer_.writer_index() <= 4096) {
       return;
     }
-    stream_writer_->try_flush();
-    if (FORY_PREDICT_FALSE(stream_writer_->has_error())) {
-      set_error(stream_writer_->error());
+    output_stream_->try_flush();
+    if (FORY_PREDICT_FALSE(output_stream_->has_error())) {
+      set_error(output_stream_->error());
     }
   }
 
   inline void force_flush() {
-    if (stream_writer_ == nullptr) {
+    if (output_stream_ == nullptr) {
       return;
     }
-    stream_writer_->force_flush();
-    if (FORY_PREDICT_FALSE(stream_writer_->has_error())) {
-      set_error(stream_writer_->error());
+    output_stream_->force_flush();
+    if (FORY_PREDICT_FALSE(output_stream_->has_error())) {
+      set_error(output_stream_->error());
     }
   }
 
@@ -370,7 +370,7 @@ private:
   std::unique_ptr<TypeResolver> type_resolver_;
   RefWriter ref_writer_;
   uint32_t current_dyn_depth_;
-  OutputStream *stream_writer_ = nullptr;
+  OutputStream *output_stream_ = nullptr;
 
   // Meta sharing state (for streaming inline TypeMeta)
   // Maps TypeInfo* to index for reference tracking - uses map size as counter

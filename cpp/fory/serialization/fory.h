@@ -520,10 +520,19 @@ public:
     if (FORY_PREDICT_FALSE(stream_buffer == nullptr)) {
       return Unexpected(Error::invalid("StreamWriter returned null buffer"));
     }
-    Buffer &buffer = *stream_buffer;
-
-    FORY_RETURN_NOT_OK(serialize_impl(obj, buffer));
-    write_ctx_->force_flush();
+    Buffer *original_buffer = &write_ctx_->buffer();
+    write_ctx_->set_buffer(stream_buffer);
+    auto serialize_result = serialize_impl(obj, *stream_buffer);
+    write_ctx_->set_buffer(original_buffer);
+    if (FORY_PREDICT_FALSE(!serialize_result.ok())) {
+      write_ctx_->set_stream_writer(nullptr);
+      return Unexpected(std::move(serialize_result).error());
+    }
+    stream_writer.force_flush();
+    write_ctx_->set_stream_writer(nullptr);
+    if (FORY_PREDICT_FALSE(stream_writer.has_error())) {
+      return Unexpected(stream_writer.error());
+    }
     if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
       return Unexpected(write_ctx_->take_error());
     }

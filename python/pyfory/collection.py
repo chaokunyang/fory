@@ -474,7 +474,7 @@ class MapSerializer(Serializer):
             value_serializer = self.value_serializer
             buffer.put_uint8(chunk_size_offset, chunk_size)
             fory.exit_flush_barrier()
-            fory.try_flush(buffer)
+            fory.try_flush()
 
     def read(self, buffer):
         fory = self.fory

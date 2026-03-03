@@ -536,7 +536,7 @@ class DataClassSerializer(Serializer):
                     is_tracking_ref = self._ref_fields.get(field_name, False)
                     is_basic = self._basic_field_flags[index]
                     self._write_field_value(buffer, serializer, field_value, is_nullable, is_dynamic, is_basic, is_tracking_ref)
-        self.fory.try_flush(buffer)
+        self.fory.try_flush()
 
     def read(self, buffer):
         if not self.fory.strict:

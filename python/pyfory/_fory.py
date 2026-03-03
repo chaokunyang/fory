@@ -414,7 +414,7 @@ class Fory:
                 buffer_callback=None,
                 unsupported_callback=None,
             )
-            self.force_flush(self.buffer)
+            self.force_flush()
         finally:
             self.buffer.bind_output_stream(None)
             self._output_stream = None
@@ -520,19 +520,17 @@ class Fory:
         if output_stream is not None:
             output_stream.exit_flush_barrier()
 
-    def try_flush(self, buffer: Buffer):
-        if buffer.get_writer_index() <= 4096:
-            return
+    def try_flush(self):
         output_stream = self._output_stream
         if output_stream is None:
             return
-        output_stream.try_flush(buffer)
+        output_stream.try_flush()
 
-    def force_flush(self, buffer: Buffer):
+    def force_flush(self):
         output_stream = self._output_stream
         if output_stream is None:
             return
-        output_stream.force_flush(buffer)
+        output_stream.force_flush()
 
     def write_ref(self, buffer, obj, typeinfo=None, serializer=None):
         if serializer is None and typeinfo is not None:

@@ -1309,7 +1309,7 @@ cdef class Fory:
                 buffer_callback=None,
                 unsupported_callback=None,
             )
-            self.force_flush(self.buffer)
+            self.force_flush()
         finally:
             self.buffer.bind_output_stream(None)
             self._output_stream = None
@@ -1411,21 +1411,19 @@ cdef class Fory:
         output_stream = <PyOutputStream>self._output_stream
         output_stream.exit_flush_barrier()
 
-    cpdef inline try_flush(self, Buffer buffer):
+    cpdef inline try_flush(self):
         cdef PyOutputStream output_stream
-        if buffer.get_writer_index() <= 4096:
-            return
         if self._output_stream is None:
             return
         output_stream = <PyOutputStream>self._output_stream
-        output_stream.try_flush(buffer)
+        output_stream.try_flush()
 
-    cpdef inline force_flush(self, Buffer buffer):
+    cpdef inline force_flush(self):
         cdef PyOutputStream output_stream
         if self._output_stream is None:
             return
         output_stream = <PyOutputStream>self._output_stream
-        output_stream.force_flush(buffer)
+        output_stream.force_flush()
 
     cpdef inline write_ref(
             self, Buffer buffer, obj, TypeInfo typeinfo=None, Serializer serializer=None):

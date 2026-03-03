@@ -284,7 +284,7 @@ def test_buffer_flush_stream():
     buffer.bind_output_stream(output_stream)
     payload = b"stream-flush-buffer"
     buffer.write_bytes(payload)
-    output_stream.force_flush(buffer)
+    output_stream.force_flush()
     assert stream.to_bytes() == payload
     assert buffer.get_writer_index() == 0
 
@@ -294,39 +294,42 @@ def test_wrap_output_stream_invalid_target_raises():
         Buffer.wrap_output_stream(object())
 
 
-def test_output_stream_try_flush_preserves_source_buffer_when_barrier_active():
+def test_output_stream_try_flush_preserves_bound_buffer_when_barrier_active():
     stream = PartialWriteStream()
     output_stream = Buffer.wrap_output_stream(stream)
-    source_buffer = Buffer.allocate(32)
+    buffer = Buffer.allocate(32)
+    buffer.bind_output_stream(output_stream)
     payload = b"x" * 5000
-    source_buffer.write_bytes(payload)
 
     output_stream.enter_flush_barrier()
-    output_stream.try_flush(source_buffer)
-    output_stream.try_flush(source_buffer)
-    assert source_buffer.get_writer_index() == len(payload)
+    buffer.write_bytes(payload)
+    output_stream.try_flush()
+    output_stream.try_flush()
+    assert buffer.get_writer_index() == len(payload)
+    assert stream.to_bytes() == b""
 
     output_stream.exit_flush_barrier()
-    output_stream.try_flush(source_buffer)
-    assert source_buffer.get_writer_index() == 0
+    output_stream.try_flush()
+    assert buffer.get_writer_index() == 0
 
-    output_stream.force_flush(source_buffer)
+    output_stream.force_flush()
     assert stream.to_bytes() == payload
 
 
 def test_output_stream_try_flush_small_payload_needs_force_flush():
     stream = PartialWriteStream()
     output_stream = Buffer.wrap_output_stream(stream)
-    source_buffer = Buffer.allocate(32)
+    buffer = Buffer.allocate(32)
+    buffer.bind_output_stream(output_stream)
     payload = b"small-payload"
-    source_buffer.write_bytes(payload)
+    buffer.write_bytes(payload)
 
-    output_stream.try_flush(source_buffer)
-    assert source_buffer.get_writer_index() == len(payload)
+    output_stream.try_flush()
+    assert buffer.get_writer_index() == len(payload)
     assert stream.to_bytes() == b""
 
-    output_stream.force_flush(source_buffer)
-    assert source_buffer.get_writer_index() == 0
+    output_stream.force_flush()
+    assert buffer.get_writer_index() == 0
     assert stream.to_bytes() == payload
 
 

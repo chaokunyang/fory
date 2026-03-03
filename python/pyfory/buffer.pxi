@@ -45,6 +45,7 @@ cdef class Buffer
 @cython.final
 cdef class PyOutputStream:
     cdef object stream
+    cdef object bound_buffer
     cdef unique_ptr[COutputStream] c_output_stream
 
     @staticmethod
@@ -59,6 +60,7 @@ cdef class PyOutputStream:
             raise ValueError(stream_error.decode("UTF-8"))
         cdef PyOutputStream writer = PyOutputStream.__new__(PyOutputStream)
         writer.stream = stream
+        writer.bound_buffer = None
         writer.c_output_stream.reset(raw_writer)
         if raw_writer != NULL:
             raw_writer.reset()
@@ -69,6 +71,9 @@ cdef class PyOutputStream:
 
     cpdef inline object get_output_stream(self):
         return self.stream
+
+    cpdef inline void bind_buffer(self, Buffer buffer):
+        self.bound_buffer = buffer
 
     cpdef inline void reset(self):
         cdef COutputStream* output_stream = self.c_output_stream.get()
@@ -88,16 +93,21 @@ cdef class PyOutputStream:
             raise ValueError("OutputStream is null")
         output_stream.exit_flush_barrier()
 
-    cpdef inline void try_flush(self, Buffer buffer):
+    cpdef inline void try_flush(self):
         cdef COutputStream* output_stream = self.c_output_stream.get()
         cdef CBuffer* output_buffer
-        cdef uint32_t source_writer_index = buffer.c_buffer.writer_index()
+        cdef Buffer source_buffer
+        cdef uint32_t source_writer_index
         cdef uint32_t output_buffer_writer_index = 0
         cdef c_bool flushed = False
-        if source_writer_index == 0:
-            return
         if output_stream == NULL:
             raise ValueError("OutputStream is null")
+        if self.bound_buffer is None:
+            raise ValueError("OutputStream has no bound buffer")
+        source_buffer = <Buffer>self.bound_buffer
+        source_writer_index = source_buffer.c_buffer.writer_index()
+        if source_writer_index <= 4096:
+            return
         output_buffer = output_stream.get_buffer()
         if output_buffer == NULL:
             raise ValueError("OutputStream returned null buffer")
@@ -105,35 +115,40 @@ cdef class PyOutputStream:
         # Stage source bytes without triggering Buffer::write_bytes auto-flush.
         output_buffer.grow(source_writer_index)
         output_buffer.copy_from(
-            output_buffer_writer_index, buffer.c_buffer.data(), 0, source_writer_index
+            output_buffer_writer_index, source_buffer.c_buffer.data(), 0, source_writer_index
         )
         output_buffer.increase_writer_index(source_writer_index)
         flushed = output_stream.try_flush()
         if output_stream.has_error():
             raise ValueError(output_stream.error().to_string().decode("UTF-8"))
         if flushed:
-            buffer.c_buffer.writer_index(0)
+            source_buffer.c_buffer.writer_index(0)
             return
         # Flush barrier or threshold gate blocked flush: keep source buffer intact
         # and roll back the staging copy to avoid duplicated bytes.
         output_buffer.writer_index(output_buffer_writer_index)
 
-    cpdef inline void force_flush(self, Buffer buffer):
+    cpdef inline void force_flush(self):
         cdef COutputStream* output_stream = self.c_output_stream.get()
         cdef CBuffer* output_buffer
-        cdef uint32_t source_writer_index = buffer.c_buffer.writer_index()
+        cdef Buffer source_buffer
+        cdef uint32_t source_writer_index
         if output_stream == NULL:
             raise ValueError("OutputStream is null")
+        if self.bound_buffer is None:
+            raise ValueError("OutputStream has no bound buffer")
+        source_buffer = <Buffer>self.bound_buffer
+        source_writer_index = source_buffer.c_buffer.writer_index()
         output_buffer = output_stream.get_buffer()
         if output_buffer == NULL:
             raise ValueError("OutputStream returned null buffer")
         if source_writer_index != 0:
-            output_buffer.write_bytes(buffer.c_buffer.data(), source_writer_index)
+            output_buffer.write_bytes(source_buffer.c_buffer.data(), source_writer_index)
         output_stream.force_flush()
         if output_stream.has_error():
             raise ValueError(output_stream.error().to_string().decode("UTF-8"))
         if source_writer_index != 0:
-            buffer.c_buffer.writer_index(0)
+            source_buffer.c_buffer.writer_index(0)
 
 
 cpdef inline PyOutputStream _wrap_output_stream(object stream):
@@ -222,7 +237,11 @@ cdef class Buffer:
         return _wrap_output_stream(stream)
 
     cpdef inline void bind_output_stream(self, object output):
+        cdef PyOutputStream previous_output_stream
         cdef PyOutputStream output_stream
+        if self.output_stream is not None:
+            previous_output_stream = <PyOutputStream>self.output_stream
+            previous_output_stream.bind_buffer(None)
         if output is None:
             self.output_stream = None
             return
@@ -231,6 +250,7 @@ cdef class Buffer:
         else:
             output_stream = _wrap_output_stream(output)
         output_stream.reset()
+        output_stream.bind_buffer(self)
         self.output_stream = output_stream
 
     cpdef inline object get_output_stream(self):

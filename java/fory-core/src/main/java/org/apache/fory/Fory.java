@@ -395,7 +395,7 @@ public final class Fory implements BaseFory {
     if (!refResolver.writeRefOrNull(buffer, obj)) {
       TypeResolver resolver = typeResolver;
       TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass());
-      if (typeInfo.getCls() == UnknownStruct.class) {
+      if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
         depth++;
         typeInfo.getSerializer().write(buffer, obj);
         depth--;
@@ -410,7 +410,7 @@ public final class Fory implements BaseFory {
     if (!refResolver.writeRefOrNull(buffer, obj)) {
       TypeResolver resolver = typeResolver;
       TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass(), classInfoHolder);
-      if (typeInfo.getCls() == UnknownStruct.class) {
+      if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
         depth++;
         typeInfo.getSerializer().write(buffer, obj);
         depth--;
@@ -422,7 +422,7 @@ public final class Fory implements BaseFory {
   }
 
   public void writeRef(MemoryBuffer buffer, Object obj, TypeInfo typeInfo) {
-    if (typeInfo.getCls() == UnknownStruct.class) {
+    if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
       if (!refResolver.writeRefOrNull(buffer, obj)) {
         depth++;
         typeInfo.getSerializer().write(buffer, obj);
@@ -480,7 +480,7 @@ public final class Fory implements BaseFory {
   public void writeNonRef(MemoryBuffer buffer, Object obj) {
     TypeResolver resolver = typeResolver;
     TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass());
-    if (typeInfo.getCls() == UnknownStruct.class) {
+    if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
       depth++;
       typeInfo.getSerializer().write(buffer, obj);
       depth--;
@@ -499,7 +499,7 @@ public final class Fory implements BaseFory {
   public void writeNonRef(MemoryBuffer buffer, Object obj, TypeInfoHolder holder) {
     TypeResolver resolver = typeResolver;
     TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass(), holder);
-    if (typeInfo.getCls() == UnknownStruct.class) {
+    if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
       depth++;
       typeInfo.getSerializer().write(buffer, obj);
       depth--;
@@ -510,7 +510,7 @@ public final class Fory implements BaseFory {
   }
 
   public void writeNonRef(MemoryBuffer buffer, Object obj, TypeInfo typeInfo) {
-    if (typeInfo.getCls() == UnknownStruct.class) {
+    if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
       depth++;
       typeInfo.getSerializer().write(buffer, obj);
       depth--;
@@ -560,7 +560,13 @@ public final class Fory implements BaseFory {
         buffer.writeFloat64((Double) obj);
         break;
       case Types.STRING:
-        stringSerializer.writeString(buffer, (String) obj);
+        if (typeInfo.getCls() == String.class) {
+          stringSerializer.writeString(buffer, (String) obj);
+          break;
+        }
+        depth++;
+        typeInfo.getSerializer().write(buffer, obj);
+        depth--;
         break;
       default:
         depth++;
@@ -967,7 +973,7 @@ public final class Fory implements BaseFory {
       case Types.INT16:
         return buffer.readInt16();
       case Types.INT32:
-        if (crossLanguage || compressInt) {
+        if (compressInt) {
           return buffer.readVarInt32();
         } else {
           return buffer.readInt32();
@@ -985,7 +991,13 @@ public final class Fory implements BaseFory {
       case Types.FLOAT64:
         return buffer.readFloat64();
       case Types.STRING:
-        return stringSerializer.readString(buffer);
+        if (typeInfo.getCls() == String.class) {
+          return stringSerializer.readString(buffer);
+        }
+        incReadDepth();
+        Object stringLike = typeInfo.getSerializer().read(buffer);
+        depth--;
+        return stringLike;
       default:
         incReadDepth();
         Object read = typeInfo.getSerializer().read(buffer);
@@ -1038,8 +1050,13 @@ public final class Fory implements BaseFory {
       case Types.FLOAT32:
       case Types.INT64:
       case Types.FLOAT64:
-      case Types.STRING:
         return obj;
+      case Types.STRING:
+        if (typeInfo.getCls() == String.class) {
+          return obj;
+        }
+        copy = copyObject(obj, typeInfo.getSerializer());
+        break;
       case ClassResolver.PRIMITIVE_BOOLEAN_ARRAY_ID:
         boolean[] boolArr = (boolean[]) obj;
         return (T) Arrays.copyOf(boolArr, boolArr.length);
@@ -1102,8 +1119,12 @@ public final class Fory implements BaseFory {
       case Types.FLOAT32:
       case Types.INT64:
       case Types.FLOAT64:
-      case Types.STRING:
         return obj;
+      case Types.STRING:
+        if (obj.getClass() == String.class) {
+          return obj;
+        }
+        return copyObject(obj, typeResolver.getTypeInfo(obj.getClass(), true).getSerializer());
       default:
         return copyObject(obj, typeResolver.getTypeInfo(obj.getClass(), true).getSerializer());
     }

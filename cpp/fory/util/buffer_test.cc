@@ -388,6 +388,35 @@ TEST(Buffer, OutputStreamForceFlush) {
   EXPECT_EQ(writer.data(), payload);
   EXPECT_EQ(writer.flush_calls(), 1U);
 }
+
+TEST(Buffer, OutputStreamRebindDetachesPreviousBufferBacklink) {
+  CountingOutputStream writer;
+  std::shared_ptr<Buffer> first;
+  std::shared_ptr<Buffer> second;
+  allocate_buffer(16, &first);
+  allocate_buffer(16, &second);
+
+  first->bind_output_stream(&writer);
+  second->bind_output_stream(&writer);
+  EXPECT_FALSE(first->is_output_stream_backed());
+  EXPECT_TRUE(second->is_output_stream_backed());
+
+  writer.enter_flush_barrier();
+  std::vector<uint8_t> second_payload(5000, 7);
+  second->write_bytes(second_payload.data(),
+                      static_cast<uint32_t>(second_payload.size()));
+  EXPECT_EQ(second->writer_index(), second_payload.size());
+  writer.exit_flush_barrier();
+
+  std::vector<uint8_t> first_payload(5000, 3);
+  first->write_bytes(first_payload.data(),
+                     static_cast<uint32_t>(first_payload.size()));
+
+  // A stale backlink on `first` would call try_flush() and flush `second`
+  // because `second` is still the stream's active buffer.
+  EXPECT_EQ(second->writer_index(), second_payload.size());
+  EXPECT_EQ(writer.data().size(), 0U);
+}
 } // namespace fory
 
 int main(int argc, char **argv) {

@@ -1298,6 +1298,13 @@ cdef class Fory:
         Args:
             obj: The object to serialize
             stream: Writable stream implementing write(...)
+
+        Notes:
+            The stream must be a non-retaining sink: ``write(data)`` must
+            synchronously consume ``data`` before returning. Fory may reuse or
+            modify the underlying buffer after ``write`` returns, so retaining
+            the passed object (or a view of it) is unsupported. If your sink
+            needs retention, copy bytes inside ``write``.
         """
         try:
             self.buffer.set_writer_index(0)

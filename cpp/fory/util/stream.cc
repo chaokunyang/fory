@@ -59,6 +59,25 @@ void OutputStream::reset() {
   }
 }
 
+void OutputStream::bind_buffer(Buffer *buffer) {
+  Buffer *next = buffer == nullptr ? buffer_.get() : buffer;
+  if (active_buffer_ == next) {
+    return;
+  }
+  if (active_buffer_ != nullptr && active_buffer_ != buffer_.get()) {
+    // Rebinding must detach the previous external buffer to avoid stale
+    // backlinks that can trigger misdirected flushes and dangling pointers.
+    active_buffer_->output_stream_ = nullptr;
+  }
+  active_buffer_ = next;
+}
+
+void OutputStream::unbind_buffer(Buffer *buffer) {
+  if (active_buffer_ == buffer) {
+    active_buffer_ = buffer_.get();
+  }
+}
+
 uint32_t OutputStream::active_buffer_writer_index() {
   Buffer *buffer = active_buffer();
   return buffer == nullptr ? 0U : buffer->writer_index();

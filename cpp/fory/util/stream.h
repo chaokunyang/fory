@@ -94,15 +94,9 @@ protected:
   virtual Result<void, Error> flush_stream() = 0;
 
 private:
-  FORY_ALWAYS_INLINE void bind_buffer(Buffer *buffer) {
-    active_buffer_ = buffer == nullptr ? buffer_.get() : buffer;
-  }
+  void bind_buffer(Buffer *buffer);
 
-  FORY_ALWAYS_INLINE void unbind_buffer(Buffer *buffer) {
-    if (active_buffer_ == buffer) {
-      active_buffer_ = buffer_.get();
-    }
-  }
+  void unbind_buffer(Buffer *buffer);
 
   FORY_ALWAYS_INLINE Buffer *active_buffer() {
     return active_buffer_ == nullptr ? buffer_.get() : active_buffer_;

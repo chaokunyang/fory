@@ -193,6 +193,9 @@ protected:
     uint32_t total_written = 0;
     while (total_written < length) {
       const uint32_t remaining = length - total_written;
+      // Contract: stream.write must consume bytes synchronously before return.
+      // The memoryview below is a transient view over serializer-managed
+      // storage and is not safe to retain after write(...) returns.
       PyObject *chunk = PyMemoryView_FromMemory(
           reinterpret_cast<char *>(
               const_cast<uint8_t *>(src + static_cast<size_t>(total_written))),
@@ -1557,6 +1560,8 @@ int Fory_PyCreateOutputStream(PyObject *stream, OutputStream **out,
     *error_message = "stream must not be null";
     return -1;
   }
+  // See PyOutputStream::write_to_stream contract: the provided sink must not
+  // retain passed write buffers after write(...) returns.
   if (!resolve_python_stream_write_method(stream, error_message)) {
     return -1;
   }

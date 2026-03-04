@@ -545,15 +545,13 @@ public final class Fory implements BaseFory {
         }
         break;
       case Types.INT64:
-        if (crossLanguage) {
-          buffer.writeVarInt64((Long) obj);
-        } else {
-          LongSerializer.writeInt64(buffer, (Long) obj, longEncoding);
-        }
+        LongSerializer.writeInt64(buffer, (Long) obj, longEncoding);
         break;
       case Types.VARINT64:
-      case Types.TAGGED_INT64:
         buffer.writeVarInt64((Long) obj);
+        break;
+      case Types.TAGGED_INT64:
+        buffer.writeTaggedInt64((Long) obj);
         break;
       case Types.FLOAT32:
         buffer.writeFloat32((Float) obj);
@@ -979,13 +977,11 @@ public final class Fory implements BaseFory {
       case Types.FLOAT32:
         return buffer.readFloat32();
       case Types.INT64:
-        if (crossLanguage) {
-          return buffer.readVarInt64();
-        }
         return LongSerializer.readInt64(buffer, longEncoding);
       case Types.VARINT64:
-      case Types.TAGGED_INT64:
         return buffer.readVarInt64();
+      case Types.TAGGED_INT64:
+        return buffer.readTaggedInt64();
       case Types.FLOAT64:
         return buffer.readFloat64();
       case Types.STRING:

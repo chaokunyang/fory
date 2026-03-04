@@ -50,6 +50,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -82,14 +83,15 @@ public class Serializers {
    */
   public static <T> Serializer<T> newSerializer(
       Fory fory, Class type, Class<? extends Serializer> serializerClass) {
-    ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
-    Serializer serializer = classResolver.getSerializer(type, false);
+    TypeResolver typeResolver = fory.getTypeResolver();
+    TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
+    Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
     try {
       if (serializerClass == ObjectSerializer.class) {
         return new ObjectSerializer(fory, type);
       }
       if (serializerClass == MetaSharedSerializer.class) {
-        TypeDef typeDef = fory.getTypeResolver().getTypeDef(type, true);
+        TypeDef typeDef = typeResolver.getTypeDef(type, true);
         return new MetaSharedSerializer(fory, type, typeDef);
       }
       Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
@@ -114,7 +116,7 @@ public class Serializers {
         return createSerializer(fory, type, serializerClass);
       }
     } catch (InvocationTargetException e) {
-      classResolver.resetSerializer(type, serializer);
+      typeResolver.resetSerializer(type, serializer);
       if (e.getCause() != null) {
         Platform.throwException(e.getCause());
       } else {
@@ -124,7 +126,7 @@ public class Serializers {
       // Some serializer may set itself in constructor as serializer, but the
       // constructor failed later. For example, some final type field doesn't
       // support serialization.
-      classResolver.resetSerializer(type, serializer);
+      typeResolver.resetSerializer(type, serializer);
       Platform.throwException(t);
     }
     throw new IllegalStateException("unreachable");

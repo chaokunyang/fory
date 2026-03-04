@@ -210,6 +210,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   public void write(MemoryBuffer buffer, Object value) {
     buffer.writeInt16((short) slotsInfos.length);
     try {
+      ClassResolver classResolver = (ClassResolver) typeResolver;
       for (SlotInfo slotsInfo : slotsInfos) {
         // create a classinfo to avoid null class bytes when class id is a
         // replacement id.
@@ -261,6 +262,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     int slotIndex = 0;
 
     try {
+      ClassResolver classResolver = (ClassResolver) typeResolver;
       TreeMap<Integer, ObjectInputValidation> callbacks = new TreeMap<>(Collections.reverseOrder());
       for (int i = 0; i < numClasses; i++) {
         Class<?> currentClass = classResolver.readClassInternal(buffer);

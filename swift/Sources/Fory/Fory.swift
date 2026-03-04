@@ -199,11 +199,7 @@ public final class Fory {
 
     public func serialize<T: Serializer>(_ value: T) throws -> Data {
         try serializeRoot(isNone: value.foryIsNone) { context in
-            if useRootDataFastPath {
-                try value.foryWriteData(context, hasGenerics: false)
-            } else {
-                try value.foryWrite(context, refMode: rootRefMode, writeTypeInfo: shouldWriteRootTypeInfo, hasGenerics: false)
-            }
+            try writeRootTypedValue(value, context: context)
         }
     }
 
@@ -212,20 +208,13 @@ public final class Fory {
             data: data,
             nilValue: T.foryDefault()
         ) { context in
-            if useRootDataFastPath {
-                return try T.foryReadData(context)
-            }
-            return try T.foryRead(context, refMode: rootRefMode, readTypeInfo: shouldWriteRootTypeInfo)
+            try readRootTypedValue(context: context)
         }
     }
 
     public func serialize<T: Serializer>(_ value: T, to buffer: inout Data) throws {
         try appendSerializedRoot(to: &buffer, isNone: value.foryIsNone) { context in
-            if useRootDataFastPath {
-                try value.foryWriteData(context, hasGenerics: false)
-            } else {
-                try value.foryWrite(context, refMode: rootRefMode, writeTypeInfo: shouldWriteRootTypeInfo, hasGenerics: false)
-            }
+            try writeRootTypedValue(value, context: context)
         }
     }
 
@@ -234,10 +223,7 @@ public final class Fory {
             from: buffer,
             nilValue: T.foryDefault()
         ) { context in
-            if useRootDataFastPath {
-                return try T.foryReadData(context)
-            }
-            return try T.foryRead(context, refMode: rootRefMode, readTypeInfo: shouldWriteRootTypeInfo)
+            try readRootTypedValue(context: context)
         }
     }
 
@@ -549,6 +535,64 @@ public final class Fory {
     @inline(__always)
     private var useRootDataFastPath: Bool {
         !shouldWriteRootTypeInfo && rootRefMode == .none
+    }
+
+    @inline(__always)
+    private var useRootNullOnlyTypeInfoFastPath: Bool {
+        shouldWriteRootTypeInfo && rootRefMode == .nullOnly
+    }
+
+    @inline(__always)
+    private func writeRootTypedValue<T: Serializer>(
+        _ value: T,
+        context: WriteContext
+    ) throws {
+        if useRootDataFastPath {
+            try value.foryWriteData(context, hasGenerics: false)
+            return
+        }
+
+        if useRootNullOnlyTypeInfoFastPath {
+            context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
+            try value.foryWriteTypeInfo(context)
+            try value.foryWriteData(context, hasGenerics: false)
+            return
+        }
+
+        try value.foryWrite(
+            context,
+            refMode: rootRefMode,
+            writeTypeInfo: shouldWriteRootTypeInfo,
+            hasGenerics: false
+        )
+    }
+
+    @inline(__always)
+    private func readRootTypedValue<T: Serializer>(
+        context: ReadContext
+    ) throws -> T {
+        if useRootDataFastPath {
+            return try T.foryReadData(context)
+        }
+
+        if useRootNullOnlyTypeInfoFastPath {
+            let rawFlag = try context.buffer.readInt8()
+            if rawFlag == RefFlag.notNullValue.rawValue {
+                try T.foryReadTypeInfo(context)
+                return try T.foryReadData(context)
+            }
+            if rawFlag == RefFlag.null.rawValue {
+                return T.foryDefault()
+            }
+            // Compatibility fallback for unexpected flag encodings on nullOnly path.
+            context.buffer.moveBack(1)
+        }
+
+        return try T.foryRead(
+            context,
+            refMode: rootRefMode,
+            readTypeInfo: shouldWriteRootTypeInfo
+        )
     }
 
     @inline(__always)

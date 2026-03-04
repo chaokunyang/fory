@@ -828,6 +828,8 @@ public final class ByteBuffer {
 
     @inlinable
     public func toData() -> Data {
-        Data(storage)
+        storage.withUnsafeBufferPointer { buffer in
+            Data(buffer: buffer)
+        }
     }
 }

@@ -746,28 +746,51 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(byte[] bytes) {
-    return deserialize(MemoryUtils.wrap(bytes), null);
+    return deserialize(MemoryUtils.wrap(bytes), (Iterable<MemoryBuffer>) null);
   }
 
-  @SuppressWarnings("unchecked")
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
-    MemoryBuffer buffer = MemoryUtils.wrap(bytes);
-    if (!crossLanguage && shareMeta) {
+    return deserialize(MemoryUtils.wrap(bytes), type);
+  }
+
+  @Override
+  public <T> T deserialize(MemoryBuffer buffer, Class<T> type) {
+    try {
+      jitContext.lock();
+      if (depth > 0) {
+        throwDepthDeserializationException();
+      }
+      depth = 0;
       byte bitmap = buffer.readByte();
       if ((bitmap & isNilFlag) == isNilFlag) {
         return null;
       }
       boolean peerOutOfBandEnabled = (bitmap & isOutOfBandFlag) == isOutOfBandFlag;
       assert !peerOutOfBandEnabled : "Out of band buffers not passed in when deserializing";
-      return deserializeJavaObject(buffer, type);
-    }
-    generics.pushGenericType(classResolver.buildGenericType(type));
-    try {
-      return (T) deserialize(buffer, null);
+      TypeResolver resolver =
+          (bitmap & isCrossLanguageFlag) == isCrossLanguageFlag ? xtypeResolver : classResolver;
+      return deserializeByType(buffer, type, resolver);
+    } catch (Throwable t) {
+      throw ExceptionUtils.handleReadFailed(this, t);
     } finally {
-      generics.popGenericType();
+      resetRead();
+      jitContext.unlock();
     }
+  }
+
+  @Override
+  public <T> T deserialize(ForyInputStream inputStream, Class<T> type) {
+    try {
+      return deserialize(inputStream.getBuffer(), type);
+    } finally {
+      inputStream.shrinkBuffer();
+    }
+  }
+
+  @Override
+  public <T> T deserialize(ForyReadableChannel channel, Class<T> type) {
+    return deserialize(channel.getBuffer(), type);
   }
 
   @Override
@@ -777,12 +800,12 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(long address, int size) {
-    return deserialize(MemoryUtils.buffer(address, size), null);
+    return deserialize(MemoryUtils.buffer(address, size), (Iterable<MemoryBuffer>) null);
   }
 
   @Override
   public Object deserialize(MemoryBuffer buffer) {
-    return deserialize(buffer, null);
+    return deserialize(buffer, (Iterable<MemoryBuffer>) null);
   }
 
   /**
@@ -839,7 +862,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ForyInputStream inputStream) {
-    return deserialize(inputStream, null);
+    return deserialize(inputStream, (Iterable<MemoryBuffer>) null);
   }
 
   @Override
@@ -854,13 +877,36 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ForyReadableChannel channel) {
-    return deserialize(channel, null);
+    return deserialize(channel, (Iterable<MemoryBuffer>) null);
   }
 
   @Override
   public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
     MemoryBuffer buf = channel.getBuffer();
     return deserialize(buf, outOfBandBuffers);
+  }
+
+  @SuppressWarnings("unchecked")
+  private <T> T deserializeByType(MemoryBuffer buffer, Class<T> type, TypeResolver resolver) {
+    generics.pushGenericType(classResolver.buildGenericType(type));
+    try {
+      RefResolver refResolver = this.refResolver;
+      int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+      if (nextReadRefId < NOT_NULL_VALUE_FLAG) {
+        return (T) refResolver.getReadObject();
+      }
+      TypeInfo typeInfo = resolver.readTypeInfo(buffer, type);
+      Object value;
+      if (resolver == xtypeResolver) {
+        value = readNonRefWithXtypeResolver(buffer, typeInfo, xtypeResolver);
+      } else {
+        value = readDataInternal(buffer, typeInfo);
+      }
+      refResolver.setReadObject(nextReadRefId, value);
+      return (T) value;
+    } finally {
+      generics.popGenericType();
+    }
   }
 
   /** Deserialize nullable referencable object from <code>buffer</code>. */
@@ -1149,215 +1195,6 @@ public final class Fory implements BaseFory {
       MemoryBuffer buffer, TypeInfoHolder classInfoHolder, XtypeResolver resolver) {
     TypeInfo typeInfo = resolver.readTypeInfo(buffer, classInfoHolder);
     return readNullable(buffer, typeInfo.getSerializer());
-  }
-
-  @Override
-  public byte[] serializeJavaObject(Object obj) {
-    MemoryBuffer buf = getBuffer();
-    buf.writerIndex(0);
-    serializeJavaObject(buf, obj);
-    byte[] bytes = buf.getBytes(0, buf.writerIndex());
-    resetBuffer();
-    return bytes;
-  }
-
-  @Override
-  public void serializeJavaObject(MemoryBuffer buffer, Object obj) {
-    try {
-      jitContext.lock();
-      if (depth > 0) {
-        throwDepthSerializationException();
-      }
-      if (config.isMetaShareEnabled()) {
-        if (!refResolver.writeRefOrNull(buffer, obj)) {
-          TypeInfo typeInfo = classResolver.getOrUpdateTypeInfo(obj.getClass());
-          classResolver.writeTypeInfo(buffer, typeInfo);
-          writeData(buffer, typeInfo, obj);
-        }
-      } else {
-        if (!refResolver.writeRefOrNull(buffer, obj)) {
-          TypeInfo typeInfo = classResolver.getOrUpdateTypeInfo(obj.getClass());
-          writeData(buffer, typeInfo, obj);
-        }
-      }
-    } catch (Throwable t) {
-      throw processSerializationError(t);
-    } finally {
-      resetWrite();
-      jitContext.unlock();
-    }
-  }
-
-  /**
-   * Serialize java object without class info, deserialization should use {@link
-   * #deserializeJavaObject}.
-   */
-  @Override
-  public void serializeJavaObject(OutputStream outputStream, Object obj) {
-    serializeToStream(outputStream, buf -> serializeJavaObject(buf, obj));
-  }
-
-  @Override
-  public <T> T deserializeJavaObject(byte[] data, Class<T> cls) {
-    return deserializeJavaObject(MemoryBuffer.fromByteArray(data), cls);
-  }
-
-  @Override
-  @SuppressWarnings("unchecked")
-  public <T> T deserializeJavaObject(MemoryBuffer buffer, Class<T> cls) {
-    try {
-      jitContext.lock();
-      if (depth > 0) {
-        throwDepthDeserializationException();
-      }
-      T obj;
-      int nextReadRefId = refResolver.tryPreserveRefId(buffer);
-      if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-        TypeInfo typeInfo;
-        if (shareMeta) {
-          typeInfo = classResolver.readTypeInfo(buffer, cls);
-        } else {
-          typeInfo = classResolver.getTypeInfo(cls);
-        }
-        obj = (T) readDataInternal(buffer, typeInfo);
-        return obj;
-      } else {
-        return null;
-      }
-    } catch (Throwable t) {
-      throw ExceptionUtils.handleReadFailed(this, t);
-    } finally {
-      resetRead();
-      jitContext.unlock();
-    }
-  }
-
-  /**
-   * Deserialize java object from binary by passing class info, serialization should use {@link
-   * #serializeJavaObject}.
-   *
-   * <p>Note that {@link ForyInputStream} will buffer and read more data, do not use the original
-   * passed stream when constructing {@link ForyInputStream}. If this is not possible, use {@link
-   * org.apache.fory.io.BlockedStreamUtils} instead for streaming serialization and deserialization.
-   */
-  @Override
-  public <T> T deserializeJavaObject(ForyInputStream inputStream, Class<T> cls) {
-    try {
-      MemoryBuffer buf = inputStream.getBuffer();
-      return deserializeJavaObject(buf, cls);
-    } finally {
-      inputStream.shrinkBuffer();
-    }
-  }
-
-  /**
-   * Deserialize java object from binary channel by passing class info, serialization should use
-   * {@link #serializeJavaObject}.
-   *
-   * <p>Note that {@link ForyInputStream} will buffer and read more data, do not use the original
-   * passed stream when constructing {@link ForyInputStream}. If this is not possible, use {@link
-   * org.apache.fory.io.BlockedStreamUtils} instead for streaming serialization and deserialization.
-   */
-  @Override
-  public <T> T deserializeJavaObject(ForyReadableChannel channel, Class<T> cls) {
-    MemoryBuffer buf = channel.getBuffer();
-    return deserializeJavaObject(buf, cls);
-  }
-
-  /**
-   * Deserialize java object from binary by passing class info, serialization should use {@link
-   * #deserializeJavaObjectAndClass}.
-   */
-  @Override
-  public byte[] serializeJavaObjectAndClass(Object obj) {
-    MemoryBuffer buf = getBuffer();
-    buf.writerIndex(0);
-    serializeJavaObjectAndClass(buf, obj);
-    byte[] bytes = buf.getBytes(0, buf.writerIndex());
-    resetBuffer();
-    return bytes;
-  }
-
-  /**
-   * Serialize java object with class info, deserialization should use {@link
-   * #deserializeJavaObjectAndClass}.
-   */
-  @Override
-  public void serializeJavaObjectAndClass(MemoryBuffer buffer, Object obj) {
-    try {
-      jitContext.lock();
-      if (depth > 0) {
-        throwDepthSerializationException();
-      }
-      writeRef(buffer, obj);
-    } catch (Throwable t) {
-      throw processSerializationError(t);
-    } finally {
-      resetWrite();
-      jitContext.unlock();
-    }
-  }
-
-  /**
-   * Serialize java object with class info, deserialization should use {@link
-   * #deserializeJavaObjectAndClass}.
-   */
-  @Override
-  public void serializeJavaObjectAndClass(OutputStream outputStream, Object obj) {
-    serializeToStream(outputStream, buf -> serializeJavaObjectAndClass(buf, obj));
-  }
-
-  /**
-   * Deserialize class info and java object from binary, serialization should use {@link
-   * #serializeJavaObjectAndClass}.
-   */
-  @Override
-  public Object deserializeJavaObjectAndClass(byte[] data) {
-    return deserializeJavaObjectAndClass(MemoryBuffer.fromByteArray(data));
-  }
-
-  /**
-   * Deserialize class info and java object from binary, serialization should use {@link
-   * #serializeJavaObjectAndClass}.
-   */
-  @Override
-  public Object deserializeJavaObjectAndClass(MemoryBuffer buffer) {
-    try {
-      jitContext.lock();
-      if (depth > 0) {
-        throwDepthDeserializationException();
-      }
-      return readRef(buffer);
-    } catch (Throwable t) {
-      throw ExceptionUtils.handleReadFailed(this, t);
-    } finally {
-      resetRead();
-      jitContext.unlock();
-    }
-  }
-
-  /**
-   * Deserialize class info and java object from binary, serialization should use {@link
-   * #serializeJavaObjectAndClass}.
-   */
-  @Override
-  public Object deserializeJavaObjectAndClass(ForyInputStream inputStream) {
-    try {
-      MemoryBuffer buf = inputStream.getBuffer();
-      return deserializeJavaObjectAndClass(buf);
-    } finally {
-      inputStream.shrinkBuffer();
-    }
-  }
-
-  /**
-   * Deserialize class info and java object from binary channel, serialization should use {@link
-   * #serializeJavaObjectAndClass}.
-   */
-  @Override
-  public Object deserializeJavaObjectAndClass(ForyReadableChannel channel) {
-    MemoryBuffer buf = channel.getBuffer();
-    return deserializeJavaObjectAndClass(buf);
   }
 
   @Override

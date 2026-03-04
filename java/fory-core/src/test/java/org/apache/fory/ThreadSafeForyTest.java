@@ -317,17 +317,17 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
-  public void testSerializeJavaObject() {
+  public void testSerializeDeserializeWithType() {
     for (ThreadSafeFory fory :
         new ThreadSafeFory[] {
           Fory.builder().requireClassRegistration(false).buildThreadSafeFory(),
           Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2, 2)
         }) {
-      byte[] bytes = fory.serializeJavaObject("abc");
-      Assert.assertEquals(fory.deserializeJavaObject(bytes, String.class), "abc");
+      byte[] bytes = fory.serialize("abc");
+      Assert.assertEquals(fory.deserialize(bytes, String.class), "abc");
       MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
-      fory.serializeJavaObject(buffer, "abc");
-      Assert.assertEquals(fory.deserializeJavaObject(buffer, String.class), "abc");
+      fory.serialize(buffer, "abc");
+      Assert.assertEquals(fory.deserialize(buffer, String.class), "abc");
     }
   }
 

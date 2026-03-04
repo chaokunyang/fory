@@ -517,16 +517,13 @@ public class ForyTest extends ForyTestBase {
   }
 
   @Test
-  public void testSerializeJavaObject() {
+  public void testSerializeDeserializeApis() {
     Fory fory = Fory.builder().requireClassRegistration(false).withLanguage(Language.JAVA).build();
     BeanA beanA = BeanA.createBeanA(2);
-    assertEquals(fory.deserializeJavaObject(fory.serializeJavaObject(beanA), BeanA.class), beanA);
+    assertEquals(fory.deserialize(fory.serialize(beanA), BeanA.class), beanA);
+    assertEquals(fory.deserialize(fory.serialize(beanA)), beanA);
     assertEquals(
-        fory.deserializeJavaObjectAndClass(fory.serializeJavaObjectAndClass(beanA)), beanA);
-    assertEquals(
-        fory.deserializeJavaObjectAndClass(
-            MemoryBuffer.fromByteArray(fory.serializeJavaObjectAndClass(beanA))),
-        beanA);
+        fory.deserialize(MemoryBuffer.fromByteArray(fory.serialize(beanA)), BeanA.class), beanA);
   }
 
   @Data
@@ -691,9 +688,9 @@ public class ForyTest extends ForyTestBase {
             .build();
     MetaContext metaContext = new MetaContext();
     fory.getSerializationContext().setMetaContext(metaContext);
-    byte[] bytes = fory.serializeJavaObjectAndClass(null);
+    byte[] bytes = fory.serialize(null);
     fory.getSerializationContext().setMetaContext(metaContext);
-    Object obj = fory.deserializeJavaObjectAndClass(bytes);
+    Object obj = fory.deserialize(bytes);
     assertNull(obj);
   }
 
@@ -750,18 +747,6 @@ public class ForyTest extends ForyTestBase {
     struct1 = (Struct1) fory1.deserialize(fory2.serialize(struct2));
     Assert.assertEquals(struct1.f1, struct2.f1);
     Assert.assertEquals(struct1.f2, struct2.f2);
-  }
-
-  @Test
-  public void testDeserializeJavaObjectWrongType() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
-    Struct1 struct1 = new Struct1(10, "abc");
-    byte[] bytes = fory.serializeJavaObject(struct1);
-    // first deserialize as Struct1 (correct type)
-    Assert.assertEquals(fory.deserializeJavaObject(bytes, Struct1.class), struct1);
-    // then deserialize as Struct2 (wrong type)
-    Assert.assertThrows(
-        DeserializationException.class, () -> fory.deserializeJavaObject(bytes, Struct2.class));
   }
 
   private Object maxDepthData() {

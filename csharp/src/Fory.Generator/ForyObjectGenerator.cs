@@ -508,7 +508,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                 sb,
                 member,
                 BuildWriteRefModeExpression(member),
-                "false",
+                BuildCompatibleReadTypeInfoExpression(member),
                 "valueNoTypeMeta",
                 "CompatNoTypeMeta",
                 4,

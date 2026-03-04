@@ -280,6 +280,8 @@ public final class WriteContext {
     private var lastCompatibleTypeMetaPlanTypeID: ObjectIdentifier?
     private var lastCompatibleTypeMetaPlanWireTypeID: TypeId?
     private var lastCompatibleTypeMetaPlan: CompatibleTypeMetaPlan?
+    private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
+    private var lastCompatibleRootTypeInfoBytes: [UInt8]?
 
     public init(
         buffer: ByteBuffer,
@@ -367,6 +369,38 @@ public final class WriteContext {
         if dynamicAnyDepth > 0 {
             dynamicAnyDepth -= 1
         }
+    }
+
+    @inline(__always)
+    func writeCachedCompatibleRootTypeInfoIfAvailable<T: Serializer>(
+        for type: T.Type
+    ) -> Bool {
+        guard compatible, !compatibleTypeDefStateUsed else {
+            return false
+        }
+        let typeID = ObjectIdentifier(type)
+        guard lastCompatibleRootTypeInfoTypeID == typeID,
+              let bytes = lastCompatibleRootTypeInfoBytes else {
+            return false
+        }
+        buffer.writeBytes(bytes)
+        compatibleTypeDefStateUsed = true
+        compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
+        return true
+    }
+
+    @inline(__always)
+    func cacheCompatibleRootTypeInfo<T: Serializer>(
+        for type: T.Type,
+        bytes: [UInt8]
+    ) {
+        lastCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
+        lastCompatibleRootTypeInfoBytes = bytes
+    }
+
+    @inline(__always)
+    func compatibleTypeDefStateIsUsed() -> Bool {
+        compatibleTypeDefStateUsed
     }
 
     public func writeCompatibleTypeMeta<T: Serializer>(

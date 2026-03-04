@@ -554,7 +554,16 @@ public final class Fory {
 
         if useRootNullOnlyTypeInfoFastPath {
             context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
-            try value.foryWriteTypeInfo(context)
+            if !context.writeCachedCompatibleRootTypeInfoIfAvailable(for: T.self) {
+                let typeInfoStart = context.buffer.count
+                try value.foryWriteTypeInfo(context)
+                if context.compatibleTypeDefStateIsUsed() {
+                    context.cacheCompatibleRootTypeInfo(
+                        for: T.self,
+                        bytes: Array(context.buffer.storage[typeInfoStart..<context.buffer.count])
+                    )
+                }
+            }
             try value.foryWriteData(context, hasGenerics: false)
             return
         }

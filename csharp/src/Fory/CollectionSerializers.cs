@@ -274,6 +274,7 @@ internal static class CollectionCodec
         ICompatibleNoTypeMetaReader<T>? compatibleNoTypeMetaReader =
             context.Compatible &&
             !readDeclaredCompatibleTypeInfo &&
+            elementTypeInfo.SupportsCompatibleReadWithoutTypeMeta &&
             elementSerializer is ICompatibleNoTypeMetaReader<T> noTypeMetaReader
                 ? noTypeMetaReader
                 : null;

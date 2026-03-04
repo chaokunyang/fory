@@ -460,7 +460,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("    public bool SupportsCompatibleReadWithoutTypeMeta()");
         sb.AppendLine("    {");
-        sb.AppendLine("        return true;");
+        sb.AppendLine("        return false;");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine(

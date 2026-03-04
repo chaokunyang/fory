@@ -92,6 +92,18 @@ public sealed class TwoStringField
 }
 
 [ForyObject]
+public sealed class OneStringFieldListHolder
+{
+    public List<OneStringField?> Items { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class TwoStringFieldListHolder
+{
+    public List<TwoStringField?> Items { get; set; } = [];
+}
+
+[ForyObject]
 public sealed class StructWithEnum
 {
     public string Name { get; set; } = string.Empty;
@@ -719,6 +731,92 @@ public sealed class ForyRuntimeTests
 
         Assert.Equal("hello", evolved.F1);
         Assert.Equal(string.Empty, evolved.F2);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CompatibleSchemaEvolutionRoundTripForListElements(bool trackRef)
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).TrackRef(trackRef).Build();
+        writer.Register<OneStringField>(200);
+
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).TrackRef(trackRef).Build();
+        reader.Register<TwoStringField>(200);
+
+        List<OneStringField?> source =
+        [
+            new OneStringField { F1 = "hello" },
+            null,
+            new OneStringField { F1 = "world" },
+        ];
+
+        byte[] payload = writer.Serialize(source);
+        List<TwoStringField?> evolved = reader.Deserialize<List<TwoStringField?>>(payload);
+
+        Assert.Equal(3, evolved.Count);
+        TwoStringField first = Assert.IsType<TwoStringField>(evolved[0]);
+        Assert.Equal("hello", first.F1);
+        Assert.Equal(string.Empty, first.F2);
+        Assert.Null(evolved[1]);
+        TwoStringField third = Assert.IsType<TwoStringField>(evolved[2]);
+        Assert.Equal("world", third.F1);
+        Assert.Equal(string.Empty, third.F2);
+
+        first.F2 = "extra-first";
+        third.F2 = "extra-third";
+        List<OneStringField?> roundTripped = writer.Deserialize<List<OneStringField?>>(reader.Serialize(evolved));
+
+        Assert.Equal(3, roundTripped.Count);
+        OneStringField firstRound = Assert.IsType<OneStringField>(roundTripped[0]);
+        Assert.Equal("hello", firstRound.F1);
+        Assert.Null(roundTripped[1]);
+        OneStringField thirdRound = Assert.IsType<OneStringField>(roundTripped[2]);
+        Assert.Equal("world", thirdRound.F1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CompatibleSchemaEvolutionRoundTripForNestedListField(bool trackRef)
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).TrackRef(trackRef).Build();
+        writer.Register<OneStringField>(200);
+        writer.Register<OneStringFieldListHolder>(201);
+
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).TrackRef(trackRef).Build();
+        reader.Register<TwoStringField>(200);
+        reader.Register<TwoStringFieldListHolder>(201);
+
+        OneStringFieldListHolder source = new()
+        {
+            Items =
+            [
+                new OneStringField { F1 = "hello" },
+                null,
+                new OneStringField { F1 = "world" },
+            ],
+        };
+
+        TwoStringFieldListHolder evolved = reader.Deserialize<TwoStringFieldListHolder>(writer.Serialize(source));
+        Assert.Equal(3, evolved.Items.Count);
+        TwoStringField first = Assert.IsType<TwoStringField>(evolved.Items[0]);
+        Assert.Equal("hello", first.F1);
+        Assert.Equal(string.Empty, first.F2);
+        Assert.Null(evolved.Items[1]);
+        TwoStringField third = Assert.IsType<TwoStringField>(evolved.Items[2]);
+        Assert.Equal("world", third.F1);
+        Assert.Equal(string.Empty, third.F2);
+
+        first.F2 = "extra-first";
+        third.F2 = "extra-third";
+        OneStringFieldListHolder roundTripped = writer.Deserialize<OneStringFieldListHolder>(reader.Serialize(evolved));
+        Assert.Equal(3, roundTripped.Items.Count);
+        OneStringField firstRound = Assert.IsType<OneStringField>(roundTripped.Items[0]);
+        Assert.Equal("hello", firstRound.F1);
+        Assert.Null(roundTripped.Items[1]);
+        OneStringField thirdRound = Assert.IsType<OneStringField>(roundTripped.Items[2]);
+        Assert.Equal("world", thirdRound.F1);
     }
 
     [Fact]

@@ -68,7 +68,7 @@ final class BenchmarkSuite {
 
     init(config: BenchmarkConfig) {
         self.config = config
-        self.fory = Fory(xlang: false, trackRef: false, compatible: false)
+        self.fory = Fory(xlang: false, trackRef: false, compatible: true)
         registerTypes()
     }
 

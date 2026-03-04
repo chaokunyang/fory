@@ -29,6 +29,8 @@ private struct CompatibleTypeMetaCacheKey: Hashable {
 
 private struct CompatibleTypeMetaCacheEntry {
     let encodedTypeMeta: [UInt8]
+    let headerHash: UInt64
+    let hasUserTypeFields: Bool
 }
 
 private enum CompatibleTypeMetaCache {
@@ -247,7 +249,17 @@ public extension Serializer {
                 expectedWireTypes: allowed,
                 actualWireTypeID: typeID
             )
-            context.pushCompatibleTypeMeta(for: Self.self, remoteTypeMeta)
+            let localTypeMeta = try compatibleTypeMetaEntry(
+                info: info,
+                wireTypeID: typeID,
+                trackRef: context.trackRef
+            )
+            context.pushCompatibleTypeMeta(
+                for: Self.self,
+                remoteTypeMeta,
+                localTypeMetaHeaderHash: localTypeMeta.headerHash,
+                localTypeMetaHasUserTypeFields: localTypeMeta.hasUserTypeFields
+            )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
                 let remoteTypeMeta = try context.readCompatibleTypeMeta()
@@ -258,7 +270,17 @@ public extension Serializer {
                     actualWireTypeID: typeID
                 )
                 if typeID == .namedStruct {
-                    context.pushCompatibleTypeMeta(for: Self.self, remoteTypeMeta)
+                    let localTypeMeta = try compatibleTypeMetaEntry(
+                        info: info,
+                        wireTypeID: typeID,
+                        trackRef: context.trackRef
+                    )
+                    context.pushCompatibleTypeMeta(
+                        for: Self.self,
+                        remoteTypeMeta,
+                        localTypeMetaHeaderHash: localTypeMeta.headerHash,
+                        localTypeMetaHasUserTypeFields: localTypeMeta.hasUserTypeFields
+                    )
                 }
             } else {
                 let namespace = try readMetaString(
@@ -411,8 +433,11 @@ public extension Serializer {
             wireTypeID: wireTypeID,
             trackRef: trackRef
         )
+        let encodedTypeMeta = try typeMeta.encode()
         let cacheEntry = CompatibleTypeMetaCacheEntry(
-            encodedTypeMeta: try typeMeta.encode()
+            encodedTypeMeta: encodedTypeMeta,
+            headerHash: try decodeTypeMetaHeaderHash(encodedTypeMeta),
+            hasUserTypeFields: hasCompatibleUserTypeField(typeMeta.fields)
         )
 
         CompatibleTypeMetaCache.lock.lock()
@@ -459,6 +484,27 @@ public extension Serializer {
             fields: fields,
             hasFieldsMeta: hasFieldsMeta
         )
+    }
+
+    private static func decodeTypeMetaHeaderHash(_ encodedTypeMeta: [UInt8]) throws -> UInt64 {
+        guard encodedTypeMeta.count >= 8 else {
+            throw ForyError.invalidData("encoded compatible type metadata must include an 8-byte header")
+        }
+        let headerReader = ByteBuffer(bytes: encodedTypeMeta)
+        let header = try headerReader.readUInt64()
+        return header >> 14
+    }
+
+    private static func hasCompatibleUserTypeField(_ fields: [TypeMetaFieldInfo]) -> Bool {
+        fields.contains { compatibleFieldNeedsTypeMeta($0.fieldType) }
+    }
+
+    private static func compatibleFieldNeedsTypeMeta(_ fieldType: TypeMetaFieldType) -> Bool {
+        if let typeID = TypeId(rawValue: fieldType.typeID),
+           TypeId.needsTypeInfoForField(typeID) {
+            return true
+        }
+        return fieldType.generics.contains { compatibleFieldNeedsTypeMeta($0) }
     }
 
     private static func validateCompatibleTypeMeta(

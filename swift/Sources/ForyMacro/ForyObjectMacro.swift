@@ -1239,6 +1239,9 @@ private func compatibleWriteLine(for field: ParsedField) -> String {
         )
         """
     }
+    if !field.isOptional, !compatibleFieldRequiresTypeInfo(field) {
+        return schemaWriteLine(for: field)
+    }
     return """
     try self.\(field.name).foryWrite(
         context,
@@ -1247,6 +1250,15 @@ private func compatibleWriteLine(for field: ParsedField) -> String {
         hasGenerics: \(hasGenerics)
     )
     """
+}
+
+private func compatibleFieldRequiresTypeInfo(_ field: ParsedField) -> Bool {
+    switch field.typeID {
+    case 0, 27, 28, 29, 30, 31, 32:
+        return true
+    default:
+        return false
+    }
 }
 
 private func buildReadDataDecl(
@@ -1265,23 +1277,29 @@ private func buildReadDataDecl(
             )
             return "value.\(field.name) = \(valueExpr)"
         }.joined(separator: "\n        ")
-        let compatibleCases = sortedFields.map { field -> String in
+        let compatibleCases = sortedFields.enumerated().map { sortedIndex, field -> String in
             let valueExpr = readFieldExpr(
                 field,
                 refModeExpr: "RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef)",
                 readTypeInfoExpr: "TypeId.needsTypeInfoForField(TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown)"
             )
-            return "case \"\(field.fieldIdentifier)\": value.\(field.name) = \(valueExpr)"
+            return "case \(sortedIndex): value.\(field.name) = \(valueExpr)"
         }.joined(separator: "\n                ")
 
         return """
         @inline(__always)
         \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
-            if context.compatible, let typeMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
+            if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
+                if compatibleMeta.canUseSchemaFastPath {
+                    let value = Self.init()
+                    context.bindPendingReference(value)
+                    \(assignLines)
+                    return value
+                }
                 let value = Self.init()
                 context.bindPendingReference(value)
-                for remoteField in typeMeta.fields {
-                    switch remoteField.fieldName {
+                for remoteField in compatibleMeta.fields {
+                    switch Int(remoteField.fieldID ?? -1) {
                 \(compatibleCases)
                     default:
                         try FieldSkipper.skipFieldValue(context: context, fieldType: remoteField.fieldType)
@@ -1308,8 +1326,11 @@ private func buildReadDataDecl(
         return """
         @inline(__always)
         \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
-            if context.compatible, let typeMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
-                for remoteField in typeMeta.fields {
+            if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
+                if compatibleMeta.canUseSchemaFastPath {
+                    return Self()
+                }
+                for remoteField in compatibleMeta.fields {
                     try FieldSkipper.skipFieldValue(context: context, fieldType: remoteField.fieldType)
                 }
                 return Self()
@@ -1344,22 +1365,28 @@ private func buildReadDataDecl(
             return "var __\(field.name) = \(field.typeText).foryDefault()"
         }
         .joined(separator: "\n                ")
-    let compatibleCases = sortedFields.map { field -> String in
+    let compatibleCases = sortedFields.enumerated().map { sortedIndex, field -> String in
         let valueExpr = readFieldExpr(
             field,
             refModeExpr: "RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef)",
             readTypeInfoExpr: "TypeId.needsTypeInfoForField(TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown)"
         )
-        return "case \"\(field.fieldIdentifier)\": __\(field.name) = \(valueExpr)"
+        return "case \(sortedIndex): __\(field.name) = \(valueExpr)"
     }.joined(separator: "\n                    ")
 
     return """
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
-        if context.compatible, let typeMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
+        if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
+                if compatibleMeta.canUseSchemaFastPath {
+                    \(readLines)
+                    return Self(
+                        \(ctorArgs)
+                    )
+                }
                 \(compatibleDefaults)
-                for remoteField in typeMeta.fields {
-                    switch remoteField.fieldName {
+                for remoteField in compatibleMeta.fields {
+                    switch Int(remoteField.fieldID ?? -1) {
                     \(compatibleCases)
                     default:
                         try FieldSkipper.skipFieldValue(context: context, fieldType: remoteField.fieldType)

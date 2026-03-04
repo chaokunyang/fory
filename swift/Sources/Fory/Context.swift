@@ -83,6 +83,38 @@ public final class CompatibleTypeDefReadState {
     }
 }
 
+private let compatibleTypeMetaSizeMask = 0xFF
+
+public struct CompatibleReadTypeMeta {
+    public let fields: [TypeMetaFieldInfo]
+    public let canUseSchemaFastPath: Bool
+
+    public init(fields: [TypeMetaFieldInfo], canUseSchemaFastPath: Bool) {
+        self.fields = fields
+        self.canUseSchemaFastPath = canUseSchemaFastPath
+    }
+}
+
+private struct CompatibleTypeMetaReadCacheKey: Hashable {
+    let header: UInt64
+    let bodySize: Int
+}
+
+private enum CompatibleTypeMetaReadCache {
+    nonisolated(unsafe) static var values: [CompatibleTypeMetaReadCacheKey: TypeMeta] = [:]
+    static let lock = NSLock()
+}
+
+private struct CompatibleResolvedTypeMetaCacheKey: Hashable {
+    let swiftType: ObjectIdentifier
+    let trackRef: Bool
+    let remoteHeaderHash: UInt64
+    let remoteFieldCount: Int
+    let localHeaderHash: UInt64
+    let hasLocalHeaderHash: Bool
+    let localHasUserTypeFields: Bool
+}
+
 private struct MetaStringCacheKey: Hashable {
     let encoding: MetaStringEncoding
     let bytes: [UInt8]
@@ -306,7 +338,8 @@ public final class ReadContext {
     private var dynamicAnyDepth = 0
 
     private var pendingRefStack: [PendingRefSlot] = []
-    private var pendingCompatibleTypeMeta: [ObjectIdentifier: [TypeMeta]] = [:]
+    private var pendingCompatibleTypeMeta: [ObjectIdentifier: CompatibleReadTypeMeta] = [:]
+    private var compatibleResolvedTypeMetaCache: [CompatibleResolvedTypeMetaCacheKey: CompatibleReadTypeMeta] = [:]
     private var pendingDynamicTypeInfo: [ObjectIdentifier: DynamicTypeInfo] = [:]
     private var canonicalReferenceCache: [CanonicalReferenceSignature: [CanonicalReferenceEntry]] = [:]
 
@@ -431,28 +464,198 @@ public final class ReadContext {
             }
             return typeMeta
         }
-        let typeMeta = try TypeMeta.decode(buffer)
-        try compatibleTypeDefState.storeTypeMeta(typeMeta, at: index)
+
+        let typeMetaStart = buffer.getCursor()
+        let header = try buffer.readUInt64()
+        var bodySize = Int(header & UInt64(compatibleTypeMetaSizeMask))
+        if bodySize == compatibleTypeMetaSizeMask {
+            bodySize += Int(try buffer.readVarUInt32())
+        }
+        let cacheKey = CompatibleTypeMetaReadCacheKey(header: header, bodySize: bodySize)
+
+        CompatibleTypeMetaReadCache.lock.lock()
+        if let cached = CompatibleTypeMetaReadCache.values[cacheKey] {
+            CompatibleTypeMetaReadCache.lock.unlock()
+            try buffer.skip(bodySize)
+            try compatibleTypeDefState.storeTypeMeta(cached, at: index)
+            return cached
+        }
+        CompatibleTypeMetaReadCache.lock.unlock()
+
+        buffer.setCursor(typeMetaStart)
+        let decoded = try TypeMeta.decode(buffer)
+        try compatibleTypeDefState.storeTypeMeta(decoded, at: index)
+
+        CompatibleTypeMetaReadCache.lock.lock()
+        if CompatibleTypeMetaReadCache.values[cacheKey] == nil {
+            CompatibleTypeMetaReadCache.values[cacheKey] = decoded
+        }
+        CompatibleTypeMetaReadCache.lock.unlock()
+        return decoded
+    }
+
+    public func pushCompatibleTypeMeta<T: Serializer>(
+        for type: T.Type,
+        _ typeMeta: TypeMeta,
+        localTypeMetaHeaderHash: UInt64? = nil,
+        localTypeMetaHasUserTypeFields: Bool = true
+    ) {
+        let typeID = ObjectIdentifier(type)
+        let cacheKey = CompatibleResolvedTypeMetaCacheKey(
+            swiftType: typeID,
+            trackRef: trackRef,
+            remoteHeaderHash: typeMeta.headerHash,
+            remoteFieldCount: typeMeta.fields.count,
+            localHeaderHash: localTypeMetaHeaderHash ?? 0,
+            hasLocalHeaderHash: localTypeMetaHeaderHash != nil,
+            localHasUserTypeFields: localTypeMetaHasUserTypeFields
+        )
+        if let cached = compatibleResolvedTypeMetaCache[cacheKey] {
+            pendingCompatibleTypeMeta[typeID] = cached
+            return
+        }
+
+        let localFields = T.foryCompatibleTypeMetaFields(trackRef: trackRef)
+        let resolvedFields = Self.assignCompatibleFieldIDs(
+            remoteFields: typeMeta.fields,
+            localFields: localFields
+        )
+        let canUseSchemaFastPath = localTypeMetaHeaderHash != nil &&
+            localTypeMetaHeaderHash == typeMeta.headerHash &&
+            !localTypeMetaHasUserTypeFields
+        let resolved = CompatibleReadTypeMeta(
+            fields: resolvedFields,
+            canUseSchemaFastPath: canUseSchemaFastPath
+        )
+
+        compatibleResolvedTypeMetaCache[cacheKey] = resolved
+        pendingCompatibleTypeMeta[typeID] = resolved
+    }
+
+    public func consumeCompatibleTypeMeta<T: Serializer>(for type: T.Type) throws -> CompatibleReadTypeMeta {
+        let typeID = ObjectIdentifier(type)
+        guard let typeMeta = pendingCompatibleTypeMeta[typeID] else {
+            throw ForyError.invalidData("missing compatible type metadata for \(type)")
+        }
         return typeMeta
     }
 
-    public func pushCompatibleTypeMeta<T: Serializer>(for type: T.Type, _ typeMeta: TypeMeta) {
-        let typeID = ObjectIdentifier(type)
-        pendingCompatibleTypeMeta[typeID] = [typeMeta]
-    }
-
-    public func consumeCompatibleTypeMeta<T: Serializer>(for type: T.Type) throws -> TypeMeta {
-        let typeID = ObjectIdentifier(type)
-        guard let stack = pendingCompatibleTypeMeta[typeID], let last = stack.last else {
-            throw ForyError.invalidData("missing compatible type metadata for \(type)")
-        }
-        return last
-    }
-
     @inline(__always)
-    public func consumeCompatibleTypeMetaIfPresent<T: Serializer>(for type: T.Type) -> TypeMeta? {
+    public func consumeCompatibleTypeMetaIfPresent<T: Serializer>(for type: T.Type) -> CompatibleReadTypeMeta? {
         let typeID = ObjectIdentifier(type)
-        return pendingCompatibleTypeMeta[typeID]?.last
+        return pendingCompatibleTypeMeta[typeID]
+    }
+
+    private static func assignCompatibleFieldIDs(
+        remoteFields: [TypeMetaFieldInfo],
+        localFields: [TypeMetaFieldInfo]
+    ) -> [TypeMetaFieldInfo] {
+        var fieldIndexByName: [String: (Int, TypeMetaFieldInfo)] = [:]
+        var fieldIndexByID: [Int16: (Int, TypeMetaFieldInfo)] = [:]
+        fieldIndexByName.reserveCapacity(localFields.count)
+        fieldIndexByID.reserveCapacity(localFields.count)
+
+        for (index, localField) in localFields.enumerated() {
+            fieldIndexByName[toSnakeCase(localField.fieldName)] = (index, localField)
+            if let fieldID = localField.fieldID, fieldID >= 0 {
+                fieldIndexByID[fieldID] = (index, localField)
+            }
+        }
+
+        return remoteFields.map { remoteField in
+            var resolvedField = remoteField
+
+            let localMatch: (Int, TypeMetaFieldInfo)?
+            if let fieldID = remoteField.fieldID, fieldID >= 0 {
+                localMatch = fieldIndexByID[fieldID]
+            } else {
+                localMatch = fieldIndexByName[toSnakeCase(remoteField.fieldName)]
+            }
+
+            guard let (sortedIndex, localFieldInfo) = localMatch,
+                  sortedIndex <= Int(Int16.max),
+                  isCompatibleFieldType(remoteField.fieldType, localFieldInfo.fieldType) else {
+                resolvedField.fieldID = -1
+                return resolvedField
+            }
+
+            resolvedField.fieldID = Int16(sortedIndex)
+            return resolvedField
+        }
+    }
+
+    private static func isCompatibleFieldType(
+        _ remoteType: TypeMetaFieldType,
+        _ localType: TypeMetaFieldType
+    ) -> Bool {
+        if normalizeCompatibleTypeIDForComparison(remoteType.typeID) != normalizeCompatibleTypeIDForComparison(localType.typeID) {
+            return false
+        }
+        if remoteType.nullable != localType.nullable || remoteType.trackRef != localType.trackRef {
+            return false
+        }
+        if remoteType.generics.count != localType.generics.count {
+            return false
+        }
+        for (remoteGeneric, localGeneric) in zip(remoteType.generics, localType.generics)
+        where !isCompatibleFieldType(remoteGeneric, localGeneric) {
+            return false
+        }
+        return true
+    }
+
+    private static func normalizeCompatibleTypeIDForComparison(_ typeID: UInt32) -> UInt32 {
+        switch typeID {
+        case TypeId.structType.rawValue,
+             TypeId.compatibleStruct.rawValue,
+             TypeId.namedStruct.rawValue,
+             TypeId.namedCompatibleStruct.rawValue,
+             TypeId.unknown.rawValue:
+            return TypeId.structType.rawValue
+        case TypeId.enumType.rawValue,
+             TypeId.namedEnum.rawValue:
+            return TypeId.enumType.rawValue
+        case TypeId.ext.rawValue,
+             TypeId.namedExt.rawValue:
+            return TypeId.ext.rawValue
+        case TypeId.binary.rawValue,
+             TypeId.int8Array.rawValue,
+             TypeId.uint8Array.rawValue:
+            return TypeId.binary.rawValue
+        case TypeId.union.rawValue,
+             TypeId.typedUnion.rawValue,
+             TypeId.namedUnion.rawValue:
+            return TypeId.union.rawValue
+        default:
+            return typeID
+        }
+    }
+
+    private static func toSnakeCase(_ name: String) -> String {
+        if name.isEmpty {
+            return name
+        }
+
+        let chars = Array(name)
+        var result = String()
+        result.reserveCapacity(name.count + 4)
+
+        for (index, char) in chars.enumerated() {
+            if char.isUppercase {
+                if index > 0 {
+                    let prevUpper = chars[index - 1].isUppercase
+                    let nextUpperOrEnd = (index + 1 >= chars.count) || chars[index + 1].isUppercase
+                    if !prevUpper || !nextUpperOrEnd {
+                        result.append("_")
+                    }
+                }
+                result.append(char.lowercased())
+            } else {
+                result.append(char)
+            }
+        }
+
+        return result
     }
 
     public func setDynamicTypeInfo<T: Serializer>(for type: T.Type, _ typeInfo: DynamicTypeInfo) {

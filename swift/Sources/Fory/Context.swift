@@ -18,28 +18,52 @@
 import Foundation
 
 public final class CompatibleTypeDefWriteState {
-    private var typeIndexBySwiftType: [ObjectIdentifier: UInt32] = [:]
+    private var firstTypeID: ObjectIdentifier?
+    private var firstTypeIndex: UInt32 = 0
+    private var overflowTypeIndexBySwiftType: [ObjectIdentifier: UInt32] = [:]
     private var nextIndex: UInt32 = 0
 
     public init() {}
 
+    @inline(__always)
     public func lookupIndex(for typeID: ObjectIdentifier) -> UInt32? {
-        typeIndexBySwiftType[typeID]
+        if firstTypeID == typeID {
+            return firstTypeIndex
+        }
+        return overflowTypeIndexBySwiftType[typeID]
     }
 
+    @inline(__always)
     public func assignIndexIfAbsent(for typeID: ObjectIdentifier) -> (index: UInt32, isNew: Bool) {
-        if let existing = typeIndexBySwiftType[typeID] {
+        if firstTypeID == typeID {
+            return (firstTypeIndex, false)
+        }
+        if let existing = overflowTypeIndexBySwiftType[typeID] {
             return (existing, false)
         }
+
         let index = nextIndex
         nextIndex &+= 1
-        typeIndexBySwiftType[typeID] = index
+
+        if firstTypeID == nil {
+            firstTypeID = typeID
+            firstTypeIndex = index
+        } else {
+            overflowTypeIndexBySwiftType[typeID] = index
+        }
         return (index, true)
     }
 
+    @inline(__always)
     public func reset() {
-        if !typeIndexBySwiftType.isEmpty {
-            typeIndexBySwiftType.removeAll(keepingCapacity: true)
+        if firstTypeID != nil {
+            firstTypeID = nil
+        }
+        if firstTypeIndex != 0 {
+            firstTypeIndex = 0
+        }
+        if !overflowTypeIndexBySwiftType.isEmpty {
+            overflowTypeIndexBySwiftType.removeAll(keepingCapacity: true)
         }
         if nextIndex != 0 {
             nextIndex = 0

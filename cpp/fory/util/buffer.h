@@ -106,11 +106,11 @@ public:
 
   FORY_ALWAYS_INLINE bool own_data() const { return own_data_; }
 
-  FORY_ALWAYS_INLINE bool is_stream_backed() const {
+  FORY_ALWAYS_INLINE bool has_input_stream() const {
     return input_stream_ != nullptr;
   }
 
-  FORY_ALWAYS_INLINE bool is_output_stream_backed() const {
+  FORY_ALWAYS_INLINE bool has_output_stream() const {
     return output_stream_ != nullptr;
   }
 

@@ -1491,13 +1491,13 @@ int Fory_PyPrimitiveCollectionReadFromBuffer(PyObject *collection,
         "tuple collection size is smaller than requested read size");
     return -1;
   }
-  if (!buffer->is_stream_backed() && kind == PythonCollectionKind::List) {
+  if (!buffer->has_input_stream() && kind == PythonCollectionKind::List) {
     return read_primitive_sequence_indexed(
         buffer, size, type_id, [collection](Py_ssize_t i, PyObject *item) {
           PyList_SET_ITEM(collection, i, item);
         });
   }
-  if (!buffer->is_stream_backed() && kind == PythonCollectionKind::Tuple) {
+  if (!buffer->has_input_stream() && kind == PythonCollectionKind::Tuple) {
     return read_primitive_sequence_indexed(
         buffer, size, type_id, [collection](Py_ssize_t i, PyObject *item) {
           PyTuple_SET_ITEM(collection, i, item);

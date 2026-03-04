@@ -398,8 +398,8 @@ TEST(Buffer, OutputStreamRebindDetachesPreviousBufferBacklink) {
 
   first->bind_output_stream(&writer);
   second->bind_output_stream(&writer);
-  EXPECT_FALSE(first->is_output_stream_backed());
-  EXPECT_TRUE(second->is_output_stream_backed());
+  EXPECT_FALSE(first->has_output_stream());
+  EXPECT_TRUE(second->has_output_stream());
 
   writer.enter_flush_barrier();
   std::vector<uint8_t> second_payload(5000, 7);

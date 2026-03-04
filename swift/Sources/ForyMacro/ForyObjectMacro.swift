@@ -1078,47 +1078,37 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
 }
 
 private func buildWriteDataDecl(sortedFields: [ParsedField], accessPrefix: String) -> String {
-    let schemaFieldLines = sortedFields.map { field in
-        schemaWriteLine(for: field)
+    let fieldLines = sortedFields.map { field in
+        writeLine(for: field)
     }
-    let compatibleLines = sortedFields.map { field in
-        compatibleWriteLine(for: field)
-    }
-    var schemaBodyLines = [
+    var schemaHeaderLines = [
         "if context.checkClassVersion {",
         "    context.buffer.writeInt32(Int32(bitPattern: Self.__forySchemaHash(context.trackRef)))",
         "}"
     ]
     let primitiveReserveBytes = schemaPrimitiveReserveBytes(sortedFields)
     if primitiveReserveBytes > 0 {
-        schemaBodyLines.insert(
+        schemaHeaderLines.insert(
             "context.buffer.reserve(\(primitiveReserveBytes) + (context.checkClassVersion ? 4 : 0))",
             at: 0
         )
     }
-    if schemaFieldLines.isEmpty {
-        schemaBodyLines.append("_ = hasGenerics")
-    } else {
-        schemaBodyLines.append(contentsOf: schemaFieldLines)
-    }
-    let schemaBody = schemaBodyLines.joined(separator: "\n        ")
+    let schemaHeader = schemaHeaderLines.joined(separator: "\n            ")
 
-    let compatibleWriteLines: String
-    if compatibleLines.isEmpty {
-        compatibleWriteLines = "\n            _ = hasGenerics"
+    let fieldBody: String
+    if fieldLines.isEmpty {
+        fieldBody = "_ = hasGenerics"
     } else {
-        let joinedCompatibleLines = compatibleLines.joined(separator: "\n            ")
-        compatibleWriteLines = "\n            \(joinedCompatibleLines)"
+        fieldBody = fieldLines.joined(separator: "\n        ")
     }
 
     return """
     @inline(__always)
     \(accessPrefix)func foryWriteData(_ context: WriteContext, hasGenerics: Bool) throws {
-        if context.compatible {
-            \(compatibleWriteLines)
-            return
+        if !context.compatible {
+            \(schemaHeader)
         }
-        \(schemaBody)
+        \(fieldBody)
     }
     """
 }
@@ -1168,7 +1158,7 @@ private func schemaPrimitiveReserveBytes(for field: ParsedField) -> Int {
     }
 }
 
-private func schemaWriteLine(for field: ParsedField) -> String {
+private func writeLine(for field: ParsedField) -> String {
     if let dynamicAnyCodec = field.dynamicAnyCodec {
         let refMode = fieldRefModeExpression(field)
         return dynamicAnyWriteLine(
@@ -1199,60 +1189,25 @@ private func schemaWriteLine(for field: ParsedField) -> String {
         )
         """
     }
-    if !field.isOptional, field.typeID != 27 {
+    if !field.isOptional, !compatibleFieldNeedsTypeInfo(field) {
         if let primitiveLine = primitiveSchemaWriteLine(field) {
             return primitiveLine
         }
         return "try self.\(field.name).foryWriteData(context, hasGenerics: \(hasGenerics))"
     }
     let refMode = fieldRefModeExpression(field)
-    return "try self.\(field.name).foryWrite(context, refMode: \(refMode), writeTypeInfo: false, hasGenerics: \(hasGenerics))"
-}
-
-private func compatibleWriteLine(for field: ParsedField) -> String {
-    let refMode = fieldRefModeExpression(field)
-    if let dynamicAnyCodec = field.dynamicAnyCodec {
-        return dynamicAnyWriteLine(
-            field: field,
-            dynamicAnyCodec: dynamicAnyCodec,
-            refModeExpr: refMode
-        )
-    }
-    let hasGenerics = field.isCollection ? "true" : "false"
-    if let codecType = field.customCodecType {
-        if field.isOptional {
-            return """
-            try (self.\(field.name).map { \(codecType)(rawValue: $0) }).foryWrite(
-                context,
-                refMode: \(refMode),
-                writeTypeInfo: false,
-                hasGenerics: false
-            )
-            """
-        }
-        return """
-        try \(codecType)(rawValue: self.\(field.name)).foryWrite(
-            context,
-            refMode: \(refMode),
-            writeTypeInfo: false,
-            hasGenerics: false
-        )
-        """
-    }
-    if !field.isOptional, !compatibleFieldRequiresTypeInfo(field) {
-        return schemaWriteLine(for: field)
-    }
+    let writeTypeInfoExpr = "context.compatible ? TypeId.needsTypeInfoForField(\(field.typeText).staticTypeId) : false"
     return """
     try self.\(field.name).foryWrite(
         context,
         refMode: \(refMode),
-        writeTypeInfo: TypeId.needsTypeInfoForField(\(field.typeText).staticTypeId),
+        writeTypeInfo: \(writeTypeInfoExpr),
         hasGenerics: \(hasGenerics)
     )
     """
 }
 
-private func compatibleFieldRequiresTypeInfo(_ field: ParsedField) -> Bool {
+private func compatibleFieldNeedsTypeInfo(_ field: ParsedField) -> Bool {
     switch field.typeID {
     case 0, 27, 28, 29, 30, 31, 32:
         return true

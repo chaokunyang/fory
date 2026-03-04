@@ -43,14 +43,14 @@ private struct CompatibleTypeMetaCacheKey: Hashable {
     let trackRef: Bool
 }
 
-private struct CompatibleTypeMetaCacheEntry {
+struct CompatibleTypeMetaPlan {
     let encodedTypeMeta: [UInt8]
     let headerHash: UInt64
     let hasUserTypeFields: Bool
 }
 
 private enum CompatibleTypeMetaCache {
-    nonisolated(unsafe) static var values: [CompatibleTypeMetaCacheKey: CompatibleTypeMetaCacheEntry] = [:]
+    nonisolated(unsafe) static var values: [CompatibleTypeMetaCacheKey: CompatibleTypeMetaPlan] = [:]
     static let lock = CacheMutex()
 }
 
@@ -174,33 +174,52 @@ public extension Serializer {
             return
         }
 
+        let swiftTypeID = ObjectIdentifier(Self.self)
         let info = try context.requireRegisteredTypeInfo(for: Self.self)
-        let wireTypeID = resolveWireTypeID(
-            declaredKind: info.kind,
-            registerByName: info.registerByName,
-            compatible: context.compatible
-        )
+        let wireTypeID: TypeId
+        if let cachedWireTypeID = context.resolvedWireTypeID(for: swiftTypeID) {
+            wireTypeID = cachedWireTypeID
+        } else {
+            wireTypeID = resolveWireTypeID(
+                declaredKind: info.kind,
+                registerByName: info.registerByName,
+                compatible: context.compatible
+            )
+            context.cacheResolvedWireTypeID(wireTypeID, for: swiftTypeID)
+        }
         context.buffer.writeUInt8(UInt8(truncatingIfNeeded: wireTypeID.rawValue))
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            let cachedTypeMeta = try compatibleTypeMetaEntry(
-                resolverIdentity: ObjectIdentifier(context.typeResolver),
-                info: info,
-                wireTypeID: wireTypeID,
-                trackRef: context.trackRef
-            )
+            let cachedTypeMeta: CompatibleTypeMetaPlan
+            if let cached = context.compatibleTypeMetaPlan(for: swiftTypeID, wireTypeID: wireTypeID) {
+                cachedTypeMeta = cached
+            } else {
+                cachedTypeMeta = try compatibleTypeMetaEntry(
+                    resolverIdentity: ObjectIdentifier(context.typeResolver),
+                    info: info,
+                    wireTypeID: wireTypeID,
+                    trackRef: context.trackRef
+                )
+                context.cacheCompatibleTypeMetaPlan(cachedTypeMeta, for: swiftTypeID, wireTypeID: wireTypeID)
+            }
             try context.writeCompatibleTypeMeta(
                 for: Self.self,
                 encodedTypeMeta: cachedTypeMeta.encodedTypeMeta
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
-                let cachedTypeMeta = try compatibleTypeMetaEntry(
-                    resolverIdentity: ObjectIdentifier(context.typeResolver),
-                    info: info,
-                    wireTypeID: wireTypeID,
-                    trackRef: context.trackRef
-                )
+                let cachedTypeMeta: CompatibleTypeMetaPlan
+                if let cached = context.compatibleTypeMetaPlan(for: swiftTypeID, wireTypeID: wireTypeID) {
+                    cachedTypeMeta = cached
+                } else {
+                    cachedTypeMeta = try compatibleTypeMetaEntry(
+                        resolverIdentity: ObjectIdentifier(context.typeResolver),
+                        info: info,
+                        wireTypeID: wireTypeID,
+                        trackRef: context.trackRef
+                    )
+                    context.cacheCompatibleTypeMetaPlan(cachedTypeMeta, for: swiftTypeID, wireTypeID: wireTypeID)
+                }
                 try context.writeCompatibleTypeMeta(
                     for: Self.self,
                     encodedTypeMeta: cachedTypeMeta.encodedTypeMeta
@@ -245,12 +264,19 @@ public extension Serializer {
             return
         }
 
+        let swiftTypeID = ObjectIdentifier(Self.self)
         let info = try context.requireRegisteredTypeInfo(for: Self.self)
-        let expectedWireTypeID = resolveWireTypeID(
-            declaredKind: info.kind,
-            registerByName: info.registerByName,
-            compatible: context.compatible
-        )
+        let expectedWireTypeID: TypeId
+        if let cachedWireTypeID = context.resolvedWireTypeID(for: swiftTypeID) {
+            expectedWireTypeID = cachedWireTypeID
+        } else {
+            expectedWireTypeID = resolveWireTypeID(
+                declaredKind: info.kind,
+                registerByName: info.registerByName,
+                compatible: context.compatible
+            )
+            context.cacheResolvedWireTypeID(expectedWireTypeID, for: swiftTypeID)
+        }
         if !isAllowedWireTypeID(
             typeID,
             declaredKind: info.kind,
@@ -269,12 +295,18 @@ public extension Serializer {
                 compatible: context.compatible,
                 actualWireTypeID: typeID
             )
-            let localTypeMeta = try compatibleTypeMetaEntry(
-                resolverIdentity: ObjectIdentifier(context.typeResolver),
-                info: info,
-                wireTypeID: typeID,
-                trackRef: context.trackRef
-            )
+            let localTypeMeta: CompatibleTypeMetaPlan
+            if let cached = context.compatibleTypeMetaPlan(for: swiftTypeID, wireTypeID: typeID) {
+                localTypeMeta = cached
+            } else {
+                localTypeMeta = try compatibleTypeMetaEntry(
+                    resolverIdentity: ObjectIdentifier(context.typeResolver),
+                    info: info,
+                    wireTypeID: typeID,
+                    trackRef: context.trackRef
+                )
+                context.cacheCompatibleTypeMetaPlan(localTypeMeta, for: swiftTypeID, wireTypeID: typeID)
+            }
             context.pushCompatibleTypeMeta(
                 for: Self.self,
                 remoteTypeMeta,
@@ -291,12 +323,18 @@ public extension Serializer {
                     actualWireTypeID: typeID
                 )
                 if typeID == .namedStruct {
-                    let localTypeMeta = try compatibleTypeMetaEntry(
-                        resolverIdentity: ObjectIdentifier(context.typeResolver),
-                        info: info,
-                        wireTypeID: typeID,
-                        trackRef: context.trackRef
-                    )
+                    let localTypeMeta: CompatibleTypeMetaPlan
+                    if let cached = context.compatibleTypeMetaPlan(for: swiftTypeID, wireTypeID: typeID) {
+                        localTypeMeta = cached
+                    } else {
+                        localTypeMeta = try compatibleTypeMetaEntry(
+                            resolverIdentity: ObjectIdentifier(context.typeResolver),
+                            info: info,
+                            wireTypeID: typeID,
+                            trackRef: context.trackRef
+                        )
+                        context.cacheCompatibleTypeMetaPlan(localTypeMeta, for: swiftTypeID, wireTypeID: typeID)
+                    }
                     context.pushCompatibleTypeMeta(
                         for: Self.self,
                         remoteTypeMeta,
@@ -432,7 +470,7 @@ public extension Serializer {
         info: RegisteredTypeInfo,
         wireTypeID: TypeId,
         trackRef: Bool
-    ) throws -> CompatibleTypeMetaCacheEntry {
+    ) throws -> CompatibleTypeMetaPlan {
         let cacheKey = CompatibleTypeMetaCacheKey(
             resolver: resolverIdentity,
             swiftType: ObjectIdentifier(Self.self),
@@ -450,7 +488,7 @@ public extension Serializer {
             trackRef: trackRef
         )
         let encodedTypeMeta = try typeMeta.encode()
-        let cacheEntry = CompatibleTypeMetaCacheEntry(
+        let cacheEntry = CompatibleTypeMetaPlan(
             encodedTypeMeta: encodedTypeMeta,
             headerHash: try decodeTypeMetaHeaderHash(encodedTypeMeta),
             hasUserTypeFields: hasCompatibleUserTypeField(typeMeta.fields)

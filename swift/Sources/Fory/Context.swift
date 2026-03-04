@@ -145,13 +145,8 @@ public struct CompatibleReadTypeMeta {
     }
 }
 
-private struct CompatibleTypeMetaReadCacheKey: Hashable {
-    let header: UInt64
-    let bodySize: Int
-}
-
 private enum CompatibleTypeMetaReadCache {
-    nonisolated(unsafe) static var values: [CompatibleTypeMetaReadCacheKey: TypeMeta] = [:]
+    nonisolated(unsafe) static var values: [UInt64: TypeMeta] = [:]
     static let lock = NSLock()
 }
 
@@ -273,6 +268,11 @@ public final class WriteContext {
     private var dynamicAnyDepth = 0
     private var lastRegisteredTypeInfoTypeID: ObjectIdentifier?
     private var lastRegisteredTypeInfo: RegisteredTypeInfo?
+    private var lastResolvedWireTypeTypeID: ObjectIdentifier?
+    private var lastResolvedWireTypeID: TypeId?
+    private var lastCompatibleTypeMetaPlanTypeID: ObjectIdentifier?
+    private var lastCompatibleTypeMetaPlanWireTypeID: TypeId?
+    private var lastCompatibleTypeMetaPlan: CompatibleTypeMetaPlan?
 
     public init(
         buffer: ByteBuffer,
@@ -319,6 +319,40 @@ public final class WriteContext {
         lastRegisteredTypeInfoTypeID = typeID
         lastRegisteredTypeInfo = info
         return info
+    }
+
+    @inline(__always)
+    public func resolvedWireTypeID(for typeID: ObjectIdentifier) -> TypeId? {
+        if lastResolvedWireTypeTypeID == typeID {
+            return lastResolvedWireTypeID
+        }
+        return nil
+    }
+
+    @inline(__always)
+    public func cacheResolvedWireTypeID(_ wireTypeID: TypeId, for typeID: ObjectIdentifier) {
+        lastResolvedWireTypeTypeID = typeID
+        lastResolvedWireTypeID = wireTypeID
+    }
+
+    @inline(__always)
+    func compatibleTypeMetaPlan(for typeID: ObjectIdentifier, wireTypeID: TypeId) -> CompatibleTypeMetaPlan? {
+        if lastCompatibleTypeMetaPlanTypeID == typeID,
+           lastCompatibleTypeMetaPlanWireTypeID == wireTypeID {
+            return lastCompatibleTypeMetaPlan
+        }
+        return nil
+    }
+
+    @inline(__always)
+    func cacheCompatibleTypeMetaPlan(
+        _ plan: CompatibleTypeMetaPlan,
+        for typeID: ObjectIdentifier,
+        wireTypeID: TypeId
+    ) {
+        lastCompatibleTypeMetaPlanTypeID = typeID
+        lastCompatibleTypeMetaPlanWireTypeID = wireTypeID
+        lastCompatibleTypeMetaPlan = plan
     }
 
     @inline(__always)
@@ -410,10 +444,15 @@ public final class ReadContext {
     private var lastCompatibleResolvedTypeMetaCacheValue: CompatibleReadTypeMeta?
     private var pendingDynamicTypeInfo: [ObjectIdentifier: DynamicTypeInfo] = [:]
     private var canonicalReferenceCache: [CanonicalReferenceSignature: [CanonicalReferenceEntry]] = [:]
-    private var lastCompatibleTypeMetaCacheKey: CompatibleTypeMetaReadCacheKey?
+    private var lastCompatibleTypeMetaCacheHeader: UInt64?
     private var lastCompatibleTypeMetaCacheEntry: TypeMeta?
     private var lastRegisteredTypeInfoTypeID: ObjectIdentifier?
     private var lastRegisteredTypeInfo: RegisteredTypeInfo?
+    private var lastResolvedWireTypeTypeID: ObjectIdentifier?
+    private var lastResolvedWireTypeID: TypeId?
+    private var lastCompatibleTypeMetaPlanTypeID: ObjectIdentifier?
+    private var lastCompatibleTypeMetaPlanWireTypeID: TypeId?
+    private var lastCompatibleTypeMetaPlan: CompatibleTypeMetaPlan?
 
     public init(
         buffer: ByteBuffer,
@@ -510,6 +549,40 @@ public final class ReadContext {
         return info
     }
 
+    @inline(__always)
+    public func resolvedWireTypeID(for typeID: ObjectIdentifier) -> TypeId? {
+        if lastResolvedWireTypeTypeID == typeID {
+            return lastResolvedWireTypeID
+        }
+        return nil
+    }
+
+    @inline(__always)
+    public func cacheResolvedWireTypeID(_ wireTypeID: TypeId, for typeID: ObjectIdentifier) {
+        lastResolvedWireTypeTypeID = typeID
+        lastResolvedWireTypeID = wireTypeID
+    }
+
+    @inline(__always)
+    func compatibleTypeMetaPlan(for typeID: ObjectIdentifier, wireTypeID: TypeId) -> CompatibleTypeMetaPlan? {
+        if lastCompatibleTypeMetaPlanTypeID == typeID,
+           lastCompatibleTypeMetaPlanWireTypeID == wireTypeID {
+            return lastCompatibleTypeMetaPlan
+        }
+        return nil
+    }
+
+    @inline(__always)
+    func cacheCompatibleTypeMetaPlan(
+        _ plan: CompatibleTypeMetaPlan,
+        for typeID: ObjectIdentifier,
+        wireTypeID: TypeId
+    ) {
+        lastCompatibleTypeMetaPlanTypeID = typeID
+        lastCompatibleTypeMetaPlanWireTypeID = wireTypeID
+        lastCompatibleTypeMetaPlan = plan
+    }
+
     public func pushPendingReference(_ refID: UInt32) {
         pendingRefStack.append(PendingRefSlot(refID: refID, bound: false))
     }
@@ -555,8 +628,7 @@ public final class ReadContext {
         if bodySize == compatibleTypeMetaSizeMask {
             bodySize += Int(try buffer.readVarUInt32())
         }
-        let cacheKey = CompatibleTypeMetaReadCacheKey(header: header, bodySize: bodySize)
-        if lastCompatibleTypeMetaCacheKey == cacheKey,
+        if lastCompatibleTypeMetaCacheHeader == header,
            let cachedEntry = lastCompatibleTypeMetaCacheEntry {
             try buffer.skip(bodySize)
             try compatibleTypeDefState.storeTypeMetaEntry(cachedEntry, at: index)
@@ -564,10 +636,10 @@ public final class ReadContext {
         }
 
         CompatibleTypeMetaReadCache.lock.lock()
-        if let cached = CompatibleTypeMetaReadCache.values[cacheKey] {
+        if let cached = CompatibleTypeMetaReadCache.values[header] {
             CompatibleTypeMetaReadCache.lock.unlock()
             try buffer.skip(bodySize)
-            lastCompatibleTypeMetaCacheKey = cacheKey
+            lastCompatibleTypeMetaCacheHeader = header
             lastCompatibleTypeMetaCacheEntry = cached
             try compatibleTypeDefState.storeTypeMetaEntry(cached, at: index)
             return cached
@@ -579,14 +651,14 @@ public final class ReadContext {
         var canonicalEntry = decoded
 
         CompatibleTypeMetaReadCache.lock.lock()
-        if let cached = CompatibleTypeMetaReadCache.values[cacheKey] {
+        if let cached = CompatibleTypeMetaReadCache.values[header] {
             canonicalEntry = cached
         } else {
-            CompatibleTypeMetaReadCache.values[cacheKey] = decoded
+            CompatibleTypeMetaReadCache.values[header] = decoded
         }
         CompatibleTypeMetaReadCache.lock.unlock()
 
-        lastCompatibleTypeMetaCacheKey = cacheKey
+        lastCompatibleTypeMetaCacheHeader = header
         lastCompatibleTypeMetaCacheEntry = canonicalEntry
         try compatibleTypeDefState.storeTypeMetaEntry(canonicalEntry, at: index)
         return canonicalEntry

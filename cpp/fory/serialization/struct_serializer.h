@@ -3270,6 +3270,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return T{};
         }
+        ctx.buffer().shrink_stream_buffer();
         return obj;
       }
 
@@ -3279,6 +3280,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return T{};
       }
+      ctx.buffer().shrink_stream_buffer();
       return obj;
     }
 
@@ -3290,6 +3292,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       return T{};
     }
 
+    ctx.buffer().shrink_stream_buffer();
     return obj;
   }
 
@@ -3333,6 +3336,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       return T{};
     }
 
+    ctx.buffer().shrink_stream_buffer();
     return obj;
   }
 

@@ -16,6 +16,7 @@
 # under the License.
 
 from dataclasses import dataclass
+import io
 
 import pytest
 
@@ -181,6 +182,25 @@ def test_stream_deserialize_multiple_objects_from_single_stream(xlang):
         assert fory.deserialize(reader) == obj
 
     assert reader.get_reader_index() == reader.size()
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_stream_backed_buffer_struct_deserialize_shrinks_each_struct(xlang):
+    fory = pyfory.Fory(xlang=xlang, ref=True)
+    fory.register(StreamStructValue)
+    first = StreamStructValue(101, "first", list(range(6000)))
+    second = StreamStructValue(202, "second", list(range(6000, 0, -1)))
+
+    payload = fory.dumps(first) + fory.dumps(second)
+    reader = Buffer.from_stream(io.BytesIO(payload), 4096)
+
+    first_result = fory.deserialize(reader)
+    assert first_result == first
+    assert reader.get_reader_index() == 0
+
+    second_result = fory.deserialize(reader)
+    assert second_result == second
+    assert reader.get_reader_index() == 0
 
 
 @pytest.mark.parametrize("xlang", [False, True])

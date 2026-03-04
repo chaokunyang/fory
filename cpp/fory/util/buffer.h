@@ -136,7 +136,7 @@ public:
   }
 
   FORY_ALWAYS_INLINE void shrink_stream_buffer() {
-    if (input_stream_ != nullptr) {
+    if (FORY_PREDICT_FALSE(input_stream_ != nullptr && reader_index_ > 4096)) {
       input_stream_->shrink_buffer();
     }
   }

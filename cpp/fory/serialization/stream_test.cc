@@ -21,6 +21,7 @@
 #include <istream>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <streambuf>
 #include <string>
 #include <utility>
@@ -308,6 +309,49 @@ TEST(StreamSerializationTest, SerializeToOStreamOverloadParity) {
   auto write_result = fory.serialize(out, original);
   ASSERT_TRUE(write_result.ok()) << write_result.error().to_string();
   EXPECT_EQ(out.data(), expected.value());
+}
+
+TEST(StreamSerializationTest,
+     StructDeserializeFromStreamBackedBufferShrinksAfterEachStruct) {
+  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  register_stream_types(fory);
+
+  std::vector<int32_t> first_values;
+  std::vector<int32_t> second_values;
+  first_values.reserve(6000);
+  second_values.reserve(6000);
+  for (int32_t i = 0; i < 6000; ++i) {
+    first_values.push_back(i);
+    second_values.push_back(6000 - i);
+  }
+
+  StreamEnvelope first{
+      "first", std::move(first_values), {{"a", 11}, {"b", 22}}, {7, 8}, true,
+  };
+  StreamEnvelope second{
+      "second", std::move(second_values), {{"c", 33}, {"d", 44}}, {9, 10},
+      false,
+  };
+
+  std::vector<uint8_t> bytes;
+  ASSERT_TRUE(fory.serialize_to(bytes, first).ok());
+  ASSERT_TRUE(fory.serialize_to(bytes, second).ok());
+
+  std::string payload(reinterpret_cast<const char *>(bytes.data()),
+                      bytes.size());
+  std::istringstream source(payload);
+  StdInputStream stream(source, 4096);
+  Buffer &buffer = stream.get_buffer();
+
+  auto first_result = fory.deserialize<StreamEnvelope>(buffer);
+  ASSERT_TRUE(first_result.ok()) << first_result.error().to_string();
+  EXPECT_EQ(first_result.value(), first);
+  EXPECT_EQ(buffer.reader_index(), 0U);
+
+  auto second_result = fory.deserialize<StreamEnvelope>(buffer);
+  ASSERT_TRUE(second_result.ok()) << second_result.error().to_string();
+  EXPECT_EQ(second_result.value(), second);
+  EXPECT_EQ(buffer.reader_index(), 0U);
 }
 
 } // namespace test

@@ -247,6 +247,9 @@ cdef class Buffer:
     cpdef inline void shrink_input_buffer(self):
         self.c_buffer.shrink_input_buffer()
 
+    cpdef inline c_bool has_input_stream(self):
+        return self.c_buffer.has_input_stream()
+
     cpdef c_bool own_data(self):
         return self.c_buffer.own_data()
 

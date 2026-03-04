@@ -38,20 +38,22 @@ public sealed class TypeResolver
 
     private readonly record struct CompatibleTypeMetaCacheKey(Type Type, TypeId WireTypeId, bool TrackRef);
 
+    // Cache lookup intentionally keys only by ResolverVersion.
+    // Keep this entry resolver-independent: do not add TypeResolver references here.
+    // ResolverVersion is a deterministic semantic fingerprint only (no resolver identity).
+    // This keeps generic cache reuse efficient across equivalent resolver instances,
+    // including per-thread resolvers in ThreadSafeFory.
     private sealed class GenericTypeCacheEntry<T>
     {
-        public GenericTypeCacheEntry(ulong resolverVersion, TypeInfo typeInfo, Serializer<T> serializer)
+        public GenericTypeCacheEntry(ulong resolverVersion, TypeInfo typeInfo)
         {
             ResolverVersion = resolverVersion;
             TypeInfo = typeInfo;
-            Serializer = serializer;
         }
 
         public ulong ResolverVersion { get; }
 
         public TypeInfo TypeInfo { get; }
-
-        public Serializer<T> Serializer { get; }
     }
 
     private static class GenericTypeCache<T>
@@ -132,20 +134,12 @@ public sealed class TypeResolver
             GenericTypeCacheEntry<T>? cacheEntry = Volatile.Read(ref GenericTypeCache<T>.Entry);
             if (cacheEntry is not null && cacheEntry.ResolverVersion == version)
             {
-                return cacheEntry.Serializer;
+                return cacheEntry.TypeInfo.RequireSerializer<T>();
             }
         }
 
         TypeInfo typeInfo = GetTypeInfo<T>();
-        Serializer<T> serializer = typeInfo.RequireSerializer<T>();
-        if (_finalized)
-        {
-            Volatile.Write(
-                ref GenericTypeCache<T>.Entry,
-                new GenericTypeCacheEntry<T>(_versionHash, typeInfo, serializer));
-        }
-
-        return serializer;
+        return typeInfo.RequireSerializer<T>();
     }
 
     public TypeInfo GetTypeInfo(Type type)
@@ -169,7 +163,7 @@ public sealed class TypeResolver
         EnsureFinalizedVersion();
         Volatile.Write(
             ref GenericTypeCache<T>.Entry,
-            new GenericTypeCacheEntry<T>(_versionHash, typeInfo, typeInfo.RequireSerializer<T>()));
+            new GenericTypeCacheEntry<T>(_versionHash, typeInfo));
         return typeInfo;
     }
 
@@ -289,10 +283,10 @@ public sealed class TypeResolver
     }
 
     /// <summary>
-    /// Returns a stable hash representing the finalized resolver type binding semantics.
-    /// The hash is computed lazily and invalidated whenever type bindings or registrations change.
+    /// Returns a finalized semantic resolver version used by generated/static caches.
+    /// The version is computed lazily and changes whenever bindings/registrations change.
     /// </summary>
-    /// <returns>Resolver version hash.</returns>
+    /// <returns>Resolver version token.</returns>
     public ulong VersionHash()
     {
         EnsureFinalizedVersion();
@@ -676,16 +670,13 @@ public sealed class TypeResolver
             TypeMeta remoteTypeMeta = context.ReadCompatibleTypeMeta();
             if (!IsValidatedCompatibleTypeMeta(info, remoteTypeMeta))
             {
-                if (!remoteTypeMeta.UserTypeId.HasValue || !info.UserTypeId.HasValue)
-                {
-                    throw new InvalidDataException("missing user type id in compatible type metadata");
-                }
-
-                if (remoteTypeMeta.UserTypeId.Value != info.UserTypeId.Value)
-                {
-                    throw new TypeMismatchException(info.UserTypeId.Value, remoteTypeMeta.UserTypeId.Value);
-                }
-
+                ValidateCompatibleTypeMeta(
+                    remoteTypeMeta,
+                    info,
+                    info.UserTypeKind.Value,
+                    info.RegisterByName,
+                    context.Compatible,
+                    typeId);
                 remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
                 MarkValidatedCompatibleTypeMeta(info, remoteTypeMeta);
             }

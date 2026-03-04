@@ -1031,14 +1031,25 @@ public sealed class ForyRuntimeTests
     [Fact]
     public void TypeResolverVersionHashIncludesUnregisteredTypeBindings()
     {
-        TypeResolver baselineResolver = new();
-        ulong baselineHash = baselineResolver.VersionHash();
-
-        TypeResolver boundResolver = new();
-        _ = boundResolver.GetTypeInfo<List<int>>();
-        ulong boundHash = boundResolver.VersionHash();
+        TypeResolver resolver = new();
+        ulong baselineHash = resolver.VersionHash();
+        _ = resolver.GetTypeInfo<List<int>>();
+        ulong boundHash = resolver.VersionHash();
 
         Assert.NotEqual(baselineHash, boundHash);
+    }
+
+    [Fact]
+    public void TypeResolverVersionHashIsStableWithinSameFinalizedResolver()
+    {
+        TypeResolver resolver = new();
+        _ = resolver.GetTypeInfo<List<int>>();
+        _ = resolver.GetTypeInfo<Dictionary<string, int>>();
+
+        ulong first = resolver.VersionHash();
+        ulong second = resolver.VersionHash();
+
+        Assert.Equal(first, second);
     }
 
     [Fact]
@@ -1055,6 +1066,20 @@ public sealed class ForyRuntimeTests
         ulong hashB = resolverB.VersionHash();
 
         Assert.Equal(hashA, hashB);
+    }
+
+    [Fact]
+    public void CompatibleStructFastPathValidatesEmbeddedTypeMetaTypeId()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        writer.Register<OneStringField>(200);
+        byte[] payload = writer.Serialize(new OneStringField { F1 = "hello" });
+
+        byte[] tamperedPayload = RewriteCompatibleTypeMetaTypeId(payload, (uint)TypeId.Map);
+
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<OneStringField>(200);
+        Assert.Throws<TypeMismatchException>(() => reader.Deserialize<OneStringField>(tamperedPayload));
     }
 
     [Fact]
@@ -1179,6 +1204,42 @@ public sealed class ForyRuntimeTests
         InvalidDataException exception = Assert.Throws<InvalidDataException>(
             () => TypeMeta.AssignFieldIds(remoteTypeMeta, localFields));
         Assert.Contains("duplicate remote field id 9", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static byte[] RewriteCompatibleTypeMetaTypeId(byte[] payload, uint embeddedTypeId)
+    {
+        ByteReader reader = new(payload);
+        _ = reader.ReadUInt8(); // frame header bitmap
+
+        sbyte refFlag = reader.ReadInt8();
+        Assert.Equal((sbyte)RefFlag.NotNullValue, refFlag);
+
+        uint wireTypeId = reader.ReadUInt8();
+        Assert.Equal((uint)TypeId.CompatibleStruct, wireTypeId);
+
+        uint typeMetaIndexMarker = reader.ReadVarUInt32();
+        Assert.Equal(0u, typeMetaIndexMarker & 1u);
+
+        int typeMetaStart = reader.Cursor;
+        TypeMeta originalTypeMeta = TypeMeta.Decode(reader);
+        int typeMetaEnd = reader.Cursor;
+
+        TypeMeta rewrittenTypeMeta = new(
+            embeddedTypeId,
+            originalTypeMeta.UserTypeId,
+            originalTypeMeta.NamespaceName,
+            originalTypeMeta.TypeName,
+            originalTypeMeta.RegisterByName,
+            originalTypeMeta.Fields,
+            originalTypeMeta.HasFieldsMeta,
+            originalTypeMeta.Compressed);
+        byte[] rewrittenTypeMetaBytes = rewrittenTypeMeta.Encode();
+
+        byte[] rewrittenPayload = new byte[typeMetaStart + rewrittenTypeMetaBytes.Length + (payload.Length - typeMetaEnd)];
+        Buffer.BlockCopy(payload, 0, rewrittenPayload, 0, typeMetaStart);
+        Buffer.BlockCopy(rewrittenTypeMetaBytes, 0, rewrittenPayload, typeMetaStart, rewrittenTypeMetaBytes.Length);
+        Buffer.BlockCopy(payload, typeMetaEnd, rewrittenPayload, typeMetaStart + rewrittenTypeMetaBytes.Length, payload.Length - typeMetaEnd);
+        return rewrittenPayload;
     }
 
     private static (ulong Encoding, string Decoded) WriteAndReadString(string value)

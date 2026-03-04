@@ -204,6 +204,14 @@ void StdInputStream::shrink_buffer() {
   }
 
   const uint32_t read_pos = buffer_->reader_index_;
+  // Best-effort policy:
+  // 1) keep a hard 4096-byte floor to avoid tiny frequent compactions;
+  // 2) for larger configured input buffers, require at least one full initial
+  //    buffer worth of consumed bytes before moving unread data.
+  if (FORY_PREDICT_TRUE(read_pos <= 4096 || read_pos < initial_buffer_size_)) {
+    return;
+  }
+
   const uint32_t remaining = remaining_size();
   if (read_pos > 0) {
     if (remaining > 0) {

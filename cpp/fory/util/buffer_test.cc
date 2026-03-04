@@ -19,6 +19,8 @@
 
 #include <iostream>
 #include <limits>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -330,6 +332,33 @@ TEST(Buffer, StreamSkipAndUnread) {
   EXPECT_EQ(view.reader_index(), 2U);
 }
 
+TEST(Buffer, StreamShrinkBufferBestEffortUsesConfiguredBufferSize) {
+  constexpr uint32_t kConfiguredBufferSize = 32768;
+  constexpr uint32_t kPayloadSize = kConfiguredBufferSize * 2;
+  std::string payload(kPayloadSize, '\x7');
+  std::istringstream source(payload);
+  StdInputStream stream(source, kConfiguredBufferSize);
+  Buffer reader(stream);
+  Error error;
+
+  reader.skip(5000, error);
+  ASSERT_TRUE(error.ok()) << error.to_string();
+  EXPECT_EQ(reader.reader_index(), 5000U);
+
+  // Below configured input buffer size, shrink should be a no-op.
+  reader.shrink_input_buffer();
+  EXPECT_EQ(reader.reader_index(), 5000U);
+
+  reader.skip(kConfiguredBufferSize, error);
+  ASSERT_TRUE(error.ok()) << error.to_string();
+  ASSERT_GT(reader.reader_index(), kConfiguredBufferSize);
+
+  const uint32_t remaining_before = reader.remaining_size();
+  reader.shrink_input_buffer();
+  EXPECT_EQ(reader.reader_index(), 0U);
+  EXPECT_EQ(reader.size(), remaining_before);
+}
+
 TEST(Buffer, StreamReadErrorWhenInsufficientData) {
   std::vector<uint8_t> raw{0x01, 0x02, 0x03};
   OneByteIStream one_byte_stream(raw);
@@ -398,8 +427,8 @@ TEST(Buffer, OutputStreamRebindDetachesPreviousBufferBacklink) {
 
   first->bind_output_stream(&writer);
   second->bind_output_stream(&writer);
-  EXPECT_FALSE(first->is_output_stream_backed());
-  EXPECT_TRUE(second->is_output_stream_backed());
+  EXPECT_FALSE(first->has_output_stream());
+  EXPECT_TRUE(second->has_output_stream());
 
   writer.enter_flush_barrier();
   std::vector<uint8_t> second_payload(5000, 7);

@@ -205,6 +205,10 @@ cdef extern from "fory/util/buffer.h" namespace "fory" nogil:
 
         void skip(uint32_t length, CError& error)
 
+        c_bool has_input_stream() const
+
+        void shrink_input_buffer()
+
         void copy(uint32_t start, uint32_t nbytes,
                   uint8_t* out, uint32_t offset) const
 

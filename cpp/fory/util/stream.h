@@ -133,6 +133,9 @@ public:
 
   virtual Result<void, Error> unread(uint32_t size) = 0;
 
+  // Best-effort input-buffer compaction/reclaim hook. Callers may invoke this
+  // frequently; implementations should return quickly unless configured
+  // compaction thresholds are met.
   virtual void shrink_buffer() = 0;
 
   virtual Buffer &get_buffer() = 0;

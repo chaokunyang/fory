@@ -572,6 +572,7 @@ class DataClassSerializer(Serializer):
                     obj_dict[field_name] = value
                 else:
                     setattr(obj, field_name, value)
+        buffer.shrink_input_buffer()
         return obj
 
 

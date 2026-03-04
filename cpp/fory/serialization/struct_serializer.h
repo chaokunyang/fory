@@ -2773,7 +2773,7 @@ void read_struct_fields_impl(T &obj, ReadContext &ctx,
     // Note: varint bounds checking is done per-byte during reading since
     // varint lengths are variable (actual size << max possible size)
     if constexpr (varint_count > 0) {
-      if (FORY_PREDICT_FALSE(buffer.is_stream_backed())) {
+      if (FORY_PREDICT_FALSE(buffer.has_input_stream())) {
         // Stream-backed buffers may not have all varint bytes materialized yet.
         // Fall back to per-field readers that propagate stream read errors.
         read_remaining_fields<T, fixed_count, total_count>(obj, ctx);
@@ -2828,7 +2828,7 @@ read_struct_fields_impl_fast(T &obj, ReadContext &ctx,
 
   // Phase 2: Read consecutive varint primitives (int32, int64) if any
   if constexpr (varint_count > 0) {
-    if (FORY_PREDICT_FALSE(buffer.is_stream_backed())) {
+    if (FORY_PREDICT_FALSE(buffer.has_input_stream())) {
       // Stream-backed buffers may not have all varint bytes materialized yet.
       // Fall back to per-field readers that propagate stream read errors.
       read_remaining_fields<T, fixed_count, total_count>(obj, ctx);
@@ -3270,6 +3270,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
         if (FORY_PREDICT_FALSE(ctx.has_error())) {
           return T{};
         }
+        ctx.buffer().shrink_input_buffer();
         return obj;
       }
 
@@ -3279,6 +3280,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       if (FORY_PREDICT_FALSE(ctx.has_error())) {
         return T{};
       }
+      ctx.buffer().shrink_input_buffer();
       return obj;
     }
 
@@ -3290,6 +3292,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       return T{};
     }
 
+    ctx.buffer().shrink_input_buffer();
     return obj;
   }
 
@@ -3333,6 +3336,7 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
       return T{};
     }
 
+    ctx.buffer().shrink_input_buffer();
     return obj;
   }
 

@@ -16,6 +16,8 @@
 # under the License.
 
 from dataclasses import dataclass
+import io
+import pickle
 
 import pytest
 
@@ -111,6 +113,12 @@ class StreamStructValue:
     values: list
 
 
+@dataclass
+class StreamPickleBufferValue:
+    idx: int
+    payload: pickle.PickleBuffer
+
+
 @pytest.mark.parametrize("xlang", [False, True])
 def test_stream_roundtrip_primitives_and_strings(xlang):
     fory = pyfory.Fory(xlang=xlang, ref=True)
@@ -181,6 +189,52 @@ def test_stream_deserialize_multiple_objects_from_single_stream(xlang):
         assert fory.deserialize(reader) == obj
 
     assert reader.get_reader_index() == reader.size()
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_stream_backed_buffer_struct_deserialize_shrinks_each_struct(xlang):
+    fory = pyfory.Fory(xlang=xlang, ref=True)
+    fory.register(StreamStructValue)
+    first = StreamStructValue(101, "first", list(range(6000)))
+    second = StreamStructValue(202, "second", list(range(6000, 0, -1)))
+
+    payload = fory.dumps(first) + fory.dumps(second)
+    reader = Buffer.from_stream(io.BytesIO(payload), 4096)
+
+    first_result = fory.deserialize(reader)
+    assert first_result == first
+    assert reader.get_reader_index() == 0
+
+    second_result = fory.deserialize(reader)
+    assert second_result == second
+    assert reader.get_reader_index() == 0
+
+
+def test_stream_backed_buffer_pickle_buffer_not_corrupted_after_next_struct():
+    fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+    fory.register(StreamPickleBufferValue)
+    first_payload = b"a" * 7000
+    second_payload = b"b" * 7000
+    first = StreamPickleBufferValue(101, pickle.PickleBuffer(first_payload))
+    second = StreamPickleBufferValue(202, pickle.PickleBuffer(second_payload))
+
+    writer = Buffer.allocate(32768)
+    fory.serialize(first, writer)
+    fory.serialize(second, writer)
+    stream_data = writer.get_bytes(0, writer.get_writer_index())
+    reader = Buffer.from_stream(io.BytesIO(stream_data), 4096)
+
+    first_result = fory.deserialize(reader)
+    assert first_result.idx == first.idx
+    assert bytes(first_result.payload.raw()) == first_payload
+
+    second_result = fory.deserialize(reader)
+    assert second_result.idx == second.idx
+    assert bytes(second_result.payload.raw()) == second_payload
+
+    # Ensure previously returned zero-copy-like payloads remain stable even
+    # after later stream reads trigger shrink logic.
+    assert bytes(first_result.payload.raw()) == first_payload
 
 
 @pytest.mark.parametrize("xlang", [False, True])

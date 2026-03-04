@@ -1630,6 +1630,8 @@ cdef class Fory:
         cdef Buffer buf
         if not self.is_peer_out_of_band_enabled:
             size = buffer.read_var_uint32()
+            if buffer.has_input_stream():
+                return buffer.read_bytes(size)
             reader_index = buffer.get_reader_index()
             buf = buffer.slice(reader_index, size)
             buffer.set_reader_index(reader_index + size)
@@ -1639,6 +1641,8 @@ cdef class Fory:
             assert self._buffers is not None
             return next(self._buffers)
         size = buffer.read_var_uint32()
+        if buffer.has_input_stream():
+            return buffer.read_bytes(size)
         reader_index = buffer.get_reader_index()
         buf = buffer.slice(reader_index, size)
         buffer.set_reader_index(reader_index + size)

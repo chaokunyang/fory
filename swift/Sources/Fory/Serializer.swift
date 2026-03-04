@@ -174,7 +174,7 @@ public extension Serializer {
             return
         }
 
-        let info = try context.typeResolver.requireRegisteredTypeInfo(for: Self.self)
+        let info = try context.requireRegisteredTypeInfo(for: Self.self)
         let wireTypeID = resolveWireTypeID(
             declaredKind: info.kind,
             registerByName: info.registerByName,
@@ -245,7 +245,7 @@ public extension Serializer {
             return
         }
 
-        let info = try context.typeResolver.requireRegisteredTypeInfo(for: Self.self)
+        let info = try context.requireRegisteredTypeInfo(for: Self.self)
         let expectedWireTypeID = resolveWireTypeID(
             declaredKind: info.kind,
             registerByName: info.registerByName,

@@ -249,7 +249,7 @@ public struct TypeMetaFieldInfo: Equatable, Sendable {
     }
 }
 
-public struct TypeMeta: Equatable, Sendable {
+public final class TypeMeta: Equatable, @unchecked Sendable {
     public let typeID: UInt32?
     public let userTypeID: UInt32?
     public let namespace: MetaString
@@ -293,6 +293,18 @@ public struct TypeMeta: Equatable, Sendable {
         self.hasFieldsMeta = hasFieldsMeta
         self.compressed = compressed
         self.headerHash = headerHash
+    }
+
+    public static func == (lhs: TypeMeta, rhs: TypeMeta) -> Bool {
+        lhs.typeID == rhs.typeID &&
+            lhs.userTypeID == rhs.userTypeID &&
+            lhs.namespace == rhs.namespace &&
+            lhs.typeName == rhs.typeName &&
+            lhs.registerByName == rhs.registerByName &&
+            lhs.fields == rhs.fields &&
+            lhs.hasFieldsMeta == rhs.hasFieldsMeta &&
+            lhs.compressed == rhs.compressed &&
+            lhs.headerHash == rhs.headerHash
     }
 
     public func encode() throws -> [UInt8] {

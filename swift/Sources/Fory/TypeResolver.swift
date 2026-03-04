@@ -17,7 +17,7 @@
 
 import Foundation
 
-public struct RegisteredTypeInfo: Equatable {
+public final class RegisteredTypeInfo: Equatable, @unchecked Sendable {
     public let userTypeID: UInt32?
     public let kind: TypeId
     public let registerByName: Bool
@@ -36,6 +36,14 @@ public struct RegisteredTypeInfo: Equatable {
         self.registerByName = registerByName
         self.namespace = namespace
         self.typeName = typeName
+    }
+
+    public static func == (lhs: RegisteredTypeInfo, rhs: RegisteredTypeInfo) -> Bool {
+        lhs.userTypeID == rhs.userTypeID &&
+            lhs.kind == rhs.kind &&
+            lhs.registerByName == rhs.registerByName &&
+            lhs.namespace == rhs.namespace &&
+            lhs.typeName == rhs.typeName
     }
 }
 

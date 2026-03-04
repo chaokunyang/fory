@@ -72,37 +72,63 @@ public final class CompatibleTypeDefWriteState {
 }
 
 public final class CompatibleTypeDefReadState {
-    private var typeMetas: [TypeMeta] = []
+    private var firstTypeMeta: TypeMeta?
+    private var overflowTypeMetas: [TypeMeta] = []
 
     public init() {}
 
-    public func typeMeta(at index: Int) -> TypeMeta? {
-        guard index >= 0, index < typeMetas.count else {
+    @inline(__always)
+    fileprivate func typeMetaEntry(at index: Int) -> TypeMeta? {
+        if index < 0 {
             return nil
         }
-        return typeMetas[index]
+        if index == 0 {
+            return firstTypeMeta
+        }
+        let overflowIndex = index - 1
+        guard overflowIndex >= 0, overflowIndex < overflowTypeMetas.count else {
+            return nil
+        }
+        return overflowTypeMetas[overflowIndex]
     }
 
-    public func storeTypeMeta(_ typeMeta: TypeMeta, at index: Int) throws {
+    public func typeMeta(at index: Int) -> TypeMeta? {
+        typeMetaEntry(at: index)
+    }
+
+    @inline(__always)
+    fileprivate func storeTypeMetaEntry(_ typeMeta: TypeMeta, at index: Int) throws {
         if index < 0 {
             throw ForyError.invalidData("negative compatible type definition index")
         }
-        if index == typeMetas.count {
-            typeMetas.append(typeMeta)
+        if index == 0 {
+            firstTypeMeta = typeMeta
             return
         }
-        if index < typeMetas.count {
-            typeMetas[index] = typeMeta
+        let overflowIndex = index - 1
+        if overflowIndex == overflowTypeMetas.count {
+            overflowTypeMetas.append(typeMeta)
+            return
+        }
+        if overflowIndex < overflowTypeMetas.count {
+            overflowTypeMetas[overflowIndex] = typeMeta
             return
         }
         throw ForyError.invalidData(
-            "compatible type definition index gap: index=\(index), count=\(typeMetas.count)"
+            "compatible type definition index gap: index=\(index), count=\(overflowTypeMetas.count + (firstTypeMeta == nil ? 0 : 1))"
         )
     }
 
+    public func storeTypeMeta(_ typeMeta: TypeMeta, at index: Int) throws {
+        try storeTypeMetaEntry(typeMeta, at: index)
+    }
+
     public func reset() {
-        if !typeMetas.isEmpty {
-            typeMetas.removeAll(keepingCapacity: true)
+        if firstTypeMeta != nil {
+            firstTypeMeta = nil
+        }
+        if !overflowTypeMetas.isEmpty {
+            overflowTypeMetas.removeAll(keepingCapacity: true)
         }
     }
 }
@@ -245,6 +271,8 @@ public final class WriteContext {
     private var compatibleTypeDefStateUsed = false
     private var metaStringWriteStateUsed = false
     private var dynamicAnyDepth = 0
+    private var lastRegisteredTypeInfoTypeID: ObjectIdentifier?
+    private var lastRegisteredTypeInfo: RegisteredTypeInfo?
 
     public init(
         buffer: ByteBuffer,
@@ -279,6 +307,18 @@ public final class WriteContext {
             )
         }
         dynamicAnyDepth = nextDepth
+    }
+
+    @inline(__always)
+    public func requireRegisteredTypeInfo<T: Serializer>(for type: T.Type) throws -> RegisteredTypeInfo {
+        let typeID = ObjectIdentifier(type)
+        if lastRegisteredTypeInfoTypeID == typeID, let cached = lastRegisteredTypeInfo {
+            return cached
+        }
+        let info = try typeResolver.requireRegisteredTypeInfo(for: type)
+        lastRegisteredTypeInfoTypeID = typeID
+        lastRegisteredTypeInfo = info
+        return info
     }
 
     @inline(__always)
@@ -363,9 +403,17 @@ public final class ReadContext {
 
     private var pendingRefStack: [PendingRefSlot] = []
     private var pendingCompatibleTypeMeta: [ObjectIdentifier: CompatibleReadTypeMeta] = [:]
+    private var pendingCompatibleTypeMetaTypeID: ObjectIdentifier?
+    private var pendingCompatibleTypeMetaValue: CompatibleReadTypeMeta?
     private var compatibleResolvedTypeMetaCache: [CompatibleResolvedTypeMetaCacheKey: CompatibleReadTypeMeta] = [:]
+    private var lastCompatibleResolvedTypeMetaCacheKey: CompatibleResolvedTypeMetaCacheKey?
+    private var lastCompatibleResolvedTypeMetaCacheValue: CompatibleReadTypeMeta?
     private var pendingDynamicTypeInfo: [ObjectIdentifier: DynamicTypeInfo] = [:]
     private var canonicalReferenceCache: [CanonicalReferenceSignature: [CanonicalReferenceEntry]] = [:]
+    private var lastCompatibleTypeMetaCacheKey: CompatibleTypeMetaReadCacheKey?
+    private var lastCompatibleTypeMetaCacheEntry: TypeMeta?
+    private var lastRegisteredTypeInfoTypeID: ObjectIdentifier?
+    private var lastRegisteredTypeInfo: RegisteredTypeInfo?
 
     public init(
         buffer: ByteBuffer,
@@ -450,6 +498,18 @@ public final class ReadContext {
         }
     }
 
+    @inline(__always)
+    public func requireRegisteredTypeInfo<T: Serializer>(for type: T.Type) throws -> RegisteredTypeInfo {
+        let typeID = ObjectIdentifier(type)
+        if lastRegisteredTypeInfoTypeID == typeID, let cached = lastRegisteredTypeInfo {
+            return cached
+        }
+        let info = try typeResolver.requireRegisteredTypeInfo(for: type)
+        lastRegisteredTypeInfoTypeID = typeID
+        lastRegisteredTypeInfo = info
+        return info
+    }
+
     public func pushPendingReference(_ refID: UInt32) {
         pendingRefStack.append(PendingRefSlot(refID: refID, bound: false))
     }
@@ -496,26 +556,40 @@ public final class ReadContext {
             bodySize += Int(try buffer.readVarUInt32())
         }
         let cacheKey = CompatibleTypeMetaReadCacheKey(header: header, bodySize: bodySize)
+        if lastCompatibleTypeMetaCacheKey == cacheKey,
+           let cachedEntry = lastCompatibleTypeMetaCacheEntry {
+            try buffer.skip(bodySize)
+            try compatibleTypeDefState.storeTypeMetaEntry(cachedEntry, at: index)
+            return cachedEntry
+        }
 
         CompatibleTypeMetaReadCache.lock.lock()
         if let cached = CompatibleTypeMetaReadCache.values[cacheKey] {
             CompatibleTypeMetaReadCache.lock.unlock()
             try buffer.skip(bodySize)
-            try compatibleTypeDefState.storeTypeMeta(cached, at: index)
+            lastCompatibleTypeMetaCacheKey = cacheKey
+            lastCompatibleTypeMetaCacheEntry = cached
+            try compatibleTypeDefState.storeTypeMetaEntry(cached, at: index)
             return cached
         }
         CompatibleTypeMetaReadCache.lock.unlock()
 
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
-        try compatibleTypeDefState.storeTypeMeta(decoded, at: index)
+        var canonicalEntry = decoded
 
         CompatibleTypeMetaReadCache.lock.lock()
-        if CompatibleTypeMetaReadCache.values[cacheKey] == nil {
+        if let cached = CompatibleTypeMetaReadCache.values[cacheKey] {
+            canonicalEntry = cached
+        } else {
             CompatibleTypeMetaReadCache.values[cacheKey] = decoded
         }
         CompatibleTypeMetaReadCache.lock.unlock()
-        return decoded
+
+        lastCompatibleTypeMetaCacheKey = cacheKey
+        lastCompatibleTypeMetaCacheEntry = canonicalEntry
+        try compatibleTypeDefState.storeTypeMetaEntry(canonicalEntry, at: index)
+        return canonicalEntry
     }
 
     public func pushCompatibleTypeMeta<T: Serializer>(
@@ -534,8 +608,15 @@ public final class ReadContext {
             hasLocalHeaderHash: localTypeMetaHeaderHash != nil,
             localHasUserTypeFields: localTypeMetaHasUserTypeFields
         )
+        if lastCompatibleResolvedTypeMetaCacheKey == cacheKey,
+           let cached = lastCompatibleResolvedTypeMetaCacheValue {
+            setPendingCompatibleTypeMeta(typeID: typeID, value: cached)
+            return
+        }
         if let cached = compatibleResolvedTypeMetaCache[cacheKey] {
-            pendingCompatibleTypeMeta[typeID] = cached
+            lastCompatibleResolvedTypeMetaCacheKey = cacheKey
+            lastCompatibleResolvedTypeMetaCacheValue = cached
+            setPendingCompatibleTypeMeta(typeID: typeID, value: cached)
             return
         }
 
@@ -553,11 +634,17 @@ public final class ReadContext {
         )
 
         compatibleResolvedTypeMetaCache[cacheKey] = resolved
-        pendingCompatibleTypeMeta[typeID] = resolved
+        lastCompatibleResolvedTypeMetaCacheKey = cacheKey
+        lastCompatibleResolvedTypeMetaCacheValue = resolved
+        setPendingCompatibleTypeMeta(typeID: typeID, value: resolved)
     }
 
     public func consumeCompatibleTypeMeta<T: Serializer>(for type: T.Type) throws -> CompatibleReadTypeMeta {
         let typeID = ObjectIdentifier(type)
+        if pendingCompatibleTypeMetaTypeID == typeID,
+           let pending = pendingCompatibleTypeMetaValue {
+            return pending
+        }
         guard let typeMeta = pendingCompatibleTypeMeta[typeID] else {
             throw ForyError.invalidData("missing compatible type metadata for \(type)")
         }
@@ -567,7 +654,24 @@ public final class ReadContext {
     @inline(__always)
     public func consumeCompatibleTypeMetaIfPresent<T: Serializer>(for type: T.Type) -> CompatibleReadTypeMeta? {
         let typeID = ObjectIdentifier(type)
+        if pendingCompatibleTypeMetaTypeID == typeID {
+            return pendingCompatibleTypeMetaValue
+        }
         return pendingCompatibleTypeMeta[typeID]
+    }
+
+    @inline(__always)
+    private func setPendingCompatibleTypeMeta(typeID: ObjectIdentifier, value: CompatibleReadTypeMeta) {
+        if pendingCompatibleTypeMetaTypeID == typeID {
+            pendingCompatibleTypeMetaValue = value
+            return
+        }
+        if let oldTypeID = pendingCompatibleTypeMetaTypeID,
+           let oldValue = pendingCompatibleTypeMetaValue {
+            pendingCompatibleTypeMeta[oldTypeID] = oldValue
+        }
+        pendingCompatibleTypeMetaTypeID = typeID
+        pendingCompatibleTypeMetaValue = value
     }
 
     private static func assignCompatibleFieldIDs(
@@ -748,8 +852,14 @@ public final class ReadContext {
                 pendingRefStack.removeAll(keepingCapacity: true)
             }
         }
-        if compatible, !pendingCompatibleTypeMeta.isEmpty {
-            pendingCompatibleTypeMeta.removeAll(keepingCapacity: true)
+        if compatible {
+            if pendingCompatibleTypeMetaTypeID != nil {
+                pendingCompatibleTypeMetaTypeID = nil
+                pendingCompatibleTypeMetaValue = nil
+            }
+            if !pendingCompatibleTypeMeta.isEmpty {
+                pendingCompatibleTypeMeta.removeAll(keepingCapacity: true)
+            }
         }
         if !pendingDynamicTypeInfo.isEmpty {
             pendingDynamicTypeInfo.removeAll(keepingCapacity: true)

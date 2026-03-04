@@ -471,7 +471,6 @@ def main() -> None:
     non_list_datatypes = [dt for dt in datatypes if not dt.endswith("list")]
     list_datatypes = [dt for dt in datatypes if dt.endswith("list")]
     fig, axes = plt.subplots(1, 4, figsize=(28, 6))
-    fig.supylabel("Throughput (ops/sec)")
     combined_subplots = [
         (axes[0], non_list_datatypes, "serialize", "Serialize Throughput (higher is better)"),
         (axes[1], non_list_datatypes, "deserialize", "Deserialize Throughput (higher is better)"),
@@ -480,6 +479,9 @@ def main() -> None:
     ]
     for ax, grouped_datatypes, operation, title in combined_subplots:
         plot_combined_tps_subplot(ax, throughputs, grouped_datatypes, operation, title)
+    # Keep the y-label style consistent with single-datatype plots (axis label,
+    # not figure-level label) and avoid overlap with y-ticks.
+    axes[0].set_ylabel("Throughput (ops/sec)")
     fig.tight_layout()
     throughput_path = os.path.join(output_dir, "throughput.png")
     plt.savefig(throughput_path, dpi=150)

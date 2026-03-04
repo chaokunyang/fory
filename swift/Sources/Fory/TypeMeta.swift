@@ -333,7 +333,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             buffer.writeVarUInt32(UInt32(body.count - Int(typeMetaSizeMask)))
         }
         buffer.writeBytes(body)
-        return buffer.storage
+        return Array(buffer.storage.prefix(buffer.count))
     }
 
     public static func decode(_ bytes: [UInt8]) throws -> TypeMeta {
@@ -442,7 +442,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             try field.write(buffer)
         }
 
-        return buffer.storage
+        return Array(buffer.storage.prefix(buffer.count))
     }
 
     private static func writeName(

@@ -186,51 +186,29 @@ public final class ByteBuffer {
             return
         }
         if value < 0x4000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = UInt8(truncatingIfNeeded: value >> 7)
-            appendUninitializedBytes(count: 2) { dst in
-                dst[0] = u1
-                dst[1] = u2
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 7))
             return
         }
         if value < 0x20_0000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            let u3 = UInt8(truncatingIfNeeded: value >> 14)
-            appendUninitializedBytes(count: 3) { dst in
-                dst[0] = u1
-                dst[1] = u2
-                dst[2] = u3
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 14))
             return
         }
         if value < 0x1000_0000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            let u3 = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            let u4 = UInt8(truncatingIfNeeded: value >> 21)
-            appendUninitializedBytes(count: 4) { dst in
-                dst[0] = u1
-                dst[1] = u2
-                dst[2] = u3
-                dst[3] = u4
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 21))
             return
         }
 
-        let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-        let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-        let u3 = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-        let u4 = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-        let u5 = UInt8(truncatingIfNeeded: value >> 28)
-        appendUninitializedBytes(count: 5) { dst in
-            dst[0] = u1
-            dst[1] = u2
-            dst[2] = u3
-            dst[3] = u4
-            dst[4] = u5
-        }
+        storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
+        storage.append(UInt8(truncatingIfNeeded: value >> 28))
     }
 
     @inlinable
@@ -241,131 +219,71 @@ public final class ByteBuffer {
             return
         }
         if value < 0x4000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = UInt8(truncatingIfNeeded: value >> 7)
-            appendUninitializedBytes(count: 2) { dst in
-                dst[0] = u1
-                dst[1] = u2
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 7))
             return
         }
         if value < 0x20_0000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            let u3 = UInt8(truncatingIfNeeded: value >> 14)
-            appendUninitializedBytes(count: 3) { dst in
-                dst[0] = u1
-                dst[1] = u2
-                dst[2] = u3
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 14))
             return
         }
         if value < 0x1000_0000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            let u3 = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            let u4 = UInt8(truncatingIfNeeded: value >> 21)
-            appendUninitializedBytes(count: 4) { dst in
-                dst[0] = u1
-                dst[1] = u2
-                dst[2] = u3
-                dst[3] = u4
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 21))
             return
         }
         if value < 0x8_0000_0000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            let u3 = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            let u4 = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-            let u5 = UInt8(truncatingIfNeeded: value >> 28)
-            appendUninitializedBytes(count: 5) { dst in
-                dst[0] = u1
-                dst[1] = u2
-                dst[2] = u3
-                dst[3] = u4
-                dst[4] = u5
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 28))
             return
         }
         if value < 0x400_0000_0000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            let u3 = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            let u4 = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-            let u5 = (UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80
-            let u6 = UInt8(truncatingIfNeeded: value >> 35)
-            appendUninitializedBytes(count: 6) { dst in
-                dst[0] = u1
-                dst[1] = u2
-                dst[2] = u3
-                dst[3] = u4
-                dst[4] = u5
-                dst[5] = u6
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 35))
             return
         }
         if value < 0x2_0000_0000_0000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            let u3 = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            let u4 = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-            let u5 = (UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80
-            let u6 = (UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80
-            let u7 = UInt8(truncatingIfNeeded: value >> 42)
-            appendUninitializedBytes(count: 7) { dst in
-                dst[0] = u1
-                dst[1] = u2
-                dst[2] = u3
-                dst[3] = u4
-                dst[4] = u5
-                dst[5] = u6
-                dst[6] = u7
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 42))
             return
         }
         if value < 0x100_0000_0000_0000 {
-            let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            let u3 = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            let u4 = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-            let u5 = (UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80
-            let u6 = (UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80
-            let u7 = (UInt8(truncatingIfNeeded: value >> 42) & 0x7F) | 0x80
-            let u8 = UInt8(truncatingIfNeeded: value >> 49)
-            appendUninitializedBytes(count: 8) { dst in
-                dst[0] = u1
-                dst[1] = u2
-                dst[2] = u3
-                dst[3] = u4
-                dst[4] = u5
-                dst[5] = u6
-                dst[6] = u7
-                dst[7] = u8
-            }
+            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80)
+            storage.append((UInt8(truncatingIfNeeded: value >> 42) & 0x7F) | 0x80)
+            storage.append(UInt8(truncatingIfNeeded: value >> 49))
             return
         }
 
-        let u1 = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-        let u2 = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-        let u3 = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-        let u4 = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-        let u5 = (UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80
-        let u6 = (UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80
-        let u7 = (UInt8(truncatingIfNeeded: value >> 42) & 0x7F) | 0x80
-        let u8 = (UInt8(truncatingIfNeeded: value >> 49) & 0x7F) | 0x80
-        let u9 = UInt8(truncatingIfNeeded: value >> 56)
-        appendUninitializedBytes(count: 9) { dst in
-            dst[0] = u1
-            dst[1] = u2
-            dst[2] = u3
-            dst[3] = u4
-            dst[4] = u5
-            dst[5] = u6
-            dst[6] = u7
-            dst[7] = u8
-            dst[8] = u9
-        }
+        storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 42) & 0x7F) | 0x80)
+        storage.append((UInt8(truncatingIfNeeded: value >> 49) & 0x7F) | 0x80)
+        storage.append(UInt8(truncatingIfNeeded: value >> 56))
     }
 
     @inlinable
@@ -424,6 +342,12 @@ public final class ByteBuffer {
     }
 
     @inlinable
+    @inline(__always)
+    public func writeBytes(_ bytes: [UInt8]) {
+        storage.append(contentsOf: bytes)
+    }
+
+    @inlinable
     public func writeBytes(_ bytes: UnsafeRawBufferPointer) {
         storage.append(contentsOf: bytes)
     }
@@ -458,8 +382,14 @@ public final class ByteBuffer {
     @inlinable
     public func readBytes(into destination: UnsafeMutableRawBufferPointer) throws {
         try checkBound(destination.count)
+        guard destination.count > 0, let destinationBase = destination.baseAddress else {
+            return
+        }
         storage.withUnsafeBytes { rawBytes in
-            destination.copyBytes(from: UnsafeRawBufferPointer(rebasing: rawBytes[cursor..<(cursor + destination.count)]))
+            guard let sourceBase = rawBytes.baseAddress else {
+                return
+            }
+            destinationBase.copyMemory(from: sourceBase.advanced(by: cursor), byteCount: destination.count)
         }
         cursor += destination.count
     }

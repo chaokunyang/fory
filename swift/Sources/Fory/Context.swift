@@ -55,6 +55,13 @@ public final class CompatibleTypeDefWriteState {
     }
 
     @inline(__always)
+    public func assignFirstTypeIndex(for typeID: ObjectIdentifier) {
+        firstTypeID = typeID
+        firstTypeIndex = 0
+        nextIndex = 1
+    }
+
+    @inline(__always)
     public func reset() {
         if firstTypeID != nil {
             firstTypeID = nil
@@ -135,7 +142,7 @@ public final class CompatibleTypeDefReadState {
 
 private let compatibleTypeMetaSizeMask = 0xFF
 
-public struct CompatibleReadTypeMeta {
+public final class CompatibleReadTypeMeta: @unchecked Sendable {
     public let fields: [TypeMetaFieldInfo]
     public let canUseSchemaFastPath: Bool
 
@@ -366,25 +373,52 @@ public final class WriteContext {
         for type: T.Type,
         typeMeta: TypeMeta
     ) throws {
-        try writeCompatibleTypeMeta(
-            for: type,
-            encodedTypeMeta: typeMeta.encode()
-        )
+        let encodedTypeMeta = try typeMeta.encode()
+        try writeCompatibleTypeMeta(for: type, encodedTypeMeta: encodedTypeMeta)
+    }
+
+    @inline(__always)
+    func writeCompatibleTypeMeta<T: Serializer>(
+        for type: T.Type,
+        plan: CompatibleTypeMetaPlan
+    ) {
+        let typeID = ObjectIdentifier(type)
+        if !compatibleTypeDefStateUsed {
+            compatibleTypeDefStateUsed = true
+            compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
+            buffer.writeBytes(plan.firstDefinitionEncodedTypeMeta)
+            return
+        }
+
+        let assignment = compatibleTypeDefState.assignIndexIfAbsent(for: typeID)
+        if assignment.isNew {
+            let marker = assignment.index << 1
+            if marker < 0x80 {
+                buffer.writeUInt8(UInt8(truncatingIfNeeded: marker))
+            } else {
+                buffer.writeVarUInt32(marker)
+            }
+            buffer.writeBytes(plan.encodedTypeMeta)
+        } else {
+            let marker = (assignment.index << 1) | 1
+            if marker < 0x80 {
+                buffer.writeUInt8(UInt8(truncatingIfNeeded: marker))
+            } else {
+                buffer.writeVarUInt32(marker)
+            }
+        }
     }
 
     public func writeCompatibleTypeMeta<T: Serializer>(
         for type: T.Type,
         encodedTypeMeta: [UInt8]
     ) throws {
-        compatibleTypeDefStateUsed = true
-        let typeID = ObjectIdentifier(type)
-        let assignment = compatibleTypeDefState.assignIndexIfAbsent(for: typeID)
-        if assignment.isNew {
-            buffer.writeVarUInt32(assignment.index << 1)
-            buffer.writeBytes(encodedTypeMeta)
-        } else {
-            buffer.writeVarUInt32((assignment.index << 1) | 1)
-        }
+        let plan = CompatibleTypeMetaPlan(
+            encodedTypeMeta: encodedTypeMeta,
+            headerHash: 0,
+            hasUserTypeFields: true
+        )
+        writeCompatibleTypeMeta(for: type, plan: plan)
     }
 
     public func resetObjectState() {
@@ -453,6 +487,9 @@ public final class ReadContext {
     private var lastCompatibleTypeMetaPlanTypeID: ObjectIdentifier?
     private var lastCompatibleTypeMetaPlanWireTypeID: TypeId?
     private var lastCompatibleTypeMetaPlan: CompatibleTypeMetaPlan?
+    private var lastValidatedCompatibleTypeID: ObjectIdentifier?
+    private var lastValidatedCompatibleWireTypeID: TypeId?
+    private var lastValidatedCompatibleHeaderHash: UInt64 = 0
 
     public init(
         buffer: ByteBuffer,
@@ -581,6 +618,28 @@ public final class ReadContext {
         lastCompatibleTypeMetaPlanTypeID = typeID
         lastCompatibleTypeMetaPlanWireTypeID = wireTypeID
         lastCompatibleTypeMetaPlan = plan
+    }
+
+    @inline(__always)
+    public func isCompatibleTypeMetaValidationCached(
+        for typeID: ObjectIdentifier,
+        wireTypeID: TypeId,
+        headerHash: UInt64
+    ) -> Bool {
+        lastValidatedCompatibleTypeID == typeID &&
+            lastValidatedCompatibleWireTypeID == wireTypeID &&
+            lastValidatedCompatibleHeaderHash == headerHash
+    }
+
+    @inline(__always)
+    public func cacheCompatibleTypeMetaValidation(
+        for typeID: ObjectIdentifier,
+        wireTypeID: TypeId,
+        headerHash: UInt64
+    ) {
+        lastValidatedCompatibleTypeID = typeID
+        lastValidatedCompatibleWireTypeID = wireTypeID
+        lastValidatedCompatibleHeaderHash = headerHash
     }
 
     public func pushPendingReference(_ refID: UInt32) {

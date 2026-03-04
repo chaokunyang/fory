@@ -43,10 +43,22 @@ private struct CompatibleTypeMetaCacheKey: Hashable {
     let trackRef: Bool
 }
 
-struct CompatibleTypeMetaPlan {
+final class CompatibleTypeMetaPlan: @unchecked Sendable {
     let encodedTypeMeta: [UInt8]
+    let firstDefinitionEncodedTypeMeta: [UInt8]
     let headerHash: UInt64
     let hasUserTypeFields: Bool
+
+    init(encodedTypeMeta: [UInt8], headerHash: UInt64, hasUserTypeFields: Bool) {
+        self.encodedTypeMeta = encodedTypeMeta
+        var firstDefinitionEncodedTypeMeta: [UInt8] = []
+        firstDefinitionEncodedTypeMeta.reserveCapacity(encodedTypeMeta.count + 1)
+        firstDefinitionEncodedTypeMeta.append(0)
+        firstDefinitionEncodedTypeMeta.append(contentsOf: encodedTypeMeta)
+        self.firstDefinitionEncodedTypeMeta = firstDefinitionEncodedTypeMeta
+        self.headerHash = headerHash
+        self.hasUserTypeFields = hasUserTypeFields
+    }
 }
 
 private enum CompatibleTypeMetaCache {
@@ -202,9 +214,9 @@ public extension Serializer {
                 )
                 context.cacheCompatibleTypeMetaPlan(cachedTypeMeta, for: swiftTypeID, wireTypeID: wireTypeID)
             }
-            try context.writeCompatibleTypeMeta(
+            context.writeCompatibleTypeMeta(
                 for: Self.self,
-                encodedTypeMeta: cachedTypeMeta.encodedTypeMeta
+                plan: cachedTypeMeta
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
@@ -220,9 +232,9 @@ public extension Serializer {
                     )
                     context.cacheCompatibleTypeMetaPlan(cachedTypeMeta, for: swiftTypeID, wireTypeID: wireTypeID)
                 }
-                try context.writeCompatibleTypeMeta(
+                context.writeCompatibleTypeMeta(
                     for: Self.self,
-                    encodedTypeMeta: cachedTypeMeta.encodedTypeMeta
+                    plan: cachedTypeMeta
                 )
             } else {
                 guard let namespace = info.namespace else {
@@ -289,12 +301,23 @@ public extension Serializer {
         switch typeID {
         case .compatibleStruct, .namedCompatibleStruct:
             let remoteTypeMeta = try context.readCompatibleTypeMeta()
-            try validateCompatibleTypeMeta(
-                remoteTypeMeta,
-                localInfo: info,
-                compatible: context.compatible,
-                actualWireTypeID: typeID
-            )
+            if !context.isCompatibleTypeMetaValidationCached(
+                for: swiftTypeID,
+                wireTypeID: typeID,
+                headerHash: remoteTypeMeta.headerHash
+            ) {
+                try validateCompatibleTypeMeta(
+                    remoteTypeMeta,
+                    localInfo: info,
+                    compatible: context.compatible,
+                    actualWireTypeID: typeID
+                )
+                context.cacheCompatibleTypeMetaValidation(
+                    for: swiftTypeID,
+                    wireTypeID: typeID,
+                    headerHash: remoteTypeMeta.headerHash
+                )
+            }
             let localTypeMeta: CompatibleTypeMetaPlan
             if let cached = context.compatibleTypeMetaPlan(for: swiftTypeID, wireTypeID: typeID) {
                 localTypeMeta = cached
@@ -316,12 +339,23 @@ public extension Serializer {
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
                 let remoteTypeMeta = try context.readCompatibleTypeMeta()
-                try validateCompatibleTypeMeta(
-                    remoteTypeMeta,
-                    localInfo: info,
-                    compatible: context.compatible,
-                    actualWireTypeID: typeID
-                )
+                if !context.isCompatibleTypeMetaValidationCached(
+                    for: swiftTypeID,
+                    wireTypeID: typeID,
+                    headerHash: remoteTypeMeta.headerHash
+                ) {
+                    try validateCompatibleTypeMeta(
+                        remoteTypeMeta,
+                        localInfo: info,
+                        compatible: context.compatible,
+                        actualWireTypeID: typeID
+                    )
+                    context.cacheCompatibleTypeMetaValidation(
+                        for: swiftTypeID,
+                        wireTypeID: typeID,
+                        headerHash: remoteTypeMeta.headerHash
+                    )
+                }
                 if typeID == .namedStruct {
                     let localTypeMeta: CompatibleTypeMetaPlan
                     if let cached = context.compatibleTypeMetaPlan(for: swiftTypeID, wireTypeID: typeID) {

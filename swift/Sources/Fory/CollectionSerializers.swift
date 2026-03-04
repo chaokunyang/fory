@@ -236,7 +236,7 @@ private func writePrimitiveArray<Element: Serializer>(_ value: [Element], contex
 
 private func readPrimitiveArray<Element: Serializer>(_ context: ReadContext) throws -> [Element] {
     let payloadSize = Int(try context.buffer.readVarUInt32())
-    try context.ensureRemainingBytes(payloadSize, label: "\(Element.self)_array_payload")
+    try context.ensureRemainingBytes(payloadSize, label: "primitive_array_payload")
 
     if Element.self == UInt8.self {
         try context.ensureCollectionLength(payloadSize, label: "uint8_array")

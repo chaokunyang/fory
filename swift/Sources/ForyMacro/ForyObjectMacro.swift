@@ -1016,13 +1016,14 @@ private func buildWriteWrapperDecl(accessPrefix: String) -> String {
         writeTypeInfo: Bool,
         hasGenerics: Bool
     ) throws {
+        let __buffer = context.buffer
         if refMode != .none {
             if refMode == .tracking, Self.isReferenceTrackableType, let object = self as AnyObject? {
-                if context.refWriter.tryWriteReference(buffer: context.buffer, object: object) {
+                if context.refWriter.tryWriteReference(buffer: __buffer, object: object) {
                     return
                 }
             } else {
-                context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
+                __buffer.writeInt8(RefFlag.notNullValue.rawValue)
             }
         }
 
@@ -1042,8 +1043,9 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> Self {
+        let __buffer = context.buffer
         if refMode != .none {
-            let rawFlag = try context.buffer.readInt8()
+            let rawFlag = try __buffer.readInt8()
             guard let flag = RefFlag(rawValue: rawFlag) else {
                 throw ForyError.refError("invalid ref flag \\(rawFlag)")
             }
@@ -1052,7 +1054,7 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
             case .null:
                 return Self.foryDefault()
             case .ref:
-                let refID = try context.buffer.readVarUInt32()
+                let refID = try __buffer.readVarUInt32()
                 return try context.refReader.readRef(refID, as: Self.self)
             case .refValue:
                 let reservedRefID = context.refReader.reserveRefID()
@@ -1083,13 +1085,13 @@ private func buildWriteDataDecl(sortedFields: [ParsedField], accessPrefix: Strin
     }
     var schemaHeaderLines = [
         "if context.checkClassVersion {",
-        "    context.buffer.writeInt32(Int32(bitPattern: Self.__forySchemaHash(context.trackRef)))",
+        "    __buffer.writeInt32(Int32(bitPattern: Self.__forySchemaHash(context.trackRef)))",
         "}"
     ]
     let primitiveReserveBytes = schemaPrimitiveReserveBytes(sortedFields)
     if primitiveReserveBytes > 0 {
         schemaHeaderLines.insert(
-            "context.buffer.reserve(\(primitiveReserveBytes) + (context.checkClassVersion ? 4 : 0))",
+            "__buffer.reserve(\(primitiveReserveBytes) + (context.checkClassVersion ? 4 : 0))",
             at: 0
         )
     }
@@ -1105,6 +1107,7 @@ private func buildWriteDataDecl(sortedFields: [ParsedField], accessPrefix: Strin
     return """
     @inline(__always)
     \(accessPrefix)func foryWriteData(_ context: WriteContext, hasGenerics: Bool) throws {
+        let __buffer = context.buffer
         if !context.compatible {
             \(schemaHeader)
         }
@@ -1244,6 +1247,7 @@ private func buildReadDataDecl(
         return """
         @inline(__always)
         \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
+            let __buffer = context.buffer
             if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
                 if compatibleMeta.canUseSchemaFastPath {
                     let value = Self.init()
@@ -1263,7 +1267,7 @@ private func buildReadDataDecl(
                 return value
             }
             if context.checkClassVersion {
-                let __schemaHash = UInt32(bitPattern: try context.buffer.readInt32())
+                let __schemaHash = UInt32(bitPattern: try __buffer.readInt32())
                 let __expectedHash = Self.__forySchemaHash(context.trackRef)
                 if __schemaHash != __expectedHash {
                     throw ForyError.invalidData("class version hash mismatch: expected \\(__expectedHash), got \\(__schemaHash)")
@@ -1281,6 +1285,7 @@ private func buildReadDataDecl(
         return """
         @inline(__always)
         \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
+            let __buffer = context.buffer
             if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
                 if compatibleMeta.canUseSchemaFastPath {
                     return Self()
@@ -1291,7 +1296,7 @@ private func buildReadDataDecl(
                 return Self()
             }
             if context.checkClassVersion {
-                let __schemaHash = UInt32(bitPattern: try context.buffer.readInt32())
+                let __schemaHash = UInt32(bitPattern: try __buffer.readInt32())
                 let __expectedHash = Self.__forySchemaHash(context.trackRef)
                 if __schemaHash != __expectedHash {
                     throw ForyError.invalidData("class version hash mismatch: expected \\(__expectedHash), got \\(__schemaHash)")
@@ -1332,6 +1337,7 @@ private func buildReadDataDecl(
     return """
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
+        let __buffer = context.buffer
         if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
                 if compatibleMeta.canUseSchemaFastPath {
                     \(readLines)
@@ -1352,7 +1358,7 @@ private func buildReadDataDecl(
                 )
             }
         if context.checkClassVersion {
-            let __schemaHash = UInt32(bitPattern: try context.buffer.readInt32())
+            let __schemaHash = UInt32(bitPattern: try __buffer.readInt32())
             let __expectedHash = Self.__forySchemaHash(context.trackRef)
             if __schemaHash != __expectedHash {
                 throw ForyError.invalidData("class version hash mismatch: expected \\(__expectedHash), got \\(__schemaHash)")
@@ -1407,31 +1413,31 @@ private func primitiveSchemaWriteLine(_ field: ParsedField) -> String? {
     let type = trimType(field.typeText)
     switch type {
     case "Bool":
-        return "context.buffer.writeUInt8(self.\(field.name) ? 1 : 0)"
+        return "__buffer.writeUInt8(self.\(field.name) ? 1 : 0)"
     case "Int8":
-        return "context.buffer.writeInt8(self.\(field.name))"
+        return "__buffer.writeInt8(self.\(field.name))"
     case "Int16":
-        return "context.buffer.writeInt16(self.\(field.name))"
+        return "__buffer.writeInt16(self.\(field.name))"
     case "Int32":
-        return "context.buffer.writeVarInt32(self.\(field.name))"
+        return "__buffer.writeVarInt32(self.\(field.name))"
     case "Int64":
-        return "context.buffer.writeVarInt64(self.\(field.name))"
+        return "__buffer.writeVarInt64(self.\(field.name))"
     case "Int":
-        return "context.buffer.writeVarInt64(Int64(self.\(field.name)))"
+        return "__buffer.writeVarInt64(Int64(self.\(field.name)))"
     case "UInt8":
-        return "context.buffer.writeUInt8(self.\(field.name))"
+        return "__buffer.writeUInt8(self.\(field.name))"
     case "UInt16":
-        return "context.buffer.writeUInt16(self.\(field.name))"
+        return "__buffer.writeUInt16(self.\(field.name))"
     case "UInt32":
-        return "context.buffer.writeVarUInt32(self.\(field.name))"
+        return "__buffer.writeVarUInt32(self.\(field.name))"
     case "UInt64":
-        return "context.buffer.writeVarUInt64(self.\(field.name))"
+        return "__buffer.writeVarUInt64(self.\(field.name))"
     case "UInt":
-        return "context.buffer.writeVarUInt64(UInt64(self.\(field.name)))"
+        return "__buffer.writeVarUInt64(UInt64(self.\(field.name)))"
     case "Float":
-        return "context.buffer.writeFloat32(self.\(field.name))"
+        return "__buffer.writeFloat32(self.\(field.name))"
     case "Double":
-        return "context.buffer.writeFloat64(self.\(field.name))"
+        return "__buffer.writeFloat64(self.\(field.name))"
     default:
         return nil
     }
@@ -1441,31 +1447,31 @@ private func primitiveSchemaReadExpr(_ field: ParsedField) -> String? {
     let type = trimType(field.typeText)
     switch type {
     case "Bool":
-        return "try context.buffer.readUInt8() != 0"
+        return "try __buffer.readUInt8() != 0"
     case "Int8":
-        return "try context.buffer.readInt8()"
+        return "try __buffer.readInt8()"
     case "Int16":
-        return "try context.buffer.readInt16()"
+        return "try __buffer.readInt16()"
     case "Int32":
-        return "try context.buffer.readVarInt32()"
+        return "try __buffer.readVarInt32()"
     case "Int64":
-        return "try context.buffer.readVarInt64()"
+        return "try __buffer.readVarInt64()"
     case "Int":
-        return "Int(try context.buffer.readVarInt64())"
+        return "Int(try __buffer.readVarInt64())"
     case "UInt8":
-        return "try context.buffer.readUInt8()"
+        return "try __buffer.readUInt8()"
     case "UInt16":
-        return "try context.buffer.readUInt16()"
+        return "try __buffer.readUInt16()"
     case "UInt32":
-        return "try context.buffer.readVarUInt32()"
+        return "try __buffer.readVarUInt32()"
     case "UInt64":
-        return "try context.buffer.readVarUInt64()"
+        return "try __buffer.readVarUInt64()"
     case "UInt":
-        return "UInt(try context.buffer.readVarUInt64())"
+        return "UInt(try __buffer.readVarUInt64())"
     case "Float":
-        return "try context.buffer.readFloat32()"
+        return "try __buffer.readFloat32()"
     case "Double":
-        return "try context.buffer.readFloat64()"
+        return "try __buffer.readFloat64()"
     default:
         return nil
     }

@@ -17,6 +17,8 @@
 
 import Foundation
 
+private let pointerReadReuseThreshold = 32
+
 public struct ForyConfig {
     public var xlang: Bool
     public var trackRef: Bool
@@ -54,6 +56,7 @@ private final class ForyRuntimeContext {
     var writeInUse = false
     var readInUse = false
 
+    var lastReadData: Data?
     var lastReadDataAddress: UnsafeRawPointer?
     var lastReadDataCount: Int = -1
 
@@ -628,10 +631,35 @@ public final class Fory {
         }
 
         runtimeContext.readInUse = true
-        runtimeContext.readBuffer.replace(with: data)
-        data.withUnsafeBytes { rawBytes in
-            runtimeContext.lastReadDataAddress = rawBytes.baseAddress
-            runtimeContext.lastReadDataCount = rawBytes.count
+        let dataCount = data.count
+        var reuseReadBuffer = false
+        if dataCount >= pointerReadReuseThreshold,
+           dataCount == runtimeContext.lastReadDataCount {
+            data.withUnsafeBytes { rawBytes in
+                if rawBytes.baseAddress == runtimeContext.lastReadDataAddress {
+                    reuseReadBuffer = true
+                }
+            }
+        }
+        if !reuseReadBuffer,
+           dataCount == runtimeContext.lastReadDataCount,
+           let lastReadData = runtimeContext.lastReadData,
+           data == lastReadData {
+            reuseReadBuffer = true
+        }
+        if reuseReadBuffer {
+            runtimeContext.readBuffer.setCursor(0)
+        } else {
+            runtimeContext.readBuffer.replace(with: data)
+            runtimeContext.lastReadData = data
+            runtimeContext.lastReadDataCount = dataCount
+            if dataCount >= pointerReadReuseThreshold {
+                data.withUnsafeBytes { rawBytes in
+                    runtimeContext.lastReadDataAddress = rawBytes.baseAddress
+                }
+            } else {
+                runtimeContext.lastReadDataAddress = nil
+            }
         }
         defer {
             runtimeContext.readContext.reset()
@@ -675,7 +703,7 @@ public final class Fory {
             if !isNone {
                 try body(context)
             }
-            output.append(contentsOf: context.buffer.storage)
+            output.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
         }
     }
 

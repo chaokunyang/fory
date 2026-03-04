@@ -138,13 +138,6 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine(
             $"file sealed class {model.SerializerName} : global::Apache.Fory.Serializer<{model.TypeName}>, global::Apache.Fory.ICompatibleNoTypeMetaReader<{model.TypeName}>");
         sb.AppendLine("{");
-        foreach (MemberModel member in model.Members.Where(m => m.UseDictionaryTypeInfoCache))
-        {
-            string cacheId = Sanitize(member.Name);
-            sb.AppendLine($"    private global::System.Type? __Fory{cacheId}DictRuntimeType;");
-            sb.AppendLine($"    private global::Apache.Fory.TypeInfo? __Fory{cacheId}DictTypeInfo;");
-        }
-
         sb.AppendLine("    private static readonly object __ForyCompatibleSchemaCacheLock = new();");
         sb.AppendLine("    private static ulong __ForyCompatibleSchemaResolverVersion;");
         sb.AppendLine("    private static ulong __ForyCompatibleSchemaHashNoTrackRef;");
@@ -160,7 +153,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine(
             "    private static global::System.Collections.Generic.IReadOnlyList<global::Apache.Fory.TypeMetaFieldInfo>? __ForyCompatibleFieldsTrackRef;");
 
-        if (model.Members.Any(m => m.UseDictionaryTypeInfoCache) || model.SortedMembers.Length > 0)
+        if (model.SortedMembers.Length > 0)
         {
             sb.AppendLine();
         }
@@ -714,11 +707,11 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         string hasGenerics,
         bool compatibleMode)
     {
-        string cacheId = Sanitize(member.Name);
+        string memberId = Sanitize(member.Name);
         string modeSuffix = compatibleMode ? "Compat" : "Schema";
-        string fieldValueVar = $"__{cacheId}DictValue{modeSuffix}";
-        string runtimeTypeVar = $"__{cacheId}DictRuntimeType{modeSuffix}";
-        string typeInfoVar = $"__{cacheId}DictTypeInfo{modeSuffix}";
+        string fieldValueVar = $"__{memberId}DictValue{modeSuffix}";
+        string runtimeTypeVar = $"__{memberId}DictRuntimeType{modeSuffix}";
+        string typeInfoVar = $"__{memberId}DictTypeInfo{modeSuffix}";
         sb.AppendLine($"            {member.TypeName} {fieldValueVar} = {memberAccess};");
         sb.AppendLine($"            if ({fieldValueVar} is null)");
         sb.AppendLine("            {");
@@ -728,17 +721,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("            else");
         sb.AppendLine("            {");
         sb.AppendLine($"                global::System.Type {runtimeTypeVar} = {fieldValueVar}.GetType();");
-        sb.AppendLine($"                global::Apache.Fory.TypeInfo {typeInfoVar};");
-        sb.AppendLine($"                if (__Fory{cacheId}DictRuntimeType == {runtimeTypeVar} && __Fory{cacheId}DictTypeInfo is not null)");
-        sb.AppendLine("                {");
-        sb.AppendLine($"                    {typeInfoVar} = __Fory{cacheId}DictTypeInfo;");
-        sb.AppendLine("                }");
-        sb.AppendLine("                else");
-        sb.AppendLine("                {");
-        sb.AppendLine($"                    {typeInfoVar} = context.TypeResolver.GetTypeInfo({runtimeTypeVar});");
-        sb.AppendLine($"                    __Fory{cacheId}DictRuntimeType = {runtimeTypeVar};");
-        sb.AppendLine($"                    __Fory{cacheId}DictTypeInfo = {typeInfoVar};");
-        sb.AppendLine("                }");
+        sb.AppendLine($"                global::Apache.Fory.TypeInfo {typeInfoVar} = context.TypeResolver.GetTypeInfo({runtimeTypeVar});");
         sb.AppendLine(
             $"                context.TypeResolver.WriteObject({typeInfoVar}, context, {fieldValueVar}, {refModeExpr}, {writeTypeInfo}, {hasGenerics});");
         sb.AppendLine("            }");

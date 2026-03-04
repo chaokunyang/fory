@@ -1029,6 +1029,35 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
+    public void TypeResolverVersionHashIncludesUnregisteredTypeBindings()
+    {
+        TypeResolver baselineResolver = new();
+        ulong baselineHash = baselineResolver.VersionHash();
+
+        TypeResolver boundResolver = new();
+        _ = boundResolver.GetTypeInfo<List<int>>();
+        ulong boundHash = boundResolver.VersionHash();
+
+        Assert.NotEqual(baselineHash, boundHash);
+    }
+
+    [Fact]
+    public void TypeResolverVersionHashIsDeterministicForSameBoundTypes()
+    {
+        TypeResolver resolverA = new();
+        _ = resolverA.GetTypeInfo<List<int>>();
+        _ = resolverA.GetTypeInfo<Dictionary<string, int>>();
+        ulong hashA = resolverA.VersionHash();
+
+        TypeResolver resolverB = new();
+        _ = resolverB.GetTypeInfo<List<int>>();
+        _ = resolverB.GetTypeInfo<Dictionary<string, int>>();
+        ulong hashB = resolverB.VersionHash();
+
+        Assert.Equal(hashA, hashB);
+    }
+
+    [Fact]
     public void TypeMetaAssignFieldIdsPrefersIdAndFallsBackToName()
     {
         List<TypeMetaFieldInfo> localFields =

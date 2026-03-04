@@ -384,7 +384,7 @@ cdef class DataClassSerializer(Serializer):
                 self._apply_missing_defaults_slots(obj)
             else:
                 self._apply_missing_defaults_dict(obj.__dict__)
-        buffer.shrink_stream_buffer()
+        buffer.shrink_input_buffer()
         return obj
 
     cdef inline void _read_dict(self, Buffer buffer, object obj):

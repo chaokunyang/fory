@@ -244,8 +244,8 @@ cdef class Buffer:
             raise ValueError("writer_index must be >= 0")
         self.c_buffer.writer_index(<uint32_t>value)
 
-    cpdef inline void shrink_stream_buffer(self):
-        self.c_buffer.shrink_stream_buffer()
+    cpdef inline void shrink_input_buffer(self):
+        self.c_buffer.shrink_input_buffer()
 
     cpdef c_bool own_data(self):
         return self.c_buffer.own_data()

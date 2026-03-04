@@ -768,9 +768,8 @@ public final class Fory implements BaseFory {
       }
       boolean peerOutOfBandEnabled = (bitmap & isOutOfBandFlag) == isOutOfBandFlag;
       assert !peerOutOfBandEnabled : "Out of band buffers not passed in when deserializing";
-      TypeResolver resolver =
-          (bitmap & isCrossLanguageFlag) == isCrossLanguageFlag ? xtypeResolver : classResolver;
-      return deserializeByType(buffer, type, resolver);
+      boolean isTargetXLang = (bitmap & isCrossLanguageFlag) == isCrossLanguageFlag;
+      return deserializeByType(buffer, type, isTargetXLang);
     } catch (Throwable t) {
       throw ExceptionUtils.handleReadFailed(this, t);
     } finally {
@@ -847,11 +846,7 @@ public final class Fory implements BaseFory {
             "outOfBandBuffers should be null when the serialized stream is "
                 + "produced with bufferCallback null.");
       }
-      if (isTargetXLang) {
-        return readRefWithXtypeResolver(buffer, xtypeResolver);
-      } else {
-        return readRef(buffer);
-      }
+      return readRefByMode(buffer, isTargetXLang);
     } catch (Throwable t) {
       throw ExceptionUtils.handleReadFailed(this, t);
     } finally {
@@ -887,7 +882,7 @@ public final class Fory implements BaseFory {
   }
 
   @SuppressWarnings("unchecked")
-  private <T> T deserializeByType(MemoryBuffer buffer, Class<T> type, TypeResolver resolver) {
+  private <T> T deserializeByType(MemoryBuffer buffer, Class<T> type, boolean isTargetXLang) {
     generics.pushGenericType(classResolver.buildGenericType(type));
     try {
       RefResolver refResolver = this.refResolver;
@@ -895,13 +890,11 @@ public final class Fory implements BaseFory {
       if (nextReadRefId < NOT_NULL_VALUE_FLAG) {
         return (T) refResolver.getReadObject();
       }
-      TypeInfo typeInfo = resolver.readTypeInfo(buffer, type);
-      Object value;
-      if (resolver == xtypeResolver) {
-        value = readNonRefWithXtypeResolver(buffer, typeInfo, xtypeResolver);
-      } else {
-        value = readDataInternal(buffer, typeInfo);
-      }
+      TypeInfo typeInfo =
+          isTargetXLang
+              ? xtypeResolver.readTypeInfo(buffer, type)
+              : classResolver.readTypeInfo(buffer, type);
+      Object value = readNonRefByMode(buffer, typeInfo, isTargetXLang);
       refResolver.setReadObject(nextReadRefId, value);
       return (T) value;
     } finally {
@@ -911,98 +904,35 @@ public final class Fory implements BaseFory {
 
   /** Deserialize nullable referencable object from <code>buffer</code>. */
   public Object readRef(MemoryBuffer buffer) {
-    if (crossLanguage) {
-      return readRefWithXtypeResolver(buffer, xtypeResolver);
-    }
-    RefResolver refResolver = this.refResolver;
-    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
-    if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-      // ref value or not-null value
-      Object o = readDataInternal(buffer, classResolver.readTypeInfo(buffer));
-      refResolver.setReadObject(nextReadRefId, o);
-      return o;
-    } else {
-      return refResolver.getReadObject();
-    }
+    return readRefByMode(buffer, crossLanguage);
   }
 
   public Object readRef(MemoryBuffer buffer, TypeInfo typeInfo) {
-    if (crossLanguage) {
-      return readRefWithXtypeResolver(buffer, typeInfo, xtypeResolver);
-    }
-    RefResolver refResolver = this.refResolver;
-    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
-    if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-      // ref value or not-null value
-      Object o = readDataInternal(buffer, typeInfo);
-      refResolver.setReadObject(nextReadRefId, o);
-      return o;
-    } else {
-      return refResolver.getReadObject();
-    }
+    return readRefByMode(buffer, typeInfo, crossLanguage);
   }
 
   public Object readRef(MemoryBuffer buffer, TypeInfoHolder classInfoHolder) {
-    if (crossLanguage) {
-      return readRefWithXtypeResolver(buffer, classInfoHolder, xtypeResolver);
-    }
-    RefResolver refResolver = this.refResolver;
-    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
-    if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-      // ref value or not-null value
-      Object o = readDataInternal(buffer, classResolver.readTypeInfo(buffer, classInfoHolder));
-      refResolver.setReadObject(nextReadRefId, o);
-      return o;
-    } else {
-      return refResolver.getReadObject();
-    }
+    return readRefByMode(buffer, classInfoHolder, crossLanguage);
   }
 
   @SuppressWarnings("unchecked")
   public <T> T readRef(MemoryBuffer buffer, Serializer<T> serializer) {
-    if (crossLanguage) {
-      return (T) readRefWithXtypeResolver(buffer, serializer, xtypeResolver);
-    }
-    if (serializer.needToWriteRef()) {
-      T obj;
-      int nextReadRefId = refResolver.tryPreserveRefId(buffer);
-      if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-        obj = serializer.read(buffer);
-        refResolver.setReadObject(nextReadRefId, obj);
-        return obj;
-      } else {
-        return (T) refResolver.getReadObject();
-      }
-    } else {
-      byte headFlag = buffer.readByte();
-      if (headFlag == Fory.NULL_FLAG) {
-        return null;
-      } else {
-        return serializer.read(buffer);
-      }
-    }
+    return (T) readRefByMode(buffer, serializer);
   }
 
   /** Deserialize not-null and non-reference object from <code>buffer</code>. */
   public Object readNonRef(MemoryBuffer buffer) {
-    if (crossLanguage) {
-      return readNonRefWithXtypeResolver(buffer, xtypeResolver.readTypeInfo(buffer), xtypeResolver);
-    }
-    return readDataInternal(buffer, classResolver.readTypeInfo(buffer));
+    TypeInfo typeInfo =
+        crossLanguage ? xtypeResolver.readTypeInfo(buffer) : classResolver.readTypeInfo(buffer);
+    return readNonRefByMode(buffer, typeInfo, crossLanguage);
   }
 
   public Object readNonRef(MemoryBuffer buffer, TypeInfoHolder classInfoHolder) {
-    if (crossLanguage) {
-      return readNonRefWithXtypeResolver(buffer, classInfoHolder, xtypeResolver);
-    }
-    return readDataInternal(buffer, classResolver.readTypeInfo(buffer, classInfoHolder));
+    return readNonRefByMode(buffer, classInfoHolder, crossLanguage);
   }
 
   public Object readNonRef(MemoryBuffer buffer, TypeInfo typeInfo) {
-    if (crossLanguage) {
-      return readNonRefWithXtypeResolver(buffer, typeInfo, xtypeResolver);
-    }
-    return readDataInternal(buffer, typeInfo);
+    return readNonRefByMode(buffer, typeInfo, crossLanguage);
   }
 
   public Object readNonRef(MemoryBuffer buffer, Serializer<?> serializer) {
@@ -1032,15 +962,7 @@ public final class Fory implements BaseFory {
   }
 
   public Object readNullable(MemoryBuffer buffer, TypeInfoHolder classInfoHolder) {
-    if (crossLanguage) {
-      return readNullableWithXtypeResolver(buffer, classInfoHolder, xtypeResolver);
-    }
-    byte headFlag = buffer.readByte();
-    if (headFlag == Fory.NULL_FLAG) {
-      return null;
-    } else {
-      return readNonRef(buffer, classInfoHolder);
-    }
+    return readNullableByMode(buffer, classInfoHolder, crossLanguage);
   }
 
   /** Class should be read already. */
@@ -1085,11 +1007,13 @@ public final class Fory implements BaseFory {
     }
   }
 
-  private Object readRefWithXtypeResolver(MemoryBuffer buffer, XtypeResolver resolver) {
+  private Object readRefByMode(MemoryBuffer buffer, boolean isTargetXLang) {
     RefResolver refResolver = this.refResolver;
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
     if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-      Object o = readNonRefWithXtypeResolver(buffer, resolver.readTypeInfo(buffer), resolver);
+      TypeInfo typeInfo =
+          isTargetXLang ? xtypeResolver.readTypeInfo(buffer) : classResolver.readTypeInfo(buffer);
+      Object o = readNonRefByMode(buffer, typeInfo, isTargetXLang);
       refResolver.setReadObject(nextReadRefId, o);
       return o;
     } else {
@@ -1097,12 +1021,11 @@ public final class Fory implements BaseFory {
     }
   }
 
-  private Object readRefWithXtypeResolver(
-      MemoryBuffer buffer, TypeInfo typeInfo, XtypeResolver resolver) {
+  private Object readRefByMode(MemoryBuffer buffer, TypeInfo typeInfo, boolean isTargetXLang) {
     RefResolver refResolver = this.refResolver;
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
     if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-      Object o = readNonRefWithXtypeResolver(buffer, typeInfo, resolver);
+      Object o = readNonRefByMode(buffer, typeInfo, isTargetXLang);
       refResolver.setReadObject(nextReadRefId, o);
       return o;
     } else {
@@ -1110,14 +1033,16 @@ public final class Fory implements BaseFory {
     }
   }
 
-  private Object readRefWithXtypeResolver(
-      MemoryBuffer buffer, TypeInfoHolder classInfoHolder, XtypeResolver resolver) {
+  private Object readRefByMode(
+      MemoryBuffer buffer, TypeInfoHolder classInfoHolder, boolean isTargetXLang) {
     RefResolver refResolver = this.refResolver;
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
     if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-      Object o =
-          readNonRefWithXtypeResolver(
-              buffer, resolver.readTypeInfo(buffer, classInfoHolder), resolver);
+      TypeInfo typeInfo =
+          isTargetXLang
+              ? xtypeResolver.readTypeInfo(buffer, classInfoHolder)
+              : classResolver.readTypeInfo(buffer, classInfoHolder);
+      Object o = readNonRefByMode(buffer, typeInfo, isTargetXLang);
       refResolver.setReadObject(nextReadRefId, o);
       return o;
     } else {
@@ -1125,13 +1050,12 @@ public final class Fory implements BaseFory {
     }
   }
 
-  private Object readRefWithXtypeResolver(
-      MemoryBuffer buffer, Serializer<?> serializer, XtypeResolver resolver) {
+  private Object readRefByMode(MemoryBuffer buffer, Serializer<?> serializer) {
     if (serializer.needToWriteRef()) {
       RefResolver refResolver = this.refResolver;
       int nextReadRefId = refResolver.tryPreserveRefId(buffer);
       if (nextReadRefId >= NOT_NULL_VALUE_FLAG) {
-        Object o = readNonRefWithXtypeResolver(buffer, serializer, resolver);
+        Object o = readNonRef(buffer, serializer);
         refResolver.setReadObject(nextReadRefId, o);
         return o;
       } else {
@@ -1142,27 +1066,24 @@ public final class Fory implements BaseFory {
       if (headFlag == Fory.NULL_FLAG) {
         return null;
       } else {
-        return readNonRefWithXtypeResolver(buffer, serializer, resolver);
+        return readNonRef(buffer, serializer);
       }
     }
   }
 
-  private Object readNonRefWithXtypeResolver(
-      MemoryBuffer buffer, TypeInfoHolder classInfoHolder, XtypeResolver resolver) {
-    TypeInfo typeInfo = resolver.readTypeInfo(buffer, classInfoHolder);
-    return readNonRefWithXtypeResolver(buffer, typeInfo, resolver);
+  private Object readNonRefByMode(
+      MemoryBuffer buffer, TypeInfoHolder classInfoHolder, boolean isTargetXLang) {
+    TypeInfo typeInfo =
+        isTargetXLang
+            ? xtypeResolver.readTypeInfo(buffer, classInfoHolder)
+            : classResolver.readTypeInfo(buffer, classInfoHolder);
+    return readNonRefByMode(buffer, typeInfo, isTargetXLang);
   }
 
-  private Object readNonRefWithXtypeResolver(
-      MemoryBuffer buffer, Serializer<?> serializer, XtypeResolver resolver) {
-    incReadDepth();
-    Object o = serializer.read(buffer);
-    depth--;
-    return o;
-  }
-
-  private Object readNonRefWithXtypeResolver(
-      MemoryBuffer buffer, TypeInfo typeInfo, XtypeResolver resolver) {
+  private Object readNonRefByMode(MemoryBuffer buffer, TypeInfo typeInfo, boolean isTargetXLang) {
+    if (!isTargetXLang) {
+      return readDataInternal(buffer, typeInfo);
+    }
     assert typeInfo != null;
     int typeId = typeInfo.getTypeId();
     switch (typeId) {
@@ -1191,9 +1112,16 @@ public final class Fory implements BaseFory {
     }
   }
 
-  private Object readNullableWithXtypeResolver(
-      MemoryBuffer buffer, TypeInfoHolder classInfoHolder, XtypeResolver resolver) {
-    TypeInfo typeInfo = resolver.readTypeInfo(buffer, classInfoHolder);
+  private Object readNullableByMode(
+      MemoryBuffer buffer, TypeInfoHolder classInfoHolder, boolean isTargetXLang) {
+    if (!isTargetXLang) {
+      byte headFlag = buffer.readByte();
+      if (headFlag == Fory.NULL_FLAG) {
+        return null;
+      }
+      return readNonRefByMode(buffer, classInfoHolder, false);
+    }
+    TypeInfo typeInfo = xtypeResolver.readTypeInfo(buffer, classInfoHolder);
     return readNullable(buffer, typeInfo.getSerializer());
   }
 

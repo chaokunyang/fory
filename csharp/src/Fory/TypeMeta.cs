@@ -673,11 +673,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             (uint)global::Apache.Fory.TypeId.CompatibleStruct or
             (uint)global::Apache.Fory.TypeId.NamedStruct or
             (uint)global::Apache.Fory.TypeId.NamedCompatibleStruct or
+            (uint)global::Apache.Fory.TypeId.Ext or
+            (uint)global::Apache.Fory.TypeId.NamedExt or
             (uint)global::Apache.Fory.TypeId.Unknown => (uint)global::Apache.Fory.TypeId.Struct,
             (uint)global::Apache.Fory.TypeId.Enum or
             (uint)global::Apache.Fory.TypeId.NamedEnum => (uint)global::Apache.Fory.TypeId.Enum,
-            (uint)global::Apache.Fory.TypeId.Ext or
-            (uint)global::Apache.Fory.TypeId.NamedExt => (uint)global::Apache.Fory.TypeId.Ext,
             (uint)global::Apache.Fory.TypeId.Union or
             (uint)global::Apache.Fory.TypeId.NamedUnion or
             (uint)global::Apache.Fory.TypeId.TypedUnion => (uint)global::Apache.Fory.TypeId.Union,

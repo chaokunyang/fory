@@ -84,7 +84,9 @@ def load_results(path: str) -> dict:
 
 def get_system_info(benchmark_data: dict) -> dict:
     info = {
-        "OS": benchmark_data.get("OsDescription", f"{platform.system()} {platform.release()}"),
+        "OS": benchmark_data.get(
+            "OsDescription", f"{platform.system()} {platform.release()}"
+        ),
         "OS Architecture": benchmark_data.get("OsArchitecture", "Unknown"),
         "Machine": benchmark_data.get("ProcessArchitecture", platform.machine()),
         "Runtime Version": benchmark_data.get("RuntimeVersion", "Unknown"),
@@ -184,7 +186,9 @@ def process_benchmark_rows(rows):
     for data_type, op_values in raw_throughputs.items():
         for operation, serializer_values in op_values.items():
             for serializer, values in serializer_values.items():
-                throughputs[data_type][operation][serializer] = sum(values) / len(values)
+                throughputs[data_type][operation][serializer] = sum(values) / len(
+                    values
+                )
 
     for data_type, serializer_values in raw_sizes.items():
         for serializer, values in serializer_values.items():
@@ -210,14 +214,20 @@ def build_coverage(rows):
         operations.add(operation)
 
     expected_cases = (
-        len(SERIALIZER_ORDER) * len(PREFERRED_DATATYPE_ORDER) * len(PREFERRED_OPERATION_ORDER)
+        len(SERIALIZER_ORDER)
+        * len(PREFERRED_DATATYPE_ORDER)
+        * len(PREFERRED_OPERATION_ORDER)
     )
     return {
         "case_count": len(cases),
         "expected_case_count": expected_cases,
         "serializers": sorted(serializers),
-        "datatypes": preferred_ordered_values(list(datatypes), PREFERRED_DATATYPE_ORDER),
-        "operations": preferred_ordered_values(list(operations), PREFERRED_OPERATION_ORDER),
+        "datatypes": preferred_ordered_values(
+            list(datatypes), PREFERRED_DATATYPE_ORDER
+        ),
+        "operations": preferred_ordered_values(
+            list(operations), PREFERRED_OPERATION_ORDER
+        ),
         "is_partial": len(cases) < expected_cases,
     }
 
@@ -331,9 +341,15 @@ def build_markdown(
     report_lines.append(
         f"| Cases in input JSON | {coverage['case_count']} / {coverage['expected_case_count']} |\n"
     )
-    report_lines.append(f"| Serializers | {', '.join(coverage['serializers']) or 'N/A'} |\n")
-    report_lines.append(f"| Datatypes | {', '.join(coverage['datatypes']) or 'N/A'} |\n")
-    report_lines.append(f"| Operations | {', '.join(coverage['operations']) or 'N/A'} |\n")
+    report_lines.append(
+        f"| Serializers | {', '.join(coverage['serializers']) or 'N/A'} |\n"
+    )
+    report_lines.append(
+        f"| Datatypes | {', '.join(coverage['datatypes']) or 'N/A'} |\n"
+    )
+    report_lines.append(
+        f"| Operations | {', '.join(coverage['operations']) or 'N/A'} |\n"
+    )
     if coverage["is_partial"]:
         report_lines.append(
             "\n> Warning: benchmark input is partial; plots/tables only show available cases.\n"
@@ -364,7 +380,8 @@ def build_markdown(
     for datatype in datatypes:
         for operation in operations:
             times = {
-                lib: timings[datatype][operation].get(lib, 0) for lib in SERIALIZER_ORDER
+                lib: timings[datatype][operation].get(lib, 0)
+                for lib in SERIALIZER_ORDER
             }
             positive_times = {lib: t for lib, t in times.items() if t > 0}
             fastest = "N/A"
@@ -448,13 +465,19 @@ def main() -> None:
     timings, throughputs, sizes = process_benchmark_rows(rows)
     coverage = build_coverage(rows)
 
-    datatype_candidates = set(timings.keys()) | set(throughputs.keys()) | set(sizes.keys())
-    datatypes = preferred_ordered_values(list(datatype_candidates), PREFERRED_DATATYPE_ORDER)
+    datatype_candidates = (
+        set(timings.keys()) | set(throughputs.keys()) | set(sizes.keys())
+    )
+    datatypes = preferred_ordered_values(
+        list(datatype_candidates), PREFERRED_DATATYPE_ORDER
+    )
     operations_present = set()
     for datatype in datatypes:
         operations_present.update(timings[datatype].keys())
         operations_present.update(throughputs[datatype].keys())
-    operations = preferred_ordered_values(list(operations_present), PREFERRED_OPERATION_ORDER)
+    operations = preferred_ordered_values(
+        list(operations_present), PREFERRED_OPERATION_ORDER
+    )
 
     plot_images = []
     for datatype in datatypes:
@@ -472,10 +495,30 @@ def main() -> None:
     list_datatypes = [dt for dt in datatypes if dt.endswith("list")]
     fig, axes = plt.subplots(1, 4, figsize=(28, 6))
     combined_subplots = [
-        (axes[0], non_list_datatypes, "serialize", "Serialize Throughput (higher is better)"),
-        (axes[1], non_list_datatypes, "deserialize", "Deserialize Throughput (higher is better)"),
-        (axes[2], list_datatypes, "serialize", "Serialize Throughput (*List, higher is better)"),
-        (axes[3], list_datatypes, "deserialize", "Deserialize Throughput (*List, higher is better)"),
+        (
+            axes[0],
+            non_list_datatypes,
+            "serialize",
+            "Serialize Throughput (higher is better)",
+        ),
+        (
+            axes[1],
+            non_list_datatypes,
+            "deserialize",
+            "Deserialize Throughput (higher is better)",
+        ),
+        (
+            axes[2],
+            list_datatypes,
+            "serialize",
+            "Serialize Throughput (*List, higher is better)",
+        ),
+        (
+            axes[3],
+            list_datatypes,
+            "deserialize",
+            "Deserialize Throughput (*List, higher is better)",
+        ),
     ]
     for ax, grouped_datatypes, operation, title in combined_subplots:
         plot_combined_tps_subplot(ax, throughputs, grouped_datatypes, operation, title)

@@ -583,7 +583,15 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             MemberModel member = model.SortedMembers[idx];
             sb.AppendLine($"                    case {idx}:");
             sb.AppendLine("                        {");
-            EmitReadMemberAssignment(sb, member, "remoteRefMode", "false", "value", "Compat", 7, false);
+            EmitReadMemberAssignment(
+                sb,
+                member,
+                "remoteRefMode",
+                BuildCompatibleReadTypeInfoExpression(member),
+                "value",
+                "Compat",
+                7,
+                false);
             sb.AppendLine("                            break;");
             sb.AppendLine("                        }");
         }
@@ -1100,14 +1108,12 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
     private static string BuildCompatibleReadTypeInfoExpression(MemberModel member)
     {
-        _ = member;
-        return "false";
+        return $"context.TypeResolver.GetTypeInfo<{member.TypeName}>().NeedsTypeInfoForField()";
     }
 
     private static string BuildCompatibleTypeInfoExpression(MemberModel member)
     {
-        _ = member;
-        return "false";
+        return $"context.TypeResolver.GetTypeInfo<{member.TypeName}>().NeedsTypeInfoForField()";
     }
 
     private static TypeModel? BuildTypeModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)

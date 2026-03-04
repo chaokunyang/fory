@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from dataclasses import dataclass
+
 import pytest
 
 import pyfory
@@ -66,6 +68,47 @@ class OneByteStream:
 
     def recvinto(self, buffer, size=-1):
         return self.recv_into(buffer, size)
+
+
+class OneByteWriteStream:
+    def __init__(self):
+        self._data = bytearray()
+
+    def write(self, payload):
+        if not payload:
+            return 0
+        view = memoryview(payload).cast("B")
+        self._data.append(view[0])
+        return 1
+
+    def to_bytes(self):
+        return bytes(self._data)
+
+
+class CountingWriteStream:
+    def __init__(self):
+        self._data = bytearray()
+        self.write_calls = 0
+        self.flush_calls = 0
+
+    def write(self, payload):
+        view = memoryview(payload).cast("B")
+        self.write_calls += 1
+        self._data.extend(view)
+        return len(view)
+
+    def flush(self):
+        self.flush_calls += 1
+
+    def to_bytes(self):
+        return bytes(self._data)
+
+
+@dataclass
+class StreamStructValue:
+    idx: int
+    name: str
+    values: list
 
 
 @pytest.mark.parametrize("xlang", [False, True])
@@ -148,3 +191,62 @@ def test_stream_deserialize_truncated_error(xlang):
 
     with pytest.raises(Exception):
         fory.deserialize(Buffer.from_stream(OneByteStream(truncated)))
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_dump_matches_dumps_bytes(xlang):
+    fory = pyfory.Fory(xlang=xlang, ref=True)
+    value = {
+        "k": [1, 2, 3, 4],
+        "nested": {"x": True, "y": "hello"},
+        "f": 3.14,
+    }
+
+    sink = OneByteWriteStream()
+    fory.dump(value, sink)
+    expected = fory.dumps(value)
+    assert sink.to_bytes() == expected
+
+
+@pytest.mark.parametrize("xlang", [False, True])
+def test_dump_map_chunk_path_matches_dumps(xlang):
+    fory = pyfory.Fory(xlang=xlang, ref=True)
+    value = {f"k{i}": i for i in range(300)}
+
+    sink = OneByteWriteStream()
+    fory.dump(value, sink)
+    expected = fory.dumps(value)
+    assert sink.to_bytes() == expected
+
+    restored = fory.deserialize(Buffer.from_stream(OneByteStream(sink.to_bytes())))
+    assert restored == value
+
+
+def test_dump_large_list_of_structs_multiple_flushes_matches_dumps():
+    fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+    fory.register(StreamStructValue)
+    value = [StreamStructValue(i, f"item-{i}-{'x' * 56}", [i, i + 1, i + 2, i + 3, i + 4]) for i in range(1800)]
+
+    sink = CountingWriteStream()
+    fory.dump(value, sink)
+    expected = fory.dumps(value)
+    assert sink.to_bytes() == expected
+    assert len(expected) > 4096 * 4
+    assert sink.write_calls >= 4
+
+    restored = fory.deserialize(Buffer.from_stream(OneByteStream(sink.to_bytes())))
+    assert restored == value
+
+
+def test_dump_large_map_with_struct_values_matches_dumps():
+    fory = pyfory.Fory(xlang=False, ref=True, strict=False)
+    fory.register(StreamStructValue)
+    value = {f"k{i}": StreamStructValue(i, "y" * 96, [i, i + 1, i + 2, i + 3]) for i in range(900)}
+
+    sink = OneByteWriteStream()
+    fory.dump(value, sink)
+    expected = fory.dumps(value)
+    assert sink.to_bytes() == expected
+
+    restored = fory.deserialize(Buffer.from_stream(OneByteStream(sink.to_bytes())))
+    assert restored == value

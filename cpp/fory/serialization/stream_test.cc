@@ -110,6 +110,44 @@ private:
   OneByteStreamBuf buf_;
 };
 
+class OneByteOutputStreamBuf final : public std::streambuf {
+public:
+  OneByteOutputStreamBuf() = default;
+
+  const std::vector<uint8_t> &data() const { return data_; }
+
+protected:
+  std::streamsize xsputn(const char *s, std::streamsize count) override {
+    if (count <= 0) {
+      return 0;
+    }
+    data_.insert(data_.end(), reinterpret_cast<const uint8_t *>(s),
+                 reinterpret_cast<const uint8_t *>(s + count));
+    return count;
+  }
+
+  int_type overflow(int_type ch) override {
+    if (traits_type::eq_int_type(ch, traits_type::eof())) {
+      return traits_type::not_eof(ch);
+    }
+    data_.push_back(static_cast<uint8_t>(traits_type::to_char_type(ch)));
+    return ch;
+  }
+
+private:
+  std::vector<uint8_t> data_;
+};
+
+class OneByteOStream final : public std::ostream {
+public:
+  OneByteOStream() : std::ostream(nullptr) { rdbuf(&buf_); }
+
+  std::vector<uint8_t> data() const { return buf_.data(); }
+
+private:
+  OneByteOutputStreamBuf buf_;
+};
+
 static inline void register_stream_types(Fory &fory) {
   uint32_t type_id = 1;
   fory.register_struct<StreamPoint>(type_id++);
@@ -124,7 +162,7 @@ TEST(StreamSerializationTest, PrimitiveAndStringRoundTrip) {
   ASSERT_TRUE(number_bytes_result.ok())
       << number_bytes_result.error().to_string();
   OneByteIStream number_source(std::move(number_bytes_result).value());
-  ForyInputStream number_stream(number_source, 8);
+  StdInputStream number_stream(number_source, 8);
   auto number_result = fory.deserialize<int64_t>(number_stream);
   ASSERT_TRUE(number_result.ok()) << number_result.error().to_string();
   EXPECT_EQ(number_result.value(), -9876543212345LL);
@@ -133,7 +171,7 @@ TEST(StreamSerializationTest, PrimitiveAndStringRoundTrip) {
   ASSERT_TRUE(string_bytes_result.ok())
       << string_bytes_result.error().to_string();
   OneByteIStream string_source(std::move(string_bytes_result).value());
-  ForyInputStream string_stream(string_source, 8);
+  StdInputStream string_stream(string_source, 8);
   auto string_result = fory.deserialize<std::string>(string_stream);
   ASSERT_TRUE(string_result.ok()) << string_result.error().to_string();
   EXPECT_EQ(string_result.value(), "stream-hello-世界");
@@ -155,7 +193,7 @@ TEST(StreamSerializationTest, StructRoundTrip) {
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
   OneByteIStream source(std::move(bytes_result).value());
-  ForyInputStream stream(source, 4);
+  StdInputStream stream(source, 4);
   auto result = fory.deserialize<StreamEnvelope>(stream);
   ASSERT_TRUE(result.ok()) << result.error().to_string();
   EXPECT_EQ(result.value(), original);
@@ -175,7 +213,7 @@ TEST(StreamSerializationTest, SequentialDeserializeFromSingleStream) {
   ASSERT_TRUE(fory.serialize_to(bytes, envelope).ok());
 
   OneByteIStream source(bytes);
-  ForyInputStream stream(source, 3);
+  StdInputStream stream(source, 3);
 
   auto first = fory.deserialize<int32_t>(stream);
   ASSERT_TRUE(first.ok()) << first.error().to_string();
@@ -206,7 +244,7 @@ TEST(StreamSerializationTest, SharedPointerIdentityRoundTrip) {
   ASSERT_TRUE(bytes_result.ok()) << bytes_result.error().to_string();
 
   OneByteIStream source(std::move(bytes_result).value());
-  ForyInputStream stream(source, 2);
+  StdInputStream stream(source, 2);
   auto result = fory.deserialize<SharedIntPair>(stream);
   ASSERT_TRUE(result.ok()) << result.error().to_string();
   ASSERT_NE(result.value().first, nullptr);
@@ -230,9 +268,46 @@ TEST(StreamSerializationTest, TruncatedStreamReturnsError) {
   truncated.pop_back();
 
   OneByteIStream source(truncated);
-  ForyInputStream stream(source, 4);
+  StdInputStream stream(source, 4);
   auto result = fory.deserialize<StreamEnvelope>(stream);
   EXPECT_FALSE(result.ok());
+}
+
+TEST(StreamSerializationTest, SerializeToOutputStreamRoundTrip) {
+  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  register_stream_types(fory);
+
+  StreamEnvelope original{
+      "writer-roundtrip", {2, 4, 6, 8}, {{"x", 1}, {"y", 2}}, {5, -9}, true,
+  };
+
+  OneByteOStream out;
+  StdOutputStream writer(out);
+  auto write_result = fory.serialize(writer, original);
+  ASSERT_TRUE(write_result.ok()) << write_result.error().to_string();
+  ASSERT_GT(write_result.value(), 0U);
+
+  auto bytes = out.data();
+  auto roundtrip = fory.deserialize<StreamEnvelope>(bytes);
+  ASSERT_TRUE(roundtrip.ok()) << roundtrip.error().to_string();
+  EXPECT_EQ(roundtrip.value(), original);
+}
+
+TEST(StreamSerializationTest, SerializeToOStreamOverloadParity) {
+  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  register_stream_types(fory);
+
+  StreamEnvelope original{
+      "ostream-overload", {11, 22, 33}, {{"k", 99}}, {1, 2}, false,
+  };
+
+  auto expected = fory.serialize(original);
+  ASSERT_TRUE(expected.ok()) << expected.error().to_string();
+
+  OneByteOStream out;
+  auto write_result = fory.serialize(out, original);
+  ASSERT_TRUE(write_result.ok()) << write_result.error().to_string();
+  EXPECT_EQ(out.data(), expected.value());
 }
 
 } // namespace test

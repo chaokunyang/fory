@@ -287,6 +287,7 @@ cdef class DataClassSerializer(Serializer):
             self._write_slots(buffer, value)
         else:
             self._write_dict(buffer, value)
+        self.fory.try_flush()
 
     cdef inline void _write_dict(self, Buffer buffer, object value):
         cdef dict value_dict = value.__dict__

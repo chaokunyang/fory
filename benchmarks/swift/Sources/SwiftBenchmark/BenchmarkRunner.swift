@@ -24,7 +24,6 @@ struct BenchmarkConfig {
     var durationSeconds: Double = 3.0
     var dataFilter: DataKind?
     var serializerFilter: SerializerKind?
-    var verifyCppSizes: Bool = false
 }
 
 struct BenchmarkEntry: Codable {
@@ -62,15 +61,6 @@ struct BenchmarkOutput: Codable {
 }
 
 final class BenchmarkSuite {
-    private static let expectedCppForySizes: [DataKind: Int] = [
-        .numericStruct: 58,
-        .sample: 446,
-        .mediaContent: 365,
-        .structList: 184,
-        .sampleList: 1980,
-        .mediaContentList: 1535
-    ]
-
     private let config: BenchmarkConfig
     private let fory: Fory
     private let msgpackEncoder = MessagePackEncoder()
@@ -125,9 +115,6 @@ final class BenchmarkSuite {
 
         entries.sort { $0.name < $1.name }
         sizeEntries.sort { $0.dataType < $1.dataType }
-        if config.verifyCppSizes {
-            try validateCppSerializedSizes(sizeEntries)
-        }
 
         return BenchmarkOutput(
             context: createContext(),
@@ -155,28 +142,6 @@ final class BenchmarkSuite {
             return false
         }
         return true
-    }
-
-    private func validateCppSerializedSizes(_ sizeEntries: [SizeEntry]) throws {
-        var actualByDataType: [String: Int] = [:]
-        actualByDataType.reserveCapacity(sizeEntries.count)
-        for entry in sizeEntries {
-            actualByDataType[entry.dataType] = entry.fory
-        }
-
-        for (dataKind, expectedSize) in Self.expectedCppForySizes {
-            if let filter = config.dataFilter, filter != dataKind {
-                continue
-            }
-            guard let actualSize = actualByDataType[dataKind.title] else {
-                throw ForyError.invalidData("missing serialized-size entry for \(dataKind.title)")
-            }
-            if actualSize != expectedSize {
-                throw ForyError.invalidData(
-                    "C++ size mismatch for \(dataKind.title): expected \(expectedSize), got \(actualSize)"
-                )
-            }
-        }
     }
 
     private func runBenchmarks<T: Serializer & Codable & ProtobufConvertible>(

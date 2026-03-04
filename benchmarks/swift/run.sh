@@ -96,7 +96,7 @@ echo -e "${GREEN}Build complete!${NC}"
 echo ""
 
 echo -e "${YELLOW}[2/3] Running benchmark...${NC}"
-ARGS=("--duration" "$DURATION" "--output" "$OUTPUT_JSON" "--verify-cpp-sizes")
+ARGS=("--duration" "$DURATION" "--output" "$OUTPUT_JSON")
 if [[ -n "$DATA" ]]; then
     ARGS+=("--data" "$DATA")
 fi

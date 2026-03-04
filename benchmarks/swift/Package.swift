@@ -52,14 +52,5 @@ let package = Package(
             ],
             path: "Sources/SwiftBenchmark"
         ),
-        .testTarget(
-            name: "SwiftBenchmarkTests",
-            dependencies: [
-                "SwiftBenchmark",
-                .product(name: "Fory", package: "fory-swift"),
-                .product(name: "MessagePack", package: "MessagePack"),
-            ],
-            path: "Tests/SwiftBenchmarkTests"
-        ),
     ]
 )

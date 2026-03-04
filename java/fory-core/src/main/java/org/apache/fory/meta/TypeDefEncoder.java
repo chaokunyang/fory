@@ -162,18 +162,11 @@ class TypeDefEncoder {
     buffer.putByte(0, currentClassHeader);
     writeFieldsInfo(resolver, buffer, fields);
 
-    byte[] compressed =
-        resolver
-            .getFory()
-            .getMetaCompressor()
-            .compress(buffer.getHeapMemory(), 0, buffer.writerIndex());
-    boolean isCompressed = false;
-    if (compressed.length < buffer.writerIndex()) {
-      isCompressed = true;
-      buffer = MemoryBuffer.fromByteArray(compressed);
-      buffer.writerIndex(compressed.length);
-    }
-    return prependHeader(buffer, isCompressed, !fields.isEmpty());
+    // Temporary xlang behavior: always write TypeMeta uncompressed.
+    // Some runtimes still don't support TypeMeta decompression, so we must avoid emitting
+    // compressed xlang TypeMeta until all xlang implementations support decompress.
+    // Note: native mode is unchanged and still uses NativeTypeDefEncoder compression flow.
+    return prependHeader(buffer, false, !fields.isEmpty());
   }
 
   static Map<String, FieldInfo> getClassFields(Class<?> type, List<FieldInfo> fieldsInfo) {

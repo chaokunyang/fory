@@ -306,9 +306,8 @@ public class ForyTest extends ForyTestBase {
     Outer outer = new Outer();
     outer.inner = new Outer.Inner();
     fory.deserialize(fory.serialize(outer));
-    assertTrue(fory.getClassResolver().getSerializer(Outer.class) instanceof ObjectSerializer);
-    assertTrue(
-        fory.getClassResolver().getSerializer(Outer.Inner.class) instanceof ObjectSerializer);
+    assertTrue(fory.getTypeResolver().getSerializer(Outer.class) instanceof ObjectSerializer);
+    assertTrue(fory.getTypeResolver().getSerializer(Outer.Inner.class) instanceof ObjectSerializer);
   }
 
   @Test
@@ -322,8 +321,8 @@ public class ForyTest extends ForyTestBase {
     Outer outer = new Outer();
     outer.inner = new Outer.Inner();
     fory.deserialize(fory.serialize(outer));
-    assertTrue(fory.getClassResolver().getSerializer(Outer.class) instanceof Generated);
-    assertTrue(fory.getClassResolver().getSerializer(Outer.Inner.class) instanceof Generated);
+    assertTrue(fory.getTypeResolver().getSerializer(Outer.class) instanceof Generated);
+    assertTrue(fory.getTypeResolver().getSerializer(Outer.Inner.class) instanceof Generated);
   }
 
   @Data
@@ -507,7 +506,7 @@ public class ForyTest extends ForyTestBase {
     Object struct1 = Struct.createPOJO(structClass1);
     serDe(fory, struct1);
     Class<? extends Serializer> serializerClass =
-        fory.getClassResolver().getSerializerClass(structClass1);
+        fory.getTypeResolver().getSerializerClass(structClass1);
     assertTrue(serializerClass.getName().contains("Codec"));
     map.put(fory, true);
     System.out.println(fory.hashCode());

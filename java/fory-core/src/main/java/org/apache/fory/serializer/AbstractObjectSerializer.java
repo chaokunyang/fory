@@ -70,7 +70,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   public AbstractObjectSerializer(Fory fory, Class<T> type, ObjectCreator<T> objectCreator) {
     super(fory, type);
     this.refResolver = fory.getRefResolver();
-    this.classResolver = fory.getClassResolver();
+    this.classResolver = (ClassResolver) fory.getTypeResolver();
     this.typeResolver = fory.getTypeResolver();
     this.isRecord = RecordUtils.isRecord(type);
     this.objectCreator = objectCreator;
@@ -1181,7 +1181,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       }
     }
     DescriptorGrouper descriptorGrouper =
-        fory.getClassResolver().createDescriptorGrouper(descriptors, false);
+        fory.getTypeResolver().createDescriptorGrouper(descriptors, false);
     FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, descriptorGrouper);
     fieldInfos = fieldGroups.allFields;
     if (isRecord) {

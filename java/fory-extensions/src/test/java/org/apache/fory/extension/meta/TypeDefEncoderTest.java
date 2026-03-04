@@ -45,10 +45,10 @@ public class TypeDefEncoderTest {
     Fory fory =
         Fory.builder().withMetaShare(true).withMetaCompressor(new ZstdMetaCompressor()).build();
     Class<TestFieldsOrderClass1> type = TestFieldsOrderClass1.class;
-    List<FieldInfo> fieldsInfo = buildFieldsInfo(fory.getClassResolver(), type);
+    List<FieldInfo> fieldsInfo = buildFieldsInfo(fory.getTypeResolver(), type);
     MemoryBuffer buffer =
         NativeTypeDefEncoder.encodeTypeDef(
-            fory.getClassResolver(), type, getClassFields(type, fieldsInfo), true);
+            fory.getTypeResolver(), type, getClassFields(type, fieldsInfo), true);
     TypeDef typeDef = TypeDef.readTypeDef(fory, buffer);
     Assert.assertEquals(typeDef.getClassName(), type.getName());
     Assert.assertEquals(typeDef.getFieldsInfo().size(), type.getDeclaredFields().length);

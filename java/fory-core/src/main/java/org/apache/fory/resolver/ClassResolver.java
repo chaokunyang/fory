@@ -1407,20 +1407,6 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
-  @Deprecated
-  public void setClassChecker(ClassChecker classChecker) {
-    extRegistry.typeChecker =
-        (resolver, className) -> {
-          if (resolver instanceof ClassResolver) {
-            return classChecker.checkClass((ClassResolver) resolver, className);
-          }
-          return false;
-        };
-    if (classChecker instanceof AllowListChecker) {
-      ((AllowListChecker) classChecker).addListener(this);
-    }
-  }
-
   // Invoked by fory JIT.
   @Override
   public TypeInfo getTypeInfo(Class<?> cls) {
@@ -1508,7 +1494,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   public <T> Serializer<T> createSerializerSafe(Class<T> cls, Supplier<Serializer<T>> func) {
-    Serializer serializer = fory.getClassResolver().getSerializer(cls, false);
+    Serializer serializer = getSerializer(cls, false);
     try {
       return func.get();
     } catch (Throwable t) {

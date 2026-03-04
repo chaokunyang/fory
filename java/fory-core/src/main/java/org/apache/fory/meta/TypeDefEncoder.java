@@ -61,13 +61,11 @@ class TypeDefEncoder {
 
   /** Build class definition from fields of class. */
   static TypeDef buildTypeDef(Fory fory, Class<?> type) {
+    XtypeResolver resolver = (XtypeResolver) fory.getTypeResolver();
     DescriptorGrouper descriptorGrouper =
-        fory.getXtypeResolver()
-            .createDescriptorGrouper(
-                fory.getXtypeResolver().getFieldDescriptors(type, true),
-                false,
-                Function.identity());
-    TypeInfo typeInfo = fory.getTypeResolver().getTypeInfo(type);
+        resolver.createDescriptorGrouper(
+            resolver.getFieldDescriptors(type, true), false, Function.identity());
+    TypeInfo typeInfo = resolver.getTypeInfo(type);
     List<Field> fields;
     int typeId = typeInfo.getTypeId();
     if (Types.isStructType(typeId)) {
@@ -78,8 +76,7 @@ class TypeDefEncoder {
     } else {
       fields = new ArrayList<>();
     }
-    return buildTypeDefWithFieldInfos(
-        fory.getXtypeResolver(), type, buildFieldsInfo(fory.getXtypeResolver(), type, fields));
+    return buildTypeDefWithFieldInfos(resolver, type, buildFieldsInfo(resolver, type, fields));
   }
 
   static List<FieldInfo> buildFieldsInfo(TypeResolver resolver, Class<?> type, List<Field> fields) {

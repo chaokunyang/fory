@@ -107,7 +107,7 @@ public class CodecUtils {
     if (beanClassClassLoader == null) {
       beanClassClassLoader = fory.getClass().getClassLoader();
     }
-    ClassResolver classResolver = fory.getClassResolver();
+    ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
     codeGenerator = getCodeGenerator(fory, beanClassClassLoader, classResolver);
     ClassLoader classLoader =
         codeGenerator.compile(

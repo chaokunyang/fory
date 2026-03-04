@@ -1428,6 +1428,18 @@ public abstract class TypeResolver {
     extRegistry.typeChecker = typeChecker;
   }
 
+  public void setSerializerFactory(SerializerFactory serializerFactory) {
+    extRegistry.serializerFactory = serializerFactory;
+  }
+
+  public SerializerFactory getSerializerFactory() {
+    return extRegistry.serializerFactory;
+  }
+
+  public void resetRead() {}
+
+  public void resetWrite() {}
+
   // CHECKSTYLE.OFF:MethodName
   public static void _addGraalvmClassRegistry(int foryConfigHash, ClassResolver classResolver) {
     // CHECKSTYLE.ON:MethodName

@@ -229,7 +229,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
     byte[] bytes1 = fory.serialize(struct1);
     Assert.assertEquals(fory.deserialize(bytes1), struct1);
     Class<? extends Serializer> serializerClass1 =
-        fory.execute(f -> f.getClassResolver().getSerializerClass(structClass1));
+        fory.execute(f -> f.getTypeResolver().getSerializerClass(structClass1));
     Assert.assertTrue(serializerClass1.getName().contains("Codec"));
 
     Class<?> structClass2 = Struct.createStructClass(className, 2);
@@ -249,7 +249,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
     fory.setClassLoader(structClass2.getClassLoader());
     Assert.assertEquals(fory.deserialize(bytes2), struct2);
     Class<? extends Serializer> serializerClass2 =
-        fory.execute(f -> f.getClassResolver().getSerializerClass(structClass2));
+        fory.execute(f -> f.getTypeResolver().getSerializerClass(structClass2));
     Assert.assertTrue(serializerClass2.getName().contains("Codec"));
     Assert.assertNotSame(serializerClass2, serializerClass1);
 
@@ -370,7 +370,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
     threadSafeFory.execute(
         fory -> {
           Assert.assertEquals(
-              fory.getClassResolver().getSerializer(Foo.class).getClass(), FooSerializer.class);
+              fory.getTypeResolver().getSerializer(Foo.class).getClass(), FooSerializer.class);
           return null;
         });
   }

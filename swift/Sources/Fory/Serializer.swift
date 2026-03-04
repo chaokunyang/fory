@@ -17,6 +17,25 @@
 
 import Foundation
 
+private final class CacheMutex: @unchecked Sendable {
+    private var mutex = pthread_mutex_t()
+
+    init() {
+        pthread_mutex_init(&mutex, nil)
+    }
+
+    deinit {
+        pthread_mutex_destroy(&mutex)
+    }
+
+    @inline(__always)
+    func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        pthread_mutex_lock(&mutex)
+        defer { pthread_mutex_unlock(&mutex) }
+        return try body()
+    }
+}
+
 private struct CompatibleTypeMetaCacheKey: Hashable {
     let resolver: ObjectIdentifier
     let swiftType: ObjectIdentifier
@@ -32,7 +51,7 @@ private struct CompatibleTypeMetaCacheEntry {
 
 private enum CompatibleTypeMetaCache {
     nonisolated(unsafe) static var values: [CompatibleTypeMetaCacheKey: CompatibleTypeMetaCacheEntry] = [:]
-    static let lock = NSLock()
+    static let lock = CacheMutex()
 }
 
 public protocol Serializer {
@@ -227,16 +246,18 @@ public extension Serializer {
         }
 
         let info = try context.typeResolver.requireRegisteredTypeInfo(for: Self.self)
-        let allowed = allowedWireTypeIDs(
+        let expectedWireTypeID = resolveWireTypeID(
             declaredKind: info.kind,
             registerByName: info.registerByName,
             compatible: context.compatible
         )
-        if !allowed.contains(typeID) {
-            if let expected = allowed.first {
-                throw ForyError.typeMismatch(expected: expected.rawValue, actual: rawTypeID)
-            }
-            throw ForyError.invalidData("no expected wire type ids for \(info.kind)")
+        if !isAllowedWireTypeID(
+            typeID,
+            declaredKind: info.kind,
+            registerByName: info.registerByName,
+            compatible: context.compatible
+        ) {
+            throw ForyError.typeMismatch(expected: expectedWireTypeID.rawValue, actual: rawTypeID)
         }
 
         switch typeID {
@@ -245,7 +266,7 @@ public extension Serializer {
             try validateCompatibleTypeMeta(
                 remoteTypeMeta,
                 localInfo: info,
-                expectedWireTypes: allowed,
+                compatible: context.compatible,
                 actualWireTypeID: typeID
             )
             let localTypeMeta = try compatibleTypeMetaEntry(
@@ -266,7 +287,7 @@ public extension Serializer {
                 try validateCompatibleTypeMeta(
                     remoteTypeMeta,
                     localInfo: info,
-                    expectedWireTypes: allowed,
+                    compatible: context.compatible,
                     actualWireTypeID: typeID
                 )
                 if typeID == .namedStruct {
@@ -370,32 +391,31 @@ public extension Serializer {
         return idKind(for: baseKind, compatible: compatible)
     }
 
-    private static func allowedWireTypeIDs(
+    private static func isAllowedWireTypeID(
+        _ typeID: TypeId,
         declaredKind: TypeId,
         registerByName: Bool,
         compatible: Bool
-    ) -> Set<TypeId> {
+    ) -> Bool {
         let baseKind = normalizeBaseKind(declaredKind)
         let expected = resolveWireTypeID(
             declaredKind: declaredKind,
             registerByName: registerByName,
             compatible: compatible
         )
-        var allowed: Set<TypeId> = [expected]
+        if typeID == expected {
+            return true
+        }
         if baseKind == .structType, compatible {
-            // Be permissive across peers while struct compatibility converges.
-            allowed.insert(.compatibleStruct)
-            allowed.insert(.namedCompatibleStruct)
-            allowed.insert(.structType)
-            allowed.insert(.namedStruct)
+            return typeID == .compatibleStruct ||
+                typeID == .namedCompatibleStruct ||
+                typeID == .structType ||
+                typeID == .namedStruct
         }
         if baseKind == .typedUnion {
-            allowed.insert(.union)
-            if registerByName {
-                allowed.insert(.namedUnion)
-            }
+            return typeID == .union || (registerByName && typeID == .namedUnion)
         }
-        return allowed
+        return false
     }
 
     private static func wireTypeNeedsUserTypeID(_ typeID: TypeId) -> Bool {
@@ -420,12 +440,9 @@ public extension Serializer {
             trackRef: trackRef
         )
 
-        CompatibleTypeMetaCache.lock.lock()
-        if let cached = CompatibleTypeMetaCache.values[cacheKey] {
-            CompatibleTypeMetaCache.lock.unlock()
+        if let cached = CompatibleTypeMetaCache.lock.withLock({ CompatibleTypeMetaCache.values[cacheKey] }) {
             return cached
         }
-        CompatibleTypeMetaCache.lock.unlock()
 
         let typeMeta = try buildCompatibleTypeMeta(
             info: info,
@@ -439,14 +456,13 @@ public extension Serializer {
             hasUserTypeFields: hasCompatibleUserTypeField(typeMeta.fields)
         )
 
-        CompatibleTypeMetaCache.lock.lock()
-        if let cached = CompatibleTypeMetaCache.values[cacheKey] {
-            CompatibleTypeMetaCache.lock.unlock()
-            return cached
+        return CompatibleTypeMetaCache.lock.withLock {
+            if let cached = CompatibleTypeMetaCache.values[cacheKey] {
+                return cached
+            }
+            CompatibleTypeMetaCache.values[cacheKey] = cacheEntry
+            return cacheEntry
         }
-        CompatibleTypeMetaCache.values[cacheKey] = cacheEntry
-        CompatibleTypeMetaCache.lock.unlock()
-        return cacheEntry
     }
 
     private static func buildCompatibleTypeMeta(
@@ -509,7 +525,7 @@ public extension Serializer {
     private static func validateCompatibleTypeMeta(
         _ remoteTypeMeta: TypeMeta,
         localInfo: RegisteredTypeInfo,
-        expectedWireTypes: Set<TypeId>,
+        compatible: Bool,
         actualWireTypeID: TypeId
     ) throws {
         if remoteTypeMeta.registerByName {
@@ -546,7 +562,12 @@ public extension Serializer {
 
         if let remoteTypeID = remoteTypeMeta.typeID,
            let remoteWireTypeID = TypeId(rawValue: remoteTypeID),
-           !expectedWireTypes.contains(remoteWireTypeID) {
+           !isAllowedWireTypeID(
+               remoteWireTypeID,
+               declaredKind: localInfo.kind,
+               registerByName: localInfo.registerByName,
+               compatible: compatible
+           ) {
             throw ForyError.typeMismatch(expected: actualWireTypeID.rawValue, actual: remoteTypeID)
         }
     }

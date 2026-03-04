@@ -30,6 +30,7 @@ private struct CLI {
                                    Filter benchmark by serializer
               --duration <seconds>  Minimum time to run each benchmark (default: 3)
               --output <path>       JSON output file (default: results/benchmark_results.json)
+              --verify-cpp-sizes    Fail if Fory serialized sizes drift from C++ benchmark targets
               --help                Show this help message
             """
         )
@@ -76,6 +77,9 @@ private struct CLI {
                 }
                 outputPath = arguments[i + 1]
                 i += 2
+            case "--verify-cpp-sizes":
+                config.verifyCppSizes = true
+                i += 1
             case "--help", "-h":
                 printUsage()
                 exit(0)
@@ -109,6 +113,9 @@ private func runMain() throws {
     }
     if let filter = config.serializerFilter {
         print("Serializer filter: \(filter.rawValue)")
+    }
+    if config.verifyCppSizes {
+        print("C++ serialized-size verification: enabled")
     }
 
     let suite = BenchmarkSuite(config: config)

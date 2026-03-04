@@ -40,6 +40,7 @@ Supported flags:
 - `--serializer <fory|protobuf|msgpack>`
 - `--duration <seconds>`
 - `--no-report`
+- `--verify-cpp-sizes`
 
 Examples:
 
@@ -64,7 +65,7 @@ Examples:
 swift build -c release
 
 # Run benchmark executable
-swift run -c release swift-benchmark --duration 3 --output results/benchmark_results.json
+swift run -c release swift-benchmark --duration 3 --output results/benchmark_results.json --verify-cpp-sizes
 
 # Generate markdown report and plot
 python3 benchmark_report.py --json-file results/benchmark_results.json --output-dir results
@@ -93,4 +94,5 @@ protoc \
 ```
 
 - The benchmark intentionally includes plain-model conversion for protobuf to mirror real-world usage.
+- `run.sh` enables `--verify-cpp-sizes` so benchmark runs fail fast if Swift Fory serialized sizes drift from the C++ target table.
 - Results vary across machines and runtime environments.

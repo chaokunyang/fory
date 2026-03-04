@@ -19,6 +19,8 @@
 
 #include <iostream>
 #include <limits>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -328,6 +330,33 @@ TEST(Buffer, StreamSkipAndUnread) {
   skip_result = stream.skip(1);
   ASSERT_TRUE(skip_result.ok()) << skip_result.error().to_string();
   EXPECT_EQ(view.reader_index(), 2U);
+}
+
+TEST(Buffer, StreamShrinkBufferBestEffortUsesConfiguredBufferSize) {
+  constexpr uint32_t kConfiguredBufferSize = 32768;
+  constexpr uint32_t kPayloadSize = kConfiguredBufferSize * 2;
+  std::string payload(kPayloadSize, '\x7');
+  std::istringstream source(payload);
+  StdInputStream stream(source, kConfiguredBufferSize);
+  Buffer reader(stream);
+  Error error;
+
+  reader.skip(5000, error);
+  ASSERT_TRUE(error.ok()) << error.to_string();
+  EXPECT_EQ(reader.reader_index(), 5000U);
+
+  // Below configured input buffer size, shrink should be a no-op.
+  reader.shrink_input_buffer();
+  EXPECT_EQ(reader.reader_index(), 5000U);
+
+  reader.skip(kConfiguredBufferSize, error);
+  ASSERT_TRUE(error.ok()) << error.to_string();
+  ASSERT_GT(reader.reader_index(), kConfiguredBufferSize);
+
+  const uint32_t remaining_before = reader.remaining_size();
+  reader.shrink_input_buffer();
+  EXPECT_EQ(reader.reader_index(), 0U);
+  EXPECT_EQ(reader.size(), remaining_before);
 }
 
 TEST(Buffer, StreamReadErrorWhenInsufficientData) {

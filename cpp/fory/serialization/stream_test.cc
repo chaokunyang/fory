@@ -219,17 +219,20 @@ TEST(StreamSerializationTest, SequentialDeserializeFromSingleStream) {
   auto first = fory.deserialize<int32_t>(stream);
   ASSERT_TRUE(first.ok()) << first.error().to_string();
   EXPECT_EQ(first.value(), 12345);
-  EXPECT_EQ(stream.get_buffer().reader_index(), 0U);
+  const uint32_t first_reader_index = stream.get_buffer().reader_index();
+  EXPECT_GT(first_reader_index, 0U);
 
   auto second = fory.deserialize<std::string>(stream);
   ASSERT_TRUE(second.ok()) << second.error().to_string();
   EXPECT_EQ(second.value(), "next-value");
-  EXPECT_EQ(stream.get_buffer().reader_index(), 0U);
+  const uint32_t second_reader_index = stream.get_buffer().reader_index();
+  EXPECT_GT(second_reader_index, first_reader_index);
 
   auto third = fory.deserialize<StreamEnvelope>(stream);
   ASSERT_TRUE(third.ok()) << third.error().to_string();
   EXPECT_EQ(third.value(), envelope);
-  EXPECT_EQ(stream.get_buffer().reader_index(), 0U);
+  const uint32_t third_reader_index = stream.get_buffer().reader_index();
+  EXPECT_GT(third_reader_index, second_reader_index);
 
   EXPECT_EQ(stream.get_buffer().remaining_size(), 0U);
 }

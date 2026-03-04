@@ -135,6 +135,10 @@ public:
     output_stream_ = nullptr;
   }
 
+  // Best-effort stream buffer compaction entry point.
+  // Stage 1 guard: avoid calling into stream shrinking for very small progress.
+  // Stage 2 guard lives in InputStream::shrink_buffer(), which can decide based
+  // on stream-specific configured buffer size.
   FORY_ALWAYS_INLINE void shrink_input_buffer() {
     if (FORY_PREDICT_FALSE(input_stream_ != nullptr && reader_index_ > 4096)) {
       input_stream_->shrink_buffer();

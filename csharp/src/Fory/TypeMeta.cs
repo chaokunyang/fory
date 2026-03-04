@@ -594,13 +594,30 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
             if (localField.FieldId.HasValue && localField.FieldId.Value >= 0)
             {
-                localById.TryAdd(localField.FieldId.Value, (i, localField));
+                short fieldId = localField.FieldId.Value;
+                if (!localById.TryAdd(fieldId, (i, localField)))
+                {
+                    throw new InvalidDataException(
+                        $"duplicate local field id {fieldId} in compatible type metadata");
+                }
             }
         }
 
+        HashSet<short>? remoteFieldIds = null;
         for (int i = 0; i < remoteTypeMeta.Fields.Count; i++)
         {
             TypeMetaFieldInfo remoteField = remoteTypeMeta.Fields[i];
+            if (remoteField.FieldId.HasValue && remoteField.FieldId.Value >= 0)
+            {
+                short fieldId = remoteField.FieldId.Value;
+                remoteFieldIds ??= [];
+                if (!remoteFieldIds.Add(fieldId))
+                {
+                    throw new InvalidDataException(
+                        $"duplicate remote field id {fieldId} in compatible type metadata");
+                }
+            }
+
             int localIndex = -1;
             TypeMetaFieldInfo? localMatch = null;
 

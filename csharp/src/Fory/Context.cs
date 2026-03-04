@@ -345,7 +345,6 @@ public sealed class ReadContext
     private Type? _lastCompatibleType;
     private TypeMeta? _lastCompatibleTypeMeta;
     private int _currentDynamicReadDepth;
-    private bool _shouldConsumeCompatibleTypeMeta;
 
     public ReadContext(
         ByteReader reader,
@@ -382,8 +381,6 @@ public sealed class ReadContext
     public bool Compatible { get; }
 
     public bool CheckStructVersion { get; }
-
-    public bool ShouldConsumeCompatibleTypeMeta => _shouldConsumeCompatibleTypeMeta;
 
     public RefReader RefReader { get; }
 
@@ -542,18 +539,6 @@ public sealed class ReadContext
         _pendingDynamicTypeInfo.Remove(type);
     }
 
-    internal bool ReplaceCompatibleTypeMetaExpectation(bool expected)
-    {
-        bool previous = _shouldConsumeCompatibleTypeMeta;
-        _shouldConsumeCompatibleTypeMeta = expected;
-        return previous;
-    }
-
-    internal void RestoreCompatibleTypeMetaExpectation(bool previous)
-    {
-        _shouldConsumeCompatibleTypeMeta = previous;
-    }
-
     public void IncreaseDynamicReadDepth()
     {
         _currentDynamicReadDepth += 1;
@@ -615,7 +600,6 @@ public sealed class ReadContext
         _canonicalReferenceCache.Clear();
         _lastCompatibleType = null;
         _lastCompatibleTypeMeta = null;
-        _shouldConsumeCompatibleTypeMeta = false;
         _currentDynamicReadDepth = 0;
     }
 

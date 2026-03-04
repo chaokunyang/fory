@@ -1102,6 +1102,56 @@ public sealed class ForyRuntimeTests
         Assert.Equal(0, remoteTypeMeta.Fields[0].AssignedFieldId);
     }
 
+    [Fact]
+    public void TypeMetaAssignFieldIdsThrowsOnDuplicateLocalFieldId()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(7, "first", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+            new TypeMetaFieldInfo(7, "second", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+        ];
+        List<TypeMetaFieldInfo> remoteFields =
+        [
+            new TypeMetaFieldInfo(7, "$tag7", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            503,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            remoteFields);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => TypeMeta.AssignFieldIds(remoteTypeMeta, localFields));
+        Assert.Contains("duplicate local field id 7", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TypeMetaAssignFieldIdsThrowsOnDuplicateRemoteFieldId()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(9, "value", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+        ];
+        List<TypeMetaFieldInfo> remoteFields =
+        [
+            new TypeMetaFieldInfo(9, "$tag9a", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+            new TypeMetaFieldInfo(9, "$tag9b", new TypeMetaFieldType((uint)TypeId.VarInt32, false)),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            504,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            remoteFields);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => TypeMeta.AssignFieldIds(remoteTypeMeta, localFields));
+        Assert.Contains("duplicate remote field id 9", exception.Message, StringComparison.Ordinal);
+    }
+
     private static (ulong Encoding, string Decoded) WriteAndReadString(string value)
     {
         ByteWriter writer = new();

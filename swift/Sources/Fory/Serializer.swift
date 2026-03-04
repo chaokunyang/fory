@@ -18,13 +18,10 @@
 import Foundation
 
 private struct CompatibleTypeMetaCacheKey: Hashable {
+    let resolver: ObjectIdentifier
     let swiftType: ObjectIdentifier
     let wireTypeID: TypeId
     let trackRef: Bool
-    let registerByName: Bool
-    let userTypeID: UInt32?
-    let namespace: MetaString?
-    let typeName: MetaString
 }
 
 private struct CompatibleTypeMetaCacheEntry {
@@ -168,6 +165,7 @@ public extension Serializer {
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
             let cachedTypeMeta = try compatibleTypeMetaEntry(
+                resolverIdentity: ObjectIdentifier(context.typeResolver),
                 info: info,
                 wireTypeID: wireTypeID,
                 trackRef: context.trackRef
@@ -179,6 +177,7 @@ public extension Serializer {
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
                 let cachedTypeMeta = try compatibleTypeMetaEntry(
+                    resolverIdentity: ObjectIdentifier(context.typeResolver),
                     info: info,
                     wireTypeID: wireTypeID,
                     trackRef: context.trackRef
@@ -250,6 +249,7 @@ public extension Serializer {
                 actualWireTypeID: typeID
             )
             let localTypeMeta = try compatibleTypeMetaEntry(
+                resolverIdentity: ObjectIdentifier(context.typeResolver),
                 info: info,
                 wireTypeID: typeID,
                 trackRef: context.trackRef
@@ -271,6 +271,7 @@ public extension Serializer {
                 )
                 if typeID == .namedStruct {
                     let localTypeMeta = try compatibleTypeMetaEntry(
+                        resolverIdentity: ObjectIdentifier(context.typeResolver),
                         info: info,
                         wireTypeID: typeID,
                         trackRef: context.trackRef
@@ -407,18 +408,16 @@ public extension Serializer {
     }
 
     private static func compatibleTypeMetaEntry(
+        resolverIdentity: ObjectIdentifier,
         info: RegisteredTypeInfo,
         wireTypeID: TypeId,
         trackRef: Bool
     ) throws -> CompatibleTypeMetaCacheEntry {
         let cacheKey = CompatibleTypeMetaCacheKey(
+            resolver: resolverIdentity,
             swiftType: ObjectIdentifier(Self.self),
             wireTypeID: wireTypeID,
-            trackRef: trackRef,
-            registerByName: info.registerByName,
-            userTypeID: info.userTypeID,
-            namespace: info.namespace,
-            typeName: info.typeName
+            trackRef: trackRef
         )
 
         CompatibleTypeMetaCache.lock.lock()

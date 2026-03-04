@@ -668,6 +668,31 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             return;
         }
 
+        if (writeTypeInfo == "false")
+        {
+            if (CanUseDirectWriteDataInvocation(member))
+            {
+                sb.AppendLine(
+                    $"            context.TypeResolver.GetSerializer<{member.TypeName}>().WriteData(context, {memberAccess}, {hasGenerics});");
+                return;
+            }
+
+            if (CanUseTrackRefBranchWriteDataInvocation(member))
+            {
+                sb.AppendLine("            if (context.TrackRef)");
+                sb.AppendLine("            {");
+                sb.AppendLine(
+                    $"                context.TypeResolver.GetSerializer<{member.TypeName}>().Write(context, {memberAccess}, global::Apache.Fory.RefMode.Tracking, false, {hasGenerics});");
+                sb.AppendLine("            }");
+                sb.AppendLine("            else");
+                sb.AppendLine("            {");
+                sb.AppendLine(
+                    $"                context.TypeResolver.GetSerializer<{member.TypeName}>().WriteData(context, {memberAccess}, {hasGenerics});");
+                sb.AppendLine("            }");
+                return;
+            }
+        }
+
         sb.AppendLine(
             $"            context.TypeResolver.GetSerializer<{member.TypeName}>().Write(context, {memberAccess}, {refModeExpr}, {writeTypeInfo}, {hasGenerics});");
     }
@@ -983,6 +1008,26 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         return member.Classification.IsPrimitive || member.Classification.TypeId == 21;
     }
 
+    private static bool CanUseDirectWriteDataInvocation(MemberModel member)
+    {
+        if (member.IsNullable || member.DynamicAnyKind != DynamicAnyKind.None)
+        {
+            return false;
+        }
+
+        return member.Classification.IsBuiltIn || !member.IsReferenceTrackableType;
+    }
+
+    private static bool CanUseTrackRefBranchWriteDataInvocation(MemberModel member)
+    {
+        if (member.IsNullable || member.DynamicAnyKind != DynamicAnyKind.None)
+        {
+            return false;
+        }
+
+        return !member.Classification.IsBuiltIn && member.IsReferenceTrackableType;
+    }
+
     private static string BuildSchemaFingerprintExpression(ImmutableArray<MemberModel> members)
     {
         if (members.IsDefaultOrEmpty)
@@ -1004,9 +1049,9 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             string trackRefExpr = member.DynamicAnyKind switch
             {
                 DynamicAnyKind.AnyValue => "(trackRef ? 1 : 0)",
-                _ => member.Classification.IsBuiltIn
+                _ => member.Classification.IsBuiltIn || !member.IsReferenceTrackableType
                     ? "0"
-                    : $"((trackRef && typeResolver.GetTypeInfo<{member.TypeName}>().IsReferenceTrackableType) ? 1 : 0)",
+                    : "(trackRef ? 1 : 0)",
             };
             string nullable = member.IsNullable ? "1" : "0";
             string piece = $"\"{EscapeString(member.FieldIdentifier)},{fingerprintTypeId},\" + {trackRefExpr} + \",{nullable};\"";
@@ -1047,9 +1092,9 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         return member.DynamicAnyKind switch
         {
             DynamicAnyKind.AnyValue => $"__ForyRefMode({BoolLiteral(member.IsNullable)}, context.TrackRef)",
-            _ => member.Classification.IsBuiltIn
+            _ => member.Classification.IsBuiltIn || !member.IsReferenceTrackableType
                 ? $"__ForyRefMode({BoolLiteral(member.IsNullable)}, false)"
-                : $"__ForyRefMode({BoolLiteral(member.IsNullable)}, context.TrackRef && context.TypeResolver.GetTypeInfo<{member.TypeName}>().IsReferenceTrackableType)",
+                : $"__ForyRefMode({BoolLiteral(member.IsNullable)}, context.TrackRef)",
         };
     }
 
@@ -1256,6 +1301,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             group,
             classification.IsCollection || classification.IsMap,
             classification.IsMap && !IsTypeSealed(unwrappedType),
+            !unwrappedType.IsValueType && classification.TypeId != 21,
             dynamicAnyKind == DynamicAnyKind.None ? DynamicAnyKind.None : dynamicAnyKind,
             typeMeta);
     }
@@ -2006,6 +2052,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             int group,
             bool isCollection,
             bool useDictionaryTypeInfoCache,
+            bool isReferenceTrackableType,
             DynamicAnyKind dynamicAnyKind,
             TypeMetaFieldTypeModel typeMeta)
         {
@@ -2021,6 +2068,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             Group = group;
             IsCollection = isCollection;
             UseDictionaryTypeInfoCache = useDictionaryTypeInfoCache;
+            IsReferenceTrackableType = isReferenceTrackableType;
             DynamicAnyKind = dynamicAnyKind;
             TypeMeta = typeMeta;
         }
@@ -2037,6 +2085,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         public int Group { get; }
         public bool IsCollection { get; }
         public bool UseDictionaryTypeInfoCache { get; }
+        public bool IsReferenceTrackableType { get; }
         public DynamicAnyKind DynamicAnyKind { get; }
         public TypeMetaFieldTypeModel TypeMeta { get; }
     }

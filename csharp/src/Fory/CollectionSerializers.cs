@@ -84,8 +84,9 @@ internal static class CollectionCodec
     {
         TypeInfo elementTypeInfo = context.TypeResolver.GetTypeInfo<T>();
         List<T> list = values as List<T> ?? [.. values];
-        context.Writer.WriteVarUInt32((uint)list.Count);
-        if (list.Count == 0)
+        int count = list.Count;
+        context.Writer.WriteVarUInt32((uint)count);
+        if (count == 0)
         {
             return;
         }
@@ -93,9 +94,9 @@ internal static class CollectionCodec
         bool hasNull = false;
         if (elementTypeInfo.IsNullableType)
         {
-            for (int i = 0; i < list.Count; i++)
+            for (int i = 0; i < count; i++)
             {
-                if (!context.TypeResolver.IsNoneObject(elementTypeInfo, list[i]))
+                if (list[i] is not null)
                 {
                     continue;
                 }
@@ -142,9 +143,9 @@ internal static class CollectionCodec
         if (dynamicElementType)
         {
             RefMode refMode = trackRef ? RefMode.Tracking : hasNull ? RefMode.NullOnly : RefMode.None;
-            foreach (T element in list)
+            for (int i = 0; i < count; i++)
             {
-                elementSerializer.Write(context, element, refMode, true, hasGenerics);
+                elementSerializer.Write(context, list[i], refMode, true, hasGenerics);
             }
 
             return;
@@ -152,9 +153,9 @@ internal static class CollectionCodec
 
         if (trackRef)
         {
-            foreach (T element in list)
+            for (int i = 0; i < count; i++)
             {
-                elementSerializer.Write(context, element, RefMode.Tracking, false, hasGenerics);
+                elementSerializer.Write(context, list[i], RefMode.Tracking, false, hasGenerics);
             }
 
             return;
@@ -162,9 +163,10 @@ internal static class CollectionCodec
 
         if (hasNull)
         {
-            foreach (T element in list)
+            for (int i = 0; i < count; i++)
             {
-                if (context.TypeResolver.IsNoneObject(elementTypeInfo, element))
+                T element = list[i];
+                if (element is null)
                 {
                     context.Writer.WriteInt8((sbyte)RefFlag.Null);
                 }
@@ -178,9 +180,9 @@ internal static class CollectionCodec
             return;
         }
 
-        foreach (T element in list)
+        for (int i = 0; i < count; i++)
         {
-            elementSerializer.WriteData(context, element, hasGenerics);
+            elementSerializer.WriteData(context, list[i], hasGenerics);
         }
     }
 

@@ -551,6 +551,53 @@ public class ForyTest extends ForyTestBase {
     }
   }
 
+  @Data
+  @AllArgsConstructor
+  static class NestedWriteBean {
+    int value;
+  }
+
+  static class NestedWriteBeanSerializer extends Serializer<NestedWriteBean> {
+    NestedWriteBeanSerializer(Fory fory) {
+      super(fory, NestedWriteBean.class);
+    }
+
+    @Override
+    public void write(MemoryBuffer buffer, NestedWriteBean value) {
+      // Trigger nested serialization to validate the API hint message.
+      fory.serialize(value);
+    }
+
+    @Override
+    public NestedWriteBean read(MemoryBuffer buffer) {
+      return new NestedWriteBean(buffer.readInt32());
+    }
+  }
+
+  @Data
+  @AllArgsConstructor
+  static class NestedReadBean {
+    int value;
+  }
+
+  static class NestedReadBeanSerializer extends Serializer<NestedReadBean> {
+    NestedReadBeanSerializer(Fory fory) {
+      super(fory, NestedReadBean.class);
+    }
+
+    @Override
+    public void write(MemoryBuffer buffer, NestedReadBean value) {
+      buffer.writeInt32(value.value);
+    }
+
+    @Override
+    public NestedReadBean read(MemoryBuffer buffer) {
+      // Trigger nested deserialization to validate the API hint message.
+      fory.deserialize(new byte[] {1});
+      return new NestedReadBean(buffer.readInt32());
+    }
+  }
+
   @Test
   public void testRegisterPrivateSerializer() {
     Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
@@ -558,6 +605,29 @@ public class ForyTest extends ForyTestBase {
     DomainObject obj = new DomainObject();
     obj.id = UUID.randomUUID();
     serDeCheckSerializer(fory, obj, "Codec");
+  }
+
+  @Test
+  public void testNestedSerializeHintUsesWriteApi() {
+    Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
+    fory.registerSerializer(NestedWriteBean.class, new NestedWriteBeanSerializer(fory));
+    SerializationException ex =
+        Assert.expectThrows(
+            SerializationException.class, () -> fory.serialize(new NestedWriteBean(1)));
+    assertTrue(ex.getMessage().contains("Fory#writeXXX"));
+    assertTrue(!ex.getMessage().contains("Fory#xwriteXXX"));
+  }
+
+  @Test
+  public void testNestedDeserializeHintUsesReadApi() {
+    Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
+    fory.registerSerializer(NestedReadBean.class, new NestedReadBeanSerializer(fory));
+    byte[] bytes = fory.serialize(new NestedReadBean(1));
+    DeserializationException ex =
+        Assert.expectThrows(DeserializationException.class, () -> fory.deserialize(bytes));
+    String message = ex.getMessage();
+    assertTrue(message != null);
+    assertTrue(!message.contains("Fory#xreadXXX"));
   }
 
   @Test

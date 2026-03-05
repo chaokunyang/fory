@@ -1276,7 +1276,7 @@ private func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
     return """
     \(locals)
     let __numericBytes = \(numericSizeExpr)
-    __buffer.writeNumericRegion(maxBytes: __numericBytes) { __base in
+    UnsafeUtil.writeNumericRegion(buffer: __buffer, maxBytes: __numericBytes) { __base in
         \(writeBody)
         return \(returnExpr)
     }
@@ -1468,7 +1468,7 @@ private func buildPrimitiveFastClassReadBlock(_ fields: [ParsedField]) -> String
     readSections.append("return \(returnExpr)")
     let readBody = readSections.joined(separator: "\n            ")
     return """
-    try __buffer.readNumericRegion { __bytes in
+    try UnsafeUtil.readNumericRegion(buffer: __buffer) { __bytes in
         \(readBody)
     }
     """
@@ -1526,7 +1526,7 @@ private func buildPrimitiveFastStructReadBlock(_ fields: [ParsedField]) -> Strin
     readSections.append("return \(returnExpr)")
     let readBody = readSections.joined(separator: "\n            ")
     return """
-    try __buffer.readNumericRegion { __bytes in
+    try UnsafeUtil.readNumericRegion(buffer: __buffer) { __bytes in
         \(readBody)
     }
     """

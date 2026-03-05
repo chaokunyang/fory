@@ -27,7 +27,18 @@ public final class UnsafeUtil {
         maxBytes: Int,
         _ body: (UnsafeMutablePointer<UInt8>) -> Int
     ) {
-        buffer.writeNumericRegion(maxBytes: maxBytes, body)
+        guard maxBytes > 0 else {
+            return
+        }
+        let start = buffer.storage.count
+        buffer.storage.append(contentsOf: repeatElement(0, count: maxBytes))
+        let written = buffer.storage.withUnsafeMutableBufferPointer { storage -> Int in
+            body(storage.baseAddress!.advanced(by: start))
+        }
+        precondition(written >= 0 && written <= maxBytes, "invalid numeric region length \(written)")
+        if written < maxBytes {
+            buffer.storage.removeLast(maxBytes - written)
+        }
     }
 
     @inlinable
@@ -36,7 +47,16 @@ public final class UnsafeUtil {
         buffer: ByteBuffer,
         _ body: (UnsafeBufferPointer<UInt8>) throws -> Int
     ) throws {
-        try buffer.readNumericRegion(body)
+        let available = buffer.storage.count - buffer.cursor
+        let consumed = try buffer.storage.withUnsafeBufferPointer { storage -> Int in
+            let start = storage.baseAddress.map { $0.advanced(by: buffer.cursor) }
+            let region = UnsafeBufferPointer(start: start, count: available)
+            return try body(region)
+        }
+        if consumed < 0 || consumed > available {
+            throw ForyError.outOfBounds(cursor: buffer.cursor, need: consumed, length: buffer.storage.count)
+        }
+        buffer.cursor += consumed
     }
 
     @inlinable

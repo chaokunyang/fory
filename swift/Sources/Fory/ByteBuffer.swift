@@ -810,11 +810,20 @@ public final class ByteBuffer {
     @inline(__always)
     public func readUTF8String(count: Int) throws -> String {
         try checkBound(count)
+        if count == 0 {
+            return ""
+        }
         let start = cursor
         let end = start + count
         cursor = end
-        let utf8Bytes = storage[start..<end]
-        guard let decoded = String(bytes: utf8Bytes, encoding: .utf8) else {
+        let decoded = storage.withUnsafeBufferPointer { buffer -> String? in
+            guard let base = buffer.baseAddress else {
+                return nil
+            }
+            let utf8Bytes = UnsafeBufferPointer(start: base.advanced(by: start), count: count)
+            return String(bytes: utf8Bytes, encoding: .utf8)
+        }
+        guard let decoded else {
             throw ForyError.invalidData("invalid UTF-8 sequence")
         }
         return decoded

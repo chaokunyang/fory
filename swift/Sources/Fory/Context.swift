@@ -145,10 +145,16 @@ private let compatibleTypeMetaSizeMask = 0xFF
 public final class CompatibleReadTypeMeta: @unchecked Sendable {
     public let fields: [TypeMetaFieldInfo]
     public let canUseSchemaFastPath: Bool
+    public let canUseSchemaOrderReadPath: Bool
 
-    public init(fields: [TypeMetaFieldInfo], canUseSchemaFastPath: Bool) {
+    public init(
+        fields: [TypeMetaFieldInfo],
+        canUseSchemaFastPath: Bool,
+        canUseSchemaOrderReadPath: Bool
+    ) {
         self.fields = fields
         self.canUseSchemaFastPath = canUseSchemaFastPath
+        self.canUseSchemaOrderReadPath = canUseSchemaOrderReadPath
     }
 }
 
@@ -183,6 +189,15 @@ private struct CanonicalReferenceEntry {
     let bytes: [UInt8]
     let object: AnyObject
 }
+
+private struct InternedUTF8StringEntry {
+    let bytes: [UInt8]
+    let value: String
+}
+
+private let utf8InternMaxEntryCount = 512
+private let utf8InternMaxByteCount = 32 * 1024
+private let utf8InternMaxStringLength = 64
 
 public final class MetaStringWriteState {
     private var stringIndexByKey: [MetaStringCacheKey: UInt32] = [:]
@@ -512,6 +527,9 @@ public final class ReadContext {
     private var lastCompatibleResolvedTypeMetaCacheValue: CompatibleReadTypeMeta?
     private var pendingDynamicTypeInfo: [ObjectIdentifier: DynamicTypeInfo] = [:]
     private var canonicalReferenceCache: [CanonicalReferenceSignature: [CanonicalReferenceEntry]] = [:]
+    private var utf8StringInternCache: [UInt64: [InternedUTF8StringEntry]] = [:]
+    private var utf8StringInternEntryCount = 0
+    private var utf8StringInternByteCount = 0
     private var lastCompatibleTypeMetaCacheHeader: UInt64?
     private var lastCompatibleTypeMetaCacheEntry: TypeMeta?
     private var lastRegisteredTypeInfoTypeID: ObjectIdentifier?
@@ -867,12 +885,13 @@ public final class ReadContext {
             remoteFields: typeMeta.fields,
             localFields: localFields
         )
-        let canUseSchemaFastPath = localTypeMetaHeaderHash != nil &&
-            localTypeMetaHeaderHash == typeMeta.headerHash &&
-            !localTypeMetaHasUserTypeFields
+        let canUseSchemaOrderReadPath = localTypeMetaHeaderHash != nil &&
+            localTypeMetaHeaderHash == typeMeta.headerHash
+        let canUseSchemaFastPath = canUseSchemaOrderReadPath && !localTypeMetaHasUserTypeFields
         let resolved = CompatibleReadTypeMeta(
             fields: resolvedFields,
-            canUseSchemaFastPath: canUseSchemaFastPath
+            canUseSchemaFastPath: canUseSchemaFastPath,
+            canUseSchemaOrderReadPath: canUseSchemaOrderReadPath
         )
 
         compatibleResolvedTypeMetaCache[cacheKey] = resolved
@@ -1040,6 +1059,31 @@ public final class ReadContext {
         pendingDynamicTypeInfo.removeValue(forKey: ObjectIdentifier(type))
     }
 
+    @inline(__always)
+    public func readInternedUTF8String(count: Int) throws -> String {
+        if count == 0 {
+            return ""
+        }
+        if count > utf8InternMaxStringLength {
+            return try buffer.readUTF8String(count: count)
+        }
+        let start = buffer.getCursor()
+        try buffer.checkBound(count)
+        let end = start + count
+        let hash = utf8Hash(start: start, end: end)
+        if let bucket = utf8StringInternCache[hash] {
+            for entry in bucket where entry.bytes.count == count {
+                if utf8BytesEqual(entry.bytes, start: start, end: end) {
+                    buffer.setCursor(end)
+                    return entry.value
+                }
+            }
+        }
+        let decoded = try buffer.readUTF8String(count: count)
+        cacheInternedUTF8String(hash: hash, bytes: Array(buffer.storage[start..<end]), value: decoded)
+        return decoded
+    }
+
     public func canonicalizeNonTrackingReference<T>(
         _ value: T,
         start: Int,
@@ -1122,6 +1166,54 @@ public final class ReadContext {
             metaStringReadStateUsed = false
         }
     }
+
+    @inline(__always)
+    private func cacheInternedUTF8String(hash: UInt64, bytes: [UInt8], value: String) {
+        if utf8StringInternEntryCount >= utf8InternMaxEntryCount ||
+            utf8StringInternByteCount + bytes.count > utf8InternMaxByteCount {
+            utf8StringInternCache.removeAll(keepingCapacity: true)
+            utf8StringInternEntryCount = 0
+            utf8StringInternByteCount = 0
+        }
+        let entry = InternedUTF8StringEntry(bytes: bytes, value: value)
+        if var bucket = utf8StringInternCache[hash] {
+            bucket.append(entry)
+            utf8StringInternCache[hash] = bucket
+        } else {
+            utf8StringInternCache[hash] = [entry]
+        }
+        utf8StringInternEntryCount += 1
+        utf8StringInternByteCount += bytes.count
+    }
+
+    @inline(__always)
+    private func utf8Hash(start: Int, end: Int) -> UInt64 {
+        var hash: UInt64 = 0xcbf29ce484222325
+        var index = start
+        let bytes = buffer.storage
+        while index < end {
+            hash ^= UInt64(bytes[index])
+            hash &*= 0x100000001b3
+            index += 1
+        }
+        hash ^= UInt64(end - start)
+        hash &*= 0x100000001b3
+        return hash
+    }
+
+    @inline(__always)
+    private func utf8BytesEqual(_ other: [UInt8], start: Int, end: Int) -> Bool {
+        let bytes = buffer.storage
+        var index = 0
+        while index < other.count {
+            if bytes[start + index] != other[index] {
+                return false
+            }
+            index += 1
+        }
+        return start + other.count == end
+    }
+
 }
 
 @inline(__always)

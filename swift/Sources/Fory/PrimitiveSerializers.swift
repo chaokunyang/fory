@@ -384,7 +384,7 @@ extension String: Serializer {
 
         switch encoding {
         case StringEncoding.utf8.rawValue:
-            return try context.buffer.readUTF8String(count: byteLength)
+            return try context.readInternedUTF8String(count: byteLength)
         case StringEncoding.latin1.rawValue:
             let bytes = try context.buffer.readBytes(count: byteLength)
             return decodeLatin1(bytes)

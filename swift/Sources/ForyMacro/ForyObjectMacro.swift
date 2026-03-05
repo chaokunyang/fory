@@ -1583,6 +1583,21 @@ private func buildReadDataDecl(
             schemaAssignSections.append("_ = context")
         }
         let schemaAssignBody = schemaAssignSections.joined(separator: "\n        ")
+        let compatibleAlignedAssignLines = sortedFields.dropFirst(primitiveFastFields.count).map { field -> String in
+            let valueExpr = compatibleSchemaReadFieldExpr(field)
+            return "value.\(field.name) = \(valueExpr)"
+        }
+        var compatibleAlignedAssignSections: [String] = []
+        if let primitiveReadBlock = buildPrimitiveFastClassReadBlock(primitiveFastFields) {
+            compatibleAlignedAssignSections.append(primitiveReadBlock)
+        }
+        if !compatibleAlignedAssignLines.isEmpty {
+            compatibleAlignedAssignSections.append(compatibleAlignedAssignLines.joined(separator: "\n        "))
+        }
+        if compatibleAlignedAssignSections.isEmpty {
+            compatibleAlignedAssignSections.append("_ = context")
+        }
+        let compatibleAlignedAssignBody = compatibleAlignedAssignSections.joined(separator: "\n        ")
         let compatibleCases = sortedFields.enumerated().map { sortedIndex, field -> String in
             let valueExpr = readFieldExpr(
                 field,
@@ -1601,6 +1616,12 @@ private func buildReadDataDecl(
                     let value = Self.init()
                     context.bindPendingReference(value)
                     \(schemaAssignBody)
+                    return value
+                }
+                if compatibleMeta.canUseSchemaOrderReadPath {
+                    let value = Self.init()
+                    context.bindPendingReference(value)
+                    \(compatibleAlignedAssignBody)
                     return value
                 }
                 let value = Self.init()
@@ -1635,7 +1656,7 @@ private func buildReadDataDecl(
         \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
             let __buffer = context.buffer
             if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
-                if compatibleMeta.canUseSchemaFastPath {
+                if compatibleMeta.canUseSchemaFastPath || compatibleMeta.canUseSchemaOrderReadPath {
                     return Self()
                 }
                 for remoteField in compatibleMeta.fields {
@@ -1671,6 +1692,21 @@ private func buildReadDataDecl(
         schemaReadSections.append(remainingReadLines.joined(separator: "\n        "))
     }
     let schemaReadBody = schemaReadSections.joined(separator: "\n        ")
+    let compatibleAlignedRemainingReadLines = sortedFields.dropFirst(primitiveFastFields.count).map { field -> String in
+        let valueExpr = compatibleSchemaReadFieldExpr(field)
+        return "let __\(field.name) = \(valueExpr)"
+    }
+    var compatibleAlignedReadSections: [String] = []
+    if let primitiveDeclarations = buildPrimitiveFastStructReadDeclarations(primitiveFastFields) {
+        compatibleAlignedReadSections.append(primitiveDeclarations)
+    }
+    if let primitiveReadBlock = buildPrimitiveFastStructReadBlock(primitiveFastFields) {
+        compatibleAlignedReadSections.append(primitiveReadBlock)
+    }
+    if !compatibleAlignedRemainingReadLines.isEmpty {
+        compatibleAlignedReadSections.append(compatibleAlignedRemainingReadLines.joined(separator: "\n        "))
+    }
+    let compatibleAlignedReadBody = compatibleAlignedReadSections.joined(separator: "\n        ")
 
     let ctorArgs = fields
         .sorted(by: { $0.originalIndex < $1.originalIndex })
@@ -1701,6 +1737,12 @@ private func buildReadDataDecl(
         if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
                 if compatibleMeta.canUseSchemaFastPath {
                     \(schemaReadBody)
+                    return Self(
+                        \(ctorArgs)
+                    )
+                }
+                if compatibleMeta.canUseSchemaOrderReadPath {
+                    \(compatibleAlignedReadBody)
                     return Self(
                         \(ctorArgs)
                     )
@@ -1761,6 +1803,21 @@ private func schemaReadFieldExpr(_ field: ParsedField) -> String {
             field,
             refModeExpr: refMode,
             readTypeInfoExpr: "false"
+        )
+    }
+    if let primitiveExpr = primitiveSchemaReadExpr(field) {
+        return primitiveExpr
+    }
+    return "try \(field.typeText).foryReadData(context)"
+}
+
+private func compatibleSchemaReadFieldExpr(_ field: ParsedField) -> String {
+    if field.dynamicAnyCodec != nil || field.customCodecType != nil || field.isOptional || field.typeID == 27 || compatibleFieldNeedsTypeInfo(field) {
+        let refMode = fieldRefModeExpression(field)
+        return readFieldExpr(
+            field,
+            refModeExpr: refMode,
+            readTypeInfoExpr: "TypeId.needsTypeInfoForField(\(field.typeText).staticTypeId)"
         )
     }
     if let primitiveExpr = primitiveSchemaReadExpr(field) {

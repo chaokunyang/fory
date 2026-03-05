@@ -527,6 +527,9 @@ public final class ReadContext {
     private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
     private var lastCompatibleRootTypeInfoBytes: [UInt8]?
     private var lastCompatibleRootTypeInfoMeta: CompatibleReadTypeMeta?
+    private var lastCompatibleRootTypeInfoRemoteTypeMeta: TypeMeta?
+    private var lastResolvedCompatibleTypeMetaTypeID: ObjectIdentifier?
+    private var lastResolvedCompatibleTypeMetaValue: TypeMeta?
 
     public init(
         buffer: ByteBuffer,
@@ -685,6 +688,15 @@ public final class ReadContext {
     }
 
     @inline(__always)
+    func lastResolvedCompatibleTypeMeta<T: Serializer>(for type: T.Type) -> TypeMeta? {
+        let typeID = ObjectIdentifier(type)
+        if lastResolvedCompatibleTypeMetaTypeID == typeID {
+            return lastResolvedCompatibleTypeMetaValue
+        }
+        return nil
+    }
+
+    @inline(__always)
     func readCachedCompatibleRootTypeInfoIfAvailable<T: Serializer>(
         for type: T.Type
     ) -> Bool {
@@ -711,6 +723,14 @@ public final class ReadContext {
             index += 1
         }
         buffer.setCursor(end)
+        if let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
+            do {
+                try compatibleTypeDefState.storeTypeMetaEntry(remoteTypeMeta, at: 0)
+                compatibleTypeDefStateUsed = true
+            } catch {
+                return false
+            }
+        }
         setPendingCompatibleTypeMeta(typeID: typeID, value: meta)
         return true
     }
@@ -719,14 +739,16 @@ public final class ReadContext {
     func cacheCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type,
         bytes: [UInt8],
-        compatibleTypeMeta: CompatibleReadTypeMeta?
+        compatibleTypeMeta: CompatibleReadTypeMeta?,
+        remoteTypeMeta: TypeMeta?
     ) {
-        guard compatible, let compatibleTypeMeta, compatibleTypeMeta.canUseSchemaFastPath else {
+        guard compatible, let compatibleTypeMeta else {
             return
         }
         lastCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
         lastCompatibleRootTypeInfoBytes = bytes
         lastCompatibleRootTypeInfoMeta = compatibleTypeMeta
+        lastCompatibleRootTypeInfoRemoteTypeMeta = remoteTypeMeta
     }
 
     public func pushPendingReference(_ refID: UInt32) {
@@ -817,6 +839,8 @@ public final class ReadContext {
         localTypeMetaHasUserTypeFields: Bool = true
     ) {
         let typeID = ObjectIdentifier(type)
+        lastResolvedCompatibleTypeMetaTypeID = typeID
+        lastResolvedCompatibleTypeMetaValue = typeMeta
         let cacheKey = CompatibleResolvedTypeMetaCacheKey(
             swiftType: typeID,
             trackRef: trackRef,

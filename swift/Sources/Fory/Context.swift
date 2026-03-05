@@ -297,6 +297,9 @@ public final class WriteContext {
     private var lastCompatibleTypeMetaPlan: CompatibleTypeMetaPlan?
     private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
     private var lastCompatibleRootTypeInfoBytes: [UInt8]?
+    private var lastCompatibleRootTypeInfoHasUserTypeFields = true
+    private var lastFirstCompatibleTypeMetaTypeID: ObjectIdentifier?
+    private var lastFirstCompatibleTypeMetaHasUserTypeFields = false
 
     public init(
         buffer: ByteBuffer,
@@ -399,8 +402,10 @@ public final class WriteContext {
             return false
         }
         buffer.writeBytes(bytes)
-        compatibleTypeDefStateUsed = true
-        compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
+        if lastCompatibleRootTypeInfoHasUserTypeFields {
+            compatibleTypeDefStateUsed = true
+            compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
+        }
         return true
     }
 
@@ -409,8 +414,14 @@ public final class WriteContext {
         for type: T.Type,
         bytes: [UInt8]
     ) {
-        lastCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
+        let typeID = ObjectIdentifier(type)
+        lastCompatibleRootTypeInfoTypeID = typeID
         lastCompatibleRootTypeInfoBytes = bytes
+        if lastFirstCompatibleTypeMetaTypeID == typeID {
+            lastCompatibleRootTypeInfoHasUserTypeFields = lastFirstCompatibleTypeMetaHasUserTypeFields
+        } else {
+            lastCompatibleRootTypeInfoHasUserTypeFields = true
+        }
     }
 
     @inline(__always)
@@ -435,6 +446,8 @@ public final class WriteContext {
         if !compatibleTypeDefStateUsed {
             compatibleTypeDefStateUsed = true
             compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
+            lastFirstCompatibleTypeMetaTypeID = typeID
+            lastFirstCompatibleTypeMetaHasUserTypeFields = plan.hasUserTypeFields
             buffer.writeBytes(plan.firstDefinitionEncodedTypeMeta)
             return
         }
@@ -473,6 +486,10 @@ public final class WriteContext {
     public func resetObjectState() {
         if dynamicAnyDepth != 0 {
             dynamicAnyDepth = 0
+        }
+        if lastFirstCompatibleTypeMetaTypeID != nil {
+            lastFirstCompatibleTypeMetaTypeID = nil
+            lastFirstCompatibleTypeMetaHasUserTypeFields = false
         }
         if trackRef {
             refWriter.reset()

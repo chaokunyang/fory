@@ -1080,7 +1080,11 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
 }
 
 private func buildWriteDataDecl(sortedFields: [ParsedField], accessPrefix: String) -> String {
-    let fieldLines = sortedFields.map { field in
+    let allFieldLines = sortedFields.map { field in
+        writeLine(for: field)
+    }
+    let leadingPrimitiveFields = leadingPrimitiveFastPathFields(sortedFields)
+    let remainingFieldLines = sortedFields.dropFirst(leadingPrimitiveFields.count).map { field in
         writeLine(for: field)
     }
     var schemaHeaderLines = [
@@ -1096,12 +1100,18 @@ private func buildWriteDataDecl(sortedFields: [ParsedField], accessPrefix: Strin
         )
     }
     let schemaHeader = schemaHeaderLines.joined(separator: "\n            ")
+    let primitiveFastWriteBlock = buildPrimitiveFastWriteBlock(leadingPrimitiveFields)
+    var fastFieldLines: [String] = []
+    if let primitiveFastWriteBlock {
+        fastFieldLines.append(primitiveFastWriteBlock)
+    }
+    fastFieldLines.append(contentsOf: remainingFieldLines)
 
     let fieldBody: String
-    if fieldLines.isEmpty {
+    if allFieldLines.isEmpty {
         fieldBody = "_ = hasGenerics"
     } else {
-        fieldBody = fieldLines.joined(separator: "\n        ")
+        fieldBody = fastFieldLines.joined(separator: "\n        ")
     }
 
     return """
@@ -1159,6 +1169,179 @@ private func schemaPrimitiveReserveBytes(for field: ParsedField) -> Int {
     default:
         return 0
     }
+}
+
+private func leadingPrimitiveFastPathFields(_ fields: [ParsedField]) -> [ParsedField] {
+    var result: [ParsedField] = []
+    result.reserveCapacity(fields.count)
+    for field in fields {
+        if isPrimitiveFastPathField(field) {
+            result.append(field)
+        } else {
+            break
+        }
+    }
+    return result
+}
+
+private func isPrimitiveFastPathField(_ field: ParsedField) -> Bool {
+    guard !field.isOptional else {
+        return false
+    }
+    guard field.dynamicAnyCodec == nil, field.customCodecType == nil else {
+        return false
+    }
+    guard field.typeID != 27, !compatibleFieldNeedsTypeInfo(field) else {
+        return false
+    }
+    return primitiveUnsafeWriteMethod(for: field) != nil && primitiveUnsafeReadMethod(for: field) != nil
+}
+
+private func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
+    guard !fields.isEmpty else {
+        return nil
+    }
+    let locals = fields.map { field in
+        "let __\(field.name) = self.\(field.name)"
+    }.joined(separator: "\n        ")
+    let writes = fields.compactMap { field in
+        primitiveUnsafeWriteLine(for: field)
+    }.joined(separator: "\n            ")
+    return """
+    \(locals)
+    __buffer.writeUnsafeNumericRegion(maxBytes: \(schemaPrimitiveReserveBytes(fields))) { __base in
+        var __offset = 0
+        \(writes)
+        return __offset
+    }
+    """
+}
+
+private func primitiveUnsafeWriteLine(for field: ParsedField) -> String? {
+    guard let method = primitiveUnsafeWriteMethod(for: field) else {
+        return nil
+    }
+    return "ByteBuffer.\(method)(__\(field.name), to: __base, offset: &__offset)"
+}
+
+private func primitiveUnsafeWriteMethod(for field: ParsedField) -> String? {
+    switch trimType(field.typeText) {
+    case "Bool":
+        return "unsafeWriteBool"
+    case "Int8":
+        return "unsafeWriteInt8"
+    case "Int16":
+        return "unsafeWriteInt16"
+    case "Int32":
+        return "unsafeWriteInt32"
+    case "Int64":
+        return "unsafeWriteInt64"
+    case "Int":
+        return "unsafeWriteInt"
+    case "UInt8":
+        return "unsafeWriteUInt8"
+    case "UInt16":
+        return "unsafeWriteUInt16"
+    case "UInt32":
+        return "unsafeWriteUInt32"
+    case "UInt64":
+        return "unsafeWriteUInt64"
+    case "UInt":
+        return "unsafeWriteUInt"
+    case "Float":
+        return "unsafeWriteFloat32"
+    case "Double":
+        return "unsafeWriteFloat64"
+    default:
+        return nil
+    }
+}
+
+private func primitiveUnsafeReadMethod(for field: ParsedField) -> String? {
+    switch trimType(field.typeText) {
+    case "Bool":
+        return "unsafeReadBool"
+    case "Int8":
+        return "unsafeReadInt8"
+    case "Int16":
+        return "unsafeReadInt16"
+    case "Int32":
+        return "unsafeReadInt32"
+    case "Int64":
+        return "unsafeReadInt64"
+    case "Int":
+        return "unsafeReadInt"
+    case "UInt8":
+        return "unsafeReadUInt8"
+    case "UInt16":
+        return "unsafeReadUInt16"
+    case "UInt32":
+        return "unsafeReadUInt32"
+    case "UInt64":
+        return "unsafeReadUInt64"
+    case "UInt":
+        return "unsafeReadUInt"
+    case "Float":
+        return "unsafeReadFloat32"
+    case "Double":
+        return "unsafeReadFloat64"
+    default:
+        return nil
+    }
+}
+
+private func primitiveUnsafeReadExpr(for field: ParsedField) -> String? {
+    guard let method = primitiveUnsafeReadMethod(for: field) else {
+        return nil
+    }
+    return "try ByteBuffer.\(method)(from: __bytes, offset: &__offset)"
+}
+
+private func buildPrimitiveFastClassReadBlock(_ fields: [ParsedField]) -> String? {
+    guard !fields.isEmpty else {
+        return nil
+    }
+    let reads = fields.compactMap { field -> String? in
+        guard let readExpr = primitiveUnsafeReadExpr(for: field) else {
+            return nil
+        }
+        return "value.\(field.name) = \(readExpr)"
+    }.joined(separator: "\n            ")
+    return """
+    try __buffer.readUnsafeNumericRegion { __bytes in
+        var __offset = 0
+        \(reads)
+        return __offset
+    }
+    """
+}
+
+private func buildPrimitiveFastStructReadDeclarations(_ fields: [ParsedField]) -> String? {
+    guard !fields.isEmpty else {
+        return nil
+    }
+    return fields.map { field in
+        "var __\(field.name): \(field.typeText) = \(field.typeText).foryDefault()"
+    }.joined(separator: "\n        ")
+}
+
+private func buildPrimitiveFastStructReadBlock(_ fields: [ParsedField]) -> String? {
+    guard !fields.isEmpty else {
+        return nil
+    }
+    let reads = fields.compactMap { field -> String? in
+        guard let readExpr = primitiveUnsafeReadExpr(for: field) else {
+            return nil
+        }
+        return "__\(field.name) = \(readExpr)"
+    }.joined(separator: "\n            ")
+    return """
+    try __buffer.readUnsafeNumericRegion { __bytes in
+        var __offset = 0
+        \(reads)
+        return __offset
+    }
+    """
 }
 
 private func writeLine(for field: ParsedField) -> String {
@@ -1226,7 +1409,8 @@ private func buildReadDataDecl(
     accessPrefix: String
 ) -> String {
     if isClass {
-        let assignLines = sortedFields.map { field -> String in
+        let primitiveFastFields = leadingPrimitiveFastPathFields(sortedFields)
+        let remainingAssignLines = sortedFields.dropFirst(primitiveFastFields.count).map { field -> String in
             let refMode = fieldRefModeExpression(field)
             let valueExpr = readFieldExpr(
                 field,
@@ -1234,7 +1418,18 @@ private func buildReadDataDecl(
                 readTypeInfoExpr: "false"
             )
             return "value.\(field.name) = \(valueExpr)"
-        }.joined(separator: "\n        ")
+        }
+        var schemaAssignSections: [String] = []
+        if let primitiveReadBlock = buildPrimitiveFastClassReadBlock(primitiveFastFields) {
+            schemaAssignSections.append(primitiveReadBlock)
+        }
+        if !remainingAssignLines.isEmpty {
+            schemaAssignSections.append(remainingAssignLines.joined(separator: "\n        "))
+        }
+        if schemaAssignSections.isEmpty {
+            schemaAssignSections.append("_ = context")
+        }
+        let schemaAssignBody = schemaAssignSections.joined(separator: "\n        ")
         let compatibleCases = sortedFields.enumerated().map { sortedIndex, field -> String in
             let valueExpr = readFieldExpr(
                 field,
@@ -1252,7 +1447,7 @@ private func buildReadDataDecl(
                 if compatibleMeta.canUseSchemaFastPath {
                     let value = Self.init()
                     context.bindPendingReference(value)
-                    \(assignLines)
+                    \(schemaAssignBody)
                     return value
                 }
                 let value = Self.init()
@@ -1275,7 +1470,7 @@ private func buildReadDataDecl(
             }
             let value = Self.init()
             context.bindPendingReference(value)
-            \(assignLines)
+            \(schemaAssignBody)
             return value
         }
         """
@@ -1307,10 +1502,22 @@ private func buildReadDataDecl(
         """
     }
 
-    let readLines = sortedFields.map { field -> String in
+    let primitiveFastFields = leadingPrimitiveFastPathFields(sortedFields)
+    let remainingReadLines = sortedFields.dropFirst(primitiveFastFields.count).map { field -> String in
         let valueExpr = schemaReadFieldExpr(field)
         return "let __\(field.name) = \(valueExpr)"
-    }.joined(separator: "\n        ")
+    }
+    var schemaReadSections: [String] = []
+    if let primitiveDeclarations = buildPrimitiveFastStructReadDeclarations(primitiveFastFields) {
+        schemaReadSections.append(primitiveDeclarations)
+    }
+    if let primitiveReadBlock = buildPrimitiveFastStructReadBlock(primitiveFastFields) {
+        schemaReadSections.append(primitiveReadBlock)
+    }
+    if !remainingReadLines.isEmpty {
+        schemaReadSections.append(remainingReadLines.joined(separator: "\n        "))
+    }
+    let schemaReadBody = schemaReadSections.joined(separator: "\n        ")
 
     let ctorArgs = fields
         .sorted(by: { $0.originalIndex < $1.originalIndex })
@@ -1340,7 +1547,7 @@ private func buildReadDataDecl(
         let __buffer = context.buffer
         if context.compatible, let compatibleMeta = context.consumeCompatibleTypeMetaIfPresent(for: Self.self) {
                 if compatibleMeta.canUseSchemaFastPath {
-                    \(readLines)
+                    \(schemaReadBody)
                     return Self(
                         \(ctorArgs)
                     )
@@ -1364,7 +1571,7 @@ private func buildReadDataDecl(
                 throw ForyError.invalidData("class version hash mismatch: expected \\(__expectedHash), got \\(__schemaHash)")
             }
         }
-        \(readLines)
+        \(schemaReadBody)
         return Self(
             \(ctorArgs)
         )

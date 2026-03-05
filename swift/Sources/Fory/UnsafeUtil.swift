@@ -211,6 +211,80 @@ public final class UnsafeUtil {
 
     @inlinable
     @inline(__always)
+    public static func varUInt32Size(_ value: UInt32) -> Int {
+        if value < 0x80 {
+            return 1
+        }
+        if value < 0x4000 {
+            return 2
+        }
+        if value < 0x20_0000 {
+            return 3
+        }
+        if value < 0x1000_0000 {
+            return 4
+        }
+        return 5
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func varInt32Size(_ value: Int32) -> Int {
+        let zigzag = UInt32(bitPattern: (value << 1) ^ (value >> 31))
+        return varUInt32Size(zigzag)
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func varUInt64Size(_ value: UInt64) -> Int {
+        if value < 0x80 {
+            return 1
+        }
+        if value < 0x4000 {
+            return 2
+        }
+        if value < 0x20_0000 {
+            return 3
+        }
+        if value < 0x1000_0000 {
+            return 4
+        }
+        if value < 0x8_0000_0000 {
+            return 5
+        }
+        if value < 0x400_0000_0000 {
+            return 6
+        }
+        if value < 0x2_0000_0000_0000 {
+            return 7
+        }
+        if value < 0x100_0000_0000_0000 {
+            return 8
+        }
+        return 9
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func varInt64Size(_ value: Int64) -> Int {
+        let zigzag = UInt64(bitPattern: (value << 1) ^ (value >> 63))
+        return varUInt64Size(zigzag)
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func varIntSize(_ value: Int) -> Int {
+        varInt64Size(Int64(value))
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func varUIntSize(_ value: UInt) -> Int {
+        varUInt64Size(UInt64(value))
+    }
+
+    @inlinable
+    @inline(__always)
     public static func writeVarUInt32(
         _ value: UInt32,
         to base: UnsafeMutablePointer<UInt8>,

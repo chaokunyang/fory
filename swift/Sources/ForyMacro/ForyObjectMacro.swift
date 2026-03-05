@@ -1241,6 +1241,13 @@ private func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
     let locals = fields.map { field in
         "let __\(field.name) = self.\(field.name)"
     }.joined(separator: "\n        ")
+    let sizeExprParts = fields.compactMap { field in
+        primitiveEncodedSizeExpr(for: field, valueExpr: "__\(field.name)")
+    }
+    guard !sizeExprParts.isEmpty else {
+        return nil
+    }
+    let numericSizeExpr = sizeExprParts.joined(separator: " + ")
     var fixedOffset = 0
     let fixedWrites = fixedFields.compactMap { field -> String? in
         guard let line = primitiveUnsafeWriteFixedLine(for: field, offset: fixedOffset) else {
@@ -1268,11 +1275,39 @@ private func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
     let returnExpr = remainingWrites.isEmpty ? "\(fixedPrefixBytes)" : "__writerIndex"
     return """
     \(locals)
-    UnsafeUtil.writeNumericRegion(buffer: __buffer, maxBytes: \(schemaPrimitiveReserveBytes(fields))) { __base in
+    let __numericBytes = \(numericSizeExpr)
+    UnsafeUtil.writeNumericRegion(buffer: __buffer, maxBytes: __numericBytes) { __base in
         \(writeBody)
         return \(returnExpr)
     }
     """
+}
+
+private func primitiveEncodedSizeExpr(for field: ParsedField, valueExpr: String) -> String? {
+    switch trimType(field.typeText) {
+    case "Bool", "Int8", "UInt8":
+        return "1"
+    case "Int16", "UInt16":
+        return "2"
+    case "Float":
+        return "4"
+    case "Double":
+        return "8"
+    case "Int32":
+        return "UnsafeUtil.varInt32Size(\(valueExpr))"
+    case "Int64":
+        return "UnsafeUtil.varInt64Size(\(valueExpr))"
+    case "Int":
+        return "UnsafeUtil.varIntSize(\(valueExpr))"
+    case "UInt32":
+        return "UnsafeUtil.varUInt32Size(\(valueExpr))"
+    case "UInt64":
+        return "UnsafeUtil.varUInt64Size(\(valueExpr))"
+    case "UInt":
+        return "UnsafeUtil.varUIntSize(\(valueExpr))"
+    default:
+        return nil
+    }
 }
 
 private func primitiveUnsafeWriteFixedLine(for field: ParsedField, offset: Int) -> String? {

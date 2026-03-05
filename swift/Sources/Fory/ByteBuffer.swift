@@ -135,6 +135,43 @@ public final class ByteBuffer {
 
     @inlinable
     @inline(__always)
+    public func writeNumericRegion(
+        maxBytes: Int,
+        _ body: (UnsafeMutablePointer<UInt8>) -> Int
+    ) {
+        guard maxBytes > 0 else {
+            return
+        }
+        let start = storage.count
+        storage.append(contentsOf: repeatElement(0, count: maxBytes))
+        let written = storage.withUnsafeMutableBufferPointer { storage -> Int in
+            body(storage.baseAddress!.advanced(by: start))
+        }
+        precondition(written >= 0 && written <= maxBytes, "invalid numeric region length \(written)")
+        if written < maxBytes {
+            storage.removeLast(maxBytes - written)
+        }
+    }
+
+    @inlinable
+    @inline(__always)
+    public func readNumericRegion(
+        _ body: (UnsafeBufferPointer<UInt8>) throws -> Int
+    ) throws {
+        let available = storage.count - cursor
+        let consumed = try storage.withUnsafeBufferPointer { storage -> Int in
+            let start = storage.baseAddress.map { $0.advanced(by: cursor) }
+            let region = UnsafeBufferPointer(start: start, count: available)
+            return try body(region)
+        }
+        if consumed < 0 || consumed > available {
+            throw ForyError.outOfBounds(cursor: cursor, need: consumed, length: storage.count)
+        }
+        cursor += consumed
+    }
+
+    @inlinable
+    @inline(__always)
     public func writeUInt8(_ value: UInt8) {
         storage.append(value)
     }

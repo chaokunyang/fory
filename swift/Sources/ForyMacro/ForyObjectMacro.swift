@@ -1184,6 +1184,40 @@ private func leadingPrimitiveFastPathFields(_ fields: [ParsedField]) -> [ParsedF
     return result
 }
 
+private func leadingFixedPrimitiveFields(_ fields: [ParsedField]) -> [ParsedField] {
+    var result: [ParsedField] = []
+    result.reserveCapacity(fields.count)
+    for field in fields {
+        if primitiveFixedByteWidth(for: field) != nil {
+            result.append(field)
+        } else {
+            break
+        }
+    }
+    return result
+}
+
+private func primitiveFixedPrefixBytes(_ fields: [ParsedField]) -> Int {
+    fields.reduce(0) { partial, field in
+        partial + (primitiveFixedByteWidth(for: field) ?? 0)
+    }
+}
+
+private func primitiveFixedByteWidth(for field: ParsedField) -> Int? {
+    switch trimType(field.typeText) {
+    case "Bool", "Int8", "UInt8":
+        return 1
+    case "Int16", "UInt16":
+        return 2
+    case "Float":
+        return 4
+    case "Double":
+        return 8
+    default:
+        return nil
+    }
+}
+
 private func isPrimitiveFastPathField(_ field: ParsedField) -> Bool {
     guard !field.isOptional else {
         return false
@@ -1201,57 +1235,88 @@ private func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
     guard !fields.isEmpty else {
         return nil
     }
+    let fixedFields = leadingFixedPrimitiveFields(fields)
+    let remainingFields = Array(fields.dropFirst(fixedFields.count))
+    let fixedPrefixBytes = primitiveFixedPrefixBytes(fixedFields)
     let locals = fields.map { field in
         "let __\(field.name) = self.\(field.name)"
     }.joined(separator: "\n        ")
-    let writes = fields.compactMap { field in
-        primitiveUnsafeWriteLine(for: field)
+    var fixedOffset = 0
+    let fixedWrites = fixedFields.compactMap { field -> String? in
+        guard let line = primitiveUnsafeWriteFixedLine(for: field, offset: fixedOffset) else {
+            return nil
+        }
+        fixedOffset += primitiveFixedByteWidth(for: field) ?? 0
+        return line
     }.joined(separator: "\n            ")
+    let remainingWrites = remainingFields.compactMap { field in
+        primitiveUnsafeWriteAdvanceLine(for: field, indexExpr: "__writerIndex")
+    }.joined(separator: "\n            ")
+    var bodySections: [String] = []
+    if !fixedWrites.isEmpty {
+        bodySections.append(fixedWrites)
+    }
+    if !remainingWrites.isEmpty {
+        bodySections.append(
+            """
+            var __writerIndex = \(fixedPrefixBytes)
+            \(remainingWrites)
+            """
+        )
+    }
+    let writeBody = bodySections.joined(separator: "\n            ")
+    let returnExpr = remainingWrites.isEmpty ? "\(fixedPrefixBytes)" : "__writerIndex"
     return """
     \(locals)
-    __buffer.writeUnsafeNumericRegion(maxBytes: \(schemaPrimitiveReserveBytes(fields))) { __base in
-        var __offset = 0
-        \(writes)
-        return __offset
+    UnsafeUtil.writeNumericRegion(buffer: __buffer, maxBytes: \(schemaPrimitiveReserveBytes(fields))) { __base in
+        \(writeBody)
+        return \(returnExpr)
     }
     """
 }
 
-private func primitiveUnsafeWriteLine(for field: ParsedField) -> String? {
+private func primitiveUnsafeWriteFixedLine(for field: ParsedField, offset: Int) -> String? {
     guard let method = primitiveUnsafeWriteMethod(for: field) else {
         return nil
     }
-    return "ByteBuffer.\(method)(__\(field.name), to: __base, offset: &__offset)"
+    return "_ = UnsafeUtil.\(method)(__\(field.name), to: __base, index: \(offset))"
+}
+
+private func primitiveUnsafeWriteAdvanceLine(for field: ParsedField, indexExpr: String) -> String? {
+    guard let method = primitiveUnsafeWriteMethod(for: field) else {
+        return nil
+    }
+    return "__writerIndex = UnsafeUtil.\(method)(__\(field.name), to: __base, index: \(indexExpr))"
 }
 
 private func primitiveUnsafeWriteMethod(for field: ParsedField) -> String? {
     switch trimType(field.typeText) {
     case "Bool":
-        return "unsafeWriteBool"
+        return "writeBool"
     case "Int8":
-        return "unsafeWriteInt8"
+        return "writeInt8"
     case "Int16":
-        return "unsafeWriteInt16"
+        return "writeInt16"
     case "Int32":
-        return "unsafeWriteInt32"
+        return "writeInt32"
     case "Int64":
-        return "unsafeWriteInt64"
+        return "writeInt64"
     case "Int":
-        return "unsafeWriteInt"
+        return "writeInt"
     case "UInt8":
-        return "unsafeWriteUInt8"
+        return "writeUInt8"
     case "UInt16":
-        return "unsafeWriteUInt16"
+        return "writeUInt16"
     case "UInt32":
-        return "unsafeWriteUInt32"
+        return "writeUInt32"
     case "UInt64":
-        return "unsafeWriteUInt64"
+        return "writeUInt64"
     case "UInt":
-        return "unsafeWriteUInt"
+        return "writeUInt"
     case "Float":
-        return "unsafeWriteFloat32"
+        return "writeFloat32"
     case "Double":
-        return "unsafeWriteFloat64"
+        return "writeFloat64"
     default:
         return nil
     }
@@ -1260,58 +1325,116 @@ private func primitiveUnsafeWriteMethod(for field: ParsedField) -> String? {
 private func primitiveUnsafeReadMethod(for field: ParsedField) -> String? {
     switch trimType(field.typeText) {
     case "Bool":
-        return "unsafeReadBool"
+        return "readBool"
     case "Int8":
-        return "unsafeReadInt8"
+        return "readInt8"
     case "Int16":
-        return "unsafeReadInt16"
+        return "readInt16"
     case "Int32":
-        return "unsafeReadInt32"
+        return "readInt32"
     case "Int64":
-        return "unsafeReadInt64"
+        return "readInt64"
     case "Int":
-        return "unsafeReadInt"
+        return "readInt"
     case "UInt8":
-        return "unsafeReadUInt8"
+        return "readUInt8"
     case "UInt16":
-        return "unsafeReadUInt16"
+        return "readUInt16"
     case "UInt32":
-        return "unsafeReadUInt32"
+        return "readUInt32"
     case "UInt64":
-        return "unsafeReadUInt64"
+        return "readUInt64"
     case "UInt":
-        return "unsafeReadUInt"
+        return "readUInt"
     case "Float":
-        return "unsafeReadFloat32"
+        return "readFloat32"
     case "Double":
-        return "unsafeReadFloat64"
+        return "readFloat64"
     default:
         return nil
     }
 }
 
-private func primitiveUnsafeReadExpr(for field: ParsedField) -> String? {
+private func primitiveUnsafeFixedReadMethod(for field: ParsedField) -> String? {
+    switch trimType(field.typeText) {
+    case "Bool":
+        return "readBoolUnchecked"
+    case "Int8":
+        return "readInt8Unchecked"
+    case "UInt8":
+        return "readUInt8Unchecked"
+    case "Int16":
+        return "readInt16Unchecked"
+    case "UInt16":
+        return "readUInt16Unchecked"
+    case "Float":
+        return "readFloat32Unchecked"
+    case "Double":
+        return "readFloat64Unchecked"
+    default:
+        return nil
+    }
+}
+
+private func primitiveUnsafeFixedReadExpr(for field: ParsedField, baseExpr: String, offset: Int) -> String? {
+    guard let method = primitiveUnsafeFixedReadMethod(for: field) else {
+        return nil
+    }
+    return "UnsafeUtil.\(method)(from: \(baseExpr), index: \(offset))"
+}
+
+private func primitiveUnsafeReadAdvanceExpr(for field: ParsedField) -> String? {
     guard let method = primitiveUnsafeReadMethod(for: field) else {
         return nil
     }
-    return "try ByteBuffer.\(method)(from: __bytes, offset: &__offset)"
+    return "try UnsafeUtil.\(method)(from: __bytes, index: &__readerIndex)"
 }
 
 private func buildPrimitiveFastClassReadBlock(_ fields: [ParsedField]) -> String? {
     guard !fields.isEmpty else {
         return nil
     }
-    let reads = fields.compactMap { field -> String? in
-        guard let readExpr = primitiveUnsafeReadExpr(for: field) else {
+    let fixedFields = leadingFixedPrimitiveFields(fields)
+    let remainingFields = Array(fields.dropFirst(fixedFields.count))
+    let fixedPrefixBytes = primitiveFixedPrefixBytes(fixedFields)
+    var fixedOffset = 0
+    let fixedReads = fixedFields.compactMap { field -> String? in
+        guard let readExpr = primitiveUnsafeFixedReadExpr(for: field, baseExpr: "__base", offset: fixedOffset) else {
+            return nil
+        }
+        fixedOffset += primitiveFixedByteWidth(for: field) ?? 0
+        return "value.\(field.name) = \(readExpr)"
+    }.joined(separator: "\n            ")
+    let remainingReads = remainingFields.compactMap { field -> String? in
+        guard let readExpr = primitiveUnsafeReadAdvanceExpr(for: field) else {
             return nil
         }
         return "value.\(field.name) = \(readExpr)"
     }.joined(separator: "\n            ")
+    var readSections: [String] = []
+    if fixedPrefixBytes > 0 {
+        readSections.append("try UnsafeUtil.checkReadable(__bytes, index: 0, need: \(fixedPrefixBytes))")
+        readSections.append(
+            """
+            guard let __base = __bytes.baseAddress else {
+                throw ForyError.outOfBounds(cursor: 0, need: \(fixedPrefixBytes), length: __bytes.count)
+            }
+            """
+        )
+        if !fixedReads.isEmpty {
+            readSections.append(fixedReads)
+        }
+    }
+    if !remainingReads.isEmpty {
+        readSections.append("var __readerIndex = \(fixedPrefixBytes)")
+        readSections.append(remainingReads)
+    }
+    let returnExpr = remainingReads.isEmpty ? "\(fixedPrefixBytes)" : "__readerIndex"
+    readSections.append("return \(returnExpr)")
+    let readBody = readSections.joined(separator: "\n            ")
     return """
-    try __buffer.readUnsafeNumericRegion { __bytes in
-        var __offset = 0
-        \(reads)
-        return __offset
+    try UnsafeUtil.readNumericRegion(buffer: __buffer) { __bytes in
+        \(readBody)
     }
     """
 }
@@ -1329,17 +1452,47 @@ private func buildPrimitiveFastStructReadBlock(_ fields: [ParsedField]) -> Strin
     guard !fields.isEmpty else {
         return nil
     }
-    let reads = fields.compactMap { field -> String? in
-        guard let readExpr = primitiveUnsafeReadExpr(for: field) else {
+    let fixedFields = leadingFixedPrimitiveFields(fields)
+    let remainingFields = Array(fields.dropFirst(fixedFields.count))
+    let fixedPrefixBytes = primitiveFixedPrefixBytes(fixedFields)
+    var fixedOffset = 0
+    let fixedReads = fixedFields.compactMap { field -> String? in
+        guard let readExpr = primitiveUnsafeFixedReadExpr(for: field, baseExpr: "__base", offset: fixedOffset) else {
+            return nil
+        }
+        fixedOffset += primitiveFixedByteWidth(for: field) ?? 0
+        return "__\(field.name) = \(readExpr)"
+    }.joined(separator: "\n            ")
+    let remainingReads = remainingFields.compactMap { field -> String? in
+        guard let readExpr = primitiveUnsafeReadAdvanceExpr(for: field) else {
             return nil
         }
         return "__\(field.name) = \(readExpr)"
     }.joined(separator: "\n            ")
+    var readSections: [String] = []
+    if fixedPrefixBytes > 0 {
+        readSections.append("try UnsafeUtil.checkReadable(__bytes, index: 0, need: \(fixedPrefixBytes))")
+        readSections.append(
+            """
+            guard let __base = __bytes.baseAddress else {
+                throw ForyError.outOfBounds(cursor: 0, need: \(fixedPrefixBytes), length: __bytes.count)
+            }
+            """
+        )
+        if !fixedReads.isEmpty {
+            readSections.append(fixedReads)
+        }
+    }
+    if !remainingReads.isEmpty {
+        readSections.append("var __readerIndex = \(fixedPrefixBytes)")
+        readSections.append(remainingReads)
+    }
+    let returnExpr = remainingReads.isEmpty ? "\(fixedPrefixBytes)" : "__readerIndex"
+    readSections.append("return \(returnExpr)")
+    let readBody = readSections.joined(separator: "\n            ")
     return """
-    try __buffer.readUnsafeNumericRegion { __bytes in
-        var __offset = 0
-        \(reads)
-        return __offset
+    try UnsafeUtil.readNumericRegion(buffer: __buffer) { __bytes in
+        \(readBody)
     }
     """
 }

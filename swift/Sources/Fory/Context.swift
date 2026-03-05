@@ -524,6 +524,9 @@ public final class ReadContext {
     private var lastValidatedCompatibleTypeID: ObjectIdentifier?
     private var lastValidatedCompatibleWireTypeID: TypeId?
     private var lastValidatedCompatibleHeaderHash: UInt64 = 0
+    private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
+    private var lastCompatibleRootTypeInfoBytes: [UInt8]?
+    private var lastCompatibleRootTypeInfoMeta: CompatibleReadTypeMeta?
 
     public init(
         buffer: ByteBuffer,
@@ -674,6 +677,56 @@ public final class ReadContext {
         lastValidatedCompatibleTypeID = typeID
         lastValidatedCompatibleWireTypeID = wireTypeID
         lastValidatedCompatibleHeaderHash = headerHash
+    }
+
+    @inline(__always)
+    func compatibleTypeDefStateIsUsed() -> Bool {
+        compatibleTypeDefStateUsed
+    }
+
+    @inline(__always)
+    func readCachedCompatibleRootTypeInfoIfAvailable<T: Serializer>(
+        for type: T.Type
+    ) -> Bool {
+        guard compatible, !compatibleTypeDefStateUsed else {
+            return false
+        }
+        let typeID = ObjectIdentifier(type)
+        guard lastCompatibleRootTypeInfoTypeID == typeID,
+              let bytes = lastCompatibleRootTypeInfoBytes,
+              let meta = lastCompatibleRootTypeInfoMeta else {
+            return false
+        }
+        let start = buffer.getCursor()
+        let end = start + bytes.count
+        guard end <= buffer.count else {
+            return false
+        }
+        let storage = buffer.storage
+        var index = 0
+        while index < bytes.count {
+            if storage[start + index] != bytes[index] {
+                return false
+            }
+            index += 1
+        }
+        buffer.setCursor(end)
+        setPendingCompatibleTypeMeta(typeID: typeID, value: meta)
+        return true
+    }
+
+    @inline(__always)
+    func cacheCompatibleRootTypeInfo<T: Serializer>(
+        for type: T.Type,
+        bytes: [UInt8],
+        compatibleTypeMeta: CompatibleReadTypeMeta?
+    ) {
+        guard compatible, let compatibleTypeMeta, compatibleTypeMeta.canUseSchemaFastPath else {
+            return
+        }
+        lastCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
+        lastCompatibleRootTypeInfoBytes = bytes
+        lastCompatibleRootTypeInfoMeta = compatibleTypeMeta
     }
 
     public func pushPendingReference(_ refID: UInt32) {

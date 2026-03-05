@@ -587,7 +587,21 @@ public final class Fory {
         if useRootNullOnlyTypeInfoFastPath {
             let rawFlag = try context.buffer.readInt8()
             if rawFlag == RefFlag.notNullValue.rawValue {
+                if context.compatible, context.readCachedCompatibleRootTypeInfoIfAvailable(for: T.self) {
+                    return try T.foryReadData(context)
+                }
+                let typeInfoStart = context.buffer.getCursor()
                 try T.foryReadTypeInfo(context)
+                if context.compatible, context.compatibleTypeDefStateIsUsed() {
+                    let typeInfoEnd = context.buffer.getCursor()
+                    if typeInfoEnd > typeInfoStart {
+                        context.cacheCompatibleRootTypeInfo(
+                            for: T.self,
+                            bytes: Array(context.buffer.storage[typeInfoStart..<typeInfoEnd]),
+                            compatibleTypeMeta: context.consumeCompatibleTypeMetaIfPresent(for: T.self)
+                        )
+                    }
+                }
                 return try T.foryReadData(context)
             }
             if rawFlag == RefFlag.null.rawValue {

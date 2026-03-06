@@ -198,23 +198,35 @@ public final class Fory {
     }
 
     public func serialize<T: Serializer>(_ value: T) throws -> Data {
-        try serializeRoot(isNone: value.foryIsNone) { context in
-            try writeRootTypedValue(value, context: context)
+        try withReusableWriteContext { context in
+            writeHead(buffer: context.buffer, isNone: value.foryIsNone)
+            if !value.foryIsNone {
+                try writeRootTypedValue(value, context: context)
+            }
+            return context.buffer.toData()
         }
     }
 
     public func deserialize<T: Serializer>(_ data: Data, as _: T.Type = T.self) throws -> T {
-        try deserializeRoot(
-            data: data,
-            nilValue: T.foryDefault()
-        ) { context in
-            try readRootTypedValue(context: context)
+        try withReusableReadContext(data: data) { context in
+            if try readHead(buffer: context.buffer) {
+                return T.foryDefault()
+            }
+            let value: T = try readRootTypedValue(context: context)
+            if context.buffer.remaining != 0 {
+                throw ForyError.invalidData("unexpected trailing bytes at root: \(context.buffer.remaining)")
+            }
+            return value
         }
     }
 
     public func serialize<T: Serializer>(_ value: T, to buffer: inout Data) throws {
-        try appendSerializedRoot(to: &buffer, isNone: value.foryIsNone) { context in
-            try writeRootTypedValue(value, context: context)
+        try withReusableWriteContext { context in
+            writeHead(buffer: context.buffer, isNone: value.foryIsNone)
+            if !value.foryIsNone {
+                try writeRootTypedValue(value, context: context)
+            }
+            buffer.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
         }
     }
 

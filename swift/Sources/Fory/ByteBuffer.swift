@@ -837,8 +837,11 @@ public final class ByteBuffer {
 
     @inlinable
     public func toData() -> Data {
-        storage.withUnsafeBufferPointer { buffer in
-            Data(buffer: buffer)
+        storage.withUnsafeBytes { rawBytes in
+            guard let baseAddress = rawBytes.baseAddress else {
+                return Data()
+            }
+            return Data(bytes: baseAddress, count: rawBytes.count)
         }
     }
 }

@@ -173,6 +173,12 @@ private struct CompatibleResolvedTypeMetaCacheKey: Hashable {
     let localHasUserTypeFields: Bool
 }
 
+private struct CachedCompatibleRootTypeInfo {
+    let wireTypeID: UInt32
+    let indexMarker: UInt32
+    let typeMetaHeader: UInt64
+}
+
 private struct MetaStringCacheKey: Hashable {
     let encoding: MetaStringEncoding
     let bytes: [UInt8]
@@ -560,7 +566,7 @@ public final class ReadContext {
     private var lastValidatedCompatibleWireTypeID: TypeId?
     private var lastValidatedCompatibleHeaderHash: UInt64 = 0
     private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
-    private var lastCompatibleRootTypeInfoBytes: [UInt8]?
+    private var lastCompatibleRootTypeInfoEntry: CachedCompatibleRootTypeInfo?
     private var lastCompatibleRootTypeInfoMeta: CompatibleReadTypeMeta?
     private var lastCompatibleRootTypeInfoRemoteTypeMeta: TypeMeta?
     private var lastResolvedCompatibleTypeMetaTypeID: ObjectIdentifier?
@@ -740,34 +746,46 @@ public final class ReadContext {
         }
         let typeID = ObjectIdentifier(type)
         guard lastCompatibleRootTypeInfoTypeID == typeID,
-              let bytes = lastCompatibleRootTypeInfoBytes,
+              let entry = lastCompatibleRootTypeInfoEntry,
               let meta = lastCompatibleRootTypeInfoMeta else {
             return false
         }
         let start = buffer.getCursor()
-        let end = start + bytes.count
-        guard end <= buffer.count else {
+        do {
+            let wireTypeID = try buffer.readVarUInt32()
+            if wireTypeID != entry.wireTypeID {
+                buffer.setCursor(start)
+                return false
+            }
+
+            let indexMarker = try buffer.readVarUInt32()
+            if indexMarker != entry.indexMarker {
+                buffer.setCursor(start)
+                return false
+            }
+
+            let typeMetaHeader = try buffer.readUInt64()
+            if typeMetaHeader != entry.typeMetaHeader {
+                buffer.setCursor(start)
+                return false
+            }
+
+            var bodySize = Int(typeMetaHeader & UInt64(compatibleTypeMetaSizeMask))
+            if bodySize == compatibleTypeMetaSizeMask {
+                bodySize += Int(try buffer.readVarUInt32())
+            }
+            try buffer.skip(bodySize)
+
+            if let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
+                try compatibleTypeDefState.storeTypeMetaEntry(remoteTypeMeta, at: Int(indexMarker >> 1))
+                compatibleTypeDefStateUsed = true
+            }
+            setPendingCompatibleTypeMeta(typeID: typeID, value: meta)
+            return true
+        } catch {
+            buffer.setCursor(start)
             return false
         }
-        let storage = buffer.storage
-        var index = 0
-        while index < bytes.count {
-            if storage[start + index] != bytes[index] {
-                return false
-            }
-            index += 1
-        }
-        buffer.setCursor(end)
-        if let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
-            do {
-                try compatibleTypeDefState.storeTypeMetaEntry(remoteTypeMeta, at: 0)
-                compatibleTypeDefStateUsed = true
-            } catch {
-                return false
-            }
-        }
-        setPendingCompatibleTypeMeta(typeID: typeID, value: meta)
-        return true
     }
 
     @inline(__always)
@@ -781,7 +799,7 @@ public final class ReadContext {
             return
         }
         lastCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
-        lastCompatibleRootTypeInfoBytes = bytes
+        lastCompatibleRootTypeInfoEntry = Self.parseCompatibleRootTypeInfo(bytes)
         lastCompatibleRootTypeInfoMeta = compatibleTypeMeta
         lastCompatibleRootTypeInfoRemoteTypeMeta = remoteTypeMeta
     }
@@ -950,6 +968,21 @@ public final class ReadContext {
         }
         pendingCompatibleTypeMetaTypeID = typeID
         pendingCompatibleTypeMetaValue = value
+    }
+
+    private static func parseCompatibleRootTypeInfo(_ bytes: [UInt8]) -> CachedCompatibleRootTypeInfo? {
+        let buffer = ByteBuffer(bytes: bytes)
+        guard let wireTypeID = try? buffer.readVarUInt32(),
+              let indexMarker = try? buffer.readVarUInt32(),
+              (indexMarker & 1) == 0,
+              let typeMetaHeader = try? buffer.readUInt64() else {
+            return nil
+        }
+        return CachedCompatibleRootTypeInfo(
+            wireTypeID: wireTypeID,
+            indexMarker: indexMarker,
+            typeMetaHeader: typeMetaHeader
+        )
     }
 
     private static func assignCompatibleFieldIDs(

@@ -306,6 +306,7 @@ public final class WriteContext {
     private var lastCompatibleRootTypeInfoHasUserTypeFields = true
     private var lastFirstCompatibleTypeMetaTypeID: ObjectIdentifier?
     private var lastFirstCompatibleTypeMetaHasUserTypeFields = false
+    private var reusableOutputData = Data()
 
     public init(
         buffer: ByteBuffer,
@@ -505,6 +506,28 @@ public final class WriteContext {
     @inline(__always)
     public func markMetaStringWriteStateUsed() {
         metaStringWriteStateUsed = true
+    }
+
+    @inline(__always)
+    public func materializeOutputData() -> Data {
+        let byteCount = buffer.storage.count
+        if reusableOutputData.count != byteCount {
+            reusableOutputData.count = byteCount
+        }
+        if byteCount > 0 {
+            reusableOutputData.withUnsafeMutableBytes { destination in
+                guard let destinationBase = destination.baseAddress else {
+                    return
+                }
+                buffer.storage.withUnsafeBytes { source in
+                    guard let sourceBase = source.baseAddress else {
+                        return
+                    }
+                    destinationBase.copyMemory(from: sourceBase, byteCount: byteCount)
+                }
+            }
+        }
+        return reusableOutputData
     }
 
     public func reset() {

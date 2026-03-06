@@ -203,7 +203,7 @@ public final class Fory {
             if !value.foryIsNone {
                 try writeRootTypedValue(value, context: context)
             }
-            return context.buffer.toData()
+            return context.materializeOutputData()
         }
     }
 
@@ -772,7 +772,7 @@ public final class Fory {
             if !isNone {
                 try body(context)
             }
-            return context.buffer.toData()
+            return context.materializeOutputData()
         }
     }
 

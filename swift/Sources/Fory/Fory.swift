@@ -498,6 +498,8 @@ public final class Fory {
         }
     }
 
+    @inlinable
+    @inline(__always)
     public func writeHead(buffer: ByteBuffer, isNone: Bool) {
         var bitmap: UInt8 = 0
         if config.xlang {
@@ -509,6 +511,8 @@ public final class Fory {
         buffer.writeUInt8(bitmap)
     }
 
+    @inlinable
+    @inline(__always)
     public func readHead(buffer: ByteBuffer) throws -> Bool {
         let bitmap = try buffer.readUInt8()
         let peerIsXlang = (bitmap & ForyHeaderFlag.isXlang) != 0

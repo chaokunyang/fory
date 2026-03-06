@@ -403,6 +403,7 @@ public final class ByteBuffer {
     }
 
     @inlinable
+    @inline(__always)
     public func readInt8() throws -> Int8 {
         Int8(bitPattern: try readUInt8())
     }

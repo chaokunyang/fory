@@ -142,7 +142,7 @@ private final class ForyThreadContextStore: @unchecked Sendable {
 
 public final class Fory {
     public let config: ForyConfig
-    public let typeResolver: TypeResolver
+    let typeResolver: TypeResolver
 
     private let instanceID: UInt64
 

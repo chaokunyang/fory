@@ -823,16 +823,12 @@ public final class ReadContext {
         let prefixBytes = entry.prefixBytes
         let prefixLength = prefixBytes.count
         let end = start + prefixLength + entry.bodySize
-        guard end <= buffer.storage.count else {
+        guard end <= buffer.count else {
             return false
         }
 
-        var idx = 0
-        while idx < prefixLength {
-            if buffer.storage[start + idx] != prefixBytes[idx] {
-                return false
-            }
-            idx += 1
+        if !buffer.matchesBytes(start: start, bytes: prefixBytes) {
+            return false
         }
 
         buffer.setCursor(end)
@@ -1259,7 +1255,7 @@ public final class ReadContext {
             }
         }
         let decoded = try buffer.readUTF8String(count: count)
-        cacheInternedUTF8String(hash: hash, bytes: Array(buffer.storage[start..<end]), value: decoded)
+        cacheInternedUTF8String(hash: hash, bytes: buffer.copyBytes(start: start, end: end), value: decoded)
         return decoded
     }
 
@@ -1278,7 +1274,7 @@ public final class ReadContext {
             return value
         }
 
-        let bytes = Array(buffer.storage[start..<end])
+        let bytes = buffer.copyBytes(start: start, end: end)
         let (hashLo, hashHi) = MurmurHash3.x64_128(bytes, seed: 47)
         let signature = CanonicalReferenceSignature(
             typeID: ObjectIdentifier(type(of: object)),
@@ -1369,9 +1365,8 @@ public final class ReadContext {
     private func utf8Hash(start: Int, end: Int) -> UInt64 {
         var hash: UInt64 = 0xcbf29ce484222325
         var index = start
-        let bytes = buffer.storage
         while index < end {
-            hash ^= UInt64(bytes[index])
+            hash ^= UInt64(buffer.byte(at: index))
             hash &*= 0x100000001b3
             index += 1
         }
@@ -1382,10 +1377,9 @@ public final class ReadContext {
 
     @inline(__always)
     private func utf8BytesEqual(_ other: [UInt8], start: Int, end: Int) -> Bool {
-        let bytes = buffer.storage
         var index = 0
         while index < other.count {
-            if bytes[start + index] != other[index] {
+            if buffer.byte(at: start + index) != other[index] {
                 return false
             }
             index += 1

@@ -53,6 +53,49 @@ public final class ByteBuffer {
         storage.count - cursor
     }
 
+    @usableFromInline
+    @inline(__always)
+    internal var readableCount: Int {
+        storage.count
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func byte(at index: Int) -> UInt8 {
+        return storage[index]
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func copyBytes(start: Int, end: Int) -> [UInt8] {
+        let length = end - start
+        guard length > 0 else {
+            return []
+        }
+        return Array(storage[start..<end])
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func matchesBytes(start: Int, bytes: [UInt8]) -> Bool {
+        var index = 0
+        while index < bytes.count {
+            if storage[start + index] != bytes[index] {
+                return false
+            }
+            index += 1
+        }
+        return true
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func withUnsafeReadableBytes<R>(
+        _ body: (UnsafeBufferPointer<UInt8>) throws -> R
+    ) rethrows -> R {
+        return try storage.withUnsafeBufferPointer(body)
+    }
+
     @inlinable
     public func reserve(_ additional: Int) {
         storage.reserveCapacity(storage.count + additional)
@@ -90,8 +133,14 @@ public final class ByteBuffer {
 
         if dataCount > 0 {
             data.withUnsafeBytes { source in
-                storage.withUnsafeMutableBytes { destination in
-                    destination.copyBytes(from: source)
+                storage.withUnsafeMutableBufferPointer { destination in
+                    guard let sourceBase = source.baseAddress, let destinationBase = destination.baseAddress else {
+                        return
+                    }
+                    UnsafeMutableRawPointer(destinationBase).copyMemory(
+                        from: sourceBase,
+                        byteCount: dataCount
+                    )
                 }
             }
         }
@@ -358,8 +407,9 @@ public final class ByteBuffer {
     @inlinable
     @inline(__always)
     public func checkBound(_ need: Int) throws {
-        if cursor + need > storage.count {
-            throw ForyError.outOfBounds(cursor: cursor, need: need, length: storage.count)
+        let length = readableCount
+        if cursor + need > length {
+            throw ForyError.outOfBounds(cursor: cursor, need: need, length: length)
         }
     }
 
@@ -369,7 +419,7 @@ public final class ByteBuffer {
         guard destination.count > 0, let destinationBase = destination.baseAddress else {
             return
         }
-        storage.withUnsafeBytes { rawBytes in
+        withUnsafeReadableBytes { rawBytes in
             guard let sourceBase = rawBytes.baseAddress else {
                 return
             }
@@ -383,7 +433,7 @@ public final class ByteBuffer {
     public func readUInt8() throws -> UInt8 {
         try checkBound(1)
         defer { cursor += 1 }
-        return storage[cursor]
+        return byte(at: cursor)
     }
 
     @inlinable
@@ -396,8 +446,8 @@ public final class ByteBuffer {
     @inline(__always)
     public func readUInt16() throws -> UInt16 {
         try checkBound(2)
-        let b0 = UInt16(storage[cursor])
-        let b1 = UInt16(storage[cursor + 1]) << 8
+        let b0 = UInt16(byte(at: cursor))
+        let b1 = UInt16(byte(at: cursor + 1)) << 8
         cursor += 2
         return b0 | b1
     }
@@ -411,10 +461,10 @@ public final class ByteBuffer {
     @inline(__always)
     public func readUInt32() throws -> UInt32 {
         try checkBound(4)
-        let b0 = UInt32(storage[cursor])
-        let b1 = UInt32(storage[cursor + 1]) << 8
-        let b2 = UInt32(storage[cursor + 2]) << 16
-        let b3 = UInt32(storage[cursor + 3]) << 24
+        let b0 = UInt32(byte(at: cursor))
+        let b1 = UInt32(byte(at: cursor + 1)) << 8
+        let b2 = UInt32(byte(at: cursor + 2)) << 16
+        let b3 = UInt32(byte(at: cursor + 3)) << 24
         cursor += 4
         return b0 | b1 | b2 | b3
     }
@@ -428,14 +478,14 @@ public final class ByteBuffer {
     @inline(__always)
     public func readUInt64() throws -> UInt64 {
         try checkBound(8)
-        let b0 = UInt64(storage[cursor])
-        let b1 = UInt64(storage[cursor + 1]) << 8
-        let b2 = UInt64(storage[cursor + 2]) << 16
-        let b3 = UInt64(storage[cursor + 3]) << 24
-        let b4 = UInt64(storage[cursor + 4]) << 32
-        let b5 = UInt64(storage[cursor + 5]) << 40
-        let b6 = UInt64(storage[cursor + 6]) << 48
-        let b7 = UInt64(storage[cursor + 7]) << 56
+        let b0 = UInt64(byte(at: cursor))
+        let b1 = UInt64(byte(at: cursor + 1)) << 8
+        let b2 = UInt64(byte(at: cursor + 2)) << 16
+        let b3 = UInt64(byte(at: cursor + 3)) << 24
+        let b4 = UInt64(byte(at: cursor + 4)) << 32
+        let b5 = UInt64(byte(at: cursor + 5)) << 40
+        let b6 = UInt64(byte(at: cursor + 6)) << 48
+        let b7 = UInt64(byte(at: cursor + 7)) << 56
         cursor += 8
         return b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
     }
@@ -448,28 +498,28 @@ public final class ByteBuffer {
     @inlinable
     @inline(__always)
     public func readVarUInt32() throws -> UInt32 {
-        let available = storage.count - cursor
+        let available = readableCount - cursor
         if available >= 5 {
             let offset = cursor
-            let b0 = storage[offset]
+            let b0 = byte(at: offset)
             if b0 < 0x80 {
                 cursor = offset + 1
                 return UInt32(b0)
             }
 
-            let b1 = storage[offset + 1]
+            let b1 = byte(at: offset + 1)
             if b1 < 0x80 {
                 cursor = offset + 2
                 return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
             }
 
-            let b2 = storage[offset + 2]
+            let b2 = byte(at: offset + 2)
             if b2 < 0x80 {
                 cursor = offset + 3
                 return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
             }
 
-            let b3 = storage[offset + 3]
+            let b3 = byte(at: offset + 3)
             if b3 < 0x80 {
                 cursor = offset + 4
                 return UInt32(b0 & 0x7F) |
@@ -478,7 +528,7 @@ public final class ByteBuffer {
                     (UInt32(b3) << 21)
             }
 
-            let b4 = storage[offset + 4]
+            let b4 = byte(at: offset + 4)
             if b4 >= 0x80 {
                 throw ForyError.encodingError("varuint32 overflow")
             }
@@ -491,28 +541,28 @@ public final class ByteBuffer {
         }
 
         try checkBound(1)
-        let b0 = storage[cursor]
+        let b0 = byte(at: cursor)
         if b0 < 0x80 {
             cursor += 1
             return UInt32(b0)
         }
 
         try checkBound(2)
-        let b1 = storage[cursor + 1]
+        let b1 = byte(at: cursor + 1)
         if b1 < 0x80 {
             cursor += 2
             return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
         }
 
         try checkBound(3)
-        let b2 = storage[cursor + 2]
+        let b2 = byte(at: cursor + 2)
         if b2 < 0x80 {
             cursor += 3
             return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
         }
 
         try checkBound(4)
-        let b3 = storage[cursor + 3]
+        let b3 = byte(at: cursor + 3)
         if b3 < 0x80 {
             cursor += 4
             return UInt32(b0 & 0x7F) |
@@ -522,7 +572,7 @@ public final class ByteBuffer {
         }
 
         try checkBound(5)
-        let b4 = storage[cursor + 4]
+        let b4 = byte(at: cursor + 4)
         if b4 >= 0x80 {
             throw ForyError.encodingError("varuint32 overflow")
         }
@@ -537,22 +587,22 @@ public final class ByteBuffer {
     @inlinable
     @inline(__always)
     public func readVarUInt64() throws -> UInt64 {
-        let available = storage.count - cursor
+        let available = readableCount - cursor
         if available >= 9 {
             let offset = cursor
-            let b0 = storage[offset]
+            let b0 = byte(at: offset)
             if b0 < 0x80 {
                 cursor = offset + 1
                 return UInt64(b0)
             }
 
-            let b1 = storage[offset + 1]
+            let b1 = byte(at: offset + 1)
             if b1 < 0x80 {
                 cursor = offset + 2
                 return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
             }
 
-            let b2 = storage[offset + 2]
+            let b2 = byte(at: offset + 2)
             if b2 < 0x80 {
                 cursor = offset + 3
                 return UInt64(b0 & 0x7F) |
@@ -560,7 +610,7 @@ public final class ByteBuffer {
                     (UInt64(b2) << 14)
             }
 
-            let b3 = storage[offset + 3]
+            let b3 = byte(at: offset + 3)
             if b3 < 0x80 {
                 cursor = offset + 4
                 return UInt64(b0 & 0x7F) |
@@ -569,7 +619,7 @@ public final class ByteBuffer {
                     (UInt64(b3) << 21)
             }
 
-            let b4 = storage[offset + 4]
+            let b4 = byte(at: offset + 4)
             if b4 < 0x80 {
                 cursor = offset + 5
                 return UInt64(b0 & 0x7F) |
@@ -579,7 +629,7 @@ public final class ByteBuffer {
                     (UInt64(b4) << 28)
             }
 
-            let b5 = storage[offset + 5]
+            let b5 = byte(at: offset + 5)
             if b5 < 0x80 {
                 cursor = offset + 6
                 return UInt64(b0 & 0x7F) |
@@ -590,7 +640,7 @@ public final class ByteBuffer {
                     (UInt64(b5) << 35)
             }
 
-            let b6 = storage[offset + 6]
+            let b6 = byte(at: offset + 6)
             if b6 < 0x80 {
                 cursor = offset + 7
                 return UInt64(b0 & 0x7F) |
@@ -602,7 +652,7 @@ public final class ByteBuffer {
                     (UInt64(b6) << 42)
             }
 
-            let b7 = storage[offset + 7]
+            let b7 = byte(at: offset + 7)
             if b7 < 0x80 {
                 cursor = offset + 8
                 return UInt64(b0 & 0x7F) |
@@ -615,7 +665,7 @@ public final class ByteBuffer {
                     (UInt64(b7) << 49)
             }
 
-            let b8 = storage[offset + 8]
+            let b8 = byte(at: offset + 8)
             cursor = offset + 9
             let low = UInt64(b0 & 0x7F) |
                 (UInt64(b1 & 0x7F) << 7) |
@@ -630,21 +680,21 @@ public final class ByteBuffer {
         }
 
         try checkBound(1)
-        let b0 = storage[cursor]
+        let b0 = byte(at: cursor)
         if b0 < 0x80 {
             cursor += 1
             return UInt64(b0)
         }
 
         try checkBound(2)
-        let b1 = storage[cursor + 1]
+        let b1 = byte(at: cursor + 1)
         if b1 < 0x80 {
             cursor += 2
             return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
         }
 
         try checkBound(3)
-        let b2 = storage[cursor + 2]
+        let b2 = byte(at: cursor + 2)
         if b2 < 0x80 {
             cursor += 3
             return UInt64(b0 & 0x7F) |
@@ -653,7 +703,7 @@ public final class ByteBuffer {
         }
 
         try checkBound(4)
-        let b3 = storage[cursor + 3]
+        let b3 = byte(at: cursor + 3)
         if b3 < 0x80 {
             cursor += 4
             return UInt64(b0 & 0x7F) |
@@ -663,7 +713,7 @@ public final class ByteBuffer {
         }
 
         try checkBound(5)
-        let b4 = storage[cursor + 4]
+        let b4 = byte(at: cursor + 4)
         if b4 < 0x80 {
             cursor += 5
             return UInt64(b0 & 0x7F) |
@@ -674,7 +724,7 @@ public final class ByteBuffer {
         }
 
         try checkBound(6)
-        let b5 = storage[cursor + 5]
+        let b5 = byte(at: cursor + 5)
         if b5 < 0x80 {
             cursor += 6
             return UInt64(b0 & 0x7F) |
@@ -686,7 +736,7 @@ public final class ByteBuffer {
         }
 
         try checkBound(7)
-        let b6 = storage[cursor + 6]
+        let b6 = byte(at: cursor + 6)
         if b6 < 0x80 {
             cursor += 7
             return UInt64(b0 & 0x7F) |
@@ -699,7 +749,7 @@ public final class ByteBuffer {
         }
 
         try checkBound(8)
-        let b7 = storage[cursor + 7]
+        let b7 = byte(at: cursor + 7)
         if b7 < 0x80 {
             cursor += 8
             return UInt64(b0 & 0x7F) |
@@ -713,7 +763,7 @@ public final class ByteBuffer {
         }
 
         try checkBound(9)
-        let b8 = storage[cursor + 8]
+        let b8 = byte(at: cursor + 8)
         cursor += 9
         let low = UInt64(b0 & 0x7F) |
             (UInt64(b1 & 0x7F) << 7) |
@@ -801,7 +851,7 @@ public final class ByteBuffer {
         let start = cursor
         let end = start + count
         cursor = end
-        let decoded = storage.withUnsafeBufferPointer { buffer -> String? in
+        let decoded = withUnsafeReadableBytes { buffer -> String? in
             guard let base = buffer.baseAddress else {
                 return nil
             }
@@ -822,7 +872,7 @@ public final class ByteBuffer {
 
     @inlinable
     public func toData() -> Data {
-        storage.withUnsafeBytes { rawBytes in
+        return storage.withUnsafeBytes { rawBytes in
             guard let baseAddress = rawBytes.baseAddress else {
                 return Data()
             }

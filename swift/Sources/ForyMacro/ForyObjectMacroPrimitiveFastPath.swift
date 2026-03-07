@@ -341,17 +341,24 @@ private func primitiveUnsafeFixedReadExpr(for field: ParsedField, baseExpr: Stri
     return "Wire.\(method)(from: \(baseExpr), index: \(offset))"
 }
 
-private func primitiveUnsafeReadAdvanceExpr(for field: ParsedField) -> String? {
+private func primitiveUnsafePointerReadAdvanceExpr(for field: ParsedField) -> String? {
     guard let method = primitiveUnsafeReadMethod(for: field) else {
         return nil
     }
-    return "try Wire.\(method)(from: __bytes, index: &__readerIndex)"
+    return "try Wire.\(method)(from: __base, length: __length, index: &__readerIndex)"
 }
 
-private func buildPrimitiveFastReadBlock(
+private struct PrimitiveFastReadPlan {
+    let statements: [String]
+    let consumedExpr: String
+    let fixedPrefixBytes: Int
+}
+
+private func buildPrimitiveFastReadStatements(
     _ fields: [ParsedField],
-    assignLine: (ParsedField, String) -> String
-) -> String? {
+    assignLine: (ParsedField, String) -> String,
+    remainingReadExpr: (ParsedField) -> String?
+) -> PrimitiveFastReadPlan? {
     guard !fields.isEmpty else {
         return nil
     }
@@ -367,31 +374,52 @@ private func buildPrimitiveFastReadBlock(
         return assignLine(field, readExpr)
     }.joined(separator: "\n            ")
     let remainingReads = remainingFields.compactMap { field -> String? in
-        guard let readExpr = primitiveUnsafeReadAdvanceExpr(for: field) else {
+        guard let readExpr = remainingReadExpr(field) else {
             return nil
         }
         return assignLine(field, readExpr)
     }.joined(separator: "\n            ")
     var readSections: [String] = []
-    if fixedPrefixBytes > 0 {
-        readSections.append("try Wire.checkReadable(__bytes, index: 0, need: \(fixedPrefixBytes))")
-        readSections.append(
-            """
-            guard let __base = __bytes.baseAddress else {
-                throw ForyError.outOfBounds(cursor: 0, need: \(fixedPrefixBytes), length: __bytes.count)
-            }
-            """
-        )
-        if !fixedReads.isEmpty {
-            readSections.append(fixedReads)
-        }
+    if !fixedReads.isEmpty {
+        readSections.append(fixedReads)
     }
     if !remainingReads.isEmpty {
         readSections.append("var __readerIndex = \(fixedPrefixBytes)")
         readSections.append(remainingReads)
     }
-    let returnExpr = remainingReads.isEmpty ? "\(fixedPrefixBytes)" : "__readerIndex"
-    readSections.append("return \(returnExpr)")
+    let consumedExpr = remainingReads.isEmpty ? "\(fixedPrefixBytes)" : "__readerIndex"
+    return PrimitiveFastReadPlan(
+        statements: readSections,
+        consumedExpr: consumedExpr,
+        fixedPrefixBytes: fixedPrefixBytes
+    )
+}
+
+private func buildPrimitiveFastReadBlock(
+    _ fields: [ParsedField],
+    assignLine: (ParsedField, String) -> String
+) -> String? {
+    guard let readPlan = buildPrimitiveFastReadStatements(
+        fields,
+        assignLine: assignLine,
+        remainingReadExpr: primitiveUnsafePointerReadAdvanceExpr
+    ) else {
+        return nil
+    }
+    var readSections: [String] = []
+    if readPlan.fixedPrefixBytes > 0 {
+        readSections.append("try Wire.checkReadable(__bytes, index: 0, need: \(readPlan.fixedPrefixBytes))")
+    }
+    readSections.append(
+        """
+        guard let __base = __bytes.baseAddress else {
+            throw ForyError.outOfBounds(cursor: 0, need: \(max(readPlan.fixedPrefixBytes, 1)), length: __bytes.count)
+        }
+        """
+    )
+    readSections.append("let __length = __bytes.count")
+    readSections.append(contentsOf: readPlan.statements)
+    readSections.append("return \(readPlan.consumedExpr)")
     let readBody = readSections.joined(separator: "\n            ")
     return """
     try Wire.readRegion(buffer: __buffer) { __bytes in

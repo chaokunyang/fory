@@ -562,6 +562,66 @@ public enum Wire {
 
     @inlinable
     @inline(__always)
+    public static func readInt32(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> Int32 {
+        try readVarInt32(from: base, length: length, index: &index)
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readUInt32(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> UInt32 {
+        try readVarUInt32(from: base, length: length, index: &index)
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readInt64(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> Int64 {
+        try readVarInt64(from: base, length: length, index: &index)
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readUInt64(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> UInt64 {
+        try readVarUInt64(from: base, length: length, index: &index)
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readInt(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> Int {
+        Int(try readVarInt64(from: base, length: length, index: &index))
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readUInt(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> UInt {
+        UInt(try readVarUInt64(from: base, length: length, index: &index))
+    }
+
+    @inlinable
+    @inline(__always)
     public static func readVarUInt32(
         from bytes: UnsafeBufferPointer<UInt8>,
         index: inout Int
@@ -822,6 +882,284 @@ public enum Wire {
 
     @inlinable
     @inline(__always)
+    public static func readVarInt32(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> Int32 {
+        let encoded = try readVarUInt32(from: base, length: length, index: &index)
+        return Int32(bitPattern: (encoded >> 1) ^ (~(encoded & 1) &+ 1))
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readVarInt64(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> Int64 {
+        let encoded = try readVarUInt64(from: base, length: length, index: &index)
+        return Int64(bitPattern: (encoded >> 1) ^ (~(encoded & 1) &+ 1))
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readVarUInt32(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> UInt32 {
+        let available = length - index
+        guard available > 0 else {
+            throw ForyError.outOfBounds(cursor: index, need: 1, length: length)
+        }
+
+        let b0 = base[index]
+        if b0 < 0x80 {
+            index += 1
+            return UInt32(b0)
+        }
+        guard available >= 2 else {
+            throw ForyError.outOfBounds(cursor: index, need: 2, length: length)
+        }
+        let b1 = base[index + 1]
+        if b1 < 0x80 {
+            index += 2
+            return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
+        }
+        guard available >= 3 else {
+            throw ForyError.outOfBounds(cursor: index, need: 3, length: length)
+        }
+        let b2 = base[index + 2]
+        if b2 < 0x80 {
+            index += 3
+            return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
+        }
+        guard available >= 4 else {
+            throw ForyError.outOfBounds(cursor: index, need: 4, length: length)
+        }
+        let b3 = base[index + 3]
+        if b3 < 0x80 {
+            index += 4
+            return UInt32(b0 & 0x7F) |
+                (UInt32(b1 & 0x7F) << 7) |
+                (UInt32(b2 & 0x7F) << 14) |
+                (UInt32(b3) << 21)
+        }
+        guard available >= 5 else {
+            throw ForyError.outOfBounds(cursor: index, need: 5, length: length)
+        }
+        let b4 = base[index + 4]
+        if b4 >= 0x80 {
+            throw ForyError.encodingError("varuint32 overflow")
+        }
+        index += 5
+        return UInt32(b0 & 0x7F) |
+            (UInt32(b1 & 0x7F) << 7) |
+            (UInt32(b2 & 0x7F) << 14) |
+            (UInt32(b3 & 0x7F) << 21) |
+            (UInt32(b4) << 28)
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readVarUInt64(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> UInt64 {
+        let available = length - index
+        if available >= 9 {
+            let offset = index
+            let b0 = base[offset]
+            if b0 < 0x80 {
+                index = offset + 1
+                return UInt64(b0)
+            }
+
+            let b1 = base[offset + 1]
+            if b1 < 0x80 {
+                index = offset + 2
+                return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
+            }
+
+            let b2 = base[offset + 2]
+            if b2 < 0x80 {
+                index = offset + 3
+                return UInt64(b0 & 0x7F) |
+                    (UInt64(b1 & 0x7F) << 7) |
+                    (UInt64(b2) << 14)
+            }
+
+            let b3 = base[offset + 3]
+            if b3 < 0x80 {
+                index = offset + 4
+                return UInt64(b0 & 0x7F) |
+                    (UInt64(b1 & 0x7F) << 7) |
+                    (UInt64(b2 & 0x7F) << 14) |
+                    (UInt64(b3) << 21)
+            }
+
+            let b4 = base[offset + 4]
+            if b4 < 0x80 {
+                index = offset + 5
+                return UInt64(b0 & 0x7F) |
+                    (UInt64(b1 & 0x7F) << 7) |
+                    (UInt64(b2 & 0x7F) << 14) |
+                    (UInt64(b3 & 0x7F) << 21) |
+                    (UInt64(b4) << 28)
+            }
+
+            let b5 = base[offset + 5]
+            if b5 < 0x80 {
+                index = offset + 6
+                return UInt64(b0 & 0x7F) |
+                    (UInt64(b1 & 0x7F) << 7) |
+                    (UInt64(b2 & 0x7F) << 14) |
+                    (UInt64(b3 & 0x7F) << 21) |
+                    (UInt64(b4 & 0x7F) << 28) |
+                    (UInt64(b5) << 35)
+            }
+
+            let b6 = base[offset + 6]
+            if b6 < 0x80 {
+                index = offset + 7
+                return UInt64(b0 & 0x7F) |
+                    (UInt64(b1 & 0x7F) << 7) |
+                    (UInt64(b2 & 0x7F) << 14) |
+                    (UInt64(b3 & 0x7F) << 21) |
+                    (UInt64(b4 & 0x7F) << 28) |
+                    (UInt64(b5 & 0x7F) << 35) |
+                    (UInt64(b6) << 42)
+            }
+
+            let b7 = base[offset + 7]
+            if b7 < 0x80 {
+                index = offset + 8
+                return UInt64(b0 & 0x7F) |
+                    (UInt64(b1 & 0x7F) << 7) |
+                    (UInt64(b2 & 0x7F) << 14) |
+                    (UInt64(b3 & 0x7F) << 21) |
+                    (UInt64(b4 & 0x7F) << 28) |
+                    (UInt64(b5 & 0x7F) << 35) |
+                    (UInt64(b6 & 0x7F) << 42) |
+                    (UInt64(b7) << 49)
+            }
+
+            let b8 = base[offset + 8]
+            index = offset + 9
+            let low = UInt64(b0 & 0x7F) |
+                (UInt64(b1 & 0x7F) << 7) |
+                (UInt64(b2 & 0x7F) << 14) |
+                (UInt64(b3 & 0x7F) << 21)
+            let high = (UInt64(b4 & 0x7F) << 28) |
+                (UInt64(b5 & 0x7F) << 35) |
+                (UInt64(b6 & 0x7F) << 42) |
+                (UInt64(b7 & 0x7F) << 49) |
+                (UInt64(b8) << 56)
+            return low | high
+        }
+
+        try checkReadable(length: length, index: index, need: 1)
+        let b0 = base[index]
+        if b0 < 0x80 {
+            index += 1
+            return UInt64(b0)
+        }
+
+        try checkReadable(length: length, index: index, need: 2)
+        let b1 = base[index + 1]
+        if b1 < 0x80 {
+            index += 2
+            return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
+        }
+
+        try checkReadable(length: length, index: index, need: 3)
+        let b2 = base[index + 2]
+        if b2 < 0x80 {
+            index += 3
+            return UInt64(b0 & 0x7F) |
+                (UInt64(b1 & 0x7F) << 7) |
+                (UInt64(b2) << 14)
+        }
+
+        try checkReadable(length: length, index: index, need: 4)
+        let b3 = base[index + 3]
+        if b3 < 0x80 {
+            index += 4
+            return UInt64(b0 & 0x7F) |
+                (UInt64(b1 & 0x7F) << 7) |
+                (UInt64(b2 & 0x7F) << 14) |
+                (UInt64(b3) << 21)
+        }
+
+        try checkReadable(length: length, index: index, need: 5)
+        let b4 = base[index + 4]
+        if b4 < 0x80 {
+            index += 5
+            return UInt64(b0 & 0x7F) |
+                (UInt64(b1 & 0x7F) << 7) |
+                (UInt64(b2 & 0x7F) << 14) |
+                (UInt64(b3 & 0x7F) << 21) |
+                (UInt64(b4) << 28)
+        }
+
+        try checkReadable(length: length, index: index, need: 6)
+        let b5 = base[index + 5]
+        if b5 < 0x80 {
+            index += 6
+            return UInt64(b0 & 0x7F) |
+                (UInt64(b1 & 0x7F) << 7) |
+                (UInt64(b2 & 0x7F) << 14) |
+                (UInt64(b3 & 0x7F) << 21) |
+                (UInt64(b4 & 0x7F) << 28) |
+                (UInt64(b5) << 35)
+        }
+
+        try checkReadable(length: length, index: index, need: 7)
+        let b6 = base[index + 6]
+        if b6 < 0x80 {
+            index += 7
+            return UInt64(b0 & 0x7F) |
+                (UInt64(b1 & 0x7F) << 7) |
+                (UInt64(b2 & 0x7F) << 14) |
+                (UInt64(b3 & 0x7F) << 21) |
+                (UInt64(b4 & 0x7F) << 28) |
+                (UInt64(b5 & 0x7F) << 35) |
+                (UInt64(b6) << 42)
+        }
+
+        try checkReadable(length: length, index: index, need: 8)
+        let b7 = base[index + 7]
+        if b7 < 0x80 {
+            index += 8
+            return UInt64(b0 & 0x7F) |
+                (UInt64(b1 & 0x7F) << 7) |
+                (UInt64(b2 & 0x7F) << 14) |
+                (UInt64(b3 & 0x7F) << 21) |
+                (UInt64(b4 & 0x7F) << 28) |
+                (UInt64(b5 & 0x7F) << 35) |
+                (UInt64(b6 & 0x7F) << 42) |
+                (UInt64(b7) << 49)
+        }
+
+        try checkReadable(length: length, index: index, need: 9)
+        let b8 = base[index + 8]
+        index += 9
+        let low = UInt64(b0 & 0x7F) |
+            (UInt64(b1 & 0x7F) << 7) |
+            (UInt64(b2 & 0x7F) << 14) |
+            (UInt64(b3 & 0x7F) << 21)
+        let high = (UInt64(b4 & 0x7F) << 28) |
+            (UInt64(b5 & 0x7F) << 35) |
+            (UInt64(b6 & 0x7F) << 42) |
+            (UInt64(b7 & 0x7F) << 49) |
+            (UInt64(b8) << 56)
+        return low | high
+    }
+
+    @inlinable
+    @inline(__always)
     public static func readFixedUInt32(
         from bytes: UnsafeBufferPointer<UInt8>,
         index: inout Int
@@ -928,6 +1266,18 @@ public enum Wire {
 
     @inlinable
     @inline(__always)
+    public static func checkReadable(
+        length: Int,
+        index: Int,
+        need: Int
+    ) throws {
+        if index < 0 || need < 0 || index + need > length {
+            throw ForyError.outOfBounds(cursor: index, need: need, length: length)
+        }
+    }
+
+    @inlinable
+    @inline(__always)
     public static func writeRegion(
         buffer: ByteBuffer,
         exactCount: Int,
@@ -949,14 +1299,14 @@ public enum Wire {
         buffer: ByteBuffer,
         _ body: (UnsafeBufferPointer<UInt8>) throws -> Int
     ) throws {
-        let available = buffer.storage.count - buffer.cursor
+        let available = buffer.count - buffer.cursor
         let consumed = try buffer.storage.withUnsafeBufferPointer { bytes -> Int in
             let start = bytes.baseAddress.map { $0.advanced(by: buffer.cursor) }
             let region = UnsafeBufferPointer(start: start, count: available)
             return try body(region)
         }
         if consumed < 0 || consumed > available {
-            throw ForyError.outOfBounds(cursor: buffer.cursor, need: consumed, length: buffer.storage.count)
+            throw ForyError.outOfBounds(cursor: buffer.cursor, need: consumed, length: buffer.count)
         }
         buffer.cursor += consumed
     }

@@ -17,8 +17,6 @@
 
 import Foundation
 
-private let pointerReadReuseThreshold = 32
-
 public struct ForyConfig {
     public var xlang: Bool
     public var trackRef: Bool
@@ -73,10 +71,6 @@ private final class ForyRuntimeContext {
     let writeContext: WriteContext
     let readBuffer: ByteBuffer
     let readContext: ReadContext
-
-    var lastReadData: Data?
-    var lastReadDataAddress: UnsafeRawPointer?
-    var lastReadDataCount: Int = -1
 
     init(typeResolver: TypeResolver, config: ForyConfig) {
         writeBuffer = ByteBuffer()
@@ -604,7 +598,7 @@ public final class Fory {
                     if typeInfoEnd > typeInfoStart {
                         context.storeCompatibleRootTypeInfo(
                             for: T.self,
-                            bytes: Array(context.buffer.storage[typeInfoStart..<typeInfoEnd]),
+                            bytes: context.buffer.copyBytes(start: typeInfoStart, end: typeInfoEnd),
                             readPlan: context.compatibleReadPlan(for: T.self),
                             remoteTypeMeta: context.lastResolvedCompatibleTypeMeta(for: T.self)
                         )
@@ -658,36 +652,7 @@ public final class Fory {
         data: Data,
         _ body: (ReadContext) throws -> R
     ) rethrows -> R {
-        let dataCount = data.count
-        var reuseReadBuffer = false
-        if dataCount >= pointerReadReuseThreshold,
-           dataCount == runtimeContext.lastReadDataCount {
-            data.withUnsafeBytes { rawBytes in
-                if rawBytes.baseAddress == runtimeContext.lastReadDataAddress {
-                    reuseReadBuffer = true
-                }
-            }
-        }
-        if !reuseReadBuffer,
-           dataCount == runtimeContext.lastReadDataCount,
-           let lastReadData = runtimeContext.lastReadData,
-           data == lastReadData {
-            reuseReadBuffer = true
-        }
-        if reuseReadBuffer {
-            runtimeContext.readBuffer.setCursor(0)
-        } else {
-            runtimeContext.readBuffer.replace(with: data)
-            runtimeContext.lastReadData = data
-            runtimeContext.lastReadDataCount = dataCount
-            if dataCount >= pointerReadReuseThreshold {
-                data.withUnsafeBytes { rawBytes in
-                    runtimeContext.lastReadDataAddress = rawBytes.baseAddress
-                }
-            } else {
-                runtimeContext.lastReadDataAddress = nil
-            }
-        }
+        runtimeContext.readBuffer.replace(with: data)
         defer {
             runtimeContext.readContext.reset()
         }

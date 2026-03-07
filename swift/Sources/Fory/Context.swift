@@ -385,7 +385,7 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func writeCachedCompatibleRootTypeInfoIfAvailable<T: Serializer>(
+    func writeCompatibleRootTypeInfoFromCache<T: Serializer>(
         for type: T.Type
     ) -> Bool {
         guard compatible, !compatibleTypeDefStateUsed else {
@@ -405,7 +405,7 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func cachedCompatibleRootTypeInfoBytesIfAvailable<T: Serializer>(
+    func primitiveRootTypeInfoBytes<T: Serializer>(
         for type: T.Type
     ) -> [UInt8]? {
         guard compatible, !compatibleTypeDefStateUsed else {
@@ -421,7 +421,7 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func cacheCompatibleRootTypeInfo<T: Serializer>(
+    func storeCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type,
         bytes: [UInt8]
     ) {
@@ -763,7 +763,7 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func readCachedCompatibleRootTypeInfoIfAvailable<T: Serializer>(
+    func consumeCompatibleRootTypeInfoFromCache<T: Serializer>(
         for type: T.Type
     ) -> Bool {
         guard compatible, !compatibleTypeDefStateUsed else {
@@ -806,18 +806,18 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func cacheCompatibleRootTypeInfo<T: Serializer>(
+    func storeCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type,
         bytes: [UInt8],
-        compatibleReadPlan: CompatibleReadPlan?,
+        readPlan: CompatibleReadPlan?,
         remoteTypeMeta: TypeMeta?
     ) {
-        guard compatible, let compatibleReadPlan else {
+        guard compatible, let readPlan else {
             return
         }
         lastCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
         lastCompatibleRootTypeInfoEntry = Self.parseCompatibleRootTypeInfo(bytes)
-        lastCompatibleRootTypeInfoPlan = compatibleReadPlan
+        lastCompatibleRootTypeInfoPlan = readPlan
         lastCompatibleRootTypeInfoRemoteTypeMeta = remoteTypeMeta
     }
 

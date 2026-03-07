@@ -177,11 +177,11 @@ public final class TypeResolver {
         throw ForyError.typeNotRegistered("\(type) is not registered")
     }
 
-    public func readByUserTypeID(_ userTypeID: UInt32, context: ReadContext) throws -> Any {
+    func readByUserTypeID(_ userTypeID: UInt32, context: ReadContext) throws -> Any {
         try readByUserTypeID(userTypeID, context: context, compatibleTypeMeta: nil)
     }
 
-    public func readByUserTypeID(
+    func readByUserTypeID(
         _ userTypeID: UInt32,
         context: ReadContext,
         compatibleTypeMeta: TypeMeta?
@@ -195,11 +195,11 @@ public final class TypeResolver {
         return try entry.reader(context)
     }
 
-    public func readByTypeName(namespace: String, typeName: String, context: ReadContext) throws -> Any {
+    func readByTypeName(namespace: String, typeName: String, context: ReadContext) throws -> Any {
         try readByTypeName(namespace: namespace, typeName: typeName, context: context, compatibleTypeMeta: nil)
     }
 
-    public func readByTypeName(
+    func readByTypeName(
         namespace: String,
         typeName: String,
         context: ReadContext,
@@ -214,7 +214,7 @@ public final class TypeResolver {
         return try entry.reader(context)
     }
 
-    public func readDynamicTypeInfo(context: ReadContext) throws -> DynamicTypeInfo {
+    func readDynamicTypeInfo(context: ReadContext) throws -> DynamicTypeInfo {
         let rawTypeID = try context.buffer.readVarUInt32()
         guard let wireTypeID = TypeId(rawValue: rawTypeID) else {
             throw ForyError.invalidData("unknown dynamic type id \(rawTypeID)")
@@ -307,7 +307,7 @@ public final class TypeResolver {
         }
     }
 
-    public func readDynamicValue(typeInfo: DynamicTypeInfo, context: ReadContext) throws -> Any {
+    func readDynamicValue(typeInfo: DynamicTypeInfo, context: ReadContext) throws -> Any {
         try context.enterDynamicAnyDepth()
         defer { context.leaveDynamicAnyDepth() }
 

@@ -49,7 +49,7 @@ private func buildClassReadDataDecl(
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleReadPlan = context.foryCompatibleReadPlan(for: Self.self) {
+        if context.compatible, let compatibleReadPlan = context.compatibleReadPlan(for: Self.self) {
             if compatibleReadPlan.canUseSchemaFastPath {
                 let value = Self.init()
                 context.bindPendingReference(value)
@@ -93,7 +93,7 @@ private func buildEmptyStructReadDataDecl(accessPrefix: String) -> String {
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleReadPlan = context.foryCompatibleReadPlan(for: Self.self) {
+        if context.compatible, let compatibleReadPlan = context.compatibleReadPlan(for: Self.self) {
             if compatibleReadPlan.canUseSchemaFastPath || compatibleReadPlan.canUseSchemaOrderReadPath {
                 return Self()
             }
@@ -140,7 +140,7 @@ private func buildStructReadDataDecl(
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleReadPlan = context.foryCompatibleReadPlan(for: Self.self) {
+        if context.compatible, let compatibleReadPlan = context.compatibleReadPlan(for: Self.self) {
                 if compatibleReadPlan.canUseSchemaFastPath {
                     \(schemaReadBody)
                     return Self(

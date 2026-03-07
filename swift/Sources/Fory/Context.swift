@@ -130,7 +130,7 @@ public final class CompatibleTypeDefReadState {
 
 private let compatibleTypeMetaSizeMask = 0xFF
 
-public final class ForyCompatibleReadPlan: @unchecked Sendable {
+public final class CompatibleReadPlan: @unchecked Sendable {
     public let fields: [TypeMetaFieldInfo]
     public let canUseSchemaFastPath: Bool
     public let canUseSchemaOrderReadPath: Bool
@@ -567,12 +567,12 @@ public final class ReadContext {
     private var dynamicAnyDepth = 0
 
     private var pendingRefStack: [PendingRefSlot] = []
-    private var pendingCompatibleReadPlans: [ObjectIdentifier: ForyCompatibleReadPlan] = [:]
+    private var pendingCompatibleReadPlans: [ObjectIdentifier: CompatibleReadPlan] = [:]
     private var pendingCompatibleReadPlanTypeID: ObjectIdentifier?
-    private var pendingCompatibleReadPlanValue: ForyCompatibleReadPlan?
-    private var compatibleReadPlanCache: [CompatibleResolvedTypeMetaCacheKey: ForyCompatibleReadPlan] = [:]
+    private var pendingCompatibleReadPlanValue: CompatibleReadPlan?
+    private var compatibleReadPlanCache: [CompatibleResolvedTypeMetaCacheKey: CompatibleReadPlan] = [:]
     private var lastCompatibleReadPlanCacheKey: CompatibleResolvedTypeMetaCacheKey?
-    private var lastCompatibleReadPlanCacheValue: ForyCompatibleReadPlan?
+    private var lastCompatibleReadPlanCacheValue: CompatibleReadPlan?
     private var pendingDynamicTypeInfo: [ObjectIdentifier: DynamicTypeInfo] = [:]
     private var canonicalReferenceCache: [CanonicalReferenceSignature: [CanonicalReferenceEntry]] = [:]
     private var utf8StringInternCache: [UInt64: [InternedUTF8StringEntry]] = [:]
@@ -592,7 +592,7 @@ public final class ReadContext {
     private var lastValidatedCompatibleHeaderHash: UInt64 = 0
     private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
     private var lastCompatibleRootTypeInfoEntry: CachedCompatibleRootTypeInfo?
-    private var lastCompatibleRootTypeInfoPlan: ForyCompatibleReadPlan?
+    private var lastCompatibleRootTypeInfoPlan: CompatibleReadPlan?
     private var lastCompatibleRootTypeInfoRemoteTypeMeta: TypeMeta?
     private var lastResolvedCompatibleTypeMetaTypeID: ObjectIdentifier?
     private var lastResolvedCompatibleTypeMetaValue: TypeMeta?
@@ -809,7 +809,7 @@ public final class ReadContext {
     func cacheCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type,
         bytes: [UInt8],
-        compatibleReadPlan: ForyCompatibleReadPlan?,
+        compatibleReadPlan: CompatibleReadPlan?,
         remoteTypeMeta: TypeMeta?
     ) {
         guard compatible, let compatibleReadPlan else {
@@ -940,7 +940,7 @@ public final class ReadContext {
         let canUseSchemaOrderReadPath = localTypeMetaHeaderHash != nil &&
             localTypeMetaHeaderHash == typeMeta.headerHash
         let canUseSchemaFastPath = canUseSchemaOrderReadPath && !localTypeMetaHasUserTypeFields
-        let resolved = ForyCompatibleReadPlan(
+        let resolved = CompatibleReadPlan(
             fields: resolvedFields,
             canUseSchemaFastPath: canUseSchemaFastPath,
             canUseSchemaOrderReadPath: canUseSchemaOrderReadPath
@@ -953,7 +953,7 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    public func foryCompatibleReadPlan<T: Serializer>(for type: T.Type) -> ForyCompatibleReadPlan? {
+    public func compatibleReadPlan<T: Serializer>(for type: T.Type) -> CompatibleReadPlan? {
         let typeID = ObjectIdentifier(type)
         if pendingCompatibleReadPlanTypeID == typeID {
             return pendingCompatibleReadPlanValue
@@ -962,7 +962,7 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    private func setPendingCompatibleReadPlan(typeID: ObjectIdentifier, value: ForyCompatibleReadPlan) {
+    private func setPendingCompatibleReadPlan(typeID: ObjectIdentifier, value: CompatibleReadPlan) {
         if pendingCompatibleReadPlanTypeID == typeID {
             pendingCompatibleReadPlanValue = value
             return

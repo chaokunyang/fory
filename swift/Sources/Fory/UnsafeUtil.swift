@@ -17,7 +17,7 @@
 
 import Foundation
 
-public enum ForyUnsafe {
+public enum UnsafeUtil {
     @inlinable
     @inline(__always)
     public static func writeBool(

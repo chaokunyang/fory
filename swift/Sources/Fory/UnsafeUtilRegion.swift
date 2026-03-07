@@ -17,7 +17,7 @@
 
 import Foundation
 
-public extension ForyUnsafe {
+public extension UnsafeUtil {
     @inlinable
     @inline(__always)
     static func writeNumericRegionExact(

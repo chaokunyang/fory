@@ -916,10 +916,12 @@ private func buildCompatibleTypeMetaFieldsDecl(sortedFields: [ParsedField], acce
     }
 
     let fieldInfosTrackRefDisabled = sortedFields.map { field in
-        "TypeMetaFieldInfo(fieldID: \(fieldIDExpression(field)), fieldName: \"\(field.name)\", fieldType: \(compatibleTypeMetaFieldExpression(field, trackRefExpression: "false")))"
+        let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: "false")
+        return "TypeMetaFieldInfo(fieldID: \(fieldIDExpression(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     let fieldInfosTrackRefEnabled = sortedFields.map { field in
-        "TypeMetaFieldInfo(fieldID: \(fieldIDExpression(field)), fieldName: \"\(field.name)\", fieldType: \(compatibleTypeMetaFieldExpression(field, trackRefExpression: "true")))"
+        let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: "true")
+        return "TypeMetaFieldInfo(fieldID: \(fieldIDExpression(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     let disabledExpr = fieldInfosTrackRefDisabled.isEmpty
         ? "[]"

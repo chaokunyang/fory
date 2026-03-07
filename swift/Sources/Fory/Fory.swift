@@ -200,7 +200,7 @@ public final class Fory {
     public func serialize<T: Serializer>(_ value: T) throws -> Data {
         try withReusableWriteContext { context in
             if !value.foryIsNone,
-               let directData = directSerializePrimitiveRootIfPossible(value, context: context) {
+               let directData = serializePrimitiveRootIfPossible(value, context: context) {
                 return directData
             }
             writeHead(buffer: context.buffer, isNone: value.foryIsNone)
@@ -227,7 +227,7 @@ public final class Fory {
     public func serialize<T: Serializer>(_ value: T, to buffer: inout Data) throws {
         try withReusableWriteContext { context in
             if !value.foryIsNone,
-               let directData = directSerializePrimitiveRootIfPossible(value, context: context) {
+               let directData = serializePrimitiveRootIfPossible(value, context: context) {
                 buffer.append(directData)
                 return
             }
@@ -568,12 +568,12 @@ public final class Fory {
     }
 
     @inline(__always)
-    private func directSerializePrimitiveRootIfPossible<T: Serializer>(
+    private func serializePrimitiveRootIfPossible<T: Serializer>(
         _ value: T,
         context: WriteContext
     ) -> Data? {
         guard useRootNullOnlyTypeInfoFastPath,
-              let payloadSize = value.foryDirectDataSize,
+              let payloadSize = value.foryPrimitiveDataSize,
               let rootTypeInfoBytes = context.cachedCompatibleRootTypeInfoBytesIfAvailable(for: T.self) else {
             return nil
         }
@@ -584,8 +584,8 @@ public final class Fory {
             base[0] = headByte
             base[1] = refByte
             var index = 2
-            index = ForyUnsafe.copyBytes(rootTypeInfoBytes, to: base, index: index)
-            value.foryWriteDirectData(to: base, index: &index)
+            index = UnsafeUtil.copyBytes(rootTypeInfoBytes, to: base, index: index)
+            value.foryWritePrimitiveData(to: base, index: &index)
             assert(index == totalByteCount)
         }
     }
@@ -646,7 +646,7 @@ public final class Fory {
                         context.cacheCompatibleRootTypeInfo(
                             for: T.self,
                             bytes: Array(context.buffer.storage[typeInfoStart..<typeInfoEnd]),
-                            compatibleReadPlan: context.foryCompatibleReadPlan(for: T.self),
+                            compatibleReadPlan: context.compatibleReadPlan(for: T.self),
                             remoteTypeMeta: context.lastResolvedCompatibleTypeMeta(for: T.self)
                         )
                     }

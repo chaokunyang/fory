@@ -22,6 +22,23 @@ public final class UnsafeUtil {
 
     @inlinable
     @inline(__always)
+    public static func writeNumericRegionExact(
+        buffer: ByteBuffer,
+        exactBytes: Int,
+        _ body: (UnsafeMutablePointer<UInt8>) -> Void
+    ) {
+        guard exactBytes > 0 else {
+            return
+        }
+        let start = buffer.storage.count
+        buffer.storage.append(contentsOf: repeatElement(0, count: exactBytes))
+        buffer.storage.withUnsafeMutableBufferPointer { storage in
+            body(storage.baseAddress!.advanced(by: start))
+        }
+    }
+
+    @inlinable
+    @inline(__always)
     public static func writeNumericRegion(
         buffer: ByteBuffer,
         maxBytes: Int,

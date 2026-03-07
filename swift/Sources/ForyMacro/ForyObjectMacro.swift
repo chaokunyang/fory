@@ -1241,12 +1241,13 @@ private func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
     let locals = fields.map { field in
         "let __\(field.name) = self.\(field.name)"
     }.joined(separator: "\n        ")
-    let numericMaxBytes = fields.reduce(0) { partial, field in
-        partial + (primitiveMaxEncodedByteWidth(for: field) ?? 0)
+    let numericByteTerms = fields.compactMap { field in
+        primitiveEncodedByteWidthExpr(for: field, valueExpr: "__\(field.name)")
     }
-    guard numericMaxBytes > 0 else {
+    guard !numericByteTerms.isEmpty else {
         return nil
     }
+    let numericBytesExpr = numericByteTerms.joined(separator: " + ")
     var fixedOffset = 0
     let fixedWrites = fixedFields.compactMap { field -> String? in
         guard let line = primitiveUnsafeWriteFixedLine(for: field, offset: fixedOffset) else {
@@ -1267,34 +1268,42 @@ private func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
             """
             var __writerIndex = \(fixedPrefixBytes)
             \(remainingWrites)
+            assert(__writerIndex == __numericBytes)
             """
         )
     }
     let writeBody = bodySections.joined(separator: "\n            ")
-    let returnExpr = remainingWrites.isEmpty ? "\(fixedPrefixBytes)" : "__writerIndex"
     return """
     \(locals)
-    UnsafeUtil.writeNumericRegion(buffer: __buffer, maxBytes: \(numericMaxBytes)) { __base in
+    let __numericBytes = \(numericBytesExpr)
+    UnsafeUtil.writeNumericRegionExact(buffer: __buffer, exactBytes: __numericBytes) { __base in
         \(writeBody)
-        return \(returnExpr)
     }
     """
 }
 
-private func primitiveMaxEncodedByteWidth(for field: ParsedField) -> Int? {
+private func primitiveEncodedByteWidthExpr(for field: ParsedField, valueExpr: String) -> String? {
     switch trimType(field.typeText) {
     case "Bool", "Int8", "UInt8":
-        return 1
+        return "1"
     case "Int16", "UInt16":
-        return 2
+        return "2"
     case "Float":
-        return 4
+        return "4"
     case "Double":
-        return 8
-    case "Int32", "UInt32":
-        return 5
-    case "Int64", "UInt64", "Int", "UInt":
-        return 10
+        return "8"
+    case "Int32":
+        return "UnsafeUtil.varInt32Size(\(valueExpr))"
+    case "UInt32":
+        return "UnsafeUtil.varUInt32Size(\(valueExpr))"
+    case "Int64":
+        return "UnsafeUtil.varInt64Size(\(valueExpr))"
+    case "UInt64":
+        return "UnsafeUtil.varUInt64Size(\(valueExpr))"
+    case "Int":
+        return "UnsafeUtil.varInt64Size(Int64(\(valueExpr)))"
+    case "UInt":
+        return "UnsafeUtil.varUInt64Size(UInt64(\(valueExpr)))"
     default:
         return nil
     }

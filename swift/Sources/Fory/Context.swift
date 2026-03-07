@@ -174,9 +174,9 @@ private struct CompatibleResolvedTypeMetaCacheKey: Hashable {
 }
 
 private struct CachedCompatibleRootTypeInfo {
-    let wireTypeID: UInt32
-    let indexMarker: UInt32
-    let typeMetaHeader: UInt64
+    let prefixBytes: [UInt8]
+    let bodySize: Int
+    let typeMetaIndex: Int
 }
 
 private struct MetaStringCacheKey: Hashable {
@@ -774,41 +774,33 @@ public final class ReadContext {
             return false
         }
         let start = buffer.getCursor()
-        do {
-            let wireTypeID = try buffer.readVarUInt32()
-            if wireTypeID != entry.wireTypeID {
-                buffer.setCursor(start)
-                return false
-            }
-
-            let indexMarker = try buffer.readVarUInt32()
-            if indexMarker != entry.indexMarker {
-                buffer.setCursor(start)
-                return false
-            }
-
-            let typeMetaHeader = try buffer.readUInt64()
-            if typeMetaHeader != entry.typeMetaHeader {
-                buffer.setCursor(start)
-                return false
-            }
-
-            var bodySize = Int(typeMetaHeader & UInt64(compatibleTypeMetaSizeMask))
-            if bodySize == compatibleTypeMetaSizeMask {
-                bodySize += Int(try buffer.readVarUInt32())
-            }
-            try buffer.skip(bodySize)
-
-            if let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
-                try compatibleTypeDefState.storeTypeMetaEntry(remoteTypeMeta, at: Int(indexMarker >> 1))
-                compatibleTypeDefStateUsed = true
-            }
-            setPendingCompatibleTypeMeta(typeID: typeID, value: meta)
-            return true
-        } catch {
-            buffer.setCursor(start)
+        let prefixBytes = entry.prefixBytes
+        let prefixLength = prefixBytes.count
+        let end = start + prefixLength + entry.bodySize
+        guard end <= buffer.storage.count else {
             return false
         }
+
+        var idx = 0
+        while idx < prefixLength {
+            if buffer.storage[start + idx] != prefixBytes[idx] {
+                return false
+            }
+            idx += 1
+        }
+
+        buffer.setCursor(end)
+        if let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
+            do {
+                try compatibleTypeDefState.storeTypeMetaEntry(remoteTypeMeta, at: entry.typeMetaIndex)
+                compatibleTypeDefStateUsed = true
+            } catch {
+                buffer.setCursor(start)
+                return false
+            }
+        }
+        setPendingCompatibleTypeMeta(typeID: typeID, value: meta)
+        return true
     }
 
     @inline(__always)
@@ -994,18 +986,98 @@ public final class ReadContext {
     }
 
     private static func parseCompatibleRootTypeInfo(_ bytes: [UInt8]) -> CachedCompatibleRootTypeInfo? {
-        let buffer = ByteBuffer(bytes: bytes)
-        guard let wireTypeID = try? buffer.readVarUInt32(),
-              let indexMarker = try? buffer.readVarUInt32(),
+        var index = 0
+        guard decodeVarUInt32(bytes, index: &index) != nil,
+              let indexMarker = decodeVarUInt32(bytes, index: &index),
               (indexMarker & 1) == 0,
-              let typeMetaHeader = try? buffer.readUInt64() else {
+              let typeMetaHeader = decodeUInt64(bytes, index: &index) else {
+            return nil
+        }
+        var bodySize = Int(typeMetaHeader & UInt64(compatibleTypeMetaSizeMask))
+        if bodySize == compatibleTypeMetaSizeMask {
+            guard let extendedBodySize = decodeVarUInt32(bytes, index: &index) else {
+                return nil
+            }
+            bodySize += Int(extendedBodySize)
+        }
+        let end = index + bodySize
+        guard end <= bytes.count else {
             return nil
         }
         return CachedCompatibleRootTypeInfo(
-            wireTypeID: wireTypeID,
-            indexMarker: indexMarker,
-            typeMetaHeader: typeMetaHeader
+            prefixBytes: Array(bytes[..<index]),
+            bodySize: bodySize,
+            typeMetaIndex: Int(indexMarker >> 1)
         )
+    }
+
+    @inline(__always)
+    private static func decodeVarUInt32(_ bytes: [UInt8], index: inout Int) -> UInt32? {
+        guard index < bytes.count else {
+            return nil
+        }
+        let b0 = bytes[index]
+        if b0 < 0x80 {
+            index += 1
+            return UInt32(b0)
+        }
+        guard index + 1 < bytes.count else {
+            return nil
+        }
+        let b1 = bytes[index + 1]
+        if b1 < 0x80 {
+            index += 2
+            return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
+        }
+        guard index + 2 < bytes.count else {
+            return nil
+        }
+        let b2 = bytes[index + 2]
+        if b2 < 0x80 {
+            index += 3
+            return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
+        }
+        guard index + 3 < bytes.count else {
+            return nil
+        }
+        let b3 = bytes[index + 3]
+        if b3 < 0x80 {
+            index += 4
+            return UInt32(b0 & 0x7F) |
+                (UInt32(b1 & 0x7F) << 7) |
+                (UInt32(b2 & 0x7F) << 14) |
+                (UInt32(b3) << 21)
+        }
+        guard index + 4 < bytes.count else {
+            return nil
+        }
+        let b4 = bytes[index + 4]
+        guard b4 < 0x80 else {
+            return nil
+        }
+        index += 5
+        return UInt32(b0 & 0x7F) |
+            (UInt32(b1 & 0x7F) << 7) |
+            (UInt32(b2 & 0x7F) << 14) |
+            (UInt32(b3 & 0x7F) << 21) |
+            (UInt32(b4) << 28)
+    }
+
+    @inline(__always)
+    private static func decodeUInt64(_ bytes: [UInt8], index: inout Int) -> UInt64? {
+        guard index + 8 <= bytes.count else {
+            return nil
+        }
+        let b0 = UInt64(bytes[index])
+        let b1 = UInt64(bytes[index + 1]) << 8
+        let b2 = UInt64(bytes[index + 2]) << 16
+        let b3 = UInt64(bytes[index + 3]) << 24
+        let b4 = UInt64(bytes[index + 4]) << 32
+        let b5 = UInt64(bytes[index + 5]) << 40
+        let b6 = UInt64(bytes[index + 6]) << 48
+        let b7 = UInt64(bytes[index + 7]) << 56
+        index += 8
+        return b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
     }
 
     private static func assignCompatibleFieldIDs(

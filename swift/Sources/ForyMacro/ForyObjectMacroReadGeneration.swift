@@ -68,7 +68,7 @@ private func buildClassReadDataDecl(
                 switch Int(remoteField.fieldID ?? -1) {
             \(compatibleCases)
                 default:
-                    try FieldSkipper.skipFieldValue(context: context, fieldType: remoteField.fieldType)
+                    try context.skipFieldValue(remoteField.fieldType)
                 }
             }
             return value
@@ -98,7 +98,7 @@ private func buildEmptyStructReadDataDecl(accessPrefix: String) -> String {
                 return Self()
             }
             for remoteField in compatibleReadPlan.fields {
-                try FieldSkipper.skipFieldValue(context: context, fieldType: remoteField.fieldType)
+                try context.skipFieldValue(remoteField.fieldType)
             }
             return Self()
         }
@@ -158,7 +158,7 @@ private func buildStructReadDataDecl(
                     switch Int(remoteField.fieldID ?? -1) {
                     \(compatibleCases)
                     default:
-                        try FieldSkipper.skipFieldValue(context: context, fieldType: remoteField.fieldType)
+                        try context.skipFieldValue(remoteField.fieldType)
                     }
                 }
                 return Self(

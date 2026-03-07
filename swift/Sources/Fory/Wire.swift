@@ -17,7 +17,7 @@
 
 import Foundation
 
-public enum UnsafeUtil {
+public enum Wire {
     @inlinable
     @inline(__always)
     public static func writeBool(
@@ -912,5 +912,85 @@ public enum UnsafeUtil {
         let b6 = UInt64(base[index + 6]) << 48
         let b7 = UInt64(base[index + 7]) << 56
         return b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func checkReadable(
+        _ bytes: UnsafeBufferPointer<UInt8>,
+        index: Int,
+        need: Int
+    ) throws {
+        if index < 0 || need < 0 || index + need > bytes.count {
+            throw ForyError.outOfBounds(cursor: index, need: need, length: bytes.count)
+        }
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func writeRegion(
+        buffer: ByteBuffer,
+        exactCount: Int,
+        _ body: (UnsafeMutablePointer<UInt8>) -> Void
+    ) {
+        guard exactCount > 0 else {
+            return
+        }
+        let start = buffer.storage.count
+        buffer.storage.append(contentsOf: repeatElement(0, count: exactCount))
+        buffer.storage.withUnsafeMutableBufferPointer { bytes in
+            body(bytes.baseAddress!.advanced(by: start))
+        }
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func readRegion(
+        buffer: ByteBuffer,
+        _ body: (UnsafeBufferPointer<UInt8>) throws -> Int
+    ) throws {
+        let available = buffer.storage.count - buffer.cursor
+        let consumed = try buffer.storage.withUnsafeBufferPointer { bytes -> Int in
+            let start = bytes.baseAddress.map { $0.advanced(by: buffer.cursor) }
+            let region = UnsafeBufferPointer(start: start, count: available)
+            return try body(region)
+        }
+        if consumed < 0 || consumed > available {
+            throw ForyError.outOfBounds(cursor: buffer.cursor, need: consumed, length: buffer.storage.count)
+        }
+        buffer.cursor += consumed
+    }
+
+    @inline(__always)
+    static func copyBytes(
+        _ bytes: [UInt8],
+        to base: UnsafeMutablePointer<UInt8>,
+        index: Int
+    ) -> Int {
+        guard !bytes.isEmpty else {
+            return index
+        }
+        bytes.withUnsafeBufferPointer { source in
+            guard let sourceBase = source.baseAddress else {
+                return
+            }
+            UnsafeMutableRawPointer(base.advanced(by: index))
+                .copyMemory(from: UnsafeRawPointer(sourceBase), byteCount: source.count)
+        }
+        return index + bytes.count
+    }
+
+    @inline(__always)
+    static func copyBytes(
+        _ bytes: UnsafeBufferPointer<UInt8>,
+        to base: UnsafeMutablePointer<UInt8>,
+        index: Int
+    ) -> Int {
+        guard let sourceBase = bytes.baseAddress, bytes.count > 0 else {
+            return index
+        }
+        UnsafeMutableRawPointer(base.advanced(by: index))
+            .copyMemory(from: UnsafeRawPointer(sourceBase), byteCount: bytes.count)
+        return index + bytes.count
     }
 }

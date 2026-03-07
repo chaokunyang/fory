@@ -584,7 +584,7 @@ public final class Fory {
             base[0] = headByte
             base[1] = refByte
             var index = 2
-            index = UnsafeUtil.copyBytes(rootTypeInfoBytes, to: base, index: index)
+            index = Wire.copyBytes(rootTypeInfoBytes, to: base, index: index)
             value.foryWritePrimitiveData(to: base, index: &index)
             assert(index == totalByteCount)
         }

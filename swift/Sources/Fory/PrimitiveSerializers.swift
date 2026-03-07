@@ -374,10 +374,10 @@ extension String: Serializer {
         let utf8Bytes = self.utf8
         let header = (UInt64(utf8Bytes.count) << 2) | StringEncoding.utf8.rawValue
         if utf8Bytes.withContiguousStorageIfAvailable({ contiguousBytes in
-            let totalBytes = UnsafeUtil.varUInt64Size(header) + contiguousBytes.count
-            UnsafeUtil.writeNumericRegionExact(buffer: context.buffer, exactBytes: totalBytes) { base in
-                var index = UnsafeUtil.writeVarUInt64(header, to: base, index: 0)
-                index = UnsafeUtil.copyBytes(contiguousBytes, to: base, index: index)
+            let totalBytes = Wire.varUInt64Size(header) + contiguousBytes.count
+            Wire.writeRegion(buffer: context.buffer, exactCount: totalBytes) { base in
+                var index = Wire.writeVarUInt64(header, to: base, index: 0)
+                index = Wire.copyBytes(contiguousBytes, to: base, index: index)
                 assert(index == totalBytes)
             }
             return true

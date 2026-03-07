@@ -573,7 +573,7 @@ public final class Fory {
         context: WriteContext
     ) -> Data? {
         guard useRootNullOnlyTypeInfoFastPath,
-              let payloadSize = value._foryDirectPrimitiveDataSize,
+              let payloadSize = value.foryDirectDataSize,
               let rootTypeInfoBytes = context.cachedCompatibleRootTypeInfoBytesIfAvailable(for: T.self) else {
             return nil
         }
@@ -584,8 +584,8 @@ public final class Fory {
             base[0] = headByte
             base[1] = refByte
             var index = 2
-            index = UnsafeUtil.copyBytes(rootTypeInfoBytes, to: base, index: index)
-            value._foryWriteDirectPrimitiveData(to: base, index: &index)
+            index = ForyUnsafe.copyBytes(rootTypeInfoBytes, to: base, index: index)
+            value.foryWriteDirectData(to: base, index: &index)
             assert(index == totalByteCount)
         }
     }
@@ -646,7 +646,7 @@ public final class Fory {
                         context.cacheCompatibleRootTypeInfo(
                             for: T.self,
                             bytes: Array(context.buffer.storage[typeInfoStart..<typeInfoEnd]),
-                            compatibleTypeMeta: context.consumeCompatibleTypeMetaIfPresent(for: T.self),
+                            compatibleReadPlan: context.foryCompatibleReadPlan(for: T.self),
                             remoteTypeMeta: context.lastResolvedCompatibleTypeMeta(for: T.self)
                         )
                     }

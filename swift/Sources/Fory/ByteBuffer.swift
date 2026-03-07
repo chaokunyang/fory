@@ -119,22 +119,6 @@ public final class ByteBuffer {
 
     @inlinable
     @inline(__always)
-    internal func appendUninitializedBytes(
-        count: Int,
-        _ body: (UnsafeMutablePointer<UInt8>) -> Void
-    ) {
-        guard count > 0 else {
-            return
-        }
-        let start = storage.count
-        storage.append(contentsOf: repeatElement(0, count: count))
-        storage.withUnsafeMutableBufferPointer { buffer in
-            body(buffer.baseAddress!.advanced(by: start))
-        }
-    }
-
-    @inlinable
-    @inline(__always)
     public func writeUInt8(_ value: UInt8) {
         storage.append(value)
     }

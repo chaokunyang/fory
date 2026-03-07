@@ -17,13 +17,13 @@
 
 import Foundation
 
-public final class CompatibleTypeDefWriteState {
+final class CompatibleTypeDefWriteState {
     private var firstTypeID: ObjectIdentifier?
     private var firstTypeIndex: UInt32 = 0
     private var overflowTypeIndexBySwiftType: [ObjectIdentifier: UInt32] = [:]
     private var nextIndex: UInt32 = 0
 
-    public init() {}
+    init() {}
 
     @inline(__always)
     func assignIndexIfAbsent(for typeID: ObjectIdentifier) -> (index: UInt32, isNew: Bool) {
@@ -70,11 +70,11 @@ public final class CompatibleTypeDefWriteState {
     }
 }
 
-public final class CompatibleTypeDefReadState {
+final class CompatibleTypeDefReadState {
     private var firstTypeMeta: TypeMeta?
     private var overflowTypeMetas: [TypeMeta] = []
 
-    public init() {}
+    init() {}
 
     @inline(__always)
     fileprivate func typeMetaEntry(at index: Int) -> TypeMeta? {
@@ -135,7 +135,7 @@ public final class CompatibleReadPlan: @unchecked Sendable {
     public let canUseSchemaFastPath: Bool
     public let canUseSchemaOrderReadPath: Bool
 
-    public init(
+    init(
         fields: [TypeMetaFieldInfo],
         canUseSchemaFastPath: Bool,
         canUseSchemaOrderReadPath: Bool
@@ -193,11 +193,11 @@ private let utf8InternMaxEntryCount = 512
 private let utf8InternMaxByteCount = 32 * 1024
 private let utf8InternMaxStringLength = 64
 
-public final class MetaStringWriteState {
+final class MetaStringWriteState {
     private var stringIndexByKey: [MetaStringCacheKey: UInt32] = [:]
     private var nextIndex: UInt32 = 0
 
-    public init() {}
+    init() {}
 
     func index(for value: MetaString) -> UInt32? {
         stringIndexByKey[MetaStringCacheKey(encoding: value.encoding, bytes: value.bytes)]
@@ -224,10 +224,10 @@ public final class MetaStringWriteState {
     }
 }
 
-public final class MetaStringReadState {
+final class MetaStringReadState {
     private var values: [MetaString] = []
 
-    public init() {}
+    init() {}
 
     func value(at index: Int) -> MetaString? {
         guard index >= 0, index < values.count else {
@@ -277,8 +277,8 @@ public final class WriteContext {
     public let checkClassVersion: Bool
     public let maxDepth: Int
     public let refWriter: RefWriter
-    public let compatibleTypeDefState: CompatibleTypeDefWriteState
-    public let metaStringWriteState: MetaStringWriteState
+    let compatibleTypeDefState: CompatibleTypeDefWriteState
+    let metaStringWriteState: MetaStringWriteState
     private var compatibleTypeDefStateUsed = false
     private var metaStringWriteStateUsed = false
     private var dynamicAnyDepth = 0
@@ -296,15 +296,35 @@ public final class WriteContext {
     private var lastFirstTypeMetaHasUserFields = false
     private var reusableOutputData = Data()
 
-    public init(
+    public convenience init(
         buffer: ByteBuffer,
         typeResolver: TypeResolver,
         trackRef: Bool,
         compatible: Bool = false,
         checkClassVersion: Bool = true,
-        maxDepth: Int = 5,
-        compatibleTypeDefState: CompatibleTypeDefWriteState = CompatibleTypeDefWriteState(),
-        metaStringWriteState: MetaStringWriteState = MetaStringWriteState()
+        maxDepth: Int = 5
+    ) {
+        self.init(
+            buffer: buffer,
+            typeResolver: typeResolver,
+            trackRef: trackRef,
+            compatible: compatible,
+            checkClassVersion: checkClassVersion,
+            maxDepth: maxDepth,
+            compatibleTypeDefState: CompatibleTypeDefWriteState(),
+            metaStringWriteState: MetaStringWriteState()
+        )
+    }
+
+    init(
+        buffer: ByteBuffer,
+        typeResolver: TypeResolver,
+        trackRef: Bool,
+        compatible: Bool,
+        checkClassVersion: Bool,
+        maxDepth: Int,
+        compatibleTypeDefState: CompatibleTypeDefWriteState,
+        metaStringWriteState: MetaStringWriteState
     ) {
         self.buffer = buffer
         self.typeResolver = typeResolver
@@ -560,8 +580,8 @@ public final class ReadContext {
     public let maxBinarySize: Int
     public let maxDepth: Int
     public let refReader: RefReader
-    public let compatibleTypeDefState: CompatibleTypeDefReadState
-    public let metaStringReadState: MetaStringReadState
+    let compatibleTypeDefState: CompatibleTypeDefReadState
+    let metaStringReadState: MetaStringReadState
     private var compatibleTypeDefStateUsed = false
     private var metaStringReadStateUsed = false
     private var dynamicAnyDepth = 0
@@ -597,7 +617,7 @@ public final class ReadContext {
     private var lastResolvedCompatibleTypeMetaTypeID: ObjectIdentifier?
     private var lastResolvedCompatibleTypeMetaValue: TypeMeta?
 
-    public init(
+    public convenience init(
         buffer: ByteBuffer,
         typeResolver: TypeResolver,
         trackRef: Bool,
@@ -605,9 +625,33 @@ public final class ReadContext {
         checkClassVersion: Bool = true,
         maxCollectionSize: Int = 1_000_000,
         maxBinarySize: Int = 64 * 1024 * 1024,
-        maxDepth: Int = 5,
-        compatibleTypeDefState: CompatibleTypeDefReadState = CompatibleTypeDefReadState(),
-        metaStringReadState: MetaStringReadState = MetaStringReadState()
+        maxDepth: Int = 5
+    ) {
+        self.init(
+            buffer: buffer,
+            typeResolver: typeResolver,
+            trackRef: trackRef,
+            compatible: compatible,
+            checkClassVersion: checkClassVersion,
+            maxCollectionSize: maxCollectionSize,
+            maxBinarySize: maxBinarySize,
+            maxDepth: maxDepth,
+            compatibleTypeDefState: CompatibleTypeDefReadState(),
+            metaStringReadState: MetaStringReadState()
+        )
+    }
+
+    init(
+        buffer: ByteBuffer,
+        typeResolver: TypeResolver,
+        trackRef: Bool,
+        compatible: Bool,
+        checkClassVersion: Bool,
+        maxCollectionSize: Int,
+        maxBinarySize: Int,
+        maxDepth: Int,
+        compatibleTypeDefState: CompatibleTypeDefReadState,
+        metaStringReadState: MetaStringReadState
     ) {
         self.buffer = buffer
         self.typeResolver = typeResolver

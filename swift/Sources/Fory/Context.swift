@@ -790,7 +790,7 @@ public final class ReadContext {
         }
 
         buffer.setCursor(end)
-        if let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
+        if !meta.canUseSchemaFastPath, let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
             do {
                 try compatibleTypeDefState.storeTypeMetaEntry(remoteTypeMeta, at: entry.typeMetaIndex)
                 compatibleTypeDefStateUsed = true

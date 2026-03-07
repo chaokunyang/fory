@@ -417,6 +417,22 @@ public final class WriteContext {
     }
 
     @inline(__always)
+    func cachedCompatibleRootTypeInfoBytesIfAvailable<T: Serializer>(
+        for type: T.Type
+    ) -> [UInt8]? {
+        guard compatible, !compatibleTypeDefStateUsed else {
+            return nil
+        }
+        let typeID = ObjectIdentifier(type)
+        guard lastCompatibleRootTypeInfoTypeID == typeID,
+              let bytes = lastCompatibleRootTypeInfoBytes,
+              !lastCompatibleRootTypeInfoHasUserTypeFields else {
+            return nil
+        }
+        return bytes
+    }
+
+    @inline(__always)
     func cacheCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type,
         bytes: [UInt8]
@@ -525,6 +541,25 @@ public final class WriteContext {
                     }
                     destinationBase.copyMemory(from: sourceBase, byteCount: byteCount)
                 }
+            }
+        }
+        return reusableOutputData
+    }
+
+    @inline(__always)
+    public func materializeOutputData(
+        byteCount: Int,
+        _ body: (UnsafeMutablePointer<UInt8>) -> Void
+    ) -> Data {
+        if reusableOutputData.count != byteCount {
+            reusableOutputData.count = byteCount
+        }
+        if byteCount > 0 {
+            reusableOutputData.withUnsafeMutableBytes { destination in
+                guard let base = destination.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                    return
+                }
+                body(base)
             }
         }
         return reusableOutputData

@@ -199,6 +199,10 @@ public final class Fory {
 
     public func serialize<T: Serializer>(_ value: T) throws -> Data {
         try withReusableWriteContext { context in
+            if !value.foryIsNone,
+               let directData = directSerializePrimitiveRootIfPossible(value, context: context) {
+                return directData
+            }
             writeHead(buffer: context.buffer, isNone: value.foryIsNone)
             if !value.foryIsNone {
                 try writeRootTypedValue(value, context: context)
@@ -222,6 +226,11 @@ public final class Fory {
 
     public func serialize<T: Serializer>(_ value: T, to buffer: inout Data) throws {
         try withReusableWriteContext { context in
+            if !value.foryIsNone,
+               let directData = directSerializePrimitiveRootIfPossible(value, context: context) {
+                buffer.append(directData)
+                return
+            }
             writeHead(buffer: context.buffer, isNone: value.foryIsNone)
             if !value.foryIsNone {
                 try writeRootTypedValue(value, context: context)
@@ -556,6 +565,29 @@ public final class Fory {
     @inline(__always)
     private var useRootNullOnlyTypeInfoFastPath: Bool {
         shouldWriteRootTypeInfo && rootRefMode == .nullOnly
+    }
+
+    @inline(__always)
+    private func directSerializePrimitiveRootIfPossible<T: Serializer>(
+        _ value: T,
+        context: WriteContext
+    ) -> Data? {
+        guard useRootNullOnlyTypeInfoFastPath,
+              let payloadSize = value._foryDirectPrimitiveDataSize,
+              let rootTypeInfoBytes = context.cachedCompatibleRootTypeInfoBytesIfAvailable(for: T.self) else {
+            return nil
+        }
+        let totalByteCount = 2 + rootTypeInfoBytes.count + payloadSize
+        let headByte: UInt8 = config.xlang ? ForyHeaderFlag.isXlang : 0
+        let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
+        return context.materializeOutputData(byteCount: totalByteCount) { base in
+            base[0] = headByte
+            base[1] = refByte
+            var index = 2
+            index = UnsafeUtil.copyBytes(rootTypeInfoBytes, to: base, index: index)
+            value._foryWriteDirectPrimitiveData(to: base, index: &index)
+            assert(index == totalByteCount)
+        }
     }
 
     @inline(__always)

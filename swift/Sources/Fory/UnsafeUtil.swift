@@ -39,6 +39,26 @@ public final class UnsafeUtil {
 
     @inlinable
     @inline(__always)
+    public static func copyBytes(
+        _ bytes: [UInt8],
+        to base: UnsafeMutablePointer<UInt8>,
+        index: Int
+    ) -> Int {
+        guard !bytes.isEmpty else {
+            return index
+        }
+        bytes.withUnsafeBufferPointer { source in
+            guard let sourceBase = source.baseAddress else {
+                return
+            }
+            UnsafeMutableRawPointer(base.advanced(by: index))
+                .copyMemory(from: UnsafeRawPointer(sourceBase), byteCount: bytes.count)
+        }
+        return index + bytes.count
+    }
+
+    @inlinable
+    @inline(__always)
     public static func writeNumericRegion(
         buffer: ByteBuffer,
         maxBytes: Int,

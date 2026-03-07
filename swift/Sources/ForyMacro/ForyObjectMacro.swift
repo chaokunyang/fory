@@ -71,6 +71,10 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
                 accessPrefix: accessPrefix
             )
         )
+        let directPrimitiveDecls = buildDirectPrimitiveSerializeDecls(
+            sortedFields: sortedFields,
+            accessPrefix: accessPrefix
+        )
 
         return [
             staticTypeIDDecl,
@@ -82,7 +86,7 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
             readWrapperDecl,
             writeDecl,
             readDecl
-        ].compactMap { $0 }
+        ].compactMap { $0 } + directPrimitiveDecls
     }
 
     public static func expansion(
@@ -1354,6 +1358,83 @@ private func primitiveUnsafeWriteMethod(for field: ParsedField) -> String? {
     default:
         return nil
     }
+}
+
+private func isDirectPrimitiveSerializeType(_ fields: [ParsedField]) -> Bool {
+    guard !fields.isEmpty else {
+        return false
+    }
+    return leadingPrimitiveFastPathFields(fields).count == fields.count
+}
+
+private func buildDirectPrimitiveSerializeDecls(
+    sortedFields: [ParsedField],
+    accessPrefix: String
+) -> [DeclSyntax] {
+    guard isDirectPrimitiveSerializeType(sortedFields) else {
+        return []
+    }
+    let locals = sortedFields.map { field in
+        "let __\(field.name) = self.\(field.name)"
+    }.joined(separator: "\n        ")
+    let byteTerms = sortedFields.compactMap { field in
+        primitiveEncodedByteWidthExpr(for: field, valueExpr: "__\(field.name)")
+    }
+    guard !byteTerms.isEmpty else {
+        return []
+    }
+    let sizeExpr = byteTerms.joined(separator: " + ")
+    let fixedFields = leadingFixedPrimitiveFields(sortedFields)
+    let fixedPrefixBytes = primitiveFixedPrefixBytes(fixedFields)
+    let remainingFields = Array(sortedFields.dropFirst(fixedFields.count))
+
+    var fixedOffset = 0
+    let fixedWrites = fixedFields.compactMap { field -> String? in
+        guard let method = primitiveUnsafeWriteMethod(for: field) else {
+            return nil
+        }
+        let line = "_ = UnsafeUtil.\(method)(__\(field.name), to: __base, index: __start + \(fixedOffset))"
+        fixedOffset += primitiveFixedByteWidth(for: field) ?? 0
+        return line
+    }.joined(separator: "\n        ")
+    let remainingWrites = remainingFields.compactMap { field -> String? in
+        guard let method = primitiveUnsafeWriteMethod(for: field) else {
+            return nil
+        }
+        return "__writerIndex = UnsafeUtil.\(method)(__\(field.name), to: __base, index: __writerIndex)"
+    }.joined(separator: "\n        ")
+
+    var writeSections: [String] = [locals, "let __start = index"]
+    if !fixedWrites.isEmpty {
+        writeSections.append(fixedWrites)
+    }
+    if !remainingWrites.isEmpty {
+        writeSections.append("var __writerIndex = __start + \(fixedPrefixBytes)")
+        writeSections.append(remainingWrites)
+        writeSections.append("index = __writerIndex")
+    } else {
+        writeSections.append("index = __start + \(fixedPrefixBytes)")
+    }
+    let writeBody = writeSections.joined(separator: "\n        ")
+
+    let sizeDecl: DeclSyntax = DeclSyntax(
+        stringLiteral: """
+        @inline(__always)
+        \(accessPrefix)var _foryDirectPrimitiveDataSize: Int? {
+            \(locals)
+            return \(sizeExpr)
+        }
+        """
+    )
+    let writeDecl: DeclSyntax = DeclSyntax(
+        stringLiteral: """
+        @inline(__always)
+        \(accessPrefix)func _foryWriteDirectPrimitiveData(to __base: UnsafeMutablePointer<UInt8>, index: inout Int) {
+            \(writeBody)
+        }
+        """
+    )
+    return [sizeDecl, writeDecl]
 }
 
 private func primitiveUnsafeReadMethod(for field: ParsedField) -> String? {

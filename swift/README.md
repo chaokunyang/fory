@@ -76,6 +76,16 @@ let output2: User = try fory.deserialize(from: buffer)
 assert(output2 == input)
 ```
 
+### 4. Threading
+
+`Fory` is the fastest option for single-threaded reuse. Keep one instance per thread.
+
+If one configured runtime needs to be shared across threads, use `ThreadSafeFory`:
+
+```swift
+let sharedFory = ThreadSafeFory(xlang: true, trackRef: false, compatible: true)
+```
+
 ## 📚 Core Features
 
 ### 1. Object Graph Serialization

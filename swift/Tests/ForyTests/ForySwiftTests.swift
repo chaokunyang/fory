@@ -147,6 +147,23 @@ struct AnyFieldHolder {
     var int32Map: [Int32: Any]
 }
 
+private final class ThreadSafeFailures: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+
+    func append(_ value: String) {
+        lock.lock()
+        values.append(value)
+        lock.unlock()
+    }
+
+    func snapshot() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
+    }
+}
+
 @Test
 func primitiveRoundTrip() throws {
     let fory = Fory()
@@ -233,6 +250,63 @@ func namedInitializerBuildsConfig() {
     #expect(configInit.config.trackRef == false)
     #expect(configInit.config.compatible == true)
     #expect(configInit.config.maxDepth == 9)
+}
+
+@Test
+func threadSafeInitializerBuildsConfig() {
+    let defaultConfig = ThreadSafeFory()
+    #expect(defaultConfig.config.xlang == true)
+    #expect(defaultConfig.config.trackRef == false)
+    #expect(defaultConfig.config.compatible == false)
+    #expect(defaultConfig.config.maxDepth == 5)
+
+    let explicitConfig = ThreadSafeFory(xlang: false, trackRef: true, compatible: true, maxDepth: 7)
+    #expect(explicitConfig.config.xlang == false)
+    #expect(explicitConfig.config.trackRef == true)
+    #expect(explicitConfig.config.compatible == true)
+    #expect(explicitConfig.config.maxDepth == 7)
+
+    let configInit = ThreadSafeFory(config: .init(xlang: false, trackRef: false, compatible: true, maxDepth: 9))
+    #expect(configInit.config.xlang == false)
+    #expect(configInit.config.trackRef == false)
+    #expect(configInit.config.compatible == true)
+    #expect(configInit.config.maxDepth == 9)
+}
+
+@Test
+func threadSafeForyConcurrentRoundTrip() {
+    let fory = ThreadSafeFory(xlang: false, trackRef: false, compatible: false)
+    fory.register(Address.self, id: 100)
+    fory.register(Person.self, id: 101)
+    let failures = ThreadSafeFailures()
+
+    DispatchQueue.concurrentPerform(iterations: 64) { iteration in
+        let person = Person(
+            id: Int64(iteration),
+            name: "user-\(iteration)",
+            nickname: iteration.isMultiple(of: 2) ? "nick-\(iteration)" : nil,
+            scores: [Int32(iteration), Int32(iteration + 1), Int32(iteration + 2)],
+            tags: ["swift", "thread-\(iteration % 4)"],
+            addresses: [Address(street: "Road \(iteration)", zip: Int32(10_000 + iteration))],
+            metadata: [Int8(iteration % 8): Int32(iteration * 3)]
+        )
+
+        do {
+            let data = try fory.serialize(person)
+            let decoded: Person = try fory.deserialize(data)
+            if decoded != person {
+                failures.append("mismatch at iteration \(iteration)")
+            }
+        } catch {
+            failures.append("iteration \(iteration) threw \(error)")
+        }
+    }
+
+    let failureMessages = failures.snapshot()
+    #expect(
+        failureMessages.isEmpty,
+        "ThreadSafeFory concurrent round-trip failures: \(failureMessages.joined(separator: ", "))"
+    )
 }
 
 @Test

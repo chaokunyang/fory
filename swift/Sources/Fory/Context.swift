@@ -137,6 +137,12 @@ private struct CompatibleRootTypeInfoEntry {
     let requiresTypeMetaState: Bool
 }
 
+private struct CompatibleTypeMetaEntry {
+    let typeMeta: TypeMeta
+    let matchesLocalSchema: Bool
+    let localHasUserTypeFields: Bool
+}
+
 private struct MetaStringCacheKey: Hashable {
     let encoding: MetaStringEncoding
     let bytes: [UInt8]
@@ -360,22 +366,6 @@ private struct PendingRefSlot {
 }
 
 public final class ReadContext {
-    public final class CompatibleTypeMetaState: @unchecked Sendable {
-        public let typeMeta: TypeMeta
-        public let matchesLocalSchema: Bool
-        public let localHasUserTypeFields: Bool
-
-        init(
-            typeMeta: TypeMeta,
-            matchesLocalSchema: Bool,
-            localHasUserTypeFields: Bool
-        ) {
-            self.typeMeta = typeMeta
-            self.matchesLocalSchema = matchesLocalSchema
-            self.localHasUserTypeFields = localHasUserTypeFields
-        }
-    }
-
     public let buffer: ByteBuffer
     let typeResolver: TypeResolver
     public let trackRef: Bool
@@ -392,9 +382,9 @@ public final class ReadContext {
     private var dynamicAnyDepth = 0
 
     private var pendingRefStack: [PendingRefSlot] = []
-    private var pendingCompatibleTypeMeta: [ObjectIdentifier: CompatibleTypeMetaState] = [:]
+    private var pendingCompatibleTypeMeta: [ObjectIdentifier: CompatibleTypeMetaEntry] = [:]
     private var pendingCompatibleTypeMetaTypeID: ObjectIdentifier?
-    private var pendingCompatibleTypeMetaValue: CompatibleTypeMetaState?
+    private var pendingCompatibleTypeMetaValue: CompatibleTypeMetaEntry?
     private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     private var utf8StringInternCache: [UInt64: [InternedUTF8StringEntry]] = [:]
     private var utf8StringInternEntryCount = 0
@@ -408,7 +398,7 @@ public final class ReadContext {
     private var lastValidatedCompatibleHeaderHash: UInt64 = 0
     private var cachedCompatibleRootTypeInfoTypeID: ObjectIdentifier?
     private var cachedCompatibleRootTypeInfoEntry: CompatibleRootTypeInfoEntry?
-    private var cachedCompatibleRootTypeMeta: CompatibleTypeMetaState?
+    private var cachedCompatibleRootTypeMeta: CompatibleTypeMetaEntry?
 
     convenience init(
         buffer: ByteBuffer,
@@ -606,7 +596,7 @@ public final class ReadContext {
         }
         cachedCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
         let typeMetaEntry = remoteTypeMeta.map { typeMeta in
-            CompatibleTypeMetaState(
+            CompatibleTypeMetaEntry(
                 typeMeta: typeMeta,
                 matchesLocalSchema: pendingCompatibleTypeMetaMatchesLocalSchema(for: type),
                 localHasUserTypeFields: pendingCompatibleTypeMetaHasUserTypeFields(for: type)
@@ -716,7 +706,7 @@ public final class ReadContext {
         }
         setPendingCompatibleTypeMeta(
             typeID: typeID,
-            value: CompatibleTypeMetaState(
+            value: CompatibleTypeMetaEntry(
                 typeMeta: typeMeta,
                 matchesLocalSchema: matchesLocalSchema,
                 localHasUserTypeFields: localHasUserTypeFields
@@ -724,19 +714,35 @@ public final class ReadContext {
         )
     }
 
+    // swiftlint:disable large_tuple
     @inline(__always)
-    public func compatibleTypeMetaState<T: Serializer>(
+    public func compatibleTypeMeta<T: Serializer>(
         for type: T.Type
-    ) -> CompatibleTypeMetaState? {
+    ) -> (typeMeta: TypeMeta, matchesLocalSchema: Bool, localHasUserTypeFields: Bool)? {
         let typeID = ObjectIdentifier(type)
         if pendingCompatibleTypeMetaTypeID == typeID {
-            return pendingCompatibleTypeMetaValue
+            guard let entry = pendingCompatibleTypeMetaValue else {
+                return nil
+            }
+            return (
+                typeMeta: entry.typeMeta,
+                matchesLocalSchema: entry.matchesLocalSchema,
+                localHasUserTypeFields: entry.localHasUserTypeFields
+            )
         }
-        return pendingCompatibleTypeMeta[typeID]
+        guard let entry = pendingCompatibleTypeMeta[typeID] else {
+            return nil
+        }
+        return (
+            typeMeta: entry.typeMeta,
+            matchesLocalSchema: entry.matchesLocalSchema,
+            localHasUserTypeFields: entry.localHasUserTypeFields
+        )
     }
+    // swiftlint:enable large_tuple
 
     @inline(__always)
-    private func setPendingCompatibleTypeMeta(typeID: ObjectIdentifier, value: CompatibleTypeMetaState) {
+    private func setPendingCompatibleTypeMeta(typeID: ObjectIdentifier, value: CompatibleTypeMetaEntry) {
         if pendingCompatibleTypeMetaTypeID == typeID {
             pendingCompatibleTypeMetaValue = value
             return

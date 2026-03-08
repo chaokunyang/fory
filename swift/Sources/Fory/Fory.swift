@@ -581,7 +581,7 @@ public final class Fory {
                         context.cacheCompatibleRootTypeInfo(
                             for: T.self,
                             bytes: context.buffer.copyBytes(start: typeInfoStart, end: typeInfoEnd),
-                            remoteTypeMeta: context.compatibleTypeMetaState(for: T.self)?.typeMeta
+                            remoteTypeMeta: context.compatibleTypeMeta(for: T.self)?.typeMeta
                         )
                     }
                 }

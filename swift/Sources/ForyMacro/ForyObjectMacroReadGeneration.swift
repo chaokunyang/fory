@@ -49,7 +49,7 @@ private func buildClassReadDataDecl(
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleState = context.compatibleTypeMetaState(for: Self.self) {
+        if context.compatible, let compatibleState = context.compatibleTypeMeta(for: Self.self) {
             if compatibleState.matchesLocalSchema {
                 if !compatibleState.localHasUserTypeFields {
                     let value = Self.init()
@@ -87,7 +87,7 @@ private func buildEmptyStructReadDataDecl(accessPrefix: String) -> String {
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleState = context.compatibleTypeMetaState(for: Self.self) {
+        if context.compatible, let compatibleState = context.compatibleTypeMeta(for: Self.self) {
             if compatibleState.matchesLocalSchema {
                 return Self()
             }
@@ -128,7 +128,7 @@ private func buildStructReadDataDecl(
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleState = context.compatibleTypeMetaState(for: Self.self) {
+        if context.compatible, let compatibleState = context.compatibleTypeMeta(for: Self.self) {
                 if compatibleState.matchesLocalSchema {
                     if !compatibleState.localHasUserTypeFields {
                         \(schemaReadBody)

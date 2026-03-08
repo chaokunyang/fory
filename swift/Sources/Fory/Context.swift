@@ -242,14 +242,6 @@ final class MetaStringReadState {
     }
 }
 
-struct DynamicTypeInfo {
-    let wireTypeID: TypeId
-    let userTypeID: UInt32?
-    let namespace: MetaString?
-    let typeName: MetaString?
-    let compatibleTypeMeta: TypeMeta?
-}
-
 public final class WriteContext {
     public let buffer: ByteBuffer
     let typeResolver: TypeResolver
@@ -536,7 +528,7 @@ public final class ReadContext {
     private var compatibleFieldsCache: [CompatibleFieldsCacheKey: CompatibleFields] = [:]
     private var lastCompatibleFieldsCacheKey: CompatibleFieldsCacheKey?
     private var lastCompatibleFieldsCacheValue: CompatibleFields?
-    private var pendingDynamicTypeInfo: [ObjectIdentifier: DynamicTypeInfo] = [:]
+    private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     private var canonicalReferenceCache: [CanonicalReferenceSignature: [CanonicalReferenceEntry]] = [:]
     private var utf8StringInternCache: [UInt64: [InternedUTF8StringEntry]] = [:]
     private var utf8StringInternEntryCount = 0
@@ -1115,16 +1107,16 @@ public final class ReadContext {
         return result
     }
 
-    func setDynamicTypeInfo<T: Serializer>(for type: T.Type, _ typeInfo: DynamicTypeInfo) {
-        pendingDynamicTypeInfo[ObjectIdentifier(type)] = typeInfo
+    func setPendingTypeInfo<T: Serializer>(for type: T.Type, _ typeInfo: TypeInfo) {
+        pendingTypeInfo[ObjectIdentifier(type)] = typeInfo
     }
 
-    func dynamicTypeInfo<T: Serializer>(for type: T.Type) -> DynamicTypeInfo? {
-        pendingDynamicTypeInfo[ObjectIdentifier(type)]
+    func pendingTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
+        pendingTypeInfo[ObjectIdentifier(type)]
     }
 
-    func clearDynamicTypeInfo<T: Serializer>(for type: T.Type) {
-        pendingDynamicTypeInfo.removeValue(forKey: ObjectIdentifier(type))
+    func clearPendingTypeInfo<T: Serializer>(for type: T.Type) {
+        pendingTypeInfo.removeValue(forKey: ObjectIdentifier(type))
     }
 
     @inline(__always)
@@ -1215,8 +1207,8 @@ public final class ReadContext {
                 pendingCompatibleFields.removeAll(keepingCapacity: true)
             }
         }
-        if !pendingDynamicTypeInfo.isEmpty {
-            pendingDynamicTypeInfo.removeAll(keepingCapacity: true)
+        if !pendingTypeInfo.isEmpty {
+            pendingTypeInfo.removeAll(keepingCapacity: true)
         }
         if trackRef, !canonicalReferenceCache.isEmpty {
             canonicalReferenceCache.removeAll(keepingCapacity: true)

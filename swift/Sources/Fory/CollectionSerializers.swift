@@ -630,7 +630,7 @@ extension Array: Serializer where Element: Serializer {
                 }
             }
             if !declared {
-                context.clearDynamicTypeInfo(for: Element.self)
+                context.clearPendingTypeInfo(for: Element.self)
             }
             return values
         }
@@ -656,7 +656,7 @@ extension Array: Serializer where Element: Serializer {
                 }
             }
             if !declared {
-                context.clearDynamicTypeInfo(for: Element.self)
+                context.clearPendingTypeInfo(for: Element.self)
             }
             return values
         }
@@ -676,7 +676,7 @@ extension Array: Serializer where Element: Serializer {
             }
         }
         if !declared {
-            context.clearDynamicTypeInfo(for: Element.self)
+            context.clearPendingTypeInfo(for: Element.self)
         }
         return values
     }
@@ -1010,10 +1010,10 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                     }
                 }
                 if !keyDeclared {
-                    context.clearDynamicTypeInfo(for: Key.self)
+                    context.clearPendingTypeInfo(for: Key.self)
                 }
                 if !valueDeclared {
-                    context.clearDynamicTypeInfo(for: Value.self)
+                    context.clearPendingTypeInfo(for: Value.self)
                 }
                 dynamicReadCount += chunkSize
             }

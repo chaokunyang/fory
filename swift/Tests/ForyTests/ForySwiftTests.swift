@@ -493,7 +493,7 @@ func topLevelAnyRoundTrip() throws {
 }
 
 @Test
-func mixedDynamicRegistrationModesCanDecodeByID() throws {
+func dynamicUserTypesDecodeByID() throws {
     let fory = Fory()
     fory.register(Address.self, id: 600)
     try fory.register(Person.self, name: "demo.person")

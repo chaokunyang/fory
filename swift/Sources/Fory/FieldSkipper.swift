@@ -34,13 +34,13 @@ public extension ReadContext {
 
     private func readSkippedFieldValue(
         fieldType: TypeMetaFieldType,
-        runtimeTypeInfo: DynamicTypeInfo? = nil,
+        typeInfo: TypeInfo? = nil,
         readTypeInfo: Bool
     ) throws -> Any? {
         let refMode = RefMode.from(nullable: fieldType.nullable, trackRef: fieldType.trackRef)
         return try readSkippedValue(
             fieldType: fieldType,
-            runtimeTypeInfo: runtimeTypeInfo,
+            typeInfo: typeInfo,
             refMode: refMode,
             readTypeInfo: readTypeInfo
         )
@@ -48,7 +48,7 @@ public extension ReadContext {
 
     private func readSkippedValue(
         fieldType: TypeMetaFieldType,
-        runtimeTypeInfo: DynamicTypeInfo?,
+        typeInfo: TypeInfo?,
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> Any? {
@@ -56,7 +56,7 @@ public extension ReadContext {
         case .none:
             return try readSkippedFieldPayload(
                 fieldType: fieldType,
-                runtimeTypeInfo: runtimeTypeInfo,
+                typeInfo: typeInfo,
                 readTypeInfo: readTypeInfo
             )
         case .nullOnly:
@@ -69,7 +69,7 @@ public extension ReadContext {
             }
             return try readSkippedFieldPayload(
                 fieldType: fieldType,
-                runtimeTypeInfo: runtimeTypeInfo,
+                typeInfo: typeInfo,
                 readTypeInfo: readTypeInfo
             )
         case .tracking:
@@ -88,7 +88,7 @@ public extension ReadContext {
                 let refID = refReader.reserveRefID()
                 let value = try readSkippedFieldPayload(
                     fieldType: fieldType,
-                    runtimeTypeInfo: runtimeTypeInfo,
+                    typeInfo: typeInfo,
                     readTypeInfo: readTypeInfo
                 )
                 refReader.storeRef(value, at: refID)
@@ -96,7 +96,7 @@ public extension ReadContext {
             case .notNullValue:
                 return try readSkippedFieldPayload(
                     fieldType: fieldType,
-                    runtimeTypeInfo: runtimeTypeInfo,
+                    typeInfo: typeInfo,
                     readTypeInfo: readTypeInfo
                 )
             }
@@ -105,15 +105,15 @@ public extension ReadContext {
 
     private func readSkippedFieldPayload(
         fieldType: TypeMetaFieldType,
-        runtimeTypeInfo: DynamicTypeInfo?,
+        typeInfo: TypeInfo?,
         readTypeInfo: Bool
     ) throws -> Any {
-        if let runtimeTypeInfo {
-            return try typeResolver.readDynamicValue(typeInfo: runtimeTypeInfo, context: self)
+        if let typeInfo {
+            return try typeResolver.readAnyValue(typeInfo: typeInfo, context: self)
         }
         if readTypeInfo {
-            let typeInfo = try typeResolver.readDynamicTypeInfo(context: self)
-            return try typeResolver.readDynamicValue(typeInfo: typeInfo, context: self)
+            let typeInfo = try typeResolver.readAnyTypeInfo(context: self)
+            return try typeResolver.readAnyValue(typeInfo: typeInfo, context: self)
         }
 
         guard let resolvedTypeID = TypeId(rawValue: fieldType.typeID) else {
@@ -227,9 +227,9 @@ public extension ReadContext {
         let declared = (header & 0b0000_0100) != 0
         let sameType = (header & 0b0000_1000) != 0
 
-        var runtimeTypeInfo: DynamicTypeInfo?
+        var typeInfo: TypeInfo?
         if sameType, !declared {
-            runtimeTypeInfo = try typeResolver.readDynamicTypeInfo(context: self)
+            typeInfo = try typeResolver.readAnyTypeInfo(context: self)
         }
 
         for _ in 0..<length {
@@ -237,7 +237,7 @@ public extension ReadContext {
                 if trackRef {
                     _ = try readSkippedValue(
                         fieldType: elementFieldType,
-                        runtimeTypeInfo: runtimeTypeInfo,
+                        typeInfo: typeInfo,
                         refMode: .tracking,
                         readTypeInfo: false
                     )
@@ -251,13 +251,13 @@ public extension ReadContext {
                     }
                     _ = try readSkippedFieldPayload(
                         fieldType: elementFieldType,
-                        runtimeTypeInfo: runtimeTypeInfo,
+                        typeInfo: typeInfo,
                         readTypeInfo: false
                     )
                 } else {
                     _ = try readSkippedFieldPayload(
                         fieldType: elementFieldType,
-                        runtimeTypeInfo: runtimeTypeInfo,
+                        typeInfo: typeInfo,
                         readTypeInfo: false
                     )
                 }
@@ -267,7 +267,7 @@ public extension ReadContext {
             if trackRef {
                 _ = try readSkippedValue(
                     fieldType: elementFieldType,
-                    runtimeTypeInfo: nil,
+                    typeInfo: nil,
                     refMode: .tracking,
                     readTypeInfo: true
                 )
@@ -281,13 +281,13 @@ public extension ReadContext {
                 }
                 _ = try readSkippedFieldPayload(
                     fieldType: elementFieldType,
-                    runtimeTypeInfo: nil,
+                    typeInfo: nil,
                     readTypeInfo: true
                 )
             } else {
                 _ = try readSkippedFieldPayload(
                     fieldType: elementFieldType,
-                    runtimeTypeInfo: nil,
+                    typeInfo: nil,
                     readTypeInfo: true
                 )
             }
@@ -334,10 +334,10 @@ public extension ReadContext {
             }
 
             if keyNull {
-                let valueRuntimeType = valueDeclared ? nil : try typeResolver.readDynamicTypeInfo(context: self)
+                let valueTypeInfo = valueDeclared ? nil : try typeResolver.readAnyTypeInfo(context: self)
                 _ = try readSkippedValue(
                     fieldType: valueType,
-                    runtimeTypeInfo: valueRuntimeType,
+                    typeInfo: valueTypeInfo,
                     refMode: trackValueRef ? .tracking : .none,
                     readTypeInfo: false
                 )
@@ -346,10 +346,10 @@ public extension ReadContext {
             }
 
             if valueNull {
-                let keyRuntimeType = keyDeclared ? nil : try typeResolver.readDynamicTypeInfo(context: self)
+                let keyTypeInfo = keyDeclared ? nil : try typeResolver.readAnyTypeInfo(context: self)
                 _ = try readSkippedValue(
                     fieldType: keyType,
-                    runtimeTypeInfo: keyRuntimeType,
+                    typeInfo: keyTypeInfo,
                     refMode: trackKeyRef ? .tracking : .none,
                     readTypeInfo: false
                 )
@@ -365,19 +365,19 @@ public extension ReadContext {
                 throw ForyError.invalidData("map chunk size exceeds remaining entries")
             }
 
-            let keyRuntimeType = keyDeclared ? nil : try typeResolver.readDynamicTypeInfo(context: self)
-            let valueRuntimeType = valueDeclared ? nil : try typeResolver.readDynamicTypeInfo(context: self)
+            let keyTypeInfo = keyDeclared ? nil : try typeResolver.readAnyTypeInfo(context: self)
+            let valueTypeInfo = valueDeclared ? nil : try typeResolver.readAnyTypeInfo(context: self)
 
             for _ in 0..<chunkSize {
                 _ = try readSkippedValue(
                     fieldType: keyType,
-                    runtimeTypeInfo: keyRuntimeType,
+                    typeInfo: keyTypeInfo,
                     refMode: trackKeyRef ? .tracking : .none,
                     readTypeInfo: false
                 )
                 _ = try readSkippedValue(
                     fieldType: valueType,
-                    runtimeTypeInfo: valueRuntimeType,
+                    typeInfo: valueTypeInfo,
                     refMode: trackValueRef ? .tracking : .none,
                     readTypeInfo: false
                 )

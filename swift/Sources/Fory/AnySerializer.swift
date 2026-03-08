@@ -57,13 +57,13 @@ extension AnyHashable: Serializer {
     }
 
     public static func foryReadData(_ context: ReadContext) throws -> AnyHashable {
-        guard let typeInfo = context.dynamicTypeInfo(for: Self.self) else {
+        guard let typeInfo = context.pendingTypeInfo(for: Self.self) else {
             throw ForyError.invalidData("dynamic AnyHashable key requires type info")
         }
-        if typeInfo.wireTypeID == .none {
+        if typeInfo.typeID == .none {
             throw ForyError.invalidData("dynamic AnyHashable key cannot be null")
         }
-        let decoded = try context.typeResolver.readDynamicValue(typeInfo: typeInfo, context: context)
+        let decoded = try context.typeResolver.readAnyValue(typeInfo: typeInfo, context: context)
         return try toAnyHashableKey(decoded)
     }
 
@@ -77,8 +77,8 @@ extension AnyHashable: Serializer {
     }
 
     public static func foryReadTypeInfo(_ context: ReadContext) throws {
-        let typeInfo = try context.typeResolver.readDynamicTypeInfo(context: context)
-        context.setDynamicTypeInfo(for: Self.self, typeInfo)
+        let typeInfo = try context.typeResolver.readAnyTypeInfo(context: context)
+        context.setPendingTypeInfo(for: Self.self, typeInfo)
     }
 
     public func foryWrite(
@@ -161,13 +161,13 @@ private struct DynamicAnyValue: Serializer {
     }
 
     static func foryReadData(_ context: ReadContext) throws -> DynamicAnyValue {
-        guard let typeInfo = context.dynamicTypeInfo(for: Self.self) else {
+        guard let typeInfo = context.pendingTypeInfo(for: Self.self) else {
             throw ForyError.invalidData("dynamic Any value requires type info")
         }
-        if typeInfo.wireTypeID == .none {
+        if typeInfo.typeID == .none {
             return .foryDefault()
         }
-        return DynamicAnyValue(try context.typeResolver.readDynamicValue(typeInfo: typeInfo, context: context))
+        return DynamicAnyValue(try context.typeResolver.readAnyValue(typeInfo: typeInfo, context: context))
     }
 
     static func foryWriteTypeInfo(_ context: WriteContext) throws {
@@ -184,8 +184,8 @@ private struct DynamicAnyValue: Serializer {
     }
 
     static func foryReadTypeInfo(_ context: ReadContext) throws {
-        let typeInfo = try context.typeResolver.readDynamicTypeInfo(context: context)
-        context.setDynamicTypeInfo(for: Self.self, typeInfo)
+        let typeInfo = try context.typeResolver.readAnyTypeInfo(context: context)
+        context.setPendingTypeInfo(for: Self.self, typeInfo)
     }
 
     func foryWrite(

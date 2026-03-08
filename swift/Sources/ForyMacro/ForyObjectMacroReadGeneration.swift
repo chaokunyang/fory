@@ -229,9 +229,9 @@ private func buildStructCompatibleDefaults(_ fields: [ParsedField]) -> String {
         .sorted(by: { $0.originalIndex < $1.originalIndex })
         .map { field in
             if field.dynamicAnyCodec != nil {
-                return "var __\(field.name): \(field.typeText) = \(dynamicAnyDefaultExpr(typeText: field.typeText))"
+                return "var __\(field.name): \(field.typeText) = \(fieldDefaultExpr(field))"
             }
-            return "var __\(field.name) = \(field.typeText).foryDefault()"
+            return "var __\(field.name) = \(fieldDefaultExpr(field))"
         }
         .joined(separator: "\n                ")
 }

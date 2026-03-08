@@ -1000,10 +1000,7 @@ private func buildDefaultDecl(isClass: Bool, fields: [ParsedField], accessPrefix
     let args = fields
         .sorted(by: { $0.originalIndex < $1.originalIndex })
         .map { field in
-            if field.dynamicAnyCodec != nil {
-                return "\(field.name): \(dynamicAnyDefaultExpr(typeText: field.typeText))"
-            }
-            return "\(field.name): \(field.typeText).foryDefault()"
+            "\(field.name): \(fieldDefaultExpr(field))"
         }
         .joined(separator: ",\n            ")
 
@@ -1360,6 +1357,13 @@ func dynamicAnyCastType(_ codec: DynamicAnyCodecKind) -> String {
 
 func dynamicAnyUsesContextTrackRef(_ codec: DynamicAnyCodecKind) -> Bool {
     codec == .anyValue
+}
+
+func fieldDefaultExpr(_ field: ParsedField) -> String {
+    if field.dynamicAnyCodec != nil {
+        return dynamicAnyDefaultExpr(typeText: field.typeText)
+    }
+    return "\(field.typeText).foryDefault()"
 }
 
 private func buildCompatibleTypeMetaFieldTypeExpression(

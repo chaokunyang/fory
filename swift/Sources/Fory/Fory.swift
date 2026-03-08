@@ -130,7 +130,7 @@ public final class Fory {
             maxBinarySize: maxBinarySize,
             maxDepth: maxDepth
         )
-        self.typeResolver = TypeResolver()
+        self.typeResolver = TypeResolver(trackRef: self.config.trackRef)
         self.runtimeContext = ForyRuntimeContext(typeResolver: typeResolver, config: self.config)
     }
 

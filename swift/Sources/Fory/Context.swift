@@ -263,18 +263,13 @@ public final class WriteContext {
     private var compatibleTypeDefStateUsed = false
     private var metaStringWriteStateUsed = false
     private var dynamicAnyDepth = 0
-    private var lastRegisteredTypeInfoTypeID: ObjectIdentifier?
-    private var lastRegisteredTypeInfo: RegisteredTypeInfo?
-    private var lastResolvedWireTypeTypeID: ObjectIdentifier?
-    private var lastResolvedWireTypeID: TypeId?
-    private var lastCompatibleTypeMetaEncodingTypeID: ObjectIdentifier?
-    private var lastCompatibleTypeMetaEncodingWireTypeID: TypeId?
-    private var lastCompatibleTypeMetaEncoding: CompatibleTypeMetaEncoding?
+    private var lastTypeInfoTypeID: ObjectIdentifier?
+    private var lastTypeInfo: TypeInfo?
     private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
     private var lastCompatibleRootTypeInfoBytes: [UInt8]?
     private var lastRootTypeInfoHasUserFields = true
-    private var lastFirstCompatibleTypeMetaTypeID: ObjectIdentifier?
-    private var lastFirstTypeMetaHasUserFields = false
+    private var lastFirstCompatibleTypeDefTypeID: ObjectIdentifier?
+    private var lastFirstTypeDefHasUserFields = false
     private var reusableOutputData = Data()
 
     convenience init(
@@ -333,49 +328,15 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func requireRegisteredTypeInfo<T: Serializer>(for type: T.Type) throws -> RegisteredTypeInfo {
+    func typeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo {
         let typeID = ObjectIdentifier(type)
-        if lastRegisteredTypeInfoTypeID == typeID, let cached = lastRegisteredTypeInfo {
+        if lastTypeInfoTypeID == typeID, let cached = lastTypeInfo {
             return cached
         }
-        let info = try typeResolver.requireRegisteredTypeInfo(for: type)
-        lastRegisteredTypeInfoTypeID = typeID
-        lastRegisteredTypeInfo = info
+        let info = try typeResolver.requireTypeInfo(for: type)
+        lastTypeInfoTypeID = typeID
+        lastTypeInfo = info
         return info
-    }
-
-    @inline(__always)
-    func resolvedWireTypeID(for typeID: ObjectIdentifier) -> TypeId? {
-        if lastResolvedWireTypeTypeID == typeID {
-            return lastResolvedWireTypeID
-        }
-        return nil
-    }
-
-    @inline(__always)
-    func cacheResolvedWireTypeID(_ wireTypeID: TypeId, for typeID: ObjectIdentifier) {
-        lastResolvedWireTypeTypeID = typeID
-        lastResolvedWireTypeID = wireTypeID
-    }
-
-    @inline(__always)
-    func compatibleTypeMetaEncoding(for typeID: ObjectIdentifier, wireTypeID: TypeId) -> CompatibleTypeMetaEncoding? {
-        if lastCompatibleTypeMetaEncodingTypeID == typeID,
-           lastCompatibleTypeMetaEncodingWireTypeID == wireTypeID {
-            return lastCompatibleTypeMetaEncoding
-        }
-        return nil
-    }
-
-    @inline(__always)
-    func cacheCompatibleTypeMetaEncoding(
-        _ encoding: CompatibleTypeMetaEncoding,
-        for typeID: ObjectIdentifier,
-        wireTypeID: TypeId
-    ) {
-        lastCompatibleTypeMetaEncodingTypeID = typeID
-        lastCompatibleTypeMetaEncodingWireTypeID = wireTypeID
-        lastCompatibleTypeMetaEncoding = encoding
     }
 
     @inline(__always)
@@ -429,8 +390,8 @@ public final class WriteContext {
         let typeID = ObjectIdentifier(type)
         lastCompatibleRootTypeInfoTypeID = typeID
         lastCompatibleRootTypeInfoBytes = bytes
-        if lastFirstCompatibleTypeMetaTypeID == typeID {
-            lastRootTypeInfoHasUserFields = lastFirstTypeMetaHasUserFields
+        if lastFirstCompatibleTypeDefTypeID == typeID {
+            lastRootTypeInfoHasUserFields = lastFirstTypeDefHasUserFields
         } else {
             lastRootTypeInfoHasUserFields = true
         }
@@ -443,15 +404,16 @@ public final class WriteContext {
 
     func writeCompatibleTypeMeta<T: Serializer>(
         for type: T.Type,
-        encoding: CompatibleTypeMetaEncoding
+        typeDef: TypeDef
     ) {
         let typeID = ObjectIdentifier(type)
         if !compatibleTypeDefStateUsed {
             compatibleTypeDefStateUsed = true
             compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
-            lastFirstCompatibleTypeMetaTypeID = typeID
-            lastFirstTypeMetaHasUserFields = encoding.hasUserTypeFields
-            buffer.writeBytes(encoding.firstDefinitionBytes)
+            lastFirstCompatibleTypeDefTypeID = typeID
+            lastFirstTypeDefHasUserFields = typeDef.hasUserTypeFields
+            buffer.writeUInt8(0)
+            buffer.writeBytes(typeDef.bytes)
             return
         }
 
@@ -463,7 +425,7 @@ public final class WriteContext {
             } else {
                 buffer.writeVarUInt32(marker)
             }
-            buffer.writeBytes(encoding.bytes)
+            buffer.writeBytes(typeDef.bytes)
         } else {
             let marker = (assignment.index << 1) | 1
             if marker < 0x80 {
@@ -478,9 +440,9 @@ public final class WriteContext {
         if dynamicAnyDepth != 0 {
             dynamicAnyDepth = 0
         }
-        if lastFirstCompatibleTypeMetaTypeID != nil {
-            lastFirstCompatibleTypeMetaTypeID = nil
-            lastFirstTypeMetaHasUserFields = false
+        if lastFirstCompatibleTypeDefTypeID != nil {
+            lastFirstCompatibleTypeDefTypeID = nil
+            lastFirstTypeDefHasUserFields = false
         }
         if trackRef {
             refWriter.reset()
@@ -581,13 +543,8 @@ public final class ReadContext {
     private var utf8StringInternByteCount = 0
     private var lastCompatibleTypeMetaCacheHeader: UInt64?
     private var lastCompatibleTypeMetaCacheEntry: TypeMeta?
-    private var lastRegisteredTypeInfoTypeID: ObjectIdentifier?
-    private var lastRegisteredTypeInfo: RegisteredTypeInfo?
-    private var lastResolvedWireTypeTypeID: ObjectIdentifier?
-    private var lastResolvedWireTypeID: TypeId?
-    private var lastCompatibleTypeMetaEncodingTypeID: ObjectIdentifier?
-    private var lastCompatibleTypeMetaEncodingWireTypeID: TypeId?
-    private var lastCompatibleTypeMetaEncoding: CompatibleTypeMetaEncoding?
+    private var lastTypeInfoTypeID: ObjectIdentifier?
+    private var lastTypeInfo: TypeInfo?
     private var lastValidatedCompatibleTypeID: ObjectIdentifier?
     private var lastValidatedCompatibleWireTypeID: TypeId?
     private var lastValidatedCompatibleHeaderHash: UInt64 = 0
@@ -706,49 +663,15 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func requireRegisteredTypeInfo<T: Serializer>(for type: T.Type) throws -> RegisteredTypeInfo {
+    func typeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo {
         let typeID = ObjectIdentifier(type)
-        if lastRegisteredTypeInfoTypeID == typeID, let cached = lastRegisteredTypeInfo {
+        if lastTypeInfoTypeID == typeID, let cached = lastTypeInfo {
             return cached
         }
-        let info = try typeResolver.requireRegisteredTypeInfo(for: type)
-        lastRegisteredTypeInfoTypeID = typeID
-        lastRegisteredTypeInfo = info
+        let info = try typeResolver.requireTypeInfo(for: type)
+        lastTypeInfoTypeID = typeID
+        lastTypeInfo = info
         return info
-    }
-
-    @inline(__always)
-    func resolvedWireTypeID(for typeID: ObjectIdentifier) -> TypeId? {
-        if lastResolvedWireTypeTypeID == typeID {
-            return lastResolvedWireTypeID
-        }
-        return nil
-    }
-
-    @inline(__always)
-    func cacheResolvedWireTypeID(_ wireTypeID: TypeId, for typeID: ObjectIdentifier) {
-        lastResolvedWireTypeTypeID = typeID
-        lastResolvedWireTypeID = wireTypeID
-    }
-
-    @inline(__always)
-    func compatibleTypeMetaEncoding(for typeID: ObjectIdentifier, wireTypeID: TypeId) -> CompatibleTypeMetaEncoding? {
-        if lastCompatibleTypeMetaEncodingTypeID == typeID,
-           lastCompatibleTypeMetaEncodingWireTypeID == wireTypeID {
-            return lastCompatibleTypeMetaEncoding
-        }
-        return nil
-    }
-
-    @inline(__always)
-    func cacheCompatibleTypeMetaEncoding(
-        _ encoding: CompatibleTypeMetaEncoding,
-        for typeID: ObjectIdentifier,
-        wireTypeID: TypeId
-    ) {
-        lastCompatibleTypeMetaEncodingTypeID = typeID
-        lastCompatibleTypeMetaEncodingWireTypeID = wireTypeID
-        lastCompatibleTypeMetaEncoding = encoding
     }
 
     @inline(__always)

@@ -506,7 +506,7 @@ func mixedDynamicRegistrationModesCanDecodeByID() throws {
 
 @Test
 func duplicateNameRegistrationIsRejected() throws {
-    let resolver = TypeResolver()
+    let resolver = TypeResolver(trackRef: false)
     try resolver.register(Address.self, namespace: "demo", typeName: "entity")
 
     do {

@@ -130,11 +130,11 @@ private func typeDefHeaderHash(_ bytes: [UInt8]) throws -> UInt64 {
     return header >> 14
 }
 
-private func typeDefHasUserTypeFields(_ fields: [TypeMetaFieldInfo]) -> Bool {
+private func typeDefHasUserTypeFields(_ fields: [TypeMeta.FieldInfo]) -> Bool {
     fields.contains { typeDefFieldNeedsTypeInfo($0.fieldType) }
 }
 
-private func typeDefFieldNeedsTypeInfo(_ fieldType: TypeMetaFieldType) -> Bool {
+private func typeDefFieldNeedsTypeInfo(_ fieldType: TypeMeta.FieldType) -> Bool {
     if let typeID = TypeId(rawValue: fieldType.typeID),
        TypeId.needsTypeInfoForField(typeID) {
         return true
@@ -151,7 +151,7 @@ final class TypeInfo: @unchecked Sendable {
     let typeName: MetaString
     let compatibleTypeMeta: TypeMeta?
 
-    private let fields: [TypeMetaFieldInfo]
+    private let fields: [TypeMeta.FieldInfo]
     private let reader: (ReadContext) throws -> Any
     private let compatibleReader: (ReadContext, TypeMeta) throws -> Any
     private var typeDefByWireType: [TypeId: TypeDef] = [:]
@@ -164,7 +164,7 @@ final class TypeInfo: @unchecked Sendable {
         namespace: MetaString,
         typeName: MetaString,
         compatibleTypeMeta: TypeMeta? = nil,
-        fields: [TypeMetaFieldInfo],
+        fields: [TypeMeta.FieldInfo],
         reader: @escaping (ReadContext) throws -> Any,
         compatibleReader: @escaping (ReadContext, TypeMeta) throws -> Any
     ) {

@@ -48,135 +48,156 @@ public let fieldNameMetaStringEncodings: [MetaStringEncoding] = [
     .lowerUpperDigitSpecial
 ]
 
-public struct TypeMetaFieldType: Equatable, Sendable {
-    public var typeID: UInt32
-    public var nullable: Bool
-    public var trackRef: Bool
-    public var generics: [TypeMetaFieldType]
+public final class TypeMeta: Equatable, @unchecked Sendable {
+    public struct FieldType: Equatable, Sendable {
+        public var typeID: UInt32
+        public var nullable: Bool
+        public var trackRef: Bool
+        public var generics: [FieldType]
 
-    public init(
-        typeID: UInt32,
-        nullable: Bool,
-        trackRef: Bool = false,
-        generics: [TypeMetaFieldType] = []
-    ) {
-        self.typeID = typeID
-        self.nullable = nullable
-        self.trackRef = trackRef
-        self.generics = generics
+        public init(
+            typeID: UInt32,
+            nullable: Bool,
+            trackRef: Bool = false,
+            generics: [FieldType] = []
+        ) {
+            self.typeID = typeID
+            self.nullable = nullable
+            self.trackRef = trackRef
+            self.generics = generics
+        }
+
+        fileprivate func write(
+            _ buffer: ByteBuffer,
+            writeFlags: Bool,
+            nullableOverride: Bool? = nil
+        ) {
+            if writeFlags {
+                var header = typeID << 2
+                if nullableOverride ?? nullable {
+                    header |= 0b10
+                }
+                if trackRef {
+                    header |= 0b1
+                }
+                buffer.writeVarUInt32(header)
+            } else {
+                buffer.writeUInt8(UInt8(truncatingIfNeeded: typeID))
+            }
+
+            if typeID == TypeId.list.rawValue || typeID == TypeId.set.rawValue {
+                let element = generics.first ?? FieldType(typeID: TypeId.unknown.rawValue, nullable: true)
+                element.write(buffer, writeFlags: true, nullableOverride: element.nullable)
+            } else if typeID == TypeId.map.rawValue {
+                let key = generics.first ?? FieldType(typeID: TypeId.unknown.rawValue, nullable: true)
+                let value = generics.dropFirst().first ?? FieldType(typeID: TypeId.unknown.rawValue, nullable: true)
+                key.write(buffer, writeFlags: true, nullableOverride: key.nullable)
+                value.write(buffer, writeFlags: true, nullableOverride: value.nullable)
+            }
+        }
+
+        fileprivate static func read(
+            _ buffer: ByteBuffer,
+            readFlags: Bool,
+            nullable: Bool? = nil,
+            trackRef: Bool? = nil
+        ) throws -> FieldType {
+            let header: UInt32
+            if readFlags {
+                header = try buffer.readVarUInt32()
+            } else {
+                header = UInt32(try buffer.readUInt8())
+            }
+
+            let typeID: UInt32
+            let resolvedNullable: Bool
+            let resolvedTrackRef: Bool
+
+            if readFlags {
+                typeID = header >> 2
+                resolvedNullable = (header & 0b10) != 0
+                resolvedTrackRef = (header & 0b1) != 0
+            } else {
+                typeID = header
+                resolvedNullable = nullable ?? false
+                resolvedTrackRef = trackRef ?? false
+            }
+
+            if typeID == TypeId.list.rawValue || typeID == TypeId.set.rawValue {
+                let element = try read(buffer, readFlags: true)
+                return FieldType(
+                    typeID: typeID,
+                    nullable: resolvedNullable,
+                    trackRef: resolvedTrackRef,
+                    generics: [element]
+                )
+            }
+            if typeID == TypeId.map.rawValue {
+                let key = try read(buffer, readFlags: true)
+                let value = try read(buffer, readFlags: true)
+                return FieldType(
+                    typeID: typeID,
+                    nullable: resolvedNullable,
+                    trackRef: resolvedTrackRef,
+                    generics: [key, value]
+                )
+            }
+
+            return FieldType(
+                typeID: typeID,
+                nullable: resolvedNullable,
+                trackRef: resolvedTrackRef,
+                generics: []
+            )
+        }
     }
 
-    fileprivate func write(
-        _ buffer: ByteBuffer,
-        writeFlags: Bool,
-        nullableOverride: Bool? = nil
-    ) {
-        if writeFlags {
-            var header = typeID << 2
-            if nullableOverride ?? nullable {
-                header |= 0b10
-            }
-            if trackRef {
+    public struct FieldInfo: Equatable, Sendable {
+        public var fieldID: Int16?
+        public var fieldName: String
+        public var fieldType: FieldType
+
+        public init(fieldID: Int16?, fieldName: String, fieldType: FieldType) {
+            self.fieldID = fieldID
+            self.fieldName = fieldName
+            self.fieldType = fieldType
+        }
+
+        fileprivate func write(_ buffer: ByteBuffer) throws {
+            var header: UInt8 = 0
+            if fieldType.trackRef {
                 header |= 0b1
             }
-            buffer.writeVarUInt32(header)
-        } else {
-            buffer.writeUInt8(UInt8(truncatingIfNeeded: typeID))
-        }
-
-        if typeID == TypeId.list.rawValue || typeID == TypeId.set.rawValue {
-            let element = generics.first ?? TypeMetaFieldType(typeID: TypeId.unknown.rawValue, nullable: true)
-            element.write(buffer, writeFlags: true, nullableOverride: element.nullable)
-        } else if typeID == TypeId.map.rawValue {
-            let key = generics.first ?? TypeMetaFieldType(typeID: TypeId.unknown.rawValue, nullable: true)
-            let value = generics.dropFirst().first ?? TypeMetaFieldType(typeID: TypeId.unknown.rawValue, nullable: true)
-            key.write(buffer, writeFlags: true, nullableOverride: key.nullable)
-            value.write(buffer, writeFlags: true, nullableOverride: value.nullable)
-        }
-    }
-
-    fileprivate static func read(
-        _ buffer: ByteBuffer,
-        readFlags: Bool,
-        nullable: Bool? = nil,
-        trackRef: Bool? = nil
-    ) throws -> TypeMetaFieldType {
-        let header: UInt32
-        if readFlags {
-            header = try buffer.readVarUInt32()
-        } else {
-            header = UInt32(try buffer.readUInt8())
-        }
-
-        let typeID: UInt32
-        let resolvedNullable: Bool
-        let resolvedTrackRef: Bool
-
-        if readFlags {
-            typeID = header >> 2
-            resolvedNullable = (header & 0b10) != 0
-            resolvedTrackRef = (header & 0b1) != 0
-        } else {
-            typeID = header
-            resolvedNullable = nullable ?? false
-            resolvedTrackRef = trackRef ?? false
-        }
-
-        if typeID == TypeId.list.rawValue || typeID == TypeId.set.rawValue {
-            let element = try read(buffer, readFlags: true)
-            return TypeMetaFieldType(
-                typeID: typeID,
-                nullable: resolvedNullable,
-                trackRef: resolvedTrackRef,
-                generics: [element]
-            )
-        }
-        if typeID == TypeId.map.rawValue {
-            let key = try read(buffer, readFlags: true)
-            let value = try read(buffer, readFlags: true)
-            return TypeMetaFieldType(
-                typeID: typeID,
-                nullable: resolvedNullable,
-                trackRef: resolvedTrackRef,
-                generics: [key, value]
-            )
-        }
-
-        return TypeMetaFieldType(
-            typeID: typeID,
-            nullable: resolvedNullable,
-            trackRef: resolvedTrackRef,
-            generics: []
-        )
-    }
-}
-
-public struct TypeMetaFieldInfo: Equatable, Sendable {
-    public var fieldID: Int16?
-    public var fieldName: String
-    public var fieldType: TypeMetaFieldType
-
-    public init(fieldID: Int16?, fieldName: String, fieldType: TypeMetaFieldType) {
-        self.fieldID = fieldID
-        self.fieldName = fieldName
-        self.fieldType = fieldType
-    }
-
-    fileprivate func write(_ buffer: ByteBuffer) throws {
-        var header: UInt8 = 0
-        if fieldType.trackRef {
-            header |= 0b1
-        }
-        if fieldType.nullable {
-            header |= 0b10
-        }
-
-        if let fieldID {
-            if fieldID < 0 {
-                throw ForyError.encodingError("negative field id is invalid")
+            if fieldType.nullable {
+                header |= 0b10
             }
-            let size = Int(fieldID)
-            header |= UInt8(0b11 << 6)
+
+            if let fieldID {
+                if fieldID < 0 {
+                    throw ForyError.encodingError("negative field id is invalid")
+                }
+                let size = Int(fieldID)
+                header |= UInt8(0b11 << 6)
+                if size >= fieldNameSizeThreshold {
+                    header |= 0b0011_1100
+                    buffer.writeUInt8(header)
+                    buffer.writeVarUInt32(UInt32(size - fieldNameSizeThreshold))
+                } else {
+                    header |= UInt8(size << 2)
+                    buffer.writeUInt8(header)
+                }
+                fieldType.write(buffer, writeFlags: false)
+                return
+            }
+
+            let snakeName = lowerCamelToLowerUnderscore(fieldName)
+            let encoded = try MetaStringEncoder.fieldName.encode(snakeName, allowedEncodings: fieldNameMetaStringEncodings)
+            guard let encodingIndex = fieldNameMetaStringEncodings.firstIndex(of: encoded.encoding) else {
+                throw ForyError.encodingError("unsupported field name encoding")
+            }
+
+            let size = encoded.bytes.count - 1
+            header |= UInt8(encodingIndex << 6)
             if size >= fieldNameSizeThreshold {
                 header |= 0b0011_1100
                 buffer.writeUInt8(header)
@@ -185,77 +206,56 @@ public struct TypeMetaFieldInfo: Equatable, Sendable {
                 header |= UInt8(size << 2)
                 buffer.writeUInt8(header)
             }
+
             fieldType.write(buffer, writeFlags: false)
-            return
+            buffer.writeBytes(encoded.bytes)
         }
 
-        let snakeName = lowerCamelToLowerUnderscore(fieldName)
-        let encoded = try MetaStringEncoder.fieldName.encode(snakeName, allowedEncodings: fieldNameMetaStringEncodings)
-        guard let encodingIndex = fieldNameMetaStringEncodings.firstIndex(of: encoded.encoding) else {
-            throw ForyError.encodingError("unsupported field name encoding")
-        }
+        fileprivate static func read(_ buffer: ByteBuffer) throws -> FieldInfo {
+            let header = try buffer.readUInt8()
+            let encodingFlags = Int((header >> 6) & 0b11)
+            var size = Int((header >> 2) & 0b1111)
+            if size == fieldNameSizeThreshold {
+                size += Int(try buffer.readVarUInt32())
+            }
+            size += 1
 
-        let size = encoded.bytes.count - 1
-        header |= UInt8(encodingIndex << 6)
-        if size >= fieldNameSizeThreshold {
-            header |= 0b0011_1100
-            buffer.writeUInt8(header)
-            buffer.writeVarUInt32(UInt32(size - fieldNameSizeThreshold))
-        } else {
-            header |= UInt8(size << 2)
-            buffer.writeUInt8(header)
-        }
-
-        fieldType.write(buffer, writeFlags: false)
-        buffer.writeBytes(encoded.bytes)
-    }
-
-    fileprivate static func read(_ buffer: ByteBuffer) throws -> TypeMetaFieldInfo {
-        let header = try buffer.readUInt8()
-        let encodingFlags = Int((header >> 6) & 0b11)
-        var size = Int((header >> 2) & 0b1111)
-        if size == fieldNameSizeThreshold {
-            size += Int(try buffer.readVarUInt32())
-        }
-        size += 1
-
-        let nullable = (header & 0b10) != 0
-        let trackRef = (header & 0b1) != 0
-        let fieldType = try TypeMetaFieldType.read(
-            buffer,
-            readFlags: false,
-            nullable: nullable,
-            trackRef: trackRef
-        )
-
-        if encodingFlags == 3 {
-            let fieldID = Int16(size - 1)
-            return TypeMetaFieldInfo(
-                fieldID: fieldID,
-                fieldName: "$tag\(fieldID)",
-                fieldType: fieldType
+            let nullable = (header & 0b10) != 0
+            let trackRef = (header & 0b1) != 0
+            let fieldType = try FieldType.read(
+                buffer,
+                readFlags: false,
+                nullable: nullable,
+                trackRef: trackRef
             )
-        }
 
-        guard encodingFlags < fieldNameMetaStringEncodings.count else {
-            throw ForyError.invalidData("invalid field name encoding id")
-        }
-        let nameBytes = try buffer.readBytes(count: size)
-        let name = try MetaStringDecoder.fieldName
-            .decode(bytes: nameBytes, encoding: fieldNameMetaStringEncodings[encodingFlags])
-            .value
+            if encodingFlags == 3 {
+                let fieldID = Int16(size - 1)
+                return FieldInfo(
+                    fieldID: fieldID,
+                    fieldName: "$tag\(fieldID)",
+                    fieldType: fieldType
+                )
+            }
 
-        return TypeMetaFieldInfo(fieldID: nil, fieldName: name, fieldType: fieldType)
+            guard encodingFlags < fieldNameMetaStringEncodings.count else {
+                throw ForyError.invalidData("invalid field name encoding id")
+            }
+            let nameBytes = try buffer.readBytes(count: size)
+            let name = try MetaStringDecoder.fieldName
+                .decode(bytes: nameBytes, encoding: fieldNameMetaStringEncodings[encodingFlags])
+                .value
+
+            return FieldInfo(fieldID: nil, fieldName: name, fieldType: fieldType)
+        }
     }
-}
 
-public final class TypeMeta: Equatable, @unchecked Sendable {
     public let typeID: UInt32?
     public let userTypeID: UInt32?
     public let namespace: MetaString
     public let typeName: MetaString
     public let registerByName: Bool
-    public let fields: [TypeMetaFieldInfo]
+    public let fields: [FieldInfo]
     public let hasFieldsMeta: Bool
     public let compressed: Bool
     public let headerHash: UInt64
@@ -266,7 +266,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         namespace: MetaString,
         typeName: MetaString,
         registerByName: Bool,
-        fields: [TypeMetaFieldInfo],
+        fields: [FieldInfo],
         hasFieldsMeta: Bool = true,
         compressed: Bool = false,
         headerHash: UInt64 = 0
@@ -383,7 +383,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             typeName = MetaString.empty(specialChar1: "$", specialChar2: "_")
         }
 
-        var fieldInfos: [TypeMetaFieldInfo] = []
+        var fieldInfos: [FieldInfo] = []
         if numFields > bodyReader.remaining {
             throw ForyError.invalidData(
                 "type meta field count \(numFields) exceeds remaining bytes \(bodyReader.remaining)"
@@ -391,7 +391,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         }
         fieldInfos.reserveCapacity(numFields)
         for _ in 0..<numFields {
-            fieldInfos.append(try TypeMetaFieldInfo.read(bodyReader))
+            fieldInfos.append(try FieldInfo.read(bodyReader))
         }
 
         if bodyReader.remaining != 0 {

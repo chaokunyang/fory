@@ -18,7 +18,7 @@
 import Foundation
 
 public extension ReadContext {
-    func skipFieldValue(_ fieldType: TypeMetaFieldType) throws {
+    func skipFieldValue(_ fieldType: TypeMeta.FieldType) throws {
         _ = try readSkippedFieldValue(
             fieldType: fieldType,
             readTypeInfo: needsTypeInfoForSkippedField(fieldType.typeID)
@@ -33,7 +33,7 @@ public extension ReadContext {
     }
 
     private func readSkippedFieldValue(
-        fieldType: TypeMetaFieldType,
+        fieldType: TypeMeta.FieldType,
         typeInfo: TypeInfo? = nil,
         readTypeInfo: Bool
     ) throws -> Any? {
@@ -47,7 +47,7 @@ public extension ReadContext {
     }
 
     private func readSkippedValue(
-        fieldType: TypeMetaFieldType,
+        fieldType: TypeMeta.FieldType,
         typeInfo: TypeInfo?,
         refMode: RefMode,
         readTypeInfo: Bool
@@ -104,7 +104,7 @@ public extension ReadContext {
     }
 
     private func readSkippedFieldPayload(
-        fieldType: TypeMetaFieldType,
+        fieldType: TypeMeta.FieldType,
         typeInfo: TypeInfo?,
         readTypeInfo: Bool
     ) throws -> Any {
@@ -211,10 +211,10 @@ public extension ReadContext {
     }
 
     private func readSkippedCollection(
-        fieldType: TypeMetaFieldType
+        fieldType: TypeMeta.FieldType
     ) throws -> [Any] {
         let elementFieldType = fieldType.generics.first
-            ?? TypeMetaFieldType(typeID: TypeId.unknown.rawValue, nullable: true)
+            ?? TypeMeta.FieldType(typeID: TypeId.unknown.rawValue, nullable: true)
         let length = Int(try buffer.readVarUInt32())
         try ensureCollectionLength(length, label: "compatible_collection")
         if length == 0 {
@@ -297,19 +297,19 @@ public extension ReadContext {
     }
 
     private func readSkippedSet(
-        fieldType: TypeMetaFieldType
+        fieldType: TypeMeta.FieldType
     ) throws -> Set<AnyHashable> {
         _ = try readSkippedCollection(fieldType: fieldType)
         return []
     }
 
     private func readSkippedMap(
-        fieldType: TypeMetaFieldType
+        fieldType: TypeMeta.FieldType
     ) throws -> [AnyHashable: Any] {
         let keyType = fieldType.generics.first
-            ?? TypeMetaFieldType(typeID: TypeId.unknown.rawValue, nullable: true)
+            ?? TypeMeta.FieldType(typeID: TypeId.unknown.rawValue, nullable: true)
         let valueType = fieldType.generics.dropFirst().first
-            ?? TypeMetaFieldType(typeID: TypeId.unknown.rawValue, nullable: true)
+            ?? TypeMeta.FieldType(typeID: TypeId.unknown.rawValue, nullable: true)
 
         let totalLength = Int(try buffer.readVarUInt32())
         try ensureCollectionLength(totalLength, label: "compatible_map")

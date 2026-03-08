@@ -131,12 +131,12 @@ final class CompatibleTypeDefReadState {
 private let compatibleTypeMetaSizeMask = 0xFF
 
 public final class CompatibleFields: @unchecked Sendable {
-    public let fields: [TypeMetaFieldInfo]
+    public let fields: [TypeMeta.FieldInfo]
     public let canUseSchemaFastPath: Bool
     public let canUseSchemaOrderReadPath: Bool
 
     init(
-        fields: [TypeMetaFieldInfo],
+        fields: [TypeMeta.FieldInfo],
         canUseSchemaFastPath: Bool,
         canUseSchemaOrderReadPath: Bool
     ) {
@@ -996,11 +996,11 @@ public final class ReadContext {
     }
 
     private static func assignCompatibleFieldIDs(
-        remoteFields: [TypeMetaFieldInfo],
-        localFields: [TypeMetaFieldInfo]
-    ) -> [TypeMetaFieldInfo] {
-        var fieldIndexByName: [String: (Int, TypeMetaFieldInfo)] = [:]
-        var fieldIndexByID: [Int16: (Int, TypeMetaFieldInfo)] = [:]
+        remoteFields: [TypeMeta.FieldInfo],
+        localFields: [TypeMeta.FieldInfo]
+    ) -> [TypeMeta.FieldInfo] {
+        var fieldIndexByName: [String: (Int, TypeMeta.FieldInfo)] = [:]
+        var fieldIndexByID: [Int16: (Int, TypeMeta.FieldInfo)] = [:]
         fieldIndexByName.reserveCapacity(localFields.count)
         fieldIndexByID.reserveCapacity(localFields.count)
 
@@ -1014,7 +1014,7 @@ public final class ReadContext {
         return remoteFields.map { remoteField in
             var resolvedField = remoteField
 
-            let localMatch: (Int, TypeMetaFieldInfo)?
+            let localMatch: (Int, TypeMeta.FieldInfo)?
             if let fieldID = remoteField.fieldID, fieldID >= 0 {
                 localMatch = fieldIndexByID[fieldID]
             } else {
@@ -1034,8 +1034,8 @@ public final class ReadContext {
     }
 
     private static func isCompatibleFieldType(
-        _ remoteType: TypeMetaFieldType,
-        _ localType: TypeMetaFieldType
+        _ remoteType: TypeMeta.FieldType,
+        _ localType: TypeMeta.FieldType
     ) -> Bool {
         if normalizeCompatibleTypeIDForComparison(remoteType.typeID) != normalizeCompatibleTypeIDForComparison(localType.typeID) {
             return false

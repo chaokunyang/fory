@@ -742,7 +742,7 @@ func macroFieldIDsPopulateCompatibleTypeMeta() {
     let fields = FieldIdConfigured.foryCompatibleTypeMetaFields(trackRef: false)
     #expect(fields.count == 2)
 
-    var byID: [Int16: TypeMetaFieldInfo] = [:]
+    var byID: [Int16: TypeMeta.FieldInfo] = [:]
     for field in fields {
         if let id = field.fieldID {
             byID[id] = field
@@ -892,7 +892,7 @@ func typeMetaRoundTripByName() throws {
     let namespace = try MetaStringEncoder.namespace.encode("com.example")
     let typeName = try MetaStringEncoder.typeName.encode("UserProfile")
 
-    let fields: [TypeMetaFieldInfo] = [
+    let fields: [TypeMeta.FieldInfo] = [
         .init(
             fieldID: nil,
             fieldName: "createdAt",

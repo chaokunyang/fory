@@ -911,10 +911,10 @@ private func buildCompatibleTypeMetaFieldsDecl(sortedFields: [ParsedField], acce
     let disabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "false")
     let enabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "true")
     return """
-    private static let __foryCompatibleTypeMetaFieldsTrackRefDisabled: [TypeMetaFieldInfo] = \(disabledExpr)
-    private static let __foryCompatibleTypeMetaFieldsTrackRefEnabled: [TypeMetaFieldInfo] = \(enabledExpr)
+    private static let __foryCompatibleTypeMetaFieldsTrackRefDisabled: [TypeMeta.FieldInfo] = \(disabledExpr)
+    private static let __foryCompatibleTypeMetaFieldsTrackRefEnabled: [TypeMeta.FieldInfo] = \(enabledExpr)
 
-    \(accessPrefix)static func foryCompatibleTypeMetaFields(trackRef: Bool) -> [TypeMetaFieldInfo] {
+    \(accessPrefix)static func foryCompatibleTypeMetaFields(trackRef: Bool) -> [TypeMeta.FieldInfo] {
         trackRef ? Self.__foryCompatibleTypeMetaFieldsTrackRefEnabled : Self.__foryCompatibleTypeMetaFieldsTrackRefDisabled
     }
     """
@@ -926,7 +926,7 @@ private func compatibleTypeMetaFieldsExpr(
 ) -> String {
     let fieldInfos = sortedFields.map { field in
         let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: trackRefExpression)
-        return "TypeMetaFieldInfo(fieldID: \(compatibleFieldIDExpr(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
+        return "TypeMeta.FieldInfo(fieldID: \(compatibleFieldIDExpr(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     guard !fieldInfos.isEmpty else {
         return "[]"
@@ -1302,7 +1302,7 @@ private func compatibleTypeMetaFieldExpression(
         fieldTrackRefExpression = "\(trackRefExpression) && \(field.typeText).isRefType"
     }
 
-    return buildCompatibleTypeMetaFieldTypeExpression(
+    return buildCompatibleFieldTypeExpression(
         typeText: field.typeText,
         nullableExpression: field.isOptional ? "true" : "false",
         trackRefExpression: fieldTrackRefExpression,
@@ -1370,7 +1370,7 @@ func fieldDefaultExpr(_ field: ParsedField) -> String {
     return "\(field.typeText).foryDefault()"
 }
 
-private func buildCompatibleTypeMetaFieldTypeExpression(
+private func buildCompatibleFieldTypeExpression(
     typeText: String,
     nullableExpression: String,
     trackRefExpression: String,
@@ -1383,13 +1383,13 @@ private func buildCompatibleTypeMetaFieldTypeExpression(
 
     if outerClassification.typeID == 22, let elementType = parseArrayElement(concreteType) {
         let elementNullable = compatibleGenericNullableExpression(elementType)
-        let elementExpr = buildCompatibleTypeMetaFieldTypeExpression(
+        let elementExpr = buildCompatibleFieldTypeExpression(
             typeText: elementType,
             nullableExpression: elementNullable,
             trackRefExpression: "false"
         )
         return """
-TypeMetaFieldType(
+TypeMeta.FieldType(
     typeID: TypeId.list.rawValue,
     nullable: \(nullableExpression),
     trackRef: \(trackRefExpression),
@@ -1400,13 +1400,13 @@ TypeMetaFieldType(
 
     if outerClassification.typeID == 23, let elementType = parseSetElement(concreteType) {
         let elementNullable = compatibleGenericNullableExpression(elementType)
-        let elementExpr = buildCompatibleTypeMetaFieldTypeExpression(
+        let elementExpr = buildCompatibleFieldTypeExpression(
             typeText: elementType,
             nullableExpression: elementNullable,
             trackRefExpression: "false"
         )
         return """
-TypeMetaFieldType(
+TypeMeta.FieldType(
     typeID: TypeId.set.rawValue,
     nullable: \(nullableExpression),
     trackRef: \(trackRefExpression),
@@ -1418,18 +1418,18 @@ TypeMetaFieldType(
     if outerClassification.typeID == 24, let (keyType, valueType) = parseDictionary(concreteType) {
         let keyNullable = compatibleGenericNullableExpression(keyType)
         let valueNullable = compatibleGenericNullableExpression(valueType)
-        let keyExpr = buildCompatibleTypeMetaFieldTypeExpression(
+        let keyExpr = buildCompatibleFieldTypeExpression(
             typeText: keyType,
             nullableExpression: keyNullable,
             trackRefExpression: "false"
         )
-        let valueExpr = buildCompatibleTypeMetaFieldTypeExpression(
+        let valueExpr = buildCompatibleFieldTypeExpression(
             typeText: valueType,
             nullableExpression: valueNullable,
             trackRefExpression: "false"
         )
         return """
-TypeMetaFieldType(
+TypeMeta.FieldType(
     typeID: TypeId.map.rawValue,
     nullable: \(nullableExpression),
     trackRef: \(trackRefExpression),
@@ -1448,7 +1448,7 @@ TypeMetaFieldType(
     }
 
     return """
-TypeMetaFieldType(
+TypeMeta.FieldType(
     typeID: \(typeIDExpr),
     nullable: \(nullableExpression),
     trackRef: \(trackRefExpression)

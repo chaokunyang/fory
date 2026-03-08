@@ -44,7 +44,7 @@ public protocol Serializer {
 
     static func foryWriteTypeInfo(_ context: WriteContext) throws
     static func foryReadTypeInfo(_ context: ReadContext) throws
-    static func foryCompatibleTypeMetaFields(trackRef: Bool) -> [TypeMetaFieldInfo]
+    static func foryCompatibleTypeMetaFields(trackRef: Bool) -> [TypeMeta.FieldInfo]
     func foryWriteTypeInfo(_ context: WriteContext) throws
     var foryPrimitiveDataSize: Int? { get }
     func foryWritePrimitiveData(to base: UnsafeMutablePointer<UInt8>, index: inout Int)
@@ -66,7 +66,7 @@ public extension Serializer {
     }
 
     @inlinable
-    static func foryCompatibleTypeMetaFields(trackRef _: Bool) -> [TypeMetaFieldInfo] {
+    static func foryCompatibleTypeMetaFields(trackRef _: Bool) -> [TypeMeta.FieldInfo] {
         []
     }
 

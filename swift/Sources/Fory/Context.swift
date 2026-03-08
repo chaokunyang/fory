@@ -156,7 +156,7 @@ private struct CompatibleFieldsCacheKey: Hashable {
     let localHasUserTypeFields: Bool
 }
 
-private struct CachedCompatibleRootTypeInfo {
+private struct CompatibleRootTypeInfoEntry {
     let prefixBytes: [UInt8]
     let bodySize: Int
     let typeMetaIndex: Int
@@ -257,8 +257,8 @@ public final class WriteContext {
     private var dynamicAnyDepth = 0
     private var lastTypeInfoTypeID: ObjectIdentifier?
     private var lastTypeInfo: TypeInfo?
-    private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
-    private var lastCompatibleRootTypeInfoBytes: [UInt8]?
+    private var cachedCompatibleRootTypeInfoTypeID: ObjectIdentifier?
+    private var cachedCompatibleRootTypeInfoBytes: [UInt8]?
     private var lastRootTypeInfoHasUserFields = true
     private var lastFirstCompatibleTypeDefTypeID: ObjectIdentifier?
     private var lastFirstTypeDefHasUserFields = false
@@ -339,15 +339,15 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func writeCompatibleRootTypeInfoFromCache<T: Serializer>(
+    func writeCachedCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type
     ) -> Bool {
         guard compatible, !compatibleTypeDefStateUsed else {
             return false
         }
         let typeID = ObjectIdentifier(type)
-        guard lastCompatibleRootTypeInfoTypeID == typeID,
-              let bytes = lastCompatibleRootTypeInfoBytes else {
+        guard cachedCompatibleRootTypeInfoTypeID == typeID,
+              let bytes = cachedCompatibleRootTypeInfoBytes else {
             return false
         }
         buffer.writeBytes(bytes)
@@ -359,15 +359,15 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func compatibleRootTypeInfoBytes<T: Serializer>(
+    func cachedCompatibleRootTypeInfoBytes<T: Serializer>(
         for type: T.Type
     ) -> [UInt8]? {
         guard compatible, !compatibleTypeDefStateUsed else {
             return nil
         }
         let typeID = ObjectIdentifier(type)
-        guard lastCompatibleRootTypeInfoTypeID == typeID,
-              let bytes = lastCompatibleRootTypeInfoBytes,
+        guard cachedCompatibleRootTypeInfoTypeID == typeID,
+              let bytes = cachedCompatibleRootTypeInfoBytes,
               !lastRootTypeInfoHasUserFields else {
             return nil
         }
@@ -375,13 +375,13 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func storeCompatibleRootTypeInfo<T: Serializer>(
+    func cacheCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type,
         bytes: [UInt8]
     ) {
         let typeID = ObjectIdentifier(type)
-        lastCompatibleRootTypeInfoTypeID = typeID
-        lastCompatibleRootTypeInfoBytes = bytes
+        cachedCompatibleRootTypeInfoTypeID = typeID
+        cachedCompatibleRootTypeInfoBytes = bytes
         if lastFirstCompatibleTypeDefTypeID == typeID {
             lastRootTypeInfoHasUserFields = lastFirstTypeDefHasUserFields
         } else {
@@ -390,7 +390,7 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func compatibleTypeDefStateIsUsed() -> Bool {
+    func usesCompatibleTypeDefState() -> Bool {
         compatibleTypeDefStateUsed
     }
 
@@ -540,12 +540,12 @@ public final class ReadContext {
     private var lastValidatedCompatibleTypeID: ObjectIdentifier?
     private var lastValidatedCompatibleWireTypeID: TypeId?
     private var lastValidatedCompatibleHeaderHash: UInt64 = 0
-    private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
-    private var lastCompatibleRootTypeInfoEntry: CachedCompatibleRootTypeInfo?
-    private var lastCompatibleRootTypeInfoFields: CompatibleFields?
-    private var lastCompatibleRootTypeInfoRemoteTypeMeta: TypeMeta?
-    private var lastResolvedCompatibleTypeMetaTypeID: ObjectIdentifier?
-    private var lastResolvedCompatibleTypeMetaValue: TypeMeta?
+    private var cachedCompatibleRootTypeInfoTypeID: ObjectIdentifier?
+    private var cachedCompatibleRootTypeInfoEntry: CompatibleRootTypeInfoEntry?
+    private var cachedCompatibleRootTypeInfoFields: CompatibleFields?
+    private var cachedCompatibleRootMeta: TypeMeta?
+    private var resolvedCompatibleTypeMetaTypeID: ObjectIdentifier?
+    private var resolvedCompatibleTypeMetaValue: TypeMeta?
 
     convenience init(
         buffer: ByteBuffer,
@@ -689,30 +689,30 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func compatibleTypeDefStateIsUsed() -> Bool {
+    func usesCompatibleTypeDefState() -> Bool {
         compatibleTypeDefStateUsed
     }
 
     @inline(__always)
-    func lastResolvedCompatibleTypeMeta<T: Serializer>(for type: T.Type) -> TypeMeta? {
+    func resolvedCompatibleTypeMeta<T: Serializer>(for type: T.Type) -> TypeMeta? {
         let typeID = ObjectIdentifier(type)
-        if lastResolvedCompatibleTypeMetaTypeID == typeID {
-            return lastResolvedCompatibleTypeMetaValue
+        if resolvedCompatibleTypeMetaTypeID == typeID {
+            return resolvedCompatibleTypeMetaValue
         }
         return nil
     }
 
     @inline(__always)
-    func consumeCompatibleRootTypeInfoFromCache<T: Serializer>(
+    func reuseCachedCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type
     ) -> Bool {
         guard compatible, !compatibleTypeDefStateUsed else {
             return false
         }
         let typeID = ObjectIdentifier(type)
-        guard lastCompatibleRootTypeInfoTypeID == typeID,
-              let entry = lastCompatibleRootTypeInfoEntry,
-              let compatibleFields = lastCompatibleRootTypeInfoFields else {
+        guard cachedCompatibleRootTypeInfoTypeID == typeID,
+              let entry = cachedCompatibleRootTypeInfoEntry,
+              let compatibleFields = cachedCompatibleRootTypeInfoFields else {
             return false
         }
         let start = buffer.getCursor()
@@ -728,7 +728,7 @@ public final class ReadContext {
         }
 
         buffer.setCursor(end)
-        if !compatibleFields.canUseSchemaFastPath, let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
+        if !compatibleFields.canUseSchemaFastPath, let remoteTypeMeta = cachedCompatibleRootMeta {
             do {
                 try compatibleTypeDefState.storeTypeMetaEntry(remoteTypeMeta, at: entry.typeMetaIndex)
                 compatibleTypeDefStateUsed = true
@@ -742,7 +742,7 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func storeCompatibleRootTypeInfo<T: Serializer>(
+    func cacheCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type,
         bytes: [UInt8],
         compatibleFields: CompatibleFields?,
@@ -751,10 +751,10 @@ public final class ReadContext {
         guard compatible, let compatibleFields else {
             return
         }
-        lastCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
-        lastCompatibleRootTypeInfoEntry = Self.parseCompatibleRootTypeInfo(bytes)
-        lastCompatibleRootTypeInfoFields = compatibleFields
-        lastCompatibleRootTypeInfoRemoteTypeMeta = remoteTypeMeta
+        cachedCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
+        cachedCompatibleRootTypeInfoEntry = Self.parseCompatibleRootTypeInfoEntry(bytes)
+        cachedCompatibleRootTypeInfoFields = compatibleFields
+        cachedCompatibleRootMeta = remoteTypeMeta
     }
 
     public func pushPendingRef(_ refID: UInt32) {
@@ -834,8 +834,8 @@ public final class ReadContext {
         localTypeMetaHasUserTypeFields: Bool = true
     ) {
         let typeID = ObjectIdentifier(type)
-        lastResolvedCompatibleTypeMetaTypeID = typeID
-        lastResolvedCompatibleTypeMetaValue = typeMeta
+        resolvedCompatibleTypeMetaTypeID = typeID
+        resolvedCompatibleTypeMetaValue = typeMeta
         let cacheKey = CompatibleFieldsCacheKey(
             swiftType: typeID,
             trackRef: trackRef,
@@ -900,7 +900,7 @@ public final class ReadContext {
         pendingCompatibleFieldsValue = value
     }
 
-    private static func parseCompatibleRootTypeInfo(_ bytes: [UInt8]) -> CachedCompatibleRootTypeInfo? {
+    private static func parseCompatibleRootTypeInfoEntry(_ bytes: [UInt8]) -> CompatibleRootTypeInfoEntry? {
         var index = 0
         guard decodeVarUInt32(bytes, index: &index) != nil,
               let indexMarker = decodeVarUInt32(bytes, index: &index),
@@ -919,7 +919,7 @@ public final class ReadContext {
         guard end <= bytes.count else {
             return nil
         }
-        return CachedCompatibleRootTypeInfo(
+        return CompatibleRootTypeInfoEntry(
             prefixBytes: Array(bytes[..<index]),
             bodySize: bodySize,
             typeMetaIndex: Int(indexMarker >> 1)

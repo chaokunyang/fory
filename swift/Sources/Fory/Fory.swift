@@ -523,7 +523,7 @@ public final class Fory {
             return nil
         }
 
-        guard let typeInfoBytes = context.compatibleRootTypeInfoBytes(for: T.self) else {
+        guard let typeInfoBytes = context.cachedCompatibleRootTypeInfoBytes(for: T.self) else {
             return nil
         }
 
@@ -552,11 +552,11 @@ public final class Fory {
 
         if !config.trackRef {
             context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
-            if !(config.compatible && context.writeCompatibleRootTypeInfoFromCache(for: T.self)) {
+            if !(config.compatible && context.writeCachedCompatibleRootTypeInfo(for: T.self)) {
                 let typeInfoStart = context.buffer.count
                 try value.foryWriteTypeInfo(context)
-                if config.compatible, context.compatibleTypeDefStateIsUsed() {
-                    context.storeCompatibleRootTypeInfo(
+                if config.compatible, context.usesCompatibleTypeDefState() {
+                    context.cacheCompatibleRootTypeInfo(
                         for: T.self,
                         bytes: Array(context.buffer.storage[typeInfoStart..<context.buffer.count])
                     )
@@ -586,19 +586,19 @@ public final class Fory {
         if !config.trackRef {
             let rawFlag = try context.buffer.readInt8()
             if rawFlag == RefFlag.notNullValue.rawValue {
-                if context.compatible, context.consumeCompatibleRootTypeInfoFromCache(for: T.self) {
+                if context.compatible, context.reuseCachedCompatibleRootTypeInfo(for: T.self) {
                     return try T.foryReadData(context)
                 }
                 let typeInfoStart = context.buffer.getCursor()
                 try T.foryReadTypeInfo(context)
-                if context.compatible, context.compatibleTypeDefStateIsUsed() {
+                if context.compatible, context.usesCompatibleTypeDefState() {
                     let typeInfoEnd = context.buffer.getCursor()
                     if typeInfoEnd > typeInfoStart {
-                        context.storeCompatibleRootTypeInfo(
+                        context.cacheCompatibleRootTypeInfo(
                             for: T.self,
                             bytes: context.buffer.copyBytes(start: typeInfoStart, end: typeInfoEnd),
                             compatibleFields: context.compatibleFields(for: T.self),
-                            remoteTypeMeta: context.lastResolvedCompatibleTypeMeta(for: T.self)
+                            remoteTypeMeta: context.resolvedCompatibleTypeMeta(for: T.self)
                         )
                     }
                 }

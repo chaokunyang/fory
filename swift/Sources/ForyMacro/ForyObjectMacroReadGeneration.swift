@@ -49,9 +49,9 @@ private func buildClassReadDataDecl(
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleState = context.compatibleTypeMeta(for: Self.self) {
-            if compatibleState.matchesLocalSchema {
-                if !compatibleState.localHasUserTypeFields {
+        if context.compatible, let typeMetaState = context.typeMeta(for: Self.self) {
+            if typeMetaState.matchesSchema {
+                if !typeMetaState.hasUserTypeFields {
                     let value = Self.init()
                     context.bindPendingRef(value)
                     \(schemaAssignBody)
@@ -64,7 +64,7 @@ private func buildClassReadDataDecl(
             }
             let value = Self.init()
             context.bindPendingRef(value)
-            for remoteField in compatibleState.typeMeta.fields {
+            for remoteField in typeMetaState.typeMeta.fields {
                 switch Int(remoteField.fieldID ?? -1) {
             \(compatibleCases)
                 default:
@@ -87,11 +87,11 @@ private func buildEmptyStructReadDataDecl(accessPrefix: String) -> String {
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleState = context.compatibleTypeMeta(for: Self.self) {
-            if compatibleState.matchesLocalSchema {
+        if context.compatible, let typeMetaState = context.typeMeta(for: Self.self) {
+            if typeMetaState.matchesSchema {
                 return Self()
             }
-            for remoteField in compatibleState.typeMeta.fields {
+            for remoteField in typeMetaState.typeMeta.fields {
                 try context.skipFieldValue(remoteField.fieldType)
             }
             return Self()
@@ -128,9 +128,9 @@ private func buildStructReadDataDecl(
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleState = context.compatibleTypeMeta(for: Self.self) {
-                if compatibleState.matchesLocalSchema {
-                    if !compatibleState.localHasUserTypeFields {
+        if context.compatible, let typeMetaState = context.typeMeta(for: Self.self) {
+                if typeMetaState.matchesSchema {
+                    if !typeMetaState.hasUserTypeFields {
                         \(schemaReadBody)
                         return Self(
                             \(ctorArgs)
@@ -142,7 +142,7 @@ private func buildStructReadDataDecl(
                     )
                 }
                 \(compatibleDefaults)
-                for remoteField in compatibleState.typeMeta.fields {
+                for remoteField in typeMetaState.typeMeta.fields {
                     switch Int(remoteField.fieldID ?? -1) {
                     \(compatibleCases)
                     default:

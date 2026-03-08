@@ -156,7 +156,7 @@ public extension Serializer {
             guard let typeDefBytes = typeInfo.typeDefBytes else {
                 throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
             }
-            context.writeCompatibleTypeMeta(
+            context.writeTypeMeta(
                 for: Self.self,
                 typeDefBytes: typeDefBytes
             )
@@ -165,7 +165,7 @@ public extension Serializer {
                 guard let typeDefBytes = typeInfo.typeDefBytes else {
                     throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
                 }
-                context.writeCompatibleTypeMeta(
+                context.writeTypeMeta(
                     for: Self.self,
                     typeDefBytes: typeDefBytes
                 )
@@ -219,25 +219,25 @@ public extension Serializer {
 
         switch typeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            let remoteTypeMeta = try readValidatedCompatibleTypeMeta(
+            let remoteTypeMeta = try readValidatedTypeMeta(
                 in: context,
                 typeInfo: typeInfo,
                 wireTypeID: typeID
             )
-            context.pushCompatibleTypeMeta(
+            context.pushTypeMeta(
                 for: Self.self,
                 remoteTypeMeta,
                 localTypeInfo: typeInfo
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
-                let remoteTypeMeta = try readValidatedCompatibleTypeMeta(
+                let remoteTypeMeta = try readValidatedTypeMeta(
                     in: context,
                     typeInfo: typeInfo,
                     wireTypeID: typeID
                 )
                 if typeID == .namedStruct {
-                    context.pushCompatibleTypeMeta(
+                    context.pushTypeMeta(
                         for: Self.self,
                         remoteTypeMeta,
                         localTypeInfo: typeInfo
@@ -277,24 +277,24 @@ public extension Serializer {
     }
 
     @inline(__always)
-    private static func readValidatedCompatibleTypeMeta(
+    private static func readValidatedTypeMeta(
         in context: ReadContext,
         typeInfo: TypeInfo,
         wireTypeID: TypeId
     ) throws -> TypeMeta {
-        let remoteTypeMeta = try context.readCompatibleTypeMeta()
-        if !context.isCompatibleTypeMetaValidationCached(
+        let remoteTypeMeta = try context.readTypeMeta()
+        if !context.isTypeMetaValidationCached(
             for: typeInfo.swiftTypeID,
             wireTypeID: wireTypeID,
             headerHash: remoteTypeMeta.headerHash
         ) {
-            try validateCompatibleTypeMeta(
+            try validateTypeMeta(
                 remoteTypeMeta,
                 localTypeInfo: typeInfo,
                 compatible: context.compatible,
                 actualWireTypeID: wireTypeID
             )
-            context.cacheCompatibleTypeMetaValidation(
+            context.cacheTypeMetaValidation(
                 for: typeInfo.swiftTypeID,
                 wireTypeID: wireTypeID,
                 headerHash: remoteTypeMeta.headerHash
@@ -303,7 +303,7 @@ public extension Serializer {
         return remoteTypeMeta
     }
 
-    private static func validateCompatibleTypeMeta(
+    private static func validateTypeMeta(
         _ remoteTypeMeta: TypeMeta,
         localTypeInfo: TypeInfo,
         compatible: Bool,

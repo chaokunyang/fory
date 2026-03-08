@@ -28,7 +28,7 @@ final class TypeResolver {
     private var byUserTypeID: [UInt32: TypeInfo] = [:]
     private var byTypeName: [TypeNameKey: TypeInfo] = [:]
     private var builtinTypeInfoByID: [TypeId: TypeInfo] = [:]
-    private var compatibleTypeMetaByHeader: [UInt64: TypeMeta] = [:]
+    private var typeMetaByHeader: [UInt64: TypeMeta] = [:]
 
     init(trackRef: Bool = false) {
         self.trackRef = trackRef
@@ -58,7 +58,7 @@ final class TypeResolver {
                 try T.foryRead(context, refMode: .none, readTypeInfo: false)
             },
             compatibleReader: { context, typeMeta in
-                context.pushCompatibleTypeMeta(for: T.self, typeMeta)
+                context.pushTypeMeta(for: T.self, typeMeta)
                 return try T.foryRead(context, refMode: .none, readTypeInfo: false)
             }
         )
@@ -107,7 +107,7 @@ final class TypeResolver {
                 try T.foryRead(context, refMode: .none, readTypeInfo: false)
             },
             compatibleReader: { context, typeMeta in
-                context.pushCompatibleTypeMeta(for: T.self, typeMeta)
+                context.pushTypeMeta(for: T.self, typeMeta)
                 return try T.foryRead(context, refMode: .none, readTypeInfo: false)
             }
         )
@@ -147,13 +147,13 @@ final class TypeResolver {
     }
 
     @inline(__always)
-    func compatibleTypeMeta(forHeader header: UInt64) -> TypeMeta? {
-        compatibleTypeMetaByHeader[header]
+    func typeMeta(forHeader header: UInt64) -> TypeMeta? {
+        typeMetaByHeader[header]
     }
 
     @inline(__always)
-    func cacheCompatibleTypeMeta(_ typeMeta: TypeMeta, forHeader header: UInt64) -> TypeMeta {
-        if let cached = compatibleTypeMetaByHeader[header] {
+    func cacheTypeMeta(_ typeMeta: TypeMeta, forHeader header: UInt64) -> TypeMeta {
+        if let cached = typeMetaByHeader[header] {
             return cached
         }
         let canonicalTypeMeta: TypeMeta
@@ -164,7 +164,7 @@ final class TypeResolver {
         } else {
             canonicalTypeMeta = typeMeta
         }
-        compatibleTypeMetaByHeader[header] = canonicalTypeMeta
+        typeMetaByHeader[header] = canonicalTypeMeta
         return canonicalTypeMeta
     }
 
@@ -355,7 +355,7 @@ final class TypeResolver {
 
     @inline(__always)
     private func compatibleAnyTypeInfo(context: ReadContext) throws -> TypeInfo {
-        let typeMeta = try context.readCompatibleTypeMeta()
+        let typeMeta = try context.readTypeMeta()
         if typeMeta.registerByName {
             let local = try requireTypeInfo(
                 namespace: typeMeta.namespace.value,

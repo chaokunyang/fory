@@ -104,7 +104,7 @@ public final class Fory {
             compatible: self.config.compatible,
             checkClassVersion: self.config.checkClassVersion,
             maxDepth: self.config.maxDepth,
-            compatibleTypeDefState: CompatibleTypeDefWriteState(),
+            typeDefState: CompatibleTypeDefWriteState(),
             metaStringWriteState: MetaStringWriteState()
         )
         self.readContext = ReadContext(
@@ -116,7 +116,7 @@ public final class Fory {
             maxCollectionSize: self.config.maxCollectionSize,
             maxBinarySize: self.config.maxBinarySize,
             maxDepth: self.config.maxDepth,
-            compatibleTypeDefState: CompatibleTypeDefReadState(),
+            typeDefState: CompatibleTypeDefReadState(),
             metaStringReadState: MetaStringReadState()
         )
     }
@@ -598,7 +598,7 @@ public final class Fory {
         if !config.trackRef {
             let rawFlag = try context.buffer.readInt8()
             if rawFlag == RefFlag.notNullValue.rawValue {
-                if config.compatible, try context.tryFastReadCompatibleRootTypeInfo(for: T.self) {
+                if config.compatible, try context.tryFastReadRootTypeInfo(for: T.self) {
                     return try T.foryReadData(context)
                 }
                 try T.foryReadTypeInfo(context)

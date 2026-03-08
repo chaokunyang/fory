@@ -128,7 +128,7 @@ final class CompatibleTypeDefReadState {
     }
 }
 
-private let compatibleTypeMetaSizeMask = 0xFF
+private let typeMetaSizeMask = 0xFF
 
 private struct MetaStringCacheKey: Hashable {
     let encoding: MetaStringEncoding
@@ -197,9 +197,9 @@ public final class WriteContext {
     public let checkClassVersion: Bool
     public let maxDepth: Int
     public let refWriter: RefWriter
-    let compatibleTypeDefState: CompatibleTypeDefWriteState
+    let typeDefState: CompatibleTypeDefWriteState
     let metaStringWriteState: MetaStringWriteState
-    private var compatibleTypeDefStateUsed = false
+    private var typeDefStateUsed = false
     private var metaStringWriteStateUsed = false
     private var dynamicAnyDepth = 0
     private var lastTypeInfoTypeID: ObjectIdentifier?
@@ -220,7 +220,7 @@ public final class WriteContext {
             compatible: compatible,
             checkClassVersion: checkClassVersion,
             maxDepth: maxDepth,
-            compatibleTypeDefState: CompatibleTypeDefWriteState(),
+            typeDefState: CompatibleTypeDefWriteState(),
             metaStringWriteState: MetaStringWriteState()
         )
     }
@@ -232,7 +232,7 @@ public final class WriteContext {
         compatible: Bool,
         checkClassVersion: Bool,
         maxDepth: Int,
-        compatibleTypeDefState: CompatibleTypeDefWriteState,
+        typeDefState: CompatibleTypeDefWriteState,
         metaStringWriteState: MetaStringWriteState
     ) {
         self.buffer = buffer
@@ -242,7 +242,7 @@ public final class WriteContext {
         self.checkClassVersion = checkClassVersion
         self.maxDepth = maxDepth
         self.refWriter = RefWriter()
-        self.compatibleTypeDefState = compatibleTypeDefState
+        self.typeDefState = typeDefState
         self.metaStringWriteState = metaStringWriteState
     }
 
@@ -279,20 +279,20 @@ public final class WriteContext {
         }
     }
 
-    func writeCompatibleTypeMeta<T: Serializer>(
+    func writeTypeMeta<T: Serializer>(
         for type: T.Type,
         typeDefBytes: [UInt8]
     ) {
         let typeID = ObjectIdentifier(type)
-        if !compatibleTypeDefStateUsed {
-            compatibleTypeDefStateUsed = true
-            compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
+        if !typeDefStateUsed {
+            typeDefStateUsed = true
+            typeDefState.assignFirstTypeIndex(for: typeID)
             buffer.writeUInt8(0)
             buffer.writeBytes(typeDefBytes)
             return
         }
 
-        let assignment = compatibleTypeDefState.assignIndexIfAbsent(for: typeID)
+        let assignment = typeDefState.assignIndexIfAbsent(for: typeID)
         if assignment.isNew {
             let marker = assignment.index << 1
             if marker < 0x80 {
@@ -327,9 +327,9 @@ public final class WriteContext {
 
     func reset() {
         resetObjectState()
-        if compatibleTypeDefStateUsed {
-            compatibleTypeDefState.reset()
-            compatibleTypeDefStateUsed = false
+        if typeDefStateUsed {
+            typeDefState.reset()
+            typeDefStateUsed = false
         }
         if metaStringWriteStateUsed {
             metaStringWriteState.reset()
@@ -353,36 +353,36 @@ public final class ReadContext {
     public let maxBinarySize: Int
     public let maxDepth: Int
     public let refReader: RefReader
-    let compatibleTypeDefState: CompatibleTypeDefReadState
+    let typeDefState: CompatibleTypeDefReadState
     let metaStringReadState: MetaStringReadState
-    private var compatibleTypeDefStateUsed = false
+    private var typeDefStateUsed = false
     private var metaStringReadStateUsed = false
     private var dynamicAnyDepth = 0
 
     private var pendingRefStack: [PendingRefSlot] = []
     // swiftlint:disable large_tuple
-    private var pendingCompatibleTypeMeta: [
+    private var pendingTypeMeta: [
         ObjectIdentifier: (
             typeMeta: TypeMeta,
-            matchesLocalSchema: Bool,
-            localHasUserTypeFields: Bool
+            matchesSchema: Bool,
+            hasUserTypeFields: Bool
         )
     ] = [:]
-    private var pendingCompatibleTypeMetaTypeID: ObjectIdentifier?
-    private var pendingCompatibleTypeMetaValue: (
+    private var pendingTypeMetaTypeID: ObjectIdentifier?
+    private var pendingTypeMetaValue: (
         typeMeta: TypeMeta,
-        matchesLocalSchema: Bool,
-        localHasUserTypeFields: Bool
+        matchesSchema: Bool,
+        hasUserTypeFields: Bool
     )?
     // swiftlint:enable large_tuple
     private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
-    private var lastCompatibleTypeMetaCacheHeader: UInt64?
-    private var lastCompatibleTypeMetaCacheEntry: TypeMeta?
+    private var lastTypeMetaCacheHeader: UInt64?
+    private var lastTypeMetaCacheEntry: TypeMeta?
     private var lastTypeInfoTypeID: ObjectIdentifier?
     private var lastTypeInfo: TypeInfo?
-    private var lastValidatedCompatibleTypeID: ObjectIdentifier?
-    private var lastValidatedCompatibleWireTypeID: TypeId?
-    private var lastValidatedCompatibleHeaderHash: UInt64 = 0
+    private var lastValidatedTypeID: ObjectIdentifier?
+    private var lastValidatedWireTypeID: TypeId?
+    private var lastValidatedHeaderHash: UInt64 = 0
 
     convenience init(
         buffer: ByteBuffer,
@@ -403,7 +403,7 @@ public final class ReadContext {
             maxCollectionSize: maxCollectionSize,
             maxBinarySize: maxBinarySize,
             maxDepth: maxDepth,
-            compatibleTypeDefState: CompatibleTypeDefReadState(),
+            typeDefState: CompatibleTypeDefReadState(),
             metaStringReadState: MetaStringReadState()
         )
     }
@@ -417,7 +417,7 @@ public final class ReadContext {
         maxCollectionSize: Int,
         maxBinarySize: Int,
         maxDepth: Int,
-        compatibleTypeDefState: CompatibleTypeDefReadState,
+        typeDefState: CompatibleTypeDefReadState,
         metaStringReadState: MetaStringReadState
     ) {
         self.buffer = buffer
@@ -429,7 +429,7 @@ public final class ReadContext {
         self.maxBinarySize = maxBinarySize
         self.maxDepth = maxDepth
         self.refReader = RefReader()
-        self.compatibleTypeDefState = compatibleTypeDefState
+        self.typeDefState = typeDefState
         self.metaStringReadState = metaStringReadState
     }
 
@@ -504,34 +504,34 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func isCompatibleTypeMetaValidationCached(
+    func isTypeMetaValidationCached(
         for typeID: ObjectIdentifier,
         wireTypeID: TypeId,
         headerHash: UInt64
     ) -> Bool {
-        lastValidatedCompatibleTypeID == typeID &&
-            lastValidatedCompatibleWireTypeID == wireTypeID &&
-            lastValidatedCompatibleHeaderHash == headerHash
+        lastValidatedTypeID == typeID &&
+            lastValidatedWireTypeID == wireTypeID &&
+            lastValidatedHeaderHash == headerHash
     }
 
     @inline(__always)
-    func cacheCompatibleTypeMetaValidation(
+    func cacheTypeMetaValidation(
         for typeID: ObjectIdentifier,
         wireTypeID: TypeId,
         headerHash: UInt64
     ) {
-        lastValidatedCompatibleTypeID = typeID
-        lastValidatedCompatibleWireTypeID = wireTypeID
-        lastValidatedCompatibleHeaderHash = headerHash
+        lastValidatedTypeID = typeID
+        lastValidatedWireTypeID = wireTypeID
+        lastValidatedHeaderHash = headerHash
     }
 
     @inline(__always)
-    private func validateCompatibleTypeMeta(
+    private func validateTypeMeta(
         _ remoteTypeMeta: TypeMeta,
         localTypeInfo: TypeInfo,
         actualWireTypeID: TypeId
     ) throws {
-        if !isCompatibleTypeMetaValidationCached(
+        if !isTypeMetaValidationCached(
             for: localTypeInfo.swiftTypeID,
             wireTypeID: actualWireTypeID,
             headerHash: remoteTypeMeta.headerHash
@@ -576,7 +576,7 @@ public final class ReadContext {
                 throw ForyError.typeMismatch(expected: actualWireTypeID.rawValue, actual: remoteTypeID)
             }
 
-            cacheCompatibleTypeMetaValidation(
+            cacheTypeMetaValidation(
                 for: localTypeInfo.swiftTypeID,
                 wireTypeID: actualWireTypeID,
                 headerHash: remoteTypeMeta.headerHash
@@ -585,8 +585,8 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func tryFastReadCompatibleRootTypeInfo<T: Serializer>(for type: T.Type) throws -> Bool {
-        guard compatible, !compatibleTypeDefStateUsed else {
+    func tryFastReadRootTypeInfo<T: Serializer>(for type: T.Type) throws -> Bool {
+        guard compatible, !typeDefStateUsed else {
             return false
         }
 
@@ -614,8 +614,8 @@ public final class ReadContext {
 
         let header = try buffer.readUInt64()
         let headerHash = header >> 14
-        var bodySize = Int(header & UInt64(compatibleTypeMetaSizeMask))
-        if bodySize == compatibleTypeMetaSizeMask {
+        var bodySize = Int(header & UInt64(typeMetaSizeMask))
+        if bodySize == typeMetaSizeMask {
             bodySize += Int(try buffer.readVarUInt32())
         }
         guard headerHash == localHeaderHash else {
@@ -627,15 +627,15 @@ public final class ReadContext {
         guard let localTypeMeta = localTypeInfo.typeMeta else {
             throw ForyError.invalidData("missing compatible type metadata for \(localTypeInfo.typeID)")
         }
-        setPendingCompatibleTypeMeta(
+        setPendingTypeMeta(
             typeID: localTypeInfo.swiftTypeID,
             value: (
                 typeMeta: localTypeMeta,
-                matchesLocalSchema: true,
-                localHasUserTypeFields: false
+                matchesSchema: true,
+                hasUserTypeFields: false
             )
         )
-        cacheCompatibleTypeMetaValidation(
+        cacheTypeMetaValidation(
             for: localTypeInfo.swiftTypeID,
             wireTypeID: wireTypeID,
             headerHash: headerHash
@@ -670,13 +670,13 @@ public final class ReadContext {
         _ = pendingRefStack.popLast()
     }
 
-    func readCompatibleTypeMeta() throws -> TypeMeta {
-        compatibleTypeDefStateUsed = true
+    func readTypeMeta() throws -> TypeMeta {
+        typeDefStateUsed = true
         let indexMarker = try buffer.readVarUInt32()
         let isRef = (indexMarker & 1) == 1
         let index = Int(indexMarker >> 1)
         if isRef {
-            guard let typeMeta = compatibleTypeDefState.typeMeta(at: index) else {
+            guard let typeMeta = typeDefState.typeMeta(at: index) else {
                 throw ForyError.invalidData("unknown compatible type definition ref index \(index)")
             }
             return typeMeta
@@ -684,99 +684,99 @@ public final class ReadContext {
 
         let typeMetaStart = buffer.getCursor()
         let header = try buffer.readUInt64()
-        var bodySize = Int(header & UInt64(compatibleTypeMetaSizeMask))
-        if bodySize == compatibleTypeMetaSizeMask {
+        var bodySize = Int(header & UInt64(typeMetaSizeMask))
+        if bodySize == typeMetaSizeMask {
             bodySize += Int(try buffer.readVarUInt32())
         }
-        if lastCompatibleTypeMetaCacheHeader == header,
-           let cachedEntry = lastCompatibleTypeMetaCacheEntry {
+        if lastTypeMetaCacheHeader == header,
+           let cachedEntry = lastTypeMetaCacheEntry {
             try buffer.skip(bodySize)
-            try compatibleTypeDefState.storeTypeMetaEntry(cachedEntry, at: index)
+            try typeDefState.storeTypeMetaEntry(cachedEntry, at: index)
             return cachedEntry
         }
 
-        if let cached = typeResolver.compatibleTypeMeta(forHeader: header) {
+        if let cached = typeResolver.typeMeta(forHeader: header) {
             try buffer.skip(bodySize)
-            lastCompatibleTypeMetaCacheHeader = header
-            lastCompatibleTypeMetaCacheEntry = cached
-            try compatibleTypeDefState.storeTypeMetaEntry(cached, at: index)
+            lastTypeMetaCacheHeader = header
+            lastTypeMetaCacheEntry = cached
+            try typeDefState.storeTypeMetaEntry(cached, at: index)
             return cached
         }
 
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
-        let canonicalEntry = typeResolver.cacheCompatibleTypeMeta(decoded, forHeader: header)
+        let canonicalEntry = typeResolver.cacheTypeMeta(decoded, forHeader: header)
 
-        lastCompatibleTypeMetaCacheHeader = header
-        lastCompatibleTypeMetaCacheEntry = canonicalEntry
-        try compatibleTypeDefState.storeTypeMetaEntry(canonicalEntry, at: index)
+        lastTypeMetaCacheHeader = header
+        lastTypeMetaCacheEntry = canonicalEntry
+        try typeDefState.storeTypeMetaEntry(canonicalEntry, at: index)
         return canonicalEntry
     }
 
-    func pushCompatibleTypeMeta<T: Serializer>(
+    func pushTypeMeta<T: Serializer>(
         for type: T.Type,
         _ typeMeta: TypeMeta
     ) {
         let typeInfo = try? typeInfo(for: type)
-        pushCompatibleTypeMeta(for: type, typeMeta, localTypeInfo: typeInfo)
+        pushTypeMeta(for: type, typeMeta, localTypeInfo: typeInfo)
     }
 
     @inline(__always)
-    func pushCompatibleTypeMeta<T: Serializer>(
+    func pushTypeMeta<T: Serializer>(
         for type: T.Type,
         _ typeMeta: TypeMeta,
         localTypeInfo: TypeInfo?
     ) {
         let typeID = ObjectIdentifier(type)
-        let matchesLocalSchema: Bool
-        let localHasUserTypeFields: Bool
+        let matchesSchema: Bool
+        let hasUserTypeFields: Bool
         if let localTypeInfo,
            let localHeaderHash = localTypeInfo.typeDefHeaderHash {
-            matchesLocalSchema = typeMeta.headerHash == localHeaderHash
-            localHasUserTypeFields = localTypeInfo.typeDefHasUserTypeFields
+            matchesSchema = typeMeta.headerHash == localHeaderHash
+            hasUserTypeFields = localTypeInfo.typeDefHasUserTypeFields
         } else {
-            matchesLocalSchema = false
-            localHasUserTypeFields = true
+            matchesSchema = false
+            hasUserTypeFields = true
         }
-        setPendingCompatibleTypeMeta(
+        setPendingTypeMeta(
             typeID: typeID,
             value: (
                 typeMeta: typeMeta,
-                matchesLocalSchema: matchesLocalSchema,
-                localHasUserTypeFields: localHasUserTypeFields
+                matchesSchema: matchesSchema,
+                hasUserTypeFields: hasUserTypeFields
             )
         )
     }
 
     @inline(__always)
     // swiftlint:disable large_tuple
-    public func compatibleTypeMeta<T: Serializer>(
+    public func typeMeta<T: Serializer>(
         for type: T.Type
-    ) -> (typeMeta: TypeMeta, matchesLocalSchema: Bool, localHasUserTypeFields: Bool)? {
+    ) -> (typeMeta: TypeMeta, matchesSchema: Bool, hasUserTypeFields: Bool)? {
         let typeID = ObjectIdentifier(type)
-        if pendingCompatibleTypeMetaTypeID == typeID {
-            return pendingCompatibleTypeMetaValue
+        if pendingTypeMetaTypeID == typeID {
+            return pendingTypeMetaValue
         }
-        return pendingCompatibleTypeMeta[typeID]
+        return pendingTypeMeta[typeID]
     }
     // swiftlint:enable large_tuple
 
     @inline(__always)
     // swiftlint:disable large_tuple
-    private func setPendingCompatibleTypeMeta(
+    private func setPendingTypeMeta(
         typeID: ObjectIdentifier,
-        value: (typeMeta: TypeMeta, matchesLocalSchema: Bool, localHasUserTypeFields: Bool)
+        value: (typeMeta: TypeMeta, matchesSchema: Bool, hasUserTypeFields: Bool)
     ) {
-        if pendingCompatibleTypeMetaTypeID == typeID {
-            pendingCompatibleTypeMetaValue = value
+        if pendingTypeMetaTypeID == typeID {
+            pendingTypeMetaValue = value
             return
         }
-        if let oldTypeID = pendingCompatibleTypeMetaTypeID,
-           let oldValue = pendingCompatibleTypeMetaValue {
-            pendingCompatibleTypeMeta[oldTypeID] = oldValue
+        if let oldTypeID = pendingTypeMetaTypeID,
+           let oldValue = pendingTypeMetaValue {
+            pendingTypeMeta[oldTypeID] = oldValue
         }
-        pendingCompatibleTypeMetaTypeID = typeID
-        pendingCompatibleTypeMetaValue = value
+        pendingTypeMetaTypeID = typeID
+        pendingTypeMetaValue = value
     }
     // swiftlint:enable large_tuple
 
@@ -808,12 +808,12 @@ public final class ReadContext {
             }
         }
         if compatible {
-            if pendingCompatibleTypeMetaTypeID != nil {
-                pendingCompatibleTypeMetaTypeID = nil
-                pendingCompatibleTypeMetaValue = nil
+            if pendingTypeMetaTypeID != nil {
+                pendingTypeMetaTypeID = nil
+                pendingTypeMetaValue = nil
             }
-            if !pendingCompatibleTypeMeta.isEmpty {
-                pendingCompatibleTypeMeta.removeAll(keepingCapacity: true)
+            if !pendingTypeMeta.isEmpty {
+                pendingTypeMeta.removeAll(keepingCapacity: true)
             }
         }
         if !pendingTypeInfo.isEmpty {
@@ -823,9 +823,9 @@ public final class ReadContext {
 
     func reset() {
         resetObjectState()
-        if compatibleTypeDefStateUsed {
-            compatibleTypeDefState.reset()
-            compatibleTypeDefStateUsed = false
+        if typeDefStateUsed {
+            typeDefState.reset()
+            typeDefStateUsed = false
         }
         if metaStringReadStateUsed {
             metaStringReadState.reset()

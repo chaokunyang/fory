@@ -227,12 +227,7 @@ private func buildCtorArgs(_ fields: [ParsedField]) -> String {
 private func buildStructCompatibleDefaults(_ fields: [ParsedField]) -> String {
     fields
         .sorted(by: { $0.originalIndex < $1.originalIndex })
-        .map { field in
-            if field.dynamicAnyCodec != nil {
-                return "var __\(field.name): \(field.typeText) = \(fieldDefaultExpr(field))"
-            }
-            return "var __\(field.name) = \(fieldDefaultExpr(field))"
-        }
+        .map(compatibleDefaultDecl)
         .joined(separator: "\n                ")
 }
 
@@ -285,7 +280,7 @@ private func readFieldExpr(
 }
 
 private func schemaReadFieldExpr(_ field: ParsedField) -> String {
-    if field.dynamicAnyCodec != nil || field.customCodecType != nil || field.isOptional || field.typeID == 27 {
+    if fieldNeedsGeneralSchemaRead(field) {
         return readFieldExpr(
             field,
             refModeExpr: fieldRefModeExpression(field),
@@ -299,7 +294,7 @@ private func schemaReadFieldExpr(_ field: ParsedField) -> String {
 }
 
 private func compatibleSchemaReadFieldExpr(_ field: ParsedField) -> String {
-    if field.dynamicAnyCodec != nil || field.customCodecType != nil || field.isOptional || field.typeID == 27 || compatibleFieldNeedsTypeInfo(field) {
+    if fieldNeedsGeneralCompatibleRead(field) {
         return readFieldExpr(
             field,
             refModeExpr: fieldRefModeExpression(field),
@@ -353,8 +348,21 @@ private func dynamicAnyReadExpr(
 ) -> String {
     let metatypeExpr = "(\(field.typeText)).self"
     let method = dynamicAnyReadMethodName(dynamicAnyCodec)
-    let readTypeInfoExpr = dynamicAnyCodec == .anyValue || dynamicAnyCodec == .anyHashableValue
+    let readTypeInfoExpr = dynamicAnyReadsTypeInfo(dynamicAnyCodec)
         ? ", readTypeInfo: true"
         : ""
     return "try castAnyDynamicValue(context.\(method)(refMode: \(refModeExpr)\(readTypeInfoExpr)), to: \(metatypeExpr))"
+}
+
+private func compatibleDefaultDecl(_ field: ParsedField) -> String {
+    let explicitType = field.dynamicAnyCodec != nil ? ": \(field.typeText)" : ""
+    return "var __\(field.name)\(explicitType) = \(fieldDefaultExpr(field))"
+}
+
+private func fieldNeedsGeneralSchemaRead(_ field: ParsedField) -> Bool {
+    field.dynamicAnyCodec != nil || field.customCodecType != nil || field.isOptional || field.typeID == 27
+}
+
+private func fieldNeedsGeneralCompatibleRead(_ field: ParsedField) -> Bool {
+    fieldNeedsGeneralSchemaRead(field) || compatibleFieldNeedsTypeInfo(field)
 }

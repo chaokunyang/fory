@@ -1359,6 +1359,10 @@ func dynamicAnyUsesContextTrackRef(_ codec: DynamicAnyCodecKind) -> Bool {
     codec == .anyValue
 }
 
+func dynamicAnyReadsTypeInfo(_ codec: DynamicAnyCodecKind) -> Bool {
+    codec == .anyValue || codec == .anyHashableValue
+}
+
 func fieldDefaultExpr(_ field: ParsedField) -> String {
     if field.dynamicAnyCodec != nil {
         return dynamicAnyDefaultExpr(typeText: field.typeText)

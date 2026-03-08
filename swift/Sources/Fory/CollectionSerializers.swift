@@ -488,7 +488,7 @@ extension Array: Serializer where Element: Serializer {
         }
 
         let hasNull = Element.isNullableType && self.contains(where: { $0.foryIsNone })
-        let trackRef = context.trackRef && Element.isReferenceTrackableType
+        let trackRef = context.trackRef && Element.isRefType
         let declaredElementType = hasGenerics && !TypeId.needsTypeInfoForField(Element.staticTypeId)
         let dynamicElementType = Element.staticTypeId == .unknown
 
@@ -560,7 +560,7 @@ extension Array: Serializer where Element: Serializer {
         let hasNull = (header & CollectionHeader.hasNull) != 0
         let declared = (header & CollectionHeader.declaredElementType) != 0
         let sameType = (header & CollectionHeader.sameType) != 0
-        let canonicalizeElements = context.trackRef && !trackRef && Element.isReferenceTrackableType
+        let canonicalizeElements = context.trackRef && !trackRef && Element.isRefType
 
         if !sameType {
             if trackRef {
@@ -585,7 +585,7 @@ extension Array: Serializer where Element: Serializer {
                                 let value = try Element.foryRead(context, refMode: .none, readTypeInfo: true)
                                 let end = buffer.getCursor()
                                 destination.advanced(by: index).initialize(
-                                    to: context.canonicalizeNonTrackingReference(value, start: start, end: end)
+                                    to: context.canonicalizeNonTrackingRef(value, start: start, end: end)
                                 )
                             } else {
                                 destination.advanced(by: index).initialize(
@@ -606,7 +606,7 @@ extension Array: Serializer where Element: Serializer {
                         let value = try Element.foryRead(context, refMode: .none, readTypeInfo: true)
                         let end = buffer.getCursor()
                         destination.advanced(by: index).initialize(
-                            to: context.canonicalizeNonTrackingReference(value, start: start, end: end)
+                            to: context.canonicalizeNonTrackingRef(value, start: start, end: end)
                         )
                     } else {
                         destination.advanced(by: index).initialize(
@@ -647,7 +647,7 @@ extension Array: Serializer where Element: Serializer {
                             let value = try Element.foryReadData(context)
                             let end = buffer.getCursor()
                             destination.advanced(by: index).initialize(
-                                to: context.canonicalizeNonTrackingReference(value, start: start, end: end)
+                                to: context.canonicalizeNonTrackingRef(value, start: start, end: end)
                             )
                         } else {
                             destination.advanced(by: index).initialize(to: try Element.foryReadData(context))
@@ -668,7 +668,7 @@ extension Array: Serializer where Element: Serializer {
                     let value = try Element.foryReadData(context)
                     let end = buffer.getCursor()
                     destination.advanced(by: index).initialize(
-                        to: context.canonicalizeNonTrackingReference(value, start: start, end: end)
+                        to: context.canonicalizeNonTrackingRef(value, start: start, end: end)
                     )
                 } else {
                     destination.advanced(by: index).initialize(to: try Element.foryReadData(context))
@@ -707,8 +707,8 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
             return
         }
 
-        let trackKeyRef = context.trackRef && Key.isReferenceTrackableType
-        let trackValueRef = context.trackRef && Value.isReferenceTrackableType
+        let trackKeyRef = context.trackRef && Key.isRefType
+        let trackValueRef = context.trackRef && Value.isRefType
         let keyDeclared = hasGenerics && !TypeId.needsTypeInfoForField(Key.staticTypeId)
         let valueDeclared = hasGenerics && !TypeId.needsTypeInfoForField(Value.staticTypeId)
         let keyDynamicType = Key.staticTypeId == .unknown
@@ -918,7 +918,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
         map.reserveCapacity(Swift.min(totalLength, context.buffer.remaining))
         let keyDynamicType = Key.staticTypeId == .unknown
         let valueDynamicType = Value.staticTypeId == .unknown
-        let canonicalizeValues = context.trackRef && Value.isReferenceTrackableType
+        let canonicalizeValues = context.trackRef && Value.isRefType
 
         if keyDynamicType || valueDynamicType {
             var dynamicReadCount = 0
@@ -954,7 +954,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                             readTypeInfo: valueDynamicType || !valueDeclared
                         )
                         let end = context.buffer.getCursor()
-                        map[Key.foryDefault()] = context.canonicalizeNonTrackingReference(
+                        map[Key.foryDefault()] = context.canonicalizeNonTrackingRef(
                             value,
                             start: start,
                             end: end
@@ -1006,7 +1006,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                             readTypeInfo: false
                         )
                         let end = context.buffer.getCursor()
-                        map[key] = context.canonicalizeNonTrackingReference(value, start: start, end: end)
+                        map[key] = context.canonicalizeNonTrackingRef(value, start: start, end: end)
                     }
                 }
                 if !keyDeclared {
@@ -1053,7 +1053,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                         readTypeInfo: !valueDeclared
                     )
                     let end = context.buffer.getCursor()
-                    map[Key.foryDefault()] = context.canonicalizeNonTrackingReference(
+                    map[Key.foryDefault()] = context.canonicalizeNonTrackingRef(
                         value,
                         start: start,
                         end: end
@@ -1106,7 +1106,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                         readTypeInfo: false
                     )
                     let end = context.buffer.getCursor()
-                    map[key] = context.canonicalizeNonTrackingReference(value, start: start, end: end)
+                    map[key] = context.canonicalizeNonTrackingRef(value, start: start, end: end)
                 }
             }
             readCount += chunkSize

@@ -18,7 +18,7 @@
 @attached(
     member,
     names: named(staticTypeId),
-    named(isReferenceTrackableType),
+    named(isRefType),
     named(__forySchemaHash),
     named(__forySchemaHashTrackRefDisabled),
     named(__forySchemaHashTrackRefEnabled),

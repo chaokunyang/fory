@@ -23,7 +23,7 @@ public final class RefWriter {
 
     public init() {}
 
-    public func tryWriteReference(buffer: ByteBuffer, object: AnyObject) -> Bool {
+    public func tryWriteRef(buffer: ByteBuffer, object: AnyObject) -> Bool {
         let objectID = ObjectIdentifier(object)
         if let refID = refs[objectID] {
             buffer.writeInt8(RefFlag.ref.rawValue)

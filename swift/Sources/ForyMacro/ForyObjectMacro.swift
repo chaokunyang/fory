@@ -48,7 +48,7 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
         """
 
         let referenceTrackDecl: DeclSyntax? = parsed.isClass ? """
-        \(raw: accessPrefix)static var isReferenceTrackableType: Bool { true }
+        \(raw: accessPrefix)static var isRefType: Bool { true }
         """ : nil
 
         let schemaHashDecl: DeclSyntax = DeclSyntax(stringLiteral: buildSchemaHashDecl(fields: parsed.fields))
@@ -959,7 +959,7 @@ private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: S
                     trackRefExpr = "0"
                 }
             } else {
-                trackRefExpr = "((\(trackRefExpression)) && \(field.typeText).isReferenceTrackableType) ? 1 : 0"
+                trackRefExpr = "((\(trackRefExpression)) && \(field.typeText).isRefType) ? 1 : 0"
             }
             return "\"\(field.schemaIdentifier),\(typeID),\\(\(trackRefExpr)),\(nullable);\""
         }
@@ -1024,8 +1024,8 @@ private func buildWriteWrapperDecl(accessPrefix: String) -> String {
     ) throws {
         let __buffer = context.buffer
         if refMode != .none {
-            if refMode == .tracking, Self.isReferenceTrackableType, let object = self as AnyObject? {
-                if context.refWriter.tryWriteReference(buffer: __buffer, object: object) {
+            if refMode == .tracking, Self.isRefType, let object = self as AnyObject? {
+                if context.refWriter.tryWriteRef(buffer: __buffer, object: object) {
                     return
                 }
             } else {
@@ -1064,13 +1064,13 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
                 return try context.refReader.readRef(refID, as: Self.self)
             case .refValue:
                 let reservedRefID = context.refReader.reserveRefID()
-                context.pushPendingReference(reservedRefID)
+                context.pushPendingRef(reservedRefID)
                 if readTypeInfo {
                     try Self.foryReadTypeInfo(context)
                 }
                 let value = try Self.foryReadData(context)
-                context.finishPendingReferenceIfNeeded(value)
-                context.popPendingReference()
+                context.finishPendingRefIfNeeded(value)
+                context.popPendingRef()
                 return value
             case .notNullValue:
                 break
@@ -1312,7 +1312,7 @@ func fieldRefModeExpression(_ field: ParsedField) -> String {
             return "RefMode.from(nullable: \(nullable), trackRef: false)"
         }
     }
-    return "RefMode.from(nullable: \(nullable), trackRef: context.trackRef && \(field.typeText).isReferenceTrackableType)"
+    return "RefMode.from(nullable: \(nullable), trackRef: context.trackRef && \(field.typeText).isRefType)"
 }
 
 private func compatibleTypeMetaFieldExpression(
@@ -1328,7 +1328,7 @@ private func compatibleTypeMetaFieldExpression(
             fieldTrackRefExpression = "false"
         }
     } else {
-        fieldTrackRefExpression = "\(trackRefExpression) && \(field.typeText).isReferenceTrackableType"
+        fieldTrackRefExpression = "\(trackRefExpression) && \(field.typeText).isRefType"
     }
 
     return buildCompatibleTypeMetaFieldTypeExpression(

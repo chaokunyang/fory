@@ -30,8 +30,8 @@ extension Optional: Serializer where Wrapped: Serializer {
         true
     }
 
-    public static var isReferenceTrackableType: Bool {
-        Wrapped.isReferenceTrackableType
+    public static var isRefType: Bool {
+        Wrapped.isRefType
     }
 
     public var foryIsNone: Bool {

@@ -842,11 +842,11 @@ public final class ReadContext {
         lastCompatibleRootTypeInfoRemoteTypeMeta = remoteTypeMeta
     }
 
-    public func pushPendingReference(_ refID: UInt32) {
+    public func pushPendingRef(_ refID: UInt32) {
         pendingRefStack.append(PendingRefSlot(refID: refID, bound: false))
     }
 
-    public func bindPendingReference(_ value: Any) {
+    public func bindPendingRef(_ value: Any) {
         guard var last = pendingRefStack.popLast() else {
             return
         }
@@ -855,7 +855,7 @@ public final class ReadContext {
         pendingRefStack.append(last)
     }
 
-    public func finishPendingReferenceIfNeeded(_ value: Any) {
+    public func finishPendingRefIfNeeded(_ value: Any) {
         guard var last = pendingRefStack.popLast() else {
             return
         }
@@ -865,7 +865,7 @@ public final class ReadContext {
         }
     }
 
-    public func popPendingReference() {
+    public func popPendingRef() {
         _ = pendingRefStack.popLast()
     }
 
@@ -1229,7 +1229,7 @@ public final class ReadContext {
         return decoded
     }
 
-    func canonicalizeNonTrackingReference<T>(
+    func canonicalizeNonTrackingRef<T>(
         _ value: T,
         start: Int,
         end: Int

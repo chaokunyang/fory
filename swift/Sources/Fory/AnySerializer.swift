@@ -124,7 +124,7 @@ private struct DynamicAnyValue: Serializer {
         true
     }
 
-    static var isReferenceTrackableType: Bool {
+    static var isRefType: Bool {
         true
     }
 
@@ -199,8 +199,8 @@ private struct DynamicAnyValue: Serializer {
                 context.buffer.writeInt8(RefFlag.null.rawValue)
                 return
             }
-            if refMode == .tracking, anyValueIsReferenceTrackable(value), let object = value as AnyObject? {
-                if context.refWriter.tryWriteReference(buffer: context.buffer, object: object) {
+            if refMode == .tracking, anyValueIsRefType(value), let object = value as AnyObject? {
+                if context.refWriter.tryWriteRef(buffer: context.buffer, object: object) {
                     return
                 }
             } else {
@@ -240,13 +240,13 @@ private struct DynamicAnyValue: Serializer {
                 return DynamicAnyValue(referenced)
             case .refValue:
                 let reservedRefID = context.refReader.reserveRefID()
-                context.pushPendingReference(reservedRefID)
+                context.pushPendingRef(reservedRefID)
                 if readTypeInfo {
                     try foryReadTypeInfo(context)
                 }
                 let value = try foryReadData(context)
-                context.finishPendingReferenceIfNeeded(value)
-                context.popPendingReference()
+                context.finishPendingRefIfNeeded(value)
+                context.popPendingRef()
                 return value
             case .notNullValue:
                 break
@@ -271,11 +271,11 @@ private func unwrapOptionalAny(_ value: Any) -> Any? {
     return child
 }
 
-private func anyValueIsReferenceTrackable(_ value: Any) -> Bool {
+private func anyValueIsRefType(_ value: Any) -> Bool {
     guard let serializer = value as? any Serializer else {
         return false
     }
-    return type(of: serializer).isReferenceTrackableType
+    return type(of: serializer).isRefType
 }
 
 private func toAnyHashableKey(_ value: Any) throws -> AnyHashable {

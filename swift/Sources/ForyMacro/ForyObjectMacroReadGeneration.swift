@@ -52,18 +52,18 @@ private func buildClassReadDataDecl(
         if context.compatible, let compatibleFields = context.compatibleFields(for: Self.self) {
             if compatibleFields.canUseSchemaFastPath {
                 let value = Self.init()
-                context.bindPendingReference(value)
+                context.bindPendingRef(value)
                 \(schemaAssignBody)
                 return value
             }
             if compatibleFields.canUseSchemaOrderReadPath {
                 let value = Self.init()
-                context.bindPendingReference(value)
+                context.bindPendingRef(value)
                 \(compatibleAlignedAssignBody)
                 return value
             }
             let value = Self.init()
-            context.bindPendingReference(value)
+            context.bindPendingRef(value)
             for remoteField in compatibleFields.fields {
                 switch Int(remoteField.fieldID ?? -1) {
             \(compatibleCases)
@@ -81,7 +81,7 @@ private func buildClassReadDataDecl(
             }
         }
         let value = Self.init()
-        context.bindPendingReference(value)
+        context.bindPendingRef(value)
         \(schemaAssignBody)
         return value
     }

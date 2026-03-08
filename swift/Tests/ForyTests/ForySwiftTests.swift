@@ -442,7 +442,7 @@ func macroStructRoundTrip() throws {
 }
 
 @Test
-func macroClassReferenceTracking() throws {
+func macroClassRefTracking() throws {
     let fory = Fory(config: .init(xlang: true, trackRef: true))
     fory.register(Node.self, id: 200)
 
@@ -457,7 +457,7 @@ func macroClassReferenceTracking() throws {
 }
 
 @Test
-func macroClassWeakReferenceTracking() throws {
+func macroClassWeakRefTracking() throws {
     let fory = Fory(config: .init(xlang: true, trackRef: true))
     fory.register(WeakNode.self, id: 201)
 
@@ -637,7 +637,7 @@ func macroAnyFieldsRoundTrip() throws {
 }
 
 @Test
-func collectionAndMapReferenceTracking() throws {
+func collectionAndMapRefTracking() throws {
     let fory = Fory(config: .init(xlang: true, trackRef: true))
     fory.register(Node.self, id: 200)
 

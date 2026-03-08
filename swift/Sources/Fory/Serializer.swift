@@ -46,7 +46,7 @@ public protocol Serializer {
     static var staticTypeId: TypeId { get }
 
     static var isNullableType: Bool { get }
-    static var isReferenceTrackableType: Bool { get }
+    static var isRefType: Bool { get }
 
     var foryIsNone: Bool { get }
 
@@ -79,7 +79,7 @@ public extension Serializer {
     static var isNullableType: Bool { false }
 
     @inlinable
-    static var isReferenceTrackableType: Bool { false }
+    static var isRefType: Bool { false }
 
     @inlinable
     var foryIsNone: Bool { false }
@@ -111,8 +111,8 @@ public extension Serializer {
         hasGenerics: Bool
     ) throws {
         if refMode != .none {
-            if refMode == .tracking, Self.isReferenceTrackableType, let object = self as AnyObject? {
-                if context.refWriter.tryWriteReference(buffer: context.buffer, object: object) {
+            if refMode == .tracking, Self.isRefType, let object = self as AnyObject? {
+                if context.refWriter.tryWriteRef(buffer: context.buffer, object: object) {
                     return
                 }
             } else {
@@ -147,13 +147,13 @@ public extension Serializer {
                 return try context.refReader.readRef(refID, as: Self.self)
             case .refValue:
                 let reservedRefID = context.refReader.reserveRefID()
-                context.pushPendingReference(reservedRefID)
+                context.pushPendingRef(reservedRefID)
                 if readTypeInfo {
                     try Self.foryReadTypeInfo(context)
                 }
                 let value = try Self.foryReadData(context)
-                context.finishPendingReferenceIfNeeded(value)
-                context.popPendingReference()
+                context.finishPendingRefIfNeeded(value)
+                context.popPendingRef()
                 return value
             case .notNullValue:
                 break

@@ -146,17 +146,53 @@ public final class Fory {
     }
 
     public func serialize<T: Serializer>(_ value: T) throws -> Data {
-        try withReusableWriteContext { context in
-            if !value.foryIsNone,
-               let directData = try materializePrimitiveRootData(value, context: context) {
-                return directData
-            }
-            writeHead(buffer: context.buffer, isNone: value.foryIsNone)
-            if !value.foryIsNone {
-                try writeRootTypedValue(value, context: context)
-            }
-            return context.buffer.copyToData()
+        let context = writeContext
+        context.buffer.clear()
+        defer {
+            context.reset()
         }
+
+        if !value.foryIsNone,
+           !config.trackRef,
+           let payloadSize = value.foryPrimitiveDataSize {
+            let headByte: UInt8 = config.xlang ? ForyHeaderFlag.isXlang : 0
+            if !config.xlang, !config.compatible {
+                let totalByteCount = 1 + payloadSize
+                return context.buffer.materializeData(byteCount: totalByteCount) { base in
+                    base[0] = headByte
+                    var index = 1
+                    value.foryWritePrimitiveData(to: base, index: &index)
+                    assert(index == totalByteCount)
+                }
+            }
+
+            if config.compatible {
+                let typeInfo = try context.typeInfo(for: T.self)
+                let wireTypeID = typeInfo.wireTypeID(compatible: true)
+                if wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct,
+                   let typeDefBytes = typeInfo.typeDefBytes,
+                   !typeInfo.typeDefHasUserTypeFields {
+                    let totalByteCount = 4 + typeDefBytes.count + payloadSize
+                    let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
+                    return context.buffer.materializeData(byteCount: totalByteCount) { base in
+                        base[0] = headByte
+                        base[1] = refByte
+                        base[2] = UInt8(truncatingIfNeeded: wireTypeID.rawValue)
+                        base[3] = 0
+                        var index = 4
+                        index = Wire.copyBytes(typeDefBytes, to: base, index: index)
+                        value.foryWritePrimitiveData(to: base, index: &index)
+                        assert(index == totalByteCount)
+                    }
+                }
+            }
+        }
+
+        writeHead(buffer: context.buffer, isNone: value.foryIsNone)
+        if !value.foryIsNone {
+            try writeRootTypedValue(value, context: context)
+        }
+        return context.buffer.copyToData()
     }
 
     public func deserialize<T: Serializer>(_ data: Data, as _: T.Type = T.self) throws -> T {
@@ -173,18 +209,59 @@ public final class Fory {
     }
 
     public func serialize<T: Serializer>(_ value: T, to buffer: inout Data) throws {
-        try withReusableWriteContext { context in
-            if !value.foryIsNone,
-               let directData = try materializePrimitiveRootData(value, context: context) {
-                buffer.append(directData)
+        let context = writeContext
+        context.buffer.clear()
+        defer {
+            context.reset()
+        }
+
+        if !value.foryIsNone,
+           !config.trackRef,
+           let payloadSize = value.foryPrimitiveDataSize {
+            let headByte: UInt8 = config.xlang ? ForyHeaderFlag.isXlang : 0
+            if !config.xlang, !config.compatible {
+                let totalByteCount = 1 + payloadSize
+                buffer.append(
+                    context.buffer.materializeData(byteCount: totalByteCount) { base in
+                        base[0] = headByte
+                        var index = 1
+                        value.foryWritePrimitiveData(to: base, index: &index)
+                        assert(index == totalByteCount)
+                    }
+                )
                 return
             }
-            writeHead(buffer: context.buffer, isNone: value.foryIsNone)
-            if !value.foryIsNone {
-                try writeRootTypedValue(value, context: context)
+
+            if config.compatible {
+                let typeInfo = try context.typeInfo(for: T.self)
+                let wireTypeID = typeInfo.wireTypeID(compatible: true)
+                if wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct,
+                   let typeDefBytes = typeInfo.typeDefBytes,
+                   !typeInfo.typeDefHasUserTypeFields {
+                    let totalByteCount = 4 + typeDefBytes.count + payloadSize
+                    let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
+                    buffer.append(
+                        context.buffer.materializeData(byteCount: totalByteCount) { base in
+                            base[0] = headByte
+                            base[1] = refByte
+                            base[2] = UInt8(truncatingIfNeeded: wireTypeID.rawValue)
+                            base[3] = 0
+                            var index = 4
+                            index = Wire.copyBytes(typeDefBytes, to: base, index: index)
+                            value.foryWritePrimitiveData(to: base, index: &index)
+                            assert(index == totalByteCount)
+                        }
+                    )
+                    return
+                }
             }
-            buffer.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
         }
+
+        writeHead(buffer: context.buffer, isNone: value.foryIsNone)
+        if !value.foryIsNone {
+            try writeRootTypedValue(value, context: context)
+        }
+        buffer.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
     }
 
     public func deserialize<T: Serializer>(from buffer: ByteBuffer, as _: T.Type = T.self) throws -> T {
@@ -484,55 +561,6 @@ public final class Fory {
         config.trackRef ? .tracking : .nullOnly
     }
 
-    @inline(__always)
-    private func materializePrimitiveRootData<T: Serializer>(
-        _ value: T,
-        context: WriteContext
-    ) throws -> Data? {
-        guard !config.trackRef,
-              let payloadSize = value.foryPrimitiveDataSize else {
-            return nil
-        }
-
-        let headByte: UInt8 = config.xlang ? ForyHeaderFlag.isXlang : 0
-
-        if !config.xlang, !config.compatible {
-            let totalByteCount = 1 + payloadSize
-            return context.buffer.materializeData(byteCount: totalByteCount) { base in
-                base[0] = headByte
-                var index = 1
-                value.foryWritePrimitiveData(to: base, index: &index)
-                assert(index == totalByteCount)
-            }
-        }
-
-        guard config.compatible else {
-            return nil
-        }
-
-        let typeInfo = try context.typeInfo(for: T.self)
-        let wireTypeID = typeInfo.wireTypeID(compatible: true)
-        guard wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct,
-              let typeDefBytes = typeInfo.typeDefBytes,
-              !typeInfo.typeDefHasUserTypeFields else {
-            return nil
-        }
-
-        let totalByteCount = 4 + typeDefBytes.count + payloadSize
-        let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
-        return context.buffer.materializeData(byteCount: totalByteCount) { base in
-            base[0] = headByte
-            base[1] = refByte
-            base[2] = UInt8(truncatingIfNeeded: wireTypeID.rawValue)
-            base[3] = 0
-            var index = 4
-            index = Wire.copyBytes(typeDefBytes, to: base, index: index)
-            value.foryWritePrimitiveData(to: base, index: &index)
-            assert(index == totalByteCount)
-        }
-    }
-
-    @inline(__always)
     private func writeRootTypedValue<T: Serializer>(
         _ value: T,
         context: WriteContext
@@ -602,17 +630,6 @@ public final class Fory {
     }
 
     @inline(__always)
-    func withReusableWriteContext<R>(
-        _ body: (WriteContext) throws -> R
-    ) rethrows -> R {
-        writeContext.buffer.clear()
-        defer {
-            writeContext.reset()
-        }
-        return try body(writeContext)
-    }
-
-    @inline(__always)
     func withReusableReadContext<R>(
         data: Data,
         _ body: (ReadContext) throws -> R
@@ -629,13 +646,16 @@ public final class Fory {
         isNone: Bool,
         _ body: (WriteContext) throws -> Void
     ) throws -> Data {
-        try withReusableWriteContext { context in
-            writeHead(buffer: context.buffer, isNone: isNone)
-            if !isNone {
-                try body(context)
-            }
-            return context.buffer.copyToData()
+        let context = writeContext
+        context.buffer.clear()
+        defer {
+            context.reset()
         }
+        writeHead(buffer: context.buffer, isNone: isNone)
+        if !isNone {
+            try body(context)
+        }
+        return context.buffer.copyToData()
     }
 
     @inline(__always)
@@ -644,13 +664,16 @@ public final class Fory {
         isNone: Bool,
         _ body: (WriteContext) throws -> Void
     ) throws {
-        try withReusableWriteContext { context in
-            writeHead(buffer: context.buffer, isNone: isNone)
-            if !isNone {
-                try body(context)
-            }
-            output.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
+        let context = writeContext
+        context.buffer.clear()
+        defer {
+            context.reset()
         }
+        writeHead(buffer: context.buffer, isNone: isNone)
+        if !isNone {
+            try body(context)
+        }
+        output.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
     }
 
     @inline(__always)

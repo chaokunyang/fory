@@ -359,7 +359,7 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func primitiveRootTypeInfoBytes<T: Serializer>(
+    func compatibleRootTypeInfoBytes<T: Serializer>(
         for type: T.Type
     ) -> [UInt8]? {
         guard compatible, !compatibleTypeDefStateUsed else {

@@ -161,7 +161,7 @@ public final class Fory {
     public func serialize<T: Serializer>(_ value: T) throws -> Data {
         try withReusableWriteContext { context in
             if !value.foryIsNone,
-               let directData = materializePrimitiveRootFastPath(value, context: context) {
+               let directData = try materializePrimitiveRootData(value, context: context) {
                 return directData
             }
             writeHead(buffer: context.buffer, isNone: value.foryIsNone)
@@ -188,7 +188,7 @@ public final class Fory {
     public func serialize<T: Serializer>(_ value: T, to buffer: inout Data) throws {
         try withReusableWriteContext { context in
             if !value.foryIsNone,
-               let directData = materializePrimitiveRootFastPath(value, context: context) {
+               let directData = try materializePrimitiveRootData(value, context: context) {
                 buffer.append(directData)
                 return
             }
@@ -498,46 +498,42 @@ public final class Fory {
     }
 
     @inline(__always)
-    private var shouldWriteRootTypeInfo: Bool {
-        config.xlang || config.compatible
-    }
-
-    @inline(__always)
-    private var rootRefMode: RefMode {
-        if config.trackRef {
-            return .tracking
-        }
-        return shouldWriteRootTypeInfo ? .nullOnly : .none
-    }
-
-    @inline(__always)
-    private var useRootDataFastPath: Bool {
-        !shouldWriteRootTypeInfo && rootRefMode == .none
-    }
-
-    @inline(__always)
-    private var useRootNullOnlyTypeInfoFastPath: Bool {
-        shouldWriteRootTypeInfo && rootRefMode == .nullOnly
-    }
-
-    @inline(__always)
-    private func materializePrimitiveRootFastPath<T: Serializer>(
+    private func materializePrimitiveRootData<T: Serializer>(
         _ value: T,
         context: WriteContext
-    ) -> Data? {
-        guard useRootNullOnlyTypeInfoFastPath,
-              let payloadSize = value.foryPrimitiveDataSize,
-              let rootTypeInfoBytes = context.primitiveRootTypeInfoBytes(for: T.self) else {
+    ) throws -> Data? {
+        guard !config.trackRef,
+              let payloadSize = value.foryPrimitiveDataSize else {
             return nil
         }
-        let totalByteCount = 2 + rootTypeInfoBytes.count + payloadSize
+
         let headByte: UInt8 = config.xlang ? ForyHeaderFlag.isXlang : 0
+
+        if !config.xlang, !config.compatible {
+            let totalByteCount = 1 + payloadSize
+            return context.materializeOutputData(byteCount: totalByteCount) { base in
+                base[0] = headByte
+                var index = 1
+                value.foryWritePrimitiveData(to: base, index: &index)
+                assert(index == totalByteCount)
+            }
+        }
+
+        guard config.compatible else {
+            return nil
+        }
+
+        guard let typeInfoBytes = context.compatibleRootTypeInfoBytes(for: T.self) else {
+            return nil
+        }
+
+        let totalByteCount = 2 + typeInfoBytes.count + payloadSize
         let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
         return context.materializeOutputData(byteCount: totalByteCount) { base in
             base[0] = headByte
             base[1] = refByte
             var index = 2
-            index = Wire.copyBytes(rootTypeInfoBytes, to: base, index: index)
+            index = Wire.copyBytes(typeInfoBytes, to: base, index: index)
             value.foryWritePrimitiveData(to: base, index: &index)
             assert(index == totalByteCount)
         }
@@ -548,17 +544,18 @@ public final class Fory {
         _ value: T,
         context: WriteContext
     ) throws {
-        if useRootDataFastPath {
+        let writeTypeInfo = config.xlang || config.compatible
+        if !writeTypeInfo {
             try value.foryWriteData(context, hasGenerics: false)
             return
         }
 
-        if useRootNullOnlyTypeInfoFastPath {
+        if !config.trackRef {
             context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
-            if !context.writeCompatibleRootTypeInfoFromCache(for: T.self) {
+            if !(config.compatible && context.writeCompatibleRootTypeInfoFromCache(for: T.self)) {
                 let typeInfoStart = context.buffer.count
                 try value.foryWriteTypeInfo(context)
-                if context.compatibleTypeDefStateIsUsed() {
+                if config.compatible, context.compatibleTypeDefStateIsUsed() {
                     context.storeCompatibleRootTypeInfo(
                         for: T.self,
                         bytes: Array(context.buffer.storage[typeInfoStart..<context.buffer.count])
@@ -571,8 +568,8 @@ public final class Fory {
 
         try value.foryWrite(
             context,
-            refMode: rootRefMode,
-            writeTypeInfo: shouldWriteRootTypeInfo,
+            refMode: .tracking,
+            writeTypeInfo: writeTypeInfo,
             hasGenerics: false
         )
     }
@@ -581,11 +578,12 @@ public final class Fory {
     private func readRootTypedValue<T: Serializer>(
         context: ReadContext
     ) throws -> T {
-        if useRootDataFastPath {
+        let readTypeInfo = config.xlang || config.compatible
+        if !readTypeInfo {
             return try T.foryReadData(context)
         }
 
-        if useRootNullOnlyTypeInfoFastPath {
+        if !config.trackRef {
             let rawFlag = try context.buffer.readInt8()
             if rawFlag == RefFlag.notNullValue.rawValue {
                 if context.compatible, context.consumeCompatibleRootTypeInfoFromCache(for: T.self) {
@@ -615,8 +613,8 @@ public final class Fory {
 
         return try T.foryRead(
             context,
-            refMode: rootRefMode,
-            readTypeInfo: shouldWriteRootTypeInfo
+            refMode: config.trackRef ? .tracking : .nullOnly,
+            readTypeInfo: readTypeInfo
         )
     }
 

@@ -75,7 +75,6 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
             sortedFields: sortedFields,
             accessPrefix: accessPrefix
         )
-
         return [
             staticTypeIDDecl,
             referenceTrackDecl,

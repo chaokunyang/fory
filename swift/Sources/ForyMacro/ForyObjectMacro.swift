@@ -1276,43 +1276,20 @@ private func dynamicAnyWriteLine(
     dynamicAnyCodec: DynamicAnyCodecKind,
     refModeExpr: String
 ) -> String {
-    switch dynamicAnyCodec {
-    case .anyValue:
+    if dynamicAnyCodec == .anyValue || dynamicAnyCodec == .anyHashableValue {
         return "try context.writeAny(self.\(field.name), refMode: \(refModeExpr), writeTypeInfo: true, hasGenerics: false)"
-    case .anyHashableValue:
-        return "try context.writeAny(self.\(field.name), refMode: \(refModeExpr), writeTypeInfo: true, hasGenerics: false)"
-    case .anyList:
-        if field.isOptional {
-            return "try context.writeAnyList(self.\(field.name) as [Any]?, refMode: \(refModeExpr), hasGenerics: true)"
-        }
-        return "try context.writeAnyList(self.\(field.name) as [Any], refMode: \(refModeExpr), hasGenerics: true)"
-    case .stringAnyMap:
-        if field.isOptional {
-            return "try context.writeStringAnyMap(self.\(field.name) as [String: Any]?, refMode: \(refModeExpr), hasGenerics: true)"
-        }
-        return "try context.writeStringAnyMap(self.\(field.name) as [String: Any], refMode: \(refModeExpr), hasGenerics: true)"
-    case .int32AnyMap:
-        if field.isOptional {
-            return "try context.writeInt32AnyMap(self.\(field.name) as [Int32: Any]?, refMode: \(refModeExpr), hasGenerics: true)"
-        }
-        return "try context.writeInt32AnyMap(self.\(field.name) as [Int32: Any], refMode: \(refModeExpr), hasGenerics: true)"
-    case .anyHashableAnyMap:
-        if field.isOptional {
-            return "try context.writeAnyHashableAnyMap(self.\(field.name) as [AnyHashable: Any]?, refMode: \(refModeExpr), hasGenerics: true)"
-        }
-        return "try context.writeAnyHashableAnyMap(self.\(field.name) as [AnyHashable: Any], refMode: \(refModeExpr), hasGenerics: true)"
     }
+    let method = dynamicAnyWriteMethodName(dynamicAnyCodec)
+    let castType = dynamicAnyCastType(dynamicAnyCodec)
+    let optionalSuffix = field.isOptional ? "?" : ""
+    return "try context.\(method)(self.\(field.name) as \(castType)\(optionalSuffix), refMode: \(refModeExpr), hasGenerics: true)"
 }
 
 func fieldRefModeExpression(_ field: ParsedField) -> String {
     let nullable = field.isOptional ? "true" : "false"
     if let dynamicAnyCodec = field.dynamicAnyCodec {
-        switch dynamicAnyCodec {
-        case .anyValue:
-            return "RefMode.from(nullable: \(nullable), trackRef: context.trackRef)"
-        case .anyHashableValue, .anyList, .stringAnyMap, .int32AnyMap, .anyHashableAnyMap:
-            return "RefMode.from(nullable: \(nullable), trackRef: false)"
-        }
+        let trackRefExpr = dynamicAnyUsesContextTrackRef(dynamicAnyCodec) ? "context.trackRef" : "false"
+        return "RefMode.from(nullable: \(nullable), trackRef: \(trackRefExpr))"
     }
     return "RefMode.from(nullable: \(nullable), trackRef: context.trackRef && \(field.typeText).isRefType)"
 }
@@ -1323,12 +1300,7 @@ private func compatibleTypeMetaFieldExpression(
 ) -> String {
     let fieldTrackRefExpression: String
     if let dynamicAnyCodec = field.dynamicAnyCodec {
-        switch dynamicAnyCodec {
-        case .anyValue:
-            fieldTrackRefExpression = trackRefExpression
-        case .anyHashableValue, .anyList, .stringAnyMap, .int32AnyMap, .anyHashableAnyMap:
-            fieldTrackRefExpression = "false"
-        }
+        fieldTrackRefExpression = dynamicAnyUsesContextTrackRef(dynamicAnyCodec) ? trackRefExpression : "false"
     } else {
         fieldTrackRefExpression = "\(trackRefExpression) && \(field.typeText).isRefType"
     }
@@ -1339,6 +1311,55 @@ private func compatibleTypeMetaFieldExpression(
         trackRefExpression: fieldTrackRefExpression,
         explicitTypeID: field.customCodecType == nil ? nil : field.typeID
     )
+}
+
+func dynamicAnyWriteMethodName(_ codec: DynamicAnyCodecKind) -> String {
+    switch codec {
+    case .anyValue, .anyHashableValue:
+        return "writeAny"
+    case .anyList:
+        return "writeAnyList"
+    case .stringAnyMap:
+        return "writeStringAnyMap"
+    case .int32AnyMap:
+        return "writeInt32AnyMap"
+    case .anyHashableAnyMap:
+        return "writeAnyHashableAnyMap"
+    }
+}
+
+func dynamicAnyReadMethodName(_ codec: DynamicAnyCodecKind) -> String {
+    switch codec {
+    case .anyValue, .anyHashableValue:
+        return "readAny"
+    case .anyList:
+        return "readAnyList"
+    case .stringAnyMap:
+        return "readStringAnyMap"
+    case .int32AnyMap:
+        return "readInt32AnyMap"
+    case .anyHashableAnyMap:
+        return "readAnyHashableAnyMap"
+    }
+}
+
+func dynamicAnyCastType(_ codec: DynamicAnyCodecKind) -> String {
+    switch codec {
+    case .anyList:
+        return "[Any]"
+    case .stringAnyMap:
+        return "[String: Any]"
+    case .int32AnyMap:
+        return "[Int32: Any]"
+    case .anyHashableAnyMap:
+        return "[AnyHashable: Any]"
+    case .anyValue, .anyHashableValue:
+        return "Any"
+    }
+}
+
+func dynamicAnyUsesContextTrackRef(_ codec: DynamicAnyCodecKind) -> Bool {
+    codec == .anyValue
 }
 
 private func buildCompatibleTypeMetaFieldTypeExpression(

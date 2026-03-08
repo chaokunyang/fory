@@ -352,18 +352,9 @@ private func dynamicAnyReadExpr(
     refModeExpr: String
 ) -> String {
     let metatypeExpr = "(\(field.typeText)).self"
-    switch dynamicAnyCodec {
-    case .anyValue:
-        return "try castAnyDynamicValue(context.readAny(refMode: \(refModeExpr), readTypeInfo: true), to: \(metatypeExpr))"
-    case .anyHashableValue:
-        return "try castAnyDynamicValue(context.readAny(refMode: \(refModeExpr), readTypeInfo: true), to: \(metatypeExpr))"
-    case .anyList:
-        return "try castAnyDynamicValue(context.readAnyList(refMode: \(refModeExpr)), to: \(metatypeExpr))"
-    case .stringAnyMap:
-        return "try castAnyDynamicValue(context.readStringAnyMap(refMode: \(refModeExpr)), to: \(metatypeExpr))"
-    case .int32AnyMap:
-        return "try castAnyDynamicValue(context.readInt32AnyMap(refMode: \(refModeExpr)), to: \(metatypeExpr))"
-    case .anyHashableAnyMap:
-        return "try castAnyDynamicValue(context.readAnyHashableAnyMap(refMode: \(refModeExpr)), to: \(metatypeExpr))"
-    }
+    let method = dynamicAnyReadMethodName(dynamicAnyCodec)
+    let readTypeInfoExpr = dynamicAnyCodec == .anyValue || dynamicAnyCodec == .anyHashableValue
+        ? ", readTypeInfo: true"
+        : ""
+    return "try castAnyDynamicValue(context.\(method)(refMode: \(refModeExpr)\(readTypeInfoExpr)), to: \(metatypeExpr))"
 }

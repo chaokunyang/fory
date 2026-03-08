@@ -66,41 +66,6 @@ public struct ForyConfig {
     }
 }
 
-private final class ForyRuntimeContext {
-    let writeBuffer: ByteBuffer
-    let writeContext: WriteContext
-    let readBuffer: ByteBuffer
-    let readContext: ReadContext
-
-    init(typeResolver: TypeResolver, config: ForyConfig) {
-        writeBuffer = ByteBuffer()
-        writeContext = WriteContext(
-            buffer: writeBuffer,
-            typeResolver: typeResolver,
-            trackRef: config.trackRef,
-            compatible: config.compatible,
-            checkClassVersion: config.checkClassVersion,
-            maxDepth: config.maxDepth,
-            compatibleTypeDefState: CompatibleTypeDefWriteState(),
-            metaStringWriteState: MetaStringWriteState()
-        )
-
-        readBuffer = ByteBuffer()
-        readContext = ReadContext(
-            buffer: readBuffer,
-            typeResolver: typeResolver,
-            trackRef: config.trackRef,
-            compatible: config.compatible,
-            checkClassVersion: config.checkClassVersion,
-            maxCollectionSize: config.maxCollectionSize,
-            maxBinarySize: config.maxBinarySize,
-            maxDepth: config.maxDepth,
-            compatibleTypeDefState: CompatibleTypeDefReadState(),
-            metaStringReadState: MetaStringReadState()
-        )
-    }
-}
-
 /// Single-threaded Fory runtime.
 ///
 /// Reuse one `Fory` per thread for the fastest path. The runtime keeps one
@@ -110,7 +75,8 @@ private final class ForyRuntimeContext {
 public final class Fory {
     public let config: ForyConfig
     let typeResolver: TypeResolver
-    private let runtimeContext: ForyRuntimeContext
+    private let writeContext: WriteContext
+    private let readContext: ReadContext
 
     public init(
         xlang: Bool = true,
@@ -131,7 +97,28 @@ public final class Fory {
             maxDepth: maxDepth
         )
         self.typeResolver = TypeResolver(trackRef: self.config.trackRef)
-        self.runtimeContext = ForyRuntimeContext(typeResolver: typeResolver, config: self.config)
+        self.writeContext = WriteContext(
+            buffer: ByteBuffer(),
+            typeResolver: typeResolver,
+            trackRef: self.config.trackRef,
+            compatible: self.config.compatible,
+            checkClassVersion: self.config.checkClassVersion,
+            maxDepth: self.config.maxDepth,
+            compatibleTypeDefState: CompatibleTypeDefWriteState(),
+            metaStringWriteState: MetaStringWriteState()
+        )
+        self.readContext = ReadContext(
+            buffer: ByteBuffer(),
+            typeResolver: typeResolver,
+            trackRef: self.config.trackRef,
+            compatible: self.config.compatible,
+            checkClassVersion: self.config.checkClassVersion,
+            maxCollectionSize: self.config.maxCollectionSize,
+            maxBinarySize: self.config.maxBinarySize,
+            maxDepth: self.config.maxDepth,
+            compatibleTypeDefState: CompatibleTypeDefReadState(),
+            metaStringReadState: MetaStringReadState()
+        )
     }
 
     public convenience init(config: ForyConfig) {
@@ -616,30 +603,14 @@ public final class Fory {
     }
 
     @inline(__always)
-    private func makeReadContext(buffer: ByteBuffer) -> ReadContext {
-        ReadContext(
-            buffer: buffer,
-            typeResolver: typeResolver,
-            trackRef: config.trackRef,
-            compatible: config.compatible,
-            checkClassVersion: config.checkClassVersion,
-            maxCollectionSize: config.maxCollectionSize,
-            maxBinarySize: config.maxBinarySize,
-            maxDepth: config.maxDepth,
-            compatibleTypeDefState: CompatibleTypeDefReadState(),
-            metaStringReadState: MetaStringReadState()
-        )
-    }
-
-    @inline(__always)
     func withReusableWriteContext<R>(
         _ body: (WriteContext) throws -> R
     ) rethrows -> R {
-        runtimeContext.writeBuffer.clear()
+        writeContext.buffer.clear()
         defer {
-            runtimeContext.writeContext.reset()
+            writeContext.reset()
         }
-        return try body(runtimeContext.writeContext)
+        return try body(writeContext)
     }
 
     @inline(__always)
@@ -647,21 +618,11 @@ public final class Fory {
         data: Data,
         _ body: (ReadContext) throws -> R
     ) rethrows -> R {
-        runtimeContext.readBuffer.replace(with: data)
+        readContext.buffer.replace(with: data)
         defer {
-            runtimeContext.readContext.reset()
+            readContext.reset()
         }
-        return try body(runtimeContext.readContext)
-    }
-
-    @inline(__always)
-    private func withTemporaryReadContext<R>(
-        buffer: ByteBuffer,
-        _ body: (ReadContext) throws -> R
-    ) rethrows -> R {
-        let context = makeReadContext(buffer: buffer)
-        defer { context.reset() }
-        return try body(context)
+        return try body(readContext)
     }
 
     @inline(__always)
@@ -717,11 +678,14 @@ public final class Fory {
         nilValue: @autoclosure () -> R,
         _ body: (ReadContext) throws -> R
     ) throws -> R {
-        try withTemporaryReadContext(buffer: buffer) { context in
-            if try readHead(buffer: buffer) {
-                return nilValue()
-            }
-            return try body(context)
+        readContext.buffer.swapState(with: buffer)
+        defer {
+            readContext.buffer.swapState(with: buffer)
+            readContext.reset()
         }
+        if try readHead(buffer: readContext.buffer) {
+            return nilValue()
+        }
+        return try body(readContext)
     }
 }

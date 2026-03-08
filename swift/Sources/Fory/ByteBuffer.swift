@@ -147,6 +147,13 @@ public final class ByteBuffer {
         cursor = 0
     }
 
+    @usableFromInline
+    @inline(__always)
+    internal func swapState(with other: ByteBuffer) {
+        swap(&storage, &other.storage)
+        swap(&cursor, &other.cursor)
+    }
+
     @inlinable
     public func getCursor() -> Int {
         cursor

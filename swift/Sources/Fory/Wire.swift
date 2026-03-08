@@ -17,6 +17,7 @@
 
 import Foundation
 
+// swiftlint:disable type_body_length
 public enum Wire {
     @inlinable
     @inline(__always)
@@ -1344,3 +1345,4 @@ public enum Wire {
         return index + bytes.count
     }
 }
+// swiftlint:enable type_body_length

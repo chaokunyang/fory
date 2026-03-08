@@ -155,7 +155,7 @@ public final class Fory {
             if !value.foryIsNone {
                 try writeRootTypedValue(value, context: context)
             }
-            return context.materializeOutputData()
+            return context.buffer.copyToData()
         }
     }
 
@@ -498,7 +498,7 @@ public final class Fory {
 
         if !config.xlang, !config.compatible {
             let totalByteCount = 1 + payloadSize
-            return context.materializeOutputData(byteCount: totalByteCount) { base in
+            return context.buffer.materializeData(byteCount: totalByteCount) { base in
                 base[0] = headByte
                 var index = 1
                 value.foryWritePrimitiveData(to: base, index: &index)
@@ -520,7 +520,7 @@ public final class Fory {
 
         let totalByteCount = 4 + typeDefBytes.count + payloadSize
         let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
-        return context.materializeOutputData(byteCount: totalByteCount) { base in
+        return context.buffer.materializeData(byteCount: totalByteCount) { base in
             base[0] = headByte
             base[1] = refByte
             base[2] = UInt8(truncatingIfNeeded: wireTypeID.rawValue)
@@ -634,7 +634,7 @@ public final class Fory {
             if !isNone {
                 try body(context)
             }
-            return context.materializeOutputData()
+            return context.buffer.copyToData()
         }
     }
 

@@ -24,6 +24,8 @@ public final class ByteBuffer {
     @usableFromInline
     internal var cursor: Int
 
+    private var dataBridge = Data()
+
     @inlinable
     public init(capacity: Int = 256) {
         storage = []
@@ -152,6 +154,50 @@ public final class ByteBuffer {
     internal func swapState(with other: ByteBuffer) {
         swap(&storage, &other.storage)
         swap(&cursor, &other.cursor)
+        swap(&dataBridge, &other.dataBridge)
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func copyToData() -> Data {
+        let byteCount = storage.count
+        if dataBridge.count != byteCount {
+            dataBridge.count = byteCount
+        }
+        if byteCount > 0 {
+            dataBridge.withUnsafeMutableBytes { destination in
+                guard let destinationBase = destination.baseAddress else {
+                    return
+                }
+                storage.withUnsafeBytes { source in
+                    guard let sourceBase = source.baseAddress else {
+                        return
+                    }
+                    destinationBase.copyMemory(from: sourceBase, byteCount: byteCount)
+                }
+            }
+        }
+        return dataBridge
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func materializeData(
+        byteCount: Int,
+        _ body: (UnsafeMutablePointer<UInt8>) -> Void
+    ) -> Data {
+        if dataBridge.count != byteCount {
+            dataBridge.count = byteCount
+        }
+        if byteCount > 0 {
+            dataBridge.withUnsafeMutableBytes { destination in
+                guard let base = destination.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                    return
+                }
+                body(base)
+            }
+        }
+        return dataBridge
     }
 
     @inlinable

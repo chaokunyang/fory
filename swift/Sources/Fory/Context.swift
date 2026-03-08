@@ -220,7 +220,6 @@ public final class WriteContext {
     private var dynamicAnyDepth = 0
     private var lastTypeInfoTypeID: ObjectIdentifier?
     private var lastTypeInfo: TypeInfo?
-    private var reusableOutputData = Data()
 
     convenience init(
         buffer: ByteBuffer,
@@ -340,47 +339,6 @@ public final class WriteContext {
     @inline(__always)
     func markMetaStringWriteStateUsed() {
         metaStringWriteStateUsed = true
-    }
-
-    @inline(__always)
-    func materializeOutputData() -> Data {
-        let byteCount = buffer.storage.count
-        if reusableOutputData.count != byteCount {
-            reusableOutputData.count = byteCount
-        }
-        if byteCount > 0 {
-            reusableOutputData.withUnsafeMutableBytes { destination in
-                guard let destinationBase = destination.baseAddress else {
-                    return
-                }
-                buffer.storage.withUnsafeBytes { source in
-                    guard let sourceBase = source.baseAddress else {
-                        return
-                    }
-                    destinationBase.copyMemory(from: sourceBase, byteCount: byteCount)
-                }
-            }
-        }
-        return reusableOutputData
-    }
-
-    @inline(__always)
-    func materializeOutputData(
-        byteCount: Int,
-        _ body: (UnsafeMutablePointer<UInt8>) -> Void
-    ) -> Data {
-        if reusableOutputData.count != byteCount {
-            reusableOutputData.count = byteCount
-        }
-        if byteCount > 0 {
-            reusableOutputData.withUnsafeMutableBytes { destination in
-                guard let base = destination.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                    return
-                }
-                body(base)
-            }
-        }
-        return reusableOutputData
     }
 
     func reset() {

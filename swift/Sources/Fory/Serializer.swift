@@ -282,7 +282,16 @@ public extension Serializer {
         typeInfo: TypeInfo,
         wireTypeID: TypeId
     ) throws -> TypeMeta {
-        let remoteTypeMeta = try context.readTypeMeta()
+        let remoteTypeMeta = try context.readTypeMeta(for: typeInfo)
+        if let localTypeMeta = typeInfo.typeMeta,
+           remoteTypeMeta === localTypeMeta {
+            context.cacheTypeMetaValidation(
+                for: typeInfo.swiftTypeID,
+                wireTypeID: wireTypeID,
+                headerHash: remoteTypeMeta.headerHash
+            )
+            return remoteTypeMeta
+        }
         if !context.isTypeMetaValidationCached(
             for: typeInfo.swiftTypeID,
             wireTypeID: wireTypeID,

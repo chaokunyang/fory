@@ -584,65 +584,6 @@ public final class ReadContext {
         }
     }
 
-    @inline(__always)
-    func tryFastReadRootTypeInfo<T: Serializer>(for type: T.Type) throws -> Bool {
-        guard compatible, !typeDefStateUsed else {
-            return false
-        }
-
-        let typeInfoStart = buffer.getCursor()
-        let localTypeInfo = try typeInfo(for: type)
-        guard !localTypeInfo.typeDefHasUserTypeFields,
-              let localHeaderHash = localTypeInfo.typeDefHeaderHash else {
-            buffer.setCursor(typeInfoStart)
-            return false
-        }
-
-        let rawTypeID = try buffer.readVarUInt32()
-        let expectedWireTypeID = localTypeInfo.wireTypeID(compatible: true)
-        guard rawTypeID == expectedWireTypeID.rawValue,
-              let wireTypeID = TypeId(rawValue: rawTypeID),
-              wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct else {
-            buffer.setCursor(typeInfoStart)
-            return false
-        }
-
-        guard try buffer.readVarUInt32() == 0 else {
-            buffer.setCursor(typeInfoStart)
-            return false
-        }
-
-        let header = try buffer.readUInt64()
-        let headerHash = header >> 14
-        var bodySize = Int(header & UInt64(typeMetaSizeMask))
-        if bodySize == typeMetaSizeMask {
-            bodySize += Int(try buffer.readVarUInt32())
-        }
-        guard headerHash == localHeaderHash else {
-            buffer.setCursor(typeInfoStart)
-            return false
-        }
-
-        try buffer.skip(bodySize)
-        guard let localTypeMeta = localTypeInfo.typeMeta else {
-            throw ForyError.invalidData("missing compatible type metadata for \(localTypeInfo.typeID)")
-        }
-        setPendingTypeMeta(
-            typeID: localTypeInfo.swiftTypeID,
-            value: (
-                typeMeta: localTypeMeta,
-                matchesSchema: true,
-                hasUserTypeFields: false
-            )
-        )
-        cacheTypeMetaValidation(
-            for: localTypeInfo.swiftTypeID,
-            wireTypeID: wireTypeID,
-            headerHash: headerHash
-        )
-        return true
-    }
-
     public func pushPendingRef(_ refID: UInt32) {
         pendingRefStack.append(PendingRefSlot(refID: refID, bound: false))
     }
@@ -711,6 +652,40 @@ public final class ReadContext {
         lastTypeMetaCacheEntry = canonicalEntry
         try typeDefState.storeTypeMetaEntry(canonicalEntry, at: index)
         return canonicalEntry
+    }
+
+    @inline(__always)
+    func readTypeMeta(for localTypeInfo: TypeInfo) throws -> TypeMeta {
+        guard !typeDefStateUsed,
+              !localTypeInfo.typeDefHasUserTypeFields,
+              let localTypeMeta = localTypeInfo.typeMeta,
+              let localHeaderHash = localTypeInfo.typeDefHeaderHash else {
+            return try readTypeMeta()
+        }
+
+        let typeMetaStart = buffer.getCursor()
+        let indexMarker = try buffer.readVarUInt32()
+        guard indexMarker == 0 else {
+            buffer.setCursor(typeMetaStart)
+            return try readTypeMeta()
+        }
+
+        let header = try buffer.readUInt64()
+        let headerHash = header >> 14
+        var bodySize = Int(header & UInt64(typeMetaSizeMask))
+        if bodySize == typeMetaSizeMask {
+            bodySize += Int(try buffer.readVarUInt32())
+        }
+
+        if headerHash == localHeaderHash {
+            try buffer.skip(bodySize)
+            lastTypeMetaCacheHeader = header
+            lastTypeMetaCacheEntry = localTypeMeta
+            return localTypeMeta
+        }
+
+        buffer.setCursor(typeMetaStart)
+        return try readTypeMeta()
     }
 
     func pushTypeMeta<T: Serializer>(

@@ -598,8 +598,42 @@ public final class Fory {
         if !config.trackRef {
             let rawFlag = try context.buffer.readInt8()
             if rawFlag == RefFlag.notNullValue.rawValue {
-                if config.compatible, try context.tryFastReadRootTypeInfo(for: T.self) {
-                    return try T.foryReadData(context)
+                if config.compatible {
+                    let typeInfoStart = context.buffer.getCursor()
+                    let localTypeInfo = try context.typeInfo(for: T.self)
+                    if !localTypeInfo.typeDefHasUserTypeFields,
+                       let localHeaderHash = localTypeInfo.typeDefHeaderHash,
+                       let localTypeMeta = localTypeInfo.typeMeta {
+                        let rawTypeID = try context.buffer.readVarUInt32()
+                        let expectedWireTypeID = localTypeInfo.wireTypeID(compatible: true)
+                        if rawTypeID == expectedWireTypeID.rawValue,
+                           let wireTypeID = TypeId(rawValue: rawTypeID),
+                           wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct,
+                           try context.buffer.readVarUInt32() == 0 {
+                            let typeMetaSizeMask = 0xFF
+                            let header = try context.buffer.readUInt64()
+                            let headerHash = header >> 14
+                            var bodySize = Int(header & UInt64(typeMetaSizeMask))
+                            if bodySize == typeMetaSizeMask {
+                                bodySize += Int(try context.buffer.readVarUInt32())
+                            }
+                            if headerHash == localHeaderHash {
+                                try context.buffer.skip(bodySize)
+                                context.pushTypeMeta(
+                                    for: T.self,
+                                    localTypeMeta,
+                                    localTypeInfo: localTypeInfo
+                                )
+                                context.cacheTypeMetaValidation(
+                                    for: localTypeInfo.swiftTypeID,
+                                    wireTypeID: wireTypeID,
+                                    headerHash: headerHash
+                                )
+                                return try T.foryReadData(context)
+                            }
+                        }
+                    }
+                    context.buffer.setCursor(typeInfoStart)
                 }
                 try T.foryReadTypeInfo(context)
                 return try T.foryReadData(context)

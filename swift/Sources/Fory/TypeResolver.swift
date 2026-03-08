@@ -21,6 +21,16 @@ private struct TypeNameKey: Hashable {
     let namespace: String
     let typeName: String
 }
+
+@inline(__always)
+private func encodedTypeMetaHeader(_ bytes: [UInt8]) throws -> UInt64 {
+    guard bytes.count >= 8 else {
+        throw ForyError.invalidData("encoded compatible type metadata must include an 8-byte header")
+    }
+    let buffer = ByteBuffer(bytes: bytes)
+    return try buffer.readUInt64()
+}
+
 final class TypeResolver {
     private let trackRef: Bool
 
@@ -74,8 +84,7 @@ final class TypeResolver {
             return
         }
 
-        bySwiftType[swiftTypeID] = typeInfo
-        byUserTypeID[id] = typeInfo
+        try store(typeInfo, for: swiftTypeID, userTypeID: id)
     }
 
     func register<T: Serializer>(_ type: T.Type, namespace: String, typeName: String) throws {
@@ -123,8 +132,7 @@ final class TypeResolver {
             return
         }
 
-        bySwiftType[swiftTypeID] = typeInfo
-        byTypeName[TypeNameKey(namespace: namespace, typeName: typeName)] = typeInfo
+        try store(typeInfo, for: swiftTypeID, typeNameKey: TypeNameKey(namespace: namespace, typeName: typeName))
     }
 
     func register<T: Serializer>(_ type: T.Type, name: String) throws {
@@ -228,6 +236,25 @@ final class TypeResolver {
             return try requireTypeInfo(userTypeID: userTypeID)
         default:
             return builtinTypeInfo(for: wireTypeID)
+        }
+    }
+
+    private func store(
+        _ typeInfo: TypeInfo,
+        for swiftTypeID: ObjectIdentifier,
+        userTypeID: UInt32? = nil,
+        typeNameKey: TypeNameKey? = nil
+    ) throws {
+        bySwiftType[swiftTypeID] = typeInfo
+        if let userTypeID {
+            byUserTypeID[userTypeID] = typeInfo
+        }
+        if let typeNameKey {
+            byTypeName[typeNameKey] = typeInfo
+        }
+        if let typeMeta = typeInfo.typeMeta,
+           let typeDefBytes = typeInfo.typeDefBytes {
+            typeMetaByHeader[try encodedTypeMetaHeader(typeDefBytes)] = typeMeta
         }
     }
 

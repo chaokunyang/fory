@@ -599,7 +599,7 @@ public final class Fory {
                         context.storeCompatibleRootTypeInfo(
                             for: T.self,
                             bytes: context.buffer.copyBytes(start: typeInfoStart, end: typeInfoEnd),
-                            readPlan: context.compatibleReadPlan(for: T.self),
+                            compatibleFields: context.compatibleFields(for: T.self),
                             remoteTypeMeta: context.lastResolvedCompatibleTypeMeta(for: T.self)
                         )
                     }

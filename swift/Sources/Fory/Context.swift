@@ -130,7 +130,7 @@ final class CompatibleTypeDefReadState {
 
 private let compatibleTypeMetaSizeMask = 0xFF
 
-public final class CompatibleReadPlan: @unchecked Sendable {
+public final class CompatibleFields: @unchecked Sendable {
     public let fields: [TypeMetaFieldInfo]
     public let canUseSchemaFastPath: Bool
     public let canUseSchemaOrderReadPath: Bool
@@ -146,12 +146,7 @@ public final class CompatibleReadPlan: @unchecked Sendable {
     }
 }
 
-private enum CompatibleTypeMetaReadCache {
-    nonisolated(unsafe) static var values: [UInt64: TypeMeta] = [:]
-    static let lock = NSLock()
-}
-
-private struct CompatibleResolvedTypeMetaCacheKey: Hashable {
+private struct CompatibleFieldsCacheKey: Hashable {
     let swiftType: ObjectIdentifier
     let trackRef: Bool
     let remoteHeaderHash: UInt64
@@ -286,9 +281,9 @@ public final class WriteContext {
     private var lastRegisteredTypeInfo: RegisteredTypeInfo?
     private var lastResolvedWireTypeTypeID: ObjectIdentifier?
     private var lastResolvedWireTypeID: TypeId?
-    private var lastCompatibleTypeMetaPlanTypeID: ObjectIdentifier?
-    private var lastCompatibleTypeMetaPlanWireTypeID: TypeId?
-    private var lastCompatibleTypeMetaPlan: CompatibleTypeMetaPlan?
+    private var lastCompatibleTypeMetaEncodingTypeID: ObjectIdentifier?
+    private var lastCompatibleTypeMetaEncodingWireTypeID: TypeId?
+    private var lastCompatibleTypeMetaEncoding: CompatibleTypeMetaEncoding?
     private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
     private var lastCompatibleRootTypeInfoBytes: [UInt8]?
     private var lastRootTypeInfoHasUserFields = true
@@ -378,23 +373,23 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    func compatibleTypeMetaPlan(for typeID: ObjectIdentifier, wireTypeID: TypeId) -> CompatibleTypeMetaPlan? {
-        if lastCompatibleTypeMetaPlanTypeID == typeID,
-           lastCompatibleTypeMetaPlanWireTypeID == wireTypeID {
-            return lastCompatibleTypeMetaPlan
+    func compatibleTypeMetaEncoding(for typeID: ObjectIdentifier, wireTypeID: TypeId) -> CompatibleTypeMetaEncoding? {
+        if lastCompatibleTypeMetaEncodingTypeID == typeID,
+           lastCompatibleTypeMetaEncodingWireTypeID == wireTypeID {
+            return lastCompatibleTypeMetaEncoding
         }
         return nil
     }
 
     @inline(__always)
-    func cacheCompatibleTypeMetaPlan(
-        _ plan: CompatibleTypeMetaPlan,
+    func cacheCompatibleTypeMetaEncoding(
+        _ encoding: CompatibleTypeMetaEncoding,
         for typeID: ObjectIdentifier,
         wireTypeID: TypeId
     ) {
-        lastCompatibleTypeMetaPlanTypeID = typeID
-        lastCompatibleTypeMetaPlanWireTypeID = wireTypeID
-        lastCompatibleTypeMetaPlan = plan
+        lastCompatibleTypeMetaEncodingTypeID = typeID
+        lastCompatibleTypeMetaEncodingWireTypeID = wireTypeID
+        lastCompatibleTypeMetaEncoding = encoding
     }
 
     @inline(__always)
@@ -462,15 +457,15 @@ public final class WriteContext {
 
     func writeCompatibleTypeMeta<T: Serializer>(
         for type: T.Type,
-        plan: CompatibleTypeMetaPlan
+        encoding: CompatibleTypeMetaEncoding
     ) {
         let typeID = ObjectIdentifier(type)
         if !compatibleTypeDefStateUsed {
             compatibleTypeDefStateUsed = true
             compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
             lastFirstCompatibleTypeMetaTypeID = typeID
-            lastFirstTypeMetaHasUserFields = plan.hasUserTypeFields
-            buffer.writeBytes(plan.firstDefinitionEncodedTypeMeta)
+            lastFirstTypeMetaHasUserFields = encoding.hasUserTypeFields
+            buffer.writeBytes(encoding.firstDefinitionBytes)
             return
         }
 
@@ -482,7 +477,7 @@ public final class WriteContext {
             } else {
                 buffer.writeVarUInt32(marker)
             }
-            buffer.writeBytes(plan.encodedTypeMeta)
+            buffer.writeBytes(encoding.bytes)
         } else {
             let marker = (assignment.index << 1) | 1
             if marker < 0x80 {
@@ -587,12 +582,12 @@ public final class ReadContext {
     private var dynamicAnyDepth = 0
 
     private var pendingRefStack: [PendingRefSlot] = []
-    private var pendingCompatibleReadPlans: [ObjectIdentifier: CompatibleReadPlan] = [:]
-    private var pendingCompatibleReadPlanTypeID: ObjectIdentifier?
-    private var pendingCompatibleReadPlanValue: CompatibleReadPlan?
-    private var compatibleReadPlanCache: [CompatibleResolvedTypeMetaCacheKey: CompatibleReadPlan] = [:]
-    private var lastCompatibleReadPlanCacheKey: CompatibleResolvedTypeMetaCacheKey?
-    private var lastCompatibleReadPlanCacheValue: CompatibleReadPlan?
+    private var pendingCompatibleFields: [ObjectIdentifier: CompatibleFields] = [:]
+    private var pendingCompatibleFieldsTypeID: ObjectIdentifier?
+    private var pendingCompatibleFieldsValue: CompatibleFields?
+    private var compatibleFieldsCache: [CompatibleFieldsCacheKey: CompatibleFields] = [:]
+    private var lastCompatibleFieldsCacheKey: CompatibleFieldsCacheKey?
+    private var lastCompatibleFieldsCacheValue: CompatibleFields?
     private var pendingDynamicTypeInfo: [ObjectIdentifier: DynamicTypeInfo] = [:]
     private var canonicalReferenceCache: [CanonicalReferenceSignature: [CanonicalReferenceEntry]] = [:]
     private var utf8StringInternCache: [UInt64: [InternedUTF8StringEntry]] = [:]
@@ -604,15 +599,15 @@ public final class ReadContext {
     private var lastRegisteredTypeInfo: RegisteredTypeInfo?
     private var lastResolvedWireTypeTypeID: ObjectIdentifier?
     private var lastResolvedWireTypeID: TypeId?
-    private var lastCompatibleTypeMetaPlanTypeID: ObjectIdentifier?
-    private var lastCompatibleTypeMetaPlanWireTypeID: TypeId?
-    private var lastCompatibleTypeMetaPlan: CompatibleTypeMetaPlan?
+    private var lastCompatibleTypeMetaEncodingTypeID: ObjectIdentifier?
+    private var lastCompatibleTypeMetaEncodingWireTypeID: TypeId?
+    private var lastCompatibleTypeMetaEncoding: CompatibleTypeMetaEncoding?
     private var lastValidatedCompatibleTypeID: ObjectIdentifier?
     private var lastValidatedCompatibleWireTypeID: TypeId?
     private var lastValidatedCompatibleHeaderHash: UInt64 = 0
     private var lastCompatibleRootTypeInfoTypeID: ObjectIdentifier?
     private var lastCompatibleRootTypeInfoEntry: CachedCompatibleRootTypeInfo?
-    private var lastCompatibleRootTypeInfoPlan: CompatibleReadPlan?
+    private var lastCompatibleRootTypeInfoFields: CompatibleFields?
     private var lastCompatibleRootTypeInfoRemoteTypeMeta: TypeMeta?
     private var lastResolvedCompatibleTypeMetaTypeID: ObjectIdentifier?
     private var lastResolvedCompatibleTypeMetaValue: TypeMeta?
@@ -751,23 +746,23 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func compatibleTypeMetaPlan(for typeID: ObjectIdentifier, wireTypeID: TypeId) -> CompatibleTypeMetaPlan? {
-        if lastCompatibleTypeMetaPlanTypeID == typeID,
-           lastCompatibleTypeMetaPlanWireTypeID == wireTypeID {
-            return lastCompatibleTypeMetaPlan
+    func compatibleTypeMetaEncoding(for typeID: ObjectIdentifier, wireTypeID: TypeId) -> CompatibleTypeMetaEncoding? {
+        if lastCompatibleTypeMetaEncodingTypeID == typeID,
+           lastCompatibleTypeMetaEncodingWireTypeID == wireTypeID {
+            return lastCompatibleTypeMetaEncoding
         }
         return nil
     }
 
     @inline(__always)
-    func cacheCompatibleTypeMetaPlan(
-        _ plan: CompatibleTypeMetaPlan,
+    func cacheCompatibleTypeMetaEncoding(
+        _ encoding: CompatibleTypeMetaEncoding,
         for typeID: ObjectIdentifier,
         wireTypeID: TypeId
     ) {
-        lastCompatibleTypeMetaPlanTypeID = typeID
-        lastCompatibleTypeMetaPlanWireTypeID = wireTypeID
-        lastCompatibleTypeMetaPlan = plan
+        lastCompatibleTypeMetaEncodingTypeID = typeID
+        lastCompatibleTypeMetaEncodingWireTypeID = wireTypeID
+        lastCompatibleTypeMetaEncoding = encoding
     }
 
     @inline(__always)
@@ -816,7 +811,7 @@ public final class ReadContext {
         let typeID = ObjectIdentifier(type)
         guard lastCompatibleRootTypeInfoTypeID == typeID,
               let entry = lastCompatibleRootTypeInfoEntry,
-              let plan = lastCompatibleRootTypeInfoPlan else {
+              let compatibleFields = lastCompatibleRootTypeInfoFields else {
             return false
         }
         let start = buffer.getCursor()
@@ -832,7 +827,7 @@ public final class ReadContext {
         }
 
         buffer.setCursor(end)
-        if !plan.canUseSchemaFastPath, let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
+        if !compatibleFields.canUseSchemaFastPath, let remoteTypeMeta = lastCompatibleRootTypeInfoRemoteTypeMeta {
             do {
                 try compatibleTypeDefState.storeTypeMetaEntry(remoteTypeMeta, at: entry.typeMetaIndex)
                 compatibleTypeDefStateUsed = true
@@ -841,7 +836,7 @@ public final class ReadContext {
                 return false
             }
         }
-        setPendingCompatibleReadPlan(typeID: typeID, value: plan)
+        setPendingCompatibleFields(typeID: typeID, value: compatibleFields)
         return true
     }
 
@@ -849,15 +844,15 @@ public final class ReadContext {
     func storeCompatibleRootTypeInfo<T: Serializer>(
         for type: T.Type,
         bytes: [UInt8],
-        readPlan: CompatibleReadPlan?,
+        compatibleFields: CompatibleFields?,
         remoteTypeMeta: TypeMeta?
     ) {
-        guard compatible, let readPlan else {
+        guard compatible, let compatibleFields else {
             return
         }
         lastCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
         lastCompatibleRootTypeInfoEntry = Self.parseCompatibleRootTypeInfo(bytes)
-        lastCompatibleRootTypeInfoPlan = readPlan
+        lastCompatibleRootTypeInfoFields = compatibleFields
         lastCompatibleRootTypeInfoRemoteTypeMeta = remoteTypeMeta
     }
 
@@ -913,28 +908,17 @@ public final class ReadContext {
             return cachedEntry
         }
 
-        CompatibleTypeMetaReadCache.lock.lock()
-        if let cached = CompatibleTypeMetaReadCache.values[header] {
-            CompatibleTypeMetaReadCache.lock.unlock()
+        if let cached = typeResolver.compatibleTypeMeta(forHeader: header) {
             try buffer.skip(bodySize)
             lastCompatibleTypeMetaCacheHeader = header
             lastCompatibleTypeMetaCacheEntry = cached
             try compatibleTypeDefState.storeTypeMetaEntry(cached, at: index)
             return cached
         }
-        CompatibleTypeMetaReadCache.lock.unlock()
 
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
-        var canonicalEntry = decoded
-
-        CompatibleTypeMetaReadCache.lock.lock()
-        if let cached = CompatibleTypeMetaReadCache.values[header] {
-            canonicalEntry = cached
-        } else {
-            CompatibleTypeMetaReadCache.values[header] = decoded
-        }
-        CompatibleTypeMetaReadCache.lock.unlock()
+        let canonicalEntry = typeResolver.cacheCompatibleTypeMeta(decoded, forHeader: header)
 
         lastCompatibleTypeMetaCacheHeader = header
         lastCompatibleTypeMetaCacheEntry = canonicalEntry
@@ -951,7 +935,7 @@ public final class ReadContext {
         let typeID = ObjectIdentifier(type)
         lastResolvedCompatibleTypeMetaTypeID = typeID
         lastResolvedCompatibleTypeMetaValue = typeMeta
-        let cacheKey = CompatibleResolvedTypeMetaCacheKey(
+        let cacheKey = CompatibleFieldsCacheKey(
             swiftType: typeID,
             trackRef: trackRef,
             remoteHeaderHash: typeMeta.headerHash,
@@ -960,15 +944,15 @@ public final class ReadContext {
             hasLocalHeaderHash: localTypeMetaHeaderHash != nil,
             localHasUserTypeFields: localTypeMetaHasUserTypeFields
         )
-        if lastCompatibleReadPlanCacheKey == cacheKey,
-           let cached = lastCompatibleReadPlanCacheValue {
-            setPendingCompatibleReadPlan(typeID: typeID, value: cached)
+        if lastCompatibleFieldsCacheKey == cacheKey,
+           let cached = lastCompatibleFieldsCacheValue {
+            setPendingCompatibleFields(typeID: typeID, value: cached)
             return
         }
-        if let cached = compatibleReadPlanCache[cacheKey] {
-            lastCompatibleReadPlanCacheKey = cacheKey
-            lastCompatibleReadPlanCacheValue = cached
-            setPendingCompatibleReadPlan(typeID: typeID, value: cached)
+        if let cached = compatibleFieldsCache[cacheKey] {
+            lastCompatibleFieldsCacheKey = cacheKey
+            lastCompatibleFieldsCacheValue = cached
+            setPendingCompatibleFields(typeID: typeID, value: cached)
             return
         }
 
@@ -980,39 +964,39 @@ public final class ReadContext {
         let canUseSchemaOrderReadPath = localTypeMetaHeaderHash != nil &&
             localTypeMetaHeaderHash == typeMeta.headerHash
         let canUseSchemaFastPath = canUseSchemaOrderReadPath && !localTypeMetaHasUserTypeFields
-        let resolved = CompatibleReadPlan(
+        let resolved = CompatibleFields(
             fields: resolvedFields,
             canUseSchemaFastPath: canUseSchemaFastPath,
             canUseSchemaOrderReadPath: canUseSchemaOrderReadPath
         )
 
-        compatibleReadPlanCache[cacheKey] = resolved
-        lastCompatibleReadPlanCacheKey = cacheKey
-        lastCompatibleReadPlanCacheValue = resolved
-        setPendingCompatibleReadPlan(typeID: typeID, value: resolved)
+        compatibleFieldsCache[cacheKey] = resolved
+        lastCompatibleFieldsCacheKey = cacheKey
+        lastCompatibleFieldsCacheValue = resolved
+        setPendingCompatibleFields(typeID: typeID, value: resolved)
     }
 
     @inline(__always)
-    public func compatibleReadPlan<T: Serializer>(for type: T.Type) -> CompatibleReadPlan? {
+    public func compatibleFields<T: Serializer>(for type: T.Type) -> CompatibleFields? {
         let typeID = ObjectIdentifier(type)
-        if pendingCompatibleReadPlanTypeID == typeID {
-            return pendingCompatibleReadPlanValue
+        if pendingCompatibleFieldsTypeID == typeID {
+            return pendingCompatibleFieldsValue
         }
-        return pendingCompatibleReadPlans[typeID]
+        return pendingCompatibleFields[typeID]
     }
 
     @inline(__always)
-    private func setPendingCompatibleReadPlan(typeID: ObjectIdentifier, value: CompatibleReadPlan) {
-        if pendingCompatibleReadPlanTypeID == typeID {
-            pendingCompatibleReadPlanValue = value
+    private func setPendingCompatibleFields(typeID: ObjectIdentifier, value: CompatibleFields) {
+        if pendingCompatibleFieldsTypeID == typeID {
+            pendingCompatibleFieldsValue = value
             return
         }
-        if let oldTypeID = pendingCompatibleReadPlanTypeID,
-           let oldValue = pendingCompatibleReadPlanValue {
-            pendingCompatibleReadPlans[oldTypeID] = oldValue
+        if let oldTypeID = pendingCompatibleFieldsTypeID,
+           let oldValue = pendingCompatibleFieldsValue {
+            pendingCompatibleFields[oldTypeID] = oldValue
         }
-        pendingCompatibleReadPlanTypeID = typeID
-        pendingCompatibleReadPlanValue = value
+        pendingCompatibleFieldsTypeID = typeID
+        pendingCompatibleFieldsValue = value
     }
 
     private static func parseCompatibleRootTypeInfo(_ bytes: [UInt8]) -> CachedCompatibleRootTypeInfo? {
@@ -1314,12 +1298,12 @@ public final class ReadContext {
             }
         }
         if compatible {
-            if pendingCompatibleReadPlanTypeID != nil {
-                pendingCompatibleReadPlanTypeID = nil
-                pendingCompatibleReadPlanValue = nil
+            if pendingCompatibleFieldsTypeID != nil {
+                pendingCompatibleFieldsTypeID = nil
+                pendingCompatibleFieldsValue = nil
             }
-            if !pendingCompatibleReadPlans.isEmpty {
-                pendingCompatibleReadPlans.removeAll(keepingCapacity: true)
+            if !pendingCompatibleFields.isEmpty {
+                pendingCompatibleFields.removeAll(keepingCapacity: true)
             }
         }
         if !pendingDynamicTypeInfo.isEmpty {

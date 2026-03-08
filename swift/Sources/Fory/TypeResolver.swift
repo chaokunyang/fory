@@ -58,6 +58,12 @@ private enum DynamicRegistrationMode {
     case mixed
 }
 
+private struct CompatibleTypeMetaEncodingKey: Hashable {
+    let swiftType: ObjectIdentifier
+    let wireTypeID: TypeId
+    let trackRef: Bool
+}
+
 private struct TypeReader {
     let swiftType: ObjectIdentifier
     let kind: TypeId
@@ -70,6 +76,8 @@ public final class TypeResolver {
     private var byUserTypeID: [UInt32: TypeReader] = [:]
     private var byTypeName: [TypeNameKey: TypeReader] = [:]
     private var registrationModeByKind: [TypeId: DynamicRegistrationMode] = [:]
+    private var compatibleTypeMetaEncodingCache: [CompatibleTypeMetaEncodingKey: CompatibleTypeMetaEncoding] = [:]
+    private var compatibleTypeMetaByHeader: [UInt64: TypeMeta] = [:]
 
     public init() {}
 
@@ -175,6 +183,40 @@ public final class TypeResolver {
             return info
         }
         throw ForyError.typeNotRegistered("\(type) is not registered")
+    }
+
+    @inline(__always)
+    func compatibleTypeMetaEncoding(
+        swiftTypeID: ObjectIdentifier,
+        wireTypeID: TypeId,
+        trackRef: Bool,
+        build: () throws -> CompatibleTypeMetaEncoding
+    ) rethrows -> CompatibleTypeMetaEncoding {
+        let key = CompatibleTypeMetaEncodingKey(
+            swiftType: swiftTypeID,
+            wireTypeID: wireTypeID,
+            trackRef: trackRef
+        )
+        if let cached = compatibleTypeMetaEncodingCache[key] {
+            return cached
+        }
+        let encoding = try build()
+        compatibleTypeMetaEncodingCache[key] = encoding
+        return encoding
+    }
+
+    @inline(__always)
+    func compatibleTypeMeta(forHeader header: UInt64) -> TypeMeta? {
+        compatibleTypeMetaByHeader[header]
+    }
+
+    @inline(__always)
+    func cacheCompatibleTypeMeta(_ typeMeta: TypeMeta, forHeader header: UInt64) -> TypeMeta {
+        if let cached = compatibleTypeMetaByHeader[header] {
+            return cached
+        }
+        compatibleTypeMetaByHeader[header] = typeMeta
+        return typeMeta
     }
 
     func readByUserTypeID(_ userTypeID: UInt32, context: ReadContext) throws -> Any {

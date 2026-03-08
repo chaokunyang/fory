@@ -348,7 +348,7 @@ private func primitiveUnsafePointerReadAdvanceExpr(for field: ParsedField) -> St
     return "try Wire.\(method)(from: __base, length: __length, index: &__readerIndex)"
 }
 
-private struct PrimitiveFastReadPlan {
+private struct PrimitiveFastReadLayout {
     let statements: [String]
     let consumedExpr: String
     let fixedPrefixBytes: Int
@@ -358,7 +358,7 @@ private func buildPrimitiveFastReadStatements(
     _ fields: [ParsedField],
     assignLine: (ParsedField, String) -> String,
     remainingReadExpr: (ParsedField) -> String?
-) -> PrimitiveFastReadPlan? {
+) -> PrimitiveFastReadLayout? {
     guard !fields.isEmpty else {
         return nil
     }
@@ -388,7 +388,7 @@ private func buildPrimitiveFastReadStatements(
         readSections.append(remainingReads)
     }
     let consumedExpr = remainingReads.isEmpty ? "\(fixedPrefixBytes)" : "__readerIndex"
-    return PrimitiveFastReadPlan(
+    return PrimitiveFastReadLayout(
         statements: readSections,
         consumedExpr: consumedExpr,
         fixedPrefixBytes: fixedPrefixBytes
@@ -399,7 +399,7 @@ private func buildPrimitiveFastReadBlock(
     _ fields: [ParsedField],
     assignLine: (ParsedField, String) -> String
 ) -> String? {
-    guard let readPlan = buildPrimitiveFastReadStatements(
+    guard let readLayout = buildPrimitiveFastReadStatements(
         fields,
         assignLine: assignLine,
         remainingReadExpr: primitiveUnsafePointerReadAdvanceExpr
@@ -407,19 +407,19 @@ private func buildPrimitiveFastReadBlock(
         return nil
     }
     var readSections: [String] = []
-    if readPlan.fixedPrefixBytes > 0 {
-        readSections.append("try Wire.checkReadable(__bytes, index: 0, need: \(readPlan.fixedPrefixBytes))")
+    if readLayout.fixedPrefixBytes > 0 {
+        readSections.append("try Wire.checkReadable(__bytes, index: 0, need: \(readLayout.fixedPrefixBytes))")
     }
     readSections.append(
         """
         guard let __base = __bytes.baseAddress else {
-            throw ForyError.outOfBounds(cursor: 0, need: \(max(readPlan.fixedPrefixBytes, 1)), length: __bytes.count)
+            throw ForyError.outOfBounds(cursor: 0, need: \(max(readLayout.fixedPrefixBytes, 1)), length: __bytes.count)
         }
         """
     )
     readSections.append("let __length = __bytes.count")
-    readSections.append(contentsOf: readPlan.statements)
-    readSections.append("return \(readPlan.consumedExpr)")
+    readSections.append(contentsOf: readLayout.statements)
+    readSections.append("return \(readLayout.consumedExpr)")
     let readBody = readSections.joined(separator: "\n            ")
     return """
     try Wire.readRegion(buffer: __buffer) { __bytes in

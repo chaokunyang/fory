@@ -17,53 +17,22 @@
 
 import Foundation
 
-private final class CacheMutex: @unchecked Sendable {
-    private var mutex = pthread_mutex_t()
-
-    init() {
-        pthread_mutex_init(&mutex, nil)
-    }
-
-    deinit {
-        pthread_mutex_destroy(&mutex)
-    }
-
-    @inline(__always)
-    func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        pthread_mutex_lock(&mutex)
-        defer { pthread_mutex_unlock(&mutex) }
-        return try body()
-    }
-}
-
-private struct CompatibleTypeMetaCacheKey: Hashable {
-    let resolver: ObjectIdentifier
-    let swiftType: ObjectIdentifier
-    let wireTypeID: TypeId
-    let trackRef: Bool
-}
-
-final class CompatibleTypeMetaPlan: @unchecked Sendable {
-    let encodedTypeMeta: [UInt8]
-    let firstDefinitionEncodedTypeMeta: [UInt8]
-    let typeMetaHeaderHash: UInt64
+final class CompatibleTypeMetaEncoding: @unchecked Sendable {
+    let bytes: [UInt8]
+    let firstDefinitionBytes: [UInt8]
+    let headerHash: UInt64
     let hasUserTypeFields: Bool
 
-    init(encodedTypeMeta: [UInt8], typeMetaHeaderHash: UInt64, hasUserTypeFields: Bool) {
-        self.encodedTypeMeta = encodedTypeMeta
-        var firstDefinitionEncodedTypeMeta: [UInt8] = []
-        firstDefinitionEncodedTypeMeta.reserveCapacity(encodedTypeMeta.count + 1)
-        firstDefinitionEncodedTypeMeta.append(0)
-        firstDefinitionEncodedTypeMeta.append(contentsOf: encodedTypeMeta)
-        self.firstDefinitionEncodedTypeMeta = firstDefinitionEncodedTypeMeta
-        self.typeMetaHeaderHash = typeMetaHeaderHash
+    init(bytes: [UInt8], headerHash: UInt64, hasUserTypeFields: Bool) {
+        self.bytes = bytes
+        var firstDefinitionBytes: [UInt8] = []
+        firstDefinitionBytes.reserveCapacity(bytes.count + 1)
+        firstDefinitionBytes.append(0)
+        firstDefinitionBytes.append(contentsOf: bytes)
+        self.firstDefinitionBytes = firstDefinitionBytes
+        self.headerHash = headerHash
         self.hasUserTypeFields = hasUserTypeFields
     }
-}
-
-private enum CompatibleTypeMetaCache {
-    nonisolated(unsafe) static var values: [CompatibleTypeMetaCacheKey: CompatibleTypeMetaPlan] = [:]
-    static let lock = CacheMutex()
 }
 
 private struct ResolvedRegisteredWireType {
@@ -210,7 +179,7 @@ public extension Serializer {
         context.buffer.writeUInt8(UInt8(truncatingIfNeeded: wireTypeID.rawValue))
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            let cachedTypeMeta = try compatibleTypeMetaPlan(
+            let cachedTypeMeta = try compatibleTypeMetaEncoding(
                 in: context,
                 swiftTypeID: swiftTypeID,
                 info: info,
@@ -218,11 +187,11 @@ public extension Serializer {
             )
             context.writeCompatibleTypeMeta(
                 for: Self.self,
-                plan: cachedTypeMeta
+                encoding: cachedTypeMeta
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
-                let cachedTypeMeta = try compatibleTypeMetaPlan(
+                let cachedTypeMeta = try compatibleTypeMetaEncoding(
                     in: context,
                     swiftTypeID: swiftTypeID,
                     info: info,
@@ -230,7 +199,7 @@ public extension Serializer {
                 )
                 context.writeCompatibleTypeMeta(
                     for: Self.self,
-                    plan: cachedTypeMeta
+                    encoding: cachedTypeMeta
                 )
             } else {
                 guard let namespace = info.namespace else {
@@ -293,7 +262,7 @@ public extension Serializer {
                 info: info,
                 wireTypeID: typeID
             )
-            let localTypeMeta = try compatibleTypeMetaPlan(
+            let localTypeMeta = try compatibleTypeMetaEncoding(
                 in: context,
                 swiftTypeID: swiftTypeID,
                 info: info,
@@ -302,7 +271,7 @@ public extension Serializer {
             context.pushCompatibleTypeMeta(
                 for: Self.self,
                 remoteTypeMeta,
-                localTypeMetaHeaderHash: localTypeMeta.typeMetaHeaderHash,
+                localTypeMetaHeaderHash: localTypeMeta.headerHash,
                 localTypeMetaHasUserTypeFields: localTypeMeta.hasUserTypeFields
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
@@ -314,7 +283,7 @@ public extension Serializer {
                     wireTypeID: typeID
                 )
                 if typeID == .namedStruct {
-                    let localTypeMeta = try compatibleTypeMetaPlan(
+                    let localTypeMeta = try compatibleTypeMetaEncoding(
                         in: context,
                         swiftTypeID: swiftTypeID,
                         info: info,
@@ -323,7 +292,7 @@ public extension Serializer {
                     context.pushCompatibleTypeMeta(
                         for: Self.self,
                         remoteTypeMeta,
-                        localTypeMetaHeaderHash: localTypeMeta.typeMetaHeaderHash,
+                        localTypeMetaHeaderHash: localTypeMeta.headerHash,
                         localTypeMetaHasUserTypeFields: localTypeMeta.hasUserTypeFields
                     )
                 }
@@ -487,43 +456,53 @@ public extension Serializer {
     }
 
     @inline(__always)
-    private static func compatibleTypeMetaPlan(
+    private static func compatibleTypeMetaEncoding(
         in context: WriteContext,
         swiftTypeID: ObjectIdentifier,
         info: RegisteredTypeInfo,
         wireTypeID: TypeId
-    ) throws -> CompatibleTypeMetaPlan {
-        if let cached = context.compatibleTypeMetaPlan(for: swiftTypeID, wireTypeID: wireTypeID) {
+    ) throws -> CompatibleTypeMetaEncoding {
+        if let cached = context.compatibleTypeMetaEncoding(for: swiftTypeID, wireTypeID: wireTypeID) {
             return cached
         }
-        let plan = try compatibleTypeMetaEntry(
-            resolverIdentity: ObjectIdentifier(context.typeResolver),
-            info: info,
+        let encoding = try context.typeResolver.compatibleTypeMetaEncoding(
+            swiftTypeID: swiftTypeID,
             wireTypeID: wireTypeID,
             trackRef: context.trackRef
-        )
-        context.cacheCompatibleTypeMetaPlan(plan, for: swiftTypeID, wireTypeID: wireTypeID)
-        return plan
+        ) {
+            try buildCompatibleTypeMetaEncoding(
+                info: info,
+                wireTypeID: wireTypeID,
+                trackRef: context.trackRef
+            )
+        }
+        context.cacheCompatibleTypeMetaEncoding(encoding, for: swiftTypeID, wireTypeID: wireTypeID)
+        return encoding
     }
 
     @inline(__always)
-    private static func compatibleTypeMetaPlan(
+    private static func compatibleTypeMetaEncoding(
         in context: ReadContext,
         swiftTypeID: ObjectIdentifier,
         info: RegisteredTypeInfo,
         wireTypeID: TypeId
-    ) throws -> CompatibleTypeMetaPlan {
-        if let cached = context.compatibleTypeMetaPlan(for: swiftTypeID, wireTypeID: wireTypeID) {
+    ) throws -> CompatibleTypeMetaEncoding {
+        if let cached = context.compatibleTypeMetaEncoding(for: swiftTypeID, wireTypeID: wireTypeID) {
             return cached
         }
-        let plan = try compatibleTypeMetaEntry(
-            resolverIdentity: ObjectIdentifier(context.typeResolver),
-            info: info,
+        let encoding = try context.typeResolver.compatibleTypeMetaEncoding(
+            swiftTypeID: swiftTypeID,
             wireTypeID: wireTypeID,
             trackRef: context.trackRef
-        )
-        context.cacheCompatibleTypeMetaPlan(plan, for: swiftTypeID, wireTypeID: wireTypeID)
-        return plan
+        ) {
+            try buildCompatibleTypeMetaEncoding(
+                info: info,
+                wireTypeID: wireTypeID,
+                trackRef: context.trackRef
+            )
+        }
+        context.cacheCompatibleTypeMetaEncoding(encoding, for: swiftTypeID, wireTypeID: wireTypeID)
+        return encoding
     }
 
     @inline(__always)
@@ -554,42 +533,22 @@ public extension Serializer {
         return remoteTypeMeta
     }
 
-    private static func compatibleTypeMetaEntry(
-        resolverIdentity: ObjectIdentifier,
+    private static func buildCompatibleTypeMetaEncoding(
         info: RegisteredTypeInfo,
         wireTypeID: TypeId,
         trackRef: Bool
-    ) throws -> CompatibleTypeMetaPlan {
-        let cacheKey = CompatibleTypeMetaCacheKey(
-            resolver: resolverIdentity,
-            swiftType: ObjectIdentifier(Self.self),
-            wireTypeID: wireTypeID,
-            trackRef: trackRef
-        )
-
-        if let cached = CompatibleTypeMetaCache.lock.withLock({ CompatibleTypeMetaCache.values[cacheKey] }) {
-            return cached
-        }
-
+    ) throws -> CompatibleTypeMetaEncoding {
         let typeMeta = try buildCompatibleTypeMeta(
             info: info,
             wireTypeID: wireTypeID,
             trackRef: trackRef
         )
         let encodedTypeMeta = try typeMeta.encode()
-        let cacheEntry = CompatibleTypeMetaPlan(
-            encodedTypeMeta: encodedTypeMeta,
-            typeMetaHeaderHash: try decodeTypeMetaHeaderHash(encodedTypeMeta),
+        return CompatibleTypeMetaEncoding(
+            bytes: encodedTypeMeta,
+            headerHash: try decodeTypeMetaHeaderHash(encodedTypeMeta),
             hasUserTypeFields: hasCompatibleUserTypeField(typeMeta.fields)
         )
-
-        return CompatibleTypeMetaCache.lock.withLock {
-            if let cached = CompatibleTypeMetaCache.values[cacheKey] {
-                return cached
-            }
-            CompatibleTypeMetaCache.values[cacheKey] = cacheEntry
-            return cacheEntry
-        }
     }
 
     private static func buildCompatibleTypeMeta(

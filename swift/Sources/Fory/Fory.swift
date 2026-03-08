@@ -523,17 +523,18 @@ public final class Fory {
             return nil
         }
 
-        guard let typeInfoBytes = context.cachedCompatibleRootTypeInfoBytes(for: T.self) else {
+        let typeInfo = try context.typeInfo(for: T.self)
+        guard let rootBytes = typeInfo.compatibleRootBytes() else {
             return nil
         }
 
-        let totalByteCount = 2 + typeInfoBytes.count + payloadSize
+        let totalByteCount = 2 + rootBytes.count + payloadSize
         let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
         return context.materializeOutputData(byteCount: totalByteCount) { base in
             base[0] = headByte
             base[1] = refByte
             var index = 2
-            index = Wire.copyBytes(typeInfoBytes, to: base, index: index)
+            index = Wire.copyBytes(rootBytes, to: base, index: index)
             value.foryWritePrimitiveData(to: base, index: &index)
             assert(index == totalByteCount)
         }
@@ -552,16 +553,7 @@ public final class Fory {
 
         if !config.trackRef {
             context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
-            if !(config.compatible && context.writeCachedCompatibleRootTypeInfo(for: T.self)) {
-                let typeInfoStart = context.buffer.count
-                try value.foryWriteTypeInfo(context)
-                if config.compatible, context.usesCompatibleTypeDefState() {
-                    context.cacheCompatibleRootTypeInfo(
-                        for: T.self,
-                        bytes: Array(context.buffer.storage[typeInfoStart..<context.buffer.count])
-                    )
-                }
-            }
+            try value.foryWriteTypeInfo(context)
             try value.foryWriteData(context, hasGenerics: false)
             return
         }

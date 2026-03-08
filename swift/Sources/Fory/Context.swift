@@ -257,11 +257,6 @@ public final class WriteContext {
     private var dynamicAnyDepth = 0
     private var lastTypeInfoTypeID: ObjectIdentifier?
     private var lastTypeInfo: TypeInfo?
-    private var cachedCompatibleRootTypeInfoTypeID: ObjectIdentifier?
-    private var cachedCompatibleRootTypeInfoBytes: [UInt8]?
-    private var lastRootTypeInfoHasUserFields = true
-    private var lastFirstCompatibleTypeDefTypeID: ObjectIdentifier?
-    private var lastFirstTypeDefHasUserFields = false
     private var reusableOutputData = Data()
 
     convenience init(
@@ -338,62 +333,6 @@ public final class WriteContext {
         }
     }
 
-    @inline(__always)
-    func writeCachedCompatibleRootTypeInfo<T: Serializer>(
-        for type: T.Type
-    ) -> Bool {
-        guard compatible, !compatibleTypeDefStateUsed else {
-            return false
-        }
-        let typeID = ObjectIdentifier(type)
-        guard cachedCompatibleRootTypeInfoTypeID == typeID,
-              let bytes = cachedCompatibleRootTypeInfoBytes else {
-            return false
-        }
-        buffer.writeBytes(bytes)
-        if lastRootTypeInfoHasUserFields {
-            compatibleTypeDefStateUsed = true
-            compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
-        }
-        return true
-    }
-
-    @inline(__always)
-    func cachedCompatibleRootTypeInfoBytes<T: Serializer>(
-        for type: T.Type
-    ) -> [UInt8]? {
-        guard compatible, !compatibleTypeDefStateUsed else {
-            return nil
-        }
-        let typeID = ObjectIdentifier(type)
-        guard cachedCompatibleRootTypeInfoTypeID == typeID,
-              let bytes = cachedCompatibleRootTypeInfoBytes,
-              !lastRootTypeInfoHasUserFields else {
-            return nil
-        }
-        return bytes
-    }
-
-    @inline(__always)
-    func cacheCompatibleRootTypeInfo<T: Serializer>(
-        for type: T.Type,
-        bytes: [UInt8]
-    ) {
-        let typeID = ObjectIdentifier(type)
-        cachedCompatibleRootTypeInfoTypeID = typeID
-        cachedCompatibleRootTypeInfoBytes = bytes
-        if lastFirstCompatibleTypeDefTypeID == typeID {
-            lastRootTypeInfoHasUserFields = lastFirstTypeDefHasUserFields
-        } else {
-            lastRootTypeInfoHasUserFields = true
-        }
-    }
-
-    @inline(__always)
-    func usesCompatibleTypeDefState() -> Bool {
-        compatibleTypeDefStateUsed
-    }
-
     func writeCompatibleTypeMeta<T: Serializer>(
         for type: T.Type,
         typeDef: TypeDef
@@ -402,8 +341,6 @@ public final class WriteContext {
         if !compatibleTypeDefStateUsed {
             compatibleTypeDefStateUsed = true
             compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
-            lastFirstCompatibleTypeDefTypeID = typeID
-            lastFirstTypeDefHasUserFields = typeDef.hasUserTypeFields
             buffer.writeUInt8(0)
             buffer.writeBytes(typeDef.bytes)
             return
@@ -431,10 +368,6 @@ public final class WriteContext {
     func resetObjectState() {
         if dynamicAnyDepth != 0 {
             dynamicAnyDepth = 0
-        }
-        if lastFirstCompatibleTypeDefTypeID != nil {
-            lastFirstCompatibleTypeDefTypeID = nil
-            lastFirstTypeDefHasUserFields = false
         }
         if trackRef {
             refWriter.reset()

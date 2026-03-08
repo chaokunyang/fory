@@ -24,6 +24,7 @@ private struct TypeNameKey: Hashable {
 
 struct TypeDef {
     let bytes: [UInt8]
+    let rootBytes: [UInt8]
     let headerHash: UInt64
     let hasUserTypeFields: Bool
 }
@@ -154,6 +155,10 @@ final class TypeInfo: @unchecked Sendable {
     private let fields: [TypeMeta.FieldInfo]
     private let reader: (ReadContext) throws -> Any
     private let compatibleReader: (ReadContext, TypeMeta) throws -> Any
+    private let nativeWireTypeIDValue: TypeId
+    private let compatibleWireTypeIDValue: TypeId
+    private var compatibleRootBytesValue: [UInt8]?
+    private var compatibleTypeDefValue: TypeDef?
     private var typeDefByWireType: [TypeId: TypeDef] = [:]
 
     init(
@@ -178,6 +183,16 @@ final class TypeInfo: @unchecked Sendable {
         self.fields = fields
         self.reader = reader
         self.compatibleReader = compatibleReader
+        nativeWireTypeIDValue = resolveRegisteredWireTypeID(
+            declaredTypeID: typeID,
+            registerByName: registerByName,
+            compatible: false
+        )
+        compatibleWireTypeIDValue = resolveRegisteredWireTypeID(
+            declaredTypeID: typeID,
+            registerByName: registerByName,
+            compatible: true
+        )
     }
 
     convenience init(typeID: TypeId) {
@@ -230,11 +245,7 @@ final class TypeInfo: @unchecked Sendable {
 
     @inline(__always)
     func wireTypeID(compatible: Bool) -> TypeId {
-        resolveRegisteredWireTypeID(
-            declaredTypeID: typeID,
-            registerByName: registerByName,
-            compatible: compatible
-        )
+        compatible ? compatibleWireTypeIDValue : nativeWireTypeIDValue
     }
 
     @inline(__always)
@@ -246,13 +257,30 @@ final class TypeInfo: @unchecked Sendable {
     }
 
     @inline(__always)
-    func typeDef(
-        wireTypeID: TypeId
-    ) throws -> TypeDef {
-        if let cached = typeDefByWireType[wireTypeID] {
+    func compatibleTypeDef() throws -> TypeDef {
+        if let cached = compatibleTypeDefValue {
             return cached
         }
+        let typeDef = try buildTypeDef(wireTypeID: compatibleWireTypeIDValue)
+        if (compatibleWireTypeIDValue == .compatibleStruct || compatibleWireTypeIDValue == .namedCompatibleStruct) &&
+            !typeDef.hasUserTypeFields {
+            compatibleRootBytesValue = typeDef.rootBytes
+        }
+        compatibleTypeDefValue = typeDef
+        return typeDef
+    }
 
+    @inline(__always)
+    func warmCompatibleTypeDef() throws {
+        _ = try compatibleTypeDef()
+    }
+
+    @inline(__always)
+    func compatibleRootBytes() -> [UInt8]? {
+        compatibleRootBytesValue
+    }
+
+    private func buildTypeDef(wireTypeID: TypeId) throws -> TypeDef {
         let hasFieldsMeta = !fields.isEmpty
         let typeMeta: TypeMeta
         if registerByName {
@@ -281,11 +309,32 @@ final class TypeInfo: @unchecked Sendable {
         }
 
         let bytes = try typeMeta.encode()
+        var rootBytes: [UInt8] = []
+        rootBytes.reserveCapacity(bytes.count + 2)
+        rootBytes.append(UInt8(truncatingIfNeeded: wireTypeID.rawValue))
+        rootBytes.append(0)
+        rootBytes.append(contentsOf: bytes)
         let typeDef = try TypeDef(
             bytes: bytes,
+            rootBytes: rootBytes,
             headerHash: typeDefHeaderHash(bytes),
             hasUserTypeFields: typeDefHasUserTypeFields(typeMeta.fields)
         )
+        return typeDef
+    }
+
+    @inline(__always)
+    func typeDef(
+        wireTypeID: TypeId
+    ) throws -> TypeDef {
+        if wireTypeID == compatibleWireTypeIDValue {
+            return try compatibleTypeDef()
+        }
+        if let cached = typeDefByWireType[wireTypeID] {
+            return cached
+        }
+
+        let typeDef = try buildTypeDef(wireTypeID: wireTypeID)
         typeDefByWireType[wireTypeID] = typeDef
         return typeDef
     }
@@ -332,6 +381,7 @@ final class TypeResolver {
                 return try T.foryRead(context, refMode: .none, readTypeInfo: false)
             }
         )
+        try typeInfo.warmCompatibleTypeDef()
 
         if let existing = bySwiftType[swiftTypeID],
            existing.matches(
@@ -381,6 +431,7 @@ final class TypeResolver {
                 return try T.foryRead(context, refMode: .none, readTypeInfo: false)
             }
         )
+        try typeInfo.warmCompatibleTypeDef()
 
         if let existing = bySwiftType[swiftTypeID],
            existing.matches(

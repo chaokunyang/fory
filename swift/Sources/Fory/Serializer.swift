@@ -153,14 +153,14 @@ public extension Serializer {
         context.buffer.writeUInt8(UInt8(truncatingIfNeeded: wireTypeID.rawValue))
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            let typeDef = try typeInfo.typeDef(wireTypeID: wireTypeID)
+            let typeDef = try typeInfo.compatibleTypeDef()
             context.writeCompatibleTypeMeta(
                 for: Self.self,
                 typeDef: typeDef
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
-                let typeDef = try typeInfo.typeDef(wireTypeID: wireTypeID)
+                let typeDef = try typeInfo.compatibleTypeDef()
                 context.writeCompatibleTypeMeta(
                     for: Self.self,
                     typeDef: typeDef

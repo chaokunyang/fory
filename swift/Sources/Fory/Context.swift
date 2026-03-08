@@ -242,31 +242,17 @@ final class MetaStringReadState {
     }
 }
 
-public struct DynamicTypeInfo {
-    public let wireTypeID: TypeId
-    public let userTypeID: UInt32?
-    public let namespace: MetaString?
-    public let typeName: MetaString?
-    public let compatibleTypeMeta: TypeMeta?
-
-    public init(
-        wireTypeID: TypeId,
-        userTypeID: UInt32?,
-        namespace: MetaString?,
-        typeName: MetaString?,
-        compatibleTypeMeta: TypeMeta?
-    ) {
-        self.wireTypeID = wireTypeID
-        self.userTypeID = userTypeID
-        self.namespace = namespace
-        self.typeName = typeName
-        self.compatibleTypeMeta = compatibleTypeMeta
-    }
+struct DynamicTypeInfo {
+    let wireTypeID: TypeId
+    let userTypeID: UInt32?
+    let namespace: MetaString?
+    let typeName: MetaString?
+    let compatibleTypeMeta: TypeMeta?
 }
 
 public final class WriteContext {
     public let buffer: ByteBuffer
-    public let typeResolver: TypeResolver
+    let typeResolver: TypeResolver
     public let trackRef: Bool
     public let compatible: Bool
     public let checkClassVersion: Bool
@@ -291,7 +277,7 @@ public final class WriteContext {
     private var lastFirstTypeMetaHasUserFields = false
     private var reusableOutputData = Data()
 
-    public convenience init(
+    convenience init(
         buffer: ByteBuffer,
         typeResolver: TypeResolver,
         trackRef: Bool,
@@ -333,7 +319,7 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    public func enterDynamicAnyDepth() throws {
+    func enterDynamicAnyDepth() throws {
         if maxDepth < 0 {
             throw ForyError.invalidData("configured maxDepth \(maxDepth) is negative")
         }
@@ -393,7 +379,7 @@ public final class WriteContext {
     }
 
     @inline(__always)
-    public func leaveDynamicAnyDepth() {
+    func leaveDynamicAnyDepth() {
         if dynamicAnyDepth > 0 {
             dynamicAnyDepth -= 1
         }
@@ -567,7 +553,7 @@ private struct PendingRefSlot {
 
 public final class ReadContext {
     public let buffer: ByteBuffer
-    public let typeResolver: TypeResolver
+    let typeResolver: TypeResolver
     public let trackRef: Bool
     public let compatible: Bool
     public let checkClassVersion: Bool
@@ -612,7 +598,7 @@ public final class ReadContext {
     private var lastResolvedCompatibleTypeMetaTypeID: ObjectIdentifier?
     private var lastResolvedCompatibleTypeMetaValue: TypeMeta?
 
-    public convenience init(
+    convenience init(
         buffer: ByteBuffer,
         typeResolver: TypeResolver,
         trackRef: Bool,
@@ -662,7 +648,7 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    public func enterDynamicAnyDepth() throws {
+    func enterDynamicAnyDepth() throws {
         if maxDepth < 0 {
             throw ForyError.invalidData("configured maxDepth \(maxDepth) is negative")
         }
@@ -676,14 +662,14 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    public func leaveDynamicAnyDepth() {
+    func leaveDynamicAnyDepth() {
         if dynamicAnyDepth > 0 {
             dynamicAnyDepth -= 1
         }
     }
 
     @inline(__always)
-    public func ensureCollectionLength(_ length: Int, label: String) throws {
+    func ensureCollectionLength(_ length: Int, label: String) throws {
         if length < 0 {
             throw ForyError.invalidData("\(label) length is negative")
         }
@@ -695,7 +681,7 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    public func ensureBinaryLength(_ length: Int, label: String) throws {
+    func ensureBinaryLength(_ length: Int, label: String) throws {
         if length < 0 {
             throw ForyError.invalidData("\(label) size is negative")
         }
@@ -707,7 +693,7 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    public func ensureRemainingBytes(_ byteCount: Int, label: String) throws {
+    func ensureRemainingBytes(_ byteCount: Int, label: String) throws {
         if byteCount < 0 {
             throw ForyError.invalidData("\(label) size is negative")
         }
@@ -1206,20 +1192,20 @@ public final class ReadContext {
         return result
     }
 
-    public func setDynamicTypeInfo<T: Serializer>(for type: T.Type, _ typeInfo: DynamicTypeInfo) {
+    func setDynamicTypeInfo<T: Serializer>(for type: T.Type, _ typeInfo: DynamicTypeInfo) {
         pendingDynamicTypeInfo[ObjectIdentifier(type)] = typeInfo
     }
 
-    public func dynamicTypeInfo<T: Serializer>(for type: T.Type) -> DynamicTypeInfo? {
+    func dynamicTypeInfo<T: Serializer>(for type: T.Type) -> DynamicTypeInfo? {
         pendingDynamicTypeInfo[ObjectIdentifier(type)]
     }
 
-    public func clearDynamicTypeInfo<T: Serializer>(for type: T.Type) {
+    func clearDynamicTypeInfo<T: Serializer>(for type: T.Type) {
         pendingDynamicTypeInfo.removeValue(forKey: ObjectIdentifier(type))
     }
 
     @inline(__always)
-    public func readInternedUTF8String(count: Int) throws -> String {
+    func readInternedUTF8String(count: Int) throws -> String {
         if count == 0 {
             return ""
         }
@@ -1243,7 +1229,7 @@ public final class ReadContext {
         return decoded
     }
 
-    public func canonicalizeNonTrackingReference<T>(
+    func canonicalizeNonTrackingReference<T>(
         _ value: T,
         start: Int,
         end: Int

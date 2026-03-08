@@ -17,14 +17,14 @@
 
 import Foundation
 
-public final class RegisteredTypeInfo: Equatable, @unchecked Sendable {
-    public let userTypeID: UInt32?
-    public let kind: TypeId
-    public let registerByName: Bool
-    public let namespace: MetaString?
-    public let typeName: MetaString
+final class RegisteredTypeInfo: Equatable, @unchecked Sendable {
+    let userTypeID: UInt32?
+    let kind: TypeId
+    let registerByName: Bool
+    let namespace: MetaString?
+    let typeName: MetaString
 
-    public init(
+    init(
         userTypeID: UInt32?,
         kind: TypeId,
         registerByName: Bool,
@@ -38,7 +38,7 @@ public final class RegisteredTypeInfo: Equatable, @unchecked Sendable {
         self.typeName = typeName
     }
 
-    public static func == (lhs: RegisteredTypeInfo, rhs: RegisteredTypeInfo) -> Bool {
+    static func == (lhs: RegisteredTypeInfo, rhs: RegisteredTypeInfo) -> Bool {
         lhs.userTypeID == rhs.userTypeID &&
             lhs.kind == rhs.kind &&
             lhs.registerByName == rhs.registerByName &&
@@ -71,7 +71,7 @@ private struct TypeReader {
     let compatibleReader: (ReadContext, TypeMeta) throws -> Any
 }
 
-public final class TypeResolver {
+final class TypeResolver {
     private var bySwiftType: [ObjectIdentifier: RegisteredTypeInfo] = [:]
     private var byUserTypeID: [UInt32: TypeReader] = [:]
     private var byTypeName: [TypeNameKey: TypeReader] = [:]
@@ -79,9 +79,9 @@ public final class TypeResolver {
     private var compatibleTypeMetaEncodingCache: [CompatibleTypeMetaEncodingKey: CompatibleTypeMetaEncoding] = [:]
     private var compatibleTypeMetaByHeader: [UInt64: TypeMeta] = [:]
 
-    public init() {}
+    init() {}
 
-    public func register<T: Serializer>(_ type: T.Type, id: UInt32) {
+    func register<T: Serializer>(_ type: T.Type, id: UInt32) {
         do {
             try registerByID(type, id: id)
         } catch {
@@ -117,7 +117,7 @@ public final class TypeResolver {
         )
     }
 
-    public func register<T: Serializer>(_ type: T.Type, namespace: String, typeName: String) throws {
+    func register<T: Serializer>(_ type: T.Type, namespace: String, typeName: String) throws {
         let namespaceMeta = try MetaStringEncoder.namespace.encode(
             namespace,
             allowedEncodings: namespaceMetaStringEncodings
@@ -158,7 +158,7 @@ public final class TypeResolver {
         )
     }
 
-    public func register<T: Serializer>(_ type: T.Type, name: String) throws {
+    func register<T: Serializer>(_ type: T.Type, name: String) throws {
         let parts = name.components(separatedBy: ".")
         if parts.count <= 1 {
             try register(type, namespace: "", typeName: name)
@@ -170,15 +170,7 @@ public final class TypeResolver {
         try register(type, namespace: resolvedNamespace, typeName: resolvedTypeName)
     }
 
-    public func registeredTypeInfo<T: Serializer>(for type: T.Type) -> RegisteredTypeInfo? {
-        bySwiftType[ObjectIdentifier(type)]
-    }
-
-    public func registeredTypeInfo(for type: any Serializer.Type) -> RegisteredTypeInfo? {
-        bySwiftType[ObjectIdentifier(type)]
-    }
-
-    public func requireRegisteredTypeInfo<T: Serializer>(for type: T.Type) throws -> RegisteredTypeInfo {
+    func requireRegisteredTypeInfo<T: Serializer>(for type: T.Type) throws -> RegisteredTypeInfo {
         if let info = bySwiftType[ObjectIdentifier(type)] {
             return info
         }

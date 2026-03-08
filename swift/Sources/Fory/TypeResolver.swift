@@ -21,325 +21,6 @@ private struct TypeNameKey: Hashable {
     let namespace: String
     let typeName: String
 }
-
-struct TypeDef {
-    let bytes: [UInt8]
-    let rootBytes: [UInt8]
-    let headerHash: UInt64
-    let hasUserTypeFields: Bool
-}
-
-@inline(__always)
-func normalizeRegisteredTypeID(_ typeID: TypeId) -> TypeId {
-    switch typeID {
-    case .namedEnum:
-        return .enumType
-    case .compatibleStruct, .namedCompatibleStruct, .namedStruct:
-        return .structType
-    case .namedExt:
-        return .ext
-    case .namedUnion, .union:
-        return .typedUnion
-    default:
-        return typeID
-    }
-}
-
-@inline(__always)
-func namedRegisteredTypeID(for baseTypeID: TypeId, compatible: Bool) -> TypeId {
-    switch baseTypeID {
-    case .structType:
-        return compatible ? .namedCompatibleStruct : .namedStruct
-    case .enumType:
-        return .namedEnum
-    case .ext:
-        return .namedExt
-    case .typedUnion:
-        return .namedUnion
-    default:
-        return baseTypeID
-    }
-}
-
-@inline(__always)
-func idRegisteredTypeID(for baseTypeID: TypeId, compatible: Bool) -> TypeId {
-    switch baseTypeID {
-    case .structType:
-        return compatible ? .compatibleStruct : .structType
-    default:
-        return baseTypeID
-    }
-}
-
-@inline(__always)
-func resolveRegisteredWireTypeID(
-    declaredTypeID: TypeId,
-    registerByName: Bool,
-    compatible: Bool
-) -> TypeId {
-    let baseTypeID = normalizeRegisteredTypeID(declaredTypeID)
-    if registerByName {
-        return namedRegisteredTypeID(for: baseTypeID, compatible: compatible)
-    }
-    return idRegisteredTypeID(for: baseTypeID, compatible: compatible)
-}
-
-@inline(__always)
-func isAllowedRegisteredWireTypeID(
-    _ wireTypeID: TypeId,
-    declaredTypeID: TypeId,
-    registerByName: Bool,
-    compatible: Bool
-) -> Bool {
-    let baseTypeID = normalizeRegisteredTypeID(declaredTypeID)
-    let expected = resolveRegisteredWireTypeID(
-        declaredTypeID: declaredTypeID,
-        registerByName: registerByName,
-        compatible: compatible
-    )
-    if wireTypeID == expected {
-        return true
-    }
-    if baseTypeID == .structType, compatible {
-        return wireTypeID == .compatibleStruct ||
-            wireTypeID == .namedCompatibleStruct ||
-            wireTypeID == .structType ||
-            wireTypeID == .namedStruct
-    }
-    if baseTypeID == .typedUnion {
-        return wireTypeID == .union || (registerByName && wireTypeID == .namedUnion)
-    }
-    return false
-}
-
-@inline(__always)
-func registeredWireTypeNeedsUserTypeID(_ wireTypeID: TypeId) -> Bool {
-    switch wireTypeID {
-    case .enumType, .structType, .ext, .typedUnion, .union:
-        return true
-    default:
-        return false
-    }
-}
-
-private func typeDefHeaderHash(_ bytes: [UInt8]) throws -> UInt64 {
-    guard bytes.count >= 8 else {
-        throw ForyError.invalidData("encoded compatible type metadata must include an 8-byte header")
-    }
-    let headerReader = ByteBuffer(bytes: bytes)
-    let header = try headerReader.readUInt64()
-    return header >> 14
-}
-
-private func typeDefHasUserTypeFields(_ fields: [TypeMeta.FieldInfo]) -> Bool {
-    fields.contains { typeDefFieldNeedsTypeInfo($0.fieldType) }
-}
-
-private func typeDefFieldNeedsTypeInfo(_ fieldType: TypeMeta.FieldType) -> Bool {
-    if let typeID = TypeId(rawValue: fieldType.typeID),
-       TypeId.needsTypeInfoForField(typeID) {
-        return true
-    }
-    return fieldType.generics.contains { typeDefFieldNeedsTypeInfo($0) }
-}
-
-final class TypeInfo: @unchecked Sendable {
-    let swiftTypeID: ObjectIdentifier
-    let typeID: TypeId
-    let userTypeID: UInt32?
-    let registerByName: Bool
-    let namespace: MetaString
-    let typeName: MetaString
-    let compatibleTypeMeta: TypeMeta?
-
-    private let fields: [TypeMeta.FieldInfo]
-    private let reader: (ReadContext) throws -> Any
-    private let compatibleReader: (ReadContext, TypeMeta) throws -> Any
-    private let nativeWireTypeIDValue: TypeId
-    private let compatibleWireTypeIDValue: TypeId
-    private var compatibleRootBytesValue: [UInt8]?
-    private var compatibleTypeDefValue: TypeDef?
-    private var typeDefByWireType: [TypeId: TypeDef] = [:]
-
-    init(
-        swiftTypeID: ObjectIdentifier,
-        typeID: TypeId,
-        userTypeID: UInt32?,
-        registerByName: Bool,
-        namespace: MetaString,
-        typeName: MetaString,
-        compatibleTypeMeta: TypeMeta? = nil,
-        fields: [TypeMeta.FieldInfo],
-        reader: @escaping (ReadContext) throws -> Any,
-        compatibleReader: @escaping (ReadContext, TypeMeta) throws -> Any
-    ) {
-        self.swiftTypeID = swiftTypeID
-        self.typeID = typeID
-        self.userTypeID = userTypeID
-        self.registerByName = registerByName
-        self.namespace = namespace
-        self.typeName = typeName
-        self.compatibleTypeMeta = compatibleTypeMeta
-        self.fields = fields
-        self.reader = reader
-        self.compatibleReader = compatibleReader
-        nativeWireTypeIDValue = resolveRegisteredWireTypeID(
-            declaredTypeID: typeID,
-            registerByName: registerByName,
-            compatible: false
-        )
-        compatibleWireTypeIDValue = resolveRegisteredWireTypeID(
-            declaredTypeID: typeID,
-            registerByName: registerByName,
-            compatible: true
-        )
-    }
-
-    convenience init(typeID: TypeId) {
-        self.init(
-            swiftTypeID: ObjectIdentifier(TypeInfo.self),
-            typeID: typeID,
-            userTypeID: nil,
-            registerByName: false,
-            namespace: MetaString.empty(specialChar1: ".", specialChar2: "_"),
-            typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
-            fields: [],
-            reader: { _ in
-                throw ForyError.invalidData("dynamic type \(typeID) uses runtime-only decode path")
-            },
-            compatibleReader: { _, _ in
-                throw ForyError.invalidData("dynamic compatible type \(typeID) uses runtime-only decode path")
-            }
-        )
-    }
-
-    convenience init(dynamic typeInfo: TypeInfo, compatibleTypeMeta: TypeMeta) {
-        self.init(
-            swiftTypeID: typeInfo.swiftTypeID,
-            typeID: typeInfo.typeID,
-            userTypeID: typeInfo.userTypeID,
-            registerByName: typeInfo.registerByName,
-            namespace: typeInfo.namespace,
-            typeName: typeInfo.typeName,
-            compatibleTypeMeta: compatibleTypeMeta,
-            fields: typeInfo.fields,
-            reader: typeInfo.reader,
-            compatibleReader: typeInfo.compatibleReader
-        )
-    }
-
-    @inline(__always)
-    func matches(
-        typeID: TypeId,
-        userTypeID: UInt32?,
-        registerByName: Bool,
-        namespace: String,
-        typeName: String
-    ) -> Bool {
-        self.typeID == typeID &&
-            self.userTypeID == userTypeID &&
-            self.registerByName == registerByName &&
-            self.namespace.value == namespace &&
-            self.typeName.value == typeName
-    }
-
-    @inline(__always)
-    func wireTypeID(compatible: Bool) -> TypeId {
-        compatible ? compatibleWireTypeIDValue : nativeWireTypeIDValue
-    }
-
-    @inline(__always)
-    func read(_ context: ReadContext, compatibleTypeMeta: TypeMeta? = nil) throws -> Any {
-        if let compatibleTypeMeta = compatibleTypeMeta ?? self.compatibleTypeMeta {
-            return try compatibleReader(context, compatibleTypeMeta)
-        }
-        return try reader(context)
-    }
-
-    @inline(__always)
-    func compatibleTypeDef() throws -> TypeDef {
-        if let cached = compatibleTypeDefValue {
-            return cached
-        }
-        let typeDef = try buildTypeDef(wireTypeID: compatibleWireTypeIDValue)
-        if (compatibleWireTypeIDValue == .compatibleStruct || compatibleWireTypeIDValue == .namedCompatibleStruct) &&
-            !typeDef.hasUserTypeFields {
-            compatibleRootBytesValue = typeDef.rootBytes
-        }
-        compatibleTypeDefValue = typeDef
-        return typeDef
-    }
-
-    @inline(__always)
-    func warmCompatibleTypeDef() throws {
-        _ = try compatibleTypeDef()
-    }
-
-    @inline(__always)
-    func compatibleRootBytes() -> [UInt8]? {
-        compatibleRootBytesValue
-    }
-
-    private func buildTypeDef(wireTypeID: TypeId) throws -> TypeDef {
-        let hasFieldsMeta = !fields.isEmpty
-        let typeMeta: TypeMeta
-        if registerByName {
-            typeMeta = try TypeMeta(
-                typeID: wireTypeID.rawValue,
-                userTypeID: nil,
-                namespace: namespace,
-                typeName: typeName,
-                registerByName: true,
-                fields: fields,
-                hasFieldsMeta: hasFieldsMeta
-            )
-        } else {
-            guard let userTypeID else {
-                throw ForyError.invalidData("missing user type id metadata for id-registered type")
-            }
-            typeMeta = try TypeMeta(
-                typeID: wireTypeID.rawValue,
-                userTypeID: userTypeID,
-                namespace: namespace,
-                typeName: typeName,
-                registerByName: false,
-                fields: fields,
-                hasFieldsMeta: hasFieldsMeta
-            )
-        }
-
-        let bytes = try typeMeta.encode()
-        var rootBytes: [UInt8] = []
-        rootBytes.reserveCapacity(bytes.count + 2)
-        rootBytes.append(UInt8(truncatingIfNeeded: wireTypeID.rawValue))
-        rootBytes.append(0)
-        rootBytes.append(contentsOf: bytes)
-        let typeDef = try TypeDef(
-            bytes: bytes,
-            rootBytes: rootBytes,
-            headerHash: typeDefHeaderHash(bytes),
-            hasUserTypeFields: typeDefHasUserTypeFields(typeMeta.fields)
-        )
-        return typeDef
-    }
-
-    @inline(__always)
-    func typeDef(
-        wireTypeID: TypeId
-    ) throws -> TypeDef {
-        if wireTypeID == compatibleWireTypeIDValue {
-            return try compatibleTypeDef()
-        }
-        if let cached = typeDefByWireType[wireTypeID] {
-            return cached
-        }
-
-        let typeDef = try buildTypeDef(wireTypeID: wireTypeID)
-        typeDefByWireType[wireTypeID] = typeDef
-        return typeDef
-    }
-}
-
 final class TypeResolver {
     private let trackRef: Bool
 
@@ -365,7 +46,7 @@ final class TypeResolver {
         let swiftTypeID = ObjectIdentifier(type)
         try validateIDRegistration(key: swiftTypeID, type: type, id: id)
 
-        let typeInfo = TypeInfo(
+        let typeInfo = try TypeInfo(
             swiftTypeID: swiftTypeID,
             typeID: T.staticTypeId,
             userTypeID: id,
@@ -381,7 +62,6 @@ final class TypeResolver {
                 return try T.foryRead(context, refMode: .none, readTypeInfo: false)
             }
         )
-        try typeInfo.warmCompatibleTypeDef()
 
         if let existing = bySwiftType[swiftTypeID],
            existing.matches(
@@ -415,7 +95,7 @@ final class TypeResolver {
             typeName: typeName
         )
 
-        let typeInfo = TypeInfo(
+        let typeInfo = try TypeInfo(
             swiftTypeID: swiftTypeID,
             typeID: T.staticTypeId,
             userTypeID: nil,
@@ -431,7 +111,6 @@ final class TypeResolver {
                 return try T.foryRead(context, refMode: .none, readTypeInfo: false)
             }
         )
-        try typeInfo.warmCompatibleTypeDef()
 
         if let existing = bySwiftType[swiftTypeID],
            existing.matches(

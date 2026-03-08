@@ -524,17 +524,22 @@ public final class Fory {
         }
 
         let typeInfo = try context.typeInfo(for: T.self)
-        guard let rootBytes = typeInfo.compatibleRootBytes() else {
+        let wireTypeID = typeInfo.wireTypeID(compatible: true)
+        guard wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct,
+              let typeDefBytes = typeInfo.typeDefBytes,
+              !typeInfo.typeDefHasUserTypeFields else {
             return nil
         }
 
-        let totalByteCount = 2 + rootBytes.count + payloadSize
+        let totalByteCount = 4 + typeDefBytes.count + payloadSize
         let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
         return context.materializeOutputData(byteCount: totalByteCount) { base in
             base[0] = headByte
             base[1] = refByte
-            var index = 2
-            index = Wire.copyBytes(rootBytes, to: base, index: index)
+            base[2] = UInt8(truncatingIfNeeded: wireTypeID.rawValue)
+            base[3] = 0
+            var index = 4
+            index = Wire.copyBytes(typeDefBytes, to: base, index: index)
             value.foryWritePrimitiveData(to: base, index: &index)
             assert(index == totalByteCount)
         }

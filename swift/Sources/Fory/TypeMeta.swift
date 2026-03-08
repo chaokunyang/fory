@@ -49,6 +49,7 @@ public let fieldNameMetaStringEncodings: [MetaStringEncoding] = [
 ]
 
 public final class TypeMeta: Equatable, @unchecked Sendable {
+
     public struct FieldType: Equatable, Sendable {
         public var typeID: UInt32
         public var nullable: Bool

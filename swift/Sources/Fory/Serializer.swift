@@ -153,17 +153,21 @@ public extension Serializer {
         context.buffer.writeUInt8(UInt8(truncatingIfNeeded: wireTypeID.rawValue))
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            let typeDef = try typeInfo.compatibleTypeDef()
+            guard let typeDefBytes = typeInfo.typeDefBytes else {
+                throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
+            }
             context.writeCompatibleTypeMeta(
                 for: Self.self,
-                typeDef: typeDef
+                typeDefBytes: typeDefBytes
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
-                let typeDef = try typeInfo.compatibleTypeDef()
+                guard let typeDefBytes = typeInfo.typeDefBytes else {
+                    throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
+                }
                 context.writeCompatibleTypeMeta(
                     for: Self.self,
-                    typeDef: typeDef
+                    typeDefBytes: typeDefBytes
                 )
             } else {
                 try writeMetaString(
@@ -220,12 +224,14 @@ public extension Serializer {
                 typeInfo: typeInfo,
                 wireTypeID: typeID
             )
-            let localTypeDef = try typeInfo.typeDef(wireTypeID: typeID)
+            guard let localTypeDefHeaderHash = typeInfo.typeDefHeaderHash else {
+                throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
+            }
             context.pushCompatibleTypeMeta(
                 for: Self.self,
                 remoteTypeMeta,
-                localTypeMetaHeaderHash: localTypeDef.headerHash,
-                localTypeMetaHasUserTypeFields: localTypeDef.hasUserTypeFields
+                localTypeMetaHeaderHash: localTypeDefHeaderHash,
+                localTypeMetaHasUserTypeFields: typeInfo.typeDefHasUserTypeFields
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
@@ -235,12 +241,14 @@ public extension Serializer {
                     wireTypeID: typeID
                 )
                 if typeID == .namedStruct {
-                    let localTypeDef = try typeInfo.typeDef(wireTypeID: typeID)
+                    guard let localTypeDefHeaderHash = typeInfo.typeDefHeaderHash else {
+                        throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
+                    }
                     context.pushCompatibleTypeMeta(
                         for: Self.self,
                         remoteTypeMeta,
-                        localTypeMetaHeaderHash: localTypeDef.headerHash,
-                        localTypeMetaHasUserTypeFields: localTypeDef.hasUserTypeFields
+                        localTypeMetaHeaderHash: localTypeDefHeaderHash,
+                        localTypeMetaHasUserTypeFields: typeInfo.typeDefHasUserTypeFields
                     )
                 }
             } else {

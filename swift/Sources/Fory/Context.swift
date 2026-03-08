@@ -335,14 +335,14 @@ public final class WriteContext {
 
     func writeCompatibleTypeMeta<T: Serializer>(
         for type: T.Type,
-        typeDef: TypeDef
+        typeDefBytes: [UInt8]
     ) {
         let typeID = ObjectIdentifier(type)
         if !compatibleTypeDefStateUsed {
             compatibleTypeDefStateUsed = true
             compatibleTypeDefState.assignFirstTypeIndex(for: typeID)
             buffer.writeUInt8(0)
-            buffer.writeBytes(typeDef.bytes)
+            buffer.writeBytes(typeDefBytes)
             return
         }
 
@@ -354,7 +354,7 @@ public final class WriteContext {
             } else {
                 buffer.writeVarUInt32(marker)
             }
-            buffer.writeBytes(typeDef.bytes)
+            buffer.writeBytes(typeDefBytes)
         } else {
             let marker = (assignment.index << 1) | 1
             if marker < 0x80 {

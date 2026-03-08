@@ -212,14 +212,14 @@ final class TypeResolver {
             if context.compatible {
                 return try compatibleAnyTypeInfo(context: context)
             }
-            let namespace = try Self.readMetaString(
+            let namespace = try readMetaString(
                 buffer: context.buffer,
-                decoder: .namespace,
+                decoder: MetaStringDecoder.namespace,
                 encodings: namespaceMetaStringEncodings
             )
-            let typeName = try Self.readMetaString(
+            let typeName = try readMetaString(
                 buffer: context.buffer,
-                decoder: .typeName,
+                decoder: MetaStringDecoder.typeName,
                 encodings: typeNameMetaStringEncodings
             )
             return try requireTypeInfo(namespace: namespace.value, typeName: typeName.value)
@@ -435,22 +435,4 @@ final class TypeResolver {
         return nil
     }
 
-    private static func readMetaString(
-        buffer: ByteBuffer,
-        decoder: MetaStringDecoder,
-        encodings: [MetaStringEncoding]
-    ) throws -> MetaString {
-        let header = try buffer.readUInt8()
-        let encodingIndex = Int(header & 0b11)
-        guard encodingIndex < encodings.count else {
-            throw ForyError.invalidData("invalid meta string encoding index")
-        }
-
-        var length = Int(header >> 2)
-        if length >= 0b11_1111 {
-            length = 0b11_1111 + Int(try buffer.readVarUInt32())
-        }
-        let bytes = try buffer.readBytes(count: length)
-        return try decoder.decode(bytes: bytes, encoding: encodings[encodingIndex])
-    }
 }

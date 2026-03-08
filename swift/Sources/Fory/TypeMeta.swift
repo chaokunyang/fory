@@ -498,9 +498,152 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         let bytes = try buffer.readBytes(count: length)
         return try decoder.decode(bytes: bytes, encoding: encodings[encodingIndex])
     }
+
+    func assigningFieldIDs(from localTypeMeta: TypeMeta) throws -> TypeMeta {
+        guard !fields.isEmpty else {
+            return self
+        }
+
+        let localFields = localTypeMeta.fields
+        guard !localFields.isEmpty else {
+            return self
+        }
+
+        var fieldIndexByName: [String: (Int, FieldInfo)] = [:]
+        var fieldIndexByID: [Int16: (Int, FieldInfo)] = [:]
+        fieldIndexByName.reserveCapacity(localFields.count)
+        fieldIndexByID.reserveCapacity(localFields.count)
+
+        for (index, localField) in localFields.enumerated() {
+            fieldIndexByName[toSnakeCase(localField.fieldName)] = (index, localField)
+            if let fieldID = localField.fieldID, fieldID >= 0 {
+                fieldIndexByID[fieldID] = (index, localField)
+            }
+        }
+
+        var resolvedFields = fields
+        var changed = false
+
+        for index in resolvedFields.indices {
+            let field = resolvedFields[index]
+
+            let localMatch: (Int, FieldInfo)?
+            if let fieldID = field.fieldID, fieldID >= 0 {
+                localMatch = fieldIndexByID[fieldID]
+            } else {
+                localMatch = fieldIndexByName[toSnakeCase(field.fieldName)]
+            }
+
+            guard let (sortedIndex, localFieldInfo) = localMatch,
+                  sortedIndex <= Int(Int16.max),
+                  Self.isCompatibleFieldType(field.fieldType, localFieldInfo.fieldType) else {
+                if field.fieldID != -1 {
+                    resolvedFields[index].fieldID = -1
+                    changed = true
+                }
+                continue
+            }
+
+            let resolvedFieldID = Int16(sortedIndex)
+            if field.fieldID != resolvedFieldID {
+                resolvedFields[index].fieldID = resolvedFieldID
+                changed = true
+            }
+        }
+
+        guard changed else {
+            return self
+        }
+
+        return try TypeMeta(
+            typeID: typeID,
+            userTypeID: userTypeID,
+            namespace: namespace,
+            typeName: typeName,
+            registerByName: registerByName,
+            fields: resolvedFields,
+            hasFieldsMeta: hasFieldsMeta,
+            compressed: compressed,
+            headerHash: headerHash
+        )
+    }
+
+    private static func isCompatibleFieldType(
+        _ remoteType: FieldType,
+        _ localType: FieldType
+    ) -> Bool {
+        if normalizeCompatibleTypeIDForComparison(remoteType.typeID) != normalizeCompatibleTypeIDForComparison(localType.typeID) {
+            return false
+        }
+        if remoteType.nullable != localType.nullable || remoteType.trackRef != localType.trackRef {
+            return false
+        }
+        if remoteType.generics.count != localType.generics.count {
+            return false
+        }
+        for (remoteGeneric, localGeneric) in zip(remoteType.generics, localType.generics)
+        where !isCompatibleFieldType(remoteGeneric, localGeneric) {
+            return false
+        }
+        return true
+    }
+
+    private static func normalizeCompatibleTypeIDForComparison(_ typeID: UInt32) -> UInt32 {
+        switch typeID {
+        case TypeId.structType.rawValue,
+             TypeId.compatibleStruct.rawValue,
+             TypeId.namedStruct.rawValue,
+             TypeId.namedCompatibleStruct.rawValue,
+             TypeId.unknown.rawValue:
+            return TypeId.structType.rawValue
+        case TypeId.enumType.rawValue,
+             TypeId.namedEnum.rawValue:
+            return TypeId.enumType.rawValue
+        case TypeId.ext.rawValue,
+             TypeId.namedExt.rawValue:
+            return TypeId.ext.rawValue
+        case TypeId.binary.rawValue,
+             TypeId.int8Array.rawValue,
+             TypeId.uint8Array.rawValue:
+            return TypeId.binary.rawValue
+        case TypeId.union.rawValue,
+             TypeId.typedUnion.rawValue,
+             TypeId.namedUnion.rawValue:
+            return TypeId.union.rawValue
+        default:
+            return typeID
+        }
+    }
 }
 
 private func lowerCamelToLowerUnderscore(_ name: String) -> String {
+    if name.isEmpty {
+        return name
+    }
+
+    let chars = Array(name)
+    var result = String()
+    result.reserveCapacity(name.count + 4)
+
+    for (index, char) in chars.enumerated() {
+        if char.isUppercase {
+            if index > 0 {
+                let prevUpper = chars[index - 1].isUppercase
+                let nextUpperOrEnd = (index + 1 >= chars.count) || chars[index + 1].isUppercase
+                if !prevUpper || !nextUpperOrEnd {
+                    result.append("_")
+                }
+            }
+            result.append(char.lowercased())
+        } else {
+            result.append(char)
+        }
+    }
+
+    return result
+}
+
+private func toSnakeCase(_ name: String) -> String {
     if name.isEmpty {
         return name
     }

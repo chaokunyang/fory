@@ -156,8 +156,16 @@ final class TypeResolver {
         if let cached = compatibleTypeMetaByHeader[header] {
             return cached
         }
-        compatibleTypeMetaByHeader[header] = typeMeta
-        return typeMeta
+        let canonicalTypeMeta: TypeMeta
+        if let typeInfo = compatibleTypeInfo(for: typeMeta),
+           let localTypeMeta = typeInfo.typeMeta,
+           let remapped = try? typeMeta.assigningFieldIDs(from: localTypeMeta) {
+            canonicalTypeMeta = remapped
+        } else {
+            canonicalTypeMeta = typeMeta
+        }
+        compatibleTypeMetaByHeader[header] = canonicalTypeMeta
+        return canonicalTypeMeta
     }
 
     func readByUserTypeID(_ userTypeID: UInt32, context: ReadContext) throws -> Any {
@@ -414,6 +422,17 @@ final class TypeResolver {
         if let existing = byTypeName[nameKey], existing.swiftTypeID != key {
             throw ForyError.invalidData("type name \(namespace)::\(typeName) is already registered by another type")
         }
+    }
+
+    @inline(__always)
+    private func compatibleTypeInfo(for typeMeta: TypeMeta) -> TypeInfo? {
+        if typeMeta.registerByName {
+            return byTypeName[TypeNameKey(namespace: typeMeta.namespace.value, typeName: typeMeta.typeName.value)]
+        }
+        if let userTypeID = typeMeta.userTypeID {
+            return byUserTypeID[userTypeID]
+        }
+        return nil
     }
 
     private static func readMetaString(

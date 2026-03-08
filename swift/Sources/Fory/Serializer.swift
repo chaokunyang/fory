@@ -224,14 +224,10 @@ public extension Serializer {
                 typeInfo: typeInfo,
                 wireTypeID: typeID
             )
-            guard let localTypeDefHeaderHash = typeInfo.typeDefHeaderHash else {
-                throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
-            }
             context.pushCompatibleTypeMeta(
                 for: Self.self,
                 remoteTypeMeta,
-                localTypeMetaHeaderHash: localTypeDefHeaderHash,
-                localTypeMetaHasUserTypeFields: typeInfo.typeDefHasUserTypeFields
+                localTypeInfo: typeInfo
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
@@ -241,14 +237,10 @@ public extension Serializer {
                     wireTypeID: typeID
                 )
                 if typeID == .namedStruct {
-                    guard let localTypeDefHeaderHash = typeInfo.typeDefHeaderHash else {
-                        throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
-                    }
                     context.pushCompatibleTypeMeta(
                         for: Self.self,
                         remoteTypeMeta,
-                        localTypeMetaHeaderHash: localTypeDefHeaderHash,
-                        localTypeMetaHasUserTypeFields: typeInfo.typeDefHasUserTypeFields
+                        localTypeInfo: typeInfo
                     )
                 }
             } else {

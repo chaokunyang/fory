@@ -49,14 +49,14 @@ private func buildClassReadDataDecl(
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleFields = context.compatibleFields(for: Self.self) {
-            if compatibleFields.canUseSchemaFastPath {
-                let value = Self.init()
-                context.bindPendingRef(value)
-                \(schemaAssignBody)
-                return value
-            }
-            if compatibleFields.canUseSchemaOrderReadPath {
+        if context.compatible, let compatibleState = context.compatibleTypeMetaState(for: Self.self) {
+            if compatibleState.matchesLocalSchema {
+                if !compatibleState.localHasUserTypeFields {
+                    let value = Self.init()
+                    context.bindPendingRef(value)
+                    \(schemaAssignBody)
+                    return value
+                }
                 let value = Self.init()
                 context.bindPendingRef(value)
                 \(compatibleAlignedAssignBody)
@@ -64,7 +64,7 @@ private func buildClassReadDataDecl(
             }
             let value = Self.init()
             context.bindPendingRef(value)
-            for remoteField in compatibleFields.fields {
+            for remoteField in compatibleState.typeMeta.fields {
                 switch Int(remoteField.fieldID ?? -1) {
             \(compatibleCases)
                 default:
@@ -87,11 +87,11 @@ private func buildEmptyStructReadDataDecl(accessPrefix: String) -> String {
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleFields = context.compatibleFields(for: Self.self) {
-            if compatibleFields.canUseSchemaFastPath || compatibleFields.canUseSchemaOrderReadPath {
+        if context.compatible, let compatibleState = context.compatibleTypeMetaState(for: Self.self) {
+            if compatibleState.matchesLocalSchema {
                 return Self()
             }
-            for remoteField in compatibleFields.fields {
+            for remoteField in compatibleState.typeMeta.fields {
                 try context.skipFieldValue(remoteField.fieldType)
             }
             return Self()
@@ -128,21 +128,21 @@ private func buildStructReadDataDecl(
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let compatibleFields = context.compatibleFields(for: Self.self) {
-                if compatibleFields.canUseSchemaFastPath {
-                    \(schemaReadBody)
-                    return Self(
-                        \(ctorArgs)
-                    )
-                }
-                if compatibleFields.canUseSchemaOrderReadPath {
+        if context.compatible, let compatibleState = context.compatibleTypeMetaState(for: Self.self) {
+                if compatibleState.matchesLocalSchema {
+                    if !compatibleState.localHasUserTypeFields {
+                        \(schemaReadBody)
+                        return Self(
+                            \(ctorArgs)
+                        )
+                    }
                     \(compatibleAlignedReadBody)
                     return Self(
                         \(ctorArgs)
                     )
                 }
                 \(compatibleDefaults)
-                for remoteField in compatibleFields.fields {
+                for remoteField in compatibleState.typeMeta.fields {
                     switch Int(remoteField.fieldID ?? -1) {
                     \(compatibleCases)
                     default:

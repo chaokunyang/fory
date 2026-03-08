@@ -908,27 +908,8 @@ private func buildSchemaHashDecl(fields: [ParsedField]) -> String {
 }
 
 private func buildCompatibleTypeMetaFieldsDecl(sortedFields: [ParsedField], accessPrefix: String) -> String {
-    func fieldIDExpression(_ field: ParsedField) -> String {
-        if let fieldID = field.fieldID {
-            return "\(fieldID)"
-        }
-        return "nil"
-    }
-
-    let fieldInfosTrackRefDisabled = sortedFields.map { field in
-        let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: "false")
-        return "TypeMetaFieldInfo(fieldID: \(fieldIDExpression(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
-    }
-    let fieldInfosTrackRefEnabled = sortedFields.map { field in
-        let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: "true")
-        return "TypeMetaFieldInfo(fieldID: \(fieldIDExpression(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
-    }
-    let disabledExpr = fieldInfosTrackRefDisabled.isEmpty
-        ? "[]"
-        : "[\n            \(fieldInfosTrackRefDisabled.joined(separator: ",\n            "))\n        ]"
-    let enabledExpr = fieldInfosTrackRefEnabled.isEmpty
-        ? "[]"
-        : "[\n            \(fieldInfosTrackRefEnabled.joined(separator: ",\n            "))\n        ]"
+    let disabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "false")
+    let enabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "true")
     return """
     private static let __foryCompatibleTypeMetaFieldsTrackRefDisabled: [TypeMetaFieldInfo] = \(disabledExpr)
     private static let __foryCompatibleTypeMetaFieldsTrackRefEnabled: [TypeMetaFieldInfo] = \(enabledExpr)
@@ -937,6 +918,27 @@ private func buildCompatibleTypeMetaFieldsDecl(sortedFields: [ParsedField], acce
         trackRef ? Self.__foryCompatibleTypeMetaFieldsTrackRefEnabled : Self.__foryCompatibleTypeMetaFieldsTrackRefDisabled
     }
     """
+}
+
+private func compatibleTypeMetaFieldsExpr(
+    sortedFields: [ParsedField],
+    trackRefExpression: String
+) -> String {
+    let fieldInfos = sortedFields.map { field in
+        let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: trackRefExpression)
+        return "TypeMetaFieldInfo(fieldID: \(compatibleFieldIDExpr(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
+    }
+    guard !fieldInfos.isEmpty else {
+        return "[]"
+    }
+    return "[\n            \(fieldInfos.joined(separator: ",\n            "))\n        ]"
+}
+
+private func compatibleFieldIDExpr(_ field: ParsedField) -> String {
+    if let fieldID = field.fieldID {
+        return "\(fieldID)"
+    }
+    return "nil"
 }
 
 private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: String) -> String {

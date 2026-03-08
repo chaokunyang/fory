@@ -73,13 +73,7 @@ private func buildClassReadDataDecl(
             }
             return value
         }
-        if context.checkClassVersion {
-            let __schemaHash = UInt32(bitPattern: try __buffer.readInt32())
-            let __expectedHash = Self.__forySchemaHash(context.trackRef)
-            if __schemaHash != __expectedHash {
-                throw ForyError.invalidData("class version hash mismatch: expected \\(__expectedHash), got \\(__schemaHash)")
-            }
-        }
+        \(schemaHashCheckExpr())
         let value = Self.init()
         context.bindPendingRef(value)
         \(schemaAssignBody)
@@ -102,13 +96,7 @@ private func buildEmptyStructReadDataDecl(accessPrefix: String) -> String {
             }
             return Self()
         }
-        if context.checkClassVersion {
-            let __schemaHash = UInt32(bitPattern: try __buffer.readInt32())
-            let __expectedHash = Self.__forySchemaHash(context.trackRef)
-            if __schemaHash != __expectedHash {
-                throw ForyError.invalidData("class version hash mismatch: expected \\(__expectedHash), got \\(__schemaHash)")
-            }
-        }
+        \(schemaHashCheckExpr())
         return Self()
     }
     """
@@ -165,13 +153,7 @@ private func buildStructReadDataDecl(
                     \(ctorArgs)
                 )
             }
-        if context.checkClassVersion {
-            let __schemaHash = UInt32(bitPattern: try __buffer.readInt32())
-            let __expectedHash = Self.__forySchemaHash(context.trackRef)
-            if __schemaHash != __expectedHash {
-                throw ForyError.invalidData("class version hash mismatch: expected \\(__expectedHash), got \\(__schemaHash)")
-            }
-        }
+        \(schemaHashCheckExpr())
         \(schemaReadBody)
         return Self(
             \(ctorArgs)
@@ -252,6 +234,18 @@ private func buildStructCompatibleDefaults(_ fields: [ParsedField]) -> String {
             return "var __\(field.name) = \(field.typeText).foryDefault()"
         }
         .joined(separator: "\n                ")
+}
+
+private func schemaHashCheckExpr(indent: String = "        ") -> String {
+    """
+    \(indent)if context.checkClassVersion {
+    \(indent)    let __schemaHash = UInt32(bitPattern: try __buffer.readInt32())
+    \(indent)    let __expectedHash = Self.__forySchemaHash(context.trackRef)
+    \(indent)    if __schemaHash != __expectedHash {
+    \(indent)        throw ForyError.invalidData("class version hash mismatch: expected \\(__expectedHash), got \\(__schemaHash)")
+    \(indent)    }
+    \(indent)}
+    """
 }
 
 private func buildCompatibleReadCases(

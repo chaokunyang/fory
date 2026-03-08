@@ -598,21 +598,10 @@ public final class Fory {
         if !config.trackRef {
             let rawFlag = try context.buffer.readInt8()
             if rawFlag == RefFlag.notNullValue.rawValue {
-                if context.compatible, context.reuseCachedCompatibleRootTypeInfo(for: T.self) {
+                if config.compatible, try context.tryFastReadCompatibleRootTypeInfo(for: T.self) {
                     return try T.foryReadData(context)
                 }
-                let typeInfoStart = context.buffer.getCursor()
                 try T.foryReadTypeInfo(context)
-                if context.compatible, context.usesCompatibleTypeDefState() {
-                    let typeInfoEnd = context.buffer.getCursor()
-                    if typeInfoEnd > typeInfoStart {
-                        context.cacheCompatibleRootTypeInfo(
-                            for: T.self,
-                            bytes: context.buffer.copyBytes(start: typeInfoStart, end: typeInfoEnd),
-                            remoteTypeMeta: context.compatibleTypeMeta(for: T.self)?.typeMeta
-                        )
-                    }
-                }
                 return try T.foryReadData(context)
             }
             if rawFlag == RefFlag.null.rawValue {

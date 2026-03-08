@@ -130,19 +130,6 @@ final class CompatibleTypeDefReadState {
 
 private let compatibleTypeMetaSizeMask = 0xFF
 
-private struct CompatibleRootTypeInfoEntry {
-    let prefixBytes: [UInt8]
-    let bodySize: Int
-    let typeMetaIndex: Int
-    let requiresTypeMetaState: Bool
-}
-
-private struct CompatibleTypeMetaEntry {
-    let typeMeta: TypeMeta
-    let matchesLocalSchema: Bool
-    let localHasUserTypeFields: Bool
-}
-
 private struct MetaStringCacheKey: Hashable {
     let encoding: MetaStringEncoding
     let bytes: [UInt8]
@@ -373,9 +360,21 @@ public final class ReadContext {
     private var dynamicAnyDepth = 0
 
     private var pendingRefStack: [PendingRefSlot] = []
-    private var pendingCompatibleTypeMeta: [ObjectIdentifier: CompatibleTypeMetaEntry] = [:]
+    // swiftlint:disable large_tuple
+    private var pendingCompatibleTypeMeta: [
+        ObjectIdentifier: (
+            typeMeta: TypeMeta,
+            matchesLocalSchema: Bool,
+            localHasUserTypeFields: Bool
+        )
+    ] = [:]
     private var pendingCompatibleTypeMetaTypeID: ObjectIdentifier?
-    private var pendingCompatibleTypeMetaValue: CompatibleTypeMetaEntry?
+    private var pendingCompatibleTypeMetaValue: (
+        typeMeta: TypeMeta,
+        matchesLocalSchema: Bool,
+        localHasUserTypeFields: Bool
+    )?
+    // swiftlint:enable large_tuple
     private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     private var lastCompatibleTypeMetaCacheHeader: UInt64?
     private var lastCompatibleTypeMetaCacheEntry: TypeMeta?
@@ -384,9 +383,6 @@ public final class ReadContext {
     private var lastValidatedCompatibleTypeID: ObjectIdentifier?
     private var lastValidatedCompatibleWireTypeID: TypeId?
     private var lastValidatedCompatibleHeaderHash: UInt64 = 0
-    private var cachedCompatibleRootTypeInfoTypeID: ObjectIdentifier?
-    private var cachedCompatibleRootTypeInfoEntry: CompatibleRootTypeInfoEntry?
-    private var cachedCompatibleRootTypeMeta: CompatibleTypeMetaEntry?
 
     convenience init(
         buffer: ByteBuffer,
@@ -530,71 +526,121 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func usesCompatibleTypeDefState() -> Bool {
-        compatibleTypeDefStateUsed
+    private func validateCompatibleTypeMeta(
+        _ remoteTypeMeta: TypeMeta,
+        localTypeInfo: TypeInfo,
+        actualWireTypeID: TypeId
+    ) throws {
+        if !isCompatibleTypeMetaValidationCached(
+            for: localTypeInfo.swiftTypeID,
+            wireTypeID: actualWireTypeID,
+            headerHash: remoteTypeMeta.headerHash
+        ) {
+            if remoteTypeMeta.registerByName {
+                guard localTypeInfo.registerByName else {
+                    throw ForyError.invalidData("received name-registered compatible metadata for id-registered local type")
+                }
+                if remoteTypeMeta.namespace.value != localTypeInfo.namespace.value {
+                    throw ForyError.invalidData(
+                        "namespace mismatch: expected \(localTypeInfo.namespace.value), got \(remoteTypeMeta.namespace.value)"
+                    )
+                }
+                if remoteTypeMeta.typeName.value != localTypeInfo.typeName.value {
+                    throw ForyError.invalidData(
+                        "type name mismatch: expected \(localTypeInfo.typeName.value), got \(remoteTypeMeta.typeName.value)"
+                    )
+                }
+            } else {
+                guard !localTypeInfo.registerByName else {
+                    throw ForyError.invalidData("received id-registered compatible metadata for name-registered local type")
+                }
+                guard let remoteUserTypeID = remoteTypeMeta.userTypeID else {
+                    throw ForyError.invalidData("missing user type id in compatible type metadata")
+                }
+                guard let localUserTypeID = localTypeInfo.userTypeID else {
+                    throw ForyError.invalidData("missing local user type id metadata for id-registered type")
+                }
+                if remoteUserTypeID != localUserTypeID {
+                    throw ForyError.typeMismatch(expected: localUserTypeID, actual: remoteUserTypeID)
+                }
+            }
+
+            if let remoteTypeID = remoteTypeMeta.typeID,
+               let remoteWireTypeID = TypeId(rawValue: remoteTypeID),
+               !isAllowedRegisteredWireTypeID(
+                   remoteWireTypeID,
+                   declaredTypeID: localTypeInfo.typeID,
+                   registerByName: localTypeInfo.registerByName,
+                   compatible: compatible
+               ) {
+                throw ForyError.typeMismatch(expected: actualWireTypeID.rawValue, actual: remoteTypeID)
+            }
+
+            cacheCompatibleTypeMetaValidation(
+                for: localTypeInfo.swiftTypeID,
+                wireTypeID: actualWireTypeID,
+                headerHash: remoteTypeMeta.headerHash
+            )
+        }
     }
 
     @inline(__always)
-    func reuseCachedCompatibleRootTypeInfo<T: Serializer>(
-        for type: T.Type
-    ) -> Bool {
+    func tryFastReadCompatibleRootTypeInfo<T: Serializer>(for type: T.Type) throws -> Bool {
         guard compatible, !compatibleTypeDefStateUsed else {
             return false
         }
-        let typeID = ObjectIdentifier(type)
-        guard cachedCompatibleRootTypeInfoTypeID == typeID,
-              let entry = cachedCompatibleRootTypeInfoEntry,
-              let typeMetaEntry = cachedCompatibleRootTypeMeta else {
-            return false
-        }
-        let start = buffer.getCursor()
-        let prefixBytes = entry.prefixBytes
-        let prefixLength = prefixBytes.count
-        let end = start + prefixLength + entry.bodySize
-        guard end <= buffer.count else {
+
+        let typeInfoStart = buffer.getCursor()
+        let localTypeInfo = try typeInfo(for: type)
+        guard !localTypeInfo.typeDefHasUserTypeFields,
+              let localHeaderHash = localTypeInfo.typeDefHeaderHash else {
+            buffer.setCursor(typeInfoStart)
             return false
         }
 
-        if !buffer.matchesBytes(start: start, bytes: prefixBytes) {
+        let rawTypeID = try buffer.readVarUInt32()
+        let expectedWireTypeID = localTypeInfo.wireTypeID(compatible: true)
+        guard rawTypeID == expectedWireTypeID.rawValue,
+              let wireTypeID = TypeId(rawValue: rawTypeID),
+              wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct else {
+            buffer.setCursor(typeInfoStart)
             return false
         }
 
-        buffer.setCursor(end)
-        if entry.requiresTypeMetaState {
-            do {
-                try compatibleTypeDefState.storeTypeMetaEntry(typeMetaEntry.typeMeta, at: entry.typeMetaIndex)
-                compatibleTypeDefStateUsed = true
-            } catch {
-                buffer.setCursor(start)
-                return false
-            }
+        guard try buffer.readVarUInt32() == 0 else {
+            buffer.setCursor(typeInfoStart)
+            return false
         }
-        setPendingCompatibleTypeMeta(typeID: typeID, value: typeMetaEntry)
-        return true
-    }
 
-    @inline(__always)
-    func cacheCompatibleRootTypeInfo<T: Serializer>(
-        for type: T.Type,
-        bytes: [UInt8],
-        remoteTypeMeta: TypeMeta?
-    ) {
-        guard compatible else {
-            return
+        let header = try buffer.readUInt64()
+        let headerHash = header >> 14
+        var bodySize = Int(header & UInt64(compatibleTypeMetaSizeMask))
+        if bodySize == compatibleTypeMetaSizeMask {
+            bodySize += Int(try buffer.readVarUInt32())
         }
-        cachedCompatibleRootTypeInfoTypeID = ObjectIdentifier(type)
-        let typeMetaEntry = remoteTypeMeta.map { typeMeta in
-            CompatibleTypeMetaEntry(
-                typeMeta: typeMeta,
-                matchesLocalSchema: pendingCompatibleTypeMetaMatchesLocalSchema(for: type),
-                localHasUserTypeFields: pendingCompatibleTypeMetaHasUserTypeFields(for: type)
+        guard headerHash == localHeaderHash else {
+            buffer.setCursor(typeInfoStart)
+            return false
+        }
+
+        try buffer.skip(bodySize)
+        guard let localTypeMeta = localTypeInfo.typeMeta else {
+            throw ForyError.invalidData("missing compatible type metadata for \(localTypeInfo.typeID)")
+        }
+        setPendingCompatibleTypeMeta(
+            typeID: localTypeInfo.swiftTypeID,
+            value: (
+                typeMeta: localTypeMeta,
+                matchesLocalSchema: true,
+                localHasUserTypeFields: false
             )
-        }
-        cachedCompatibleRootTypeInfoEntry = Self.parseCompatibleRootTypeInfoEntry(
-            bytes,
-            requiresTypeMetaState: typeMetaEntry.map { !$0.matchesLocalSchema || $0.localHasUserTypeFields } ?? true
         )
-        cachedCompatibleRootTypeMeta = typeMetaEntry
+        cacheCompatibleTypeMetaValidation(
+            for: localTypeInfo.swiftTypeID,
+            wireTypeID: wireTypeID,
+            headerHash: headerHash
+        )
+        return true
     }
 
     public func pushPendingRef(_ refID: UInt32) {
@@ -694,7 +740,7 @@ public final class ReadContext {
         }
         setPendingCompatibleTypeMeta(
             typeID: typeID,
-            value: CompatibleTypeMetaEntry(
+            value: (
                 typeMeta: typeMeta,
                 matchesLocalSchema: matchesLocalSchema,
                 localHasUserTypeFields: localHasUserTypeFields
@@ -702,35 +748,25 @@ public final class ReadContext {
         )
     }
 
-    // swiftlint:disable large_tuple
     @inline(__always)
+    // swiftlint:disable large_tuple
     public func compatibleTypeMeta<T: Serializer>(
         for type: T.Type
     ) -> (typeMeta: TypeMeta, matchesLocalSchema: Bool, localHasUserTypeFields: Bool)? {
         let typeID = ObjectIdentifier(type)
         if pendingCompatibleTypeMetaTypeID == typeID {
-            guard let entry = pendingCompatibleTypeMetaValue else {
-                return nil
-            }
-            return (
-                typeMeta: entry.typeMeta,
-                matchesLocalSchema: entry.matchesLocalSchema,
-                localHasUserTypeFields: entry.localHasUserTypeFields
-            )
+            return pendingCompatibleTypeMetaValue
         }
-        guard let entry = pendingCompatibleTypeMeta[typeID] else {
-            return nil
-        }
-        return (
-            typeMeta: entry.typeMeta,
-            matchesLocalSchema: entry.matchesLocalSchema,
-            localHasUserTypeFields: entry.localHasUserTypeFields
-        )
+        return pendingCompatibleTypeMeta[typeID]
     }
     // swiftlint:enable large_tuple
 
     @inline(__always)
-    private func setPendingCompatibleTypeMeta(typeID: ObjectIdentifier, value: CompatibleTypeMetaEntry) {
+    // swiftlint:disable large_tuple
+    private func setPendingCompatibleTypeMeta(
+        typeID: ObjectIdentifier,
+        value: (typeMeta: TypeMeta, matchesLocalSchema: Bool, localHasUserTypeFields: Bool)
+    ) {
         if pendingCompatibleTypeMetaTypeID == typeID {
             pendingCompatibleTypeMetaValue = value
             return
@@ -742,123 +778,7 @@ public final class ReadContext {
         pendingCompatibleTypeMetaTypeID = typeID
         pendingCompatibleTypeMetaValue = value
     }
-
-    @inline(__always)
-    private func pendingCompatibleTypeMetaMatchesLocalSchema<T: Serializer>(for type: T.Type) -> Bool {
-        let typeID = ObjectIdentifier(type)
-        if pendingCompatibleTypeMetaTypeID == typeID {
-            return pendingCompatibleTypeMetaValue?.matchesLocalSchema ?? false
-        }
-        return pendingCompatibleTypeMeta[typeID]?.matchesLocalSchema ?? false
-    }
-
-    @inline(__always)
-    private func pendingCompatibleTypeMetaHasUserTypeFields<T: Serializer>(for type: T.Type) -> Bool {
-        let typeID = ObjectIdentifier(type)
-        if pendingCompatibleTypeMetaTypeID == typeID {
-            return pendingCompatibleTypeMetaValue?.localHasUserTypeFields ?? true
-        }
-        return pendingCompatibleTypeMeta[typeID]?.localHasUserTypeFields ?? true
-    }
-
-    private static func parseCompatibleRootTypeInfoEntry(
-        _ bytes: [UInt8],
-        requiresTypeMetaState: Bool
-    ) -> CompatibleRootTypeInfoEntry? {
-        var index = 0
-        guard decodeVarUInt32(bytes, index: &index) != nil,
-              let indexMarker = decodeVarUInt32(bytes, index: &index),
-              (indexMarker & 1) == 0,
-              let typeMetaHeader = decodeUInt64(bytes, index: &index) else {
-            return nil
-        }
-        var bodySize = Int(typeMetaHeader & UInt64(compatibleTypeMetaSizeMask))
-        if bodySize == compatibleTypeMetaSizeMask {
-            guard let extendedBodySize = decodeVarUInt32(bytes, index: &index) else {
-                return nil
-            }
-            bodySize += Int(extendedBodySize)
-        }
-        let end = index + bodySize
-        guard end <= bytes.count else {
-            return nil
-        }
-        return CompatibleRootTypeInfoEntry(
-            prefixBytes: Array(bytes[..<index]),
-            bodySize: bodySize,
-            typeMetaIndex: Int(indexMarker >> 1),
-            requiresTypeMetaState: requiresTypeMetaState
-        )
-    }
-
-    @inline(__always)
-    private static func decodeVarUInt32(_ bytes: [UInt8], index: inout Int) -> UInt32? {
-        guard index < bytes.count else {
-            return nil
-        }
-        let b0 = bytes[index]
-        if b0 < 0x80 {
-            index += 1
-            return UInt32(b0)
-        }
-        guard index + 1 < bytes.count else {
-            return nil
-        }
-        let b1 = bytes[index + 1]
-        if b1 < 0x80 {
-            index += 2
-            return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
-        }
-        guard index + 2 < bytes.count else {
-            return nil
-        }
-        let b2 = bytes[index + 2]
-        if b2 < 0x80 {
-            index += 3
-            return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
-        }
-        guard index + 3 < bytes.count else {
-            return nil
-        }
-        let b3 = bytes[index + 3]
-        if b3 < 0x80 {
-            index += 4
-            return UInt32(b0 & 0x7F) |
-                (UInt32(b1 & 0x7F) << 7) |
-                (UInt32(b2 & 0x7F) << 14) |
-                (UInt32(b3) << 21)
-        }
-        guard index + 4 < bytes.count else {
-            return nil
-        }
-        let b4 = bytes[index + 4]
-        guard b4 < 0x80 else {
-            return nil
-        }
-        index += 5
-        return UInt32(b0 & 0x7F) |
-            (UInt32(b1 & 0x7F) << 7) |
-            (UInt32(b2 & 0x7F) << 14) |
-            (UInt32(b3 & 0x7F) << 21) |
-            (UInt32(b4) << 28)
-    }
-
-    @inline(__always)
-    private static func decodeUInt64(_ bytes: [UInt8], index: inout Int) -> UInt64? {
-        guard index + 8 <= bytes.count else {
-            return nil
-        }
-        let b0 = UInt64(bytes[index])
-        let b1 = UInt64(bytes[index + 1]) << 8
-        let b2 = UInt64(bytes[index + 2]) << 16
-        let b3 = UInt64(bytes[index + 3]) << 24
-        let b4 = UInt64(bytes[index + 4]) << 32
-        let b5 = UInt64(bytes[index + 5]) << 40
-        let b6 = UInt64(bytes[index + 6]) << 48
-        let b7 = UInt64(bytes[index + 7]) << 56
-        index += 8
-        return b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
-    }
+    // swiftlint:enable large_tuple
 
     func setPendingTypeInfo<T: Serializer>(for type: T.Type, _ typeInfo: TypeInfo) {
         pendingTypeInfo[ObjectIdentifier(type)] = typeInfo

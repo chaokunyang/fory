@@ -216,6 +216,17 @@ final class TypeInfo: @unchecked Sendable {
             hasFieldsMeta: !fields.isEmpty
         )
         let typeDefBytes = try typeMeta.encode()
+        let typeDefHeaderHash = try encodedTypeDefHeaderHash(typeDefBytes)
+        let canonicalTypeMeta = try TypeMeta(
+            typeID: registerByName ? nil : compatibleWireTypeID.rawValue,
+            userTypeID: registerByName ? nil : userTypeID,
+            namespace: namespace,
+            typeName: typeName,
+            registerByName: registerByName,
+            fields: fields,
+            hasFieldsMeta: !fields.isEmpty,
+            headerHash: typeDefHeaderHash
+        )
         self.init(
             swiftTypeID: swiftTypeID,
             typeID: typeID,
@@ -223,9 +234,9 @@ final class TypeInfo: @unchecked Sendable {
             registerByName: registerByName,
             namespace: namespace,
             typeName: typeName,
-            typeMeta: typeMeta,
+            typeMeta: canonicalTypeMeta,
             typeDefBytes: typeDefBytes,
-            typeDefHeaderHash: try encodedTypeDefHeaderHash(typeDefBytes),
+            typeDefHeaderHash: typeDefHeaderHash,
             typeDefHasUserTypeFields: encodedTypeDefHasUserTypeFields(fields),
             reader: reader,
             compatibleReader: compatibleReader

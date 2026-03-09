@@ -154,12 +154,20 @@ final class TypeResolver {
             return cached
         }
         let localTypeInfo = try requireCompatibleTypeInfo(for: typeMeta)
+        if header == localTypeInfo.typeDefHeader {
+            compatibleTypeInfoByHeader[header] = localTypeInfo
+            return localTypeInfo
+        }
         let canonicalTypeMeta: TypeMeta
         if let localTypeMeta = localTypeInfo.typeMeta,
            let remapped = try? typeMeta.assigningFieldIDs(from: localTypeMeta) {
             canonicalTypeMeta = remapped
         } else {
             canonicalTypeMeta = typeMeta
+        }
+        if header == localTypeInfo.typeDefHeader {
+            compatibleTypeInfoByHeader[header] = localTypeInfo
+            return localTypeInfo
         }
         let compatibleTypeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
         compatibleTypeInfoByHeader[header] = compatibleTypeInfo
@@ -198,7 +206,7 @@ final class TypeResolver {
     }
 
     func readAnyTypeInfo(context: ReadContext) throws -> TypeInfo {
-        let rawTypeID = try context.buffer.readVarUInt32()
+        let rawTypeID = UInt32(try context.buffer.readUInt8())
         guard let wireTypeID = TypeId(rawValue: rawTypeID) else {
             throw ForyError.invalidData("unknown dynamic type id \(rawTypeID)")
         }

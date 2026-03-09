@@ -18,54 +18,23 @@
 import Foundation
 
 final class CompatibleTypeDefWriteState {
-    private var firstTypeID: ObjectIdentifier?
-    private var firstTypeIndex: UInt32 = 0
-    private var overflowTypeIndexBySwiftType: [ObjectIdentifier: UInt32] = [:]
-    private var nextIndex: UInt32 = 0
+    private let typeIndexBySwiftType = ObjectIdMap(initialCapacity: 8)
 
     init() {}
 
     @inline(__always)
-    func assignIndexIfAbsent(for typeID: ObjectIdentifier) -> (index: UInt32, isNew: Bool) {
-        if firstTypeID == typeID {
-            return (firstTypeIndex, false)
-        }
-        if let existing = overflowTypeIndexBySwiftType[typeID] {
-            return (existing, false)
-        }
-
-        let index = nextIndex
-        nextIndex &+= 1
-
-        if firstTypeID == nil {
-            firstTypeID = typeID
-            firstTypeIndex = index
-        } else {
-            overflowTypeIndexBySwiftType[typeID] = index
-        }
-        return (index, true)
-    }
-
-    @inline(__always)
-    func assignFirstTypeIndex(for typeID: ObjectIdentifier) {
-        firstTypeID = typeID
-        firstTypeIndex = 0
-        nextIndex = 1
+    func assignIndexIfAbsent(for typeInfo: TypeInfo) -> (index: UInt32, isNew: Bool) {
+        let assignment = typeIndexBySwiftType.putIfAbsent(
+            UInt32(typeIndexBySwiftType.count),
+            for: typeInfo.swiftTypeID
+        )
+        return (assignment.value, assignment.inserted)
     }
 
     @inline(__always)
     func reset() {
-        if firstTypeID != nil {
-            firstTypeID = nil
-        }
-        if firstTypeIndex != 0 {
-            firstTypeIndex = 0
-        }
-        if !overflowTypeIndexBySwiftType.isEmpty {
-            overflowTypeIndexBySwiftType.removeAll(keepingCapacity: true)
-        }
-        if nextIndex != 0 {
-            nextIndex = 0
+        if !typeIndexBySwiftType.isEmpty {
+            typeIndexBySwiftType.removeAll(keepingCapacity: true)
         }
     }
 }
@@ -282,28 +251,27 @@ public final class WriteContext {
         }
     }
 
-    func writeTypeMeta<T: Serializer>(
-        for type: T.Type,
-        typeDefBytes: [UInt8]
-    ) {
-        let typeID = ObjectIdentifier(type)
+    func writeTypeMeta(_ typeInfo: TypeInfo) {
         if !typeDefStateUsed {
             typeDefStateUsed = true
-            typeDefState.assignFirstTypeIndex(for: typeID)
-            buffer.writeUInt8(0)
-            buffer.writeBytes(typeDefBytes)
-            return
         }
 
-        let assignment = typeDefState.assignIndexIfAbsent(for: typeID)
+        let assignment = typeDefState.assignIndexIfAbsent(for: typeInfo)
         if assignment.isNew {
+            if assignment.index == 0, let firstTypeDefBytes = typeInfo.firstTypeDefBytes {
+                buffer.writeBytes(firstTypeDefBytes)
+                return
+            }
+
             let marker = assignment.index << 1
             if marker < 0x80 {
                 buffer.writeUInt8(UInt8(truncatingIfNeeded: marker))
             } else {
                 buffer.writeVarUInt32(marker)
             }
-            buffer.writeBytes(typeDefBytes)
+            if let typeDefBytes = typeInfo.typeDefBytes {
+                buffer.writeBytes(typeDefBytes)
+            }
         } else {
             let marker = (assignment.index << 1) | 1
             if marker < 0x80 {
@@ -486,7 +454,7 @@ public final class ReadContext {
 
     @inline(__always)
     func readStaticTypeInfo(_ typeID: TypeId) throws -> TypeInfo? {
-        let rawTypeID = try buffer.readVarUInt32()
+        let rawTypeID = UInt32(try buffer.readUInt8())
         guard let actualTypeID = TypeId(rawValue: rawTypeID) else {
             throw ForyError.invalidData("unknown type id \(rawTypeID)")
         }
@@ -503,7 +471,7 @@ public final class ReadContext {
     }
 
     func readTypeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo? {
-        let rawTypeID = try buffer.readVarUInt32()
+        let rawTypeID = UInt32(try buffer.readUInt8())
         guard let typeID = TypeId(rawValue: rawTypeID) else {
             throw ForyError.invalidData("unknown type id \(rawTypeID)")
         }
@@ -528,17 +496,17 @@ public final class ReadContext {
 
         switch typeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            return try readCompatibleTypeInfo(
+            return try readCompatibleTypeInfoIfNeeded(
                 for: localTypeInfo,
                 wireTypeID: typeID
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if compatible {
-                let remoteTypeInfo = try readCompatibleTypeInfo(
+                let remoteTypeInfo = try readCompatibleTypeInfoIfNeeded(
                     for: localTypeInfo,
                     wireTypeID: typeID
                 )
-                if typeID == .namedStruct {
+                if typeID == .namedStruct, let remoteTypeInfo {
                     return remoteTypeInfo
                 }
             } else {
@@ -576,6 +544,38 @@ public final class ReadContext {
             }
         }
         return nil
+    }
+
+    @inline(__always)
+    private func readCompatibleTypeInfoIfNeeded(
+        for localTypeInfo: TypeInfo,
+        wireTypeID: TypeId
+    ) throws -> TypeInfo? {
+        if !checkClassVersion,
+           !typeDefStateUsed,
+           !localTypeInfo.typeDefHasUserTypeFields,
+           let localTypeDefHeader = localTypeInfo.typeDefHeader {
+            let typeMetaStart = buffer.getCursor()
+            let indexMarker = try buffer.readVarUInt32()
+            if indexMarker == 0 {
+                let header = try buffer.readUInt64()
+                var bodySize = Int(header & UInt64(typeMetaSizeMask))
+                if bodySize == typeMetaSizeMask {
+                    bodySize += Int(try buffer.readVarUInt32())
+                }
+                if header == localTypeDefHeader {
+                    typeDefStateUsed = true
+                    try typeDefState.storeTypeInfoEntry(localTypeInfo, at: 0)
+                    try buffer.skip(bodySize)
+                    return nil
+                }
+            }
+            buffer.setCursor(typeMetaStart)
+        }
+        return try readCompatibleTypeInfo(
+            for: localTypeInfo,
+            wireTypeID: wireTypeID
+        )
     }
 
     public func pushPendingRef(_ refID: UInt32) {
@@ -643,22 +643,22 @@ public final class ReadContext {
     ) throws -> TypeInfo {
         let remoteTypeInfo: TypeInfo
         if !typeDefStateUsed,
-           !localTypeInfo.typeDefHasUserTypeFields,
-           let localHeaderHash = localTypeInfo.typeDefHeaderHash {
-           let typeMetaStart = buffer.getCursor()
-           let indexMarker = try buffer.readVarUInt32()
+           let localTypeDefHeader = localTypeInfo.typeDefHeader {
+            let typeMetaStart = buffer.getCursor()
+            let indexMarker = try buffer.readVarUInt32()
             if indexMarker != 0 {
                 buffer.setCursor(typeMetaStart)
                 remoteTypeInfo = try readCompatibleTypeInfo()
             } else {
                 let header = try buffer.readUInt64()
-                let headerHash = header >> 14
                 var bodySize = Int(header & UInt64(typeMetaSizeMask))
                 if bodySize == typeMetaSizeMask {
                     bodySize += Int(try buffer.readVarUInt32())
                 }
 
-                if headerHash == localHeaderHash {
+                if header == localTypeDefHeader {
+                    typeDefStateUsed = true
+                    try typeDefState.storeTypeInfoEntry(localTypeInfo, at: 0)
                     try buffer.skip(bodySize)
                     return localTypeInfo
                 }

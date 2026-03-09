@@ -151,12 +151,13 @@ public final class TypeInfo: @unchecked Sendable {
     let namespace: MetaString
     let typeName: MetaString
     let typeMeta: TypeMeta?
+    public let compatibleTypeMeta: TypeMeta?
     let typeDefBytes: [UInt8]?
+    let firstTypeDefBytes: [UInt8]?
     let typeDefHeader: UInt64?
     public let typeDefHeaderHash: UInt64?
     public let typeDefHasUserTypeFields: Bool
 
-    private let readTypeMeta: TypeMeta?
     private let reader: (ReadContext) throws -> Any
     private let compatibleReader: (ReadContext, TypeInfo) throws -> Any
     private let nativeWireTypeID: TypeId
@@ -170,11 +171,12 @@ public final class TypeInfo: @unchecked Sendable {
         namespace: MetaString,
         typeName: MetaString,
         typeMeta: TypeMeta? = nil,
+        compatibleTypeMeta: TypeMeta? = nil,
         typeDefBytes: [UInt8]? = nil,
+        firstTypeDefBytes: [UInt8]? = nil,
         typeDefHeader: UInt64? = nil,
         typeDefHeaderHash: UInt64? = nil,
         typeDefHasUserTypeFields: Bool = true,
-        readTypeMeta: TypeMeta? = nil,
         reader: @escaping (ReadContext) throws -> Any,
         compatibleReader: @escaping (ReadContext, TypeInfo) throws -> Any
     ) {
@@ -185,11 +187,12 @@ public final class TypeInfo: @unchecked Sendable {
         self.namespace = namespace
         self.typeName = typeName
         self.typeMeta = typeMeta
+        self.compatibleTypeMeta = compatibleTypeMeta ?? typeMeta
         self.typeDefBytes = typeDefBytes
+        self.firstTypeDefBytes = firstTypeDefBytes
         self.typeDefHeader = typeDefHeader
         self.typeDefHeaderHash = typeDefHeaderHash
         self.typeDefHasUserTypeFields = typeDefHasUserTypeFields
-        self.readTypeMeta = readTypeMeta
         self.reader = reader
         self.compatibleReader = compatibleReader
         nativeWireTypeID = resolveRegisteredWireTypeID(
@@ -230,6 +233,10 @@ public final class TypeInfo: @unchecked Sendable {
             hasFieldsMeta: !fields.isEmpty
         )
         let typeDefBytes = try typeMeta.encode()
+        var firstTypeDefBytes = [UInt8]()
+        firstTypeDefBytes.reserveCapacity(typeDefBytes.count + 1)
+        firstTypeDefBytes.append(0)
+        firstTypeDefBytes.append(contentsOf: typeDefBytes)
         let typeDefHeader = try encodedTypeDefHeader(typeDefBytes)
         let typeDefHeaderHash = try encodedTypeDefHeaderHash(typeDefBytes)
         let canonicalTypeMeta = try TypeMeta(
@@ -250,7 +257,9 @@ public final class TypeInfo: @unchecked Sendable {
             namespace: namespace,
             typeName: typeName,
             typeMeta: canonicalTypeMeta,
+            compatibleTypeMeta: canonicalTypeMeta,
             typeDefBytes: typeDefBytes,
+            firstTypeDefBytes: firstTypeDefBytes,
             typeDefHeader: typeDefHeader,
             typeDefHeaderHash: typeDefHeaderHash,
             typeDefHasUserTypeFields: encodedTypeDefHasUserTypeFields(fields),
@@ -285,11 +294,12 @@ public final class TypeInfo: @unchecked Sendable {
             namespace: typeInfo.namespace,
             typeName: typeInfo.typeName,
             typeMeta: typeInfo.typeMeta,
+            compatibleTypeMeta: compatibleTypeMeta,
             typeDefBytes: typeInfo.typeDefBytes,
+            firstTypeDefBytes: typeInfo.firstTypeDefBytes,
             typeDefHeader: typeInfo.typeDefHeader,
             typeDefHeaderHash: typeInfo.typeDefHeaderHash,
             typeDefHasUserTypeFields: typeInfo.typeDefHasUserTypeFields,
-            readTypeMeta: compatibleTypeMeta,
             reader: typeInfo.reader,
             compatibleReader: typeInfo.compatibleReader
         )
@@ -315,16 +325,12 @@ public final class TypeInfo: @unchecked Sendable {
         compatible ? compatibleWireTypeID : nativeWireTypeID
     }
 
-    public var compatibleTypeMeta: TypeMeta? {
-        readTypeMeta ?? typeMeta
-    }
-
     @inline(__always)
     func read(_ context: ReadContext, compatibleTypeInfo: TypeInfo? = nil) throws -> Any {
         if let compatibleTypeInfo {
             return try compatibleReader(context, compatibleTypeInfo)
         }
-        if readTypeMeta != nil {
+        if compatibleTypeMeta !== typeMeta {
             return try compatibleReader(context, self)
         }
         return try reader(context)

@@ -214,22 +214,16 @@ public extension Serializer {
         context.buffer.writeUInt8(UInt8(truncatingIfNeeded: wireTypeID.rawValue))
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            guard let typeDefBytes = typeInfo.typeDefBytes else {
+            guard typeInfo.typeDefBytes != nil else {
                 throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
             }
-            context.writeTypeMeta(
-                for: Self.self,
-                typeDefBytes: typeDefBytes
-            )
+            context.writeTypeMeta(typeInfo)
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
-                guard let typeDefBytes = typeInfo.typeDefBytes else {
+                guard typeInfo.typeDefBytes != nil else {
                     throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
                 }
-                context.writeTypeMeta(
-                    for: Self.self,
-                    typeDefBytes: typeDefBytes
-                )
+                context.writeTypeMeta(typeInfo)
             } else {
                 try writeMetaString(
                     context: context,

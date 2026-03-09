@@ -566,21 +566,9 @@ public final class Fory {
         context: WriteContext
     ) throws {
         let writeTypeInfo = config.xlang || config.compatible
-        if !writeTypeInfo {
-            try value.foryWriteData(context, hasGenerics: false)
-            return
-        }
-
-        if !config.trackRef {
-            context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
-            try value.foryWriteTypeInfo(context)
-            try value.foryWriteData(context, hasGenerics: false)
-            return
-        }
-
         try value.foryWrite(
             context,
-            refMode: .tracking,
+            refMode: config.trackRef ? .tracking : (writeTypeInfo ? .nullOnly : .none),
             writeTypeInfo: writeTypeInfo,
             hasGenerics: false
         )
@@ -592,7 +580,11 @@ public final class Fory {
     ) throws -> T {
         let readTypeInfo = config.xlang || config.compatible
         if !readTypeInfo {
-            return try T.foryReadData(context)
+            return try T.foryRead(
+                context,
+                refMode: config.trackRef ? .tracking : .none,
+                readTypeInfo: false
+            )
         }
 
         if !config.trackRef {
@@ -629,14 +621,21 @@ public final class Fory {
                                     wireTypeID: wireTypeID,
                                     headerHash: headerHash
                                 )
-                                return try T.foryReadData(context)
+                                return try T.foryRead(
+                                    context,
+                                    refMode: .none,
+                                    readTypeInfo: false
+                                )
                             }
                         }
                     }
                     context.buffer.setCursor(typeInfoStart)
                 }
-                try T.foryReadTypeInfo(context)
-                return try T.foryReadData(context)
+                return try T.foryRead(
+                    context,
+                    refMode: .none,
+                    readTypeInfo: true
+                )
             }
             if rawFlag == RefFlag.null.rawValue {
                 return T.foryDefault()

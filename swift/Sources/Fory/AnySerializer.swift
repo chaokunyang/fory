@@ -65,9 +65,14 @@ extension AnyHashable: Serializer {
     }
 
     public static func foryReadData(_ context: ReadContext) throws -> AnyHashable {
-        guard let typeInfo = context.pendingTypeInfo(for: Self.self) else {
+        guard let typeInfo = context.compatibleTypeInfo(for: Self.self) else {
             throw ForyError.invalidData("dynamic AnyHashable key requires type info")
         }
+        return try foryReadCompatibleData(context, remoteTypeInfo: typeInfo)
+    }
+
+    public static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> AnyHashable {
+        let typeInfo = remoteTypeInfo
         if typeInfo.typeID == .none {
             throw ForyError.invalidData("dynamic AnyHashable key cannot be null")
         }
@@ -85,7 +90,7 @@ extension AnyHashable: Serializer {
     }
 
     public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
-        try context.readAnyTypeInfo(for: Self.self)
+        try context.readTypeInfo()
     }
 
     public func foryWrite(
@@ -168,9 +173,14 @@ private struct DynamicAnyValue: Serializer {
     }
 
     static func foryReadData(_ context: ReadContext) throws -> DynamicAnyValue {
-        guard let typeInfo = context.pendingTypeInfo(for: Self.self) else {
+        guard let typeInfo = context.compatibleTypeInfo(for: Self.self) else {
             throw ForyError.invalidData("dynamic Any value requires type info")
         }
+        return try foryReadCompatibleData(context, remoteTypeInfo: typeInfo)
+    }
+
+    static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> DynamicAnyValue {
+        let typeInfo = remoteTypeInfo
         if typeInfo.typeID == .none {
             return .foryDefault()
         }
@@ -191,7 +201,7 @@ private struct DynamicAnyValue: Serializer {
     }
 
     static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
-        try context.readAnyTypeInfo(for: Self.self)
+        try context.readTypeInfo()
     }
 
     func foryWrite(

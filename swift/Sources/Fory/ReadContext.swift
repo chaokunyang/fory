@@ -116,7 +116,6 @@ public final class ReadContext {
     private var metaStringReadStateUsed = false
     private var dynamicAnyDepth = 0
 
-    private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     @usableFromInline
     internal var pendingCompatibleTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     private var lastTypeInfo = TypeInfo.uncached
@@ -248,12 +247,6 @@ public final class ReadContext {
         if actualTypeID != typeID {
             throw ForyError.typeMismatch(expected: typeID.rawValue, actual: rawTypeID)
         }
-        return nil
-    }
-
-    @inline(__always)
-    func readAnyTypeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo? {
-        pendingTypeInfo[ObjectIdentifier(type)] = try readTypeInfo()
         return nil
     }
 
@@ -606,10 +599,6 @@ public final class ReadContext {
         return value
     }
 
-    func pendingTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
-        pendingTypeInfo[ObjectIdentifier(type)]
-    }
-
     @usableFromInline
     @inline(__always)
     internal func compatibleTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
@@ -647,16 +636,7 @@ public final class ReadContext {
             return try body()
         }
 
-        let typeKey = ObjectIdentifier(type)
-        let previousPendingTypeInfo = pendingTypeInfo[typeKey]
         let remoteCompatibleTypeInfo = try T.foryReadTypeInfo(self)
-        defer {
-            if let previousPendingTypeInfo {
-                pendingTypeInfo[typeKey] = previousPendingTypeInfo
-            } else {
-                pendingTypeInfo.removeValue(forKey: typeKey)
-            }
-        }
         return try withCompatibleTypeInfo(remoteCompatibleTypeInfo, for: type, body)
     }
 
@@ -671,9 +651,6 @@ public final class ReadContext {
         }
         if trackRef {
             refReader.reset()
-        }
-        if !pendingTypeInfo.isEmpty {
-            pendingTypeInfo.removeAll(keepingCapacity: true)
         }
         if !pendingCompatibleTypeInfo.isEmpty {
             pendingCompatibleTypeInfo.removeAll(keepingCapacity: true)

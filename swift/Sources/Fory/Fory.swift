@@ -116,7 +116,7 @@ public final class Fory {
             maxCollectionSize: self.config.maxCollectionSize,
             maxBinarySize: self.config.maxBinarySize,
             maxDepth: self.config.maxDepth,
-            typeDefState: CompatibleTypeDefReadState(),
+            typeDefState: TypeInfoReadState(),
             metaStringReadState: MetaStringReadState()
         )
     }

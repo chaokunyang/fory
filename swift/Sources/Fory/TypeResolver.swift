@@ -54,7 +54,7 @@ final class TypeResolver {
             registerByName: false,
             namespace: MetaString.empty(specialChar1: ".", specialChar2: "_"),
             typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
-            fields: T.foryCompatibleTypeMetaFields(trackRef: trackRef),
+            fields: T.foryFieldsInfo(trackRef: trackRef),
             reader: { context in
                 try T.foryRead(context, refMode: .none, readTypeInfo: false)
             },
@@ -101,7 +101,7 @@ final class TypeResolver {
             registerByName: true,
             namespace: namespaceMeta,
             typeName: typeNameMeta,
-            fields: T.foryCompatibleTypeMetaFields(trackRef: trackRef),
+            fields: T.foryFieldsInfo(trackRef: trackRef),
             reader: { context in
                 try T.foryRead(context, refMode: .none, readTypeInfo: false)
             },

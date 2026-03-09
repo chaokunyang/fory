@@ -17,6 +17,16 @@
 
 import Foundation
 
+@inline(__always)
+func writeBuiltinTypeInfo(_ context: WriteContext, _ typeID: TypeId) {
+    context.writeStaticTypeInfo(typeID)
+}
+
+@inline(__always)
+func readBuiltinTypeInfo(_ context: ReadContext, _ typeID: TypeId) throws -> TypeInfo? {
+    try context.readStaticTypeInfo(typeID)
+}
+
 public protocol Serializer {
     static func foryDefault() -> Self
     static var staticTypeId: TypeId { get }
@@ -42,10 +52,10 @@ public protocol Serializer {
         readTypeInfo: Bool
     ) throws -> Self
 
-    static func foryWriteTypeInfo(_ context: WriteContext) throws
+    static func foryWriteStaticTypeInfo(_ context: WriteContext) throws
     static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo?
     static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self
-    static func foryCompatibleTypeMetaFields(trackRef: Bool) -> [TypeMeta.FieldInfo]
+    static func foryFieldsInfo(trackRef: Bool) -> [TypeMeta.FieldInfo]
     func foryWriteTypeInfo(_ context: WriteContext) throws
 }
 
@@ -61,11 +71,11 @@ public extension Serializer {
 
     @inlinable
     func foryWriteTypeInfo(_ context: WriteContext) throws {
-        try Self.foryWriteTypeInfo(context)
+        try Self.foryWriteStaticTypeInfo(context)
     }
 
     @inlinable
-    static func foryCompatibleTypeMetaFields(trackRef _: Bool) -> [TypeMeta.FieldInfo] {
+    static func foryFieldsInfo(trackRef _: Bool) -> [TypeMeta.FieldInfo] {
         []
     }
 
@@ -95,7 +105,7 @@ public extension Serializer {
         }
 
         if writeTypeInfo {
-            try Self.foryWriteTypeInfo(context)
+            try Self.foryWriteStaticTypeInfo(context)
         }
 
         try foryWriteData(context, hasGenerics: hasGenerics)
@@ -193,7 +203,7 @@ public extension Serializer {
         }
     }
 
-    static func foryWriteTypeInfo(_ context: WriteContext) throws {
+    static func foryWriteStaticTypeInfo(_ context: WriteContext) throws {
         guard staticTypeId.isUserTypeKind else {
             context.buffer.writeUInt8(UInt8(truncatingIfNeeded: staticTypeId.rawValue))
             return

@@ -729,7 +729,7 @@ func macroFieldEncodingOverridesForUnsignedTypes() throws {
 
 @Test
 func macroFieldEncodingOverridesCompatibleTypeMeta() throws {
-    let fields = EncodedNumberFields.foryCompatibleTypeMetaFields(trackRef: false)
+    let fields = EncodedNumberFields.foryFieldsInfo(trackRef: false)
     #expect(fields.count == 2)
     #expect(fields[0].fieldName == "u32Fixed")
     #expect(fields[0].fieldType.typeID == TypeId.uint32.rawValue)
@@ -739,7 +739,7 @@ func macroFieldEncodingOverridesCompatibleTypeMeta() throws {
 
 @Test
 func macroFieldIDsPopulateCompatibleTypeMeta() {
-    let fields = FieldIdConfigured.foryCompatibleTypeMetaFields(trackRef: false)
+    let fields = FieldIdConfigured.foryFieldsInfo(trackRef: false)
     #expect(fields.count == 2)
 
     var byID: [Int16: TypeMeta.FieldInfo] = [:]

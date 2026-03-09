@@ -448,7 +448,7 @@ extension Array: Serializer where Element: Serializer {
         primitiveArrayTypeID(for: Element.self) ?? .list
     }
 
-    public static func foryWriteTypeInfo(_ context: WriteContext) throws {
+    public static func foryWriteStaticTypeInfo(_ context: WriteContext) throws {
         if Element.self == UInt8.self, context.compatible {
             context.buffer.writeUInt8(UInt8(truncatingIfNeeded: TypeId.binary.rawValue))
             return
@@ -506,7 +506,7 @@ extension Array: Serializer where Element: Serializer {
 
         buffer.writeUInt8(header)
         if !dynamicElementType && !declaredElementType {
-            try Element.foryWriteTypeInfo(context)
+            try Element.foryWriteStaticTypeInfo(context)
         }
 
         if dynamicElementType {
@@ -650,6 +650,14 @@ extension Set: Serializer where Element: Serializer & Hashable {
 
     public static var staticTypeId: TypeId { .set }
 
+    public static func foryWriteStaticTypeInfo(_ context: WriteContext) throws {
+        writeBuiltinTypeInfo(context, staticTypeId)
+    }
+
+    public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
+        try readBuiltinTypeInfo(context, staticTypeId)
+    }
+
     public func foryWriteData(_ context: WriteContext, hasGenerics: Bool) throws {
         try Array(self).foryWriteData(context, hasGenerics: hasGenerics)
     }
@@ -663,6 +671,14 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
     public static func foryDefault() -> [Key: Value] { [:] }
 
     public static var staticTypeId: TypeId { .map }
+
+    public static func foryWriteStaticTypeInfo(_ context: WriteContext) throws {
+        writeBuiltinTypeInfo(context, staticTypeId)
+    }
+
+    public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
+        try readBuiltinTypeInfo(context, staticTypeId)
+    }
 
     public func foryWriteData(_ context: WriteContext, hasGenerics: Bool) throws {
         context.buffer.writeVarUInt32(UInt32(self.count))
@@ -708,7 +724,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                         if valueDynamicType {
                             try pair.value.foryWriteTypeInfo(context)
                         } else {
-                            try Value.foryWriteTypeInfo(context)
+                            try Value.foryWriteStaticTypeInfo(context)
                         }
                     }
                     if trackValueRef {
@@ -729,7 +745,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                         if keyDynamicType {
                             try pair.key.foryWriteTypeInfo(context)
                         } else {
-                            try Key.foryWriteTypeInfo(context)
+                            try Key.foryWriteStaticTypeInfo(context)
                         }
                     }
                     if trackKeyRef {
@@ -751,14 +767,14 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                     if keyDynamicType {
                         try pair.key.foryWriteTypeInfo(context)
                     } else {
-                        try Key.foryWriteTypeInfo(context)
+                        try Key.foryWriteStaticTypeInfo(context)
                     }
                 }
                 if !valueDeclared {
                     if valueDynamicType {
                         try pair.value.foryWriteTypeInfo(context)
                     } else {
-                        try Value.foryWriteTypeInfo(context)
+                        try Value.foryWriteStaticTypeInfo(context)
                     }
                 }
 
@@ -809,7 +825,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                 context.buffer.writeUInt8(header)
                 if !keyIsNil {
                     if !keyDeclared {
-                        try Key.foryWriteTypeInfo(context)
+                        try Key.foryWriteStaticTypeInfo(context)
                     }
                     if trackKeyRef {
                         try pair.key.foryWrite(context, refMode: .tracking, writeTypeInfo: false, hasGenerics: hasGenerics)
@@ -819,7 +835,7 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                 }
                 if !valueIsNil {
                     if !valueDeclared {
-                        try Value.foryWriteTypeInfo(context)
+                        try Value.foryWriteStaticTypeInfo(context)
                     }
                     if trackValueRef {
                         try pair.value.foryWrite(context, refMode: .tracking, writeTypeInfo: false, hasGenerics: hasGenerics)
@@ -842,10 +858,10 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
             context.buffer.writeUInt8(0)
 
             if !keyDeclared {
-                try Key.foryWriteTypeInfo(context)
+                try Key.foryWriteStaticTypeInfo(context)
             }
             if !valueDeclared {
-                try Value.foryWriteTypeInfo(context)
+                try Value.foryWriteStaticTypeInfo(context)
             }
 
             var chunkSize: UInt8 = 0

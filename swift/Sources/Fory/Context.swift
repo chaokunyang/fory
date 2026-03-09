@@ -70,7 +70,7 @@ final class CompatibleTypeDefWriteState {
     }
 }
 
-final class CompatibleTypeDefReadState {
+final class TypeInfoReadState {
     private var firstTypeInfo: TypeInfo?
     private var overflowTypeInfos: [TypeInfo] = []
 
@@ -271,6 +271,11 @@ public final class WriteContext {
     }
 
     @inline(__always)
+    func writeStaticTypeInfo(_ typeID: TypeId) {
+        buffer.writeUInt8(UInt8(truncatingIfNeeded: typeID.rawValue))
+    }
+
+    @inline(__always)
     func leaveDynamicAnyDepth() {
         if dynamicAnyDepth > 0 {
             dynamicAnyDepth -= 1
@@ -351,7 +356,7 @@ public final class ReadContext {
     public let maxBinarySize: Int
     public let maxDepth: Int
     public let refReader: RefReader
-    let typeDefState: CompatibleTypeDefReadState
+    let typeDefState: TypeInfoReadState
     let metaStringReadState: MetaStringReadState
     private var typeDefStateUsed = false
     private var metaStringReadStateUsed = false
@@ -380,7 +385,7 @@ public final class ReadContext {
             maxCollectionSize: maxCollectionSize,
             maxBinarySize: maxBinarySize,
             maxDepth: maxDepth,
-            typeDefState: CompatibleTypeDefReadState(),
+            typeDefState: TypeInfoReadState(),
             metaStringReadState: MetaStringReadState()
         )
     }
@@ -394,7 +399,7 @@ public final class ReadContext {
         maxCollectionSize: Int,
         maxBinarySize: Int,
         maxDepth: Int,
-        typeDefState: CompatibleTypeDefReadState,
+        typeDefState: TypeInfoReadState,
         metaStringReadState: MetaStringReadState
     ) {
         self.buffer = buffer
@@ -477,6 +482,24 @@ public final class ReadContext {
         let info = try typeResolver.requireTypeInfo(for: type)
         lastTypeInfo = info
         return info
+    }
+
+    @inline(__always)
+    func readStaticTypeInfo(_ typeID: TypeId) throws -> TypeInfo? {
+        let rawTypeID = try buffer.readVarUInt32()
+        guard let actualTypeID = TypeId(rawValue: rawTypeID) else {
+            throw ForyError.invalidData("unknown type id \(rawTypeID)")
+        }
+        if actualTypeID != typeID {
+            throw ForyError.typeMismatch(expected: typeID.rawValue, actual: rawTypeID)
+        }
+        return nil
+    }
+
+    @inline(__always)
+    func readAnyTypeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo? {
+        pendingTypeInfo[ObjectIdentifier(type)] = try typeResolver.readAnyTypeInfo(context: self)
+        return nil
     }
 
     func readTypeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo? {
@@ -693,10 +716,6 @@ public final class ReadContext {
             throw ForyError.typeMismatch(expected: wireTypeID.rawValue, actual: remoteTypeID)
         }
         return remoteTypeInfo
-    }
-
-    func setPendingTypeInfo<T: Serializer>(for type: T.Type, _ typeInfo: TypeInfo) {
-        pendingTypeInfo[ObjectIdentifier(type)] = typeInfo
     }
 
     func pendingTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {

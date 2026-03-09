@@ -49,8 +49,8 @@ extension Optional: Serializer where Wrapped: Serializer {
         .some(try Wrapped.foryReadData(context))
     }
 
-    public static func foryWriteTypeInfo(_ context: WriteContext) throws {
-        try Wrapped.foryWriteTypeInfo(context)
+    public static func foryWriteStaticTypeInfo(_ context: WriteContext) throws {
+        try Wrapped.foryWriteStaticTypeInfo(context)
     }
 
     public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {

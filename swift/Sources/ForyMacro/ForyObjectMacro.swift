@@ -915,11 +915,11 @@ private func buildCompatibleTypeMetaFieldsDecl(sortedFields: [ParsedField], acce
     let disabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "false")
     let enabledExpr = compatibleTypeMetaFieldsExpr(sortedFields: sortedFields, trackRefExpression: "true")
     return """
-    private static let __foryCompatibleTypeMetaFieldsTrackRefDisabled: [TypeMeta.FieldInfo] = \(disabledExpr)
-    private static let __foryCompatibleTypeMetaFieldsTrackRefEnabled: [TypeMeta.FieldInfo] = \(enabledExpr)
+    private static let __foryFieldsInfoTrackRefDisabled: [TypeMeta.FieldInfo] = \(disabledExpr)
+    private static let __foryFieldsInfoTrackRefEnabled: [TypeMeta.FieldInfo] = \(enabledExpr)
 
-    \(accessPrefix)static func foryCompatibleTypeMetaFields(trackRef: Bool) -> [TypeMeta.FieldInfo] {
-        trackRef ? Self.__foryCompatibleTypeMetaFieldsTrackRefEnabled : Self.__foryCompatibleTypeMetaFieldsTrackRefDisabled
+    \(accessPrefix)static func foryFieldsInfo(trackRef: Bool) -> [TypeMeta.FieldInfo] {
+        trackRef ? Self.__foryFieldsInfoTrackRefEnabled : Self.__foryFieldsInfoTrackRefDisabled
     }
     """
 }
@@ -1037,7 +1037,7 @@ private func buildWriteWrapperDecl(accessPrefix: String) -> String {
         }
 
         if writeTypeInfo {
-            try Self.foryWriteTypeInfo(context)
+            try Self.foryWriteStaticTypeInfo(context)
         }
 
         try foryWriteData(context, hasGenerics: hasGenerics)

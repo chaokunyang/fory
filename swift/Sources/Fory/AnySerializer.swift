@@ -71,7 +71,7 @@ extension AnyHashable: Serializer {
         if typeInfo.typeID == .none {
             throw ForyError.invalidData("dynamic AnyHashable key cannot be null")
         }
-        let decoded = try context.typeResolver.readAnyValue(typeInfo: typeInfo, context: context)
+        let decoded = try context.readAnyValue(typeInfo: typeInfo)
         return try toAnyHashableKey(decoded)
     }
 
@@ -174,7 +174,7 @@ private struct DynamicAnyValue: Serializer {
         if typeInfo.typeID == .none {
             return .foryDefault()
         }
-        return DynamicAnyValue(try context.typeResolver.readAnyValue(typeInfo: typeInfo, context: context))
+        return DynamicAnyValue(try context.readAnyValue(typeInfo: typeInfo))
     }
 
     static func foryWriteStaticTypeInfo(_ context: WriteContext) throws {

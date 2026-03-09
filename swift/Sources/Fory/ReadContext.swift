@@ -253,8 +253,40 @@ public final class ReadContext {
 
     @inline(__always)
     func readAnyTypeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo? {
-        pendingTypeInfo[ObjectIdentifier(type)] = try typeResolver.readAnyTypeInfo(context: self)
+        pendingTypeInfo[ObjectIdentifier(type)] = try readTypeInfo()
         return nil
+    }
+
+    func readTypeInfo() throws -> TypeInfo {
+        let rawTypeID = UInt32(try buffer.readUInt8())
+        guard let wireTypeID = TypeId(rawValue: rawTypeID) else {
+            throw ForyError.invalidData("unknown dynamic type id \(rawTypeID)")
+        }
+
+        switch wireTypeID {
+        case .compatibleStruct, .namedCompatibleStruct:
+            return try readCompatibleTypeInfo()
+        case .namedStruct, .namedEnum, .namedExt, .namedUnion:
+            if compatible {
+                return try readCompatibleTypeInfo()
+            }
+            let namespace = try readMetaString(
+                context: self,
+                decoder: .namespace,
+                encodings: namespaceMetaStringEncodings
+            )
+            let typeName = try readMetaString(
+                context: self,
+                decoder: .typeName,
+                encodings: typeNameMetaStringEncodings
+            )
+            return try typeResolver.requireTypeInfo(namespace: namespace.value, typeName: typeName.value)
+        case .structType, .enumType, .ext, .typedUnion, .union:
+            let userTypeID = try buffer.readVarUInt32()
+            return try typeResolver.requireTypeInfo(userTypeID: userTypeID)
+        default:
+            return typeResolver.builtinTypeInfo(for: wireTypeID)
+        }
     }
 
     func readTypeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo? {
@@ -476,6 +508,102 @@ public final class ReadContext {
             throw ForyError.typeMismatch(expected: wireTypeID.rawValue, actual: remoteTypeID)
         }
         return remoteTypeInfo
+    }
+
+    func readAnyValue(typeInfo: TypeInfo) throws -> Any {
+        try enterDynamicAnyDepth()
+        defer { leaveDynamicAnyDepth() }
+
+        let value: Any
+        switch typeInfo.typeID {
+        case .bool:
+            value = try Bool.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .int8:
+            value = try Int8.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .int16:
+            value = try Int16.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .int32:
+            value = try ForyInt32Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .varint32:
+            value = try Int32.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .int64:
+            value = try ForyInt64Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .varint64:
+            value = try Int64.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .taggedInt64:
+            value = try ForyInt64Tagged.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .uint8:
+            value = try UInt8.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .uint16:
+            value = try UInt16.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .uint32:
+            value = try ForyUInt32Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .varUInt32:
+            value = try UInt32.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .uint64:
+            value = try ForyUInt64Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .varUInt64:
+            value = try UInt64.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .taggedUInt64:
+            value = try ForyUInt64Tagged.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .float16:
+            value = try Float16.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .bfloat16:
+            value = try BFloat16.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .float32:
+            value = try Float.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .float64:
+            value = try Double.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .string:
+            value = try String.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .duration:
+            value = try Duration.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .timestamp:
+            value = try Date.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .date:
+            value = try ForyDate.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .binary, .uint8Array:
+            value = try Data.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .boolArray:
+            value = try [Bool].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .int8Array:
+            value = try [Int8].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .int16Array:
+            value = try [Int16].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .int32Array:
+            value = try [Int32].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .int64Array:
+            value = try [Int64].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .uint16Array:
+            value = try [UInt16].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .uint32Array:
+            value = try [UInt32].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .uint64Array:
+            value = try [UInt64].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .float16Array:
+            value = try [Float16].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .bfloat16Array:
+            value = try [BFloat16].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .float32Array:
+            value = try [Float].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .float64Array:
+            value = try [Double].foryRead(self, refMode: .none, readTypeInfo: false)
+        case .array, .list:
+            value = try readAnyList(refMode: .none) ?? []
+        case .set:
+            value = try Set<AnyHashable>.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .map:
+            value = try readDynamicAnyMapValue(context: self)
+        case .none:
+            value = ForyAnyNullValue()
+        default:
+            if typeInfo.typeID.isUserTypeKind {
+                value = try typeInfo.read(self)
+            } else {
+                throw ForyError.invalidData("unsupported dynamic type id \(typeInfo.typeID)")
+            }
+        }
+        return value
     }
 
     func pendingTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {

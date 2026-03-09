@@ -109,11 +109,11 @@ public extension ReadContext {
         readTypeInfo: Bool
     ) throws -> Any {
         if let typeInfo {
-            return try typeResolver.readAnyValue(typeInfo: typeInfo, context: self)
+            return try readAnyValue(typeInfo: typeInfo)
         }
         if readTypeInfo {
-            let typeInfo = try typeResolver.readAnyTypeInfo(context: self)
-            return try typeResolver.readAnyValue(typeInfo: typeInfo, context: self)
+            let typeInfo = try self.readTypeInfo()
+            return try readAnyValue(typeInfo: typeInfo)
         }
 
         guard let resolvedTypeID = TypeId(rawValue: fieldType.typeID) else {
@@ -229,7 +229,7 @@ public extension ReadContext {
 
         var typeInfo: TypeInfo?
         if sameType, !declared {
-            typeInfo = try typeResolver.readAnyTypeInfo(context: self)
+            typeInfo = try self.readTypeInfo()
         }
 
         for _ in 0..<length {
@@ -334,7 +334,7 @@ public extension ReadContext {
             }
 
             if keyNull {
-                let valueTypeInfo = valueDeclared ? nil : try typeResolver.readAnyTypeInfo(context: self)
+                let valueTypeInfo = valueDeclared ? nil : try self.readTypeInfo()
                 _ = try readSkippedValue(
                     fieldType: valueType,
                     typeInfo: valueTypeInfo,
@@ -346,7 +346,7 @@ public extension ReadContext {
             }
 
             if valueNull {
-                let keyTypeInfo = keyDeclared ? nil : try typeResolver.readAnyTypeInfo(context: self)
+                let keyTypeInfo = keyDeclared ? nil : try self.readTypeInfo()
                 _ = try readSkippedValue(
                     fieldType: keyType,
                     typeInfo: keyTypeInfo,
@@ -365,8 +365,8 @@ public extension ReadContext {
                 throw ForyError.invalidData("map chunk size exceeds remaining entries")
             }
 
-            let keyTypeInfo = keyDeclared ? nil : try typeResolver.readAnyTypeInfo(context: self)
-            let valueTypeInfo = valueDeclared ? nil : try typeResolver.readAnyTypeInfo(context: self)
+            let keyTypeInfo = keyDeclared ? nil : try self.readTypeInfo()
+            let valueTypeInfo = valueDeclared ? nil : try self.readTypeInfo()
 
             for _ in 0..<chunkSize {
                 _ = try readSkippedValue(

@@ -165,44 +165,9 @@ final class TypeResolver {
         } else {
             canonicalTypeMeta = typeMeta
         }
-        if header == localTypeInfo.typeDefHeader {
-            compatibleTypeInfoByHeader[header] = localTypeInfo
-            return localTypeInfo
-        }
         let compatibleTypeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
         compatibleTypeInfoByHeader[header] = compatibleTypeInfo
         return compatibleTypeInfo
-    }
-
-    func readByUserTypeID(_ userTypeID: UInt32, context: ReadContext) throws -> Any {
-        try readByUserTypeID(userTypeID, context: context, compatibleTypeInfo: nil)
-    }
-
-    func readByUserTypeID(
-        _ userTypeID: UInt32,
-        context: ReadContext,
-        compatibleTypeInfo: TypeInfo?
-    ) throws -> Any {
-        guard let typeInfo = byUserTypeID[userTypeID] else {
-            throw ForyError.typeNotRegistered("user_type_id=\(userTypeID)")
-        }
-        return try typeInfo.read(context, compatibleTypeInfo: compatibleTypeInfo)
-    }
-
-    func readByTypeName(namespace: String, typeName: String, context: ReadContext) throws -> Any {
-        try readByTypeName(namespace: namespace, typeName: typeName, context: context, compatibleTypeInfo: nil)
-    }
-
-    func readByTypeName(
-        namespace: String,
-        typeName: String,
-        context: ReadContext,
-        compatibleTypeInfo: TypeInfo?
-    ) throws -> Any {
-        guard let typeInfo = byTypeName[TypeNameKey(namespace: namespace, typeName: typeName)] else {
-            throw ForyError.typeNotRegistered("namespace=\(namespace), type=\(typeName)")
-        }
-        return try typeInfo.read(context, compatibleTypeInfo: compatibleTypeInfo)
     }
 
     func readAnyTypeInfo(context: ReadContext) throws -> TypeInfo {

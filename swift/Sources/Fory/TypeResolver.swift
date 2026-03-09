@@ -326,9 +326,9 @@ public final class TypeInfo: @unchecked Sendable {
     }
 
     @inline(__always)
-    func read(_ context: ReadContext, compatibleTypeInfo: TypeInfo? = nil) throws -> Any {
-        if let compatibleTypeInfo {
-            return try compatibleReader(context, compatibleTypeInfo)
+    func read(_ context: ReadContext, typeInfo: TypeInfo? = nil) throws -> Any {
+        if let typeInfo {
+            return try compatibleReader(context, typeInfo)
         }
         if compatibleTypeMeta !== typeMeta {
             return try compatibleReader(context, self)
@@ -349,7 +349,7 @@ final class TypeResolver {
     private var byUserTypeID: [UInt32: TypeInfo] = [:]
     private var byTypeName: [TypeNameKey: TypeInfo] = [:]
     private var builtinTypeInfoByID: [TypeId: TypeInfo] = [:]
-    private var compatibleTypeInfoByHeader: [UInt64: TypeInfo] = [:]
+    private var typeInfoByHeader: [UInt64: TypeInfo] = [:]
 
     init(trackRef: Bool = false) {
         self.trackRef = trackRef
@@ -464,18 +464,18 @@ final class TypeResolver {
     }
 
     @inline(__always)
-    func compatibleTypeInfo(forHeader header: UInt64) -> TypeInfo? {
-        compatibleTypeInfoByHeader[header]
+    func getTypeInfo(forHeader header: UInt64) -> TypeInfo? {
+        typeInfoByHeader[header]
     }
 
     @inline(__always)
-    func cacheCompatibleTypeInfo(_ typeMeta: TypeMeta, forHeader header: UInt64) throws -> TypeInfo {
-        if let cached = compatibleTypeInfoByHeader[header] {
+    func cacheTypeInfo(_ typeMeta: TypeMeta, forHeader header: UInt64) throws -> TypeInfo {
+        if let cached = typeInfoByHeader[header] {
             return cached
         }
-        let localTypeInfo = try requireCompatibleTypeInfo(for: typeMeta)
+        let localTypeInfo = try requireTypeInfo(for: typeMeta)
         if header == localTypeInfo.typeDefHeader {
-            compatibleTypeInfoByHeader[header] = localTypeInfo
+            typeInfoByHeader[header] = localTypeInfo
             return localTypeInfo
         }
         let canonicalTypeMeta: TypeMeta
@@ -485,9 +485,9 @@ final class TypeResolver {
         } else {
             canonicalTypeMeta = typeMeta
         }
-        let compatibleTypeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
-        compatibleTypeInfoByHeader[header] = compatibleTypeInfo
-        return compatibleTypeInfo
+        let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
+        typeInfoByHeader[header] = typeInfo
+        return typeInfo
     }
 
     private func store(
@@ -505,7 +505,7 @@ final class TypeResolver {
         }
         if let typeMeta = typeInfo.typeMeta,
            let typeDefHeader = typeInfo.typeDefHeader {
-            compatibleTypeInfoByHeader[typeDefHeader] = TypeInfo(
+            typeInfoByHeader[typeDefHeader] = TypeInfo(
                 dynamic: typeInfo,
                 compatibleTypeMeta: typeMeta
             )
@@ -593,7 +593,7 @@ final class TypeResolver {
     }
 
     @inline(__always)
-    private func requireCompatibleTypeInfo(for typeMeta: TypeMeta) throws -> TypeInfo {
+    private func requireTypeInfo(for typeMeta: TypeMeta) throws -> TypeInfo {
         if typeMeta.registerByName {
             guard let typeInfo = byTypeName[TypeNameKey(namespace: typeMeta.namespace.value, typeName: typeMeta.typeName.value)] else {
                 throw ForyError.typeNotRegistered(

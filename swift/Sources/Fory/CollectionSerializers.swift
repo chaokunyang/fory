@@ -598,8 +598,8 @@ extension Array: Serializer where Element: Serializer {
             }
         }
 
-        let elementCompatibleTypeInfo = declared ? nil : try Element.foryReadTypeInfo(context)
-        return try context.withCompatibleTypeInfo(elementCompatibleTypeInfo, for: Element.self) {
+        let elementTypeInfo = declared ? nil : try Element.foryReadTypeInfo(context)
+        return try context.withTypeInfo(elementTypeInfo, for: Element.self) {
             if trackRef {
                 return try readArrayUninitialized(count: length) { destination in
                     for index in 0..<length {
@@ -934,17 +934,17 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                 if chunkSize > (totalLength - dynamicReadCount) {
                     throw ForyError.invalidData("map dynamic chunk size exceeds remaining entries")
                 }
-                let keyCompatibleTypeInfo = keyDeclared ? nil : try Key.foryReadTypeInfo(context)
-                let valueCompatibleTypeInfo = valueDeclared ? nil : try Value.foryReadTypeInfo(context)
+                let keyTypeInfo = keyDeclared ? nil : try Key.foryReadTypeInfo(context)
+                let valueTypeInfo = valueDeclared ? nil : try Value.foryReadTypeInfo(context)
                 for _ in 0..<chunkSize {
-                    let key = try context.withCompatibleTypeInfo(keyCompatibleTypeInfo, for: Key.self) {
+                    let key = try context.withTypeInfo(keyTypeInfo, for: Key.self) {
                         try Key.foryRead(
                             context,
                             refMode: trackKeyRef ? .tracking : .none,
                             readTypeInfo: false
                         )
                     }
-                    let value = try context.withCompatibleTypeInfo(valueCompatibleTypeInfo, for: Value.self) {
+                    let value = try context.withTypeInfo(valueTypeInfo, for: Value.self) {
                         try Value.foryRead(
                             context,
                             refMode: trackValueRef ? .tracking : .none,
@@ -1001,17 +1001,17 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
             if chunkSize > (totalLength - readCount) {
                 throw ForyError.invalidData("map chunk size exceeds remaining entries")
             }
-            let keyCompatibleTypeInfo = keyDeclared ? nil : try Key.foryReadTypeInfo(context)
-            let valueCompatibleTypeInfo = valueDeclared ? nil : try Value.foryReadTypeInfo(context)
+            let keyTypeInfo = keyDeclared ? nil : try Key.foryReadTypeInfo(context)
+            let valueTypeInfo = valueDeclared ? nil : try Value.foryReadTypeInfo(context)
             for _ in 0..<chunkSize {
-                let key = try context.withCompatibleTypeInfo(keyCompatibleTypeInfo, for: Key.self) {
+                let key = try context.withTypeInfo(keyTypeInfo, for: Key.self) {
                     try Key.foryRead(
                         context,
                         refMode: trackKeyRef ? .tracking : .none,
                         readTypeInfo: false
                     )
                 }
-                let value = try context.withCompatibleTypeInfo(valueCompatibleTypeInfo, for: Value.self) {
+                let value = try context.withTypeInfo(valueTypeInfo, for: Value.self) {
                     try Value.foryRead(
                         context,
                         refMode: trackValueRef ? .tracking : .none,

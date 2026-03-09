@@ -90,11 +90,11 @@ extension Optional: Serializer where Wrapped: Serializer {
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> Wrapped? {
-        let compatibleTypeInfo = readTypeInfo ? nil : context.compatibleTypeInfo(for: Self.self)
+        let typeInfo = readTypeInfo ? nil : context.getTypeInfo(for: Self.self)
         switch refMode {
         case .none:
             return .some(
-                try context.withCompatibleTypeInfo(compatibleTypeInfo, for: Wrapped.self) {
+                try context.withTypeInfo(typeInfo, for: Wrapped.self) {
                     try Wrapped.foryRead(context, refMode: .none, readTypeInfo: readTypeInfo)
                 }
             )
@@ -104,7 +104,7 @@ extension Optional: Serializer where Wrapped: Serializer {
                 return nil
             }
             return .some(
-                try context.withCompatibleTypeInfo(compatibleTypeInfo, for: Wrapped.self) {
+                try context.withTypeInfo(typeInfo, for: Wrapped.self) {
                     try Wrapped.foryRead(context, refMode: .none, readTypeInfo: readTypeInfo)
                 }
             )
@@ -115,7 +115,7 @@ extension Optional: Serializer where Wrapped: Serializer {
             }
             context.buffer.moveBack(1)
             return .some(
-                try context.withCompatibleTypeInfo(compatibleTypeInfo, for: Wrapped.self) {
+                try context.withTypeInfo(typeInfo, for: Wrapped.self) {
                     try Wrapped.foryRead(context, refMode: .tracking, readTypeInfo: readTypeInfo)
                 }
             )

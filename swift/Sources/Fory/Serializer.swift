@@ -110,7 +110,7 @@ public extension Serializer {
             if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
                 return try readCompatibleData(remoteTypeInfo)
             }
-        } else if let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) {
+        } else if let remoteTypeInfo = context.getTypeInfo(for: Self.self) {
             return try readCompatibleData(remoteTypeInfo)
         }
         return try readData()

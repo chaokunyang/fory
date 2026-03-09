@@ -243,7 +243,7 @@ private struct DynamicAnyValue: Serializer {
                 }
                 return remoteTypeInfo
             }
-            guard let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) else {
+            guard let remoteTypeInfo = context.getTypeInfo(for: Self.self) else {
                 throw ForyError.invalidData("dynamic Any value requires type info")
             }
             return remoteTypeInfo

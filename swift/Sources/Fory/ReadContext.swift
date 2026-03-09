@@ -116,7 +116,7 @@ public final class ReadContext {
     private var metaStringReadStateUsed = false
     private var dynamicAnyDepth = 0
 
-    private var compatibleTypeInfoStack: [(typeKey: ObjectIdentifier, typeInfo: TypeInfo)] = []
+    private var typeInfoStack: [(typeKey: ObjectIdentifier, typeInfo: TypeInfo)] = []
     private var lastTypeInfo = TypeInfo.uncached
 
     convenience init(
@@ -389,7 +389,7 @@ public final class ReadContext {
         )
     }
 
-    func readCompatibleTypeInfo() throws -> TypeInfo {
+    private func readCompatibleTypeInfo() throws -> TypeInfo {
         typeDefStateUsed = true
         let indexMarker = try buffer.readVarUInt32()
         let isRef = (indexMarker & 1) == 1
@@ -407,7 +407,7 @@ public final class ReadContext {
         if bodySize == typeMetaSizeMask {
             bodySize += Int(try buffer.readVarUInt32())
         }
-        if let cached = typeResolver.compatibleTypeInfo(forHeader: header) {
+        if let cached = typeResolver.getTypeInfo(forHeader: header) {
             try buffer.skip(bodySize)
             try typeDefState.storeTypeInfoEntry(cached, at: index)
             return cached
@@ -415,13 +415,13 @@ public final class ReadContext {
 
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
-        let cachedTypeInfo = try typeResolver.cacheCompatibleTypeInfo(decoded, forHeader: header)
+        let cachedTypeInfo = try typeResolver.cacheTypeInfo(decoded, forHeader: header)
         try typeDefState.storeTypeInfoEntry(cachedTypeInfo, at: index)
         return cachedTypeInfo
     }
 
     @inline(__always)
-    func readCompatibleTypeInfo(
+    private func readCompatibleTypeInfo(
         for localTypeInfo: TypeInfo,
         wireTypeID: TypeId
     ) throws -> TypeInfo {
@@ -599,15 +599,15 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func compatibleTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
+    func getTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
         let typeKey = ObjectIdentifier(type)
-        for entry in compatibleTypeInfoStack.reversed() where entry.typeKey == typeKey {
+        for entry in typeInfoStack.reversed() where entry.typeKey == typeKey {
             return entry.typeInfo
         }
         return nil
     }
 
-    func withCompatibleTypeInfo<T: Serializer, R>(
+    func withTypeInfo<T: Serializer, R>(
         _ typeInfo: TypeInfo?,
         for type: T.Type,
         _ body: () throws -> R
@@ -616,9 +616,9 @@ public final class ReadContext {
             return try body()
         }
 
-        compatibleTypeInfoStack.append((ObjectIdentifier(type), typeInfo))
+        typeInfoStack.append((ObjectIdentifier(type), typeInfo))
         defer {
-            _ = compatibleTypeInfoStack.popLast()
+            _ = typeInfoStack.popLast()
         }
         return try body()
     }
@@ -635,8 +635,8 @@ public final class ReadContext {
         if trackRef {
             refReader.reset()
         }
-        if !compatibleTypeInfoStack.isEmpty {
-            compatibleTypeInfoStack.removeAll(keepingCapacity: true)
+        if !typeInfoStack.isEmpty {
+            typeInfoStack.removeAll(keepingCapacity: true)
         }
     }
 

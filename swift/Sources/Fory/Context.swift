@@ -584,6 +584,113 @@ public final class ReadContext {
         }
     }
 
+    @inline(__always)
+    private func readValidatedTypeMeta(
+        localTypeInfo: TypeInfo,
+        wireTypeID: TypeId
+    ) throws -> TypeMeta {
+        let remoteTypeMeta = try readTypeMeta(for: localTypeInfo)
+        if let localTypeMeta = localTypeInfo.typeMeta,
+           remoteTypeMeta === localTypeMeta {
+            cacheTypeMetaValidation(
+                for: localTypeInfo.swiftTypeID,
+                wireTypeID: wireTypeID,
+                headerHash: remoteTypeMeta.headerHash
+            )
+            return remoteTypeMeta
+        }
+        try validateTypeMeta(
+            remoteTypeMeta,
+            localTypeInfo: localTypeInfo,
+            actualWireTypeID: wireTypeID
+        )
+        return remoteTypeMeta
+    }
+
+    func readTypeInfo<T: Serializer>(for type: T.Type) throws {
+        let rawTypeID = try buffer.readVarUInt32()
+        guard let typeID = TypeId(rawValue: rawTypeID) else {
+            throw ForyError.invalidData("unknown type id \(rawTypeID)")
+        }
+
+        guard T.staticTypeId.isUserTypeKind else {
+            if typeID != T.staticTypeId {
+                throw ForyError.typeMismatch(expected: T.staticTypeId.rawValue, actual: rawTypeID)
+            }
+            return
+        }
+
+        let localTypeInfo = try typeInfo(for: type)
+        let expectedWireTypeID = localTypeInfo.wireTypeID(compatible: compatible)
+        if !isAllowedRegisteredWireTypeID(
+            typeID,
+            declaredTypeID: localTypeInfo.typeID,
+            registerByName: localTypeInfo.registerByName,
+            compatible: compatible
+        ) {
+            throw ForyError.typeMismatch(expected: expectedWireTypeID.rawValue, actual: rawTypeID)
+        }
+
+        switch typeID {
+        case .compatibleStruct, .namedCompatibleStruct:
+            let remoteTypeMeta = try readValidatedTypeMeta(
+                localTypeInfo: localTypeInfo,
+                wireTypeID: typeID
+            )
+            pushTypeMeta(
+                for: type,
+                remoteTypeMeta,
+                localTypeInfo: localTypeInfo
+            )
+        case .namedEnum, .namedStruct, .namedExt, .namedUnion:
+            if compatible {
+                let remoteTypeMeta = try readValidatedTypeMeta(
+                    localTypeInfo: localTypeInfo,
+                    wireTypeID: typeID
+                )
+                if typeID == .namedStruct {
+                    pushTypeMeta(
+                        for: type,
+                        remoteTypeMeta,
+                        localTypeInfo: localTypeInfo
+                    )
+                }
+            } else {
+                let namespace = try readMetaString(
+                    context: self,
+                    decoder: .namespace,
+                    encodings: namespaceMetaStringEncodings
+                )
+                let typeName = try readMetaString(
+                    context: self,
+                    decoder: .typeName,
+                    encodings: typeNameMetaStringEncodings
+                )
+                guard localTypeInfo.registerByName else {
+                    throw ForyError.invalidData("received name-registered type info for id-registered local type")
+                }
+                if namespace.value != localTypeInfo.namespace.value ||
+                    typeName.value != localTypeInfo.typeName.value {
+                    let expectedTypeName = "\(localTypeInfo.namespace.value)::\(localTypeInfo.typeName.value)"
+                    let actualTypeName = "\(namespace.value)::\(typeName.value)"
+                    throw ForyError.invalidData(
+                        "type name mismatch: expected \(expectedTypeName), got \(actualTypeName)"
+                    )
+                }
+            }
+        default:
+            if !localTypeInfo.registerByName && registeredWireTypeNeedsUserTypeID(typeID) {
+                guard let localUserTypeID = localTypeInfo.userTypeID else {
+                    throw ForyError.invalidData("missing user type id for id-registered type")
+                }
+                let remoteUserTypeID = try buffer.readVarUInt32()
+                if remoteUserTypeID != localUserTypeID {
+                    throw ForyError.typeMismatch(expected: localUserTypeID, actual: remoteUserTypeID)
+                }
+            }
+        }
+    }
+
     public func pushPendingRef(_ refID: UInt32) {
         pendingRefStack.append(PendingRefSlot(refID: refID, bound: false))
     }

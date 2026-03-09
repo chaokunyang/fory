@@ -1075,6 +1075,11 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
                         context.popPendingRef()
                         return value
                     }
+                } else if let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) {
+                    let value = try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                    context.finishPendingRefIfNeeded(value)
+                    context.popPendingRef()
+                    return value
                 }
                 let value = try Self.foryReadData(context)
                 context.finishPendingRefIfNeeded(value)
@@ -1089,6 +1094,8 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
             if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
                 return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
             }
+        } else if let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) {
+            return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
         }
         return try Self.foryReadData(context)
     }

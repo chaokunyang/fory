@@ -90,22 +90,35 @@ extension Optional: Serializer where Wrapped: Serializer {
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> Wrapped? {
+        let compatibleTypeInfo = readTypeInfo ? nil : context.compatibleTypeInfo(for: Self.self)
         switch refMode {
         case .none:
-            return .some(try Wrapped.foryRead(context, refMode: .none, readTypeInfo: readTypeInfo))
+            return .some(
+                try context.withCompatibleTypeInfo(compatibleTypeInfo, for: Wrapped.self) {
+                    try Wrapped.foryRead(context, refMode: .none, readTypeInfo: readTypeInfo)
+                }
+            )
         case .nullOnly:
             let refFlag = try context.buffer.readInt8()
             if refFlag == RefFlag.null.rawValue {
                 return nil
             }
-            return .some(try Wrapped.foryRead(context, refMode: .none, readTypeInfo: readTypeInfo))
+            return .some(
+                try context.withCompatibleTypeInfo(compatibleTypeInfo, for: Wrapped.self) {
+                    try Wrapped.foryRead(context, refMode: .none, readTypeInfo: readTypeInfo)
+                }
+            )
         case .tracking:
             let refFlag = try context.buffer.readInt8()
             if refFlag == RefFlag.null.rawValue {
                 return nil
             }
             context.buffer.moveBack(1)
-            return .some(try Wrapped.foryRead(context, refMode: .tracking, readTypeInfo: readTypeInfo))
+            return .some(
+                try context.withCompatibleTypeInfo(compatibleTypeInfo, for: Wrapped.self) {
+                    try Wrapped.foryRead(context, refMode: .tracking, readTypeInfo: readTypeInfo)
+                }
+            )
         }
     }
 }

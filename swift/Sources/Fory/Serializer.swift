@@ -88,6 +88,21 @@ public extension Serializer {
 public extension Serializer {
 
     @inlinable
+    static func foryReadPayload(
+        _ context: ReadContext,
+        readTypeInfo: Bool
+    ) throws -> Self {
+        if readTypeInfo {
+            if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+            }
+        } else if let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) {
+            return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+        }
+        return try Self.foryReadData(context)
+    }
+
+    @inlinable
     func foryWrite(
         _ context: WriteContext,
         refMode: RefMode,
@@ -119,47 +134,24 @@ public extension Serializer {
     ) throws -> Self {
         switch refMode {
         case .none:
-            if readTypeInfo {
-                if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                    return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                }
-            }
-            return try Self.foryReadData(context)
+            return try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
         case .nullOnly:
             let rawFlag = try context.buffer.readInt8()
             switch rawFlag {
             case RefFlag.null.rawValue:
                 return Self.foryDefault()
             case RefFlag.notNullValue.rawValue:
-                if readTypeInfo {
-                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                        return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                    }
-                }
-                return try Self.foryReadData(context)
+                return try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
             case RefFlag.refValue.rawValue:
                 if context.trackRef {
                     let reservedRefID = context.refReader.reserveRefID()
                     context.pushPendingRef(reservedRefID)
-                    if readTypeInfo {
-                        if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                            let value = try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                            context.finishPendingRefIfNeeded(value)
-                            context.popPendingRef()
-                            return value
-                        }
-                    }
-                    let value = try Self.foryReadData(context)
+                    let value = try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
                     context.finishPendingRefIfNeeded(value)
                     context.popPendingRef()
                     return value
                 }
-                if readTypeInfo {
-                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                        return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                    }
-                }
-                return try Self.foryReadData(context)
+                return try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
             case RefFlag.ref.rawValue:
                 let refID = try context.buffer.readVarUInt32()
                 return try context.refReader.readRef(refID, as: Self.self)
@@ -180,25 +172,12 @@ public extension Serializer {
             case .refValue:
                 let reservedRefID = context.refReader.reserveRefID()
                 context.pushPendingRef(reservedRefID)
-                if readTypeInfo {
-                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                        let value = try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                        context.finishPendingRefIfNeeded(value)
-                        context.popPendingRef()
-                        return value
-                    }
-                }
-                let value = try Self.foryReadData(context)
+                let value = try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
                 context.finishPendingRefIfNeeded(value)
                 context.popPendingRef()
                 return value
             case .notNullValue:
-                if readTypeInfo {
-                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                        return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                    }
-                }
-                return try Self.foryReadData(context)
+                return try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
             }
         }
     }

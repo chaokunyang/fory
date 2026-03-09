@@ -598,50 +598,42 @@ extension Array: Serializer where Element: Serializer {
             }
         }
 
-        if !declared {
-            _ = try Element.foryReadTypeInfo(context)
-        }
-
-        if trackRef {
-            let values = try readArrayUninitialized(count: length) { destination in
-                for index in 0..<length {
-                    destination.advanced(by: index).initialize(
-                        to: try Element.foryRead(context, refMode: .tracking, readTypeInfo: false)
-                    )
-                }
-            }
-            if !declared {
-                context.clearPendingTypeInfo(for: Element.self)
-            }
-            return values
-        }
-
-        if hasNull {
-            let values = try readArrayUninitialized(count: length) { destination in
-                for index in 0..<length {
-                    let refFlag = try buffer.readInt8()
-                    if refFlag == RefFlag.null.rawValue {
-                        destination.advanced(by: index).initialize(to: Element.foryDefault())
-                    } else {
-                        destination.advanced(by: index).initialize(to: try Element.foryReadData(context))
+        return try context.withScopedTypeInfo(for: Element.self, declared: declared) {
+            if trackRef {
+                return try readArrayUninitialized(count: length) { destination in
+                    for index in 0..<length {
+                        destination.advanced(by: index).initialize(
+                            to: try Element.foryRead(context, refMode: .tracking, readTypeInfo: false)
+                        )
                     }
                 }
             }
-            if !declared {
-                context.clearPendingTypeInfo(for: Element.self)
-            }
-            return values
-        }
 
-        let values = try readArrayUninitialized(count: length) { destination in
-            for index in 0..<length {
-                destination.advanced(by: index).initialize(to: try Element.foryReadData(context))
+            if hasNull {
+                return try readArrayUninitialized(count: length) { destination in
+                    for index in 0..<length {
+                        let refFlag = try buffer.readInt8()
+                        if refFlag == RefFlag.null.rawValue {
+                            destination.advanced(by: index).initialize(to: Element.foryDefault())
+                        } else if refFlag == RefFlag.notNullValue.rawValue {
+                            destination.advanced(by: index).initialize(
+                                to: try Element.foryRead(context, refMode: .none, readTypeInfo: false)
+                            )
+                        } else {
+                            throw ForyError.refError("invalid nullability flag \(refFlag)")
+                        }
+                    }
+                }
+            }
+
+            return try readArrayUninitialized(count: length) { destination in
+                for index in 0..<length {
+                    destination.advanced(by: index).initialize(
+                        to: try Element.foryRead(context, refMode: .none, readTypeInfo: false)
+                    )
+                }
             }
         }
-        if !declared {
-            context.clearPendingTypeInfo(for: Element.self)
-        }
-        return values
     }
 }
 
@@ -941,30 +933,22 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                 if chunkSize > (totalLength - dynamicReadCount) {
                     throw ForyError.invalidData("map dynamic chunk size exceeds remaining entries")
                 }
-                if !keyDeclared {
-                    _ = try Key.foryReadTypeInfo(context)
-                }
-                if !valueDeclared {
-                    _ = try Value.foryReadTypeInfo(context)
-                }
-                for _ in 0..<chunkSize {
-                    let key = try Key.foryRead(
-                        context,
-                        refMode: trackKeyRef ? .tracking : .none,
-                        readTypeInfo: false
-                    )
-                    let value = try Value.foryRead(
-                        context,
-                        refMode: trackValueRef ? .tracking : .none,
-                        readTypeInfo: false
-                    )
-                    map[key] = value
-                }
-                if !keyDeclared {
-                    context.clearPendingTypeInfo(for: Key.self)
-                }
-                if !valueDeclared {
-                    context.clearPendingTypeInfo(for: Value.self)
+                try context.withScopedTypeInfo(for: Key.self, declared: keyDeclared) {
+                    try context.withScopedTypeInfo(for: Value.self, declared: valueDeclared) {
+                        for _ in 0..<chunkSize {
+                            let key = try Key.foryRead(
+                                context,
+                                refMode: trackKeyRef ? .tracking : .none,
+                                readTypeInfo: false
+                            )
+                            let value = try Value.foryRead(
+                                context,
+                                refMode: trackValueRef ? .tracking : .none,
+                                readTypeInfo: false
+                            )
+                            map[key] = value
+                        }
+                    }
                 }
                 dynamicReadCount += chunkSize
             }
@@ -1014,25 +998,22 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
             if chunkSize > (totalLength - readCount) {
                 throw ForyError.invalidData("map chunk size exceeds remaining entries")
             }
-            if !keyDeclared {
-                _ = try Key.foryReadTypeInfo(context)
-            }
-            if !valueDeclared {
-                _ = try Value.foryReadTypeInfo(context)
-            }
-
-            for _ in 0..<chunkSize {
-                let key = try Key.foryRead(
-                    context,
-                    refMode: trackKeyRef ? .tracking : .none,
-                    readTypeInfo: false
-                )
-                let value = try Value.foryRead(
-                    context,
-                    refMode: trackValueRef ? .tracking : .none,
-                    readTypeInfo: false
-                )
-                map[key] = value
+            try context.withScopedTypeInfo(for: Key.self, declared: keyDeclared) {
+                try context.withScopedTypeInfo(for: Value.self, declared: valueDeclared) {
+                    for _ in 0..<chunkSize {
+                        let key = try Key.foryRead(
+                            context,
+                            refMode: trackKeyRef ? .tracking : .none,
+                            readTypeInfo: false
+                        )
+                        let value = try Value.foryRead(
+                            context,
+                            refMode: trackValueRef ? .tracking : .none,
+                            readTypeInfo: false
+                        )
+                        map[key] = value
+                    }
+                }
             }
             readCount += chunkSize
         }

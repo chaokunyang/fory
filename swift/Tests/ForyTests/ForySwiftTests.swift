@@ -99,6 +99,27 @@ enum FieldIdUnionTarget: Equatable {
 }
 
 @ForyObject
+struct CompatibleNestedItem: Equatable {
+    var id: Int32
+    var name: String
+}
+
+@ForyObject
+struct CompatibleNestedArrayHolder: Equatable {
+    var items: [CompatibleNestedItem]
+}
+
+@ForyObject
+struct CompatibleNestedOptionalArrayHolder: Equatable {
+    var items: [CompatibleNestedItem?]
+}
+
+@ForyObject
+struct CompatibleNestedMapHolder: Equatable {
+    var items: [Int32: CompatibleNestedItem]
+}
+
+@ForyObject
 final class Node {
     var value: Int32 = 0
     var next: Node?
@@ -793,6 +814,70 @@ func macroFieldIDsDriveTaggedUnionDecodeAcrossRenames() throws {
     default:
         #expect(Bool(false))
     }
+}
+
+@Test
+func compatibleNestedStructArrayRoundTrip() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(CompatibleNestedItem.self, id: 9103)
+    writer.register(CompatibleNestedArrayHolder.self, id: 9104)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(CompatibleNestedItem.self, id: 9103)
+    reader.register(CompatibleNestedArrayHolder.self, id: 9104)
+
+    let value = CompatibleNestedArrayHolder(
+        items: [
+            CompatibleNestedItem(id: 1, name: "alpha"),
+            CompatibleNestedItem(id: 2, name: "beta")
+        ]
+    )
+    let bytes = try writer.serialize(value)
+    let decoded: CompatibleNestedArrayHolder = try reader.deserialize(bytes)
+    #expect(decoded == value)
+}
+
+@Test
+func compatibleNestedStructOptionalArrayRoundTrip() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(CompatibleNestedItem.self, id: 9103)
+    writer.register(CompatibleNestedOptionalArrayHolder.self, id: 9105)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(CompatibleNestedItem.self, id: 9103)
+    reader.register(CompatibleNestedOptionalArrayHolder.self, id: 9105)
+
+    let value = CompatibleNestedOptionalArrayHolder(
+        items: [
+            CompatibleNestedItem(id: 1, name: "alpha"),
+            nil,
+            CompatibleNestedItem(id: 2, name: "beta")
+        ]
+    )
+    let bytes = try writer.serialize(value)
+    let decoded: CompatibleNestedOptionalArrayHolder = try reader.deserialize(bytes)
+    #expect(decoded == value)
+}
+
+@Test
+func compatibleNestedStructMapRoundTrip() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(CompatibleNestedItem.self, id: 9103)
+    writer.register(CompatibleNestedMapHolder.self, id: 9106)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(CompatibleNestedItem.self, id: 9103)
+    reader.register(CompatibleNestedMapHolder.self, id: 9106)
+
+    let value = CompatibleNestedMapHolder(
+        items: [
+            1: CompatibleNestedItem(id: 10, name: "first"),
+            2: CompatibleNestedItem(id: 20, name: "second")
+        ]
+    )
+    let bytes = try writer.serialize(value)
+    let decoded: CompatibleNestedMapHolder = try reader.deserialize(bytes)
+    #expect(decoded == value)
 }
 
 @Test

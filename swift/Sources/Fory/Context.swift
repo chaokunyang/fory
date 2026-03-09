@@ -332,6 +332,7 @@ public final class ReadContext {
 
     private var pendingRefStack: [PendingRefSlot] = []
     private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
+    private var pendingCompatibleTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     private var lastTypeInfo = TypeInfo.uncached
 
     convenience init(
@@ -722,8 +723,52 @@ public final class ReadContext {
         pendingTypeInfo[ObjectIdentifier(type)]
     }
 
-    func clearPendingTypeInfo<T: Serializer>(for type: T.Type) {
-        pendingTypeInfo.removeValue(forKey: ObjectIdentifier(type))
+    public func compatibleTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
+        pendingCompatibleTypeInfo[ObjectIdentifier(type)]
+    }
+
+    func withCompatibleTypeInfo<T: Serializer, R>(
+        _ typeInfo: TypeInfo?,
+        for type: T.Type,
+        _ body: () throws -> R
+    ) rethrows -> R {
+        guard let typeInfo else {
+            return try body()
+        }
+
+        let typeKey = ObjectIdentifier(type)
+        let previousCompatibleTypeInfo = pendingCompatibleTypeInfo[typeKey]
+        pendingCompatibleTypeInfo[typeKey] = typeInfo
+        defer {
+            if let previousCompatibleTypeInfo {
+                pendingCompatibleTypeInfo[typeKey] = previousCompatibleTypeInfo
+            } else {
+                pendingCompatibleTypeInfo.removeValue(forKey: typeKey)
+            }
+        }
+        return try body()
+    }
+
+    func withScopedTypeInfo<T: Serializer, R>(
+        for type: T.Type,
+        declared: Bool,
+        _ body: () throws -> R
+    ) throws -> R {
+        guard !declared else {
+            return try body()
+        }
+
+        let typeKey = ObjectIdentifier(type)
+        let previousPendingTypeInfo = pendingTypeInfo[typeKey]
+        let remoteCompatibleTypeInfo = try T.foryReadTypeInfo(self)
+        defer {
+            if let previousPendingTypeInfo {
+                pendingTypeInfo[typeKey] = previousPendingTypeInfo
+            } else {
+                pendingTypeInfo.removeValue(forKey: typeKey)
+            }
+        }
+        return try withCompatibleTypeInfo(remoteCompatibleTypeInfo, for: type, body)
     }
 
     @inline(__always)
@@ -743,6 +788,9 @@ public final class ReadContext {
         }
         if !pendingTypeInfo.isEmpty {
             pendingTypeInfo.removeAll(keepingCapacity: true)
+        }
+        if !pendingCompatibleTypeInfo.isEmpty {
+            pendingCompatibleTypeInfo.removeAll(keepingCapacity: true)
         }
     }
 

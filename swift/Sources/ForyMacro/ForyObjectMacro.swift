@@ -71,6 +71,14 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
                 accessPrefix: accessPrefix
             )
         )
+        let readCompatibleDecl: DeclSyntax = DeclSyntax(
+            stringLiteral: buildReadCompatibleDataDecl(
+                isClass: parsed.isClass,
+                fields: parsed.fields,
+                sortedFields: sortedFields,
+                accessPrefix: accessPrefix
+            )
+        )
         return [
             staticTypeIDDecl,
             referenceTrackDecl,
@@ -80,7 +88,8 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
             writeWrapperDecl,
             readWrapperDecl,
             writeDecl,
-            readDecl
+            readDecl,
+            readCompatibleDecl
         ].compactMap { $0 }
     }
 
@@ -1060,7 +1069,12 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
                 let reservedRefID = context.refReader.reserveRefID()
                 context.pushPendingRef(reservedRefID)
                 if readTypeInfo {
-                    try Self.foryReadTypeInfo(context)
+                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                        let value = try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                        context.finishPendingRefIfNeeded(value)
+                        context.popPendingRef()
+                        return value
+                    }
                 }
                 let value = try Self.foryReadData(context)
                 context.finishPendingRefIfNeeded(value)
@@ -1072,7 +1086,9 @@ private func buildReadWrapperDecl(accessPrefix: String) -> String {
         }
 
         if readTypeInfo {
-            try Self.foryReadTypeInfo(context)
+            if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+            }
         }
         return try Self.foryReadData(context)
     }

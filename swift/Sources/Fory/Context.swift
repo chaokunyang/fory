@@ -71,59 +71,59 @@ final class CompatibleTypeDefWriteState {
 }
 
 final class CompatibleTypeDefReadState {
-    private var firstTypeMeta: TypeMeta?
-    private var overflowTypeMetas: [TypeMeta] = []
+    private var firstTypeInfo: TypeInfo?
+    private var overflowTypeInfos: [TypeInfo] = []
 
     init() {}
 
     @inline(__always)
-    fileprivate func typeMetaEntry(at index: Int) -> TypeMeta? {
+    fileprivate func typeInfoEntry(at index: Int) -> TypeInfo? {
         if index < 0 {
             return nil
         }
         if index == 0 {
-            return firstTypeMeta
+            return firstTypeInfo
         }
         let overflowIndex = index - 1
-        guard overflowIndex >= 0, overflowIndex < overflowTypeMetas.count else {
+        guard overflowIndex >= 0, overflowIndex < overflowTypeInfos.count else {
             return nil
         }
-        return overflowTypeMetas[overflowIndex]
+        return overflowTypeInfos[overflowIndex]
     }
 
-    func typeMeta(at index: Int) -> TypeMeta? {
-        typeMetaEntry(at: index)
+    func typeInfo(at index: Int) -> TypeInfo? {
+        typeInfoEntry(at: index)
     }
 
     @inline(__always)
-    fileprivate func storeTypeMetaEntry(_ typeMeta: TypeMeta, at index: Int) throws {
+    fileprivate func storeTypeInfoEntry(_ typeInfo: TypeInfo, at index: Int) throws {
         if index < 0 {
             throw ForyError.invalidData("negative compatible type definition index")
         }
         if index == 0 {
-            firstTypeMeta = typeMeta
+            firstTypeInfo = typeInfo
             return
         }
         let overflowIndex = index - 1
-        if overflowIndex == overflowTypeMetas.count {
-            overflowTypeMetas.append(typeMeta)
+        if overflowIndex == overflowTypeInfos.count {
+            overflowTypeInfos.append(typeInfo)
             return
         }
-        if overflowIndex < overflowTypeMetas.count {
-            overflowTypeMetas[overflowIndex] = typeMeta
+        if overflowIndex < overflowTypeInfos.count {
+            overflowTypeInfos[overflowIndex] = typeInfo
             return
         }
         throw ForyError.invalidData(
-            "compatible type definition index gap: index=\(index), count=\(overflowTypeMetas.count + (firstTypeMeta == nil ? 0 : 1))"
+            "compatible type definition index gap: index=\(index), count=\(overflowTypeInfos.count + (firstTypeInfo == nil ? 0 : 1))"
         )
     }
 
     func reset() {
-        if firstTypeMeta != nil {
-            firstTypeMeta = nil
+        if firstTypeInfo != nil {
+            firstTypeInfo = nil
         }
-        if !overflowTypeMetas.isEmpty {
-            overflowTypeMetas.removeAll(keepingCapacity: true)
+        if !overflowTypeInfos.isEmpty {
+            overflowTypeInfos.removeAll(keepingCapacity: true)
         }
     }
 }
@@ -358,21 +358,6 @@ public final class ReadContext {
     private var dynamicAnyDepth = 0
 
     private var pendingRefStack: [PendingRefSlot] = []
-    // swiftlint:disable large_tuple
-    private var pendingTypeMeta: [
-        ObjectIdentifier: (
-            typeMeta: TypeMeta,
-            matchesSchema: Bool,
-            hasUserTypeFields: Bool
-        )
-    ] = [:]
-    private var pendingTypeMetaTypeID: ObjectIdentifier?
-    private var pendingTypeMetaValue: (
-        typeMeta: TypeMeta,
-        matchesSchema: Bool,
-        hasUserTypeFields: Bool
-    )?
-    // swiftlint:enable large_tuple
     private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     private var lastTypeInfo = TypeInfo.uncached
 
@@ -494,7 +479,7 @@ public final class ReadContext {
         return info
     }
 
-    func readTypeInfo<T: Serializer>(for type: T.Type) throws {
+    func readTypeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo? {
         let rawTypeID = try buffer.readVarUInt32()
         guard let typeID = TypeId(rawValue: rawTypeID) else {
             throw ForyError.invalidData("unknown type id \(rawTypeID)")
@@ -504,7 +489,7 @@ public final class ReadContext {
             if typeID != T.staticTypeId {
                 throw ForyError.typeMismatch(expected: T.staticTypeId.rawValue, actual: rawTypeID)
             }
-            return
+            return nil
         }
 
         let localTypeInfo = try typeInfo(for: type)
@@ -520,27 +505,18 @@ public final class ReadContext {
 
         switch typeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            let remoteTypeMeta = try readTypeMeta(
+            return try readCompatibleTypeInfo(
                 for: localTypeInfo,
                 wireTypeID: typeID
             )
-            pushTypeMeta(
-                for: type,
-                remoteTypeMeta,
-                localTypeInfo: localTypeInfo
-            )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if compatible {
-                let remoteTypeMeta = try readTypeMeta(
+                let remoteTypeInfo = try readCompatibleTypeInfo(
                     for: localTypeInfo,
                     wireTypeID: typeID
                 )
                 if typeID == .namedStruct {
-                    pushTypeMeta(
-                        for: type,
-                        remoteTypeMeta,
-                        localTypeInfo: localTypeInfo
-                    )
+                    return remoteTypeInfo
                 }
             } else {
                 let namespace = try readMetaString(
@@ -576,6 +552,7 @@ public final class ReadContext {
                 }
             }
         }
+        return nil
     }
 
     public func pushPendingRef(_ refID: UInt32) {
@@ -605,16 +582,16 @@ public final class ReadContext {
         _ = pendingRefStack.popLast()
     }
 
-    func readTypeMeta() throws -> TypeMeta {
+    func readCompatibleTypeInfo() throws -> TypeInfo {
         typeDefStateUsed = true
         let indexMarker = try buffer.readVarUInt32()
         let isRef = (indexMarker & 1) == 1
         let index = Int(indexMarker >> 1)
         if isRef {
-            guard let typeMeta = typeDefState.typeMeta(at: index) else {
+            guard let typeInfo = typeDefState.typeInfo(at: index) else {
                 throw ForyError.invalidData("unknown compatible type definition ref index \(index)")
             }
-            return typeMeta
+            return typeInfo
         }
 
         let typeMetaStart = buffer.getCursor()
@@ -623,34 +600,33 @@ public final class ReadContext {
         if bodySize == typeMetaSizeMask {
             bodySize += Int(try buffer.readVarUInt32())
         }
-        if let cached = typeResolver.typeMeta(forHeader: header) {
+        if let cached = typeResolver.compatibleTypeInfo(forHeader: header) {
             try buffer.skip(bodySize)
-            try typeDefState.storeTypeMetaEntry(cached, at: index)
+            try typeDefState.storeTypeInfoEntry(cached, at: index)
             return cached
         }
 
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
-        let canonicalEntry = typeResolver.cacheTypeMeta(decoded, forHeader: header)
-        try typeDefState.storeTypeMetaEntry(canonicalEntry, at: index)
-        return canonicalEntry
+        let cachedTypeInfo = try typeResolver.cacheCompatibleTypeInfo(decoded, forHeader: header)
+        try typeDefState.storeTypeInfoEntry(cachedTypeInfo, at: index)
+        return cachedTypeInfo
     }
 
     @inline(__always)
-    func readTypeMeta(
+    func readCompatibleTypeInfo(
         for localTypeInfo: TypeInfo,
         wireTypeID: TypeId
-    ) throws -> TypeMeta {
-        let remoteTypeMeta: TypeMeta
+    ) throws -> TypeInfo {
+        let remoteTypeInfo: TypeInfo
         if !typeDefStateUsed,
            !localTypeInfo.typeDefHasUserTypeFields,
-           let localTypeMeta = localTypeInfo.typeMeta,
            let localHeaderHash = localTypeInfo.typeDefHeaderHash {
            let typeMetaStart = buffer.getCursor()
            let indexMarker = try buffer.readVarUInt32()
             if indexMarker != 0 {
                 buffer.setCursor(typeMetaStart)
-                remoteTypeMeta = try readTypeMeta()
+                remoteTypeInfo = try readCompatibleTypeInfo()
             } else {
                 let header = try buffer.readUInt64()
                 let headerHash = header >> 14
@@ -661,18 +637,21 @@ public final class ReadContext {
 
                 if headerHash == localHeaderHash {
                     try buffer.skip(bodySize)
-                    return localTypeMeta
+                    return localTypeInfo
                 }
 
                 buffer.setCursor(typeMetaStart)
-                remoteTypeMeta = try readTypeMeta()
+                remoteTypeInfo = try readCompatibleTypeInfo()
             }
         } else {
-            remoteTypeMeta = try readTypeMeta()
+            remoteTypeInfo = try readCompatibleTypeInfo()
+        }
+        guard let remoteTypeMeta = remoteTypeInfo.compatibleTypeMeta else {
+            throw ForyError.invalidData("compatible type metadata is required")
         }
         if let localTypeMeta = localTypeInfo.typeMeta,
            remoteTypeMeta === localTypeMeta {
-            return remoteTypeMeta
+            return localTypeInfo
         }
         if remoteTypeMeta.registerByName {
             guard localTypeInfo.registerByName else {
@@ -713,75 +692,8 @@ public final class ReadContext {
            ) {
             throw ForyError.typeMismatch(expected: wireTypeID.rawValue, actual: remoteTypeID)
         }
-        return remoteTypeMeta
+        return remoteTypeInfo
     }
-
-    func pushTypeMeta<T: Serializer>(
-        for type: T.Type,
-        _ typeMeta: TypeMeta
-    ) {
-        let typeInfo = try? typeInfo(for: type)
-        pushTypeMeta(for: type, typeMeta, localTypeInfo: typeInfo)
-    }
-
-    @inline(__always)
-    func pushTypeMeta<T: Serializer>(
-        for type: T.Type,
-        _ typeMeta: TypeMeta,
-        localTypeInfo: TypeInfo?
-    ) {
-        let typeID = ObjectIdentifier(type)
-        let matchesSchema: Bool
-        let hasUserTypeFields: Bool
-        if let localTypeInfo,
-           let localHeaderHash = localTypeInfo.typeDefHeaderHash {
-            matchesSchema = typeMeta.headerHash == localHeaderHash
-            hasUserTypeFields = localTypeInfo.typeDefHasUserTypeFields
-        } else {
-            matchesSchema = false
-            hasUserTypeFields = true
-        }
-        setPendingTypeMeta(
-            typeID: typeID,
-            value: (
-                typeMeta: typeMeta,
-                matchesSchema: matchesSchema,
-                hasUserTypeFields: hasUserTypeFields
-            )
-        )
-    }
-
-    @inline(__always)
-    // swiftlint:disable large_tuple
-    public func typeMeta<T: Serializer>(
-        for type: T.Type
-    ) -> (typeMeta: TypeMeta, matchesSchema: Bool, hasUserTypeFields: Bool)? {
-        let typeID = ObjectIdentifier(type)
-        if pendingTypeMetaTypeID == typeID {
-            return pendingTypeMetaValue
-        }
-        return pendingTypeMeta[typeID]
-    }
-    // swiftlint:enable large_tuple
-
-    @inline(__always)
-    // swiftlint:disable large_tuple
-    private func setPendingTypeMeta(
-        typeID: ObjectIdentifier,
-        value: (typeMeta: TypeMeta, matchesSchema: Bool, hasUserTypeFields: Bool)
-    ) {
-        if pendingTypeMetaTypeID == typeID {
-            pendingTypeMetaValue = value
-            return
-        }
-        if let oldTypeID = pendingTypeMetaTypeID,
-           let oldValue = pendingTypeMetaValue {
-            pendingTypeMeta[oldTypeID] = oldValue
-        }
-        pendingTypeMetaTypeID = typeID
-        pendingTypeMetaValue = value
-    }
-    // swiftlint:enable large_tuple
 
     func setPendingTypeInfo<T: Serializer>(for type: T.Type, _ typeInfo: TypeInfo) {
         pendingTypeInfo[ObjectIdentifier(type)] = typeInfo
@@ -808,15 +720,6 @@ public final class ReadContext {
             refReader.reset()
             if !pendingRefStack.isEmpty {
                 pendingRefStack.removeAll(keepingCapacity: true)
-            }
-        }
-        if compatible {
-            if pendingTypeMetaTypeID != nil {
-                pendingTypeMetaTypeID = nil
-                pendingTypeMetaValue = nil
-            }
-            if !pendingTypeMeta.isEmpty {
-                pendingTypeMeta.removeAll(keepingCapacity: true)
             }
         }
         if !pendingTypeInfo.isEmpty {

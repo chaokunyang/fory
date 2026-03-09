@@ -30,49 +30,32 @@ func buildReadDataDecl(
     return buildStructReadDataDecl(fields: fields, sortedFields: sortedFields, accessPrefix: accessPrefix)
 }
 
+func buildReadCompatibleDataDecl(
+    isClass: Bool,
+    fields: [ParsedField],
+    sortedFields: [ParsedField],
+    accessPrefix: String
+) -> String {
+    if isClass {
+        return buildClassReadCompatibleDataDecl(sortedFields: sortedFields, accessPrefix: accessPrefix)
+    }
+    if fields.isEmpty {
+        return buildEmptyStructReadCompatibleDataDecl(accessPrefix: accessPrefix)
+    }
+    return buildStructReadCompatibleDataDecl(fields: fields, sortedFields: sortedFields, accessPrefix: accessPrefix)
+}
+
 private func buildClassReadDataDecl(
     sortedFields: [ParsedField],
     accessPrefix: String
 ) -> String {
     let primitiveFastFields = leadingPrimitiveFastPathFields(sortedFields)
     let schemaAssignBody = buildClassAssignBody(sortedFields: sortedFields, primitiveFastFields: primitiveFastFields, compatibleAligned: false)
-    let compatibleAlignedAssignBody = buildClassAssignBody(
-        sortedFields: sortedFields,
-        primitiveFastFields: primitiveFastFields,
-        compatibleAligned: true
-    )
-    let compatibleCases = buildCompatibleReadCases(sortedFields: sortedFields, indent: "                ") { sortedIndex, field, valueExpr in
-        "case \(sortedIndex): value.\(field.name) = \(valueExpr)"
-    }
 
     return """
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let typeMetaState = context.typeMeta(for: Self.self) {
-            if typeMetaState.matchesSchema {
-                if !typeMetaState.hasUserTypeFields {
-                    let value = Self.init()
-                    context.bindPendingRef(value)
-                    \(schemaAssignBody)
-                    return value
-                }
-                let value = Self.init()
-                context.bindPendingRef(value)
-                \(compatibleAlignedAssignBody)
-                return value
-            }
-            let value = Self.init()
-            context.bindPendingRef(value)
-            for remoteField in typeMetaState.typeMeta.fields {
-                switch Int(remoteField.fieldID ?? -1) {
-            \(compatibleCases)
-                default:
-                    try context.skipFieldValue(remoteField.fieldType)
-                }
-            }
-            return value
-        }
         \(schemaHashCheckExpr())
         let value = Self.init()
         context.bindPendingRef(value)
@@ -87,15 +70,6 @@ private func buildEmptyStructReadDataDecl(accessPrefix: String) -> String {
     @inline(__always)
     \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
         let __buffer = context.buffer
-        if context.compatible, let typeMetaState = context.typeMeta(for: Self.self) {
-            if typeMetaState.matchesSchema {
-                return Self()
-            }
-            for remoteField in typeMetaState.typeMeta.fields {
-                try context.skipFieldValue(remoteField.fieldType)
-            }
-            return Self()
-        }
         \(schemaHashCheckExpr())
         return Self()
     }
@@ -103,6 +77,98 @@ private func buildEmptyStructReadDataDecl(accessPrefix: String) -> String {
 }
 
 private func buildStructReadDataDecl(
+    fields: [ParsedField],
+    sortedFields: [ParsedField],
+    accessPrefix: String
+) -> String {
+    let primitiveFastFields = leadingPrimitiveFastPathFields(sortedFields)
+    let schemaReadBody = buildStructReadBody(
+        sortedFields: sortedFields,
+        primitiveFastFields: primitiveFastFields,
+        compatibleAligned: false
+    )
+    let ctorArgs = buildCtorArgs(fields)
+
+    return """
+    @inline(__always)
+    \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
+        let __buffer = context.buffer
+        \(schemaHashCheckExpr())
+        \(schemaReadBody)
+        return Self(
+            \(ctorArgs)
+        )
+    }
+    """
+}
+
+private func buildClassReadCompatibleDataDecl(
+    sortedFields: [ParsedField],
+    accessPrefix: String
+) -> String {
+    let primitiveFastFields = leadingPrimitiveFastPathFields(sortedFields)
+    let schemaAssignBody = buildClassAssignBody(sortedFields: sortedFields, primitiveFastFields: primitiveFastFields, compatibleAligned: false)
+    let compatibleAlignedAssignBody = buildClassAssignBody(
+        sortedFields: sortedFields,
+        primitiveFastFields: primitiveFastFields,
+        compatibleAligned: true
+    )
+    let compatibleCases = buildCompatibleReadCases(sortedFields: sortedFields, indent: "                ") { sortedIndex, field, valueExpr in
+        "case \(sortedIndex): value.\(field.name) = \(valueExpr)"
+    }
+    let bufferBinding = (schemaAssignBody.contains("__buffer") ||
+        compatibleAlignedAssignBody.contains("__buffer") ||
+        compatibleCases.contains("__buffer")) ? "let __buffer = context.buffer\n        " : ""
+
+    return """
+    @inline(__always)
+    \(accessPrefix)static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self {
+        \(bufferBinding)guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
+            throw ForyError.invalidData("compatible type metadata is required")
+        }
+        let value = Self.init()
+        context.bindPendingRef(value)
+        if let localHeaderHash = remoteTypeInfo.typeDefHeaderHash,
+           typeMeta.headerHash == localHeaderHash {
+            if !remoteTypeInfo.typeDefHasUserTypeFields {
+                \(schemaAssignBody)
+                return value
+            }
+            \(compatibleAlignedAssignBody)
+            return value
+        }
+        for remoteField in typeMeta.fields {
+            switch Int(remoteField.fieldID ?? -1) {
+        \(compatibleCases)
+            default:
+                try context.skipFieldValue(remoteField.fieldType)
+            }
+        }
+        return value
+    }
+    """
+}
+
+private func buildEmptyStructReadCompatibleDataDecl(accessPrefix: String) -> String {
+    """
+    @inline(__always)
+    \(accessPrefix)static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self {
+        guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
+            throw ForyError.invalidData("compatible type metadata is required")
+        }
+        if let localHeaderHash = remoteTypeInfo.typeDefHeaderHash,
+           typeMeta.headerHash == localHeaderHash {
+            return Self()
+        }
+        for remoteField in typeMeta.fields {
+            try context.skipFieldValue(remoteField.fieldType)
+        }
+        return Self()
+    }
+    """
+}
+
+private func buildStructReadCompatibleDataDecl(
     fields: [ParsedField],
     sortedFields: [ParsedField],
     accessPrefix: String
@@ -123,38 +189,37 @@ private func buildStructReadDataDecl(
     let compatibleCases = buildCompatibleReadCases(sortedFields: sortedFields, indent: "                    ") { sortedIndex, field, valueExpr in
         "case \(sortedIndex): __\(field.name) = \(valueExpr)"
     }
+    let bufferBinding = (schemaReadBody.contains("__buffer") ||
+        compatibleAlignedReadBody.contains("__buffer") ||
+        compatibleCases.contains("__buffer")) ? "let __buffer = context.buffer\n        " : ""
 
     return """
     @inline(__always)
-    \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
-        let __buffer = context.buffer
-        if context.compatible, let typeMetaState = context.typeMeta(for: Self.self) {
-                if typeMetaState.matchesSchema {
-                    if !typeMetaState.hasUserTypeFields {
-                        \(schemaReadBody)
-                        return Self(
-                            \(ctorArgs)
-                        )
-                    }
-                    \(compatibleAlignedReadBody)
-                    return Self(
-                        \(ctorArgs)
-                    )
-                }
-                \(compatibleDefaults)
-                for remoteField in typeMetaState.typeMeta.fields {
-                    switch Int(remoteField.fieldID ?? -1) {
-                    \(compatibleCases)
-                    default:
-                        try context.skipFieldValue(remoteField.fieldType)
-                    }
-                }
+    \(accessPrefix)static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self {
+        \(bufferBinding)guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
+            throw ForyError.invalidData("compatible type metadata is required")
+        }
+        if let localHeaderHash = remoteTypeInfo.typeDefHeaderHash,
+           typeMeta.headerHash == localHeaderHash {
+            if !remoteTypeInfo.typeDefHasUserTypeFields {
+                \(schemaReadBody)
                 return Self(
                     \(ctorArgs)
                 )
             }
-        \(schemaHashCheckExpr())
-        \(schemaReadBody)
+            \(compatibleAlignedReadBody)
+            return Self(
+                \(ctorArgs)
+            )
+        }
+        \(compatibleDefaults)
+        for remoteField in typeMeta.fields {
+            switch Int(remoteField.fieldID ?? -1) {
+            \(compatibleCases)
+            default:
+                try context.skipFieldValue(remoteField.fieldType)
+            }
+        }
         return Self(
             \(ctorArgs)
         )

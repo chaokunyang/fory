@@ -111,6 +111,15 @@ func registeredWireTypeNeedsUserTypeID(_ wireTypeID: TypeId) -> Bool {
 }
 
 @inline(__always)
+private func encodedTypeDefHeader(_ bytes: [UInt8]) throws -> UInt64 {
+    guard bytes.count >= 8 else {
+        throw ForyError.invalidData("encoded compatible type metadata must include an 8-byte header")
+    }
+    let buffer = ByteBuffer(bytes: bytes)
+    return try buffer.readUInt64()
+}
+
+@inline(__always)
 private func encodedTypeDefHeaderHash(_ bytes: [UInt8]) throws -> UInt64 {
     guard bytes.count >= 8 else {
         throw ForyError.invalidData("encoded compatible type metadata must include an 8-byte header")
@@ -132,7 +141,7 @@ private func encodedTypeDefHasUserTypeFields(_ fields: [TypeMeta.FieldInfo]) -> 
     fields.contains { fieldNeedsTypeInfo($0.fieldType) }
 }
 
-final class TypeInfo: @unchecked Sendable {
+public final class TypeInfo: @unchecked Sendable {
     static let uncached = TypeInfo(typeID: .unknown)
 
     let swiftTypeID: ObjectIdentifier
@@ -143,12 +152,13 @@ final class TypeInfo: @unchecked Sendable {
     let typeName: MetaString
     let typeMeta: TypeMeta?
     let typeDefBytes: [UInt8]?
-    let typeDefHeaderHash: UInt64?
-    let typeDefHasUserTypeFields: Bool
+    let typeDefHeader: UInt64?
+    public let typeDefHeaderHash: UInt64?
+    public let typeDefHasUserTypeFields: Bool
 
     private let readTypeMeta: TypeMeta?
     private let reader: (ReadContext) throws -> Any
-    private let compatibleReader: (ReadContext, TypeMeta) throws -> Any
+    private let compatibleReader: (ReadContext, TypeInfo) throws -> Any
     private let nativeWireTypeID: TypeId
     private let compatibleWireTypeID: TypeId
 
@@ -161,11 +171,12 @@ final class TypeInfo: @unchecked Sendable {
         typeName: MetaString,
         typeMeta: TypeMeta? = nil,
         typeDefBytes: [UInt8]? = nil,
+        typeDefHeader: UInt64? = nil,
         typeDefHeaderHash: UInt64? = nil,
         typeDefHasUserTypeFields: Bool = true,
         readTypeMeta: TypeMeta? = nil,
         reader: @escaping (ReadContext) throws -> Any,
-        compatibleReader: @escaping (ReadContext, TypeMeta) throws -> Any
+        compatibleReader: @escaping (ReadContext, TypeInfo) throws -> Any
     ) {
         self.swiftTypeID = swiftTypeID
         self.typeID = typeID
@@ -175,6 +186,7 @@ final class TypeInfo: @unchecked Sendable {
         self.typeName = typeName
         self.typeMeta = typeMeta
         self.typeDefBytes = typeDefBytes
+        self.typeDefHeader = typeDefHeader
         self.typeDefHeaderHash = typeDefHeaderHash
         self.typeDefHasUserTypeFields = typeDefHasUserTypeFields
         self.readTypeMeta = readTypeMeta
@@ -201,7 +213,7 @@ final class TypeInfo: @unchecked Sendable {
         typeName: MetaString,
         fields: [TypeMeta.FieldInfo],
         reader: @escaping (ReadContext) throws -> Any,
-        compatibleReader: @escaping (ReadContext, TypeMeta) throws -> Any
+        compatibleReader: @escaping (ReadContext, TypeInfo) throws -> Any
     ) throws {
         let compatibleWireTypeID = resolveRegisteredWireTypeID(
             declaredTypeID: typeID,
@@ -218,6 +230,7 @@ final class TypeInfo: @unchecked Sendable {
             hasFieldsMeta: !fields.isEmpty
         )
         let typeDefBytes = try typeMeta.encode()
+        let typeDefHeader = try encodedTypeDefHeader(typeDefBytes)
         let typeDefHeaderHash = try encodedTypeDefHeaderHash(typeDefBytes)
         let canonicalTypeMeta = try TypeMeta(
             typeID: registerByName ? nil : compatibleWireTypeID.rawValue,
@@ -238,6 +251,7 @@ final class TypeInfo: @unchecked Sendable {
             typeName: typeName,
             typeMeta: canonicalTypeMeta,
             typeDefBytes: typeDefBytes,
+            typeDefHeader: typeDefHeader,
             typeDefHeaderHash: typeDefHeaderHash,
             typeDefHasUserTypeFields: encodedTypeDefHasUserTypeFields(fields),
             reader: reader,
@@ -272,6 +286,7 @@ final class TypeInfo: @unchecked Sendable {
             typeName: typeInfo.typeName,
             typeMeta: typeInfo.typeMeta,
             typeDefBytes: typeInfo.typeDefBytes,
+            typeDefHeader: typeInfo.typeDefHeader,
             typeDefHeaderHash: typeInfo.typeDefHeaderHash,
             typeDefHasUserTypeFields: typeInfo.typeDefHasUserTypeFields,
             readTypeMeta: compatibleTypeMeta,
@@ -300,10 +315,17 @@ final class TypeInfo: @unchecked Sendable {
         compatible ? compatibleWireTypeID : nativeWireTypeID
     }
 
+    public var compatibleTypeMeta: TypeMeta? {
+        readTypeMeta ?? typeMeta
+    }
+
     @inline(__always)
-    func read(_ context: ReadContext, compatibleTypeMeta: TypeMeta? = nil) throws -> Any {
-        if let typeMeta = compatibleTypeMeta ?? readTypeMeta {
-            return try compatibleReader(context, typeMeta)
+    func read(_ context: ReadContext, compatibleTypeInfo: TypeInfo? = nil) throws -> Any {
+        if let compatibleTypeInfo {
+            return try compatibleReader(context, compatibleTypeInfo)
+        }
+        if readTypeMeta != nil {
+            return try compatibleReader(context, self)
         }
         return try reader(context)
     }

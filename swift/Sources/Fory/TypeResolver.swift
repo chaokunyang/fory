@@ -22,15 +22,6 @@ private struct TypeNameKey: Hashable {
     let typeName: String
 }
 
-@inline(__always)
-private func encodedTypeMetaHeader(_ bytes: [UInt8]) throws -> UInt64 {
-    guard bytes.count >= 8 else {
-        throw ForyError.invalidData("encoded compatible type metadata must include an 8-byte header")
-    }
-    let buffer = ByteBuffer(bytes: bytes)
-    return try buffer.readUInt64()
-}
-
 final class TypeResolver {
     private let trackRef: Bool
 
@@ -38,7 +29,7 @@ final class TypeResolver {
     private var byUserTypeID: [UInt32: TypeInfo] = [:]
     private var byTypeName: [TypeNameKey: TypeInfo] = [:]
     private var builtinTypeInfoByID: [TypeId: TypeInfo] = [:]
-    private var typeMetaByHeader: [UInt64: TypeMeta] = [:]
+    private var compatibleTypeInfoByHeader: [UInt64: TypeInfo] = [:]
 
     init(trackRef: Bool = false) {
         self.trackRef = trackRef
@@ -67,9 +58,8 @@ final class TypeResolver {
             reader: { context in
                 try T.foryRead(context, refMode: .none, readTypeInfo: false)
             },
-            compatibleReader: { context, typeMeta in
-                context.pushTypeMeta(for: T.self, typeMeta)
-                return try T.foryRead(context, refMode: .none, readTypeInfo: false)
+            compatibleReader: { context, remoteTypeInfo in
+                try T.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
             }
         )
 
@@ -115,9 +105,8 @@ final class TypeResolver {
             reader: { context in
                 try T.foryRead(context, refMode: .none, readTypeInfo: false)
             },
-            compatibleReader: { context, typeMeta in
-                context.pushTypeMeta(for: T.self, typeMeta)
-                return try T.foryRead(context, refMode: .none, readTypeInfo: false)
+            compatibleReader: { context, remoteTypeInfo in
+                try T.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
             }
         )
 
@@ -155,56 +144,57 @@ final class TypeResolver {
     }
 
     @inline(__always)
-    func typeMeta(forHeader header: UInt64) -> TypeMeta? {
-        typeMetaByHeader[header]
+    func compatibleTypeInfo(forHeader header: UInt64) -> TypeInfo? {
+        compatibleTypeInfoByHeader[header]
     }
 
     @inline(__always)
-    func cacheTypeMeta(_ typeMeta: TypeMeta, forHeader header: UInt64) -> TypeMeta {
-        if let cached = typeMetaByHeader[header] {
+    func cacheCompatibleTypeInfo(_ typeMeta: TypeMeta, forHeader header: UInt64) throws -> TypeInfo {
+        if let cached = compatibleTypeInfoByHeader[header] {
             return cached
         }
+        let localTypeInfo = try requireCompatibleTypeInfo(for: typeMeta)
         let canonicalTypeMeta: TypeMeta
-        if let typeInfo = compatibleTypeInfo(for: typeMeta),
-           let localTypeMeta = typeInfo.typeMeta,
+        if let localTypeMeta = localTypeInfo.typeMeta,
            let remapped = try? typeMeta.assigningFieldIDs(from: localTypeMeta) {
             canonicalTypeMeta = remapped
         } else {
             canonicalTypeMeta = typeMeta
         }
-        typeMetaByHeader[header] = canonicalTypeMeta
-        return canonicalTypeMeta
+        let compatibleTypeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
+        compatibleTypeInfoByHeader[header] = compatibleTypeInfo
+        return compatibleTypeInfo
     }
 
     func readByUserTypeID(_ userTypeID: UInt32, context: ReadContext) throws -> Any {
-        try readByUserTypeID(userTypeID, context: context, compatibleTypeMeta: nil)
+        try readByUserTypeID(userTypeID, context: context, compatibleTypeInfo: nil)
     }
 
     func readByUserTypeID(
         _ userTypeID: UInt32,
         context: ReadContext,
-        compatibleTypeMeta: TypeMeta?
+        compatibleTypeInfo: TypeInfo?
     ) throws -> Any {
         guard let typeInfo = byUserTypeID[userTypeID] else {
             throw ForyError.typeNotRegistered("user_type_id=\(userTypeID)")
         }
-        return try typeInfo.read(context, compatibleTypeMeta: compatibleTypeMeta)
+        return try typeInfo.read(context, compatibleTypeInfo: compatibleTypeInfo)
     }
 
     func readByTypeName(namespace: String, typeName: String, context: ReadContext) throws -> Any {
-        try readByTypeName(namespace: namespace, typeName: typeName, context: context, compatibleTypeMeta: nil)
+        try readByTypeName(namespace: namespace, typeName: typeName, context: context, compatibleTypeInfo: nil)
     }
 
     func readByTypeName(
         namespace: String,
         typeName: String,
         context: ReadContext,
-        compatibleTypeMeta: TypeMeta?
+        compatibleTypeInfo: TypeInfo?
     ) throws -> Any {
         guard let typeInfo = byTypeName[TypeNameKey(namespace: namespace, typeName: typeName)] else {
             throw ForyError.typeNotRegistered("namespace=\(namespace), type=\(typeName)")
         }
-        return try typeInfo.read(context, compatibleTypeMeta: compatibleTypeMeta)
+        return try typeInfo.read(context, compatibleTypeInfo: compatibleTypeInfo)
     }
 
     func readAnyTypeInfo(context: ReadContext) throws -> TypeInfo {
@@ -253,8 +243,11 @@ final class TypeResolver {
             byTypeName[typeNameKey] = typeInfo
         }
         if let typeMeta = typeInfo.typeMeta,
-           let typeDefBytes = typeInfo.typeDefBytes {
-            typeMetaByHeader[try encodedTypeMetaHeader(typeDefBytes)] = typeMeta
+           let typeDefHeader = typeInfo.typeDefHeader {
+            compatibleTypeInfoByHeader[typeDefHeader] = TypeInfo(
+                dynamic: typeInfo,
+                compatibleTypeMeta: typeMeta
+            )
         }
     }
 
@@ -382,19 +375,7 @@ final class TypeResolver {
 
     @inline(__always)
     private func compatibleAnyTypeInfo(context: ReadContext) throws -> TypeInfo {
-        let typeMeta = try context.readTypeMeta()
-        if typeMeta.registerByName {
-            let local = try requireTypeInfo(
-                namespace: typeMeta.namespace.value,
-                typeName: typeMeta.typeName.value
-            )
-            return TypeInfo(dynamic: local, compatibleTypeMeta: typeMeta)
-        }
-        guard let userTypeID = typeMeta.userTypeID else {
-            throw ForyError.invalidData("missing user type id in compatible dynamic type meta")
-        }
-        let local = try requireTypeInfo(userTypeID: userTypeID)
-        return TypeInfo(dynamic: local, compatibleTypeMeta: typeMeta)
+        try context.readCompatibleTypeInfo()
     }
 
     private func validateIDRegistration<T: Serializer>(
@@ -452,14 +433,22 @@ final class TypeResolver {
     }
 
     @inline(__always)
-    private func compatibleTypeInfo(for typeMeta: TypeMeta) -> TypeInfo? {
+    private func requireCompatibleTypeInfo(for typeMeta: TypeMeta) throws -> TypeInfo {
         if typeMeta.registerByName {
-            return byTypeName[TypeNameKey(namespace: typeMeta.namespace.value, typeName: typeMeta.typeName.value)]
+            guard let typeInfo = byTypeName[TypeNameKey(namespace: typeMeta.namespace.value, typeName: typeMeta.typeName.value)] else {
+                throw ForyError.typeNotRegistered(
+                    "namespace=\(typeMeta.namespace.value), type=\(typeMeta.typeName.value)"
+                )
+            }
+            return typeInfo
         }
         if let userTypeID = typeMeta.userTypeID {
-            return byUserTypeID[userTypeID]
+            guard let typeInfo = byUserTypeID[userTypeID] else {
+                throw ForyError.typeNotRegistered("user_type_id=\(userTypeID)")
+            }
+            return typeInfo
         }
-        return nil
+        throw ForyError.invalidData("missing user type id in compatible dynamic type meta")
     }
 
 }

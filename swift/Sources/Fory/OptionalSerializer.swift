@@ -53,7 +53,7 @@ extension Optional: Serializer where Wrapped: Serializer {
         try Wrapped.foryWriteTypeInfo(context)
     }
 
-    public static func foryReadTypeInfo(_ context: ReadContext) throws {
+    public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
         try Wrapped.foryReadTypeInfo(context)
     }
 

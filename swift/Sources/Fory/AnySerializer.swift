@@ -76,9 +76,10 @@ extension AnyHashable: Serializer {
         try writeAnyTypeInfo(base, context: context)
     }
 
-    public static func foryReadTypeInfo(_ context: ReadContext) throws {
+    public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
         let typeInfo = try context.typeResolver.readAnyTypeInfo(context: context)
         context.setPendingTypeInfo(for: Self.self, typeInfo)
+        return nil
     }
 
     public func foryWrite(
@@ -183,9 +184,10 @@ private struct DynamicAnyValue: Serializer {
         try writeAnyTypeInfo(value, context: context)
     }
 
-    static func foryReadTypeInfo(_ context: ReadContext) throws {
+    static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
         let typeInfo = try context.typeResolver.readAnyTypeInfo(context: context)
         context.setPendingTypeInfo(for: Self.self, typeInfo)
+        return nil
     }
 
     func foryWrite(
@@ -242,7 +244,7 @@ private struct DynamicAnyValue: Serializer {
                 let reservedRefID = context.refReader.reserveRefID()
                 context.pushPendingRef(reservedRefID)
                 if readTypeInfo {
-                    try foryReadTypeInfo(context)
+                    _ = try foryReadTypeInfo(context)
                 }
                 let value = try foryReadData(context)
                 context.finishPendingRefIfNeeded(value)
@@ -254,7 +256,7 @@ private struct DynamicAnyValue: Serializer {
         }
 
         if readTypeInfo {
-            try foryReadTypeInfo(context)
+            _ = try foryReadTypeInfo(context)
         }
         return try foryReadData(context)
     }

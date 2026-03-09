@@ -456,7 +456,7 @@ extension Array: Serializer where Element: Serializer {
         context.buffer.writeUInt8(UInt8(truncatingIfNeeded: staticTypeId.rawValue))
     }
 
-    public static func foryReadTypeInfo(_ context: ReadContext) throws {
+    public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
         let rawTypeID = try context.buffer.readVarUInt32()
         guard let actualTypeID = TypeId(rawValue: rawTypeID) else {
             throw ForyError.invalidData("unknown type id \(rawTypeID)")
@@ -464,7 +464,7 @@ extension Array: Serializer where Element: Serializer {
 
         if Element.self == UInt8.self {
             if actualTypeID == .uint8Array || actualTypeID == .binary {
-                return
+                return nil
             }
             throw ForyError.typeMismatch(expected: TypeId.uint8Array.rawValue, actual: rawTypeID)
         }
@@ -473,6 +473,7 @@ extension Array: Serializer where Element: Serializer {
         if actualTypeID != expectedTypeID {
             throw ForyError.typeMismatch(expected: expectedTypeID.rawValue, actual: rawTypeID)
         }
+        return nil
     }
 
     public func foryWriteData(_ context: WriteContext, hasGenerics: Bool) throws {
@@ -598,7 +599,7 @@ extension Array: Serializer where Element: Serializer {
         }
 
         if !declared {
-            try Element.foryReadTypeInfo(context)
+            _ = try Element.foryReadTypeInfo(context)
         }
 
         if trackRef {
@@ -925,10 +926,10 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                     throw ForyError.invalidData("map dynamic chunk size exceeds remaining entries")
                 }
                 if !keyDeclared {
-                    try Key.foryReadTypeInfo(context)
+                    _ = try Key.foryReadTypeInfo(context)
                 }
                 if !valueDeclared {
-                    try Value.foryReadTypeInfo(context)
+                    _ = try Value.foryReadTypeInfo(context)
                 }
                 for _ in 0..<chunkSize {
                     let key = try Key.foryRead(
@@ -998,10 +999,10 @@ extension Dictionary: Serializer where Key: Serializer & Hashable, Value: Serial
                 throw ForyError.invalidData("map chunk size exceeds remaining entries")
             }
             if !keyDeclared {
-                try Key.foryReadTypeInfo(context)
+                _ = try Key.foryReadTypeInfo(context)
             }
             if !valueDeclared {
-                try Value.foryReadTypeInfo(context)
+                _ = try Value.foryReadTypeInfo(context)
             }
 
             for _ in 0..<chunkSize {

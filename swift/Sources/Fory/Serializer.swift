@@ -43,7 +43,8 @@ public protocol Serializer {
     ) throws -> Self
 
     static func foryWriteTypeInfo(_ context: WriteContext) throws
-    static func foryReadTypeInfo(_ context: ReadContext) throws
+    static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo?
+    static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self
     static func foryCompatibleTypeMetaFields(trackRef: Bool) -> [TypeMeta.FieldInfo]
     func foryWriteTypeInfo(_ context: WriteContext) throws
 }
@@ -66,6 +67,11 @@ public extension Serializer {
     @inlinable
     static func foryCompatibleTypeMetaFields(trackRef _: Bool) -> [TypeMeta.FieldInfo] {
         []
+    }
+
+    @inlinable
+    static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo _: TypeInfo) throws -> Self {
+        try foryReadData(context)
     }
 }
 
@@ -104,7 +110,9 @@ public extension Serializer {
         switch refMode {
         case .none:
             if readTypeInfo {
-                try Self.foryReadTypeInfo(context)
+                if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                    return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                }
             }
             return try Self.foryReadData(context)
         case .nullOnly:
@@ -114,7 +122,9 @@ public extension Serializer {
                 return Self.foryDefault()
             case RefFlag.notNullValue.rawValue:
                 if readTypeInfo {
-                    try Self.foryReadTypeInfo(context)
+                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                        return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                    }
                 }
                 return try Self.foryReadData(context)
             case RefFlag.refValue.rawValue:
@@ -122,7 +132,12 @@ public extension Serializer {
                     let reservedRefID = context.refReader.reserveRefID()
                     context.pushPendingRef(reservedRefID)
                     if readTypeInfo {
-                        try Self.foryReadTypeInfo(context)
+                        if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                            let value = try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                            context.finishPendingRefIfNeeded(value)
+                            context.popPendingRef()
+                            return value
+                        }
                     }
                     let value = try Self.foryReadData(context)
                     context.finishPendingRefIfNeeded(value)
@@ -130,7 +145,9 @@ public extension Serializer {
                     return value
                 }
                 if readTypeInfo {
-                    try Self.foryReadTypeInfo(context)
+                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                        return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                    }
                 }
                 return try Self.foryReadData(context)
             case RefFlag.ref.rawValue:
@@ -154,7 +171,12 @@ public extension Serializer {
                 let reservedRefID = context.refReader.reserveRefID()
                 context.pushPendingRef(reservedRefID)
                 if readTypeInfo {
-                    try Self.foryReadTypeInfo(context)
+                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                        let value = try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                        context.finishPendingRefIfNeeded(value)
+                        context.popPendingRef()
+                        return value
+                    }
                 }
                 let value = try Self.foryReadData(context)
                 context.finishPendingRefIfNeeded(value)
@@ -162,7 +184,9 @@ public extension Serializer {
                 return value
             case .notNullValue:
                 if readTypeInfo {
-                    try Self.foryReadTypeInfo(context)
+                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
+                        return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                    }
                 }
                 return try Self.foryReadData(context)
             }
@@ -220,7 +244,7 @@ public extension Serializer {
         }
     }
 
-    static func foryReadTypeInfo(_ context: ReadContext) throws {
+    static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
         try context.readTypeInfo(for: Self.self)
     }
 

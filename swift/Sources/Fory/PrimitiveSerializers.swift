@@ -425,7 +425,7 @@ extension Data: Serializer {
 
     public static func foryDefault() -> Data { Data() }
 
-    public static func foryReadTypeInfo(_ context: ReadContext) throws {
+    public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
         let rawTypeID = try context.buffer.readVarUInt32()
         guard let typeID = TypeId(rawValue: rawTypeID) else {
             throw ForyError.invalidData("unknown type id \(rawTypeID)")
@@ -433,6 +433,7 @@ extension Data: Serializer {
         if typeID != .binary && typeID != .uint8Array {
             throw ForyError.typeMismatch(expected: TypeId.binary.rawValue, actual: rawTypeID)
         }
+        return nil
     }
 
     public func foryWriteData(_ context: WriteContext, hasGenerics: Bool) throws {

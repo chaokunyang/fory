@@ -330,6 +330,9 @@ public final class TypeInfo: @unchecked Sendable {
         if let typeInfo {
             return try compatibleReader(context, typeInfo)
         }
+        if context.compatible {
+            return try compatibleReader(context, self)
+        }
         if compatibleTypeMeta !== typeMeta {
             return try compatibleReader(context, self)
         }

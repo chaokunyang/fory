@@ -523,20 +523,34 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
         var resolvedFields = fields
         var changed = false
+        var usedLocalFields = Array(repeating: false, count: localFields.count)
 
         for index in resolvedFields.indices {
             let field = resolvedFields[index]
 
-            let localMatch: (Int, FieldInfo)?
+            var localMatch: (Int, FieldInfo)?
             if let fieldID = field.fieldID, fieldID >= 0 {
                 localMatch = fieldIndexByID[fieldID]
-            } else {
-                localMatch = fieldIndexByName[toSnakeCase(field.fieldName)]
             }
 
-            guard let (sortedIndex, localFieldInfo) = localMatch,
-                  sortedIndex <= Int(Int16.max),
-                  Self.isCompatibleFieldType(field.fieldType, localFieldInfo.fieldType) else {
+            if localMatch == nil {
+                if let candidate = fieldIndexByName[toSnakeCase(field.fieldName)],
+                   Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) {
+                    localMatch = candidate
+                }
+            }
+
+            if localMatch == nil {
+                for localIndex in localFields.indices where !usedLocalFields[localIndex] {
+                    if Self.isCompatibleFieldType(field.fieldType, localFields[localIndex].fieldType) {
+                        localMatch = (localIndex, localFields[localIndex])
+                        break
+                    }
+                }
+            }
+
+            guard let (sortedIndex, _) = localMatch,
+                  sortedIndex <= Int(Int16.max) else {
                 if field.fieldID != -1 {
                     resolvedFields[index].fieldID = -1
                     changed = true
@@ -549,6 +563,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
                 resolvedFields[index].fieldID = resolvedFieldID
                 changed = true
             }
+            usedLocalFields[sortedIndex] = true
         }
 
         guard changed else {
@@ -573,9 +588,6 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
         _ localType: FieldType
     ) -> Bool {
         if normalizeCompatibleTypeIDForComparison(remoteType.typeID) != normalizeCompatibleTypeIDForComparison(localType.typeID) {
-            return false
-        }
-        if remoteType.nullable != localType.nullable || remoteType.trackRef != localType.trackRef {
             return false
         }
         if remoteType.generics.count != localType.generics.count {

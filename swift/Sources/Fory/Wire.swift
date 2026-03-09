@@ -1296,6 +1296,30 @@ public enum Wire {
 
     @inlinable
     @inline(__always)
+    public static func writeRegion(
+        buffer: ByteBuffer,
+        maxCount: Int,
+        _ body: (UnsafeMutablePointer<UInt8>) -> Int
+    ) {
+        guard maxCount > 0 else {
+            return
+        }
+        let start = buffer.storage.count
+        buffer.storage.append(contentsOf: repeatElement(0, count: maxCount))
+        let written = buffer.storage.withUnsafeMutableBufferPointer { bytes in
+            body(bytes.baseAddress!.advanced(by: start))
+        }
+        precondition(
+            written >= 0 && written <= maxCount,
+            "writeRegion wrote \(written) bytes into a maxCount \(maxCount) region"
+        )
+        if written < maxCount {
+            buffer.storage.removeLast(maxCount - written)
+        }
+    }
+
+    @inlinable
+    @inline(__always)
     public static func readRegion(
         buffer: ByteBuffer,
         _ body: (UnsafeBufferPointer<UInt8>) throws -> Int

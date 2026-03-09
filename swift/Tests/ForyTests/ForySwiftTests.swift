@@ -932,9 +932,9 @@ func pvlVarInt64AndVarUInt64Extremes() throws {
     let minBuffer = ByteBuffer()
     minBuffer.writeVarInt64(Int64.min)
     #expect(minBuffer.count == 9)
-    #expect(minBuffer.storage.prefix(minBuffer.count).allSatisfy { $0 == 0xFF })
+    #expect(minBuffer.readableBytes().allSatisfy { $0 == 0xFF })
 
-    let encoded = Array(writeBuffer.storage.prefix(writeBuffer.count))
+    let encoded = writeBuffer.readableBytes()
 
     let readBuffer = ByteBuffer(bytes: encoded)
     for value in uintValues {

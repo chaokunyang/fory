@@ -82,16 +82,15 @@ func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
     let fixedFields = leadingFixedPrimitiveFields(fields)
     let remainingFields = Array(fields.dropFirst(fixedFields.count))
     let fixedPrefixBytes = primitiveFixedPrefixBytes(fixedFields)
+    let maxNumericBytes = fields.reduce(0) { partial, field in
+        partial + (primitiveMaxEncodedByteWidth(for: field) ?? 0)
+    }
+    guard maxNumericBytes > 0 else {
+        return nil
+    }
     let locals = fields.map { field in
         "let __\(field.name) = self.\(field.name)"
     }.joined(separator: "\n        ")
-    let numericByteTerms = fields.compactMap { field in
-        primitiveEncodedByteWidthExpr(for: field, valueExpr: "__\(field.name)")
-    }
-    guard !numericByteTerms.isEmpty else {
-        return nil
-    }
-    let numericBytesExpr = numericByteTerms.joined(separator: " + ")
     var fixedOffset = 0
     let fixedWrites = fixedFields.compactMap { field -> String? in
         guard let line = primitiveUnsafeWriteFixedLine(for: field, offset: fixedOffset) else {
@@ -112,42 +111,44 @@ func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
             """
             var __writerIndex = \(fixedPrefixBytes)
             \(remainingWrites)
-            assert(__writerIndex == __numericBytes)
+            assert(__writerIndex <= \(maxNumericBytes))
+            return __writerIndex
             """
         )
+    } else {
+        bodySections.append("return \(fixedPrefixBytes)")
     }
     let writeBody = bodySections.joined(separator: "\n            ")
     return """
     \(locals)
-    let __numericBytes = \(numericBytesExpr)
-    Wire.writeRegion(buffer: __buffer, exactCount: __numericBytes) { __base in
+    Wire.writeRegion(buffer: __buffer, maxCount: \(maxNumericBytes)) { __base in
         \(writeBody)
     }
     """
 }
 
-private func primitiveEncodedByteWidthExpr(for field: ParsedField, valueExpr: String) -> String? {
+private func primitiveMaxEncodedByteWidth(for field: ParsedField) -> Int? {
     switch trimType(field.typeText) {
     case "Bool", "Int8", "UInt8":
-        return "1"
+        return 1
     case "Int16", "UInt16":
-        return "2"
+        return 2
     case "Float":
-        return "4"
+        return 4
     case "Double":
-        return "8"
+        return 8
     case "Int32":
-        return "Wire.varInt32Size(\(valueExpr))"
+        return 5
     case "UInt32":
-        return "Wire.varUInt32Size(\(valueExpr))"
+        return 5
     case "Int64":
-        return "Wire.varInt64Size(\(valueExpr))"
+        return 9
     case "UInt64":
-        return "Wire.varUInt64Size(\(valueExpr))"
+        return 9
     case "Int":
-        return "Wire.varInt64Size(Int64(\(valueExpr)))"
+        return 9
     case "UInt":
-        return "Wire.varUInt64Size(UInt64(\(valueExpr)))"
+        return 9
     default:
         return nil
     }

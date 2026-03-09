@@ -183,7 +183,7 @@ public final class Fory {
         if !value.foryIsNone {
             try writeRootTypedValue(value, context: context)
         }
-        buffer.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
+        buffer.append(context.buffer.copyToData())
     }
 
     public func deserialize<T: Serializer>(from buffer: ByteBuffer, as _: T.Type = T.self) throws -> T {
@@ -552,7 +552,7 @@ public final class Fory {
         if !isNone {
             try body(context)
         }
-        output.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
+        output.append(context.buffer.copyToData())
     }
 
     @inline(__always)

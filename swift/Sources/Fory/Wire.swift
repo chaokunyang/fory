@@ -69,9 +69,7 @@ public enum Wire {
         to base: UnsafeMutablePointer<UInt8>,
         index: Int
     ) -> Int {
-        let little = value.littleEndian
-        base[index] = UInt8(truncatingIfNeeded: little)
-        base[index + 1] = UInt8(truncatingIfNeeded: little >> 8)
+        UnsafeMutableRawPointer(base).storeBytes(of: value.littleEndian, toByteOffset: index, as: UInt16.self)
         return index + 2
     }
 
@@ -242,29 +240,36 @@ public enum Wire {
             base[index] = UInt8(value)
             return index + 1
         }
+        var encoded = UInt64((value & 0x7F) | 0x80)
+        encoded |= UInt64(value & 0x3F80) << 1
         if value < 0x4000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = UInt8(truncatingIfNeeded: value >> 7)
+            UnsafeMutableRawPointer(base).storeBytes(
+                of: UInt16(truncatingIfNeeded: encoded).littleEndian,
+                toByteOffset: index,
+                as: UInt16.self
+            )
             return index + 2
         }
+        encoded |= (UInt64(value & 0x1FC000) << 2) | 0x8000
         if value < 0x20_0000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            base[index + 2] = UInt8(truncatingIfNeeded: value >> 14)
+            UnsafeMutableRawPointer(base).storeBytes(
+                of: UInt32(truncatingIfNeeded: encoded).littleEndian,
+                toByteOffset: index,
+                as: UInt32.self
+            )
             return index + 3
         }
+        encoded |= (UInt64(value & 0xFE00000) << 3) | 0x800000
         if value < 0x1000_0000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            base[index + 2] = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            base[index + 3] = UInt8(truncatingIfNeeded: value >> 21)
+            UnsafeMutableRawPointer(base).storeBytes(
+                of: UInt32(truncatingIfNeeded: encoded).littleEndian,
+                toByteOffset: index,
+                as: UInt32.self
+            )
             return index + 4
         }
-        base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-        base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-        base[index + 2] = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-        base[index + 3] = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-        base[index + 4] = UInt8(truncatingIfNeeded: value >> 28)
+        encoded |= (UInt64(value >> 28) << 32) | 0x80000000
+        UnsafeMutableRawPointer(base).storeBytes(of: encoded.littleEndian, toByteOffset: index, as: UInt64.self)
         return index + 5
     }
 
@@ -279,70 +284,56 @@ public enum Wire {
             base[index] = UInt8(value)
             return index + 1
         }
+        var encoded = (value & 0x7F) | 0x80
+        encoded |= (value & 0x3F80) << 1
         if value < 0x4000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = UInt8(truncatingIfNeeded: value >> 7)
+            UnsafeMutableRawPointer(base).storeBytes(
+                of: UInt16(truncatingIfNeeded: encoded).littleEndian,
+                toByteOffset: index,
+                as: UInt16.self
+            )
             return index + 2
         }
+        encoded |= ((value & 0x1FC000) << 2) | 0x8000
         if value < 0x20_0000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            base[index + 2] = UInt8(truncatingIfNeeded: value >> 14)
+            UnsafeMutableRawPointer(base).storeBytes(
+                of: UInt32(truncatingIfNeeded: encoded).littleEndian,
+                toByteOffset: index,
+                as: UInt32.self
+            )
             return index + 3
         }
+        encoded |= ((value & 0xFE00000) << 3) | 0x800000
         if value < 0x1000_0000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            base[index + 2] = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            base[index + 3] = UInt8(truncatingIfNeeded: value >> 21)
+            UnsafeMutableRawPointer(base).storeBytes(
+                of: UInt32(truncatingIfNeeded: encoded).littleEndian,
+                toByteOffset: index,
+                as: UInt32.self
+            )
             return index + 4
         }
+        encoded |= ((value & 0x7F0000000) << 4) | 0x80000000
         if value < 0x8_0000_0000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            base[index + 2] = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            base[index + 3] = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-            base[index + 4] = UInt8(truncatingIfNeeded: value >> 28)
+            UnsafeMutableRawPointer(base).storeBytes(of: encoded.littleEndian, toByteOffset: index, as: UInt64.self)
             return index + 5
         }
+        encoded |= ((value & 0x3F800000000) << 5) | 0x8000000000
         if value < 0x400_0000_0000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            base[index + 2] = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            base[index + 3] = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-            base[index + 4] = (UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80
-            base[index + 5] = UInt8(truncatingIfNeeded: value >> 35)
+            UnsafeMutableRawPointer(base).storeBytes(of: encoded.littleEndian, toByteOffset: index, as: UInt64.self)
             return index + 6
         }
+        encoded |= ((value & 0x1FC0000000000) << 6) | 0x800000000000
         if value < 0x2_0000_0000_0000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            base[index + 2] = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            base[index + 3] = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-            base[index + 4] = (UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80
-            base[index + 5] = (UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80
-            base[index + 6] = UInt8(truncatingIfNeeded: value >> 42)
+            UnsafeMutableRawPointer(base).storeBytes(of: encoded.littleEndian, toByteOffset: index, as: UInt64.self)
             return index + 7
         }
+        encoded |= ((value & 0xFE000000000000) << 7) | 0x80000000000000
         if value < 0x100_0000_0000_0000 {
-            base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-            base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-            base[index + 2] = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-            base[index + 3] = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-            base[index + 4] = (UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80
-            base[index + 5] = (UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80
-            base[index + 6] = (UInt8(truncatingIfNeeded: value >> 42) & 0x7F) | 0x80
-            base[index + 7] = UInt8(truncatingIfNeeded: value >> 49)
+            UnsafeMutableRawPointer(base).storeBytes(of: encoded.littleEndian, toByteOffset: index, as: UInt64.self)
             return index + 8
         }
-        base[index] = (UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80
-        base[index + 1] = (UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80
-        base[index + 2] = (UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80
-        base[index + 3] = (UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80
-        base[index + 4] = (UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80
-        base[index + 5] = (UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80
-        base[index + 6] = (UInt8(truncatingIfNeeded: value >> 42) & 0x7F) | 0x80
-        base[index + 7] = (UInt8(truncatingIfNeeded: value >> 49) & 0x7F) | 0x80
+        encoded |= 0x8000000000000000
+        UnsafeMutableRawPointer(base).storeBytes(of: encoded.littleEndian, toByteOffset: index, as: UInt64.self)
         base[index + 8] = UInt8(truncatingIfNeeded: value >> 56)
         return index + 9
     }
@@ -389,9 +380,7 @@ public enum Wire {
         from base: UnsafePointer<UInt8>,
         index: Int
     ) -> UInt16 {
-        let b0 = UInt16(base[index])
-        let b1 = UInt16(base[index + 1]) << 8
-        return b0 | b1
+        loadUInt16(from: base, index: index)
     }
 
     @inlinable
@@ -630,56 +619,7 @@ public enum Wire {
         guard let base = bytes.baseAddress else {
             throw ForyError.outOfBounds(cursor: index, need: 1, length: bytes.count)
         }
-        let available = bytes.count - index
-        guard available > 0 else {
-            throw ForyError.outOfBounds(cursor: index, need: 1, length: bytes.count)
-        }
-
-        let b0 = base[index]
-        if b0 < 0x80 {
-            index += 1
-            return UInt32(b0)
-        }
-        guard available >= 2 else {
-            throw ForyError.outOfBounds(cursor: index, need: 2, length: bytes.count)
-        }
-        let b1 = base[index + 1]
-        if b1 < 0x80 {
-            index += 2
-            return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
-        }
-        guard available >= 3 else {
-            throw ForyError.outOfBounds(cursor: index, need: 3, length: bytes.count)
-        }
-        let b2 = base[index + 2]
-        if b2 < 0x80 {
-            index += 3
-            return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
-        }
-        guard available >= 4 else {
-            throw ForyError.outOfBounds(cursor: index, need: 4, length: bytes.count)
-        }
-        let b3 = base[index + 3]
-        if b3 < 0x80 {
-            index += 4
-            return UInt32(b0 & 0x7F) |
-                (UInt32(b1 & 0x7F) << 7) |
-                (UInt32(b2 & 0x7F) << 14) |
-                (UInt32(b3) << 21)
-        }
-        guard available >= 5 else {
-            throw ForyError.outOfBounds(cursor: index, need: 5, length: bytes.count)
-        }
-        let b4 = base[index + 4]
-        if b4 >= 0x80 {
-            throw ForyError.encodingError("varuint32 overflow")
-        }
-        index += 5
-        return UInt32(b0 & 0x7F) |
-            (UInt32(b1 & 0x7F) << 7) |
-            (UInt32(b2 & 0x7F) << 14) |
-            (UInt32(b3 & 0x7F) << 21) |
-            (UInt32(b4) << 28)
+        return try readVarUInt32(from: base, length: bytes.count, index: &index)
     }
 
     @inlinable
@@ -688,197 +628,10 @@ public enum Wire {
         from bytes: UnsafeBufferPointer<UInt8>,
         index: inout Int
     ) throws -> UInt64 {
-        let available = bytes.count - index
         guard let base = bytes.baseAddress else {
             throw ForyError.outOfBounds(cursor: index, need: 1, length: bytes.count)
         }
-        if available >= 9 {
-            let offset = index
-            let b0 = base[offset]
-            if b0 < 0x80 {
-                index = offset + 1
-                return UInt64(b0)
-            }
-
-            let b1 = base[offset + 1]
-            if b1 < 0x80 {
-                index = offset + 2
-                return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
-            }
-
-            let b2 = base[offset + 2]
-            if b2 < 0x80 {
-                index = offset + 3
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2) << 14)
-            }
-
-            let b3 = base[offset + 3]
-            if b3 < 0x80 {
-                index = offset + 4
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3) << 21)
-            }
-
-            let b4 = base[offset + 4]
-            if b4 < 0x80 {
-                index = offset + 5
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4) << 28)
-            }
-
-            let b5 = base[offset + 5]
-            if b5 < 0x80 {
-                index = offset + 6
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5) << 35)
-            }
-
-            let b6 = base[offset + 6]
-            if b6 < 0x80 {
-                index = offset + 7
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5 & 0x7F) << 35) |
-                    (UInt64(b6) << 42)
-            }
-
-            let b7 = base[offset + 7]
-            if b7 < 0x80 {
-                index = offset + 8
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5 & 0x7F) << 35) |
-                    (UInt64(b6 & 0x7F) << 42) |
-                    (UInt64(b7) << 49)
-            }
-
-            let b8 = base[offset + 8]
-            index = offset + 9
-            let low = UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21)
-            let high = (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6 & 0x7F) << 42) |
-                (UInt64(b7 & 0x7F) << 49) |
-                (UInt64(b8) << 56)
-            return low | high
-        }
-
-        try checkReadable(bytes, index: index, need: 1)
-        let b0 = base[index]
-        if b0 < 0x80 {
-            index += 1
-            return UInt64(b0)
-        }
-
-        try checkReadable(bytes, index: index, need: 2)
-        let b1 = base[index + 1]
-        if b1 < 0x80 {
-            index += 2
-            return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
-        }
-
-        try checkReadable(bytes, index: index, need: 3)
-        let b2 = base[index + 2]
-        if b2 < 0x80 {
-            index += 3
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2) << 14)
-        }
-
-        try checkReadable(bytes, index: index, need: 4)
-        let b3 = base[index + 3]
-        if b3 < 0x80 {
-            index += 4
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3) << 21)
-        }
-
-        try checkReadable(bytes, index: index, need: 5)
-        let b4 = base[index + 4]
-        if b4 < 0x80 {
-            index += 5
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4) << 28)
-        }
-
-        try checkReadable(bytes, index: index, need: 6)
-        let b5 = base[index + 5]
-        if b5 < 0x80 {
-            index += 6
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5) << 35)
-        }
-
-        try checkReadable(bytes, index: index, need: 7)
-        let b6 = base[index + 6]
-        if b6 < 0x80 {
-            index += 7
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6) << 42)
-        }
-
-        try checkReadable(bytes, index: index, need: 8)
-        let b7 = base[index + 7]
-        if b7 < 0x80 {
-            index += 8
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6 & 0x7F) << 42) |
-                (UInt64(b7) << 49)
-        }
-
-        try checkReadable(bytes, index: index, need: 9)
-        let b8 = base[index + 8]
-        index += 9
-        let low = UInt64(b0 & 0x7F) |
-            (UInt64(b1 & 0x7F) << 7) |
-            (UInt64(b2 & 0x7F) << 14) |
-            (UInt64(b3 & 0x7F) << 21)
-        let high = (UInt64(b4 & 0x7F) << 28) |
-            (UInt64(b5 & 0x7F) << 35) |
-            (UInt64(b6 & 0x7F) << 42) |
-            (UInt64(b7 & 0x7F) << 49) |
-            (UInt64(b8) << 56)
-        return low | high
+        return try readVarUInt64(from: base, length: bytes.count, index: &index)
     }
 
     @inlinable
@@ -914,52 +667,35 @@ public enum Wire {
         guard available > 0 else {
             throw ForyError.outOfBounds(cursor: index, need: 1, length: length)
         }
+        if available < 5 {
+            return try readVarUInt32Slow(from: base, length: length, index: &index)
+        }
 
-        let b0 = base[index]
-        if b0 < 0x80 {
-            index += 1
-            return UInt32(b0)
+        let offset = index
+        let bulk = loadUInt32(from: base, index: offset)
+        var result = bulk & 0x7F
+        if (bulk & 0x80) == 0 {
+            index = offset + 1
+            return result
         }
-        guard available >= 2 else {
-            throw ForyError.outOfBounds(cursor: index, need: 2, length: length)
+        result |= (bulk >> 1) & 0x3F80
+        if (bulk & 0x8000) == 0 {
+            index = offset + 2
+            return result
         }
-        let b1 = base[index + 1]
-        if b1 < 0x80 {
-            index += 2
-            return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
+        result |= (bulk >> 2) & 0x1FC000
+        if (bulk & 0x800000) == 0 {
+            index = offset + 3
+            return result
         }
-        guard available >= 3 else {
-            throw ForyError.outOfBounds(cursor: index, need: 3, length: length)
+        result |= (bulk >> 3) & 0xFE00000
+        if (bulk & 0x80000000) == 0 {
+            index = offset + 4
+            return result
         }
-        let b2 = base[index + 2]
-        if b2 < 0x80 {
-            index += 3
-            return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
-        }
-        guard available >= 4 else {
-            throw ForyError.outOfBounds(cursor: index, need: 4, length: length)
-        }
-        let b3 = base[index + 3]
-        if b3 < 0x80 {
-            index += 4
-            return UInt32(b0 & 0x7F) |
-                (UInt32(b1 & 0x7F) << 7) |
-                (UInt32(b2 & 0x7F) << 14) |
-                (UInt32(b3) << 21)
-        }
-        guard available >= 5 else {
-            throw ForyError.outOfBounds(cursor: index, need: 5, length: length)
-        }
-        let b4 = base[index + 4]
-        if b4 >= 0x80 {
-            throw ForyError.encodingError("varuint32 overflow")
-        }
-        index += 5
-        return UInt32(b0 & 0x7F) |
-            (UInt32(b1 & 0x7F) << 7) |
-            (UInt32(b2 & 0x7F) << 14) |
-            (UInt32(b3 & 0x7F) << 21) |
-            (UInt32(b4) << 28)
+        result |= UInt32(base[offset + 4] & 0x7F) << 28
+        index = offset + 5
+        return result
     }
 
     @inlinable
@@ -970,193 +706,55 @@ public enum Wire {
         index: inout Int
     ) throws -> UInt64 {
         let available = length - index
-        if available >= 9 {
-            let offset = index
-            let b0 = base[offset]
-            if b0 < 0x80 {
-                index = offset + 1
-                return UInt64(b0)
-            }
-
-            let b1 = base[offset + 1]
-            if b1 < 0x80 {
-                index = offset + 2
-                return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
-            }
-
-            let b2 = base[offset + 2]
-            if b2 < 0x80 {
-                index = offset + 3
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2) << 14)
-            }
-
-            let b3 = base[offset + 3]
-            if b3 < 0x80 {
-                index = offset + 4
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3) << 21)
-            }
-
-            let b4 = base[offset + 4]
-            if b4 < 0x80 {
-                index = offset + 5
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4) << 28)
-            }
-
-            let b5 = base[offset + 5]
-            if b5 < 0x80 {
-                index = offset + 6
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5) << 35)
-            }
-
-            let b6 = base[offset + 6]
-            if b6 < 0x80 {
-                index = offset + 7
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5 & 0x7F) << 35) |
-                    (UInt64(b6) << 42)
-            }
-
-            let b7 = base[offset + 7]
-            if b7 < 0x80 {
-                index = offset + 8
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5 & 0x7F) << 35) |
-                    (UInt64(b6 & 0x7F) << 42) |
-                    (UInt64(b7) << 49)
-            }
-
-            let b8 = base[offset + 8]
-            index = offset + 9
-            let low = UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21)
-            let high = (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6 & 0x7F) << 42) |
-                (UInt64(b7 & 0x7F) << 49) |
-                (UInt64(b8) << 56)
-            return low | high
+        if available < 9 {
+            return try readVarUInt64Slow(from: base, length: length, index: &index)
         }
 
-        try checkReadable(length: length, index: index, need: 1)
-        let b0 = base[index]
-        if b0 < 0x80 {
-            index += 1
-            return UInt64(b0)
+        let offset = index
+        let bulk = loadUInt64(from: base, index: offset)
+        var result = bulk & 0x7F
+        if (bulk & 0x80) == 0 {
+            index = offset + 1
+            return result
         }
-
-        try checkReadable(length: length, index: index, need: 2)
-        let b1 = base[index + 1]
-        if b1 < 0x80 {
-            index += 2
-            return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
+        result |= (bulk >> 1) & 0x3F80
+        if (bulk & 0x8000) == 0 {
+            index = offset + 2
+            return result
         }
-
-        try checkReadable(length: length, index: index, need: 3)
-        let b2 = base[index + 2]
-        if b2 < 0x80 {
-            index += 3
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2) << 14)
+        result |= (bulk >> 2) & 0x1FC000
+        if (bulk & 0x800000) == 0 {
+            index = offset + 3
+            return result
         }
-
-        try checkReadable(length: length, index: index, need: 4)
-        let b3 = base[index + 3]
-        if b3 < 0x80 {
-            index += 4
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3) << 21)
+        result |= (bulk >> 3) & 0xFE00000
+        if (bulk & 0x80000000) == 0 {
+            index = offset + 4
+            return result
         }
-
-        try checkReadable(length: length, index: index, need: 5)
-        let b4 = base[index + 4]
-        if b4 < 0x80 {
-            index += 5
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4) << 28)
+        result |= (bulk >> 4) & 0x7F0000000
+        if (bulk & 0x8000000000) == 0 {
+            index = offset + 5
+            return result
         }
-
-        try checkReadable(length: length, index: index, need: 6)
-        let b5 = base[index + 5]
-        if b5 < 0x80 {
-            index += 6
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5) << 35)
+        result |= (bulk >> 5) & 0x3F800000000
+        if (bulk & 0x800000000000) == 0 {
+            index = offset + 6
+            return result
         }
-
-        try checkReadable(length: length, index: index, need: 7)
-        let b6 = base[index + 6]
-        if b6 < 0x80 {
-            index += 7
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6) << 42)
+        result |= (bulk >> 6) & 0x1FC0000000000
+        if (bulk & 0x80000000000000) == 0 {
+            index = offset + 7
+            return result
         }
-
-        try checkReadable(length: length, index: index, need: 8)
-        let b7 = base[index + 7]
-        if b7 < 0x80 {
-            index += 8
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6 & 0x7F) << 42) |
-                (UInt64(b7) << 49)
+        result |= (bulk >> 7) & 0xFE000000000000
+        if (bulk & 0x8000000000000000) == 0 {
+            index = offset + 8
+            return result
         }
-
-        try checkReadable(length: length, index: index, need: 9)
-        let b8 = base[index + 8]
-        index += 9
-        let low = UInt64(b0 & 0x7F) |
-            (UInt64(b1 & 0x7F) << 7) |
-            (UInt64(b2 & 0x7F) << 14) |
-            (UInt64(b3 & 0x7F) << 21)
-        let high = (UInt64(b4 & 0x7F) << 28) |
-            (UInt64(b5 & 0x7F) << 35) |
-            (UInt64(b6 & 0x7F) << 42) |
-            (UInt64(b7 & 0x7F) << 49) |
-            (UInt64(b8) << 56)
-        return low | high
+        result |= UInt64(base[offset + 8]) << 56
+        index = offset + 9
+        return result
     }
 
     @inlinable
@@ -1196,11 +794,7 @@ public enum Wire {
         to base: UnsafeMutablePointer<UInt8>,
         index: Int
     ) -> Int {
-        let little = value.littleEndian
-        base[index] = UInt8(truncatingIfNeeded: little)
-        base[index + 1] = UInt8(truncatingIfNeeded: little >> 8)
-        base[index + 2] = UInt8(truncatingIfNeeded: little >> 16)
-        base[index + 3] = UInt8(truncatingIfNeeded: little >> 24)
+        UnsafeMutableRawPointer(base).storeBytes(of: value.littleEndian, toByteOffset: index, as: UInt32.self)
         return index + 4
     }
 
@@ -1211,15 +805,7 @@ public enum Wire {
         to base: UnsafeMutablePointer<UInt8>,
         index: Int
     ) -> Int {
-        let little = value.littleEndian
-        base[index] = UInt8(truncatingIfNeeded: little)
-        base[index + 1] = UInt8(truncatingIfNeeded: little >> 8)
-        base[index + 2] = UInt8(truncatingIfNeeded: little >> 16)
-        base[index + 3] = UInt8(truncatingIfNeeded: little >> 24)
-        base[index + 4] = UInt8(truncatingIfNeeded: little >> 32)
-        base[index + 5] = UInt8(truncatingIfNeeded: little >> 40)
-        base[index + 6] = UInt8(truncatingIfNeeded: little >> 48)
-        base[index + 7] = UInt8(truncatingIfNeeded: little >> 56)
+        UnsafeMutableRawPointer(base).storeBytes(of: value.littleEndian, toByteOffset: index, as: UInt64.self)
         return index + 8
     }
 
@@ -1229,11 +815,7 @@ public enum Wire {
         from base: UnsafePointer<UInt8>,
         index: Int
     ) -> UInt32 {
-        let b0 = UInt32(base[index])
-        let b1 = UInt32(base[index + 1]) << 8
-        let b2 = UInt32(base[index + 2]) << 16
-        let b3 = UInt32(base[index + 3]) << 24
-        return b0 | b1 | b2 | b3
+        loadUInt32(from: base, index: index)
     }
 
     @inlinable
@@ -1242,15 +824,108 @@ public enum Wire {
         from base: UnsafePointer<UInt8>,
         index: Int
     ) -> UInt64 {
-        let b0 = UInt64(base[index])
-        let b1 = UInt64(base[index + 1]) << 8
-        let b2 = UInt64(base[index + 2]) << 16
-        let b3 = UInt64(base[index + 3]) << 24
-        let b4 = UInt64(base[index + 4]) << 32
-        let b5 = UInt64(base[index + 5]) << 40
-        let b6 = UInt64(base[index + 6]) << 48
-        let b7 = UInt64(base[index + 7]) << 56
-        return b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
+        loadUInt64(from: base, index: index)
+    }
+
+    @inlinable
+    @inline(__always)
+    static func loadUInt16(
+        from base: UnsafePointer<UInt8>,
+        index: Int
+    ) -> UInt16 {
+        let raw = UnsafeRawPointer(base)
+        if ((Int(bitPattern: raw) + index) & (MemoryLayout<UInt16>.alignment - 1)) == 0 {
+            return UInt16(littleEndian: raw.load(fromByteOffset: index, as: UInt16.self))
+        }
+        return UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: index, as: UInt16.self))
+    }
+
+    @inlinable
+    @inline(__always)
+    static func loadUInt32(
+        from base: UnsafePointer<UInt8>,
+        index: Int
+    ) -> UInt32 {
+        let raw = UnsafeRawPointer(base)
+        if ((Int(bitPattern: raw) + index) & (MemoryLayout<UInt32>.alignment - 1)) == 0 {
+            return UInt32(littleEndian: raw.load(fromByteOffset: index, as: UInt32.self))
+        }
+        return UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: index, as: UInt32.self))
+    }
+
+    @inlinable
+    @inline(__always)
+    static func loadUInt64(
+        from base: UnsafePointer<UInt8>,
+        index: Int
+    ) -> UInt64 {
+        let raw = UnsafeRawPointer(base)
+        if ((Int(bitPattern: raw) + index) & (MemoryLayout<UInt64>.alignment - 1)) == 0 {
+            return UInt64(littleEndian: raw.load(fromByteOffset: index, as: UInt64.self))
+        }
+        return UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: index, as: UInt64.self))
+    }
+
+    @inlinable
+    @inline(__always)
+    static func readVarUInt32Slow(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> UInt32 {
+        var position = index
+        var result: UInt32 = 0
+        var shift: UInt32 = 0
+        for step in 0..<5 {
+            if position >= length {
+                throw ForyError.outOfBounds(cursor: position, need: 1, length: length)
+            }
+            let byte = base[position]
+            position += 1
+            if step == 4, byte >= 0x80 {
+                throw ForyError.encodingError("varuint32 overflow")
+            }
+            result |= UInt32(byte & 0x7F) << shift
+            if byte < 0x80 {
+                index = position
+                return result
+            }
+            shift += 7
+        }
+        throw ForyError.encodingError("varuint32 overflow")
+    }
+
+    @inlinable
+    @inline(__always)
+    static func readVarUInt64Slow(
+        from base: UnsafePointer<UInt8>,
+        length: Int,
+        index: inout Int
+    ) throws -> UInt64 {
+        var position = index
+        var result: UInt64 = 0
+        var shift: UInt64 = 0
+        for _ in 0..<8 {
+            if position >= length {
+                throw ForyError.outOfBounds(cursor: position, need: 1, length: length)
+            }
+            let byte = base[position]
+            position += 1
+            result |= UInt64(byte & 0x7F) << shift
+            if byte < 0x80 {
+                index = position
+                return result
+            }
+            shift += 7
+        }
+        if position >= length {
+            throw ForyError.outOfBounds(cursor: position, need: 1, length: length)
+        }
+        let last = base[position]
+        position += 1
+        result |= UInt64(last) << 56
+        index = position
+        return result
     }
 
     @inlinable
@@ -1287,11 +962,30 @@ public enum Wire {
         guard exactCount > 0 else {
             return
         }
-        let start = buffer.storage.count
-        buffer.storage.append(contentsOf: repeatElement(0, count: exactCount))
-        buffer.storage.withUnsafeMutableBufferPointer { bytes in
-            body(bytes.baseAddress!.advanced(by: start))
+        buffer.ensureWritable(exactCount)
+        let start = buffer.writerIndex
+        body(buffer.bytesBaseAddress!.advanced(by: start))
+        buffer.advanceWriterIndex(exactCount)
+    }
+
+    @inlinable
+    @inline(__always)
+    public static func writeRegion(
+        buffer: ByteBuffer,
+        maxCount: Int,
+        _ body: (UnsafeMutablePointer<UInt8>) -> Int
+    ) {
+        guard maxCount > 0 else {
+            return
         }
+        buffer.ensureWritable(maxCount)
+        let start = buffer.writerIndex
+        let written = body(buffer.bytesBaseAddress!.advanced(by: start))
+        precondition(
+            written >= 0 && written <= maxCount,
+            "writeRegion wrote \(written) bytes into a maxCount \(maxCount) region"
+        )
+        buffer.advanceWriterIndex(written)
     }
 
     @inlinable
@@ -1300,16 +994,14 @@ public enum Wire {
         buffer: ByteBuffer,
         _ body: (UnsafeBufferPointer<UInt8>) throws -> Int
     ) throws {
-        let available = buffer.count - buffer.cursor
-        let consumed = try buffer.storage.withUnsafeBufferPointer { bytes -> Int in
-            let start = bytes.baseAddress.map { $0.advanced(by: buffer.cursor) }
-            let region = UnsafeBufferPointer(start: start, count: available)
-            return try body(region)
-        }
+        let available = buffer.count - buffer.readerIndex
+        let start = buffer.bytesBaseAddress.map { UnsafePointer($0.advanced(by: buffer.readerIndex)) }
+        let region = UnsafeBufferPointer(start: start, count: available)
+        let consumed = try body(region)
         if consumed < 0 || consumed > available {
-            throw ForyError.outOfBounds(cursor: buffer.cursor, need: consumed, length: buffer.count)
+            throw ForyError.outOfBounds(cursor: buffer.readerIndex, need: consumed, length: buffer.count)
         }
-        buffer.cursor += consumed
+        buffer.advanceReaderIndex(consumed)
     }
 
     @inline(__always)

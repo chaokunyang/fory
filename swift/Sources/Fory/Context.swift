@@ -18,22 +18,48 @@
 import Foundation
 
 final class CompatibleTypeDefWriteState {
+    private var hasFirstTypeInfo = false
+    private var firstSwiftTypeID: ObjectIdentifier?
+    private var typeIndexMapActive = false
     private let typeIndexBySwiftType = ObjectIdMap(initialCapacity: 8)
 
     init() {}
 
     @inline(__always)
     func assignIndexIfAbsent(for typeInfo: TypeInfo) -> (index: UInt32, isNew: Bool) {
+        let swiftTypeID = typeInfo.swiftTypeID
+        if !typeIndexMapActive {
+            if !hasFirstTypeInfo {
+                hasFirstTypeInfo = true
+                firstSwiftTypeID = swiftTypeID
+                return (0, true)
+            }
+            if swiftTypeID == firstSwiftTypeID {
+                return (0, false)
+            }
+            typeIndexMapActive = true
+            if let firstSwiftTypeID {
+                _ = typeIndexBySwiftType.putIfAbsent(0, for: firstSwiftTypeID)
+            }
+        } else if swiftTypeID == firstSwiftTypeID {
+            return (0, false)
+        }
+
         let assignment = typeIndexBySwiftType.putIfAbsent(
             UInt32(typeIndexBySwiftType.count),
-            for: typeInfo.swiftTypeID
+            for: swiftTypeID
         )
         return (assignment.value, assignment.inserted)
     }
 
     @inline(__always)
     func reset() {
-        if !typeIndexBySwiftType.isEmpty {
+        if hasFirstTypeInfo {
+            hasFirstTypeInfo = false
+            firstSwiftTypeID = nil
+        }
+        if typeIndexMapActive {
+            typeIndexMapActive = false
             typeIndexBySwiftType.removeAll(keepingCapacity: true)
         }
     }

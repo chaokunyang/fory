@@ -17,77 +17,153 @@
 
 import Foundation
 
+// swiftlint:disable type_body_length
 public final class ByteBuffer {
     @usableFromInline
-    internal var storage: [UInt8]
+    internal var storage: UnsafeMutableRawPointer?
 
     @usableFromInline
-    internal var cursor: Int
+    internal var capacity: Int
+
+    @usableFromInline
+    internal var writerIndex: Int
+
+    @usableFromInline
+    internal var readerIndex: Int
 
     private var dataBridge = Data()
 
     @inlinable
     public init(capacity: Int = 256) {
-        storage = []
-        storage.reserveCapacity(capacity)
-        cursor = 0
+        let initialCapacity = Self.roundCapacity(capacity)
+        storage = initialCapacity > 0
+            ? UnsafeMutableRawPointer.allocate(
+                byteCount: initialCapacity,
+                alignment: MemoryLayout<UInt64>.alignment
+            )
+            : nil
+        self.capacity = initialCapacity
+        writerIndex = 0
+        readerIndex = 0
     }
 
     @inlinable
     public init(data: Data) {
-        storage = Array(data)
-        cursor = 0
+        let initialCapacity = Self.roundCapacity(data.count)
+        storage = initialCapacity > 0
+            ? UnsafeMutableRawPointer.allocate(
+                byteCount: initialCapacity,
+                alignment: MemoryLayout<UInt64>.alignment
+            )
+            : nil
+        capacity = initialCapacity
+        writerIndex = data.count
+        readerIndex = 0
+        if data.count > 0 {
+            data.withUnsafeBytes { source in
+                guard let sourceBase = source.baseAddress, let storage else {
+                    return
+                }
+                storage.copyMemory(from: sourceBase, byteCount: data.count)
+            }
+        }
     }
 
     @inlinable
     public init(bytes: [UInt8]) {
-        storage = bytes
-        cursor = 0
+        let initialCapacity = Self.roundCapacity(bytes.count)
+        storage = initialCapacity > 0
+            ? UnsafeMutableRawPointer.allocate(
+                byteCount: initialCapacity,
+                alignment: MemoryLayout<UInt64>.alignment
+            )
+            : nil
+        capacity = initialCapacity
+        writerIndex = bytes.count
+        readerIndex = 0
+        if bytes.count > 0 {
+            bytes.withUnsafeBytes { source in
+                guard let sourceBase = source.baseAddress, let storage else {
+                    return
+                }
+                storage.copyMemory(from: sourceBase, byteCount: bytes.count)
+            }
+        }
+    }
+
+    deinit {
+        storage?.deallocate()
     }
 
     @inlinable
     public var count: Int {
-        storage.count
+        writerIndex
     }
 
     @inlinable
     public var remaining: Int {
-        storage.count - cursor
+        writerIndex - readerIndex
     }
 
     @usableFromInline
     @inline(__always)
     internal var readableCount: Int {
-        storage.count
+        writerIndex
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal var bytesBaseAddress: UnsafeMutablePointer<UInt8>? {
+        storage?.assumingMemoryBound(to: UInt8.self)
     }
 
     @usableFromInline
     @inline(__always)
     internal func byte(at index: Int) -> UInt8 {
-        return storage[index]
+        bytesBaseAddress![index]
     }
 
     @usableFromInline
     @inline(__always)
     internal func copyBytes(start: Int, end: Int) -> [UInt8] {
         let length = end - start
-        guard length > 0 else {
+        guard length > 0, let storage else {
             return []
         }
-        return Array(storage[start..<end])
+        return [UInt8](unsafeUninitializedCapacity: length) { destination, initializedCount in
+            guard let destinationBase = destination.baseAddress else {
+                initializedCount = 0
+                return
+            }
+            UnsafeMutableRawPointer(destinationBase).copyMemory(
+                from: storage.advanced(by: start),
+                byteCount: length
+            )
+            initializedCount = length
+        }
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func readableBytes() -> [UInt8] {
+        copyBytes(start: 0, end: writerIndex)
     }
 
     @usableFromInline
     @inline(__always)
     internal func matchesBytes(start: Int, bytes: [UInt8]) -> Bool {
-        var index = 0
-        while index < bytes.count {
-            if storage[start + index] != bytes[index] {
-                return false
-            }
-            index += 1
+        guard !bytes.isEmpty else {
+            return true
         }
-        return true
+        guard let storage else {
+            return false
+        }
+        return bytes.withUnsafeBytes { source in
+            guard let sourceBase = source.baseAddress else {
+                return true
+            }
+            return memcmp(storage.advanced(by: start), sourceBase, bytes.count) == 0
+        }
     }
 
     @usableFromInline
@@ -95,18 +171,19 @@ public final class ByteBuffer {
     internal func withUnsafeReadableBytes<R>(
         _ body: (UnsafeBufferPointer<UInt8>) throws -> R
     ) rethrows -> R {
-        return try storage.withUnsafeBufferPointer(body)
+        let readable = UnsafeBufferPointer(start: bytesBaseAddress, count: writerIndex)
+        return try body(readable)
     }
 
     @inlinable
     public func reserve(_ additional: Int) {
-        storage.reserveCapacity(storage.count + additional)
+        ensureCapacity(writerIndex + additional)
     }
 
     @inlinable
     public func clear() {
-        storage.removeAll(keepingCapacity: true)
-        cursor = 0
+        readerIndex = 0
+        writerIndex = 0
     }
 
     @inlinable
@@ -116,65 +193,53 @@ public final class ByteBuffer {
 
     @inlinable
     public func flip() {
-        cursor = 0
+        readerIndex = 0
     }
 
     @inlinable
     public func setCursor(_ value: Int) {
-        cursor = value
+        readerIndex = value
     }
 
     @inlinable
     public func replace(with data: Data) {
         let dataCount = data.count
-        if storage.count < dataCount {
-            storage.append(contentsOf: repeatElement(0, count: dataCount - storage.count))
-        } else if storage.count > dataCount {
-            storage.removeLast(storage.count - dataCount)
-        }
-
+        ensureCapacity(dataCount)
         if dataCount > 0 {
             data.withUnsafeBytes { source in
-                storage.withUnsafeMutableBufferPointer { destination in
-                    guard let sourceBase = source.baseAddress, let destinationBase = destination.baseAddress else {
-                        return
-                    }
-                    UnsafeMutableRawPointer(destinationBase).copyMemory(
-                        from: sourceBase,
-                        byteCount: dataCount
-                    )
+                guard let sourceBase = source.baseAddress, let storage else {
+                    return
                 }
+                storage.copyMemory(from: sourceBase, byteCount: dataCount)
             }
         }
-        cursor = 0
+        writerIndex = dataCount
+        readerIndex = 0
     }
 
     @usableFromInline
     @inline(__always)
     internal func swapState(with other: ByteBuffer) {
         swap(&storage, &other.storage)
-        swap(&cursor, &other.cursor)
+        swap(&capacity, &other.capacity)
+        swap(&writerIndex, &other.writerIndex)
+        swap(&readerIndex, &other.readerIndex)
         swap(&dataBridge, &other.dataBridge)
     }
 
     @usableFromInline
     @inline(__always)
     internal func copyToData() -> Data {
-        let byteCount = storage.count
+        let byteCount = writerIndex
         if dataBridge.count != byteCount {
             dataBridge.count = byteCount
         }
-        if byteCount > 0 {
+        if byteCount > 0, let storage {
             dataBridge.withUnsafeMutableBytes { destination in
                 guard let destinationBase = destination.baseAddress else {
                     return
                 }
-                storage.withUnsafeBytes { source in
-                    guard let sourceBase = source.baseAddress else {
-                        return
-                    }
-                    destinationBase.copyMemory(from: sourceBase, byteCount: byteCount)
-                }
+                destinationBase.copyMemory(from: storage, byteCount: byteCount)
             }
         }
         return dataBridge
@@ -202,180 +267,112 @@ public final class ByteBuffer {
 
     @inlinable
     public func getCursor() -> Int {
-        cursor
+        readerIndex
     }
 
     @inlinable
     public func moveBack(_ amount: Int) {
-        cursor -= amount
+        readerIndex -= amount
     }
 
-    @inlinable
+    @usableFromInline
     @inline(__always)
-    internal func appendLittleEndian<T: FixedWidthInteger>(_ value: T) {
-        var little = value.littleEndian
-        withUnsafeBytes(of: &little) { raw in
-            storage.append(contentsOf: raw)
-        }
+    internal func ensureWritable(_ need: Int) {
+        ensureCapacity(writerIndex + need)
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func advanceWriterIndex(_ delta: Int) {
+        writerIndex += delta
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func advanceReaderIndex(_ delta: Int) {
+        readerIndex += delta
     }
 
     @inlinable
     @inline(__always)
     public func writeUInt8(_ value: UInt8) {
-        storage.append(value)
+        ensureWritable(1)
+        bytesBaseAddress![writerIndex] = value
+        writerIndex += 1
     }
 
     @inlinable
     @inline(__always)
     public func writeInt8(_ value: Int8) {
-        storage.append(UInt8(bitPattern: value))
+        ensureWritable(1)
+        bytesBaseAddress![writerIndex] = UInt8(bitPattern: value)
+        writerIndex += 1
     }
 
     @inlinable
     @inline(__always)
     public func writeUInt16(_ value: UInt16) {
-        appendLittleEndian(value)
+        ensureWritable(2)
+        storage!.storeBytes(of: value.littleEndian, toByteOffset: writerIndex, as: UInt16.self)
+        writerIndex += 2
     }
 
     @inlinable
     public func writeInt16(_ value: Int16) {
-        writeUInt16(UInt16(bitPattern: value))
+        ensureWritable(2)
+        storage!.storeBytes(of: UInt16(bitPattern: value).littleEndian, toByteOffset: writerIndex, as: UInt16.self)
+        writerIndex += 2
     }
 
     @inlinable
     @inline(__always)
     public func writeUInt32(_ value: UInt32) {
-        appendLittleEndian(value)
+        ensureWritable(4)
+        storage!.storeBytes(of: value.littleEndian, toByteOffset: writerIndex, as: UInt32.self)
+        writerIndex += 4
     }
 
     @inlinable
     public func writeInt32(_ value: Int32) {
-        writeUInt32(UInt32(bitPattern: value))
+        ensureWritable(4)
+        storage!.storeBytes(of: UInt32(bitPattern: value).littleEndian, toByteOffset: writerIndex, as: UInt32.self)
+        writerIndex += 4
     }
 
     @inlinable
     @inline(__always)
     public func writeUInt64(_ value: UInt64) {
-        appendLittleEndian(value)
+        ensureWritable(8)
+        storage!.storeBytes(of: value.littleEndian, toByteOffset: writerIndex, as: UInt64.self)
+        writerIndex += 8
     }
 
     @inlinable
     public func writeInt64(_ value: Int64) {
-        writeUInt64(UInt64(bitPattern: value))
+        ensureWritable(8)
+        storage!.storeBytes(of: UInt64(bitPattern: value).littleEndian, toByteOffset: writerIndex, as: UInt64.self)
+        writerIndex += 8
     }
 
     @inlinable
     @inline(__always)
     public func writeVarUInt32(_ value: UInt32) {
-        if value < 0x80 {
-            storage.append(UInt8(value))
-            return
-        }
-        if value < 0x4000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 7))
-            return
-        }
-        if value < 0x20_0000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 14))
-            return
-        }
-        if value < 0x1000_0000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 21))
-            return
-        }
-
-        storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
-        storage.append(UInt8(truncatingIfNeeded: value >> 28))
+        ensureWritable(8)
+        writerIndex += putVarUInt32(at: writerIndex, value: value)
     }
 
     @inlinable
     @inline(__always)
     public func writeVarUInt64(_ value: UInt64) {
-        if value < 0x80 {
-            storage.append(UInt8(value))
-            return
-        }
-        if value < 0x4000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 7))
-            return
-        }
-        if value < 0x20_0000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 14))
-            return
-        }
-        if value < 0x1000_0000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 21))
-            return
-        }
-        if value < 0x8_0000_0000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 28))
-            return
-        }
-        if value < 0x400_0000_0000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 35))
-            return
-        }
-        if value < 0x2_0000_0000_0000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 42))
-            return
-        }
-        if value < 0x100_0000_0000_0000 {
-            storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80)
-            storage.append((UInt8(truncatingIfNeeded: value >> 42) & 0x7F) | 0x80)
-            storage.append(UInt8(truncatingIfNeeded: value >> 49))
-            return
-        }
-
-        storage.append((UInt8(truncatingIfNeeded: value) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 7) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 14) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 21) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 28) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 35) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 42) & 0x7F) | 0x80)
-        storage.append((UInt8(truncatingIfNeeded: value >> 49) & 0x7F) | 0x80)
-        storage.append(UInt8(truncatingIfNeeded: value >> 56))
+        ensureWritable(9)
+        writerIndex += putVarUInt64(at: writerIndex, value: value)
     }
 
     @inlinable
     public func writeVarUInt36Small(_ value: UInt64) {
         precondition(value < (1 << 36), "varuint36small overflow")
-        writeVarUInt64(value)
+        ensureWritable(8)
+        writerIndex += putVarUInt36Small(at: writerIndex, value: value)
     }
 
     @inlinable
@@ -396,20 +393,28 @@ public final class ByteBuffer {
     public func writeTaggedInt64(_ value: Int64) {
         if (-1_073_741_824 ... 1_073_741_823).contains(value) {
             writeInt32(Int32(truncatingIfNeeded: value) << 1)
-        } else {
-            writeUInt8(0x01)
-            writeInt64(value)
+            return
         }
+        ensureWritable(9)
+        bytesBaseAddress![writerIndex] = 0x01
+        storage!.storeBytes(
+            of: UInt64(bitPattern: value).littleEndian,
+            toByteOffset: writerIndex + 1,
+            as: UInt64.self
+        )
+        writerIndex += 9
     }
 
     @inlinable
     public func writeTaggedUInt64(_ value: UInt64) {
         if value <= UInt64(Int32.max) {
             writeUInt32(UInt32(truncatingIfNeeded: value) << 1)
-        } else {
-            writeUInt8(0x01)
-            writeUInt64(value)
+            return
         }
+        ensureWritable(9)
+        bytesBaseAddress![writerIndex] = 0x01
+        storage!.storeBytes(of: value.littleEndian, toByteOffset: writerIndex + 1, as: UInt64.self)
+        writerIndex += 9
     }
 
     @inlinable
@@ -424,69 +429,128 @@ public final class ByteBuffer {
 
     @inlinable
     public func writeBytes(_ bytes: some Collection<UInt8>) {
-        storage.append(contentsOf: bytes)
+        let length = bytes.count
+        guard length > 0 else {
+            return
+        }
+        ensureWritable(length)
+        let destination = bytesBaseAddress!.advanced(by: writerIndex)
+        if bytes.withContiguousStorageIfAvailable({ contiguousBytes in
+            guard let sourceBase = contiguousBytes.baseAddress else {
+                return
+            }
+            UnsafeMutableRawPointer(destination).copyMemory(
+                from: UnsafeRawPointer(sourceBase),
+                byteCount: contiguousBytes.count
+            )
+        }) != nil {
+            writerIndex += length
+            return
+        }
+        var offset = 0
+        for byte in bytes {
+            destination[offset] = byte
+            offset += 1
+        }
+        writerIndex += length
     }
 
     @inlinable
     @inline(__always)
     public func writeBytes(_ bytes: [UInt8]) {
-        storage.append(contentsOf: bytes)
+        let length = bytes.count
+        guard length > 0 else {
+            return
+        }
+        ensureWritable(length)
+        bytes.withUnsafeBytes { source in
+            guard let sourceBase = source.baseAddress, let destination = bytesBaseAddress else {
+                return
+            }
+            UnsafeMutableRawPointer(destination.advanced(by: writerIndex))
+                .copyMemory(from: sourceBase, byteCount: length)
+        }
+        writerIndex += length
     }
 
     @inlinable
     public func writeBytes(_ bytes: UnsafeRawBufferPointer) {
-        storage.append(contentsOf: bytes)
+        let length = bytes.count
+        guard length > 0, let sourceBase = bytes.baseAddress else {
+            return
+        }
+        ensureWritable(length)
+        UnsafeMutableRawPointer(bytesBaseAddress!.advanced(by: writerIndex))
+            .copyMemory(from: sourceBase, byteCount: length)
+        writerIndex += length
     }
 
     @inlinable
     public func writeData(_ data: Data) {
-        storage.append(contentsOf: data)
+        let length = data.count
+        guard length > 0 else {
+            return
+        }
+        ensureWritable(length)
+        data.withUnsafeBytes { source in
+            guard let sourceBase = source.baseAddress, let destination = bytesBaseAddress else {
+                return
+            }
+            UnsafeMutableRawPointer(destination.advanced(by: writerIndex))
+                .copyMemory(from: sourceBase, byteCount: length)
+        }
+        writerIndex += length
     }
 
     @inlinable
     public func setByte(at index: Int, to value: UInt8) {
-        storage[index] = value
+        bytesBaseAddress![index] = value
     }
 
     @inlinable
     public func setBytes(at index: Int, to bytes: some Collection<UInt8>) {
-        var idx = index
+        if bytes.withContiguousStorageIfAvailable({ contiguousBytes in
+            guard let sourceBase = contiguousBytes.baseAddress, let storage else {
+                return
+            }
+            storage.advanced(by: index).copyMemory(
+                from: UnsafeRawPointer(sourceBase),
+                byteCount: contiguousBytes.count
+            )
+        }) != nil {
+            return
+        }
+        var offset = index
         for byte in bytes {
-            storage[idx] = byte
-            idx += 1
+            bytesBaseAddress![offset] = byte
+            offset += 1
         }
     }
 
     @inlinable
     @inline(__always)
     public func checkBound(_ need: Int) throws {
-        let length = readableCount
-        if cursor + need > length {
-            throw ForyError.outOfBounds(cursor: cursor, need: need, length: length)
+        if readerIndex < 0 || need < 0 || readerIndex + need > writerIndex {
+            throw ForyError.outOfBounds(cursor: readerIndex, need: need, length: writerIndex)
         }
     }
 
     @inlinable
     public func readBytes(into destination: UnsafeMutableRawBufferPointer) throws {
         try checkBound(destination.count)
-        guard destination.count > 0, let destinationBase = destination.baseAddress else {
+        guard destination.count > 0, let destinationBase = destination.baseAddress, let storage else {
             return
         }
-        withUnsafeReadableBytes { rawBytes in
-            guard let sourceBase = rawBytes.baseAddress else {
-                return
-            }
-            destinationBase.copyMemory(from: sourceBase.advanced(by: cursor), byteCount: destination.count)
-        }
-        cursor += destination.count
+        destinationBase.copyMemory(from: storage.advanced(by: readerIndex), byteCount: destination.count)
+        readerIndex += destination.count
     }
 
     @inlinable
     @inline(__always)
     public func readUInt8() throws -> UInt8 {
         try checkBound(1)
-        defer { cursor += 1 }
-        return byte(at: cursor)
+        defer { readerIndex += 1 }
+        return bytesBaseAddress![readerIndex]
     }
 
     @inlinable
@@ -499,10 +563,9 @@ public final class ByteBuffer {
     @inline(__always)
     public func readUInt16() throws -> UInt16 {
         try checkBound(2)
-        let b0 = UInt16(byte(at: cursor))
-        let b1 = UInt16(byte(at: cursor + 1)) << 8
-        cursor += 2
-        return b0 | b1
+        let value = loadUInt16(at: readerIndex)
+        readerIndex += 2
+        return value
     }
 
     @inlinable
@@ -514,12 +577,9 @@ public final class ByteBuffer {
     @inline(__always)
     public func readUInt32() throws -> UInt32 {
         try checkBound(4)
-        let b0 = UInt32(byte(at: cursor))
-        let b1 = UInt32(byte(at: cursor + 1)) << 8
-        let b2 = UInt32(byte(at: cursor + 2)) << 16
-        let b3 = UInt32(byte(at: cursor + 3)) << 24
-        cursor += 4
-        return b0 | b1 | b2 | b3
+        let value = loadUInt32(at: readerIndex)
+        readerIndex += 4
+        return value
     }
 
     @inlinable
@@ -531,16 +591,9 @@ public final class ByteBuffer {
     @inline(__always)
     public func readUInt64() throws -> UInt64 {
         try checkBound(8)
-        let b0 = UInt64(byte(at: cursor))
-        let b1 = UInt64(byte(at: cursor + 1)) << 8
-        let b2 = UInt64(byte(at: cursor + 2)) << 16
-        let b3 = UInt64(byte(at: cursor + 3)) << 24
-        let b4 = UInt64(byte(at: cursor + 4)) << 32
-        let b5 = UInt64(byte(at: cursor + 5)) << 40
-        let b6 = UInt64(byte(at: cursor + 6)) << 48
-        let b7 = UInt64(byte(at: cursor + 7)) << 56
-        cursor += 8
-        return b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
+        let value = loadUInt64(at: readerIndex)
+        readerIndex += 8
+        return value
     }
 
     @inlinable
@@ -551,292 +604,122 @@ public final class ByteBuffer {
     @inlinable
     @inline(__always)
     public func readVarUInt32() throws -> UInt32 {
-        let available = readableCount - cursor
-        if available >= 5 {
-            let offset = cursor
-            let b0 = byte(at: offset)
-            if b0 < 0x80 {
-                cursor = offset + 1
-                return UInt32(b0)
-            }
-
-            let b1 = byte(at: offset + 1)
-            if b1 < 0x80 {
-                cursor = offset + 2
-                return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
-            }
-
-            let b2 = byte(at: offset + 2)
-            if b2 < 0x80 {
-                cursor = offset + 3
-                return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
-            }
-
-            let b3 = byte(at: offset + 3)
-            if b3 < 0x80 {
-                cursor = offset + 4
-                return UInt32(b0 & 0x7F) |
-                    (UInt32(b1 & 0x7F) << 7) |
-                    (UInt32(b2 & 0x7F) << 14) |
-                    (UInt32(b3) << 21)
-            }
-
-            let b4 = byte(at: offset + 4)
-            if b4 >= 0x80 {
-                throw ForyError.encodingError("varuint32 overflow")
-            }
-            cursor = offset + 5
-            return UInt32(b0 & 0x7F) |
-                (UInt32(b1 & 0x7F) << 7) |
-                (UInt32(b2 & 0x7F) << 14) |
-                (UInt32(b3 & 0x7F) << 21) |
-                (UInt32(b4) << 28)
-        }
-
         try checkBound(1)
-        let b0 = byte(at: cursor)
-        if b0 < 0x80 {
-            cursor += 1
-            return UInt32(b0)
+        if writerIndex - readerIndex < 5 {
+            return try readVarUInt32Slow()
         }
-
-        try checkBound(2)
-        let b1 = byte(at: cursor + 1)
-        if b1 < 0x80 {
-            cursor += 2
-            return UInt32(b0 & 0x7F) | (UInt32(b1) << 7)
+        let offset = readerIndex
+        let bulk = loadUInt32(at: offset)
+        var result = bulk & 0x7F
+        if (bulk & 0x80) == 0 {
+            readerIndex = offset + 1
+            return result
         }
-
-        try checkBound(3)
-        let b2 = byte(at: cursor + 2)
-        if b2 < 0x80 {
-            cursor += 3
-            return UInt32(b0 & 0x7F) | (UInt32(b1 & 0x7F) << 7) | (UInt32(b2) << 14)
+        result |= (bulk >> 1) & 0x3F80
+        if (bulk & 0x8000) == 0 {
+            readerIndex = offset + 2
+            return result
         }
-
-        try checkBound(4)
-        let b3 = byte(at: cursor + 3)
-        if b3 < 0x80 {
-            cursor += 4
-            return UInt32(b0 & 0x7F) |
-                (UInt32(b1 & 0x7F) << 7) |
-                (UInt32(b2 & 0x7F) << 14) |
-                (UInt32(b3) << 21)
+        result |= (bulk >> 2) & 0x1FC000
+        if (bulk & 0x800000) == 0 {
+            readerIndex = offset + 3
+            return result
         }
-
-        try checkBound(5)
-        let b4 = byte(at: cursor + 4)
-        if b4 >= 0x80 {
-            throw ForyError.encodingError("varuint32 overflow")
+        result |= (bulk >> 3) & 0xFE00000
+        if (bulk & 0x80000000) == 0 {
+            readerIndex = offset + 4
+            return result
         }
-        cursor += 5
-        return UInt32(b0 & 0x7F) |
-            (UInt32(b1 & 0x7F) << 7) |
-            (UInt32(b2 & 0x7F) << 14) |
-            (UInt32(b3 & 0x7F) << 21) |
-            (UInt32(b4) << 28)
+        result |= UInt32(byte(at: offset + 4) & 0x7F) << 28
+        readerIndex = offset + 5
+        return result
     }
 
     @inlinable
     @inline(__always)
     public func readVarUInt64() throws -> UInt64 {
-        let available = readableCount - cursor
-        if available >= 9 {
-            let offset = cursor
-            let b0 = byte(at: offset)
-            if b0 < 0x80 {
-                cursor = offset + 1
-                return UInt64(b0)
-            }
-
-            let b1 = byte(at: offset + 1)
-            if b1 < 0x80 {
-                cursor = offset + 2
-                return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
-            }
-
-            let b2 = byte(at: offset + 2)
-            if b2 < 0x80 {
-                cursor = offset + 3
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2) << 14)
-            }
-
-            let b3 = byte(at: offset + 3)
-            if b3 < 0x80 {
-                cursor = offset + 4
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3) << 21)
-            }
-
-            let b4 = byte(at: offset + 4)
-            if b4 < 0x80 {
-                cursor = offset + 5
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4) << 28)
-            }
-
-            let b5 = byte(at: offset + 5)
-            if b5 < 0x80 {
-                cursor = offset + 6
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5) << 35)
-            }
-
-            let b6 = byte(at: offset + 6)
-            if b6 < 0x80 {
-                cursor = offset + 7
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5 & 0x7F) << 35) |
-                    (UInt64(b6) << 42)
-            }
-
-            let b7 = byte(at: offset + 7)
-            if b7 < 0x80 {
-                cursor = offset + 8
-                return UInt64(b0 & 0x7F) |
-                    (UInt64(b1 & 0x7F) << 7) |
-                    (UInt64(b2 & 0x7F) << 14) |
-                    (UInt64(b3 & 0x7F) << 21) |
-                    (UInt64(b4 & 0x7F) << 28) |
-                    (UInt64(b5 & 0x7F) << 35) |
-                    (UInt64(b6 & 0x7F) << 42) |
-                    (UInt64(b7) << 49)
-            }
-
-            let b8 = byte(at: offset + 8)
-            cursor = offset + 9
-            let low = UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21)
-            let high = (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6 & 0x7F) << 42) |
-                (UInt64(b7 & 0x7F) << 49) |
-                (UInt64(b8) << 56)
-            return low | high
-        }
-
         try checkBound(1)
-        let b0 = byte(at: cursor)
-        if b0 < 0x80 {
-            cursor += 1
-            return UInt64(b0)
+        if writerIndex - readerIndex < 9 {
+            return try readVarUInt64Slow()
         }
-
-        try checkBound(2)
-        let b1 = byte(at: cursor + 1)
-        if b1 < 0x80 {
-            cursor += 2
-            return UInt64(b0 & 0x7F) | (UInt64(b1) << 7)
+        let offset = readerIndex
+        let bulk = loadUInt64(at: offset)
+        var result = bulk & 0x7F
+        if (bulk & 0x80) == 0 {
+            readerIndex = offset + 1
+            return result
         }
-
-        try checkBound(3)
-        let b2 = byte(at: cursor + 2)
-        if b2 < 0x80 {
-            cursor += 3
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2) << 14)
+        result |= (bulk >> 1) & 0x3F80
+        if (bulk & 0x8000) == 0 {
+            readerIndex = offset + 2
+            return result
         }
-
-        try checkBound(4)
-        let b3 = byte(at: cursor + 3)
-        if b3 < 0x80 {
-            cursor += 4
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3) << 21)
+        result |= (bulk >> 2) & 0x1FC000
+        if (bulk & 0x800000) == 0 {
+            readerIndex = offset + 3
+            return result
         }
-
-        try checkBound(5)
-        let b4 = byte(at: cursor + 4)
-        if b4 < 0x80 {
-            cursor += 5
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4) << 28)
+        result |= (bulk >> 3) & 0xFE00000
+        if (bulk & 0x80000000) == 0 {
+            readerIndex = offset + 4
+            return result
         }
-
-        try checkBound(6)
-        let b5 = byte(at: cursor + 5)
-        if b5 < 0x80 {
-            cursor += 6
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5) << 35)
+        result |= (bulk >> 4) & 0x7F0000000
+        if (bulk & 0x8000000000) == 0 {
+            readerIndex = offset + 5
+            return result
         }
-
-        try checkBound(7)
-        let b6 = byte(at: cursor + 6)
-        if b6 < 0x80 {
-            cursor += 7
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6) << 42)
+        result |= (bulk >> 5) & 0x3F800000000
+        if (bulk & 0x800000000000) == 0 {
+            readerIndex = offset + 6
+            return result
         }
-
-        try checkBound(8)
-        let b7 = byte(at: cursor + 7)
-        if b7 < 0x80 {
-            cursor += 8
-            return UInt64(b0 & 0x7F) |
-                (UInt64(b1 & 0x7F) << 7) |
-                (UInt64(b2 & 0x7F) << 14) |
-                (UInt64(b3 & 0x7F) << 21) |
-                (UInt64(b4 & 0x7F) << 28) |
-                (UInt64(b5 & 0x7F) << 35) |
-                (UInt64(b6 & 0x7F) << 42) |
-                (UInt64(b7) << 49)
+        result |= (bulk >> 6) & 0x1FC0000000000
+        if (bulk & 0x80000000000000) == 0 {
+            readerIndex = offset + 7
+            return result
         }
-
-        try checkBound(9)
-        let b8 = byte(at: cursor + 8)
-        cursor += 9
-        let low = UInt64(b0 & 0x7F) |
-            (UInt64(b1 & 0x7F) << 7) |
-            (UInt64(b2 & 0x7F) << 14) |
-            (UInt64(b3 & 0x7F) << 21)
-        let high = (UInt64(b4 & 0x7F) << 28) |
-            (UInt64(b5 & 0x7F) << 35) |
-            (UInt64(b6 & 0x7F) << 42) |
-            (UInt64(b7 & 0x7F) << 49) |
-            (UInt64(b8) << 56)
-        return low | high
+        result |= (bulk >> 7) & 0xFE000000000000
+        if (bulk & 0x8000000000000000) == 0 {
+            readerIndex = offset + 8
+            return result
+        }
+        result |= UInt64(byte(at: offset + 8)) << 56
+        readerIndex = offset + 9
+        return result
     }
 
     @inlinable
     public func readVarUInt36Small() throws -> UInt64 {
-        let value = try readVarUInt64()
-        if value >= (1 << 36) {
-            throw ForyError.encodingError("varuint36small overflow")
+        try checkBound(1)
+        if writerIndex - readerIndex < 8 {
+            return try readVarUInt36SmallSlow()
         }
-        return value
+        let offset = readerIndex
+        let bulk = loadUInt64(at: offset)
+        var result = bulk & 0x7F
+        if (bulk & 0x80) == 0 {
+            readerIndex = offset + 1
+            return result
+        }
+        result |= (bulk >> 1) & 0x3F80
+        if (bulk & 0x8000) == 0 {
+            readerIndex = offset + 2
+            return result
+        }
+        result |= (bulk >> 2) & 0x1FC000
+        if (bulk & 0x800000) == 0 {
+            readerIndex = offset + 3
+            return result
+        }
+        result |= (bulk >> 3) & 0xFE00000
+        if (bulk & 0x80000000) == 0 {
+            readerIndex = offset + 4
+            return result
+        }
+        result |= (bulk >> 4) & 0xFF0000000
+        readerIndex = offset + 5
+        return result
     }
 
     @inlinable
@@ -901,16 +784,15 @@ public final class ByteBuffer {
         if count == 0 {
             return ""
         }
-        let start = cursor
-        let end = start + count
-        cursor = end
-        let decoded = withUnsafeReadableBytes { buffer -> String? in
-            guard let base = buffer.baseAddress else {
-                return nil
-            }
-            let utf8Bytes = UnsafeBufferPointer(start: base.advanced(by: start), count: count)
-            return String(bytes: utf8Bytes, encoding: .utf8)
-        }
+        let start = readerIndex
+        readerIndex = start + count
+        let decoded = String(
+            bytes: UnsafeBufferPointer(
+                start: bytesBaseAddress!.advanced(by: start),
+                count: count
+            ),
+            encoding: .utf8
+        )
         guard let decoded else {
             throw ForyError.invalidData("invalid UTF-8 sequence")
         }
@@ -920,16 +802,267 @@ public final class ByteBuffer {
     @inlinable
     public func skip(_ count: Int) throws {
         try checkBound(count)
-        cursor += count
+        readerIndex += count
     }
 
     @inlinable
     public func toData() -> Data {
-        return storage.withUnsafeBytes { rawBytes in
-            guard let baseAddress = rawBytes.baseAddress else {
-                return Data()
-            }
-            return Data(bytes: baseAddress, count: rawBytes.count)
+        guard writerIndex > 0, let storage else {
+            return Data()
         }
+        return Data(bytes: storage, count: writerIndex)
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal static func roundCapacity(_ value: Int) -> Int {
+        guard value > 0 else {
+            return 0
+        }
+        let word = MemoryLayout<UInt64>.size
+        return ((value + word - 1) / word) * word
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func ensureCapacity(_ minimumCapacity: Int) {
+        guard minimumCapacity > capacity else {
+            return
+        }
+        let newCapacity = Self.roundCapacity(max(minimumCapacity, max(capacity * 2, 8)))
+        let newStorage = UnsafeMutableRawPointer.allocate(
+            byteCount: newCapacity,
+            alignment: MemoryLayout<UInt64>.alignment
+        )
+        if writerIndex > 0, let storage {
+            newStorage.copyMemory(from: storage, byteCount: writerIndex)
+            storage.deallocate()
+        } else {
+            storage?.deallocate()
+        }
+        storage = newStorage
+        capacity = newCapacity
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func loadUInt16(at offset: Int) -> UInt16 {
+        let raw = UnsafeRawPointer(storage!)
+        if ((Int(bitPattern: raw) + offset) & (MemoryLayout<UInt16>.alignment - 1)) == 0 {
+            return UInt16(littleEndian: raw.load(fromByteOffset: offset, as: UInt16.self))
+        }
+        return UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt16.self))
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func loadUInt32(at offset: Int) -> UInt32 {
+        let raw = UnsafeRawPointer(storage!)
+        if ((Int(bitPattern: raw) + offset) & (MemoryLayout<UInt32>.alignment - 1)) == 0 {
+            return UInt32(littleEndian: raw.load(fromByteOffset: offset, as: UInt32.self))
+        }
+        return UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt32.self))
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func loadUInt64(at offset: Int) -> UInt64 {
+        let raw = UnsafeRawPointer(storage!)
+        if ((Int(bitPattern: raw) + offset) & (MemoryLayout<UInt64>.alignment - 1)) == 0 {
+            return UInt64(littleEndian: raw.load(fromByteOffset: offset, as: UInt64.self))
+        }
+        return UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt64.self))
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func putVarUInt32(at offset: Int, value: UInt32) -> Int {
+        if value < 0x80 {
+            bytesBaseAddress![offset] = UInt8(value)
+            return 1
+        }
+        var encoded = UInt64((value & 0x7F) | 0x80)
+        encoded |= UInt64(value & 0x3F80) << 1
+        if value < 0x4000 {
+            storage!.storeBytes(of: UInt16(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt16.self)
+            return 2
+        }
+        encoded |= (UInt64(value & 0x1FC000) << 2) | 0x8000
+        if value < 0x20_0000 {
+            storage!.storeBytes(of: UInt32(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt32.self)
+            return 3
+        }
+        encoded |= (UInt64(value & 0xFE00000) << 3) | 0x800000
+        if value < 0x1000_0000 {
+            storage!.storeBytes(of: UInt32(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt32.self)
+            return 4
+        }
+        encoded |= (UInt64(value >> 28) << 32) | 0x80000000
+        storage!.storeBytes(of: encoded.littleEndian, toByteOffset: offset, as: UInt64.self)
+        return 5
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func putVarUInt64(at offset: Int, value: UInt64) -> Int {
+        if value < 0x80 {
+            bytesBaseAddress![offset] = UInt8(value)
+            return 1
+        }
+        var encoded = (value & 0x7F) | 0x80
+        encoded |= (value & 0x3F80) << 1
+        if value < 0x4000 {
+            storage!.storeBytes(of: UInt16(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt16.self)
+            return 2
+        }
+        encoded |= ((value & 0x1FC000) << 2) | 0x8000
+        if value < 0x20_0000 {
+            storage!.storeBytes(of: UInt32(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt32.self)
+            return 3
+        }
+        encoded |= ((value & 0xFE00000) << 3) | 0x800000
+        if value < 0x1000_0000 {
+            storage!.storeBytes(of: UInt32(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt32.self)
+            return 4
+        }
+        encoded |= ((value & 0x7F0000000) << 4) | 0x80000000
+        if value < 0x8_0000_0000 {
+            storage!.storeBytes(of: encoded.littleEndian, toByteOffset: offset, as: UInt64.self)
+            return 5
+        }
+        encoded |= ((value & 0x3F800000000) << 5) | 0x8000000000
+        if value < 0x400_0000_0000 {
+            storage!.storeBytes(of: encoded.littleEndian, toByteOffset: offset, as: UInt64.self)
+            return 6
+        }
+        encoded |= ((value & 0x1FC0000000000) << 6) | 0x800000000000
+        if value < 0x2_0000_0000_0000 {
+            storage!.storeBytes(of: encoded.littleEndian, toByteOffset: offset, as: UInt64.self)
+            return 7
+        }
+        encoded |= ((value & 0xFE000000000000) << 7) | 0x80000000000000
+        if value < 0x100_0000_0000_0000 {
+            storage!.storeBytes(of: encoded.littleEndian, toByteOffset: offset, as: UInt64.self)
+            return 8
+        }
+        encoded |= 0x8000000000000000
+        storage!.storeBytes(of: encoded.littleEndian, toByteOffset: offset, as: UInt64.self)
+        bytesBaseAddress![offset + 8] = UInt8(truncatingIfNeeded: value >> 56)
+        return 9
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func putVarUInt36Small(at offset: Int, value: UInt64) -> Int {
+        if value < 0x80 {
+            bytesBaseAddress![offset] = UInt8(value)
+            return 1
+        }
+        var encoded = (value & 0x7F) | 0x80
+        encoded |= (value & 0x3F80) << 1
+        if value < 0x4000 {
+            storage!.storeBytes(of: UInt16(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt16.self)
+            return 2
+        }
+        encoded |= ((value & 0x1FC000) << 2) | 0x8000
+        if value < 0x20_0000 {
+            storage!.storeBytes(of: UInt32(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt32.self)
+            return 3
+        }
+        encoded |= ((value & 0xFE00000) << 3) | 0x800000
+        if value < 0x1000_0000 {
+            storage!.storeBytes(of: UInt32(truncatingIfNeeded: encoded).littleEndian, toByteOffset: offset, as: UInt32.self)
+            return 4
+        }
+        encoded |= ((value & 0xFF0000000) << 4) | 0x80000000
+        storage!.storeBytes(of: encoded.littleEndian, toByteOffset: offset, as: UInt64.self)
+        return 5
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func readVarUInt32Slow() throws -> UInt32 {
+        var position = readerIndex
+        var result: UInt32 = 0
+        var shift: UInt32 = 0
+        for index in 0..<5 {
+            if position >= writerIndex {
+                throw ForyError.outOfBounds(cursor: position, need: 1, length: writerIndex)
+            }
+            let byte = self.byte(at: position)
+            position += 1
+            if index == 4, byte >= 0x80 {
+                throw ForyError.encodingError("varuint32 overflow")
+            }
+            result |= UInt32(byte & 0x7F) << shift
+            if byte < 0x80 {
+                readerIndex = position
+                return result
+            }
+            shift += 7
+        }
+        throw ForyError.encodingError("varuint32 overflow")
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func readVarUInt64Slow() throws -> UInt64 {
+        var position = readerIndex
+        var result: UInt64 = 0
+        var shift: UInt64 = 0
+        for _ in 0..<8 {
+            if position >= writerIndex {
+                throw ForyError.outOfBounds(cursor: position, need: 1, length: writerIndex)
+            }
+            let byte = self.byte(at: position)
+            position += 1
+            result |= UInt64(byte & 0x7F) << shift
+            if byte < 0x80 {
+                readerIndex = position
+                return result
+            }
+            shift += 7
+        }
+        if position >= writerIndex {
+            throw ForyError.outOfBounds(cursor: position, need: 1, length: writerIndex)
+        }
+        let last = self.byte(at: position)
+        position += 1
+        result |= UInt64(last) << 56
+        readerIndex = position
+        return result
+    }
+
+    @usableFromInline
+    @inline(__always)
+    internal func readVarUInt36SmallSlow() throws -> UInt64 {
+        var position = readerIndex
+        var result: UInt64 = 0
+        var shift: UInt64 = 0
+        for _ in 0..<4 {
+            if position >= writerIndex {
+                throw ForyError.outOfBounds(cursor: position, need: 1, length: writerIndex)
+            }
+            let byte = self.byte(at: position)
+            position += 1
+            result |= UInt64(byte & 0x7F) << shift
+            if byte < 0x80 {
+                readerIndex = position
+                return result
+            }
+            shift += 7
+        }
+        if position >= writerIndex {
+            throw ForyError.outOfBounds(cursor: position, need: 1, length: writerIndex)
+        }
+        let last = self.byte(at: position)
+        if last >= 0x80 {
+            throw ForyError.encodingError("varuint36small overflow")
+        }
+        position += 1
+        result |= UInt64(last) << 28
+        readerIndex = position
+        return result
     }
 }
+// swiftlint:enable type_body_length

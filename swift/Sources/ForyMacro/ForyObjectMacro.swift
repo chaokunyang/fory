@@ -71,10 +71,6 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
                 accessPrefix: accessPrefix
             )
         )
-        let directPrimitiveDecls = buildDirectPrimitiveSerializeDecls(
-            sortedFields: sortedFields,
-            accessPrefix: accessPrefix
-        )
         return [
             staticTypeIDDecl,
             referenceTrackDecl,
@@ -85,7 +81,7 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
             readWrapperDecl,
             writeDecl,
             readDecl
-        ].compactMap { $0 } + directPrimitiveDecls
+        ].compactMap { $0 }
     }
 
     public static func expansion(

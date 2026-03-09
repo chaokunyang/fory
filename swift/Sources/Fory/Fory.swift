@@ -152,42 +152,6 @@ public final class Fory {
             context.reset()
         }
 
-        if !value.foryIsNone,
-           !config.trackRef,
-           let payloadSize = value.foryPrimitiveDataSize {
-            let headByte: UInt8 = config.xlang ? ForyHeaderFlag.isXlang : 0
-            if !config.xlang, !config.compatible {
-                let totalByteCount = 1 + payloadSize
-                return context.buffer.materializeData(byteCount: totalByteCount) { base in
-                    base[0] = headByte
-                    var index = 1
-                    value.foryWritePrimitiveData(to: base, index: &index)
-                    assert(index == totalByteCount)
-                }
-            }
-
-            if config.compatible {
-                let typeInfo = try context.typeInfo(for: T.self)
-                let wireTypeID = typeInfo.wireTypeID(compatible: true)
-                if wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct,
-                   let typeDefBytes = typeInfo.typeDefBytes,
-                   !typeInfo.typeDefHasUserTypeFields {
-                    let totalByteCount = 4 + typeDefBytes.count + payloadSize
-                    let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
-                    return context.buffer.materializeData(byteCount: totalByteCount) { base in
-                        base[0] = headByte
-                        base[1] = refByte
-                        base[2] = UInt8(truncatingIfNeeded: wireTypeID.rawValue)
-                        base[3] = 0
-                        var index = 4
-                        index = Wire.copyBytes(typeDefBytes, to: base, index: index)
-                        value.foryWritePrimitiveData(to: base, index: &index)
-                        assert(index == totalByteCount)
-                    }
-                }
-            }
-        }
-
         writeHead(buffer: context.buffer, isNone: value.foryIsNone)
         if !value.foryIsNone {
             try writeRootTypedValue(value, context: context)
@@ -213,48 +177,6 @@ public final class Fory {
         context.buffer.clear()
         defer {
             context.reset()
-        }
-
-        if !value.foryIsNone,
-           !config.trackRef,
-           let payloadSize = value.foryPrimitiveDataSize {
-            let headByte: UInt8 = config.xlang ? ForyHeaderFlag.isXlang : 0
-            if !config.xlang, !config.compatible {
-                let totalByteCount = 1 + payloadSize
-                buffer.append(
-                    context.buffer.materializeData(byteCount: totalByteCount) { base in
-                        base[0] = headByte
-                        var index = 1
-                        value.foryWritePrimitiveData(to: base, index: &index)
-                        assert(index == totalByteCount)
-                    }
-                )
-                return
-            }
-
-            if config.compatible {
-                let typeInfo = try context.typeInfo(for: T.self)
-                let wireTypeID = typeInfo.wireTypeID(compatible: true)
-                if wireTypeID == .compatibleStruct || wireTypeID == .namedCompatibleStruct,
-                   let typeDefBytes = typeInfo.typeDefBytes,
-                   !typeInfo.typeDefHasUserTypeFields {
-                    let totalByteCount = 4 + typeDefBytes.count + payloadSize
-                    let refByte = UInt8(bitPattern: RefFlag.notNullValue.rawValue)
-                    buffer.append(
-                        context.buffer.materializeData(byteCount: totalByteCount) { base in
-                            base[0] = headByte
-                            base[1] = refByte
-                            base[2] = UInt8(truncatingIfNeeded: wireTypeID.rawValue)
-                            base[3] = 0
-                            var index = 4
-                            index = Wire.copyBytes(typeDefBytes, to: base, index: index)
-                            value.foryWritePrimitiveData(to: base, index: &index)
-                            assert(index == totalByteCount)
-                        }
-                    )
-                    return
-                }
-            }
         }
 
         writeHead(buffer: context.buffer, isNone: value.foryIsNone)

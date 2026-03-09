@@ -29,9 +29,7 @@
     named(foryWrite),
     named(foryRead),
     named(foryWriteData),
-    named(foryReadData),
-    named(foryPrimitiveDataSize),
-    named(foryWritePrimitiveData)
+    named(foryReadData)
 )
 @attached(extension, conformances: Serializer)
 public macro ForyObject() = #externalMacro(module: "ForyMacro", type: "ForyObjectMacro")

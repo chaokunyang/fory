@@ -30,7 +30,9 @@
     named(foryRead),
     named(foryWriteData),
     named(foryReadData),
-    named(foryReadCompatibleData)
+    named(foryReadCompatibleData),
+    named(__foryReadDataImpl),
+    named(__foryReadCompatibleDataImpl)
 )
 @attached(extension, conformances: Serializer)
 public macro ForyObject() = #externalMacro(module: "ForyMacro", type: "ForyObjectMacro")

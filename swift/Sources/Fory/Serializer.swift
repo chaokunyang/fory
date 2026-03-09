@@ -86,20 +86,34 @@ public extension Serializer {
 }
 
 public extension Serializer {
-
-    @inlinable
     static func foryReadPayload(
         _ context: ReadContext,
         readTypeInfo: Bool
     ) throws -> Self {
+        try Self.foryReadPayload(
+            context,
+            readTypeInfo: readTypeInfo,
+            readData: { try Self.foryReadData(context) },
+            readCompatibleData: { remoteTypeInfo in
+                try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+            }
+        )
+    }
+
+    static func foryReadPayload(
+        _ context: ReadContext,
+        readTypeInfo: Bool,
+        readData: () throws -> Self,
+        readCompatibleData: (TypeInfo) throws -> Self
+    ) throws -> Self {
         if readTypeInfo {
             if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                return try readCompatibleData(remoteTypeInfo)
             }
         } else if let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) {
-            return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+            return try readCompatibleData(remoteTypeInfo)
         }
-        return try Self.foryReadData(context)
+        return try readData()
     }
 
     @inlinable
@@ -145,10 +159,10 @@ public extension Serializer {
             case RefFlag.refValue.rawValue:
                 if context.trackRef {
                     let reservedRefID = context.refReader.reserveRefID()
-                    context.pushPendingRef(reservedRefID)
                     let value = try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
-                    context.finishPendingRefIfNeeded(value)
-                    context.popPendingRef()
+                    if let object = value as AnyObject? {
+                        context.refReader.storeRef(object, at: reservedRefID)
+                    }
                     return value
                 }
                 return try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
@@ -170,11 +184,11 @@ public extension Serializer {
                 let refID = try context.buffer.readVarUInt32()
                 return try context.refReader.readRef(refID, as: Self.self)
             case .refValue:
-                let reservedRefID = context.refReader.reserveRefID()
-                context.pushPendingRef(reservedRefID)
+                let reservedRefID = context.trackRef ? context.refReader.reserveRefID() : nil
                 let value = try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)
-                context.finishPendingRefIfNeeded(value)
-                context.popPendingRef()
+                if let reservedRefID, let object = value as AnyObject? {
+                    context.refReader.storeRef(object, at: reservedRefID)
+                }
                 return value
             case .notNullValue:
                 return try Self.foryReadPayload(context, readTypeInfo: readTypeInfo)

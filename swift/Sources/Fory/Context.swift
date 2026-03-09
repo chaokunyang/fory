@@ -309,11 +309,6 @@ public final class WriteContext {
     }
 }
 
-private struct PendingRefSlot {
-    var refID: UInt32
-    var bound: Bool
-}
-
 public final class ReadContext {
     public let buffer: ByteBuffer
     let typeResolver: TypeResolver
@@ -330,7 +325,6 @@ public final class ReadContext {
     private var metaStringReadStateUsed = false
     private var dynamicAnyDepth = 0
 
-    private var pendingRefStack: [PendingRefSlot] = []
     private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     @usableFromInline
     internal var pendingCompatibleTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
@@ -580,33 +574,6 @@ public final class ReadContext {
         )
     }
 
-    public func pushPendingRef(_ refID: UInt32) {
-        pendingRefStack.append(PendingRefSlot(refID: refID, bound: false))
-    }
-
-    public func bindPendingRef(_ value: Any) {
-        guard var last = pendingRefStack.popLast() else {
-            return
-        }
-        last.bound = true
-        refReader.storeRef(value, at: last.refID)
-        pendingRefStack.append(last)
-    }
-
-    public func finishPendingRefIfNeeded(_ value: Any) {
-        guard var last = pendingRefStack.popLast() else {
-            return
-        }
-        if !last.bound {
-            refReader.storeRef(value, at: last.refID)
-            last.bound = true
-        }
-    }
-
-    public func popPendingRef() {
-        _ = pendingRefStack.popLast()
-    }
-
     func readCompatibleTypeInfo() throws -> TypeInfo {
         typeDefStateUsed = true
         let indexMarker = try buffer.readVarUInt32()
@@ -785,9 +752,6 @@ public final class ReadContext {
         }
         if trackRef {
             refReader.reset()
-            if !pendingRefStack.isEmpty {
-                pendingRefStack.removeAll(keepingCapacity: true)
-            }
         }
         if !pendingTypeInfo.isEmpty {
             pendingTypeInfo.removeAll(keepingCapacity: true)

@@ -45,6 +45,55 @@ func buildReadCompatibleDataDecl(
     return buildStructReadCompatibleDataDecl(fields: fields, sortedFields: sortedFields, accessPrefix: accessPrefix)
 }
 
+func buildClassReadWrapperDecl(accessPrefix: String) -> String {
+    """
+    @inline(__always)
+    \(accessPrefix)static func foryRead(
+        _ context: ReadContext,
+        refMode: RefMode,
+        readTypeInfo: Bool
+    ) throws -> Self {
+        let __buffer = context.buffer
+        let __reservedRefID: UInt32?
+        if refMode != .none {
+            let rawFlag = try __buffer.readInt8()
+            guard let flag = RefFlag(rawValue: rawFlag) else {
+                throw ForyError.refError("invalid ref flag \\(rawFlag)")
+            }
+
+            switch flag {
+            case .null:
+                return Self.foryDefault()
+            case .ref:
+                let refID = try __buffer.readVarUInt32()
+                return try context.refReader.readRef(refID, as: Self.self)
+            case .refValue:
+                __reservedRefID = context.trackRef ? context.refReader.reserveRefID() : nil
+            case .notNullValue:
+                __reservedRefID = nil
+            }
+        } else {
+            __reservedRefID = nil
+        }
+
+        return try Self.foryReadPayload(
+            context,
+            readTypeInfo: readTypeInfo,
+            readData: {
+                try Self.__foryReadDataImpl(context, reservedRefID: __reservedRefID)
+            },
+            readCompatibleData: { remoteTypeInfo in
+                try Self.__foryReadCompatibleDataImpl(
+                    context,
+                    remoteTypeInfo: remoteTypeInfo,
+                    reservedRefID: __reservedRefID
+                )
+            }
+        )
+    }
+    """
+}
+
 private func buildClassReadDataDecl(
     sortedFields: [ParsedField],
     accessPrefix: String
@@ -54,13 +103,20 @@ private func buildClassReadDataDecl(
 
     return """
     @inline(__always)
-    \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
+    private static func __foryReadDataImpl(_ context: ReadContext, reservedRefID: UInt32?) throws -> Self {
         let __buffer = context.buffer
         \(schemaHashCheckExpr())
         let value = Self.init()
-        context.bindPendingRef(value)
+        if let reservedRefID {
+            context.refReader.storeRef(value, at: reservedRefID)
+        }
         \(schemaAssignBody)
         return value
+    }
+
+    @inline(__always)
+    \(accessPrefix)static func foryReadData(_ context: ReadContext) throws -> Self {
+        try Self.__foryReadDataImpl(context, reservedRefID: nil)
     }
     """
 }
@@ -122,12 +178,18 @@ private func buildClassReadCompatibleDataDecl(
 
     return """
     @inline(__always)
-    \(accessPrefix)static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self {
+    private static func __foryReadCompatibleDataImpl(
+        _ context: ReadContext,
+        remoteTypeInfo: TypeInfo,
+        reservedRefID: UInt32?
+    ) throws -> Self {
         \(bufferBinding)guard let typeMeta = remoteTypeInfo.compatibleTypeMeta else {
             throw ForyError.invalidData("compatible type metadata is required")
         }
         let value = Self.init()
-        context.bindPendingRef(value)
+        if let reservedRefID {
+            context.refReader.storeRef(value, at: reservedRefID)
+        }
         if let localHeaderHash = remoteTypeInfo.typeDefHeaderHash,
            typeMeta.headerHash == localHeaderHash {
             if !remoteTypeInfo.typeDefHasUserTypeFields {
@@ -145,6 +207,11 @@ private func buildClassReadCompatibleDataDecl(
             }
         }
         return value
+    }
+
+    @inline(__always)
+    \(accessPrefix)static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> Self {
+        try Self.__foryReadCompatibleDataImpl(context, remoteTypeInfo: remoteTypeInfo, reservedRefID: nil)
     }
     """
 }

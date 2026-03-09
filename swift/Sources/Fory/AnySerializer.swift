@@ -245,14 +245,14 @@ private struct DynamicAnyValue: Serializer {
                 }
                 return DynamicAnyValue(referenced)
             case .refValue:
-                let reservedRefID = context.refReader.reserveRefID()
-                context.pushPendingRef(reservedRefID)
+                let reservedRefID = context.trackRef ? context.refReader.reserveRefID() : nil
                 if readTypeInfo {
                     _ = try foryReadTypeInfo(context)
                 }
                 let value = try foryReadData(context)
-                context.finishPendingRefIfNeeded(value)
-                context.popPendingRef()
+                if let reservedRefID {
+                    context.refReader.storeRef(value, at: reservedRefID)
+                }
                 return value
             case .notNullValue:
                 break

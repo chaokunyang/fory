@@ -59,6 +59,9 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
             stringLiteral: buildDefaultDecl(isClass: parsed.isClass, fields: parsed.fields, accessPrefix: accessPrefix)
         )
         let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
+        let readWrapperDecl: DeclSyntax? = parsed.isClass
+            ? DeclSyntax(stringLiteral: buildClassReadWrapperDecl(accessPrefix: accessPrefix))
+            : nil
         let writeDecl: DeclSyntax = DeclSyntax(
             stringLiteral: buildWriteDataDecl(sortedFields: sortedFields, accessPrefix: accessPrefix)
         )
@@ -85,6 +88,7 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
             compatibleTypeMetaDecl,
             defaultDecl,
             writeWrapperDecl,
+            readWrapperDecl,
             writeDecl,
             readDecl,
             readCompatibleDecl

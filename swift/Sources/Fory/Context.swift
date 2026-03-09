@@ -332,7 +332,8 @@ public final class ReadContext {
 
     private var pendingRefStack: [PendingRefSlot] = []
     private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
-    private var pendingCompatibleTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
+    @usableFromInline
+    internal var pendingCompatibleTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
     private var lastTypeInfo = TypeInfo.uncached
 
     convenience init(
@@ -723,7 +724,9 @@ public final class ReadContext {
         pendingTypeInfo[ObjectIdentifier(type)]
     }
 
-    public func compatibleTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
+    @usableFromInline
+    @inline(__always)
+    internal func compatibleTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
         pendingCompatibleTypeInfo[ObjectIdentifier(type)]
     }
 

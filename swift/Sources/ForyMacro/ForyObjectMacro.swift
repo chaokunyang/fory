@@ -59,7 +59,6 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
             stringLiteral: buildDefaultDecl(isClass: parsed.isClass, fields: parsed.fields, accessPrefix: accessPrefix)
         )
         let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
-        let readWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildReadWrapperDecl(accessPrefix: accessPrefix))
         let writeDecl: DeclSyntax = DeclSyntax(
             stringLiteral: buildWriteDataDecl(sortedFields: sortedFields, accessPrefix: accessPrefix)
         )
@@ -86,7 +85,6 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
             compatibleTypeMetaDecl,
             defaultDecl,
             writeWrapperDecl,
-            readWrapperDecl,
             writeDecl,
             readDecl,
             readCompatibleDecl
@@ -326,7 +324,6 @@ private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: Stri
     \(raw: accessPrefix)static var staticTypeId: TypeId { .enumType }
     """
     let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
-    let readWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildReadWrapperDecl(accessPrefix: accessPrefix))
 
     let writeDecl: DeclSyntax = DeclSyntax(
         stringLiteral: """
@@ -354,7 +351,7 @@ private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: Stri
         """
     )
 
-    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, readWrapperDecl, writeDecl, readDecl]
+    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
 }
 
 private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {
@@ -411,7 +408,6 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
     \(raw: accessPrefix)static var staticTypeId: TypeId { .typedUnion }
     """
     let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
-    let readWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildReadWrapperDecl(accessPrefix: accessPrefix))
 
     let writeDecl: DeclSyntax = DeclSyntax(
         stringLiteral: """
@@ -439,7 +435,7 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         """
     )
 
-    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, readWrapperDecl, writeDecl, readDecl]
+    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
 }
 
 private func enumCasePattern(_ enumCase: ParsedEnumCase) -> String {
@@ -1041,63 +1037,6 @@ private func buildWriteWrapperDecl(accessPrefix: String) -> String {
         }
 
         try foryWriteData(context, hasGenerics: hasGenerics)
-    }
-    """
-}
-
-private func buildReadWrapperDecl(accessPrefix: String) -> String {
-    """
-    \(accessPrefix)static func foryRead(
-        _ context: ReadContext,
-        refMode: RefMode,
-        readTypeInfo: Bool
-    ) throws -> Self {
-        let __buffer = context.buffer
-        if refMode != .none {
-            let rawFlag = try __buffer.readInt8()
-            guard let flag = RefFlag(rawValue: rawFlag) else {
-                throw ForyError.refError("invalid ref flag \\(rawFlag)")
-            }
-
-            switch flag {
-            case .null:
-                return Self.foryDefault()
-            case .ref:
-                let refID = try __buffer.readVarUInt32()
-                return try context.refReader.readRef(refID, as: Self.self)
-            case .refValue:
-                let reservedRefID = context.refReader.reserveRefID()
-                context.pushPendingRef(reservedRefID)
-                if readTypeInfo {
-                    if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                        let value = try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                        context.finishPendingRefIfNeeded(value)
-                        context.popPendingRef()
-                        return value
-                    }
-                } else if let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) {
-                    let value = try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                    context.finishPendingRefIfNeeded(value)
-                    context.popPendingRef()
-                    return value
-                }
-                let value = try Self.foryReadData(context)
-                context.finishPendingRefIfNeeded(value)
-                context.popPendingRef()
-                return value
-            case .notNullValue:
-                break
-            }
-        }
-
-        if readTypeInfo {
-            if let remoteTypeInfo = try Self.foryReadTypeInfo(context) {
-                return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-            }
-        } else if let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) {
-            return try Self.foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-        }
-        return try Self.foryReadData(context)
     }
     """
 }

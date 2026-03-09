@@ -380,9 +380,6 @@ public final class ReadContext {
     private var lastTypeMetaCacheEntry: TypeMeta?
     private var lastTypeInfoTypeID: ObjectIdentifier?
     private var lastTypeInfo: TypeInfo?
-    private var lastValidatedTypeID: ObjectIdentifier?
-    private var lastValidatedWireTypeID: TypeId?
-    private var lastValidatedHeaderHash: UInt64 = 0
 
     convenience init(
         buffer: ByteBuffer,
@@ -503,110 +500,6 @@ public final class ReadContext {
         return info
     }
 
-    @inline(__always)
-    func isTypeMetaValidationCached(
-        for typeID: ObjectIdentifier,
-        wireTypeID: TypeId,
-        headerHash: UInt64
-    ) -> Bool {
-        lastValidatedTypeID == typeID &&
-            lastValidatedWireTypeID == wireTypeID &&
-            lastValidatedHeaderHash == headerHash
-    }
-
-    @inline(__always)
-    func cacheTypeMetaValidation(
-        for typeID: ObjectIdentifier,
-        wireTypeID: TypeId,
-        headerHash: UInt64
-    ) {
-        lastValidatedTypeID = typeID
-        lastValidatedWireTypeID = wireTypeID
-        lastValidatedHeaderHash = headerHash
-    }
-
-    @inline(__always)
-    private func validateTypeMeta(
-        _ remoteTypeMeta: TypeMeta,
-        localTypeInfo: TypeInfo,
-        actualWireTypeID: TypeId
-    ) throws {
-        if !isTypeMetaValidationCached(
-            for: localTypeInfo.swiftTypeID,
-            wireTypeID: actualWireTypeID,
-            headerHash: remoteTypeMeta.headerHash
-        ) {
-            if remoteTypeMeta.registerByName {
-                guard localTypeInfo.registerByName else {
-                    throw ForyError.invalidData("received name-registered compatible metadata for id-registered local type")
-                }
-                if remoteTypeMeta.namespace.value != localTypeInfo.namespace.value {
-                    throw ForyError.invalidData(
-                        "namespace mismatch: expected \(localTypeInfo.namespace.value), got \(remoteTypeMeta.namespace.value)"
-                    )
-                }
-                if remoteTypeMeta.typeName.value != localTypeInfo.typeName.value {
-                    throw ForyError.invalidData(
-                        "type name mismatch: expected \(localTypeInfo.typeName.value), got \(remoteTypeMeta.typeName.value)"
-                    )
-                }
-            } else {
-                guard !localTypeInfo.registerByName else {
-                    throw ForyError.invalidData("received id-registered compatible metadata for name-registered local type")
-                }
-                guard let remoteUserTypeID = remoteTypeMeta.userTypeID else {
-                    throw ForyError.invalidData("missing user type id in compatible type metadata")
-                }
-                guard let localUserTypeID = localTypeInfo.userTypeID else {
-                    throw ForyError.invalidData("missing local user type id metadata for id-registered type")
-                }
-                if remoteUserTypeID != localUserTypeID {
-                    throw ForyError.typeMismatch(expected: localUserTypeID, actual: remoteUserTypeID)
-                }
-            }
-
-            if let remoteTypeID = remoteTypeMeta.typeID,
-               let remoteWireTypeID = TypeId(rawValue: remoteTypeID),
-               !isAllowedRegisteredWireTypeID(
-                   remoteWireTypeID,
-                   declaredTypeID: localTypeInfo.typeID,
-                   registerByName: localTypeInfo.registerByName,
-                   compatible: compatible
-               ) {
-                throw ForyError.typeMismatch(expected: actualWireTypeID.rawValue, actual: remoteTypeID)
-            }
-
-            cacheTypeMetaValidation(
-                for: localTypeInfo.swiftTypeID,
-                wireTypeID: actualWireTypeID,
-                headerHash: remoteTypeMeta.headerHash
-            )
-        }
-    }
-
-    @inline(__always)
-    private func readValidatedTypeMeta(
-        localTypeInfo: TypeInfo,
-        wireTypeID: TypeId
-    ) throws -> TypeMeta {
-        let remoteTypeMeta = try readTypeMeta(for: localTypeInfo)
-        if let localTypeMeta = localTypeInfo.typeMeta,
-           remoteTypeMeta === localTypeMeta {
-            cacheTypeMetaValidation(
-                for: localTypeInfo.swiftTypeID,
-                wireTypeID: wireTypeID,
-                headerHash: remoteTypeMeta.headerHash
-            )
-            return remoteTypeMeta
-        }
-        try validateTypeMeta(
-            remoteTypeMeta,
-            localTypeInfo: localTypeInfo,
-            actualWireTypeID: wireTypeID
-        )
-        return remoteTypeMeta
-    }
-
     func readTypeInfo<T: Serializer>(for type: T.Type) throws {
         let rawTypeID = try buffer.readVarUInt32()
         guard let typeID = TypeId(rawValue: rawTypeID) else {
@@ -633,8 +526,8 @@ public final class ReadContext {
 
         switch typeID {
         case .compatibleStruct, .namedCompatibleStruct:
-            let remoteTypeMeta = try readValidatedTypeMeta(
-                localTypeInfo: localTypeInfo,
+            let remoteTypeMeta = try readTypeMeta(
+                for: localTypeInfo,
                 wireTypeID: typeID
             )
             pushTypeMeta(
@@ -644,8 +537,8 @@ public final class ReadContext {
             )
         case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if compatible {
-                let remoteTypeMeta = try readValidatedTypeMeta(
-                    localTypeInfo: localTypeInfo,
+                let remoteTypeMeta = try readTypeMeta(
+                    for: localTypeInfo,
                     wireTypeID: typeID
                 )
                 if typeID == .namedStruct {
@@ -762,37 +655,85 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func readTypeMeta(for localTypeInfo: TypeInfo) throws -> TypeMeta {
-        guard !typeDefStateUsed,
-              !localTypeInfo.typeDefHasUserTypeFields,
-              let localTypeMeta = localTypeInfo.typeMeta,
-              let localHeaderHash = localTypeInfo.typeDefHeaderHash else {
-            return try readTypeMeta()
+    func readTypeMeta(
+        for localTypeInfo: TypeInfo,
+        wireTypeID: TypeId
+    ) throws -> TypeMeta {
+        let remoteTypeMeta: TypeMeta
+        if !typeDefStateUsed,
+           !localTypeInfo.typeDefHasUserTypeFields,
+           let localTypeMeta = localTypeInfo.typeMeta,
+           let localHeaderHash = localTypeInfo.typeDefHeaderHash {
+           let typeMetaStart = buffer.getCursor()
+           let indexMarker = try buffer.readVarUInt32()
+            if indexMarker != 0 {
+                buffer.setCursor(typeMetaStart)
+                remoteTypeMeta = try readTypeMeta()
+            } else {
+                let header = try buffer.readUInt64()
+                let headerHash = header >> 14
+                var bodySize = Int(header & UInt64(typeMetaSizeMask))
+                if bodySize == typeMetaSizeMask {
+                    bodySize += Int(try buffer.readVarUInt32())
+                }
+
+                if headerHash == localHeaderHash {
+                    try buffer.skip(bodySize)
+                    lastTypeMetaCacheHeader = header
+                    lastTypeMetaCacheEntry = localTypeMeta
+                    return localTypeMeta
+                }
+
+                buffer.setCursor(typeMetaStart)
+                remoteTypeMeta = try readTypeMeta()
+            }
+        } else {
+            remoteTypeMeta = try readTypeMeta()
+        }
+        if let localTypeMeta = localTypeInfo.typeMeta,
+           remoteTypeMeta === localTypeMeta {
+            return remoteTypeMeta
+        }
+        if remoteTypeMeta.registerByName {
+            guard localTypeInfo.registerByName else {
+                throw ForyError.invalidData("received name-registered compatible metadata for id-registered local type")
+            }
+            if remoteTypeMeta.namespace.value != localTypeInfo.namespace.value {
+                throw ForyError.invalidData(
+                    "namespace mismatch: expected \(localTypeInfo.namespace.value), got \(remoteTypeMeta.namespace.value)"
+                )
+            }
+            if remoteTypeMeta.typeName.value != localTypeInfo.typeName.value {
+                throw ForyError.invalidData(
+                    "type name mismatch: expected \(localTypeInfo.typeName.value), got \(remoteTypeMeta.typeName.value)"
+                )
+            }
+        } else {
+            guard !localTypeInfo.registerByName else {
+                throw ForyError.invalidData("received id-registered compatible metadata for name-registered local type")
+            }
+            guard let remoteUserTypeID = remoteTypeMeta.userTypeID else {
+                throw ForyError.invalidData("missing user type id in compatible type metadata")
+            }
+            guard let localUserTypeID = localTypeInfo.userTypeID else {
+                throw ForyError.invalidData("missing local user type id metadata for id-registered type")
+            }
+            if remoteUserTypeID != localUserTypeID {
+                throw ForyError.typeMismatch(expected: localUserTypeID, actual: remoteUserTypeID)
+            }
         }
 
-        let typeMetaStart = buffer.getCursor()
-        let indexMarker = try buffer.readVarUInt32()
-        guard indexMarker == 0 else {
-            buffer.setCursor(typeMetaStart)
-            return try readTypeMeta()
+        if let remoteTypeID = remoteTypeMeta.typeID,
+           let remoteWireTypeID = TypeId(rawValue: remoteTypeID),
+           !isAllowedRegisteredWireTypeID(
+               remoteWireTypeID,
+               declaredTypeID: localTypeInfo.typeID,
+               registerByName: localTypeInfo.registerByName,
+               compatible: compatible
+           ) {
+            throw ForyError.typeMismatch(expected: wireTypeID.rawValue, actual: remoteTypeID)
         }
-
-        let header = try buffer.readUInt64()
-        let headerHash = header >> 14
-        var bodySize = Int(header & UInt64(typeMetaSizeMask))
-        if bodySize == typeMetaSizeMask {
-            bodySize += Int(try buffer.readVarUInt32())
-        }
-
-        if headerHash == localHeaderHash {
-            try buffer.skip(bodySize)
-            lastTypeMetaCacheHeader = header
-            lastTypeMetaCacheEntry = localTypeMeta
-            return localTypeMeta
-        }
-
-        buffer.setCursor(typeMetaStart)
-        return try readTypeMeta()
+        return remoteTypeMeta
     }
 
     func pushTypeMeta<T: Serializer>(

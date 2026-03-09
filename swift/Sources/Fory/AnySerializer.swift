@@ -257,7 +257,13 @@ private struct DynamicAnyValue: Serializer {
             case .refValue:
                 let reservedRefID = context.trackRef ? context.refReader.reserveRefID() : nil
                 if readTypeInfo {
-                    _ = try foryReadTypeInfo(context)
+                    if let remoteTypeInfo = try foryReadTypeInfo(context) {
+                        let value = try foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+                        if let reservedRefID {
+                            context.refReader.storeRef(value, at: reservedRefID)
+                        }
+                        return value
+                    }
                 }
                 let value = try foryReadData(context)
                 if let reservedRefID {
@@ -270,7 +276,9 @@ private struct DynamicAnyValue: Serializer {
         }
 
         if readTypeInfo {
-            _ = try foryReadTypeInfo(context)
+            if let remoteTypeInfo = try foryReadTypeInfo(context) {
+                return try foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
+            }
         }
         return try foryReadData(context)
     }

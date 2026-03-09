@@ -116,8 +116,7 @@ public final class ReadContext {
     private var metaStringReadStateUsed = false
     private var dynamicAnyDepth = 0
 
-    @usableFromInline
-    internal var pendingCompatibleTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
+    private var compatibleTypeInfoStack: [(typeKey: ObjectIdentifier, typeInfo: TypeInfo)] = []
     private var lastTypeInfo = TypeInfo.uncached
 
     convenience init(
@@ -599,10 +598,13 @@ public final class ReadContext {
         return value
     }
 
-    @usableFromInline
     @inline(__always)
-    internal func compatibleTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
-        pendingCompatibleTypeInfo[ObjectIdentifier(type)]
+    func compatibleTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
+        let typeKey = ObjectIdentifier(type)
+        for entry in compatibleTypeInfoStack.reversed() where entry.typeKey == typeKey {
+            return entry.typeInfo
+        }
+        return nil
     }
 
     func withCompatibleTypeInfo<T: Serializer, R>(
@@ -614,30 +616,11 @@ public final class ReadContext {
             return try body()
         }
 
-        let typeKey = ObjectIdentifier(type)
-        let previousCompatibleTypeInfo = pendingCompatibleTypeInfo[typeKey]
-        pendingCompatibleTypeInfo[typeKey] = typeInfo
+        compatibleTypeInfoStack.append((ObjectIdentifier(type), typeInfo))
         defer {
-            if let previousCompatibleTypeInfo {
-                pendingCompatibleTypeInfo[typeKey] = previousCompatibleTypeInfo
-            } else {
-                pendingCompatibleTypeInfo.removeValue(forKey: typeKey)
-            }
+            _ = compatibleTypeInfoStack.popLast()
         }
         return try body()
-    }
-
-    func withScopedTypeInfo<T: Serializer, R>(
-        for type: T.Type,
-        declared: Bool,
-        _ body: () throws -> R
-    ) throws -> R {
-        guard !declared else {
-            return try body()
-        }
-
-        let remoteCompatibleTypeInfo = try T.foryReadTypeInfo(self)
-        return try withCompatibleTypeInfo(remoteCompatibleTypeInfo, for: type, body)
     }
 
     @inline(__always)
@@ -652,8 +635,8 @@ public final class ReadContext {
         if trackRef {
             refReader.reset()
         }
-        if !pendingCompatibleTypeInfo.isEmpty {
-            pendingCompatibleTypeInfo.removeAll(keepingCapacity: true)
+        if !compatibleTypeInfoStack.isEmpty {
+            compatibleTypeInfoStack.removeAll(keepingCapacity: true)
         }
     }
 

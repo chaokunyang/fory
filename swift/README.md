@@ -80,12 +80,6 @@ assert(output2 == input)
 
 `Fory` is the fastest option for single-threaded reuse. Keep one instance per thread.
 
-If one configured runtime needs to be shared across threads, use `ThreadSafeFory`:
-
-```swift
-let sharedFory = ThreadSafeFory(xlang: true, trackRef: false, compatible: true)
-```
-
 ## 📚 Core Features
 
 ### 1. Object Graph Serialization

@@ -70,8 +70,7 @@ public struct ForyConfig {
 ///
 /// Reuse one `Fory` per thread for the fastest path. The runtime keeps one
 /// reusable read/write context pair and must not be used concurrently from
-/// multiple threads. Use `ThreadSafeFory` when one configured runtime needs to
-/// be shared.
+/// multiple threads.
 public final class Fory {
     public let config: ForyConfig
     let typeResolver: TypeResolver

@@ -44,14 +44,6 @@ let fory = Fory() // xlang=true, trackRef=false, compatible=false
 `Fory` is single-threaded and optimized to reuse one read/write context pair on the calling thread.
 Reuse one instance per thread and do not use the same instance concurrently.
 
-When one configured runtime needs to be shared across threads, use `ThreadSafeFory`:
-
-```swift
-let fory = ThreadSafeFory(xlang: true, trackRef: false, compatible: true)
-```
-
-`ThreadSafeFory` serializes access around one underlying `Fory`, so plain `Fory` remains the fastest option for thread-confined workloads.
-
 ## Options
 
 ### `xlang`

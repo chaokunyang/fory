@@ -18,7 +18,7 @@
 import Foundation
 
 // swiftlint:disable type_body_length
-public enum Wire {
+public enum UnsafeUtil {
     @inlinable
     @inline(__always)
     public static func writeBool(

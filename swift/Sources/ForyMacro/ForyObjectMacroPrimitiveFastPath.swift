@@ -121,7 +121,7 @@ func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
     let writeBody = bodySections.joined(separator: "\n            ")
     return """
     \(locals)
-    Wire.writeRegion(buffer: __buffer, maxCount: \(maxNumericBytes)) { __base in
+    UnsafeUtil.writeRegion(buffer: __buffer, maxCount: \(maxNumericBytes)) { __base in
         \(writeBody)
     }
     """
@@ -158,14 +158,14 @@ private func primitiveUnsafeWriteFixedLine(for field: ParsedField, offset: Int) 
     guard let method = primitiveUnsafeWriteMethod(for: field) else {
         return nil
     }
-    return "_ = Wire.\(method)(__\(field.name), to: __base, index: \(offset))"
+    return "_ = UnsafeUtil.\(method)(__\(field.name), to: __base, index: \(offset))"
 }
 
 private func primitiveUnsafeWriteAdvanceLine(for field: ParsedField, indexExpr: String) -> String? {
     guard let method = primitiveUnsafeWriteMethod(for: field) else {
         return nil
     }
-    return "__writerIndex = Wire.\(method)(__\(field.name), to: __base, index: \(indexExpr))"
+    return "__writerIndex = UnsafeUtil.\(method)(__\(field.name), to: __base, index: \(indexExpr))"
 }
 
 private func primitiveUnsafeWriteMethod(for field: ParsedField) -> String? {
@@ -259,14 +259,14 @@ private func primitiveUnsafeFixedReadExpr(for field: ParsedField, baseExpr: Stri
     guard let method = primitiveUnsafeFixedReadMethod(for: field) else {
         return nil
     }
-    return "Wire.\(method)(from: \(baseExpr), index: \(offset))"
+    return "UnsafeUtil.\(method)(from: \(baseExpr), index: \(offset))"
 }
 
 private func primitiveUnsafePointerReadAdvanceExpr(for field: ParsedField) -> String? {
     guard let method = primitiveUnsafeReadMethod(for: field) else {
         return nil
     }
-    return "try Wire.\(method)(from: __base, length: __length, index: &__readerIndex)"
+    return "try UnsafeUtil.\(method)(from: __base, length: __length, index: &__readerIndex)"
 }
 
 private struct PrimitiveFastReadLayout {
@@ -329,7 +329,7 @@ private func buildPrimitiveFastReadBlock(
     }
     var readSections: [String] = []
     if readLayout.fixedPrefixBytes > 0 {
-        readSections.append("try Wire.checkReadable(__bytes, index: 0, need: \(readLayout.fixedPrefixBytes))")
+        readSections.append("try UnsafeUtil.checkReadable(__bytes, index: 0, need: \(readLayout.fixedPrefixBytes))")
     }
     readSections.append(
         """
@@ -343,7 +343,7 @@ private func buildPrimitiveFastReadBlock(
     readSections.append("return \(readLayout.consumedExpr)")
     let readBody = readSections.joined(separator: "\n            ")
     return """
-    try Wire.readRegion(buffer: __buffer) { __bytes in
+    try UnsafeUtil.readRegion(buffer: __buffer) { __bytes in
         \(readBody)
     }
     """

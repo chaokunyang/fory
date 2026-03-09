@@ -65,10 +65,10 @@ extension AnyHashable: Serializer {
     }
 
     public static func foryReadData(_ context: ReadContext) throws -> AnyHashable {
-        guard let typeInfo = context.compatibleTypeInfo(for: Self.self) else {
-            throw ForyError.invalidData("dynamic AnyHashable key requires type info")
-        }
-        return try foryReadCompatibleData(context, remoteTypeInfo: typeInfo)
+        _ = context
+        throw ForyError.invalidData(
+            "dynamic AnyHashable key read requires type info; foryReadData should not be called directly"
+        )
     }
 
     public static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> AnyHashable {
@@ -173,10 +173,10 @@ private struct DynamicAnyValue: Serializer {
     }
 
     static func foryReadData(_ context: ReadContext) throws -> DynamicAnyValue {
-        guard let typeInfo = context.compatibleTypeInfo(for: Self.self) else {
-            throw ForyError.invalidData("dynamic Any value requires type info")
-        }
-        return try foryReadCompatibleData(context, remoteTypeInfo: typeInfo)
+        _ = context
+        throw ForyError.invalidData(
+            "dynamic Any read requires type info; foryReadData should not be called directly"
+        )
     }
 
     static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo: TypeInfo) throws -> DynamicAnyValue {
@@ -235,6 +235,20 @@ private struct DynamicAnyValue: Serializer {
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> DynamicAnyValue {
+        @inline(__always)
+        func requireDynamicTypeInfo() throws -> TypeInfo {
+            if readTypeInfo {
+                guard let remoteTypeInfo = try foryReadTypeInfo(context) else {
+                    throw ForyError.invalidData("dynamic Any value requires type info")
+                }
+                return remoteTypeInfo
+            }
+            guard let remoteTypeInfo = context.compatibleTypeInfo(for: Self.self) else {
+                throw ForyError.invalidData("dynamic Any value requires type info")
+            }
+            return remoteTypeInfo
+        }
+
         if refMode != .none {
             let rawFlag = try context.buffer.readInt8()
             guard let flag = RefFlag(rawValue: rawFlag) else {
@@ -256,16 +270,8 @@ private struct DynamicAnyValue: Serializer {
                 return DynamicAnyValue(referenced)
             case .refValue:
                 let reservedRefID = context.trackRef ? context.refReader.reserveRefID() : nil
-                if readTypeInfo {
-                    if let remoteTypeInfo = try foryReadTypeInfo(context) {
-                        let value = try foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-                        if let reservedRefID {
-                            context.refReader.storeRef(value, at: reservedRefID)
-                        }
-                        return value
-                    }
-                }
-                let value = try foryReadData(context)
+                let remoteTypeInfo = try requireDynamicTypeInfo()
+                let value = try foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
                 if let reservedRefID {
                     context.refReader.storeRef(value, at: reservedRefID)
                 }
@@ -275,12 +281,7 @@ private struct DynamicAnyValue: Serializer {
             }
         }
 
-        if readTypeInfo {
-            if let remoteTypeInfo = try foryReadTypeInfo(context) {
-                return try foryReadCompatibleData(context, remoteTypeInfo: remoteTypeInfo)
-            }
-        }
-        return try foryReadData(context)
+        return try foryReadCompatibleData(context, remoteTypeInfo: requireDynamicTypeInfo())
     }
 }
 

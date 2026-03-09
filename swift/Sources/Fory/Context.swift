@@ -202,8 +202,7 @@ public final class WriteContext {
     private var typeDefStateUsed = false
     private var metaStringWriteStateUsed = false
     private var dynamicAnyDepth = 0
-    private var lastTypeInfoTypeID: ObjectIdentifier?
-    private var lastTypeInfo: TypeInfo?
+    private var lastTypeInfo = TypeInfo.uncached
 
     convenience init(
         buffer: ByteBuffer,
@@ -263,11 +262,10 @@ public final class WriteContext {
     @inline(__always)
     func typeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo {
         let typeID = ObjectIdentifier(type)
-        if lastTypeInfoTypeID == typeID, let cached = lastTypeInfo {
-            return cached
+        if lastTypeInfo.swiftTypeID == typeID {
+            return lastTypeInfo
         }
         let info = try typeResolver.requireTypeInfo(for: type)
-        lastTypeInfoTypeID = typeID
         lastTypeInfo = info
         return info
     }
@@ -376,10 +374,7 @@ public final class ReadContext {
     )?
     // swiftlint:enable large_tuple
     private var pendingTypeInfo: [ObjectIdentifier: TypeInfo] = [:]
-    private var lastTypeMetaCacheHeader: UInt64?
-    private var lastTypeMetaCacheEntry: TypeMeta?
-    private var lastTypeInfoTypeID: ObjectIdentifier?
-    private var lastTypeInfo: TypeInfo?
+    private var lastTypeInfo = TypeInfo.uncached
 
     convenience init(
         buffer: ByteBuffer,
@@ -491,11 +486,10 @@ public final class ReadContext {
     @inline(__always)
     func typeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo {
         let typeID = ObjectIdentifier(type)
-        if lastTypeInfoTypeID == typeID, let cached = lastTypeInfo {
-            return cached
+        if lastTypeInfo.swiftTypeID == typeID {
+            return lastTypeInfo
         }
         let info = try typeResolver.requireTypeInfo(for: type)
-        lastTypeInfoTypeID = typeID
         lastTypeInfo = info
         return info
     }
@@ -629,17 +623,8 @@ public final class ReadContext {
         if bodySize == typeMetaSizeMask {
             bodySize += Int(try buffer.readVarUInt32())
         }
-        if lastTypeMetaCacheHeader == header,
-           let cachedEntry = lastTypeMetaCacheEntry {
-            try buffer.skip(bodySize)
-            try typeDefState.storeTypeMetaEntry(cachedEntry, at: index)
-            return cachedEntry
-        }
-
         if let cached = typeResolver.typeMeta(forHeader: header) {
             try buffer.skip(bodySize)
-            lastTypeMetaCacheHeader = header
-            lastTypeMetaCacheEntry = cached
             try typeDefState.storeTypeMetaEntry(cached, at: index)
             return cached
         }
@@ -647,9 +632,6 @@ public final class ReadContext {
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
         let canonicalEntry = typeResolver.cacheTypeMeta(decoded, forHeader: header)
-
-        lastTypeMetaCacheHeader = header
-        lastTypeMetaCacheEntry = canonicalEntry
         try typeDefState.storeTypeMetaEntry(canonicalEntry, at: index)
         return canonicalEntry
     }
@@ -679,8 +661,6 @@ public final class ReadContext {
 
                 if headerHash == localHeaderHash {
                     try buffer.skip(bodySize)
-                    lastTypeMetaCacheHeader = header
-                    lastTypeMetaCacheEntry = localTypeMeta
                     return localTypeMeta
                 }
 

@@ -133,6 +133,8 @@ private func encodedTypeDefHasUserTypeFields(_ fields: [TypeMeta.FieldInfo]) -> 
 }
 
 final class TypeInfo: @unchecked Sendable {
+    static let uncached = TypeInfo(typeID: .unknown)
+
     let swiftTypeID: ObjectIdentifier
     let typeID: TypeId
     let userTypeID: UInt32?

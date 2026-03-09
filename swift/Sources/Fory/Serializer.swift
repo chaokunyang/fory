@@ -109,12 +109,49 @@ public extension Serializer {
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> Self {
-        if refMode != .none {
+        switch refMode {
+        case .none:
+            if readTypeInfo {
+                try Self.foryReadTypeInfo(context)
+            }
+            return try Self.foryReadData(context)
+        case .nullOnly:
+            let rawFlag = try context.buffer.readInt8()
+            switch rawFlag {
+            case RefFlag.null.rawValue:
+                return Self.foryDefault()
+            case RefFlag.notNullValue.rawValue:
+                if readTypeInfo {
+                    try Self.foryReadTypeInfo(context)
+                }
+                return try Self.foryReadData(context)
+            case RefFlag.refValue.rawValue:
+                if context.trackRef {
+                    let reservedRefID = context.refReader.reserveRefID()
+                    context.pushPendingRef(reservedRefID)
+                    if readTypeInfo {
+                        try Self.foryReadTypeInfo(context)
+                    }
+                    let value = try Self.foryReadData(context)
+                    context.finishPendingRefIfNeeded(value)
+                    context.popPendingRef()
+                    return value
+                }
+                if readTypeInfo {
+                    try Self.foryReadTypeInfo(context)
+                }
+                return try Self.foryReadData(context)
+            case RefFlag.ref.rawValue:
+                let refID = try context.buffer.readVarUInt32()
+                return try context.refReader.readRef(refID, as: Self.self)
+            default:
+                throw ForyError.refError("invalid ref flag \(rawFlag)")
+            }
+        case .tracking:
             let rawFlag = try context.buffer.readInt8()
             guard let flag = RefFlag(rawValue: rawFlag) else {
                 throw ForyError.refError("invalid ref flag \(rawFlag)")
             }
-
             switch flag {
             case .null:
                 return Self.foryDefault()
@@ -132,14 +169,12 @@ public extension Serializer {
                 context.popPendingRef()
                 return value
             case .notNullValue:
-                break
+                if readTypeInfo {
+                    try Self.foryReadTypeInfo(context)
+                }
+                return try Self.foryReadData(context)
             }
         }
-
-        if readTypeInfo {
-            try Self.foryReadTypeInfo(context)
-        }
-        return try Self.foryReadData(context)
     }
 
     static func foryWriteTypeInfo(_ context: WriteContext) throws {

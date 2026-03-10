@@ -15,34 +15,44 @@
 // specific language governing permissions and limitations
 // under the License.
 
-struct ReusableArray<Element> {
+final class ReusableArray<Element> {
     private var a: [Element] = []
+    private let defaultValue: Element
+    private var nonEmpty = false
     private(set) var used = 0
 
-    init(reserve: Int = 0) {
-        a.reserveCapacity(reserve)
+    init(defaultValue: Element, reserve: Int = 2) {
+        self.defaultValue = defaultValue
+        a.reserveCapacity(max(reserve, 2))
     }
 
     @inline(__always)
-    mutating func reset() {
+    func reset() {
         used = 0
+        nonEmpty = false
     }
 
     @inline(__always)
-    mutating func push(_ x: Element) {
+    func push(_ x: Element) {
         if used < a.count {
             a[used] = x
         } else {
             a.append(x)
         }
         used += 1
+        nonEmpty = true
     }
 
     @inline(__always)
-    subscript(index: Int) -> Element {
-        get { a[index] }
-        set { a[index] = newValue }
+    func get(_ index: Int) -> Element {
+        guard index >= 0, index < used else {
+            return defaultValue
+        }
+        return a[index]
     }
+
+    @inline(__always)
+    var isEmpty: Bool { !nonEmpty }
 
     var slice: ArraySlice<Element> { a[..<used] }
 }

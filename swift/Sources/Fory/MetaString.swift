@@ -27,7 +27,7 @@ public enum MetaStringEncoding: UInt8, CaseIterable, Sendable {
     case allToLowerSpecial = 4
 }
 
-public struct MetaString: Equatable, Hashable, Sendable {
+public final class MetaString: Equatable, Hashable, @unchecked Sendable {
     public let value: String
     public let encoding: MetaStringEncoding
     public let specialChar1: Character
@@ -67,6 +67,24 @@ public struct MetaString: Equatable, Hashable, Sendable {
             preconditionFailure("failed to create empty MetaString")
         }
         return emptyMetaString
+    }
+
+    public static func == (lhs: MetaString, rhs: MetaString) -> Bool {
+        lhs.value == rhs.value &&
+            lhs.encoding == rhs.encoding &&
+            lhs.specialChar1 == rhs.specialChar1 &&
+            lhs.specialChar2 == rhs.specialChar2 &&
+            lhs.bytes == rhs.bytes &&
+            lhs.stripLastChar == rhs.stripLastChar
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(encoding)
+        hasher.combine(specialChar1)
+        hasher.combine(specialChar2)
+        hasher.combine(bytes)
+        hasher.combine(stripLastChar)
     }
 }
 

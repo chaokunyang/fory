@@ -29,8 +29,8 @@ public final class ReadContext {
     public let maxBinarySize: Int
     public let maxDepth: Int
     public let refReader: RefReader
-    private var compatibleTypeDefTypeInfos = ReusableArray<TypeInfo>(reserve: 8)
-    private var metaStrings = ReusableArray<MetaString>(reserve: 16)
+    private let compatibleTypeDefTypeInfos = ReusableArray<TypeInfo?>(defaultValue: nil, reserve: 2)
+    private let metaStrings = ReusableArray<MetaString?>(defaultValue: nil, reserve: 16)
     private var dynamicAnyDepth = 0
 
     private var typeInfoStack = UInt64Map<TypeInfo>(initialCapacity: 8)
@@ -249,28 +249,11 @@ public final class ReadContext {
 
     @inline(__always)
     private func compatibleTypeInfo(at index: Int) -> TypeInfo? {
-        guard index >= 0, index < compatibleTypeDefTypeInfos.used else {
-            return nil
-        }
-        let typeInfo = compatibleTypeDefTypeInfos[index]
-        if typeInfo === TypeInfo.empty {
-            return nil
-        }
-        return typeInfo
+        compatibleTypeDefTypeInfos.get(index)
     }
 
     @inline(__always)
-    private func storeCompatibleTypeInfo(_ typeInfo: TypeInfo, at index: Int) throws {
-        if index < 0 {
-            throw ForyError.invalidData("negative compatible type definition index")
-        }
-        if index < compatibleTypeDefTypeInfos.used {
-            compatibleTypeDefTypeInfos[index] = typeInfo
-            return
-        }
-        while compatibleTypeDefTypeInfos.used < index {
-            compatibleTypeDefTypeInfos.push(TypeInfo.empty)
-        }
+    private func appendCompatibleTypeInfo(_ typeInfo: TypeInfo) {
         compatibleTypeDefTypeInfos.push(typeInfo)
     }
 
@@ -280,7 +263,7 @@ public final class ReadContext {
         wireTypeID: TypeId
     ) throws -> TypeInfo? {
         if !checkClassVersion,
-           compatibleTypeDefTypeInfos.used == 0,
+           compatibleTypeDefTypeInfos.isEmpty,
            !localTypeInfo.typeDefHasUserTypeFields,
            let localTypeDefHeader = localTypeInfo.typeDefHeader {
             let typeMetaStart = buffer.getCursor()
@@ -292,7 +275,7 @@ public final class ReadContext {
                     bodySize += Int(try buffer.readVarUInt32())
                 }
                 if header == localTypeDefHeader {
-                    try storeCompatibleTypeInfo(localTypeInfo, at: 0)
+                    appendCompatibleTypeInfo(localTypeInfo)
                     try buffer.skip(bodySize)
                     return nil
                 }
@@ -324,14 +307,14 @@ public final class ReadContext {
         }
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
             try buffer.skip(bodySize)
-            try storeCompatibleTypeInfo(cached, at: index)
+            appendCompatibleTypeInfo(cached)
             return cached
         }
 
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
         let cachedTypeInfo = try typeResolver.cacheTypeInfo(decoded, forHeader: header)
-        try storeCompatibleTypeInfo(cachedTypeInfo, at: index)
+        appendCompatibleTypeInfo(cachedTypeInfo)
         return cachedTypeInfo
     }
 
@@ -341,7 +324,7 @@ public final class ReadContext {
         wireTypeID: TypeId
     ) throws -> TypeInfo {
         let remoteTypeInfo: TypeInfo
-        if compatibleTypeDefTypeInfos.used == 0,
+        if compatibleTypeDefTypeInfos.isEmpty,
            let localTypeDefHeader = localTypeInfo.typeDefHeader {
             let typeMetaStart = buffer.getCursor()
             let indexMarker = try buffer.readVarUInt32()
@@ -356,7 +339,7 @@ public final class ReadContext {
                 }
 
                 if header == localTypeDefHeader {
-                    try storeCompatibleTypeInfo(localTypeInfo, at: 0)
+                    appendCompatibleTypeInfo(localTypeInfo)
                     try buffer.skip(bodySize)
                     return localTypeInfo
                 }
@@ -546,10 +529,7 @@ public final class ReadContext {
 
     @inline(__always)
     func metaString(at index: Int) -> MetaString? {
-        guard index >= 0, index < metaStrings.used else {
-            return nil
-        }
-        return metaStrings[index]
+        metaStrings.get(index)
     }
 
     @inline(__always)

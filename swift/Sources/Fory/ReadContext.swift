@@ -148,22 +148,7 @@ public final class ReadContext {
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
             return try readCompatibleTypeInfo()
-        case .namedStruct:
-            if compatible {
-                return try readCompatibleTypeInfo()
-            }
-            let namespace = try readMetaString(
-                context: self,
-                decoder: .namespace,
-                encodings: namespaceMetaStringEncodings
-            )
-            let typeName = try readMetaString(
-                context: self,
-                decoder: .typeName,
-                encodings: typeNameMetaStringEncodings
-            )
-            return try typeResolver.requireTypeInfo(namespace: namespace.value, typeName: typeName.value)
-        case .namedEnum, .namedExt, .namedUnion:
+        case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if compatible {
                 return try readCompatibleTypeInfo()
             }
@@ -217,36 +202,7 @@ public final class ReadContext {
                 for: localTypeInfo,
                 wireTypeID: typeID
             )
-        case .namedStruct:
-            if compatible {
-                _ = try readCompatibleTypeInfoIfNeeded(
-                    for: localTypeInfo,
-                    wireTypeID: typeID
-                )
-            } else {
-                let namespace = try readMetaString(
-                    context: self,
-                    decoder: .namespace,
-                    encodings: namespaceMetaStringEncodings
-                )
-                let typeName = try readMetaString(
-                    context: self,
-                    decoder: .typeName,
-                    encodings: typeNameMetaStringEncodings
-                )
-                guard localTypeInfo.registerByName else {
-                    throw ForyError.invalidData("received name-registered type info for id-registered local type")
-                }
-                if namespace.value != localTypeInfo.namespace.value ||
-                    typeName.value != localTypeInfo.typeName.value {
-                    let expectedTypeName = "\(localTypeInfo.namespace.value)::\(localTypeInfo.typeName.value)"
-                    let actualTypeName = "\(namespace.value)::\(typeName.value)"
-                    throw ForyError.invalidData(
-                        "type name mismatch: expected \(expectedTypeName), got \(actualTypeName)"
-                    )
-                }
-            }
-        case .namedEnum, .namedExt, .namedUnion:
+        case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if compatible {
                 _ = try readCompatibleTypeInfoIfNeeded(
                     for: localTypeInfo,

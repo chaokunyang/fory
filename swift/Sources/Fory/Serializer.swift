@@ -215,27 +215,7 @@ public extension Serializer {
                 throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
             }
             context.writeTypeMeta(typeInfo)
-        case .namedStruct:
-            if context.compatible {
-                guard typeInfo.typeDefBytes != nil else {
-                    throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
-                }
-                context.writeTypeMeta(typeInfo)
-            } else {
-                try writeMetaString(
-                    context: context,
-                    value: typeInfo.namespace,
-                    encodings: namespaceMetaStringEncodings,
-                    encoder: .namespace
-                )
-                try writeMetaString(
-                    context: context,
-                    value: typeInfo.typeName,
-                    encodings: typeNameMetaStringEncodings,
-                    encoder: .typeName
-                )
-            }
-        case .namedEnum, .namedExt, .namedUnion:
+        case .namedEnum, .namedStruct, .namedExt, .namedUnion:
             if context.compatible {
                 guard typeInfo.typeDefBytes != nil else {
                     throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")

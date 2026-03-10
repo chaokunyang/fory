@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fory Perf Optimizer"
+  short_description: "Profile-first Apache Fory perf optimization playbook"
+  default_prompt: "Optimize Apache Fory bottlenecks with a profile-driven, benchmark-verified, cross-language workflow that preserves protocol correctness."

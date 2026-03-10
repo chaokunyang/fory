@@ -17,11 +17,6 @@
 
 namespace Apache.Fory;
 
-public interface ICompatibleNoTypeMetaReader<T>
-{
-    T ReadDataCompatibleNoTypeMeta(ReadContext context);
-}
-
 /// <summary>
 /// Base class for custom serializers.
 /// </summary>

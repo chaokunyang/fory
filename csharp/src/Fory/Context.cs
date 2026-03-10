@@ -17,33 +17,13 @@
 
 namespace Apache.Fory;
 
-public sealed class CompatibleTypeDefWriteState
+internal sealed class TypeMetaWriteState
 {
     private Dictionary<Type, uint>? _typeIndexByType;
     private Type? _firstType;
     private uint _nextIndex;
 
-    public uint? LookupIndex(Type type)
-    {
-        if (_nextIndex == 0)
-        {
-            return null;
-        }
-
-        if (ReferenceEquals(_firstType, type))
-        {
-            return 0;
-        }
-
-        if (_typeIndexByType is not null && _typeIndexByType.TryGetValue(type, out uint idx))
-        {
-            return idx;
-        }
-
-        return null;
-    }
-
-    public (uint Index, bool IsNew) AssignIndexIfAbsent(Type type)
+    internal (uint Index, bool IsNew) AssignIndexIfAbsent(Type type)
     {
         if (_nextIndex == 0)
         {
@@ -72,7 +52,7 @@ public sealed class CompatibleTypeDefWriteState
         return (index, true);
     }
 
-    public void Reset()
+    internal void Reset()
     {
         _firstType = null;
         _typeIndexByType?.Clear();
@@ -80,9 +60,9 @@ public sealed class CompatibleTypeDefWriteState
     }
 }
 
-public sealed class CompatibleTypeDefReadState
+internal sealed class TypeMetaReadState
 {
-    private const int MaxParsedTypeDefEntries = 8192;
+    private const int MaxParsedTypeMetaEntries = 8192;
     private readonly List<TypeMeta> _typeMetas = [];
     private readonly Dictionary<ulong, CachedTypeMetaEntry> _cachedTypeMetasByHeader = [];
     private TypeMeta? _firstTypeMeta;
@@ -93,7 +73,7 @@ public sealed class CompatibleTypeDefReadState
 
     private readonly record struct CachedTypeMetaEntry(TypeMeta TypeMeta, int SkipBytesAfterHeader);
 
-    public TypeMeta? TypeMetaAt(int index)
+    internal TypeMeta? TypeMetaAt(int index)
     {
         if (index < 0)
         {
@@ -109,11 +89,11 @@ public sealed class CompatibleTypeDefReadState
         return listIndex >= 0 && listIndex < _typeMetas.Count ? _typeMetas[listIndex] : null;
     }
 
-    public void StoreTypeMeta(TypeMeta typeMeta, int index)
+    internal void StoreTypeMeta(TypeMeta typeMeta, int index)
     {
         if (index < 0)
         {
-            throw new InvalidDataException("negative compatible type definition index");
+            throw new InvalidDataException("negative type meta index");
         }
 
         if (index == 0)
@@ -126,7 +106,7 @@ public sealed class CompatibleTypeDefReadState
         if (!_hasFirstTypeMeta)
         {
             throw new InvalidDataException(
-                $"compatible type definition index gap: index={index}, missing index 0");
+                $"type meta index gap: index={index}, missing index 0");
         }
 
         int listIndex = index - 1;
@@ -143,10 +123,10 @@ public sealed class CompatibleTypeDefReadState
         }
 
         throw new InvalidDataException(
-            $"compatible type definition index gap: index={index}, count={_typeMetas.Count + 1}");
+            $"type meta index gap: index={index}, count={_typeMetas.Count + 1}");
     }
 
-    public bool TryGetCachedTypeMeta(ulong header, out TypeMeta typeMeta, out int skipBytesAfterHeader)
+    internal bool TryGetCachedTypeMeta(ulong header, out TypeMeta typeMeta, out int skipBytesAfterHeader)
     {
         if (_hasLastMetaHeader && _lastMetaHeader == header)
         {
@@ -170,19 +150,19 @@ public sealed class CompatibleTypeDefReadState
         return false;
     }
 
-    public void CacheTypeMeta(ulong header, TypeMeta typeMeta, int skipBytesAfterHeader)
+    internal void CacheTypeMeta(ulong header, TypeMeta typeMeta, int skipBytesAfterHeader)
     {
         CachedTypeMetaEntry cached = new(typeMeta, skipBytesAfterHeader);
         _lastMetaHeader = header;
         _lastTypeMeta = cached;
         _hasLastMetaHeader = true;
-        if (_cachedTypeMetasByHeader.Count < MaxParsedTypeDefEntries)
+        if (_cachedTypeMetasByHeader.Count < MaxParsedTypeMetaEntries)
         {
             _cachedTypeMetasByHeader.TryAdd(header, cached);
         }
     }
 
-    public void Reset()
+    internal void Reset()
     {
         _firstTypeMeta = null;
         _hasFirstTypeMeta = false;
@@ -190,17 +170,12 @@ public sealed class CompatibleTypeDefReadState
     }
 }
 
-public sealed class MetaStringWriteState
+internal sealed class MetaStringWriteState
 {
     private readonly Dictionary<MetaString, uint> _stringIndexByKey = [];
     private uint _nextIndex;
 
-    public uint? Index(MetaString value)
-    {
-        return _stringIndexByKey.TryGetValue(value, out uint index) ? index : null;
-    }
-
-    public (uint Index, bool IsNew) AssignIndexIfAbsent(MetaString value)
+    internal (uint Index, bool IsNew) AssignIndexIfAbsent(MetaString value)
     {
         if (_stringIndexByKey.TryGetValue(value, out uint existing))
         {
@@ -213,28 +188,28 @@ public sealed class MetaStringWriteState
         return (index, true);
     }
 
-    public void Reset()
+    internal void Reset()
     {
         _stringIndexByKey.Clear();
         _nextIndex = 0;
     }
 }
 
-public sealed class MetaStringReadState
+internal sealed class MetaStringReadState
 {
     private readonly List<MetaString> _values = [];
 
-    public MetaString? ValueAt(int index)
+    internal MetaString? ValueAt(int index)
     {
         return index >= 0 && index < _values.Count ? _values[index] : null;
     }
 
-    public void Append(MetaString value)
+    internal void Append(MetaString value)
     {
         _values.Add(value);
     }
 
-    public void Reset()
+    internal void Reset()
     {
         _values.Clear();
     }
@@ -247,9 +222,7 @@ public sealed class WriteContext
         TypeResolver typeResolver,
         bool trackRef,
         bool compatible = false,
-        bool checkStructVersion = false,
-        CompatibleTypeDefWriteState? compatibleTypeDefState = null,
-        MetaStringWriteState? metaStringWriteState = null)
+        bool checkStructVersion = false)
     {
         Writer = writer;
         TypeResolver = typeResolver;
@@ -257,8 +230,8 @@ public sealed class WriteContext
         Compatible = compatible;
         CheckStructVersion = checkStructVersion;
         RefWriter = new RefWriter();
-        CompatibleTypeDefState = compatibleTypeDefState ?? new CompatibleTypeDefWriteState();
-        MetaStringWriteState = metaStringWriteState ?? new MetaStringWriteState();
+        TypeMetaState = new TypeMetaWriteState();
+        MetaStringWriteState = new MetaStringWriteState();
     }
 
     public ByteWriter Writer { get; private set; }
@@ -271,26 +244,26 @@ public sealed class WriteContext
 
     public bool CheckStructVersion { get; }
 
-    public RefWriter RefWriter { get; }
+    internal RefWriter RefWriter { get; }
 
-    public CompatibleTypeDefWriteState CompatibleTypeDefState { get; }
+    internal TypeMetaWriteState TypeMetaState { get; }
 
-    public MetaStringWriteState MetaStringWriteState { get; }
+    internal MetaStringWriteState MetaStringWriteState { get; }
 
-    public void ResetFor(ByteWriter writer)
+    internal void ResetFor(ByteWriter writer)
     {
         Writer = writer;
         Reset();
     }
 
-    public void WriteCompatibleTypeMeta(Type type, TypeMeta typeMeta)
+    internal void WriteTypeMeta(Type type, TypeMeta typeMeta)
     {
-        WriteCompatibleTypeMeta(type, typeMeta.Encode());
+        WriteTypeMeta(type, typeMeta.Encode());
     }
 
-    public void WriteCompatibleTypeMeta(Type type, ReadOnlySpan<byte> encodedTypeMeta)
+    internal void WriteTypeMeta(Type type, ReadOnlySpan<byte> encodedTypeMeta)
     {
-        (uint index, bool isNew) = CompatibleTypeDefState.AssignIndexIfAbsent(type);
+        (uint index, bool isNew) = TypeMetaState.AssignIndexIfAbsent(type);
         if (isNew)
         {
             Writer.WriteVarUInt32(index << 1);
@@ -302,15 +275,15 @@ public sealed class WriteContext
         }
     }
 
-    public void ResetObjectState()
+    internal void ResetObjectState()
     {
         RefWriter.Reset();
     }
 
-    public void Reset()
+    internal void Reset()
     {
         ResetObjectState();
-        CompatibleTypeDefState.Reset();
+        TypeMetaState.Reset();
         MetaStringWriteState.Reset();
     }
 }
@@ -333,11 +306,11 @@ public sealed class ReadContext
     private readonly Dictionary<CanonicalRefSignature, List<CanonicalRefEntry>> _canonicalRefCache = [];
     private readonly List<uint> _readRefIds = [];
     private readonly int _maxDynamicReadDepth;
-    private Type? _pendingCompatibleType;
-    private TypeMeta? _pendingCompatibleTypeMeta;
-    private Dictionary<Type, TypeMeta>? _pendingCompatibleTypeMetaMap;
-    private Type? _lastCompatibleType;
-    private TypeMeta? _lastCompatibleTypeMeta;
+    private Type? _typeMetaType;
+    private TypeMeta? _typeMeta;
+    private Dictionary<Type, TypeMeta>? _typeMetaByType;
+    private Type? _cachedTypeMetaType;
+    private TypeMeta? _cachedTypeMeta;
     private int _currentDynamicReadDepth;
 
     public ReadContext(
@@ -346,8 +319,6 @@ public sealed class ReadContext
         bool trackRef,
         bool compatible = false,
         bool checkStructVersion = false,
-        CompatibleTypeDefReadState? compatibleTypeDefState = null,
-        MetaStringReadState? metaStringReadState = null,
         int maxDynamicReadDepth = 20)
     {
         if (maxDynamicReadDepth <= 0)
@@ -361,8 +332,8 @@ public sealed class ReadContext
         Compatible = compatible;
         CheckStructVersion = checkStructVersion;
         RefReader = new RefReader();
-        CompatibleTypeDefState = compatibleTypeDefState ?? new CompatibleTypeDefReadState();
-        MetaStringReadState = metaStringReadState ?? new MetaStringReadState();
+        TypeMetaState = new TypeMetaReadState();
+        MetaStringReadState = new MetaStringReadState();
         _maxDynamicReadDepth = maxDynamicReadDepth;
     }
 
@@ -376,42 +347,42 @@ public sealed class ReadContext
 
     public bool CheckStructVersion { get; }
 
-    public RefReader RefReader { get; }
+    internal RefReader RefReader { get; }
 
-    public CompatibleTypeDefReadState CompatibleTypeDefState { get; }
+    internal TypeMetaReadState TypeMetaState { get; }
 
-    public MetaStringReadState MetaStringReadState { get; }
+    internal MetaStringReadState MetaStringReadState { get; }
 
-    public void ResetFor(ByteReader reader)
+    internal void ResetFor(ByteReader reader)
     {
         Reader = reader;
         Reset();
     }
 
-    public TypeMeta ReadCompatibleTypeMeta()
+    internal TypeMeta ReadTypeMeta()
     {
         uint indexMarker = Reader.ReadVarUInt32();
         bool isRef = (indexMarker & 1) == 1;
         int index = checked((int)(indexMarker >> 1));
         if (isRef)
         {
-            TypeMeta? cached = CompatibleTypeDefState.TypeMetaAt(index);
+            TypeMeta? cached = TypeMetaState.TypeMetaAt(index);
             if (cached is null)
             {
-                throw new InvalidDataException($"unknown compatible type definition ref index {index}");
+                throw new InvalidDataException($"unknown type meta ref index {index}");
             }
 
             return cached;
         }
 
         ulong header = Reader.ReadUInt64();
-        if (CompatibleTypeDefState.TryGetCachedTypeMeta(
+        if (TypeMetaState.TryGetCachedTypeMeta(
                 header,
                 out TypeMeta cachedTypeMeta,
                 out int skipBytesAfterHeader))
         {
             Reader.Skip(skipBytesAfterHeader);
-            CompatibleTypeDefState.StoreTypeMeta(cachedTypeMeta, index);
+            TypeMetaState.StoreTypeMeta(cachedTypeMeta, index);
             return cachedTypeMeta;
         }
 
@@ -420,115 +391,106 @@ public sealed class ReadContext
         TypeMeta typeMeta = TypeMeta.Decode(Reader);
         int consumedTypeMetaBytes = Reader.Cursor - headerStartCursor;
         int parsedSkipBytesAfterHeader = consumedTypeMetaBytes - sizeof(ulong);
-        CompatibleTypeDefState.StoreTypeMeta(typeMeta, index);
-        CompatibleTypeDefState.CacheTypeMeta(header, typeMeta, parsedSkipBytesAfterHeader);
+        TypeMetaState.StoreTypeMeta(typeMeta, index);
+        TypeMetaState.CacheTypeMeta(header, typeMeta, parsedSkipBytesAfterHeader);
         return typeMeta;
     }
 
-    public void PushCompatibleTypeMeta(Type type, TypeMeta typeMeta)
+    internal void StoreTypeMeta(Type type, TypeMeta typeMeta)
     {
-        if (_lastCompatibleType == type && ReferenceEquals(_lastCompatibleTypeMeta, typeMeta))
+        if (_cachedTypeMetaType == type && ReferenceEquals(_cachedTypeMeta, typeMeta))
         {
             return;
         }
 
-        if (ReferenceEquals(_pendingCompatibleType, type))
+        if (ReferenceEquals(_typeMetaType, type))
         {
-            if (ReferenceEquals(_pendingCompatibleTypeMeta, typeMeta))
+            if (ReferenceEquals(_typeMeta, typeMeta))
             {
-                _lastCompatibleType = type;
-                _lastCompatibleTypeMeta = typeMeta;
+                _cachedTypeMetaType = type;
+                _cachedTypeMeta = typeMeta;
                 return;
             }
 
-            _pendingCompatibleTypeMeta = typeMeta;
-            _lastCompatibleType = type;
-            _lastCompatibleTypeMeta = typeMeta;
+            _typeMeta = typeMeta;
+            _cachedTypeMetaType = type;
+            _cachedTypeMeta = typeMeta;
             return;
         }
 
-        if (_pendingCompatibleType is null)
+        if (_typeMetaType is null)
         {
-            _pendingCompatibleType = type;
-            _pendingCompatibleTypeMeta = typeMeta;
-            _lastCompatibleType = type;
-            _lastCompatibleTypeMeta = typeMeta;
+            _typeMetaType = type;
+            _typeMeta = typeMeta;
+            _cachedTypeMetaType = type;
+            _cachedTypeMeta = typeMeta;
             return;
         }
 
-        if (_pendingCompatibleTypeMetaMap is null)
+        if (_typeMetaByType is null)
         {
-            _pendingCompatibleTypeMetaMap = new Dictionary<Type, TypeMeta>();
-            if (_pendingCompatibleTypeMeta is not null)
+            _typeMetaByType = new Dictionary<Type, TypeMeta>();
+            if (_typeMeta is not null)
             {
-                _pendingCompatibleTypeMetaMap[_pendingCompatibleType] = _pendingCompatibleTypeMeta;
+                _typeMetaByType[_typeMetaType!] = _typeMeta;
             }
         }
-        else if (_pendingCompatibleTypeMetaMap.TryGetValue(type, out TypeMeta? existing) &&
+        else if (_typeMetaByType.TryGetValue(type, out TypeMeta? existing) &&
                  ReferenceEquals(existing, typeMeta))
         {
-            _lastCompatibleType = type;
-            _lastCompatibleTypeMeta = typeMeta;
+            _cachedTypeMetaType = type;
+            _cachedTypeMeta = typeMeta;
             return;
         }
 
-        _pendingCompatibleTypeMetaMap[type] = typeMeta;
-        _lastCompatibleType = type;
-        _lastCompatibleTypeMeta = typeMeta;
+        _typeMetaByType[type] = typeMeta;
+        _cachedTypeMetaType = type;
+        _cachedTypeMeta = typeMeta;
     }
 
-    public bool TryConsumeCompatibleTypeMeta(Type type, out TypeMeta? typeMeta)
+    public TypeMeta? GetTypeMeta<T>()
     {
-        if (_lastCompatibleType == type && _lastCompatibleTypeMeta is not null)
-        {
-            typeMeta = _lastCompatibleTypeMeta;
-            return true;
-        }
-
-        if (ReferenceEquals(_pendingCompatibleType, type) &&
-            _pendingCompatibleTypeMeta is not null)
-        {
-            _lastCompatibleType = type;
-            _lastCompatibleTypeMeta = _pendingCompatibleTypeMeta;
-            typeMeta = _pendingCompatibleTypeMeta;
-            return true;
-        }
-
-        if (_pendingCompatibleTypeMetaMap is null ||
-            !_pendingCompatibleTypeMetaMap.TryGetValue(type, out TypeMeta? pendingTypeMeta) ||
-            pendingTypeMeta is null)
-        {
-            typeMeta = null;
-            return false;
-        }
-
-        _lastCompatibleType = type;
-        _lastCompatibleTypeMeta = pendingTypeMeta;
-        typeMeta = pendingTypeMeta;
-        return true;
+        return GetTypeMeta(typeof(T));
     }
 
-    public TypeMeta ConsumeCompatibleTypeMeta(Type type)
+    private TypeMeta? GetTypeMeta(Type type)
     {
-        if (TryConsumeCompatibleTypeMeta(type, out TypeMeta? typeMeta) && typeMeta is not null)
+        if (_cachedTypeMetaType == type && _cachedTypeMeta is not null)
         {
-            return typeMeta;
+            return _cachedTypeMeta;
         }
 
-        throw new InvalidDataException($"missing compatible type metadata for {type}");
+        if (ReferenceEquals(_typeMetaType, type) &&
+            _typeMeta is not null)
+        {
+            _cachedTypeMetaType = type;
+            _cachedTypeMeta = _typeMeta;
+            return _typeMeta;
+        }
+
+        if (_typeMetaByType is null ||
+            !_typeMetaByType.TryGetValue(type, out TypeMeta? typeMeta) ||
+            typeMeta is null)
+        {
+            return null;
+        }
+
+        _cachedTypeMetaType = type;
+        _cachedTypeMeta = typeMeta;
+        return typeMeta;
     }
 
-    public void SetPendingTypeInfo(Type type, TypeInfo typeInfo)
+    internal void SetPendingTypeInfo(Type type, TypeInfo typeInfo)
     {
         _pendingTypeInfo[type] = typeInfo;
     }
 
-    public TypeInfo? PendingTypeInfo(Type type)
+    internal TypeInfo? PendingTypeInfo(Type type)
     {
         return _pendingTypeInfo.TryGetValue(type, out TypeInfo? typeInfo) ? typeInfo : null;
     }
 
-    public void ClearPendingTypeInfo(Type type)
+    internal void ClearPendingTypeInfo(Type type)
     {
         _pendingTypeInfo.Remove(type);
     }
@@ -556,7 +518,7 @@ public sealed class ReadContext
         }
     }
 
-    public void IncreaseDynamicReadDepth()
+    internal void IncreaseDynamicReadDepth()
     {
         _currentDynamicReadDepth += 1;
         if (_currentDynamicReadDepth > _maxDynamicReadDepth)
@@ -566,7 +528,7 @@ public sealed class ReadContext
         }
     }
 
-    public void DecreaseDynamicReadDepth()
+    internal void DecreaseDynamicReadDepth()
     {
         if (_currentDynamicReadDepth > 0)
         {
@@ -574,7 +536,7 @@ public sealed class ReadContext
         }
     }
 
-    public T CanonicalizeNonTrackingRef<T>(T value, int start, int end)
+    internal T CanonicalizeNonTrackingRef<T>(T value, int start, int end)
     {
         if (!TrackRef || end <= start || value is null || value is not object obj)
         {
@@ -607,24 +569,24 @@ public sealed class ReadContext
         return value;
     }
 
-    public void ResetObjectState()
+    internal void ResetObjectState()
     {
         RefReader.Reset();
-        _pendingCompatibleType = null;
-        _pendingCompatibleTypeMeta = null;
-        _pendingCompatibleTypeMetaMap?.Clear();
+        _typeMetaType = null;
+        _typeMeta = null;
+        _typeMetaByType?.Clear();
         _pendingTypeInfo.Clear();
         _canonicalRefCache.Clear();
         _readRefIds.Clear();
-        _lastCompatibleType = null;
-        _lastCompatibleTypeMeta = null;
+        _cachedTypeMetaType = null;
+        _cachedTypeMeta = null;
         _currentDynamicReadDepth = 0;
     }
 
-    public void Reset()
+    internal void Reset()
     {
         ResetObjectState();
-        CompatibleTypeDefState.Reset();
+        TypeMetaState.Reset();
         MetaStringReadState.Reset();
     }
 }

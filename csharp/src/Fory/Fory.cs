@@ -39,17 +39,13 @@ public sealed class Fory
             _typeResolver,
             Config.TrackRef,
             Config.Compatible,
-            Config.CheckStructVersion,
-            new CompatibleTypeDefWriteState(),
-            new MetaStringWriteState());
+            Config.CheckStructVersion);
         _readContext = new ReadContext(
             new ByteReader(Array.Empty<byte>()),
             _typeResolver,
             Config.TrackRef,
             Config.Compatible,
             Config.CheckStructVersion,
-            new CompatibleTypeDefReadState(),
-            new MetaStringReadState(),
             Config.MaxDepth);
     }
 

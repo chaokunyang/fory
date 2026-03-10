@@ -16,31 +16,35 @@
 // under the License.
 
 final class ReusableArray<Element> {
-    private var a: [Element] = []
+    private var storage: UnsafeMutablePointer<Element>
+    private var capacity: Int
     private let defaultValue: Element
-    private var nonEmpty = false
     private(set) var used = 0
 
     init(defaultValue: Element, reserve: Int = 2) {
         self.defaultValue = defaultValue
-        a.reserveCapacity(max(reserve, 2))
+        capacity = max(reserve, 2)
+        storage = UnsafeMutablePointer<Element>.allocate(capacity: capacity)
+        storage.initialize(repeating: defaultValue, count: capacity)
+    }
+
+    deinit {
+        storage.deinitialize(count: capacity)
+        storage.deallocate()
     }
 
     @inline(__always)
     func reset() {
         used = 0
-        nonEmpty = false
     }
 
     @inline(__always)
-    func push(_ x: Element) {
-        if used < a.count {
-            a[used] = x
-        } else {
-            a.append(x)
+    func push(_ value: Element) {
+        if used == capacity {
+            grow()
         }
+        storage.advanced(by: used).pointee = value
         used += 1
-        nonEmpty = true
     }
 
     @inline(__always)
@@ -48,11 +52,22 @@ final class ReusableArray<Element> {
         guard index >= 0, index < used else {
             return defaultValue
         }
-        return a[index]
+        return storage.advanced(by: index).pointee
     }
 
     @inline(__always)
-    var isEmpty: Bool { !nonEmpty }
+    var isEmpty: Bool { used == 0 }
 
-    var slice: ArraySlice<Element> { a[..<used] }
+    private func grow() {
+        let newCapacity = capacity << 1
+        let newStorage = UnsafeMutablePointer<Element>.allocate(capacity: newCapacity)
+        newStorage.initialize(repeating: defaultValue, count: newCapacity)
+        for index in 0 ..< used {
+            newStorage.advanced(by: index).pointee = storage.advanced(by: index).pointee
+        }
+        storage.deinitialize(count: capacity)
+        storage.deallocate()
+        storage = newStorage
+        capacity = newCapacity
+    }
 }

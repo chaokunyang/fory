@@ -148,14 +148,20 @@ public final class WriteContext {
             typeDefStateUsed = true
         }
 
-        let assignment = assignTypeDefIndexIfAbsent(for: typeInfo)
-        if assignment.isNew {
-            if assignment.index == 0, let firstTypeDefBytes = typeInfo.firstTypeDefBytes {
+        let typeIndexBySwiftType = self.typeIndexBySwiftType
+        let typeKey = UInt64(UInt(bitPattern: typeInfo.swiftTypeID))
+        let assignment = typeIndexBySwiftType.putIfAbsent(
+            UInt32(typeIndexBySwiftType.count),
+            for: typeKey
+        )
+        let buffer = self.buffer
+        if assignment.inserted {
+            if assignment.value == 0, let firstTypeDefBytes = typeInfo.firstTypeDefBytes {
                 buffer.writeBytes(firstTypeDefBytes)
                 return
             }
 
-            let marker = assignment.index << 1
+            let marker = assignment.value << 1
             if marker < 0x80 {
                 buffer.writeUInt8(UInt8(truncatingIfNeeded: marker))
             } else {
@@ -165,7 +171,7 @@ public final class WriteContext {
                 buffer.writeBytes(typeDefBytes)
             }
         } else {
-            let marker = (assignment.index << 1) | 1
+            let marker = (assignment.value << 1) | 1
             if marker < 0x80 {
                 buffer.writeUInt8(UInt8(truncatingIfNeeded: marker))
             } else {
@@ -177,16 +183,6 @@ public final class WriteContext {
     @inline(__always)
     func markMetaStringWriteStateUsed() {
         metaStringWriteStateUsed = true
-    }
-
-    @inline(__always)
-    private func assignTypeDefIndexIfAbsent(for typeInfo: TypeInfo) -> (index: UInt32, isNew: Bool) {
-        let typeKey = UInt64(UInt(bitPattern: typeInfo.swiftTypeID))
-        let assignment = typeIndexBySwiftType.putIfAbsent(
-            UInt32(typeIndexBySwiftType.count),
-            for: typeKey
-        )
-        return (assignment.value, assignment.inserted)
     }
 
     func reset() {

@@ -23,13 +23,13 @@ private let uint64MapGoldenRatio: UInt64 = 0x9E3779B97F4A7C15
 /// (for example type metadata caches in resolver/read/write contexts).
 /// This is not part of the public API surface.
 final class UInt64Map<Value> {
-
     private struct Slot {
         var key: UInt64
         var value: Value?
     }
 
-    private var entries: [Slot]
+    private var entries: UnsafeMutablePointer<Slot>
+    private var tableCapacity: Int
     private var mask: Int
     private var shift: Int
     private var size = 0
@@ -42,11 +42,20 @@ final class UInt64Map<Value> {
     init(initialCapacity: Int = 2, loadFactor: Double = uint64MapDefaultLoadFactor) {
         self.loadFactor = loadFactor
         let capacity = Self.nextPowerOfTwo(max(initialCapacity, 2))
-        let emptySlot = Slot(key: uint64MapEmptyKey, value: nil)
-        entries = Array(repeating: emptySlot, count: capacity)
+        tableCapacity = capacity
+        entries = UnsafeMutablePointer<Slot>.allocate(capacity: capacity)
+        entries.initialize(
+            repeating: Slot(key: uint64MapEmptyKey, value: nil),
+            count: capacity
+        )
         mask = capacity - 1
         shift = UInt64.bitWidth - UInt64(capacity).trailingZeroBitCount
         growThreshold = Int(Double(capacity) * loadFactor)
+    }
+
+    deinit {
+        entries.deinitialize(count: tableCapacity)
+        entries.deallocate()
     }
 
     var count: Int {
@@ -54,7 +63,7 @@ final class UInt64Map<Value> {
     }
 
     var capacity: Int {
-        entries.count
+        tableCapacity
     }
 
     var isEmpty: Bool {
@@ -69,11 +78,11 @@ final class UInt64Map<Value> {
 
         var index = place(key)
         while true {
-            let entry = entries[index]
-            if entry.key == key {
-                return entry.value
+            let slot = entries[index]
+            if slot.key == key {
+                return slot.value
             }
-            if entry.key == uint64MapEmptyKey {
+            if slot.key == uint64MapEmptyKey {
                 return nil
             }
             index = (index + 1) & mask
@@ -148,13 +157,13 @@ final class UInt64Map<Value> {
 
         var index = place(key)
         while true {
-            let entry = entries[index]
-            if entry.key == key {
-                let removed = entry.value
+            let slot = entries[index]
+            if slot.key == key {
+                let removed = slot.value
                 removeEntry(at: index)
                 return removed
             }
-            if entry.key == uint64MapEmptyKey {
+            if slot.key == uint64MapEmptyKey {
                 return nil
             }
             index = (index + 1) & mask
@@ -163,14 +172,9 @@ final class UInt64Map<Value> {
 
     func clear() {
         if !isEmpty {
-            entries.withUnsafeMutableBufferPointer { buffer in
-                guard let base = buffer.baseAddress else {
-                    return
-                }
-                base.update(
-                    repeating: Slot(key: uint64MapEmptyKey, value: nil),
-                    count: buffer.count
-                )
+            for index in 0 ..< tableCapacity {
+                entries[index].key = uint64MapEmptyKey
+                entries[index].value = nil
             }
             hasMaxKey = false
             maxKeyValue = nil
@@ -181,10 +185,13 @@ final class UInt64Map<Value> {
     @inline(__always)
     private func findSlotForInsert(_ key: UInt64) -> Int {
         var index = place(key)
-        while entries[index].key != uint64MapEmptyKey && entries[index].key != key {
+        while true {
+            let slotKey = entries[index].key
+            if slotKey == uint64MapEmptyKey || slotKey == key {
+                return index
+            }
             index = (index + 1) & mask
         }
-        return index
     }
 
     @inline(__always)
@@ -194,22 +201,32 @@ final class UInt64Map<Value> {
 
     private func grow() {
         let oldEntries = entries
-        let newCapacity = oldEntries.count * 2
-
-        entries = Array(
+        let oldCapacity = tableCapacity
+        let newCapacity = oldCapacity << 1
+        let newEntries = UnsafeMutablePointer<Slot>.allocate(capacity: newCapacity)
+        newEntries.initialize(
             repeating: Slot(key: uint64MapEmptyKey, value: nil),
             count: newCapacity
         )
+
+        entries = newEntries
+        tableCapacity = newCapacity
         mask = newCapacity - 1
         shift = UInt64.bitWidth - UInt64(newCapacity).trailingZeroBitCount
         growThreshold = Int(Double(newCapacity) * loadFactor)
         size = hasMaxKey ? 1 : 0
 
-        for oldEntry in oldEntries where oldEntry.key != uint64MapEmptyKey {
-            let newIndex = findSlotForInsert(oldEntry.key)
-            entries[newIndex] = oldEntry
-            size += 1
+        for index in 0 ..< oldCapacity {
+            let oldSlot = oldEntries[index]
+            if oldSlot.key != uint64MapEmptyKey {
+                let newIndex = findSlotForInsert(oldSlot.key)
+                entries[newIndex] = oldSlot
+                size += 1
+            }
         }
+
+        oldEntries.deinitialize(count: oldCapacity)
+        oldEntries.deallocate()
     }
 
     private func removeEntry(at index: Int) {
@@ -225,7 +242,8 @@ final class UInt64Map<Value> {
             cursor = (cursor + 1) & mask
         }
 
-        entries[hole] = Slot(key: uint64MapEmptyKey, value: nil)
+        entries[hole].key = uint64MapEmptyKey
+        entries[hole].value = nil
         size -= 1
     }
 

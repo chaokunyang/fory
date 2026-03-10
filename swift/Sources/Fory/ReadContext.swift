@@ -248,20 +248,12 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    private func getCompatibleTypeInfo(at index: Int) -> TypeInfo? {
-        compatibleTypeDefTypeInfos.get(index)
-    }
-
-    @inline(__always)
-    private func appendCompatibleTypeInfo(_ typeInfo: TypeInfo) {
-        compatibleTypeDefTypeInfos.push(typeInfo)
-    }
-
-    @inline(__always)
     private func readCompatibleTypeInfoIfNeeded(
         for localTypeInfo: TypeInfo,
         wireTypeID: TypeId
     ) throws -> TypeInfo? {
+        let buffer = self.buffer
+        let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
         if !checkClassVersion,
            compatibleTypeDefTypeInfos.isEmpty,
            !localTypeInfo.typeDefHasUserTypeFields,
@@ -275,7 +267,7 @@ public final class ReadContext {
                     bodySize += Int(try buffer.readVarUInt32())
                 }
                 if header == localTypeDefHeader {
-                    appendCompatibleTypeInfo(localTypeInfo)
+                    compatibleTypeDefTypeInfos.push(localTypeInfo)
                     try buffer.skip(bodySize)
                     return nil
                 }
@@ -289,11 +281,13 @@ public final class ReadContext {
     }
 
     private func readCompatibleTypeInfo() throws -> TypeInfo {
+        let buffer = self.buffer
+        let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
         let indexMarker = try buffer.readVarUInt32()
         let isRef = (indexMarker & 1) == 1
         let index = Int(indexMarker >> 1)
         if isRef {
-            guard let typeInfo = getCompatibleTypeInfo(at: index) else {
+            guard let typeInfo = compatibleTypeDefTypeInfos.get(index) else {
                 throw ForyError.invalidData("unknown compatible type definition ref index \(index)")
             }
             return typeInfo
@@ -307,14 +301,14 @@ public final class ReadContext {
         }
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
             try buffer.skip(bodySize)
-            appendCompatibleTypeInfo(cached)
+            compatibleTypeDefTypeInfos.push(cached)
             return cached
         }
 
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
         let cachedTypeInfo = try typeResolver.cacheTypeInfo(decoded, forHeader: header)
-        appendCompatibleTypeInfo(cachedTypeInfo)
+        compatibleTypeDefTypeInfos.push(cachedTypeInfo)
         return cachedTypeInfo
     }
 
@@ -323,6 +317,8 @@ public final class ReadContext {
         for localTypeInfo: TypeInfo,
         wireTypeID: TypeId
     ) throws -> TypeInfo {
+        let buffer = self.buffer
+        let compatibleTypeDefTypeInfos = self.compatibleTypeDefTypeInfos
         let remoteTypeInfo: TypeInfo
         if compatibleTypeDefTypeInfos.isEmpty,
            let localTypeDefHeader = localTypeInfo.typeDefHeader {
@@ -339,7 +335,7 @@ public final class ReadContext {
                 }
 
                 if header == localTypeDefHeader {
-                    appendCompatibleTypeInfo(localTypeInfo)
+                    compatibleTypeDefTypeInfos.push(localTypeInfo)
                     try buffer.skip(bodySize)
                     return localTypeInfo
                 }

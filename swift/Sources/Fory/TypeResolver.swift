@@ -382,16 +382,25 @@ final class TypeResolver {
         }
     }
 
+    @inline(__always)
+    private func evolving<T: Serializer>(for type: T.Type) -> Bool {
+        guard let type = type as? any StructSerializer.Type else {
+            return true
+        }
+        return type.foryEvolving
+    }
+
     private func registerByID<T: Serializer>(_ type: T.Type, id: UInt32) throws {
         let swiftTypeID = ObjectIdentifier(type)
         try validateIDRegistration(key: swiftTypeID, type: type, id: id)
+        let evolving = evolving(for: type)
 
         let typeInfo = try TypeInfo(
             swiftTypeID: swiftTypeID,
             typeID: T.staticTypeId,
             userTypeID: id,
             registerByName: false,
-            evolving: T.foryEvolving,
+            evolving: evolving,
             namespace: MetaString.empty(specialChar1: ".", specialChar2: "_"),
             typeName: MetaString.empty(specialChar1: "$", specialChar2: "_"),
             fields: T.foryFieldsInfo(trackRef: trackRef),
@@ -408,7 +417,7 @@ final class TypeResolver {
                typeID: T.staticTypeId,
                userTypeID: id,
                registerByName: false,
-               evolving: T.foryEvolving,
+               evolving: evolving,
                namespace: "",
                typeName: ""
            ) {
@@ -434,13 +443,14 @@ final class TypeResolver {
             namespace: namespace,
             typeName: typeName
         )
+        let evolving = evolving(for: type)
 
         let typeInfo = try TypeInfo(
             swiftTypeID: swiftTypeID,
             typeID: T.staticTypeId,
             userTypeID: nil,
             registerByName: true,
-            evolving: T.foryEvolving,
+            evolving: evolving,
             namespace: namespaceMeta,
             typeName: typeNameMeta,
             fields: T.foryFieldsInfo(trackRef: trackRef),
@@ -457,7 +467,7 @@ final class TypeResolver {
                typeID: T.staticTypeId,
                userTypeID: nil,
                registerByName: true,
-               evolving: T.foryEvolving,
+               evolving: evolving,
                namespace: namespace,
                typeName: typeName
            ) {

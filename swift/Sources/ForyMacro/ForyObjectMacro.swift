@@ -38,7 +38,7 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
 
         if let enumDecl = declaration.as(EnumDeclSyntax.self) {
             let parsedEnum = try parseEnumDecl(enumDecl)
-            return buildEnumDecls(parsedEnum, accessPrefix: accessPrefix, evolving: objectConfig.evolving)
+            return buildEnumDecls(parsedEnum, accessPrefix: accessPrefix)
         }
 
         let parsed = try parseFields(declaration)
@@ -114,7 +114,9 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
         }
 
         let extensionDecl: ExtensionDeclSyntax = try ExtensionDeclSyntax(
-            "extension \(raw: typeName): Serializer {}"
+            declaration.is(EnumDeclSyntax.self)
+                ? "extension \(raw: typeName): Serializer {}"
+                : "extension \(raw: typeName): Serializer, StructSerializer {}"
         )
         return [extensionDecl]
     }
@@ -304,16 +306,16 @@ private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl 
     return .init(kind: .ordinal, cases: cases)
 }
 
-private func buildEnumDecls(_ parsedEnum: ParsedEnumDecl, accessPrefix: String, evolving: Bool) -> [DeclSyntax] {
+private func buildEnumDecls(_ parsedEnum: ParsedEnumDecl, accessPrefix: String) -> [DeclSyntax] {
     switch parsedEnum.kind {
     case .ordinal:
-        return buildOrdinalEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix, evolving: evolving)
+        return buildOrdinalEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix)
     case .taggedUnion:
-        return buildTaggedUnionEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix, evolving: evolving)
+        return buildTaggedUnionEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix)
     }
 }
 
-private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String, evolving: Bool) -> [DeclSyntax] {
+private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {
     let defaultCase = cases[0].name
     let writeSwitchCases = cases.enumerated().map { index, enumCase in
         """
@@ -335,9 +337,6 @@ private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: Stri
 
     let staticTypeIDDecl: DeclSyntax = """
     \(raw: accessPrefix)static var staticTypeId: TypeId { .enumType }
-    """
-    let evolvingDecl: DeclSyntax = """
-    \(raw: accessPrefix)static var foryEvolving: Bool { \(raw: evolving ? "true" : "false") }
     """
     let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
 
@@ -367,10 +366,10 @@ private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: Stri
         """
     )
 
-    return [defaultDecl, staticTypeIDDecl, evolvingDecl, writeWrapperDecl, writeDecl, readDecl]
+    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
 }
 
-private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String, evolving: Bool) -> [DeclSyntax] {
+private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {
     let defaultExpr = enumCaseDefaultExpr(cases[0])
     let writeSwitchCases = cases.enumerated().map { index, enumCase in
         let caseID = enumCase.caseID ?? index
@@ -423,9 +422,6 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
     let staticTypeIDDecl: DeclSyntax = """
     \(raw: accessPrefix)static var staticTypeId: TypeId { .typedUnion }
     """
-    let evolvingDecl: DeclSyntax = """
-    \(raw: accessPrefix)static var foryEvolving: Bool { \(raw: evolving ? "true" : "false") }
-    """
     let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
 
     let writeDecl: DeclSyntax = DeclSyntax(
@@ -454,7 +450,7 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         """
     )
 
-    return [defaultDecl, staticTypeIDDecl, evolvingDecl, writeWrapperDecl, writeDecl, readDecl]
+    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
 }
 
 private func enumCasePattern(_ enumCase: ParsedEnumCase) -> String {

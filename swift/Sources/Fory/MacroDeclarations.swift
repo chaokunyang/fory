@@ -35,7 +35,7 @@
     named(__foryReadDataImpl),
     named(__foryReadCompatibleDataImpl)
 )
-@attached(extension, conformances: Serializer)
+@attached(extension, conformances: Serializer, StructSerializer)
 public macro ForyObject(evolving: Bool = true) = #externalMacro(module: "ForyMacro", type: "ForyObjectMacro")
 
 public enum ForyFieldEncoding: String {

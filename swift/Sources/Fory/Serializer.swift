@@ -30,7 +30,6 @@ func readBuiltinTypeInfo(_ context: ReadContext, _ typeID: TypeId) throws -> Typ
 public protocol Serializer {
     static func foryDefault() -> Self
     static var staticTypeId: TypeId { get }
-    static var foryEvolving: Bool { get }
 
     static var isNullableType: Bool { get }
     static var isRefType: Bool { get }
@@ -60,12 +59,13 @@ public protocol Serializer {
     func foryWriteTypeInfo(_ context: WriteContext) throws
 }
 
+public protocol StructSerializer: Serializer {
+    static var foryEvolving: Bool { get }
+}
+
 public extension Serializer {
     @inlinable
     static var isNullableType: Bool { false }
-
-    @inlinable
-    static var foryEvolving: Bool { true }
 
     @inlinable
     static var isRefType: Bool { false }
@@ -87,6 +87,11 @@ public extension Serializer {
     static func foryReadCompatibleData(_ context: ReadContext, remoteTypeInfo _: TypeInfo) throws -> Self {
         try foryReadData(context)
     }
+}
+
+public extension StructSerializer {
+    @inlinable
+    static var foryEvolving: Bool { true }
 }
 
 public extension Serializer {

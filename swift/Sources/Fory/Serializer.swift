@@ -30,6 +30,7 @@ func readBuiltinTypeInfo(_ context: ReadContext, _ typeID: TypeId) throws -> Typ
 public protocol Serializer {
     static func foryDefault() -> Self
     static var staticTypeId: TypeId { get }
+    static var foryEvolving: Bool { get }
 
     static var isNullableType: Bool { get }
     static var isRefType: Bool { get }
@@ -62,6 +63,9 @@ public protocol Serializer {
 public extension Serializer {
     @inlinable
     static var isNullableType: Bool { false }
+
+    @inlinable
+    static var foryEvolving: Bool { true }
 
     @inlinable
     static var isRefType: Bool { false }
@@ -211,7 +215,27 @@ public extension Serializer {
                 throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
             }
             context.writeTypeMeta(typeInfo)
-        case .namedEnum, .namedStruct, .namedExt, .namedUnion:
+        case .namedStruct:
+            if context.compatible {
+                guard typeInfo.typeDefBytes != nil else {
+                    throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")
+                }
+                context.writeTypeMeta(typeInfo)
+            } else {
+                try writeMetaString(
+                    context: context,
+                    value: typeInfo.namespace,
+                    encodings: namespaceMetaStringEncodings,
+                    encoder: .namespace
+                )
+                try writeMetaString(
+                    context: context,
+                    value: typeInfo.typeName,
+                    encodings: typeNameMetaStringEncodings,
+                    encoder: .typeName
+                )
+            }
+        case .namedEnum, .namedExt, .namedUnion:
             if context.compatible {
                 guard typeInfo.typeDefBytes != nil else {
                     throw ForyError.invalidData("missing compatible type definition for \(typeInfo.typeID)")

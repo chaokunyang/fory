@@ -322,7 +322,11 @@ public sealed class TypeResolver
                 $"compatible TypeMeta hash is only available for registered struct types, got {type}");
         }
 
-        TypeId wireTypeId = ResolveWireTypeId(info.UserTypeKind.Value, info.RegisterByName, compatible: true);
+        TypeId wireTypeId = ResolveWireTypeId(
+            info.UserTypeKind.Value,
+            info.RegisterByName,
+            compatible: true,
+            info.Evolving);
         TypeInfo.CompatibleTypeMetaCacheEntry typeMeta = BuildCompatibleTypeMeta(info, wireTypeId, trackRef);
         return typeMeta.HeaderHash;
     }
@@ -435,6 +439,7 @@ public sealed class TypeResolver
             hash = MixBool(hash, info.IsNullableType);
             hash = MixBool(hash, info.IsReferenceTrackableType);
             hash = MixBool(hash, info.SupportsCompatibleReadWithoutTypeMeta);
+            hash = MixBool(hash, info.Evolving);
             hash = MixBool(hash, info.IsRegistered);
             hash = MixBool(hash, info.RegisterByName);
 
@@ -467,7 +472,11 @@ public sealed class TypeResolver
 
                 if (info.IsRegistered)
                 {
-                    TypeId wireTypeId = ResolveWireTypeId(info.UserTypeKind.Value, info.RegisterByName, compatible: true);
+                    TypeId wireTypeId = ResolveWireTypeId(
+                        info.UserTypeKind.Value,
+                        info.RegisterByName,
+                        compatible: true,
+                        info.Evolving);
                     hash = MixUInt32(hash, (uint)wireTypeId);
                     hash = MixUInt64(hash, BuildCompatibleTypeMeta(info, wireTypeId, trackRef: false).HeaderHash);
                     hash = MixUInt64(hash, BuildCompatibleTypeMeta(info, wireTypeId, trackRef: true).HeaderHash);
@@ -547,7 +556,11 @@ public sealed class TypeResolver
             throw new InvalidDataException($"registered type {type} is not a user type");
         }
 
-        TypeId wireTypeId = ResolveWireTypeId(info.UserTypeKind.Value, info.RegisterByName, context.Compatible);
+        TypeId wireTypeId = ResolveWireTypeId(
+            info.UserTypeKind.Value,
+            info.RegisterByName,
+            context.Compatible,
+            info.Evolving);
         context.Writer.WriteUInt8((byte)wireTypeId);
         switch (wireTypeId)
         {
@@ -559,8 +572,35 @@ public sealed class TypeResolver
                     context.WriteCompatibleTypeMeta(type, typeMeta.EncodedBytes);
                     return;
                 }
-            case TypeId.NamedEnum:
             case TypeId.NamedStruct:
+                {
+                    if (context.Compatible)
+                    {
+                        TypeInfo.CompatibleTypeMetaCacheEntry typeMeta =
+                            BuildCompatibleTypeMeta(info, wireTypeId, context.TrackRef);
+                        context.WriteCompatibleTypeMeta(type, typeMeta.EncodedBytes);
+                        return;
+                    }
+
+                    if (!info.NamespaceName.HasValue || !info.TypeName.HasValue)
+                    {
+                        throw new InvalidDataException("missing type name metadata for name-registered type");
+                    }
+
+                    WriteMetaString(
+                        context,
+                        info.NamespaceName.Value,
+                        TypeMetaEncodings.NamespaceMetaStringEncodings,
+                        MetaStringEncoder.Namespace);
+                    WriteMetaString(
+                        context,
+                        info.TypeName.Value,
+                        TypeMetaEncodings.TypeNameMetaStringEncodings,
+                        MetaStringEncoder.TypeName);
+
+                    return;
+                }
+            case TypeId.NamedEnum:
             case TypeId.NamedExt:
             case TypeId.NamedUnion:
                 {
@@ -688,9 +728,9 @@ public sealed class TypeResolver
         UserTypeKind declaredKind = info.UserTypeKind.Value;
         bool registerByName = info.RegisterByName;
         bool compatible = context.Compatible;
-        if (!IsAllowedWireType(typeId, declaredKind, registerByName, compatible))
+        if (!IsAllowedWireType(typeId, declaredKind, registerByName, compatible, info.Evolving))
         {
-            TypeId expected = ResolveWireTypeId(declaredKind, registerByName, compatible);
+            TypeId expected = ResolveWireTypeId(declaredKind, registerByName, compatible, info.Evolving);
             throw new TypeMismatchException((uint)expected, rawTypeId);
         }
 
@@ -716,8 +756,48 @@ public sealed class TypeResolver
                     context.PushCompatibleTypeMeta(type, remoteTypeMeta);
                     return;
                 }
-            case TypeId.NamedEnum:
             case TypeId.NamedStruct:
+                {
+                    if (compatible)
+                    {
+                        TypeMeta remoteTypeMeta = context.ReadCompatibleTypeMeta();
+                        if (!IsValidatedCompatibleTypeMeta(info, remoteTypeMeta))
+                        {
+                            ValidateCompatibleTypeMeta(
+                                remoteTypeMeta,
+                                info,
+                                declaredKind,
+                                registerByName,
+                                compatible,
+                                typeId);
+                            MarkValidatedCompatibleTypeMeta(info, remoteTypeMeta);
+                        }
+
+                        return;
+                    }
+
+                    if (!info.RegisterByName || !info.NamespaceName.HasValue || !info.TypeName.HasValue)
+                    {
+                        throw new InvalidDataException("received name-registered type info for id-registered local type");
+                    }
+
+                    MetaString namespaceName = ReadMetaString(
+                        context,
+                        MetaStringDecoder.Namespace,
+                        TypeMetaEncodings.NamespaceMetaStringEncodings);
+                    MetaString typeName = ReadMetaString(
+                        context,
+                        MetaStringDecoder.TypeName,
+                        TypeMetaEncodings.TypeNameMetaStringEncodings);
+                    if (namespaceName.Value != info.NamespaceName.Value.Value || typeName.Value != info.TypeName.Value.Value)
+                    {
+                        throw new InvalidDataException(
+                            $"type name mismatch: expected {info.NamespaceName.Value.Value}::{info.TypeName.Value.Value}, got {namespaceName.Value}::{typeName.Value}");
+                    }
+
+                    return;
+                }
+            case TypeId.NamedEnum:
             case TypeId.NamedExt:
             case TypeId.NamedUnion:
                 {
@@ -733,17 +813,7 @@ public sealed class TypeResolver
                                 registerByName,
                                 compatible,
                                 typeId);
-                            if (typeId == TypeId.NamedStruct)
-                            {
-                                remoteTypeMeta.EnsureAssignedFieldIds(CompatibleTypeMetaFields(info, context.TrackRef));
-                            }
-
                             MarkValidatedCompatibleTypeMeta(info, remoteTypeMeta);
-                        }
-
-                        if (typeId == TypeId.NamedStruct)
-                        {
-                            context.PushCompatibleTypeMeta(type, remoteTypeMeta);
                         }
                     }
                     else
@@ -789,13 +859,17 @@ public sealed class TypeResolver
         }
     }
 
-    internal static TypeId ResolveWireTypeId(UserTypeKind declaredKind, bool registerByName, bool compatible)
+    internal static TypeId ResolveWireTypeId(
+        UserTypeKind declaredKind,
+        bool registerByName,
+        bool compatible,
+        bool evolving = true)
     {
         if (registerByName)
         {
             return declaredKind switch
             {
-                UserTypeKind.Struct => compatible ? TypeId.NamedCompatibleStruct : TypeId.NamedStruct,
+                UserTypeKind.Struct => compatible && evolving ? TypeId.NamedCompatibleStruct : TypeId.NamedStruct,
                 UserTypeKind.Enum => TypeId.NamedEnum,
                 UserTypeKind.Ext => TypeId.NamedExt,
                 UserTypeKind.TypedUnion => TypeId.NamedUnion,
@@ -805,7 +879,7 @@ public sealed class TypeResolver
 
         return declaredKind switch
         {
-            UserTypeKind.Struct => compatible ? TypeId.CompatibleStruct : TypeId.Struct,
+            UserTypeKind.Struct => compatible && evolving ? TypeId.CompatibleStruct : TypeId.Struct,
             UserTypeKind.Enum => TypeId.Enum,
             UserTypeKind.Ext => TypeId.Ext,
             UserTypeKind.TypedUnion => TypeId.TypedUnion,
@@ -822,7 +896,8 @@ public sealed class TypeResolver
         TypeId actualWireType,
         UserTypeKind declaredKind,
         bool registerByName,
-        bool compatible)
+        bool compatible,
+        bool evolving = true)
     {
         if (declaredKind == UserTypeKind.Struct && compatible)
         {
@@ -833,7 +908,7 @@ public sealed class TypeResolver
                 TypeId.NamedCompatibleStruct;
         }
 
-        TypeId expected = ResolveWireTypeId(declaredKind, registerByName, compatible);
+        TypeId expected = ResolveWireTypeId(declaredKind, registerByName, compatible, evolving);
         return actualWireType == expected;
     }
 
@@ -910,6 +985,17 @@ public sealed class TypeResolver
             case TypeId.NamedExt:
             case TypeId.NamedUnion:
                 {
+                    if (wireTypeId == TypeId.NamedStruct && context.Compatible)
+                    {
+                        TypeMeta typeMeta = context.ReadCompatibleTypeMeta();
+                        return new DynamicTypeInfo(
+                            wireTypeId,
+                            typeMeta.UserTypeId,
+                            typeMeta.NamespaceName,
+                            typeMeta.TypeName,
+                            typeMeta);
+                    }
+
                     MetaString namespaceName = ReadMetaString(context.Reader, MetaStringDecoder.Namespace, TypeMetaEncodings.NamespaceMetaStringEncodings);
                     MetaString typeName = ReadMetaString(context.Reader, MetaStringDecoder.TypeName, TypeMetaEncodings.TypeNameMetaStringEncodings);
                     return new DynamicTypeInfo(wireTypeId, null, namespaceName, typeName, null);
@@ -1359,7 +1445,7 @@ public sealed class TypeResolver
             IsKnownTypeId(remoteTypeMeta.TypeId.Value))
         {
             TypeId remoteWireTypeId = (TypeId)remoteTypeMeta.TypeId.Value;
-            if (!IsAllowedWireType(remoteWireTypeId, declaredKind, registerByName, compatible))
+            if (!IsAllowedWireType(remoteWireTypeId, declaredKind, registerByName, compatible, localInfo.Evolving))
             {
                 throw new TypeMismatchException((uint)actualWireTypeId, remoteTypeMeta.TypeId.Value);
             }

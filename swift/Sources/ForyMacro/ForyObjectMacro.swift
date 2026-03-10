@@ -28,16 +28,17 @@ struct ForySwiftPlugin: CompilerPlugin {
 
 public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
     public static func expansion(
-        of _: AttributeSyntax,
+        of attribute: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,
         conformingTo _: [TypeSyntax],
         in _: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         let accessPrefix = serializerMemberAccessPrefix(declaration)
+        let objectConfig = try parseForyObjectConfiguration(attribute)
 
         if let enumDecl = declaration.as(EnumDeclSyntax.self) {
             let parsedEnum = try parseEnumDecl(enumDecl)
-            return buildEnumDecls(parsedEnum, accessPrefix: accessPrefix)
+            return buildEnumDecls(parsedEnum, accessPrefix: accessPrefix, evolving: objectConfig.evolving)
         }
 
         let parsed = try parseFields(declaration)
@@ -45,6 +46,9 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
 
         let staticTypeIDDecl: DeclSyntax = """
         \(raw: accessPrefix)static var staticTypeId: TypeId { .structType }
+        """
+        let evolvingDecl: DeclSyntax = """
+        \(raw: accessPrefix)static var foryEvolving: Bool { \(raw: objectConfig.evolving ? "true" : "false") }
         """
 
         let referenceTrackDecl: DeclSyntax? = parsed.isClass ? """
@@ -83,6 +87,7 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
         )
         return [
             staticTypeIDDecl,
+            evolvingDecl,
             referenceTrackDecl,
             schemaHashDecl,
             compatibleTypeMetaDecl,
@@ -206,6 +211,10 @@ private struct ParsedForyFieldConfiguration {
     let id: Int?
 }
 
+private struct ParsedForyObjectConfiguration {
+    let evolving: Bool
+}
+
 private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl {
     var cases: [ParsedEnumCase] = []
 
@@ -295,16 +304,16 @@ private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl 
     return .init(kind: .ordinal, cases: cases)
 }
 
-private func buildEnumDecls(_ parsedEnum: ParsedEnumDecl, accessPrefix: String) -> [DeclSyntax] {
+private func buildEnumDecls(_ parsedEnum: ParsedEnumDecl, accessPrefix: String, evolving: Bool) -> [DeclSyntax] {
     switch parsedEnum.kind {
     case .ordinal:
-        return buildOrdinalEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix)
+        return buildOrdinalEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix, evolving: evolving)
     case .taggedUnion:
-        return buildTaggedUnionEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix)
+        return buildTaggedUnionEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix, evolving: evolving)
     }
 }
 
-private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {
+private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String, evolving: Bool) -> [DeclSyntax] {
     let defaultCase = cases[0].name
     let writeSwitchCases = cases.enumerated().map { index, enumCase in
         """
@@ -326,6 +335,9 @@ private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: Stri
 
     let staticTypeIDDecl: DeclSyntax = """
     \(raw: accessPrefix)static var staticTypeId: TypeId { .enumType }
+    """
+    let evolvingDecl: DeclSyntax = """
+    \(raw: accessPrefix)static var foryEvolving: Bool { \(raw: evolving ? "true" : "false") }
     """
     let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
 
@@ -355,10 +367,10 @@ private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: Stri
         """
     )
 
-    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
+    return [defaultDecl, staticTypeIDDecl, evolvingDecl, writeWrapperDecl, writeDecl, readDecl]
 }
 
-private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {
+private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String, evolving: Bool) -> [DeclSyntax] {
     let defaultExpr = enumCaseDefaultExpr(cases[0])
     let writeSwitchCases = cases.enumerated().map { index, enumCase in
         let caseID = enumCase.caseID ?? index
@@ -411,6 +423,9 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
     let staticTypeIDDecl: DeclSyntax = """
     \(raw: accessPrefix)static var staticTypeId: TypeId { .typedUnion }
     """
+    let evolvingDecl: DeclSyntax = """
+    \(raw: accessPrefix)static var foryEvolving: Bool { \(raw: evolving ? "true" : "false") }
+    """
     let writeWrapperDecl: DeclSyntax = DeclSyntax(stringLiteral: buildWriteWrapperDecl(accessPrefix: accessPrefix))
 
     let writeDecl: DeclSyntax = DeclSyntax(
@@ -439,7 +454,7 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         """
     )
 
-    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
+    return [defaultDecl, staticTypeIDDecl, evolvingDecl, writeWrapperDecl, writeDecl, readDecl]
 }
 
 private func enumCasePattern(_ enumCase: ParsedEnumCase) -> String {
@@ -626,6 +641,44 @@ private func parseForyFieldConfiguration(
     }
 
     return ParsedForyFieldConfiguration(encoding: parsedEncoding, id: parsedID)
+}
+
+private func parseForyObjectConfiguration(_ attribute: AttributeSyntax) throws -> ParsedForyObjectConfiguration {
+    guard let args = attribute.arguments else {
+        return .init(evolving: true)
+    }
+    guard case .argumentList(let argList) = args else {
+        throw MacroExpansionErrorMessage("@ForyObject arguments are invalid")
+    }
+    guard !argList.isEmpty else {
+        return .init(evolving: true)
+    }
+
+    var evolving = true
+    for arg in argList {
+        let label = arg.label?.text
+        if label == nil || label == "evolving" {
+            evolving = try parseBoolLiteralExpression(
+                arg.expression,
+                message: "@ForyObject evolving must be a boolean literal"
+            )
+            continue
+        }
+        throw MacroExpansionErrorMessage("@ForyObject supports only the 'evolving' argument")
+    }
+    return .init(evolving: evolving)
+}
+
+private func parseBoolLiteralExpression(_ expr: ExprSyntax, message: String) throws -> Bool {
+    let raw = trimType(expr.trimmedDescription)
+    switch raw {
+    case "true":
+        return true
+    case "false":
+        return false
+    default:
+        throw MacroExpansionErrorMessage(message)
+    }
 }
 
 private func parseFieldEncodingExpression(_ expr: ExprSyntax) throws -> FieldEncoding {

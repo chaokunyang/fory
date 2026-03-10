@@ -18,6 +18,7 @@
 @attached(
     member,
     names: named(staticTypeId),
+    named(foryEvolving),
     named(isRefType),
     named(__forySchemaHash),
     named(__forySchemaHashTrackRefDisabled),
@@ -35,7 +36,7 @@
     named(__foryReadCompatibleDataImpl)
 )
 @attached(extension, conformances: Serializer)
-public macro ForyObject() = #externalMacro(module: "ForyMacro", type: "ForyObjectMacro")
+public macro ForyObject(evolving: Bool = true) = #externalMacro(module: "ForyMacro", type: "ForyObjectMacro")
 
 public enum ForyFieldEncoding: String {
     case varint

@@ -148,7 +148,22 @@ public final class ReadContext {
         switch wireTypeID {
         case .compatibleStruct, .namedCompatibleStruct:
             return try readCompatibleTypeInfo()
-        case .namedStruct, .namedEnum, .namedExt, .namedUnion:
+        case .namedStruct:
+            if compatible {
+                return try readCompatibleTypeInfo()
+            }
+            let namespace = try readMetaString(
+                context: self,
+                decoder: .namespace,
+                encodings: namespaceMetaStringEncodings
+            )
+            let typeName = try readMetaString(
+                context: self,
+                decoder: .typeName,
+                encodings: typeNameMetaStringEncodings
+            )
+            return try typeResolver.requireTypeInfo(namespace: namespace.value, typeName: typeName.value)
+        case .namedEnum, .namedExt, .namedUnion:
             if compatible {
                 return try readCompatibleTypeInfo()
             }
@@ -190,7 +205,8 @@ public final class ReadContext {
             typeID,
             declaredTypeID: localTypeInfo.typeID,
             registerByName: localTypeInfo.registerByName,
-            compatible: compatible
+            compatible: compatible,
+            evolving: localTypeInfo.evolving
         ) {
             throw ForyError.typeMismatch(expected: expectedWireTypeID.rawValue, actual: rawTypeID)
         }
@@ -201,15 +217,41 @@ public final class ReadContext {
                 for: localTypeInfo,
                 wireTypeID: typeID
             )
-        case .namedEnum, .namedStruct, .namedExt, .namedUnion:
+        case .namedStruct:
             if compatible {
-                let remoteTypeInfo = try readCompatibleTypeInfoIfNeeded(
+                _ = try readCompatibleTypeInfoIfNeeded(
                     for: localTypeInfo,
                     wireTypeID: typeID
                 )
-                if typeID == .namedStruct, let remoteTypeInfo {
-                    return remoteTypeInfo
+            } else {
+                let namespace = try readMetaString(
+                    context: self,
+                    decoder: .namespace,
+                    encodings: namespaceMetaStringEncodings
+                )
+                let typeName = try readMetaString(
+                    context: self,
+                    decoder: .typeName,
+                    encodings: typeNameMetaStringEncodings
+                )
+                guard localTypeInfo.registerByName else {
+                    throw ForyError.invalidData("received name-registered type info for id-registered local type")
                 }
+                if namespace.value != localTypeInfo.namespace.value ||
+                    typeName.value != localTypeInfo.typeName.value {
+                    let expectedTypeName = "\(localTypeInfo.namespace.value)::\(localTypeInfo.typeName.value)"
+                    let actualTypeName = "\(namespace.value)::\(typeName.value)"
+                    throw ForyError.invalidData(
+                        "type name mismatch: expected \(expectedTypeName), got \(actualTypeName)"
+                    )
+                }
+            }
+        case .namedEnum, .namedExt, .namedUnion:
+            if compatible {
+                _ = try readCompatibleTypeInfoIfNeeded(
+                    for: localTypeInfo,
+                    wireTypeID: typeID
+                )
             } else {
                 let namespace = try readMetaString(
                     context: self,
@@ -388,7 +430,8 @@ public final class ReadContext {
                remoteWireTypeID,
                declaredTypeID: localTypeInfo.typeID,
                registerByName: localTypeInfo.registerByName,
-               compatible: compatible
+               compatible: compatible,
+               evolving: localTypeInfo.evolving
            ) {
             throw ForyError.typeMismatch(expected: wireTypeID.rawValue, actual: remoteTypeID)
         }

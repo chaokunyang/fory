@@ -51,6 +51,7 @@ public sealed class TypeInfo
         bool isReferenceTrackableType,
         bool supportsCompatibleReadWithoutTypeMeta,
         object? defaultObject,
+        bool evolving,
         bool isRegistered,
         uint? userTypeId,
         bool registerByName,
@@ -71,6 +72,7 @@ public sealed class TypeInfo
         IsReferenceTrackableType = isReferenceTrackableType;
         SupportsCompatibleReadWithoutTypeMeta = supportsCompatibleReadWithoutTypeMeta;
         DefaultObject = defaultObject;
+        Evolving = evolving;
         IsRegistered = isRegistered;
         UserTypeId = userTypeId;
         RegisterByName = registerByName;
@@ -90,6 +92,7 @@ public sealed class TypeInfo
         (TypeId? builtInTypeId, UserTypeKind? userTypeKind, bool isDynamicType) = ResolveTypeShape(
             type,
             hasCompatibleTypeMetaFieldsProvider);
+        bool evolving = ResolveStructEvolving(type, userTypeKind);
         bool isNullableType = !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
         bool isReferenceTrackableType = type != typeof(string) && !type.IsValueType;
         bool supportsCompatibleReadWithoutTypeMeta = ResolveSupportsCompatibleReadWithoutTypeMeta(serializer);
@@ -103,6 +106,7 @@ public sealed class TypeInfo
             isReferenceTrackableType,
             supportsCompatibleReadWithoutTypeMeta,
             serializer.DefaultObject,
+            evolving,
             isRegistered: false,
             userTypeId: null,
             registerByName: false,
@@ -171,6 +175,18 @@ public sealed class TypeInfo
         {
             return false;
         }
+    }
+
+    private static bool ResolveStructEvolving(Type type, UserTypeKind? userTypeKind)
+    {
+        if (userTypeKind != Apache.Fory.UserTypeKind.Struct)
+        {
+            return true;
+        }
+
+        Type structType = Nullable.GetUnderlyingType(type) ?? type;
+        ForyObjectAttribute? attribute = structType.GetCustomAttribute<ForyObjectAttribute>();
+        return attribute?.Evolving ?? true;
     }
 
     private static void WriteDataObject<T>(Serializer<T> serializer, WriteContext context, object? value, bool hasGenerics)
@@ -471,6 +487,8 @@ public sealed class TypeInfo
 
     public object? DefaultObject { get; }
 
+    internal bool Evolving { get; }
+
     internal Type SerializerType => _serializer.GetType();
 
     public bool NeedsTypeInfoForField()
@@ -545,6 +563,7 @@ public sealed class TypeInfo
             IsReferenceTrackableType,
             SupportsCompatibleReadWithoutTypeMeta,
             DefaultObject,
+            Evolving,
             isRegistered: true,
             userTypeId: userTypeId,
             registerByName: false,
@@ -569,6 +588,7 @@ public sealed class TypeInfo
             IsReferenceTrackableType,
             SupportsCompatibleReadWithoutTypeMeta,
             DefaultObject,
+            Evolving,
             isRegistered: true,
             userTypeId: null,
             registerByName: true,

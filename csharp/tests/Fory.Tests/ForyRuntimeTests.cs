@@ -92,6 +92,18 @@ public sealed class TwoStringField
 }
 
 [ForyObject]
+public sealed class EvolvingOverrideValue
+{
+    public string F1 { get; set; } = string.Empty;
+}
+
+[ForyObject(Evolving = false)]
+public sealed class FixedOverrideValue
+{
+    public string F1 { get; set; } = string.Empty;
+}
+
+[ForyObject]
 public sealed class OneStringFieldListHolder
 {
     public List<OneStringField?> Items { get; set; } = [];
@@ -669,6 +681,24 @@ public sealed class ForyRuntimeTests
         Assert.Equal("value1", key1);
         Assert.True(decoded.Data.TryGetValue("key3", out string? key3));
         Assert.Null(key3);
+    }
+
+    [Fact]
+    public void StructEvolvingOverrideUsesSmallerCompatiblePayload()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(true).Build();
+        fory.Register<EvolvingOverrideValue>(1001);
+        fory.Register<FixedOverrideValue>(1002);
+
+        EvolvingOverrideValue evolving = new() { F1 = "payload" };
+        FixedOverrideValue fixedValue = new() { F1 = "payload" };
+
+        byte[] evolvingPayload = fory.Serialize(evolving);
+        byte[] fixedPayload = fory.Serialize(fixedValue);
+
+        Assert.True(fixedPayload.Length < evolvingPayload.Length);
+        Assert.Equal("payload", fory.Deserialize<EvolvingOverrideValue>(evolvingPayload).F1);
+        Assert.Equal("payload", fory.Deserialize<FixedOverrideValue>(fixedPayload).F1);
     }
 
     [Fact]

@@ -59,12 +59,15 @@ export class AnyHelper {
       case TypeId.NAMED_EXT:
       case TypeId.NAMED_UNION:
       case TypeId.NAMED_COMPATIBLE_STRUCT:
-        if (fory.isCompatible() || typeId === TypeId.NAMED_COMPATIBLE_STRUCT) {
+        if (typeId === TypeId.NAMED_COMPATIBLE_STRUCT || (typeId === TypeId.NAMED_STRUCT && fory.isCompatible())) {
           const typeMeta = fory.typeMetaResolver.readTypeMeta(fory.binaryReader);
           const ns = typeMeta.getNs();
           const typeName = typeMeta.getTypeName();
           const named = `${ns}$${typeName}`;
-          serializer = tryUpdateSerializer(fory.typeResolver.getSerializerByName(named), typeMeta);
+          const namedSerializer = fory.typeResolver.getSerializerByName(named);
+          serializer = typeId === TypeId.NAMED_COMPATIBLE_STRUCT
+            ? tryUpdateSerializer(namedSerializer, typeMeta)
+            : namedSerializer;
         } else {
           const ns = fory.metaStringResolver.readNamespace(fory.binaryReader);
           const typeName = fory.metaStringResolver.readTypeName(fory.binaryReader);

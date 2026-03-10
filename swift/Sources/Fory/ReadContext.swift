@@ -19,29 +19,6 @@ import Foundation
 
 private let typeMetaSizeMask = 0xFF
 
-final class MetaStringReadState {
-    private var values: [MetaString] = []
-
-    init() {}
-
-    func value(at index: Int) -> MetaString? {
-        guard index >= 0, index < values.count else {
-            return nil
-        }
-        return values[index]
-    }
-
-    func append(_ value: MetaString) {
-        values.append(value)
-    }
-
-    func reset() {
-        if !values.isEmpty {
-            values.removeAll(keepingCapacity: true)
-        }
-    }
-}
-
 public final class ReadContext {
     public let buffer: ByteBuffer
     let typeResolver: TypeResolver
@@ -52,17 +29,15 @@ public final class ReadContext {
     public let maxBinarySize: Int
     public let maxDepth: Int
     public let refReader: RefReader
-    let metaStringReadState: MetaStringReadState
     private var compatibleTypeDefTypeInfos = ReusableArray<TypeInfo>(reserve: 8)
-    private var typeDefStateUsed = false
-    private var metaStringReadStateUsed = false
+    private var metaStrings = ReusableArray<MetaString>(reserve: 16)
     private var dynamicAnyDepth = 0
 
     private var typeInfoStack = UInt64Map<TypeInfo>(initialCapacity: 8)
     private var typeInfoScopeStack: [(typeKey: UInt64, previousTypeInfo: TypeInfo?)] = []
     private var lastTypeInfo = TypeInfo.uncached
 
-    convenience init(
+    init(
         buffer: ByteBuffer,
         typeResolver: TypeResolver,
         trackRef: Bool,
@@ -71,30 +46,6 @@ public final class ReadContext {
         maxCollectionSize: Int = 1_000_000,
         maxBinarySize: Int = 64 * 1024 * 1024,
         maxDepth: Int = 5
-    ) {
-        self.init(
-            buffer: buffer,
-            typeResolver: typeResolver,
-            trackRef: trackRef,
-            compatible: compatible,
-            checkClassVersion: checkClassVersion,
-            maxCollectionSize: maxCollectionSize,
-            maxBinarySize: maxBinarySize,
-            maxDepth: maxDepth,
-            metaStringReadState: MetaStringReadState()
-        )
-    }
-
-    init(
-        buffer: ByteBuffer,
-        typeResolver: TypeResolver,
-        trackRef: Bool,
-        compatible: Bool,
-        checkClassVersion: Bool,
-        maxCollectionSize: Int,
-        maxBinarySize: Int,
-        maxDepth: Int,
-        metaStringReadState: MetaStringReadState
     ) {
         self.buffer = buffer
         self.typeResolver = typeResolver
@@ -105,7 +56,6 @@ public final class ReadContext {
         self.maxBinarySize = maxBinarySize
         self.maxDepth = maxDepth
         self.refReader = RefReader()
-        self.metaStringReadState = metaStringReadState
     }
 
     @inline(__always)
@@ -330,7 +280,7 @@ public final class ReadContext {
         wireTypeID: TypeId
     ) throws -> TypeInfo? {
         if !checkClassVersion,
-           !typeDefStateUsed,
+           compatibleTypeDefTypeInfos.used == 0,
            !localTypeInfo.typeDefHasUserTypeFields,
            let localTypeDefHeader = localTypeInfo.typeDefHeader {
             let typeMetaStart = buffer.getCursor()
@@ -342,7 +292,6 @@ public final class ReadContext {
                     bodySize += Int(try buffer.readVarUInt32())
                 }
                 if header == localTypeDefHeader {
-                    typeDefStateUsed = true
                     try storeCompatibleTypeInfo(localTypeInfo, at: 0)
                     try buffer.skip(bodySize)
                     return nil
@@ -357,7 +306,6 @@ public final class ReadContext {
     }
 
     private func readCompatibleTypeInfo() throws -> TypeInfo {
-        typeDefStateUsed = true
         let indexMarker = try buffer.readVarUInt32()
         let isRef = (indexMarker & 1) == 1
         let index = Int(indexMarker >> 1)
@@ -393,7 +341,7 @@ public final class ReadContext {
         wireTypeID: TypeId
     ) throws -> TypeInfo {
         let remoteTypeInfo: TypeInfo
-        if !typeDefStateUsed,
+        if compatibleTypeDefTypeInfos.used == 0,
            let localTypeDefHeader = localTypeInfo.typeDefHeader {
             let typeMetaStart = buffer.getCursor()
             let indexMarker = try buffer.readVarUInt32()
@@ -408,7 +356,6 @@ public final class ReadContext {
                 }
 
                 if header == localTypeDefHeader {
-                    typeDefStateUsed = true
                     try storeCompatibleTypeInfo(localTypeInfo, at: 0)
                     try buffer.skip(bodySize)
                     return localTypeInfo
@@ -598,8 +545,16 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func markMetaStringReadStateUsed() {
-        metaStringReadStateUsed = true
+    func metaString(at index: Int) -> MetaString? {
+        guard index >= 0, index < metaStrings.used else {
+            return nil
+        }
+        return metaStrings[index]
+    }
+
+    @inline(__always)
+    func appendMetaString(_ value: MetaString) {
+        metaStrings.push(value)
     }
 
     func reset() {
@@ -615,14 +570,8 @@ public final class ReadContext {
         if !typeInfoScopeStack.isEmpty {
             typeInfoScopeStack.removeAll(keepingCapacity: true)
         }
-        if typeDefStateUsed {
-            compatibleTypeDefTypeInfos.reset()
-            typeDefStateUsed = false
-        }
-        if metaStringReadStateUsed {
-            metaStringReadState.reset()
-            metaStringReadStateUsed = false
-        }
+        compatibleTypeDefTypeInfos.reset()
+        metaStrings.reset()
     }
 }
 

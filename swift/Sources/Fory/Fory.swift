@@ -113,8 +113,7 @@ public final class Fory {
             checkClassVersion: self.config.checkClassVersion,
             maxCollectionSize: self.config.maxCollectionSize,
             maxBinarySize: self.config.maxBinarySize,
-            maxDepth: self.config.maxDepth,
-            metaStringReadState: MetaStringReadState()
+            maxDepth: self.config.maxDepth
         )
     }
 

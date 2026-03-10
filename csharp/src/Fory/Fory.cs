@@ -149,7 +149,7 @@ public sealed class Fory
             _writeContext.ResetFor(writer);
             RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
             serializer.Write(_writeContext, value, refMode, true, false);
-            _writeContext.ResetObjectState();
+            _writeContext.RefWriter.Reset();
         }
 
         return writer.ToArray();
@@ -272,10 +272,20 @@ public sealed class Fory
             return serializer.DefaultValue;
         }
 
-        _readContext.ResetFor(reader);
+        ReadContext readContext = _readContext;
+        readContext.ResetFor(reader);
         RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
-        T value = serializer.Read(_readContext, refMode, true);
-        _readContext.ResetObjectState();
+        T value = serializer.Read(readContext, refMode, true);
+        readContext.RefReader.Reset();
+        readContext._typeMetaType = null;
+        readContext._typeMeta = null;
+        readContext._typeMetaByType?.Clear();
+        readContext._readTypeInfoByType.Clear();
+        readContext._canonicalRefCache.Clear();
+        readContext._reservedRefIds.Clear();
+        readContext._cachedTypeMetaType = null;
+        readContext._cachedTypeMeta = null;
+        readContext._currentDynamicReadDepth = 0;
         return value;
     }
 

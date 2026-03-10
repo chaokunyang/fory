@@ -597,7 +597,7 @@ public sealed class TypeResolver
         if (type == typeof(object))
         {
             TypeInfo anyTypeInfo = ReadAnyTypeInfo(context);
-            context.SetPendingTypeInfo(type, anyTypeInfo);
+            context.SetReadTypeInfo(type, anyTypeInfo);
             return;
         }
 

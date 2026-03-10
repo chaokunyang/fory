@@ -113,7 +113,7 @@ public abstract class Serializer<T>
                 case RefFlag.RefValue:
                     {
                         uint reservedRefId = context.RefReader.ReserveRefId();
-                        context.EnterReadRefId(reservedRefId);
+                        context.SetReservedRefId(reservedRefId);
                         try
                         {
                             if (readTypeInfo)
@@ -127,7 +127,7 @@ public abstract class Serializer<T>
                         }
                         finally
                         {
-                            context.ExitReadRefId();
+                            context.ClearReservedRefId();
                         }
                     }
                 case RefFlag.NotNullValue:

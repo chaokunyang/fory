@@ -301,18 +301,18 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
                     if (keyTypeInfoForRead is not null)
                     {
-                        context.SetPendingTypeInfo(typeof(TKey), keyTypeInfoForRead);
+                        context.SetReadTypeInfo(typeof(TKey), keyTypeInfoForRead);
                     }
 
                     TKey key = keySerializer.Read(context, trackKeyRef ? RefMode.Tracking : RefMode.None, false);
                     if (keyTypeInfoForRead is not null)
                     {
-                        context.ClearPendingTypeInfo(typeof(TKey));
+                        context.ClearReadTypeInfo(typeof(TKey));
                     }
 
                     if (valueTypeInfoForRead is not null)
                     {
-                        context.SetPendingTypeInfo(typeof(TValue), valueTypeInfoForRead);
+                        context.SetReadTypeInfo(typeof(TValue), valueTypeInfoForRead);
                     }
 
                     TValue value = ReadValueElement(
@@ -323,7 +323,7 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                         valueSerializer);
                     if (valueTypeInfoForRead is not null)
                     {
-                        context.ClearPendingTypeInfo(typeof(TValue));
+                        context.ClearReadTypeInfo(typeof(TValue));
                     }
 
                     SetValue(map, key, value);
@@ -352,12 +352,12 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
             if (!keyDeclared)
             {
-                context.ClearPendingTypeInfo(typeof(TKey));
+                context.ClearReadTypeInfo(typeof(TKey));
             }
 
             if (!valueDeclared)
             {
-                context.ClearPendingTypeInfo(typeof(TValue));
+                context.ClearReadTypeInfo(typeof(TValue));
             }
 
             readCount += chunkSize;

@@ -275,14 +275,9 @@ public sealed class WriteContext
         }
     }
 
-    internal void ResetObjectState()
-    {
-        RefWriter.Reset();
-    }
-
     internal void Reset()
     {
-        ResetObjectState();
+        RefWriter.Reset();
         TypeMetaState.Reset();
         MetaStringWriteState.Reset();
     }
@@ -302,16 +297,16 @@ internal sealed class CanonicalRefEntry
 
 public sealed class ReadContext
 {
-    private readonly Dictionary<Type, TypeInfo> _pendingTypeInfo = [];
-    private readonly Dictionary<CanonicalRefSignature, List<CanonicalRefEntry>> _canonicalRefCache = [];
-    private readonly List<uint> _readRefIds = [];
+    internal readonly Dictionary<Type, TypeInfo> _readTypeInfoByType = [];
+    internal readonly Dictionary<CanonicalRefSignature, List<CanonicalRefEntry>> _canonicalRefCache = [];
+    internal readonly List<uint> _reservedRefIds = [];
     private readonly int _maxDynamicReadDepth;
-    private Type? _typeMetaType;
-    private TypeMeta? _typeMeta;
-    private Dictionary<Type, TypeMeta>? _typeMetaByType;
-    private Type? _cachedTypeMetaType;
-    private TypeMeta? _cachedTypeMeta;
-    private int _currentDynamicReadDepth;
+    internal Type? _typeMetaType;
+    internal TypeMeta? _typeMeta;
+    internal Dictionary<Type, TypeMeta>? _typeMetaByType;
+    internal Type? _cachedTypeMetaType;
+    internal TypeMeta? _cachedTypeMeta;
+    internal int _currentDynamicReadDepth;
 
     public ReadContext(
         ByteReader reader,
@@ -480,45 +475,45 @@ public sealed class ReadContext
         return typeMeta;
     }
 
-    internal void SetPendingTypeInfo(Type type, TypeInfo typeInfo)
+    internal void SetReadTypeInfo(Type type, TypeInfo typeInfo)
     {
-        _pendingTypeInfo[type] = typeInfo;
+        _readTypeInfoByType[type] = typeInfo;
     }
 
-    internal TypeInfo? PendingTypeInfo(Type type)
+    internal TypeInfo? GetReadTypeInfo(Type type)
     {
-        return _pendingTypeInfo.TryGetValue(type, out TypeInfo? typeInfo) ? typeInfo : null;
+        return _readTypeInfoByType.TryGetValue(type, out TypeInfo? typeInfo) ? typeInfo : null;
     }
 
-    internal void ClearPendingTypeInfo(Type type)
+    internal void ClearReadTypeInfo(Type type)
     {
-        _pendingTypeInfo.Remove(type);
+        _readTypeInfoByType.Remove(type);
     }
 
     public void StoreRef(object? value)
     {
-        if (_readRefIds.Count == 0)
+        if (_reservedRefIds.Count == 0)
         {
             return;
         }
 
-        RefReader.StoreRefAt(_readRefIds[^1], value);
+        RefReader.StoreRefAt(_reservedRefIds[^1], value);
     }
 
-    internal void EnterReadRefId(uint refId)
+    internal void SetReservedRefId(uint refId)
     {
-        _readRefIds.Add(refId);
+        _reservedRefIds.Add(refId);
     }
 
-    internal void ExitReadRefId()
+    internal void ClearReservedRefId()
     {
-        if (_readRefIds.Count > 0)
+        if (_reservedRefIds.Count > 0)
         {
-            _readRefIds.RemoveAt(_readRefIds.Count - 1);
+            _reservedRefIds.RemoveAt(_reservedRefIds.Count - 1);
         }
     }
 
-    internal void IncreaseDynamicReadDepth()
+    internal void IncreaseReadDepth()
     {
         _currentDynamicReadDepth += 1;
         if (_currentDynamicReadDepth > _maxDynamicReadDepth)
@@ -528,7 +523,7 @@ public sealed class ReadContext
         }
     }
 
-    internal void DecreaseDynamicReadDepth()
+    internal void DecreaseReadDepth()
     {
         if (_currentDynamicReadDepth > 0)
         {
@@ -569,23 +564,18 @@ public sealed class ReadContext
         return value;
     }
 
-    internal void ResetObjectState()
+    internal void Reset()
     {
         RefReader.Reset();
         _typeMetaType = null;
         _typeMeta = null;
         _typeMetaByType?.Clear();
-        _pendingTypeInfo.Clear();
+        _readTypeInfoByType.Clear();
         _canonicalRefCache.Clear();
-        _readRefIds.Clear();
+        _reservedRefIds.Clear();
         _cachedTypeMetaType = null;
         _cachedTypeMeta = null;
         _currentDynamicReadDepth = 0;
-    }
-
-    internal void Reset()
-    {
-        ResetObjectState();
         TypeMetaState.Reset();
         MetaStringReadState.Reset();
     }

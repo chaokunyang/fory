@@ -623,18 +623,18 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
 
                     if (keyTypeInfoForRead is not null)
                     {
-                        context.SetPendingTypeInfo(typeof(TKey), keyTypeInfoForRead);
+                        context.SetReadTypeInfo(typeof(TKey), keyTypeInfoForRead);
                     }
 
                     TKey key = keySerializer.Read(context, trackKeyRef ? RefMode.Tracking : RefMode.None, false);
                     if (keyTypeInfoForRead is not null)
                     {
-                        context.ClearPendingTypeInfo(typeof(TKey));
+                        context.ClearReadTypeInfo(typeof(TKey));
                     }
 
                     if (valueTypeInfoForRead is not null)
                     {
-                        context.SetPendingTypeInfo(typeof(TValue), valueTypeInfoForRead);
+                        context.SetReadTypeInfo(typeof(TValue), valueTypeInfoForRead);
                     }
 
                     TValue valueRead = ReadValueElement(
@@ -645,7 +645,7 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
                         valueSerializer);
                     if (valueTypeInfoForRead is not null)
                     {
-                        context.ClearPendingTypeInfo(typeof(TValue));
+                        context.ClearReadTypeInfo(typeof(TValue));
                     }
 
                     map[key] = valueRead;
@@ -674,12 +674,12 @@ public sealed class NullableKeyDictionarySerializer<TKey, TValue> : Serializer<N
 
             if (!keyDeclared)
             {
-                context.ClearPendingTypeInfo(typeof(TKey));
+                context.ClearReadTypeInfo(typeof(TKey));
             }
 
             if (!valueDeclared)
             {
-                context.ClearPendingTypeInfo(typeof(TValue));
+                context.ClearReadTypeInfo(typeof(TValue));
             }
 
             readCount += chunkSize;

@@ -33,7 +33,7 @@ public sealed class DynamicAnyObjectSerializer : Serializer<object?>
 
     public override object? ReadData(ReadContext context)
     {
-        TypeInfo? typeInfo = context.PendingTypeInfo(typeof(object));
+        TypeInfo? typeInfo = context.GetReadTypeInfo(typeof(object));
         if (typeInfo is null)
         {
             throw new InvalidDataException("dynamic Any value requires type info");
@@ -94,7 +94,7 @@ public sealed class DynamicAnyObjectSerializer : Serializer<object?>
                 case RefFlag.RefValue:
                     {
                         uint reservedRefId = context.RefReader.ReserveRefId();
-                        context.EnterReadRefId(reservedRefId);
+                        context.SetReservedRefId(reservedRefId);
                         try
                         {
                             object? value = ReadNonNullDynamicAny(context, readTypeInfo);
@@ -103,7 +103,7 @@ public sealed class DynamicAnyObjectSerializer : Serializer<object?>
                         }
                         finally
                         {
-                            context.ExitReadRefId();
+                            context.ClearReservedRefId();
                         }
                     }
                 case RefFlag.NotNullValue:
@@ -125,12 +125,12 @@ public sealed class DynamicAnyObjectSerializer : Serializer<object?>
     private static void ReadAnyTypeInfo(ReadContext context)
     {
         TypeInfo typeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
-        context.SetPendingTypeInfo(typeof(object), typeInfo);
+        context.SetReadTypeInfo(typeof(object), typeInfo);
     }
 
     private object? ReadNonNullDynamicAny(ReadContext context, bool readTypeInfo)
     {
-        context.IncreaseDynamicReadDepth();
+        context.IncreaseReadDepth();
         bool loadedDynamicTypeInfo = false;
         try
         {
@@ -146,10 +146,10 @@ public sealed class DynamicAnyObjectSerializer : Serializer<object?>
         {
             if (loadedDynamicTypeInfo)
             {
-                context.ClearPendingTypeInfo(typeof(object));
+                context.ClearReadTypeInfo(typeof(object));
             }
 
-            context.DecreaseDynamicReadDepth();
+            context.DecreaseReadDepth();
         }
     }
 }

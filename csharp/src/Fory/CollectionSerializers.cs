@@ -263,7 +263,7 @@ internal static class CollectionCodec
 
             if (!declared)
             {
-                context.ClearPendingTypeInfo(typeof(T));
+                context.ClearReadTypeInfo(typeof(T));
             }
 
             return values;
@@ -302,7 +302,7 @@ internal static class CollectionCodec
 
         if (!declared)
         {
-            context.ClearPendingTypeInfo(typeof(T));
+            context.ClearReadTypeInfo(typeof(T));
         }
 
         return values;

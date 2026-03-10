@@ -248,7 +248,7 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    private func compatibleTypeInfo(at index: Int) -> TypeInfo? {
+    private func getCompatibleTypeInfo(at index: Int) -> TypeInfo? {
         compatibleTypeDefTypeInfos.get(index)
     }
 
@@ -293,7 +293,7 @@ public final class ReadContext {
         let isRef = (indexMarker & 1) == 1
         let index = Int(indexMarker >> 1)
         if isRef {
-            guard let typeInfo = compatibleTypeInfo(at: index) else {
+            guard let typeInfo = getCompatibleTypeInfo(at: index) else {
                 throw ForyError.invalidData("unknown compatible type definition ref index \(index)")
             }
             return typeInfo
@@ -528,12 +528,12 @@ public final class ReadContext {
     }
 
     @inline(__always)
-    func metaString(at index: Int) -> MetaString? {
+    func getReadMetaString(at index: Int) -> MetaString? {
         metaStrings.get(index)
     }
 
     @inline(__always)
-    func appendMetaString(_ value: MetaString) {
+    func appendReadMetaString(_ value: MetaString) {
         metaStrings.push(value)
     }
 

@@ -511,7 +511,7 @@ func readMetaString(
     let isRef = (header & 1) == 1
     if isRef {
         let index = length - 1
-        guard let cached = context.metaString(at: index) else {
+        guard let cached = context.getReadMetaString(at: index) else {
             throw ForyError.invalidData("unknown meta string ref index \(index)")
         }
         return cached
@@ -545,7 +545,7 @@ func readMetaString(
         let bytes = try context.buffer.readBytes(count: length)
         value = try decoder.decode(bytes: bytes, encoding: encoding)
     }
-    context.appendMetaString(value)
+    context.appendReadMetaString(value)
     return value
 }
 

@@ -199,22 +199,18 @@ public final class WriteContext {
         }
     }
 
-    func resetObjectState() {
-        if dynamicAnyDepth != 0 {
-            dynamicAnyDepth = 0
-        }
-        if trackRef {
-            refWriter.reset()
-        }
-    }
-
     @inline(__always)
     func markMetaStringWriteStateUsed() {
         metaStringWriteStateUsed = true
     }
 
     func reset() {
-        resetObjectState()
+        if dynamicAnyDepth != 0 {
+            dynamicAnyDepth = 0
+        }
+        if trackRef {
+            refWriter.reset()
+        }
         if typeDefStateUsed {
             typeDefState.reset()
             typeDefStateUsed = false

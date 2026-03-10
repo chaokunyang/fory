@@ -36,12 +36,6 @@ public final class RefWriter {
         return false
     }
 
-    public func reserveRefID() -> UInt32 {
-        let id = nextRefID
-        nextRefID &+= 1
-        return id
-    }
-
     public func reset() {
         if !refs.isEmpty {
             refs.removeAll(keepingCapacity: true)

@@ -628,7 +628,7 @@ public final class ReadContext {
         metaStringReadStateUsed = true
     }
 
-    func resetObjectState() {
+    func reset() {
         if dynamicAnyDepth != 0 {
             dynamicAnyDepth = 0
         }
@@ -638,10 +638,6 @@ public final class ReadContext {
         if !typeInfoStack.isEmpty {
             typeInfoStack.removeAll(keepingCapacity: true)
         }
-    }
-
-    func reset() {
-        resetObjectState()
         if typeDefStateUsed {
             typeDefState.reset()
             typeDefStateUsed = false

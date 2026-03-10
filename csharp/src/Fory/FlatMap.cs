@@ -30,6 +30,10 @@ internal static class TypeMapKey
     }
 }
 
+/// <summary>
+/// Open-addressed map keyed by <see cref="ulong"/>.
+/// <para><see cref="ulong.MaxValue"/> is reserved as the empty-slot marker and must never be inserted.</para>
+/// </summary>
 internal sealed class UInt64Map<TValue>
 {
     private const ulong EmptyKey = ulong.MaxValue;
@@ -50,10 +54,7 @@ internal sealed class UInt64Map<TValue>
     private readonly double _loadFactor;
     private int _growThreshold;
 
-    private bool _hasMaxKey;
-    private TValue _maxKeyValue = default!;
-
-    internal UInt64Map(int initialCapacity = 8, double loadFactor = DefaultLoadFactor)
+    internal UInt64Map(int initialCapacity = 2, double loadFactor = DefaultLoadFactor)
     {
         _loadFactor = loadFactor;
         int capacity = NextPowerOfTwo(Math.Max(initialCapacity, 2));
@@ -70,18 +71,6 @@ internal sealed class UInt64Map<TValue>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool TryGetValue(ulong key, out TValue value)
     {
-        if (key == EmptyKey)
-        {
-            if (_hasMaxKey)
-            {
-                value = _maxKeyValue;
-                return true;
-            }
-
-            value = default!;
-            return false;
-        }
-
         int index = Place(key);
         while (true)
         {
@@ -106,18 +95,6 @@ internal sealed class UInt64Map<TValue>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void Set(ulong key, TValue value)
     {
-        if (key == EmptyKey)
-        {
-            if (!_hasMaxKey)
-            {
-                _hasMaxKey = true;
-                _count += 1;
-            }
-
-            _maxKeyValue = value;
-            return;
-        }
-
         if (_count >= _growThreshold)
         {
             Grow();
@@ -137,19 +114,6 @@ internal sealed class UInt64Map<TValue>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool Remove(ulong key)
     {
-        if (key == EmptyKey)
-        {
-            if (!_hasMaxKey)
-            {
-                return false;
-            }
-
-            _hasMaxKey = false;
-            _maxKeyValue = default!;
-            _count -= 1;
-            return true;
-        }
-
         int index = Place(key);
         while (true)
         {
@@ -178,18 +142,22 @@ internal sealed class UInt64Map<TValue>
         }
 
         ClearEntries(_entries, _tableCapacity);
-        _hasMaxKey = false;
-        _maxKeyValue = default!;
+        _count = 0;
+    }
+
+    internal void ClearKeys()
+    {
+        if (_count == 0)
+        {
+            return;
+        }
+
+        ClearEntryKeys(_entries, _tableCapacity);
         _count = 0;
     }
 
     internal void AddValuesTo(List<TValue> values)
     {
-        if (_hasMaxKey)
-        {
-            values.Add(_maxKeyValue);
-        }
-
         for (int i = 0; i < _tableCapacity; i++)
         {
             if (_entries[i].Key != EmptyKey)
@@ -234,7 +202,7 @@ internal sealed class UInt64Map<TValue>
         _mask = newCapacity - 1;
         _shift = 64 - BitOperations.TrailingZeroCount((uint)newCapacity);
         _growThreshold = (int)(newCapacity * _loadFactor);
-        _count = _hasMaxKey ? 1 : 0;
+        _count = 0;
 
         for (int i = 0; i < oldCapacity; i++)
         {
@@ -279,6 +247,15 @@ internal sealed class UInt64Map<TValue>
         }
 
         return idealSlot <= emptySlot && idealSlot > candidateSlot;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ClearEntryKeys(Slot[] entries, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            entries[i].Key = EmptyKey;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

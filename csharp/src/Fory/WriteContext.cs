@@ -128,7 +128,7 @@ public sealed class WriteContext
         RefWriter.Reset();
         _firstTypeMetaKey = 0;
         _hasFirstTypeMeta = false;
-        _typeMetaIndexByType?.Clear();
+        _typeMetaIndexByType?.ClearKeys();
         _nextTypeMetaIndex = 0;
         _metaStringIndexByKey.Clear();
         _nextMetaStringIndex = 0;

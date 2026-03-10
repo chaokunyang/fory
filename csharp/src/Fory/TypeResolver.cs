@@ -313,7 +313,7 @@ public sealed class TypeResolver
     {
         _finalized = false;
         _versionHash = 0;
-        _validatedTypeMetaByType.Clear();
+        _validatedTypeMetaByType.ClearKeys();
     }
 
     private void EnsureFinalizedVersion()

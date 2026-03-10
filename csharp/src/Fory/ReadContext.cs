@@ -408,8 +408,8 @@ public sealed class ReadContext
         RefReader.Reset();
         _typeMetaType = null;
         _typeMeta = null;
-        _typeMetaByType?.Clear();
-        _readTypeInfoByType.Clear();
+        _typeMetaByType?.ClearKeys();
+        _readTypeInfoByType.ClearKeys();
         _canonicalRefCache.Clear();
         _reservedRefIds.Clear();
         _cachedTypeMetaType = null;

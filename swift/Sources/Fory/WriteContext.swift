@@ -17,29 +17,6 @@
 
 import Foundation
 
-final class CompatibleTypeDefWriteState {
-    private let typeIndexBySwiftType = UInt64Map<UInt32>(initialCapacity: 8)
-
-    init() {}
-
-    @inline(__always)
-    func assignIndexIfAbsent(for typeInfo: TypeInfo) -> (index: UInt32, isNew: Bool) {
-        let typeKey = UInt64(UInt(bitPattern: typeInfo.swiftTypeID))
-        let assignment = typeIndexBySwiftType.putIfAbsent(
-            UInt32(typeIndexBySwiftType.count),
-            for: typeKey
-        )
-        return (assignment.value, assignment.inserted)
-    }
-
-    @inline(__always)
-    func reset() {
-        if !typeIndexBySwiftType.isEmpty {
-            typeIndexBySwiftType.removeAll(keepingCapacity: true)
-        }
-    }
-}
-
 private struct MetaStringCacheKey: Hashable {
     let encoding: MetaStringEncoding
     let bytes: [UInt8]
@@ -84,8 +61,8 @@ public final class WriteContext {
     public let checkClassVersion: Bool
     public let maxDepth: Int
     public let refWriter: RefWriter
-    let typeDefState: CompatibleTypeDefWriteState
     let metaStringWriteState: MetaStringWriteState
+    private let typeIndexBySwiftType = UInt64Map<UInt32>(initialCapacity: 8)
     private var typeDefStateUsed = false
     private var metaStringWriteStateUsed = false
     private var dynamicAnyDepth = 0
@@ -106,7 +83,6 @@ public final class WriteContext {
             compatible: compatible,
             checkClassVersion: checkClassVersion,
             maxDepth: maxDepth,
-            typeDefState: CompatibleTypeDefWriteState(),
             metaStringWriteState: MetaStringWriteState()
         )
     }
@@ -118,7 +94,6 @@ public final class WriteContext {
         compatible: Bool,
         checkClassVersion: Bool,
         maxDepth: Int,
-        typeDefState: CompatibleTypeDefWriteState,
         metaStringWriteState: MetaStringWriteState
     ) {
         self.buffer = buffer
@@ -128,7 +103,6 @@ public final class WriteContext {
         self.checkClassVersion = checkClassVersion
         self.maxDepth = maxDepth
         self.refWriter = RefWriter()
-        self.typeDefState = typeDefState
         self.metaStringWriteState = metaStringWriteState
     }
 
@@ -174,7 +148,7 @@ public final class WriteContext {
             typeDefStateUsed = true
         }
 
-        let assignment = typeDefState.assignIndexIfAbsent(for: typeInfo)
+        let assignment = assignTypeDefIndexIfAbsent(for: typeInfo)
         if assignment.isNew {
             if assignment.index == 0, let firstTypeDefBytes = typeInfo.firstTypeDefBytes {
                 buffer.writeBytes(firstTypeDefBytes)
@@ -205,6 +179,16 @@ public final class WriteContext {
         metaStringWriteStateUsed = true
     }
 
+    @inline(__always)
+    private func assignTypeDefIndexIfAbsent(for typeInfo: TypeInfo) -> (index: UInt32, isNew: Bool) {
+        let typeKey = UInt64(UInt(bitPattern: typeInfo.swiftTypeID))
+        let assignment = typeIndexBySwiftType.putIfAbsent(
+            UInt32(typeIndexBySwiftType.count),
+            for: typeKey
+        )
+        return (assignment.value, assignment.inserted)
+    }
+
     func reset() {
         if dynamicAnyDepth != 0 {
             dynamicAnyDepth = 0
@@ -213,7 +197,9 @@ public final class WriteContext {
             refWriter.reset()
         }
         if typeDefStateUsed {
-            typeDefState.reset()
+            if !typeIndexBySwiftType.isEmpty {
+                typeIndexBySwiftType.removeAll(keepingCapacity: true)
+            }
             typeDefStateUsed = false
         }
         if metaStringWriteStateUsed {

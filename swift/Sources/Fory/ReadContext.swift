@@ -17,64 +17,6 @@
 
 import Foundation
 
-final class TypeInfoReadState {
-    private var firstTypeInfo: TypeInfo?
-    private var overflowTypeInfos: [TypeInfo] = []
-
-    init() {}
-
-    @inline(__always)
-    fileprivate func typeInfoEntry(at index: Int) -> TypeInfo? {
-        if index < 0 {
-            return nil
-        }
-        if index == 0 {
-            return firstTypeInfo
-        }
-        let overflowIndex = index - 1
-        guard overflowIndex >= 0, overflowIndex < overflowTypeInfos.count else {
-            return nil
-        }
-        return overflowTypeInfos[overflowIndex]
-    }
-
-    func typeInfo(at index: Int) -> TypeInfo? {
-        typeInfoEntry(at: index)
-    }
-
-    @inline(__always)
-    fileprivate func storeTypeInfoEntry(_ typeInfo: TypeInfo, at index: Int) throws {
-        if index < 0 {
-            throw ForyError.invalidData("negative compatible type definition index")
-        }
-        if index == 0 {
-            firstTypeInfo = typeInfo
-            return
-        }
-        let overflowIndex = index - 1
-        if overflowIndex == overflowTypeInfos.count {
-            overflowTypeInfos.append(typeInfo)
-            return
-        }
-        if overflowIndex < overflowTypeInfos.count {
-            overflowTypeInfos[overflowIndex] = typeInfo
-            return
-        }
-        throw ForyError.invalidData(
-            "compatible type definition index gap: index=\(index), count=\(overflowTypeInfos.count + (firstTypeInfo == nil ? 0 : 1))"
-        )
-    }
-
-    func reset() {
-        if firstTypeInfo != nil {
-            firstTypeInfo = nil
-        }
-        if !overflowTypeInfos.isEmpty {
-            overflowTypeInfos.removeAll(keepingCapacity: true)
-        }
-    }
-}
-
 private let typeMetaSizeMask = 0xFF
 
 final class MetaStringReadState {
@@ -110,8 +52,8 @@ public final class ReadContext {
     public let maxBinarySize: Int
     public let maxDepth: Int
     public let refReader: RefReader
-    let typeDefState: TypeInfoReadState
     let metaStringReadState: MetaStringReadState
+    private var compatibleTypeDefTypeInfos = ReusableArray<TypeInfo>(reserve: 8)
     private var typeDefStateUsed = false
     private var metaStringReadStateUsed = false
     private var dynamicAnyDepth = 0
@@ -139,7 +81,6 @@ public final class ReadContext {
             maxCollectionSize: maxCollectionSize,
             maxBinarySize: maxBinarySize,
             maxDepth: maxDepth,
-            typeDefState: TypeInfoReadState(),
             metaStringReadState: MetaStringReadState()
         )
     }
@@ -153,7 +94,6 @@ public final class ReadContext {
         maxCollectionSize: Int,
         maxBinarySize: Int,
         maxDepth: Int,
-        typeDefState: TypeInfoReadState,
         metaStringReadState: MetaStringReadState
     ) {
         self.buffer = buffer
@@ -165,7 +105,6 @@ public final class ReadContext {
         self.maxBinarySize = maxBinarySize
         self.maxDepth = maxDepth
         self.refReader = RefReader()
-        self.typeDefState = typeDefState
         self.metaStringReadState = metaStringReadState
     }
 
@@ -359,6 +298,33 @@ public final class ReadContext {
     }
 
     @inline(__always)
+    private func compatibleTypeInfo(at index: Int) -> TypeInfo? {
+        guard index >= 0, index < compatibleTypeDefTypeInfos.used else {
+            return nil
+        }
+        let typeInfo = compatibleTypeDefTypeInfos[index]
+        if typeInfo === TypeInfo.empty {
+            return nil
+        }
+        return typeInfo
+    }
+
+    @inline(__always)
+    private func storeCompatibleTypeInfo(_ typeInfo: TypeInfo, at index: Int) throws {
+        if index < 0 {
+            throw ForyError.invalidData("negative compatible type definition index")
+        }
+        if index < compatibleTypeDefTypeInfos.used {
+            compatibleTypeDefTypeInfos[index] = typeInfo
+            return
+        }
+        while compatibleTypeDefTypeInfos.used < index {
+            compatibleTypeDefTypeInfos.push(TypeInfo.empty)
+        }
+        compatibleTypeDefTypeInfos.push(typeInfo)
+    }
+
+    @inline(__always)
     private func readCompatibleTypeInfoIfNeeded(
         for localTypeInfo: TypeInfo,
         wireTypeID: TypeId
@@ -377,7 +343,7 @@ public final class ReadContext {
                 }
                 if header == localTypeDefHeader {
                     typeDefStateUsed = true
-                    try typeDefState.storeTypeInfoEntry(localTypeInfo, at: 0)
+                    try storeCompatibleTypeInfo(localTypeInfo, at: 0)
                     try buffer.skip(bodySize)
                     return nil
                 }
@@ -396,7 +362,7 @@ public final class ReadContext {
         let isRef = (indexMarker & 1) == 1
         let index = Int(indexMarker >> 1)
         if isRef {
-            guard let typeInfo = typeDefState.typeInfo(at: index) else {
+            guard let typeInfo = compatibleTypeInfo(at: index) else {
                 throw ForyError.invalidData("unknown compatible type definition ref index \(index)")
             }
             return typeInfo
@@ -410,14 +376,14 @@ public final class ReadContext {
         }
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
             try buffer.skip(bodySize)
-            try typeDefState.storeTypeInfoEntry(cached, at: index)
+            try storeCompatibleTypeInfo(cached, at: index)
             return cached
         }
 
         buffer.setCursor(typeMetaStart)
         let decoded = try TypeMeta.decode(buffer)
         let cachedTypeInfo = try typeResolver.cacheTypeInfo(decoded, forHeader: header)
-        try typeDefState.storeTypeInfoEntry(cachedTypeInfo, at: index)
+        try storeCompatibleTypeInfo(cachedTypeInfo, at: index)
         return cachedTypeInfo
     }
 
@@ -443,7 +409,7 @@ public final class ReadContext {
 
                 if header == localTypeDefHeader {
                     typeDefStateUsed = true
-                    try typeDefState.storeTypeInfoEntry(localTypeInfo, at: 0)
+                    try storeCompatibleTypeInfo(localTypeInfo, at: 0)
                     try buffer.skip(bodySize)
                     return localTypeInfo
                 }
@@ -650,7 +616,7 @@ public final class ReadContext {
             typeInfoScopeStack.removeAll(keepingCapacity: true)
         }
         if typeDefStateUsed {
-            typeDefState.reset()
+            compatibleTypeDefTypeInfos.reset()
             typeDefStateUsed = false
         }
         if metaStringReadStateUsed {

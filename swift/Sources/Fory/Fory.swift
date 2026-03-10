@@ -103,7 +103,6 @@ public final class Fory {
             compatible: self.config.compatible,
             checkClassVersion: self.config.checkClassVersion,
             maxDepth: self.config.maxDepth,
-            typeDefState: CompatibleTypeDefWriteState(),
             metaStringWriteState: MetaStringWriteState()
         )
         self.readContext = ReadContext(
@@ -115,7 +114,6 @@ public final class Fory {
             maxCollectionSize: self.config.maxCollectionSize,
             maxBinarySize: self.config.maxBinarySize,
             maxDepth: self.config.maxDepth,
-            typeDefState: TypeInfoReadState(),
             metaStringReadState: MetaStringReadState()
         )
     }

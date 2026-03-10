@@ -449,9 +449,7 @@ def test_struct_evolving_override():
         data_bytes = f.read()
 
     fory = pyfory.Fory(xlang=True, compatible=True)
-    fory.register_type(
-        EvolvingOverrideStruct, namespace="test", typename="evolving_yes"
-    )
+    fory.register_type(EvolvingOverrideStruct, namespace="test", typename="evolving_yes")
     fory.register_type(FixedOverrideStruct, namespace="test", typename="evolving_off")
 
     buffer = pyfory.Buffer(data_bytes)

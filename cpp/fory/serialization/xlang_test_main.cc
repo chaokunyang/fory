@@ -145,7 +145,9 @@ struct EvolvingOverrideStruct {
 
 struct FixedOverrideStruct {
   std::string f1;
-  bool operator==(const FixedOverrideStruct &other) const { return f1 == other.f1; }
+  bool operator==(const FixedOverrideStruct &other) const {
+    return f1 == other.f1;
+  }
   FORY_STRUCT(FixedOverrideStruct, f1);
 };
 FORY_STRUCT_EVOLVING(FixedOverrideStruct, false);

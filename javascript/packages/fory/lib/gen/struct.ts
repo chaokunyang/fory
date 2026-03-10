@@ -237,14 +237,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           `;
         break;
       case TypeId.NAMED_STRUCT:
-        if (this.builder.fory.isCompatible()) {
-          typeMetaStmt = `
-          const ${typeMeta} = ${this.builder.typeMetaResolver.readTypeMeta(this.builder.reader.ownName())};
-          if (getHash() !== ${typeMeta}.getHash()) {
-            ${this.metaChangedSerializer} = ${this.builder.typeMetaResolver.genSerializerByTypeMetaRuntime(typeMeta)}
-          }
-          `;
-        } else {
+        if (!this.builder.fory.isCompatible()) {
           namesStmt = `
             ${
               this.builder.metaStringResolver.readNamespace(this.builder.reader.ownName())
@@ -252,6 +245,13 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
             ${
               this.builder.metaStringResolver.readTypeName(this.builder.reader.ownName())
             };
+          `;
+        } else {
+          typeMetaStmt = `
+          const ${typeMeta} = ${this.builder.typeMetaResolver.readTypeMeta(this.builder.reader.ownName())};
+          if (getHash() !== ${typeMeta}.getHash()) {
+            ${this.metaChangedSerializer} = ${this.builder.typeMetaResolver.genSerializerByTypeMetaRuntime(typeMeta)}
+          }
           `;
         }
         break;
@@ -332,10 +332,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         break;
       case TypeId.NAMED_STRUCT:
         {
-          if (this.builder.fory.isCompatible()) {
-            const bytes = this.scope.declare("typeInfoBytes", `new Uint8Array([${TypeMeta.fromTypeInfo(this.typeInfo).toBytes().join(",")}])`);
-            typeMeta = this.builder.typeMetaResolver.writeTypeMeta(this.builder.getTypeInfo(), this.builder.writer.ownName(), bytes);
-          } else {
+          if (!this.builder.fory.isCompatible()) {
             const typeInfo = this.typeInfo;
             const nsBytes = this.scope.declare("nsBytes", this.builder.metaStringResolver.encodeNamespace(CodecBuilder.replaceBackslashAndQuote(typeInfo.namespace)));
             const typeNameBytes = this.scope.declare("typeNameBytes", this.builder.metaStringResolver.encodeTypeName(CodecBuilder.replaceBackslashAndQuote(typeInfo.typeName)));
@@ -343,6 +340,9 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
               ${this.builder.metaStringResolver.writeBytes(this.builder.writer.ownName(), nsBytes)}
               ${this.builder.metaStringResolver.writeBytes(this.builder.writer.ownName(), typeNameBytes)}
             `;
+          } else {
+            const bytes = this.scope.declare("typeInfoBytes", `new Uint8Array([${TypeMeta.fromTypeInfo(this.typeInfo).toBytes().join(",")}])`);
+            typeMeta = this.builder.typeMetaResolver.writeTypeMeta(this.builder.getTypeInfo(), this.builder.writer.ownName(), bytes);
           }
         }
         break;

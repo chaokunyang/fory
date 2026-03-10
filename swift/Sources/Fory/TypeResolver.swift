@@ -345,7 +345,8 @@ public final class TypeInfo: @unchecked Sendable {
         if let typeInfo {
             return try compatibleReader(context, typeInfo)
         }
-        if compatibleWireTypeID == .compatibleStruct || compatibleWireTypeID == .namedCompatibleStruct {
+        if context.compatible &&
+            (compatibleWireTypeID == .compatibleStruct || compatibleWireTypeID == .namedCompatibleStruct) {
             return try compatibleReader(context, self)
         }
         if compatibleTypeMeta !== typeMeta {

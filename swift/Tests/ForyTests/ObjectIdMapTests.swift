@@ -69,14 +69,14 @@ func uint64MapGrowRetainsEntries() {
 }
 
 @Test
-func uint64MapRemoveAllKeepingCapacityClearsEntries() {
+func uint64MapClearKeepsCapacityAndClearsEntries() {
     let map = UInt64Map<UInt32>(initialCapacity: 8)
     let box = UInt64MapBox()
     let key = UInt64(UInt(bitPattern: ObjectIdentifier(box)))
     _ = map.putIfAbsent(7, for: key)
     let previousCapacity = map.capacity
 
-    map.removeAll(keepingCapacity: true)
+    map.clear()
 
     #expect(map.isEmpty)
     #expect(map.capacity == previousCapacity)

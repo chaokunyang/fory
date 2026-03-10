@@ -19,6 +19,9 @@ private let uint64MapEmptyKey = UInt64.max
 private let uint64MapDefaultLoadFactor = 0.5
 private let uint64MapGoldenRatio: UInt64 = 0x9E3779B97F4A7C15
 
+/// Internal open-addressed UInt64-key map for runtime caches in Fory Swift
+/// (for example type metadata caches in resolver/read/write contexts).
+/// This is not part of the public API surface.
 final class UInt64Map<Value> {
 
     private var keys: [UInt64]
@@ -32,9 +35,9 @@ final class UInt64Map<Value> {
     private var hasMaxKey = false
     private var maxKeyValue: Value?
 
-    init(initialCapacity: Int = 64, loadFactor: Double = uint64MapDefaultLoadFactor) {
+    init(initialCapacity: Int = 2, loadFactor: Double = uint64MapDefaultLoadFactor) {
         self.loadFactor = loadFactor
-        let capacity = Self.nextPowerOfTwo(max(initialCapacity, 8))
+        let capacity = Self.nextPowerOfTwo(max(initialCapacity, 2))
         keys = Array(repeating: uint64MapEmptyKey, count: capacity)
         values = Array(repeating: nil, count: capacity)
         mask = capacity - 1
@@ -151,24 +154,13 @@ final class UInt64Map<Value> {
         }
     }
 
-    func removeAll(keepingCapacity: Bool = true) {
-        if !keepingCapacity {
-            let capacity = Self.nextPowerOfTwo(8)
-            keys = Array(repeating: uint64MapEmptyKey, count: capacity)
-            values = Array(repeating: nil, count: capacity)
-            mask = capacity - 1
-            shift = UInt64.bitWidth - UInt64(capacity).trailingZeroBitCount
-            growThreshold = Int(Double(capacity) * loadFactor)
-            hasMaxKey = false
-            maxKeyValue = nil
-            size = 0
-            return
-        }
-
+    func clear() {
         if !isEmpty {
-            for index in keys.indices {
-                keys[index] = uint64MapEmptyKey
-                values[index] = nil
+            keys.withUnsafeMutableBufferPointer { buffer in
+                guard let base = buffer.baseAddress else {
+                    return
+                }
+                base.update(repeating: uint64MapEmptyKey, count: buffer.count)
             }
             hasMaxKey = false
             maxKeyValue = nil

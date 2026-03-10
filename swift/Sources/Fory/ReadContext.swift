@@ -565,7 +565,7 @@ public final class ReadContext {
             refReader.reset()
         }
         if !typeInfoStack.isEmpty {
-            typeInfoStack.removeAll(keepingCapacity: true)
+            typeInfoStack.clear()
         }
         if !typeInfoScopeStack.isEmpty {
             typeInfoScopeStack.removeAll(keepingCapacity: true)

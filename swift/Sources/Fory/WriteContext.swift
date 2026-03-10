@@ -198,7 +198,7 @@ public final class WriteContext {
         }
         if typeDefStateUsed {
             if !typeIndexBySwiftType.isEmpty {
-                typeIndexBySwiftType.removeAll(keepingCapacity: true)
+                typeIndexBySwiftType.clear()
             }
             typeDefStateUsed = false
         }

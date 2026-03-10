@@ -355,9 +355,11 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine(
-            $"            __ForyTypeMetaHeaderHashNoTrackRef = typeResolver.GetTypeMetaHeaderHash<{model.TypeName}>(false);");
+            $"            global::Apache.Fory.TypeInfo typeInfo = typeResolver.GetTypeInfo<{model.TypeName}>();");
         sb.AppendLine(
-            $"            __ForyTypeMetaHeaderHashTrackRef = typeResolver.GetTypeMetaHeaderHash<{model.TypeName}>(true);");
+            "            __ForyTypeMetaHeaderHashNoTrackRef = typeInfo.GetTypeMetaHeaderHash(false);");
+        sb.AppendLine(
+            "            __ForyTypeMetaHeaderHashTrackRef = typeInfo.GetTypeMetaHeaderHash(true);");
         sb.AppendLine("            __ForyLastTypeMetaNoTrackRef = null;");
         sb.AppendLine("            __ForyLastTypeMetaMatchedNoTrackRef = false;");
         sb.AppendLine("            __ForyLastTypeMetaTrackRef = null;");
@@ -487,7 +489,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"        {model.TypeName} valueNoTypeMeta = new {model.TypeName}();");
         if (model.Kind == DeclKind.Class)
         {
-            sb.AppendLine("        context.StoreReadRef(valueNoTypeMeta);");
+            sb.AppendLine("        context.StoreRef(valueNoTypeMeta);");
         }
 
         foreach (MemberModel member in model.SortedMembers)
@@ -521,7 +523,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"            {model.TypeName} value = new {model.TypeName}();");
         if (model.Kind == DeclKind.Class)
         {
-            sb.AppendLine("            context.StoreReadRef(value);");
+            sb.AppendLine("            context.StoreRef(value);");
         }
 
         sb.AppendLine("            bool __ForyExactTypeMeta = __ForyMatchesCachedTypeMeta(typeMeta, context.TrackRef, context.TypeResolver);");
@@ -606,7 +608,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"        {model.TypeName} valueSchema = new {model.TypeName}();");
         if (model.Kind == DeclKind.Class)
         {
-            sb.AppendLine("        context.StoreReadRef(valueSchema);");
+            sb.AppendLine("        context.StoreRef(valueSchema);");
         }
 
         foreach (MemberModel member in model.SortedMembers)

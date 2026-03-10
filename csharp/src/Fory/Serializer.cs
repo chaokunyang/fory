@@ -122,7 +122,7 @@ public abstract class Serializer<T>
                             }
 
                             T value = ReadData(context);
-                            context.StoreReadRef(value);
+                            context.StoreRef(value);
                             return value;
                         }
                         finally

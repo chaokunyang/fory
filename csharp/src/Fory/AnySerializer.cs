@@ -98,7 +98,7 @@ public sealed class DynamicAnyObjectSerializer : Serializer<object?>
                         try
                         {
                             object? value = ReadNonNullDynamicAny(context, readTypeInfo);
-                            context.StoreReadRef(value);
+                            context.StoreRef(value);
                             return value;
                         }
                         finally

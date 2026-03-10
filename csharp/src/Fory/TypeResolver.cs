@@ -15,7 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Linq;
@@ -35,8 +34,6 @@ public sealed class TypeResolver
         typeof(TypeResolver).GetMethod(
             nameof(CreateNullableSerializerTypeInfo),
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-
-    private readonly record struct TypeMetaCacheKey(Type Type, TypeId WireTypeId, bool TrackRef);
 
     // Cache lookup intentionally keys only by ResolverVersion.
     // Keep this entry resolver-independent: do not add TypeResolver references here.
@@ -112,7 +109,6 @@ public sealed class TypeResolver
 
     private readonly Dictionary<uint, TypeInfo> _byUserTypeId = [];
     private readonly Dictionary<(string NamespaceName, string TypeName), TypeInfo> _byTypeName = [];
-    private readonly Dictionary<TypeMetaCacheKey, TypeInfo.TypeMetaCacheEntry> _typeMetaCache = [];
     private readonly Dictionary<Type, TypeMeta> _validatedTypeMetaByType = [];
 
     private readonly Dictionary<Type, TypeInfo> _typeInfos = [];
@@ -310,38 +306,10 @@ public sealed class TypeResolver
         return _versionHash;
     }
 
-    /// <summary>
-    /// Returns the compatible-mode TypeMeta header hash for a registered struct type.
-    /// </summary>
-    /// <typeparam name="T">Registered struct type.</typeparam>
-    /// <param name="trackRef">Whether the TypeMeta should be generated with tracked references.</param>
-    /// <returns>TypeMeta header hash bits used for exact-schema fast path checks.</returns>
-    public ulong GetTypeMetaHeaderHash<T>(bool trackRef)
-    {
-        EnsureFinalizedVersion();
-
-        Type type = typeof(T);
-        TypeInfo info = RequireRegisteredTypeInfo(type);
-        if (!info.UserTypeKind.HasValue || info.UserTypeKind.Value != UserTypeKind.Struct)
-        {
-            throw new InvalidDataException(
-                $"TypeMeta hash is only available for registered struct types, got {type}");
-        }
-
-        TypeId wireTypeId = ResolveWireTypeId(
-            info.UserTypeKind.Value,
-            info.RegisterByName,
-            compatible: true,
-            info.Evolving);
-        TypeInfo.TypeMetaCacheEntry typeMeta = BuildTypeMeta(info, wireTypeId, trackRef);
-        return typeMeta.HeaderHash;
-    }
-
     private void InvalidateFinalizedVersion()
     {
         _finalized = false;
         _versionHash = 0;
-        _typeMetaCache.Clear();
         _validatedTypeMetaByType.Clear();
     }
 
@@ -483,8 +451,8 @@ public sealed class TypeResolver
                         compatible: true,
                         info.Evolving);
                     hash = MixUInt32(hash, (uint)wireTypeId);
-                    hash = MixUInt64(hash, BuildTypeMeta(info, wireTypeId, trackRef: false).HeaderHash);
-                    hash = MixUInt64(hash, BuildTypeMeta(info, wireTypeId, trackRef: true).HeaderHash);
+                    hash = MixUInt64(hash, info.GetTypeMetaHeaderHash(trackRef: false));
+                    hash = MixUInt64(hash, info.GetTypeMetaHeaderHash(trackRef: true));
                 }
             }
         }
@@ -572,8 +540,7 @@ public sealed class TypeResolver
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
                 {
-                    TypeInfo.TypeMetaCacheEntry typeMeta =
-                        BuildTypeMeta(info, wireTypeId, context.TrackRef);
+                    TypeInfo.TypeMetaCacheEntry typeMeta = info.GetTypeMetaCacheEntry(context.TrackRef);
                     context.WriteTypeMeta(type, typeMeta.EncodedBytes);
                     return;
                 }
@@ -581,7 +548,7 @@ public sealed class TypeResolver
             case TypeId.NamedStruct:
             case TypeId.NamedExt:
             case TypeId.NamedUnion:
-                WriteNamedTypeInfo(type, info, wireTypeId, context);
+                WriteNamedTypeInfo(type, info, context);
                 return;
             default:
                 if (!info.RegisterByName && WireTypeNeedsUserTypeId(wireTypeId))
@@ -598,12 +565,11 @@ public sealed class TypeResolver
         }
     }
 
-    private void WriteNamedTypeInfo(Type type, TypeInfo typeInfo, TypeId wireTypeId, WriteContext context)
+    private void WriteNamedTypeInfo(Type type, TypeInfo typeInfo, WriteContext context)
     {
         if (context.Compatible)
         {
-            TypeInfo.TypeMetaCacheEntry typeMeta =
-                BuildTypeMeta(typeInfo, wireTypeId, context.TrackRef);
+            TypeInfo.TypeMetaCacheEntry typeMeta = typeInfo.GetTypeMetaCacheEntry(context.TrackRef);
             context.WriteTypeMeta(type, typeMeta.EncodedBytes);
             return;
         }
@@ -1242,65 +1208,6 @@ public sealed class TypeResolver
     private void SetValidatedTypeMeta(TypeInfo info, TypeMeta remoteTypeMeta)
     {
         _validatedTypeMetaByType[info.Type] = remoteTypeMeta;
-    }
-
-    private TypeInfo.TypeMetaCacheEntry BuildTypeMeta(
-        TypeInfo info,
-        TypeId wireTypeId,
-        bool trackRef)
-    {
-        TypeMetaCacheKey key = new(info.Type, wireTypeId, trackRef);
-        if (_typeMetaCache.TryGetValue(key, out TypeInfo.TypeMetaCacheEntry cached))
-        {
-            return cached;
-        }
-
-        TypeMeta typeMeta = BuildTypeMetaUncached(info, wireTypeId, trackRef);
-        byte[] encoded = typeMeta.Encode();
-        ulong header = BinaryPrimitives.ReadUInt64LittleEndian(encoded);
-        ulong headerHash = header >> (int)(64 - TypeMetaConstants.TypeMetaNumHashBits);
-        TypeInfo.TypeMetaCacheEntry entry = new(typeMeta, encoded, headerHash);
-        _typeMetaCache[key] = entry;
-        return entry;
-    }
-
-    private TypeMeta BuildTypeMetaUncached(
-        TypeInfo info,
-        TypeId wireTypeId,
-        bool trackRef)
-    {
-        IReadOnlyList<TypeMetaFieldInfo> fields = TypeMetaFields(info, trackRef);
-        bool hasFieldsMeta = fields.Count > 0;
-        if (info.RegisterByName)
-        {
-            if (!info.NamespaceName.HasValue || !info.TypeName.HasValue)
-            {
-                throw new InvalidDataException("missing type name metadata for name-registered type");
-            }
-
-            return new TypeMeta(
-                (uint)wireTypeId,
-                null,
-                info.NamespaceName.Value,
-                info.TypeName.Value,
-                true,
-                fields,
-                hasFieldsMeta);
-        }
-
-        if (!info.UserTypeId.HasValue)
-        {
-            throw new InvalidDataException("missing user type id metadata for id-registered type");
-        }
-
-        return new TypeMeta(
-            (uint)wireTypeId,
-            info.UserTypeId.Value,
-            MetaString.Empty('.', '_'),
-            MetaString.Empty('$', '_'),
-            false,
-            fields,
-            hasFieldsMeta);
     }
 
     private static void ValidateTypeMeta(

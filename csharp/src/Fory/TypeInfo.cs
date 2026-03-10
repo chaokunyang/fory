@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Reflection;
@@ -40,7 +41,10 @@ public sealed class TypeInfo
     private readonly Action<WriteContext, object?, RefMode, bool, bool> _writeObject;
     private readonly Func<ReadContext, RefMode, bool, object?> _readObject;
     private readonly Func<bool, IReadOnlyList<TypeMetaFieldInfo>> _typeMetaFields;
+    private readonly object _typeMetaCacheLock = new();
     private static readonly IReadOnlyList<TypeMetaFieldInfo> EmptyTypeMetaFields = Array.Empty<TypeMetaFieldInfo>();
+    private TypeMetaCacheEntry? _typeMetaNoTrackRef;
+    private TypeMetaCacheEntry? _typeMetaTrackRef;
 
     private TypeInfo(
         Type type,
@@ -511,6 +515,11 @@ public sealed class TypeInfo
         return _typeMeta;
     }
 
+    public ulong GetTypeMetaHeaderHash(bool trackRef)
+    {
+        return GetTypeMetaCacheEntry(trackRef).HeaderHash;
+    }
+
     internal bool IsRegistered { get; }
 
     internal uint? UserTypeId { get; }
@@ -622,5 +631,91 @@ public sealed class TypeInfo
             _typeMetaFields,
             wireTypeId,
             typeMeta);
+    }
+
+    internal TypeMetaCacheEntry GetTypeMetaCacheEntry(bool trackRef)
+    {
+        if (trackRef)
+        {
+            if (_typeMetaTrackRef.HasValue)
+            {
+                return _typeMetaTrackRef.Value;
+            }
+        }
+        else if (_typeMetaNoTrackRef.HasValue)
+        {
+            return _typeMetaNoTrackRef.Value;
+        }
+
+        lock (_typeMetaCacheLock)
+        {
+            if (trackRef)
+            {
+                _typeMetaTrackRef ??= BuildTypeMetaCacheEntry(trackRef: true);
+                return _typeMetaTrackRef.Value;
+            }
+
+            _typeMetaNoTrackRef ??= BuildTypeMetaCacheEntry(trackRef: false);
+            return _typeMetaNoTrackRef.Value;
+        }
+    }
+
+    private TypeMetaCacheEntry BuildTypeMetaCacheEntry(bool trackRef)
+    {
+        if (!UserTypeKind.HasValue)
+        {
+            throw new InvalidDataException($"type meta is only available for user types, got {Type}");
+        }
+
+        if (!IsRegistered)
+        {
+            throw new TypeNotRegisteredException($"{Type} is not registered");
+        }
+
+        TypeId wireTypeId = TypeResolver.ResolveWireTypeId(
+            UserTypeKind.Value,
+            RegisterByName,
+            compatible: true,
+            Evolving);
+        IReadOnlyList<TypeMetaFieldInfo> fields = TypeMetaFields(trackRef);
+        bool hasFieldsMeta = fields.Count > 0;
+        TypeMeta typeMeta;
+        if (RegisterByName)
+        {
+            if (!NamespaceName.HasValue || !TypeName.HasValue)
+            {
+                throw new InvalidDataException("missing type name metadata for name-registered type");
+            }
+
+            typeMeta = new TypeMeta(
+                (uint)wireTypeId,
+                null,
+                NamespaceName.Value,
+                TypeName.Value,
+                true,
+                fields,
+                hasFieldsMeta);
+        }
+        else
+        {
+            if (!UserTypeId.HasValue)
+            {
+                throw new InvalidDataException("missing user type id metadata for id-registered type");
+            }
+
+            typeMeta = new TypeMeta(
+                (uint)wireTypeId,
+                UserTypeId.Value,
+                MetaString.Empty('.', '_'),
+                MetaString.Empty('$', '_'),
+                false,
+                fields,
+                hasFieldsMeta);
+        }
+
+        byte[] encoded = typeMeta.Encode();
+        ulong header = BinaryPrimitives.ReadUInt64LittleEndian(encoded);
+        ulong headerHash = header >> (int)(64 - TypeMetaConstants.TypeMetaNumHashBits);
+        return new TypeMetaCacheEntry(typeMeta, encoded, headerHash);
     }
 }

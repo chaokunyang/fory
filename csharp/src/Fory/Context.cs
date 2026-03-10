@@ -495,7 +495,7 @@ public sealed class ReadContext
         _pendingTypeInfo.Remove(type);
     }
 
-    public void StoreReadRef(object? value)
+    public void StoreRef(object? value)
     {
         if (_readRefIds.Count == 0)
         {

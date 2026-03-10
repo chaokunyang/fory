@@ -17,7 +17,6 @@
 
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Reflection;
 using System.Threading;
 
@@ -57,61 +56,53 @@ public sealed class TypeResolver
     {
         public static GenericTypeCacheEntry<T>? Entry;
     }
-    private static readonly Dictionary<Type, Type> PrimitiveStringKeyDictionaryCodecs = new()
-    {
-        [typeof(string)] = typeof(StringPrimitiveDictionaryCodec),
-        [typeof(int)] = typeof(Int32PrimitiveDictionaryCodec),
-        [typeof(long)] = typeof(Int64PrimitiveDictionaryCodec),
-        [typeof(bool)] = typeof(BoolPrimitiveDictionaryCodec),
-        [typeof(double)] = typeof(Float64PrimitiveDictionaryCodec),
-        [typeof(float)] = typeof(Float32PrimitiveDictionaryCodec),
-        [typeof(uint)] = typeof(UInt32PrimitiveDictionaryCodec),
-        [typeof(ulong)] = typeof(UInt64PrimitiveDictionaryCodec),
-        [typeof(sbyte)] = typeof(Int8PrimitiveDictionaryCodec),
-        [typeof(short)] = typeof(Int16PrimitiveDictionaryCodec),
-        [typeof(ushort)] = typeof(UInt16PrimitiveDictionaryCodec),
-    };
+    private static readonly UInt64Map<Type> PrimitiveStringKeyDictionaryCodecs = CreateTypeMap(
+        (typeof(string), typeof(StringPrimitiveDictionaryCodec)),
+        (typeof(int), typeof(Int32PrimitiveDictionaryCodec)),
+        (typeof(long), typeof(Int64PrimitiveDictionaryCodec)),
+        (typeof(bool), typeof(BoolPrimitiveDictionaryCodec)),
+        (typeof(double), typeof(Float64PrimitiveDictionaryCodec)),
+        (typeof(float), typeof(Float32PrimitiveDictionaryCodec)),
+        (typeof(uint), typeof(UInt32PrimitiveDictionaryCodec)),
+        (typeof(ulong), typeof(UInt64PrimitiveDictionaryCodec)),
+        (typeof(sbyte), typeof(Int8PrimitiveDictionaryCodec)),
+        (typeof(short), typeof(Int16PrimitiveDictionaryCodec)),
+        (typeof(ushort), typeof(UInt16PrimitiveDictionaryCodec)));
 
-    private static readonly Dictionary<Type, Type> PrimitiveSameTypeDictionaryCodecs = new()
-    {
-        [typeof(int)] = typeof(Int32PrimitiveDictionaryCodec),
-        [typeof(long)] = typeof(Int64PrimitiveDictionaryCodec),
-        [typeof(uint)] = typeof(UInt32PrimitiveDictionaryCodec),
-        [typeof(ulong)] = typeof(UInt64PrimitiveDictionaryCodec),
-    };
+    private static readonly UInt64Map<Type> PrimitiveSameTypeDictionaryCodecs = CreateTypeMap(
+        (typeof(int), typeof(Int32PrimitiveDictionaryCodec)),
+        (typeof(long), typeof(Int64PrimitiveDictionaryCodec)),
+        (typeof(uint), typeof(UInt32PrimitiveDictionaryCodec)),
+        (typeof(ulong), typeof(UInt64PrimitiveDictionaryCodec)));
 
-    private static readonly Dictionary<Type, Type> PrimitiveListLikeCollectionCodecs = new()
-    {
-        [typeof(bool)] = typeof(BoolPrimitiveDictionaryCodec),
-        [typeof(sbyte)] = typeof(Int8PrimitiveDictionaryCodec),
-        [typeof(short)] = typeof(Int16PrimitiveDictionaryCodec),
-        [typeof(int)] = typeof(Int32PrimitiveDictionaryCodec),
-        [typeof(long)] = typeof(Int64PrimitiveDictionaryCodec),
-        [typeof(ushort)] = typeof(UInt16PrimitiveDictionaryCodec),
-        [typeof(uint)] = typeof(UInt32PrimitiveDictionaryCodec),
-        [typeof(ulong)] = typeof(UInt64PrimitiveDictionaryCodec),
-        [typeof(float)] = typeof(Float32PrimitiveDictionaryCodec),
-        [typeof(double)] = typeof(Float64PrimitiveDictionaryCodec),
-    };
+    private static readonly UInt64Map<Type> PrimitiveListLikeCollectionCodecs = CreateTypeMap(
+        (typeof(bool), typeof(BoolPrimitiveDictionaryCodec)),
+        (typeof(sbyte), typeof(Int8PrimitiveDictionaryCodec)),
+        (typeof(short), typeof(Int16PrimitiveDictionaryCodec)),
+        (typeof(int), typeof(Int32PrimitiveDictionaryCodec)),
+        (typeof(long), typeof(Int64PrimitiveDictionaryCodec)),
+        (typeof(ushort), typeof(UInt16PrimitiveDictionaryCodec)),
+        (typeof(uint), typeof(UInt32PrimitiveDictionaryCodec)),
+        (typeof(ulong), typeof(UInt64PrimitiveDictionaryCodec)),
+        (typeof(float), typeof(Float32PrimitiveDictionaryCodec)),
+        (typeof(double), typeof(Float64PrimitiveDictionaryCodec)));
 
-    private static readonly Dictionary<Type, Type> PrimitiveSetCollectionCodecs = new()
-    {
-        [typeof(sbyte)] = typeof(Int8PrimitiveDictionaryCodec),
-        [typeof(short)] = typeof(Int16PrimitiveDictionaryCodec),
-        [typeof(int)] = typeof(Int32PrimitiveDictionaryCodec),
-        [typeof(long)] = typeof(Int64PrimitiveDictionaryCodec),
-        [typeof(ushort)] = typeof(UInt16PrimitiveDictionaryCodec),
-        [typeof(uint)] = typeof(UInt32PrimitiveDictionaryCodec),
-        [typeof(ulong)] = typeof(UInt64PrimitiveDictionaryCodec),
-        [typeof(float)] = typeof(Float32PrimitiveDictionaryCodec),
-        [typeof(double)] = typeof(Float64PrimitiveDictionaryCodec),
-    };
+    private static readonly UInt64Map<Type> PrimitiveSetCollectionCodecs = CreateTypeMap(
+        (typeof(sbyte), typeof(Int8PrimitiveDictionaryCodec)),
+        (typeof(short), typeof(Int16PrimitiveDictionaryCodec)),
+        (typeof(int), typeof(Int32PrimitiveDictionaryCodec)),
+        (typeof(long), typeof(Int64PrimitiveDictionaryCodec)),
+        (typeof(ushort), typeof(UInt16PrimitiveDictionaryCodec)),
+        (typeof(uint), typeof(UInt32PrimitiveDictionaryCodec)),
+        (typeof(ulong), typeof(UInt64PrimitiveDictionaryCodec)),
+        (typeof(float), typeof(Float32PrimitiveDictionaryCodec)),
+        (typeof(double), typeof(Float64PrimitiveDictionaryCodec)));
 
     private readonly Dictionary<uint, TypeInfo> _byUserTypeId = [];
     private readonly Dictionary<(string NamespaceName, string TypeName), TypeInfo> _byTypeName = [];
-    private readonly Dictionary<Type, TypeMeta> _validatedTypeMetaByType = [];
+    private readonly UInt64Map<TypeMeta> _validatedTypeMetaByType = new();
 
-    private readonly Dictionary<Type, TypeInfo> _typeInfos = [];
+    private readonly UInt64Map<TypeInfo> _typeInfos = new();
     private ulong _versionHash;
     private bool _finalized;
 
@@ -120,6 +111,17 @@ public sealed class TypeResolver
     {
         Type type = typeof(T);
         GeneratedFactories[type] = static _ => TypeInfo.Create(typeof(T), new TSerializer());
+    }
+
+    private static UInt64Map<Type> CreateTypeMap(params (Type Key, Type Value)[] entries)
+    {
+        UInt64Map<Type> map = new(entries.Length * 2);
+        foreach ((Type key, Type value) in entries)
+        {
+            map.Set(TypeMapKey.Get(key), value);
+        }
+
+        return map;
     }
 
     public Serializer<T> GetSerializer<T>()
@@ -234,7 +236,8 @@ public sealed class TypeResolver
 
     private TypeInfo GetOrCreateTypeInfo(Type type, TypeInfo? explicitTypeInfo)
     {
-        if (_typeInfos.TryGetValue(type, out TypeInfo? existing))
+        ulong typeKey = TypeMapKey.Get(type);
+        if (_typeInfos.TryGetValue(typeKey, out TypeInfo? existing))
         {
             if (explicitTypeInfo is null || ReferenceEquals(existing, explicitTypeInfo))
             {
@@ -253,12 +256,12 @@ public sealed class TypeResolver
             throw new InvalidDataException($"serializer type mismatch for {type}, got {typeInfo.Type}");
         }
 
-        if (_typeInfos.TryGetValue(type, out TypeInfo? previous))
+        if (_typeInfos.TryGetValue(typeKey, out TypeInfo? previous))
         {
             typeInfo = typeInfo.WithRegistrationFrom(previous);
         }
 
-        _typeInfos[type] = typeInfo;
+        _typeInfos.Set(typeKey, typeInfo);
         InvalidateFinalizedVersion();
         return typeInfo;
     }
@@ -279,7 +282,7 @@ public sealed class TypeResolver
     internal void Register(Type type, uint id, TypeInfo? explicitTypeInfo = null)
     {
         TypeInfo typeInfo = GetOrCreateTypeInfo(type, explicitTypeInfo).WithTypeIdRegistration(id);
-        _typeInfos[type] = typeInfo;
+        _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byUserTypeId[id] = typeInfo;
         InvalidateFinalizedVersion();
     }
@@ -290,7 +293,7 @@ public sealed class TypeResolver
         MetaString namespaceMeta = MetaStringEncoder.Namespace.Encode(namespaceName, TypeMetaEncodings.NamespaceMetaStringEncodings);
         MetaString typeNameMeta = MetaStringEncoder.TypeName.Encode(typeName, TypeMetaEncodings.TypeNameMetaStringEncodings);
         typeInfo = typeInfo.WithTypeNameRegistration(namespaceMeta, typeNameMeta);
-        _typeInfos[type] = typeInfo;
+        _typeInfos.Set(TypeMapKey.Get(type), typeInfo);
         _byTypeName[(namespaceName, typeName)] = typeInfo;
         InvalidateFinalizedVersion();
     }
@@ -397,11 +400,12 @@ public sealed class TypeResolver
         ulong hash = offsetBasis;
         hash = MixBool(hash, true);
 
-        List<TypeInfo> typeInfos = _typeInfos.Values
-            .OrderBy(
-                static info => info.Type.AssemblyQualifiedName ?? info.Type.FullName ?? info.Type.Name,
-                StringComparer.Ordinal)
-            .ToList();
+        List<TypeInfo> typeInfos = new(_typeInfos.Count);
+        _typeInfos.AddValuesTo(typeInfos);
+        typeInfos.Sort(static (left, right) =>
+            StringComparer.Ordinal.Compare(
+                left.Type.AssemblyQualifiedName ?? left.Type.FullName ?? left.Type.Name,
+                right.Type.AssemblyQualifiedName ?? right.Type.FullName ?? right.Type.Name));
         hash = MixUInt32(hash, unchecked((uint)typeInfos.Count));
         foreach (TypeInfo info in typeInfos)
         {
@@ -467,7 +471,7 @@ public sealed class TypeResolver
 
     internal TypeInfo? GetRegisteredTypeInfo(Type type)
     {
-        if (_typeInfos.TryGetValue(type, out TypeInfo? typeInfo) && typeInfo.IsRegistered)
+        if (_typeInfos.TryGetValue(TypeMapKey.Get(type), out TypeInfo? typeInfo) && typeInfo.IsRegistered)
         {
             return typeInfo;
         }
@@ -1201,13 +1205,13 @@ public sealed class TypeResolver
 
     private bool HasValidatedTypeMeta(TypeInfo info, TypeMeta remoteTypeMeta)
     {
-        return _validatedTypeMetaByType.TryGetValue(info.Type, out TypeMeta? validated) &&
+        return _validatedTypeMetaByType.TryGetValue(TypeMapKey.Get(info.Type), out TypeMeta? validated) &&
                ReferenceEquals(validated, remoteTypeMeta);
     }
 
     private void SetValidatedTypeMeta(TypeInfo info, TypeMeta remoteTypeMeta)
     {
-        _validatedTypeMetaByType[info.Type] = remoteTypeMeta;
+        _validatedTypeMetaByType.Set(TypeMapKey.Get(info.Type), remoteTypeMeta);
     }
 
     private static void ValidateTypeMeta(
@@ -1288,7 +1292,7 @@ public sealed class TypeResolver
         }
 
         byte[] bytes = normalized.Bytes;
-        (uint index, bool isNew) = context.MetaStringWriteState.AssignIndexIfAbsent(normalized);
+        (uint index, bool isNew) = context.AssignMetaStringIndexIfAbsent(normalized);
         if (isNew)
         {
             context.Writer.WriteVarUInt32((uint)(bytes.Length << 1));
@@ -1320,7 +1324,7 @@ public sealed class TypeResolver
         if (isRef)
         {
             int index = length - 1;
-            MetaString? cached = context.MetaStringReadState.ValueAt(index);
+            MetaString? cached = context.GetReadMetaString(index);
             if (cached is null)
             {
                 throw new InvalidDataException($"unknown meta string ref index {index}");
@@ -1357,7 +1361,7 @@ public sealed class TypeResolver
             value = decoder.Decode(bytes, encoding);
         }
 
-        context.MetaStringReadState.Append(value);
+        context.AppendReadMetaString(value);
         return value;
     }
 
@@ -1786,7 +1790,7 @@ public sealed class TypeResolver
         if ((genericType == typeof(LinkedList<>) ||
              genericType == typeof(Queue<>) ||
              genericType == typeof(Stack<>)) &&
-            PrimitiveListLikeCollectionCodecs.TryGetValue(elementType, out Type? listLikeCodec))
+            PrimitiveListLikeCollectionCodecs.TryGetValue(TypeMapKey.Get(elementType), out Type? listLikeCodec))
         {
             Type serializerType = genericType == typeof(LinkedList<>)
                 ? typeof(PrimitiveLinkedListSerializer<,>).MakeGenericType(elementType, listLikeCodec)
@@ -1798,7 +1802,7 @@ public sealed class TypeResolver
 
         if ((genericType == typeof(SortedSet<>) ||
              genericType == typeof(ImmutableHashSet<>)) &&
-            PrimitiveSetCollectionCodecs.TryGetValue(elementType, out Type? setCodec))
+            PrimitiveSetCollectionCodecs.TryGetValue(TypeMapKey.Get(elementType), out Type? setCodec))
         {
             Type serializerType = genericType == typeof(SortedSet<>)
                 ? typeof(PrimitiveSortedSetSerializer<,>).MakeGenericType(elementType, setCodec)
@@ -1830,7 +1834,7 @@ public sealed class TypeResolver
         Type valueType = genericArgs[1];
 
         if (keyType == typeof(string) &&
-            PrimitiveStringKeyDictionaryCodecs.TryGetValue(valueType, out Type? valueCodecType))
+            PrimitiveStringKeyDictionaryCodecs.TryGetValue(TypeMapKey.Get(valueType), out Type? valueCodecType))
         {
             Type serializerType = genericType == typeof(Dictionary<,>)
                 ? typeof(PrimitiveStringKeyDictionarySerializer<,>).MakeGenericType(valueType, valueCodecType)
@@ -1843,7 +1847,7 @@ public sealed class TypeResolver
         }
 
         if (keyType == valueType &&
-            PrimitiveSameTypeDictionaryCodecs.TryGetValue(valueType, out Type? sameTypeCodec))
+            PrimitiveSameTypeDictionaryCodecs.TryGetValue(TypeMapKey.Get(valueType), out Type? sameTypeCodec))
         {
             Type serializerType = genericType == typeof(Dictionary<,>)
                 ? typeof(PrimitiveSameTypeDictionarySerializer<,>).MakeGenericType(valueType, sameTypeCodec)

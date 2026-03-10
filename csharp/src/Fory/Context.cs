@@ -240,13 +240,6 @@ public sealed class MetaStringReadState
     }
 }
 
-public sealed record DynamicTypeInfo(
-    TypeId WireTypeId,
-    uint? UserTypeId,
-    MetaString? NamespaceName,
-    MetaString? TypeName,
-    TypeMeta? CompatibleTypeMeta);
-
 public sealed class WriteContext
 {
     public WriteContext(
@@ -322,13 +315,13 @@ public sealed class WriteContext
     }
 }
 
-internal readonly record struct CanonicalReferenceSignature(
+internal readonly record struct CanonicalRefSignature(
     Type Type,
     ulong HashLo,
     ulong HashHi,
     int Length);
 
-internal sealed class CanonicalReferenceEntry
+internal sealed class CanonicalRefEntry
 {
     public required byte[] Bytes { get; init; }
     public required object Object { get; init; }
@@ -336,8 +329,9 @@ internal sealed class CanonicalReferenceEntry
 
 public sealed class ReadContext
 {
-    private readonly Dictionary<Type, DynamicTypeInfo> _pendingDynamicTypeInfo = [];
-    private readonly Dictionary<CanonicalReferenceSignature, List<CanonicalReferenceEntry>> _canonicalReferenceCache = [];
+    private readonly Dictionary<Type, TypeInfo> _pendingTypeInfo = [];
+    private readonly Dictionary<CanonicalRefSignature, List<CanonicalRefEntry>> _canonicalRefCache = [];
+    private readonly List<uint> _readRefIds = [];
     private readonly int _maxDynamicReadDepth;
     private Type? _pendingCompatibleType;
     private TypeMeta? _pendingCompatibleTypeMeta;
@@ -524,19 +518,42 @@ public sealed class ReadContext
         throw new InvalidDataException($"missing compatible type metadata for {type}");
     }
 
-    public void SetDynamicTypeInfo(Type type, DynamicTypeInfo typeInfo)
+    public void SetPendingTypeInfo(Type type, TypeInfo typeInfo)
     {
-        _pendingDynamicTypeInfo[type] = typeInfo;
+        _pendingTypeInfo[type] = typeInfo;
     }
 
-    public DynamicTypeInfo? DynamicTypeInfo(Type type)
+    public TypeInfo? PendingTypeInfo(Type type)
     {
-        return _pendingDynamicTypeInfo.TryGetValue(type, out DynamicTypeInfo? typeInfo) ? typeInfo : null;
+        return _pendingTypeInfo.TryGetValue(type, out TypeInfo? typeInfo) ? typeInfo : null;
     }
 
-    public void ClearDynamicTypeInfo(Type type)
+    public void ClearPendingTypeInfo(Type type)
     {
-        _pendingDynamicTypeInfo.Remove(type);
+        _pendingTypeInfo.Remove(type);
+    }
+
+    public void StoreReadRef(object? value)
+    {
+        if (_readRefIds.Count == 0)
+        {
+            return;
+        }
+
+        RefReader.StoreRefAt(_readRefIds[^1], value);
+    }
+
+    internal void EnterReadRefId(uint refId)
+    {
+        _readRefIds.Add(refId);
+    }
+
+    internal void ExitReadRefId()
+    {
+        if (_readRefIds.Count > 0)
+        {
+            _readRefIds.RemoveAt(_readRefIds.Count - 1);
+        }
     }
 
     public void IncreaseDynamicReadDepth()
@@ -557,7 +574,7 @@ public sealed class ReadContext
         }
     }
 
-    public T CanonicalizeNonTrackingReference<T>(T value, int start, int end)
+    public T CanonicalizeNonTrackingRef<T>(T value, int start, int end)
     {
         if (!TrackRef || end <= start || value is null || value is not object obj)
         {
@@ -567,11 +584,11 @@ public sealed class ReadContext
         byte[] bytes = new byte[end - start];
         Array.Copy(Reader.Storage, start, bytes, 0, bytes.Length);
         (ulong hashLo, ulong hashHi) = MurmurHash3.X64_128(bytes, 47);
-        CanonicalReferenceSignature signature = new(obj.GetType(), hashLo, hashHi, bytes.Length);
+        CanonicalRefSignature signature = new(obj.GetType(), hashLo, hashHi, bytes.Length);
 
-        if (_canonicalReferenceCache.TryGetValue(signature, out List<CanonicalReferenceEntry>? bucket))
+        if (_canonicalRefCache.TryGetValue(signature, out List<CanonicalRefEntry>? bucket))
         {
-            foreach (CanonicalReferenceEntry entry in bucket)
+            foreach (CanonicalRefEntry entry in bucket)
             {
                 if (entry.Bytes.AsSpan().SequenceEqual(bytes))
                 {
@@ -579,13 +596,13 @@ public sealed class ReadContext
                 }
             }
 
-            bucket.Add(new CanonicalReferenceEntry { Bytes = bytes, Object = obj });
+            bucket.Add(new CanonicalRefEntry { Bytes = bytes, Object = obj });
             return value;
         }
 
-        _canonicalReferenceCache[signature] =
+        _canonicalRefCache[signature] =
         [
-            new CanonicalReferenceEntry { Bytes = bytes, Object = obj },
+            new CanonicalRefEntry { Bytes = bytes, Object = obj },
         ];
         return value;
     }
@@ -596,8 +613,9 @@ public sealed class ReadContext
         _pendingCompatibleType = null;
         _pendingCompatibleTypeMeta = null;
         _pendingCompatibleTypeMetaMap?.Clear();
-        _pendingDynamicTypeInfo.Clear();
-        _canonicalReferenceCache.Clear();
+        _pendingTypeInfo.Clear();
+        _canonicalRefCache.Clear();
+        _readRefIds.Clear();
         _lastCompatibleType = null;
         _lastCompatibleTypeMeta = null;
         _currentDynamicReadDepth = 0;

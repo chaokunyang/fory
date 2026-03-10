@@ -591,7 +591,7 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void MacroClassReferenceTracking()
+    public void MacroClassRefTracking()
     {
         ForyRuntime fory = ForyRuntime.Builder().TrackRef(true).Build();
         fory.Register<Node>(200);
@@ -932,6 +932,27 @@ public sealed class ForyRuntimeTests
         Assert.Contains("a", setDecoded);
         Assert.Contains(7, setDecoded);
         Assert.Contains(false, setDecoded);
+    }
+
+    [Fact]
+    public void DynamicObjectCompatibleModeSupportsStructKeyAndValue()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(true).Build();
+        fory.Register<EvolvingOverrideValue>(410);
+        fory.Register<FixedOverrideValue>(411);
+
+        Dictionary<object, object?> source = new()
+        {
+            [new FixedOverrideValue { F1 = "key" }] = new EvolvingOverrideValue { F1 = "value" },
+        };
+
+        Dictionary<object, object?> decoded =
+            Assert.IsType<Dictionary<object, object?>>(fory.Deserialize<object?>(fory.Serialize<object?>(source)));
+        KeyValuePair<object, object?> entry = Assert.Single(decoded);
+        FixedOverrideValue key = Assert.IsType<FixedOverrideValue>(entry.Key);
+        EvolvingOverrideValue value = Assert.IsType<EvolvingOverrideValue>(entry.Value);
+        Assert.Equal("key", key.F1);
+        Assert.Equal("value", value.F1);
     }
 
     [Fact]

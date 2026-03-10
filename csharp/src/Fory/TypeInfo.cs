@@ -48,7 +48,7 @@ public sealed class TypeInfo
         UserTypeKind? userTypeKind,
         bool isDynamicType,
         bool isNullableType,
-        bool isReferenceTrackableType,
+        bool isRefType,
         bool supportsCompatibleReadWithoutTypeMeta,
         object? defaultObject,
         bool evolving,
@@ -61,7 +61,9 @@ public sealed class TypeInfo
         Func<ReadContext, object?> readDataObject,
         Action<WriteContext, object?, RefMode, bool, bool> writeObject,
         Func<ReadContext, RefMode, bool, object?> readObject,
-        Func<bool, IReadOnlyList<TypeMetaFieldInfo>> compatibleTypeMetaFields)
+        Func<bool, IReadOnlyList<TypeMetaFieldInfo>> compatibleTypeMetaFields,
+        TypeId? readWireTypeId,
+        TypeMeta? readCompatibleTypeMeta)
     {
         Type = type;
         _serializer = serializer;
@@ -69,7 +71,7 @@ public sealed class TypeInfo
         UserTypeKind = userTypeKind;
         IsDynamicType = isDynamicType;
         IsNullableType = isNullableType;
-        IsReferenceTrackableType = isReferenceTrackableType;
+        IsRefType = isRefType;
         SupportsCompatibleReadWithoutTypeMeta = supportsCompatibleReadWithoutTypeMeta;
         DefaultObject = defaultObject;
         Evolving = evolving;
@@ -83,6 +85,8 @@ public sealed class TypeInfo
         _writeObject = writeObject;
         _readObject = readObject;
         _compatibleTypeMetaFields = compatibleTypeMetaFields;
+        ReadWireTypeId = readWireTypeId;
+        ReadCompatibleTypeMeta = readCompatibleTypeMeta;
     }
 
     internal static TypeInfo Create<T>(Type type, Serializer<T> serializer)
@@ -94,7 +98,7 @@ public sealed class TypeInfo
             hasCompatibleTypeMetaFieldsProvider);
         bool evolving = ResolveStructEvolving(type, userTypeKind);
         bool isNullableType = !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
-        bool isReferenceTrackableType = type != typeof(string) && !type.IsValueType;
+        bool isRefType = type != typeof(string) && !type.IsValueType;
         bool supportsCompatibleReadWithoutTypeMeta = ResolveSupportsCompatibleReadWithoutTypeMeta(serializer);
         return new TypeInfo(
             type,
@@ -103,7 +107,7 @@ public sealed class TypeInfo
             userTypeKind,
             isDynamicType,
             isNullableType,
-            isReferenceTrackableType,
+            isRefType,
             supportsCompatibleReadWithoutTypeMeta,
             serializer.DefaultObject,
             evolving,
@@ -117,7 +121,9 @@ public sealed class TypeInfo
             (context, value, refMode, writeTypeInfo, hasGenerics) =>
                 WriteObject(serializer, context, value, refMode, writeTypeInfo, hasGenerics),
             (context, refMode, readTypeInfo) => serializer.Read(context, refMode, readTypeInfo),
-            compatibleTypeMetaFields);
+            compatibleTypeMetaFields,
+            builtInTypeId,
+            null);
     }
 
     private static Func<bool, IReadOnlyList<TypeMetaFieldInfo>> CreateCompatibleTypeMetaFieldsProvider(
@@ -481,13 +487,17 @@ public sealed class TypeInfo
 
     public bool IsNullableType { get; }
 
-    public bool IsReferenceTrackableType { get; }
+    public bool IsRefType { get; }
 
     public bool SupportsCompatibleReadWithoutTypeMeta { get; }
 
     public object? DefaultObject { get; }
 
     internal bool Evolving { get; }
+
+    internal TypeId? ReadWireTypeId { get; }
+
+    internal TypeMeta? ReadCompatibleTypeMeta { get; }
 
     internal Type SerializerType => _serializer.GetType();
 
@@ -560,7 +570,7 @@ public sealed class TypeInfo
             UserTypeKind,
             IsDynamicType,
             IsNullableType,
-            IsReferenceTrackableType,
+            IsRefType,
             SupportsCompatibleReadWithoutTypeMeta,
             DefaultObject,
             Evolving,
@@ -573,7 +583,9 @@ public sealed class TypeInfo
             _readDataObject,
             _writeObject,
             _readObject,
-            _compatibleTypeMetaFields);
+            _compatibleTypeMetaFields,
+            ReadWireTypeId,
+            ReadCompatibleTypeMeta);
     }
 
     internal TypeInfo WithTypeNameRegistration(MetaString namespaceName, MetaString typeName)
@@ -585,7 +597,7 @@ public sealed class TypeInfo
             UserTypeKind,
             IsDynamicType,
             IsNullableType,
-            IsReferenceTrackableType,
+            IsRefType,
             SupportsCompatibleReadWithoutTypeMeta,
             DefaultObject,
             Evolving,
@@ -598,7 +610,9 @@ public sealed class TypeInfo
             _readDataObject,
             _writeObject,
             _readObject,
-            _compatibleTypeMetaFields);
+            _compatibleTypeMetaFields,
+            ReadWireTypeId,
+            ReadCompatibleTypeMeta);
     }
 
     internal TypeInfo WithRegistrationFrom(TypeInfo source)
@@ -624,5 +638,32 @@ public sealed class TypeInfo
         }
 
         return WithTypeIdRegistration(source.UserTypeId.Value);
+    }
+
+    internal TypeInfo WithReadTypeInfo(TypeId wireTypeId, TypeMeta? compatibleTypeMeta = null)
+    {
+        return new TypeInfo(
+            Type,
+            _serializer,
+            BuiltInTypeId,
+            UserTypeKind,
+            IsDynamicType,
+            IsNullableType,
+            IsRefType,
+            SupportsCompatibleReadWithoutTypeMeta,
+            DefaultObject,
+            Evolving,
+            IsRegistered,
+            UserTypeId,
+            RegisterByName,
+            NamespaceName,
+            TypeName,
+            _writeDataObject,
+            _readDataObject,
+            _writeObject,
+            _readObject,
+            _compatibleTypeMetaFields,
+            wireTypeId,
+            compatibleTypeMeta);
     }
 }

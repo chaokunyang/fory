@@ -492,7 +492,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"        {model.TypeName} valueNoTypeMeta = new {model.TypeName}();");
         if (model.Kind == DeclKind.Class)
         {
-            sb.AppendLine("        context.RefReader.BindPendingReference(valueNoTypeMeta);");
+            sb.AppendLine("        context.StoreReadRef(valueNoTypeMeta);");
         }
 
         foreach (MemberModel member in model.SortedMembers)
@@ -525,7 +525,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"            {model.TypeName} value = new {model.TypeName}();");
         if (model.Kind == DeclKind.Class)
         {
-            sb.AppendLine("            context.RefReader.BindPendingReference(value);");
+            sb.AppendLine("            context.StoreReadRef(value);");
         }
 
         sb.AppendLine("            bool __ForyExactCompatibleSchema = __ForyCachedExactCompatibleSchema(typeMeta, context.TrackRef, context.TypeResolver);");
@@ -610,7 +610,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"        {model.TypeName} valueSchema = new {model.TypeName}();");
         if (model.Kind == DeclKind.Class)
         {
-            sb.AppendLine("        context.RefReader.BindPendingReference(valueSchema);");
+            sb.AppendLine("        context.StoreReadRef(valueSchema);");
         }
 
         foreach (MemberModel member in model.SortedMembers)
@@ -1006,7 +1006,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             return false;
         }
 
-        return member.Classification.IsBuiltIn || !member.IsReferenceTrackableType;
+        return member.Classification.IsBuiltIn || !member.IsRefType;
     }
 
     private static bool CanUseTrackRefBranchWriteDataInvocation(MemberModel member)
@@ -1016,7 +1016,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             return false;
         }
 
-        return !member.Classification.IsBuiltIn && member.IsReferenceTrackableType;
+        return !member.Classification.IsBuiltIn && member.IsRefType;
     }
 
     private static string BuildSchemaFingerprintExpression(ImmutableArray<MemberModel> members)
@@ -1040,7 +1040,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             string trackRefExpr = member.DynamicAnyKind switch
             {
                 DynamicAnyKind.AnyValue => "(trackRef ? 1 : 0)",
-                _ => member.Classification.IsBuiltIn || !member.IsReferenceTrackableType
+                _ => member.Classification.IsBuiltIn || !member.IsRefType
                     ? "0"
                     : "(trackRef ? 1 : 0)",
             };
@@ -1083,7 +1083,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         return member.DynamicAnyKind switch
         {
             DynamicAnyKind.AnyValue => $"__ForyRefMode({BoolLiteral(member.IsNullable)}, context.TrackRef)",
-            _ => member.Classification.IsBuiltIn || !member.IsReferenceTrackableType
+            _ => member.Classification.IsBuiltIn || !member.IsRefType
                 ? $"__ForyRefMode({BoolLiteral(member.IsNullable)}, false)"
                 : $"__ForyRefMode({BoolLiteral(member.IsNullable)}, context.TrackRef)",
         };
@@ -2041,7 +2041,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             int group,
             bool isCollection,
             bool useDictionaryTypeInfoCache,
-            bool isReferenceTrackableType,
+            bool isRefType,
             DynamicAnyKind dynamicAnyKind,
             TypeMetaFieldTypeModel typeMeta)
         {
@@ -2057,7 +2057,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             Group = group;
             IsCollection = isCollection;
             UseDictionaryTypeInfoCache = useDictionaryTypeInfoCache;
-            IsReferenceTrackableType = isReferenceTrackableType;
+            IsRefType = isRefType;
             DynamicAnyKind = dynamicAnyKind;
             TypeMeta = typeMeta;
         }
@@ -2074,7 +2074,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         public int Group { get; }
         public bool IsCollection { get; }
         public bool UseDictionaryTypeInfoCache { get; }
-        public bool IsReferenceTrackableType { get; }
+        public bool IsRefType { get; }
         public DynamicAnyKind DynamicAnyKind { get; }
         public TypeMetaFieldTypeModel TypeMeta { get; }
     }

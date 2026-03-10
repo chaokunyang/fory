@@ -17,16 +17,6 @@
 
 import Foundation
 
-@inline(__always)
-func writeBuiltinTypeInfo(_ context: WriteContext, _ typeID: TypeId) {
-    context.writeStaticTypeInfo(typeID)
-}
-
-@inline(__always)
-func readBuiltinTypeInfo(_ context: ReadContext, _ typeID: TypeId) throws -> TypeInfo? {
-    try context.readStaticTypeInfo(typeID)
-}
-
 public protocol Serializer {
     static func foryDefault() -> Self
     static var staticTypeId: TypeId { get }

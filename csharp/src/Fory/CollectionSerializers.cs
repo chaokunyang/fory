@@ -106,7 +106,7 @@ internal static class CollectionCodec
             }
         }
 
-        bool trackRef = context.TrackRef && elementTypeInfo.IsReferenceTrackableType;
+        bool trackRef = context.TrackRef && elementTypeInfo.IsRefType;
         bool declaredElementType = hasGenerics &&
                                    (CanDeclareElementType<T>(elementTypeInfo) ||
                                     CanDeclareRuntimeElementType(list, elementTypeInfo));
@@ -200,7 +200,7 @@ internal static class CollectionCodec
         bool hasNull = (header & CollectionBits.HasNull) != 0;
         bool declared = (header & CollectionBits.DeclaredElementType) != 0;
         bool sameType = (header & CollectionBits.SameType) != 0;
-        bool canonicalizeElements = context.TrackRef && !trackRef && elementTypeInfo.IsReferenceTrackableType;
+        bool canonicalizeElements = context.TrackRef && !trackRef && elementTypeInfo.IsRefType;
         bool readDeclaredCompatibleTypeInfo =
             context.Compatible &&
             declared &&
@@ -265,7 +265,7 @@ internal static class CollectionCodec
 
             if (!declared)
             {
-                context.ClearDynamicTypeInfo(typeof(T));
+                context.ClearPendingTypeInfo(typeof(T));
             }
 
             return values;
@@ -314,7 +314,7 @@ internal static class CollectionCodec
 
         if (!declared)
         {
-            context.ClearDynamicTypeInfo(typeof(T));
+            context.ClearPendingTypeInfo(typeof(T));
         }
 
         return values;
@@ -334,7 +334,7 @@ internal static class CollectionCodec
         int start = context.Reader.Cursor;
         T value = elementSerializer.Read(context, RefMode.None, readTypeInfo);
         int end = context.Reader.Cursor;
-        return context.CanonicalizeNonTrackingReference(value, start, end);
+        return context.CanonicalizeNonTrackingRef(value, start, end);
     }
 
     private static T ReadCollectionElementDataWithCanonicalization<T>(
@@ -355,7 +355,7 @@ internal static class CollectionCodec
             ? elementSerializer.ReadData(context)
             : compatibleNoTypeMetaReader.ReadDataCompatibleNoTypeMeta(context);
         int end = context.Reader.Cursor;
-        return context.CanonicalizeNonTrackingReference(value, start, end);
+        return context.CanonicalizeNonTrackingRef(value, start, end);
     }
 }
 

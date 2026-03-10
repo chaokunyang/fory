@@ -437,7 +437,7 @@ public sealed class TypeResolver
             hash = MixUInt32(hash, info.UserTypeKind.HasValue ? (uint)info.UserTypeKind.Value + 1u : 0u);
             hash = MixBool(hash, info.IsDynamicType);
             hash = MixBool(hash, info.IsNullableType);
-            hash = MixBool(hash, info.IsReferenceTrackableType);
+            hash = MixBool(hash, info.IsRefType);
             hash = MixBool(hash, info.SupportsCompatibleReadWithoutTypeMeta);
             hash = MixBool(hash, info.Evolving);
             hash = MixBool(hash, info.IsRegistered);
@@ -625,8 +625,8 @@ public sealed class TypeResolver
         Type type = typeof(T);
         if (type == typeof(object))
         {
-            DynamicTypeInfo dynamicTypeInfo = ReadDynamicTypeInfo(context);
-            context.SetDynamicTypeInfo(type, dynamicTypeInfo);
+            TypeInfo anyTypeInfo = ReadAnyTypeInfo(context);
+            context.SetPendingTypeInfo(type, anyTypeInfo);
             return;
         }
 
@@ -860,11 +860,7 @@ public sealed class TypeResolver
         ReadContext context,
         TypeMeta? compatibleTypeMeta = null)
     {
-        if (!_byUserTypeId.TryGetValue(userTypeId, out TypeInfo? typeInfo))
-        {
-            throw new TypeNotRegisteredException($"user_type_id={userTypeId}");
-        }
-
+        TypeInfo typeInfo = RequireRegisteredTypeInfoByUserTypeId(userTypeId);
         return ReadRegisteredValue(typeInfo, context, compatibleTypeMeta);
     }
 
@@ -874,11 +870,7 @@ public sealed class TypeResolver
         ReadContext context,
         TypeMeta? compatibleTypeMeta = null)
     {
-        if (!_byTypeName.TryGetValue((namespaceName, typeName), out TypeInfo? typeInfo))
-        {
-            throw new TypeNotRegisteredException($"namespace={namespaceName}, type={typeName}");
-        }
-
+        TypeInfo typeInfo = RequireRegisteredTypeInfoByName(namespaceName, typeName);
         return ReadRegisteredValue(typeInfo, context, compatibleTypeMeta);
     }
 
@@ -896,12 +888,12 @@ public sealed class TypeResolver
         return ReadObject(typeInfo, context, RefMode.None, false);
     }
 
-    public DynamicTypeInfo ReadDynamicTypeInfo(ReadContext context)
+    public TypeInfo ReadAnyTypeInfo(ReadContext context)
     {
         uint rawTypeId = context.Reader.ReadUInt8();
         if (!IsKnownTypeId(rawTypeId))
         {
-            throw new InvalidDataException($"unknown dynamic type id {rawTypeId}");
+            throw new InvalidDataException($"unknown type id {rawTypeId}");
         }
 
         TypeId wireTypeId = (TypeId)rawTypeId;
@@ -909,195 +901,179 @@ public sealed class TypeResolver
         {
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
-                {
-                    TypeMeta typeMeta = context.ReadCompatibleTypeMeta();
-                    if (typeMeta.RegisterByName)
-                    {
-                        return new DynamicTypeInfo(
-                            wireTypeId,
-                            null,
-                            typeMeta.NamespaceName,
-                            typeMeta.TypeName,
-                            typeMeta);
-                    }
-
-                    return new DynamicTypeInfo(wireTypeId, typeMeta.UserTypeId, null, null, typeMeta);
-                }
+                return ResolveAnyCompatibleTypeInfo(wireTypeId, context.ReadCompatibleTypeMeta(), context.Compatible);
             case TypeId.NamedEnum:
             case TypeId.NamedStruct:
             case TypeId.NamedExt:
             case TypeId.NamedUnion:
-                return ReadNamedDynamicTypeInfo(wireTypeId, context);
+                return ReadNamedAnyTypeInfo(wireTypeId, context);
             case TypeId.Struct:
             case TypeId.Enum:
             case TypeId.Ext:
             case TypeId.TypedUnion:
-                {
-                    return new DynamicTypeInfo(wireTypeId, context.Reader.ReadVarUInt32(), null, null, null);
-                }
+                return ResolveAnyUserTypeInfo(wireTypeId, context.Reader.ReadVarUInt32(), context.Compatible);
             default:
-                return new DynamicTypeInfo(wireTypeId, null, null, null, null);
+                return ResolveAnyBuiltInTypeInfo(wireTypeId);
         }
     }
 
-    private DynamicTypeInfo ReadNamedDynamicTypeInfo(TypeId wireTypeId, ReadContext context)
+    private TypeInfo ReadNamedAnyTypeInfo(TypeId wireTypeId, ReadContext context)
     {
         if (context.Compatible)
         {
-            TypeMeta typeMeta = context.ReadCompatibleTypeMeta();
-            return new DynamicTypeInfo(
-                wireTypeId,
-                typeMeta.UserTypeId,
-                typeMeta.NamespaceName,
-                typeMeta.TypeName,
-                typeMeta);
+            return ResolveAnyCompatibleTypeInfo(wireTypeId, context.ReadCompatibleTypeMeta(), compatible: true);
         }
 
         MetaString namespaceName = ReadMetaString(
-            context.Reader,
+            context,
             MetaStringDecoder.Namespace,
             TypeMetaEncodings.NamespaceMetaStringEncodings);
         MetaString typeName = ReadMetaString(
-            context.Reader,
+            context,
             MetaStringDecoder.TypeName,
             TypeMetaEncodings.TypeNameMetaStringEncodings);
-        return new DynamicTypeInfo(wireTypeId, null, namespaceName, typeName, null);
+        return ResolveAnyUserTypeInfo(wireTypeId, namespaceName.Value, typeName.Value, compatible: false);
     }
 
-    public object? ReadDynamicValue(DynamicTypeInfo typeInfo, ReadContext context)
+    internal object? ReadAnyValue(TypeInfo typeInfo, ReadContext context)
     {
-        switch (typeInfo.WireTypeId)
+        TypeId wireTypeId = typeInfo.ReadWireTypeId
+                            ?? throw new InvalidDataException($"missing read wire type for {typeInfo.Type}");
+        switch (wireTypeId)
         {
-            case TypeId.Bool:
-                return context.Reader.ReadUInt8() != 0;
-            case TypeId.Int8:
-                return context.Reader.ReadInt8();
-            case TypeId.Int16:
-                return context.Reader.ReadInt16();
             case TypeId.Int32:
                 return context.Reader.ReadInt32();
-            case TypeId.VarInt32:
-                return context.Reader.ReadVarInt32();
             case TypeId.Int64:
                 return context.Reader.ReadInt64();
-            case TypeId.VarInt64:
-                return context.Reader.ReadVarInt64();
             case TypeId.TaggedInt64:
                 return context.Reader.ReadTaggedInt64();
-            case TypeId.UInt8:
-                return context.Reader.ReadUInt8();
-            case TypeId.UInt16:
-                return context.Reader.ReadUInt16();
             case TypeId.UInt32:
                 return context.Reader.ReadUInt32();
-            case TypeId.VarUInt32:
-                return context.Reader.ReadVarUInt32();
             case TypeId.UInt64:
                 return context.Reader.ReadUInt64();
-            case TypeId.VarUInt64:
-                return context.Reader.ReadVarUInt64();
             case TypeId.TaggedUInt64:
                 return context.Reader.ReadTaggedUInt64();
-            case TypeId.Float32:
-                return context.Reader.ReadFloat32();
-            case TypeId.Float64:
-                return context.Reader.ReadFloat64();
-            case TypeId.String:
-                return StringSerializer.ReadString(context);
-            case TypeId.Date:
-                return TimeCodec.ReadDate(context);
-            case TypeId.Timestamp:
-                return TimeCodec.ReadTimestamp(context);
-            case TypeId.Duration:
-                return TimeCodec.ReadDuration(context);
-            case TypeId.Binary:
-            case TypeId.UInt8Array:
-                return ReadBinary(context);
-            case TypeId.BoolArray:
-                return ReadBoolArray(context);
-            case TypeId.Int8Array:
-                return ReadInt8Array(context);
-            case TypeId.Int16Array:
-                return ReadInt16Array(context);
-            case TypeId.Int32Array:
-                return ReadInt32Array(context);
-            case TypeId.Int64Array:
-                return ReadInt64Array(context);
-            case TypeId.UInt16Array:
-                return ReadUInt16Array(context);
-            case TypeId.UInt32Array:
-                return ReadUInt32Array(context);
-            case TypeId.UInt64Array:
-                return ReadUInt64Array(context);
-            case TypeId.Float32Array:
-                return ReadFloat32Array(context);
-            case TypeId.Float64Array:
-                return ReadFloat64Array(context);
-            case TypeId.List:
-                return DynamicContainerCodec.ReadListPayload(context);
-            case TypeId.Set:
-                return DynamicContainerCodec.ReadSetPayload(context);
             case TypeId.Map:
                 return DynamicContainerCodec.ReadMapPayload(context);
-            case TypeId.Union:
-                return GetSerializer<Union>().Read(context, RefMode.None, false);
             case TypeId.Struct:
             case TypeId.Enum:
             case TypeId.Ext:
             case TypeId.TypedUnion:
-                {
-                    if (!typeInfo.UserTypeId.HasValue)
-                    {
-                        throw new InvalidDataException($"missing dynamic user type id for {typeInfo.WireTypeId}");
-                    }
-
-                    return ReadByUserTypeId(typeInfo.UserTypeId.Value, context);
-                }
             case TypeId.NamedStruct:
             case TypeId.NamedEnum:
             case TypeId.NamedExt:
             case TypeId.NamedUnion:
-                {
-                    if (!typeInfo.NamespaceName.HasValue || !typeInfo.TypeName.HasValue)
-                    {
-                        throw new InvalidDataException($"missing dynamic type name for {typeInfo.WireTypeId}");
-                    }
-
-                    return ReadByTypeName(typeInfo.NamespaceName.Value.Value, typeInfo.TypeName.Value.Value, context);
-                }
             case TypeId.CompatibleStruct:
             case TypeId.NamedCompatibleStruct:
-                {
-                    if (typeInfo.CompatibleTypeMeta is null)
-                    {
-                        throw new InvalidDataException($"missing compatible type meta for {typeInfo.WireTypeId}");
-                    }
-
-                    TypeMeta compatibleTypeMeta = typeInfo.CompatibleTypeMeta;
-                    if (compatibleTypeMeta.RegisterByName)
-                    {
-                        return ReadByTypeName(
-                            compatibleTypeMeta.NamespaceName.Value,
-                            compatibleTypeMeta.TypeName.Value,
-                            context,
-                            compatibleTypeMeta);
-                    }
-
-                    if (!compatibleTypeMeta.UserTypeId.HasValue)
-                    {
-                        throw new InvalidDataException("missing user type id in compatible dynamic type meta");
-                    }
-
-                    return ReadByUserTypeId(
-                        compatibleTypeMeta.UserTypeId.Value,
-                        context,
-                        compatibleTypeMeta);
-                }
+                return ReadRegisteredValue(typeInfo, context, typeInfo.ReadCompatibleTypeMeta);
             case TypeId.None:
                 return null;
             default:
-                throw new InvalidDataException($"unsupported dynamic type id {typeInfo.WireTypeId}");
+                return ReadDataObject(typeInfo, context);
         }
+    }
+
+    private TypeInfo ResolveAnyCompatibleTypeInfo(TypeId wireTypeId, TypeMeta typeMeta, bool compatible)
+    {
+        TypeInfo typeInfo = typeMeta.RegisterByName
+            ? RequireRegisteredTypeInfoByName(typeMeta.NamespaceName.Value, typeMeta.TypeName.Value)
+            : typeMeta.UserTypeId.HasValue
+                ? RequireRegisteredTypeInfoByUserTypeId(typeMeta.UserTypeId.Value)
+                : throw new InvalidDataException("missing user type id in compatible type meta");
+        ValidateAnyReadWireType(typeInfo, wireTypeId, compatible);
+        return typeInfo.WithReadTypeInfo(wireTypeId, typeMeta);
+    }
+
+    private TypeInfo ResolveAnyUserTypeInfo(TypeId wireTypeId, uint userTypeId, bool compatible)
+    {
+        TypeInfo typeInfo = RequireRegisteredTypeInfoByUserTypeId(userTypeId);
+        ValidateAnyReadWireType(typeInfo, wireTypeId, compatible);
+        return typeInfo.WithReadTypeInfo(wireTypeId);
+    }
+
+    private TypeInfo ResolveAnyUserTypeInfo(TypeId wireTypeId, string namespaceName, string typeName, bool compatible)
+    {
+        TypeInfo typeInfo = RequireRegisteredTypeInfoByName(namespaceName, typeName);
+        ValidateAnyReadWireType(typeInfo, wireTypeId, compatible);
+        return typeInfo.WithReadTypeInfo(wireTypeId);
+    }
+
+    private void ValidateAnyReadWireType(TypeInfo typeInfo, TypeId wireTypeId, bool compatible)
+    {
+        if (!typeInfo.UserTypeKind.HasValue)
+        {
+            return;
+        }
+
+        if (!IsAllowedWireType(
+                wireTypeId,
+                typeInfo.UserTypeKind.Value,
+                typeInfo.RegisterByName,
+                compatible,
+                typeInfo.Evolving))
+        {
+            throw new InvalidDataException(
+                $"wire type {wireTypeId} is not valid for registered type {typeInfo.Type}");
+        }
+    }
+
+    private TypeInfo ResolveAnyBuiltInTypeInfo(TypeId wireTypeId)
+    {
+        return wireTypeId switch
+        {
+            TypeId.Bool => GetTypeInfo<bool>().WithReadTypeInfo(wireTypeId),
+            TypeId.Int8 => GetTypeInfo<sbyte>().WithReadTypeInfo(wireTypeId),
+            TypeId.Int16 => GetTypeInfo<short>().WithReadTypeInfo(wireTypeId),
+            TypeId.Int32 or TypeId.VarInt32 => GetTypeInfo<int>().WithReadTypeInfo(wireTypeId),
+            TypeId.Int64 or TypeId.VarInt64 or TypeId.TaggedInt64 => GetTypeInfo<long>().WithReadTypeInfo(wireTypeId),
+            TypeId.UInt8 => GetTypeInfo<byte>().WithReadTypeInfo(wireTypeId),
+            TypeId.UInt16 => GetTypeInfo<ushort>().WithReadTypeInfo(wireTypeId),
+            TypeId.UInt32 or TypeId.VarUInt32 => GetTypeInfo<uint>().WithReadTypeInfo(wireTypeId),
+            TypeId.UInt64 or TypeId.VarUInt64 or TypeId.TaggedUInt64 => GetTypeInfo<ulong>().WithReadTypeInfo(wireTypeId),
+            TypeId.Float32 => GetTypeInfo<float>().WithReadTypeInfo(wireTypeId),
+            TypeId.Float64 => GetTypeInfo<double>().WithReadTypeInfo(wireTypeId),
+            TypeId.String => GetTypeInfo<string>().WithReadTypeInfo(wireTypeId),
+            TypeId.Date => GetTypeInfo<DateOnly>().WithReadTypeInfo(wireTypeId),
+            TypeId.Timestamp => GetTypeInfo<DateTimeOffset>().WithReadTypeInfo(wireTypeId),
+            TypeId.Duration => GetTypeInfo<TimeSpan>().WithReadTypeInfo(wireTypeId),
+            TypeId.Binary or TypeId.UInt8Array => GetTypeInfo<byte[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.BoolArray => GetTypeInfo<bool[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.Int8Array => GetTypeInfo<sbyte[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.Int16Array => GetTypeInfo<short[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.Int32Array => GetTypeInfo<int[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.Int64Array => GetTypeInfo<long[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.UInt16Array => GetTypeInfo<ushort[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.UInt32Array => GetTypeInfo<uint[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.UInt64Array => GetTypeInfo<ulong[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.Float32Array => GetTypeInfo<float[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.Float64Array => GetTypeInfo<double[]>().WithReadTypeInfo(wireTypeId),
+            TypeId.List => GetTypeInfo<List<object?>>().WithReadTypeInfo(wireTypeId),
+            TypeId.Set => GetTypeInfo<HashSet<object?>>().WithReadTypeInfo(wireTypeId),
+            TypeId.Map => GetTypeInfo<NullableKeyDictionary<object, object?>>().WithReadTypeInfo(wireTypeId),
+            TypeId.Union => GetTypeInfo<Union>().WithReadTypeInfo(wireTypeId),
+            TypeId.None => GetTypeInfo<object?>().WithReadTypeInfo(wireTypeId),
+            _ => throw new InvalidDataException($"unsupported dynamic type id {wireTypeId}"),
+        };
+    }
+
+    private TypeInfo RequireRegisteredTypeInfoByUserTypeId(uint userTypeId)
+    {
+        if (_byUserTypeId.TryGetValue(userTypeId, out TypeInfo? typeInfo))
+        {
+            return typeInfo;
+        }
+
+        throw new TypeNotRegisteredException($"user_type_id={userTypeId}");
+    }
+
+    private TypeInfo RequireRegisteredTypeInfoByName(string namespaceName, string typeName)
+    {
+        if (_byTypeName.TryGetValue((namespaceName, typeName), out TypeInfo? typeInfo))
+        {
+            return typeInfo;
+        }
+
+        throw new TypeNotRegisteredException($"namespace={namespaceName}, type={typeName}");
     }
 
     private static byte[] ReadBinary(ReadContext context)

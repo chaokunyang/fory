@@ -1301,6 +1301,8 @@ public enum UnsafeUtil {
         maxCount: Int,
         _ body: (UnsafeMutablePointer<UInt8>) -> Int
     ) {
+        // Keep the closure non-throwing for the hot path; callers return the
+        // actual byte count and we trim the unused suffix afterward.
         guard maxCount > 0 else {
             return
         }
@@ -1324,16 +1326,25 @@ public enum UnsafeUtil {
         buffer: ByteBuffer,
         _ body: (UnsafeBufferPointer<UInt8>) throws -> Int
     ) throws {
-        let available = buffer.count - buffer.cursor
+        let startIndex = buffer.cursor
+        let readableCount = buffer.count
+        if _slowPath(startIndex < 0 || startIndex > readableCount) {
+            throw ForyError.outOfBounds(
+                cursor: startIndex,
+                need: 0,
+                length: readableCount
+            )
+        }
+        let available = readableCount - startIndex
         let consumed = try buffer.storage.withUnsafeBufferPointer { bytes -> Int in
-            let start = bytes.baseAddress.map { $0.advanced(by: buffer.cursor) }
+            let start = bytes.baseAddress.map { $0.advanced(by: startIndex) }
             let region = UnsafeBufferPointer(start: start, count: available)
             return try body(region)
         }
         if consumed < 0 || consumed > available {
-            throw ForyError.outOfBounds(cursor: buffer.cursor, need: consumed, length: buffer.count)
+            throw ForyError.outOfBounds(cursor: startIndex, need: consumed, length: readableCount)
         }
-        buffer.cursor += consumed
+        buffer.cursor = startIndex + consumed
     }
 
     @inline(__always)

@@ -33,6 +33,11 @@ final class ReusableArray<Element> {
         storage.deallocate()
     }
 
+    /// Reset logical usage to zero in O(1) without clearing backing slots.
+    ///
+    /// This is intentional for hot-path reuse: existing slot values stay in
+    /// storage until they are overwritten by later `push` calls or released by
+    /// `deinit`.
     @inline(__always)
     func reset() {
         used = 0

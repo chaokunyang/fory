@@ -229,7 +229,7 @@ public sealed class Fory
     /// </summary>
     /// <param name="writer">Destination writer.</param>
     /// <param name="isNone">Whether the payload value is null.</param>
-    public void WriteHead(ByteWriter writer, bool isNone)
+    internal void WriteHead(ByteWriter writer, bool isNone)
     {
         byte bitmap = 0;
         if (Config.Xlang)
@@ -251,7 +251,7 @@ public sealed class Fory
     /// <param name="reader">Source reader.</param>
     /// <returns><c>true</c> if the payload value is null; otherwise <c>false</c>.</returns>
     /// <exception cref="InvalidDataException">Thrown when the peer xlang bitmap does not match this runtime mode.</exception>
-    public bool ReadHead(ByteReader reader)
+    internal bool ReadHead(ByteReader reader)
     {
         byte bitmap = reader.ReadUInt8();
         bool peerIsXlang = (bitmap & ForyHeaderFlag.IsXlang) != 0;

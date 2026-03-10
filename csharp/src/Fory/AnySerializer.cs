@@ -208,7 +208,7 @@ public static class DynamicAnyCodec
         return context.TypeResolver.GetSerializer<object?>().Read(context, refMode, readTypeInfo);
     }
 
-    public static void WriteAnyPayload(object value, WriteContext context, bool hasGenerics)
+    internal static void WriteAnyPayload(object value, WriteContext context, bool hasGenerics)
     {
         if (DynamicContainerCodec.TryWritePayload(value, context, hasGenerics))
         {

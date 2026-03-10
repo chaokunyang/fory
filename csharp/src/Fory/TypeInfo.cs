@@ -451,23 +451,21 @@ public sealed class TypeInfo
         return false;
     }
 
-    public Type Type { get; }
+    internal Type Type { get; }
 
-    public bool IsBuiltinType => BuiltInTypeId.HasValue;
+    internal bool IsBuiltinType => BuiltInTypeId.HasValue;
 
-    public TypeId? BuiltInTypeId { get; }
-
-    public bool IsUserType => UserTypeKind.HasValue;
+    internal TypeId? BuiltInTypeId { get; }
 
     internal UserTypeKind? UserTypeKind { get; }
 
-    public bool IsDynamicType { get; }
+    internal bool IsDynamicType { get; }
 
-    public bool IsNullableType { get; }
+    internal bool IsNullableType { get; }
 
-    public bool IsRefType { get; }
+    internal bool IsRefType { get; }
 
-    public object? DefaultObject { get; }
+    internal object? DefaultObject { get; }
 
     internal bool Evolving { get; }
 

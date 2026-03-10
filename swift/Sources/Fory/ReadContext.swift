@@ -551,124 +551,83 @@ public final class ReadContext {
     }
 }
 
-@inline(__always)
-private func readAnyGlobal(
-    context: ReadContext,
-    refMode: RefMode,
-    readTypeInfo: Bool
-) throws -> Any? {
-    try readAny(
-        context: context,
-        refMode: refMode,
-        readTypeInfo: readTypeInfo
-    )
-}
-
-@inline(__always)
-private func readAnyListGlobal(
-    context: ReadContext,
-    refMode: RefMode,
-    readTypeInfo: Bool
-) throws -> [Any]? {
-    try readAnyList(
-        context: context,
-        refMode: refMode,
-        readTypeInfo: readTypeInfo
-    )
-}
-
-@inline(__always)
-private func readStringAnyMapGlobal(
-    context: ReadContext,
-    refMode: RefMode,
-    readTypeInfo: Bool
-) throws -> [String: Any]? {
-    try readStringAnyMap(
-        context: context,
-        refMode: refMode,
-        readTypeInfo: readTypeInfo
-    )
-}
-
-@inline(__always)
-private func readInt32AnyMapGlobal(
-    context: ReadContext,
-    refMode: RefMode,
-    readTypeInfo: Bool
-) throws -> [Int32: Any]? {
-    try readInt32AnyMap(
-        context: context,
-        refMode: refMode,
-        readTypeInfo: readTypeInfo
-    )
-}
-
-@inline(__always)
-private func readAnyHashableAnyMapGlobal(
-    context: ReadContext,
-    refMode: RefMode,
-    readTypeInfo: Bool
-) throws -> [AnyHashable: Any]? {
-    try readAnyHashableAnyMap(
-        context: context,
-        refMode: refMode,
-        readTypeInfo: readTypeInfo
-    )
-}
-
 public extension ReadContext {
     func readAny(
         refMode: RefMode,
         readTypeInfo: Bool = true
     ) throws -> Any? {
-        try readAnyGlobal(
-            context: self,
-            refMode: refMode,
-            readTypeInfo: readTypeInfo
-        )
+        try DynamicAnyValue.foryRead(self, refMode: refMode, readTypeInfo: readTypeInfo).anyValue()
     }
 
     func readAnyList(
         refMode: RefMode,
         readTypeInfo: Bool = false
     ) throws -> [Any]? {
-        try readAnyListGlobal(
-            context: self,
+        let wrapped: [DynamicAnyValue]? = try [DynamicAnyValue]?.foryRead(
+            self,
             refMode: refMode,
             readTypeInfo: readTypeInfo
         )
+        return wrapped?.map { $0.anyValueForCollection() }
     }
 
     func readStringAnyMap(
         refMode: RefMode,
         readTypeInfo: Bool = false
     ) throws -> [String: Any]? {
-        try readStringAnyMapGlobal(
-            context: self,
+        let wrapped: [String: DynamicAnyValue]? = try [String: DynamicAnyValue]?.foryRead(
+            self,
             refMode: refMode,
             readTypeInfo: readTypeInfo
         )
+        guard let wrapped else {
+            return nil
+        }
+        var map: [String: Any] = [:]
+        map.reserveCapacity(wrapped.count)
+        for pair in wrapped {
+            map[pair.key] = pair.value.anyValueForCollection()
+        }
+        return map
     }
 
     func readInt32AnyMap(
         refMode: RefMode,
         readTypeInfo: Bool = false
     ) throws -> [Int32: Any]? {
-        try readInt32AnyMapGlobal(
-            context: self,
+        let wrapped: [Int32: DynamicAnyValue]? = try [Int32: DynamicAnyValue]?.foryRead(
+            self,
             refMode: refMode,
             readTypeInfo: readTypeInfo
         )
+        guard let wrapped else {
+            return nil
+        }
+        var map: [Int32: Any] = [:]
+        map.reserveCapacity(wrapped.count)
+        for pair in wrapped {
+            map[pair.key] = pair.value.anyValueForCollection()
+        }
+        return map
     }
 
     func readAnyHashableAnyMap(
         refMode: RefMode,
         readTypeInfo: Bool = false
     ) throws -> [AnyHashable: Any]? {
-        try readAnyHashableAnyMapGlobal(
-            context: self,
+        let wrapped: [AnyHashable: DynamicAnyValue]? = try [AnyHashable: DynamicAnyValue]?.foryRead(
+            self,
             refMode: refMode,
             readTypeInfo: readTypeInfo
         )
+        guard let wrapped else {
+            return nil
+        }
+        var map: [AnyHashable: Any] = [:]
+        map.reserveCapacity(wrapped.count)
+        for pair in wrapped {
+            map[pair.key] = pair.value.anyValueForCollection()
+        }
+        return map
     }
 }

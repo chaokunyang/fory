@@ -205,91 +205,6 @@ public final class WriteContext {
     }
 }
 
-@inline(__always)
-private func writeAnyGlobal(
-    _ value: Any?,
-    context: WriteContext,
-    refMode: RefMode,
-    writeTypeInfo: Bool,
-    hasGenerics: Bool
-) throws {
-    try writeAny(
-        value,
-        context: context,
-        refMode: refMode,
-        writeTypeInfo: writeTypeInfo,
-        hasGenerics: hasGenerics
-    )
-}
-
-@inline(__always)
-private func writeAnyListGlobal(
-    _ value: [Any]?,
-    context: WriteContext,
-    refMode: RefMode,
-    writeTypeInfo: Bool,
-    hasGenerics: Bool
-) throws {
-    try writeAnyList(
-        value,
-        context: context,
-        refMode: refMode,
-        writeTypeInfo: writeTypeInfo,
-        hasGenerics: hasGenerics
-    )
-}
-
-@inline(__always)
-private func writeStringAnyMapGlobal(
-    _ value: [String: Any]?,
-    context: WriteContext,
-    refMode: RefMode,
-    writeTypeInfo: Bool,
-    hasGenerics: Bool
-) throws {
-    try writeStringAnyMap(
-        value,
-        context: context,
-        refMode: refMode,
-        writeTypeInfo: writeTypeInfo,
-        hasGenerics: hasGenerics
-    )
-}
-
-@inline(__always)
-private func writeInt32AnyMapGlobal(
-    _ value: [Int32: Any]?,
-    context: WriteContext,
-    refMode: RefMode,
-    writeTypeInfo: Bool,
-    hasGenerics: Bool
-) throws {
-    try writeInt32AnyMap(
-        value,
-        context: context,
-        refMode: refMode,
-        writeTypeInfo: writeTypeInfo,
-        hasGenerics: hasGenerics
-    )
-}
-
-@inline(__always)
-private func writeAnyHashableAnyMapGlobal(
-    _ value: [AnyHashable: Any]?,
-    context: WriteContext,
-    refMode: RefMode,
-    writeTypeInfo: Bool,
-    hasGenerics: Bool
-) throws {
-    try writeAnyHashableAnyMap(
-        value,
-        context: context,
-        refMode: refMode,
-        writeTypeInfo: writeTypeInfo,
-        hasGenerics: hasGenerics
-    )
-}
-
 public extension WriteContext {
     func writeAny(
         _ value: Any?,
@@ -297,9 +212,8 @@ public extension WriteContext {
         writeTypeInfo: Bool = true,
         hasGenerics: Bool = false
     ) throws {
-        try writeAnyGlobal(
-            value,
-            context: self,
+        try DynamicAnyValue.wrapped(value).foryWrite(
+            self,
             refMode: refMode,
             writeTypeInfo: writeTypeInfo,
             hasGenerics: hasGenerics
@@ -312,9 +226,9 @@ public extension WriteContext {
         writeTypeInfo: Bool = false,
         hasGenerics: Bool = true
     ) throws {
-        try writeAnyListGlobal(
-            value,
-            context: self,
+        let wrapped = value?.map { DynamicAnyValue.wrapped($0) }
+        try wrapped.foryWrite(
+            self,
             refMode: refMode,
             writeTypeInfo: writeTypeInfo,
             hasGenerics: hasGenerics
@@ -327,9 +241,11 @@ public extension WriteContext {
         writeTypeInfo: Bool = false,
         hasGenerics: Bool = true
     ) throws {
-        try writeStringAnyMapGlobal(
-            value,
-            context: self,
+        let wrapped = value?.reduce(into: [String: DynamicAnyValue]()) { result, pair in
+            result[pair.key] = DynamicAnyValue.wrapped(pair.value)
+        }
+        try wrapped.foryWrite(
+            self,
             refMode: refMode,
             writeTypeInfo: writeTypeInfo,
             hasGenerics: hasGenerics
@@ -342,9 +258,11 @@ public extension WriteContext {
         writeTypeInfo: Bool = false,
         hasGenerics: Bool = true
     ) throws {
-        try writeInt32AnyMapGlobal(
-            value,
-            context: self,
+        let wrapped = value?.reduce(into: [Int32: DynamicAnyValue]()) { result, pair in
+            result[pair.key] = DynamicAnyValue.wrapped(pair.value)
+        }
+        try wrapped.foryWrite(
+            self,
             refMode: refMode,
             writeTypeInfo: writeTypeInfo,
             hasGenerics: hasGenerics
@@ -357,9 +275,11 @@ public extension WriteContext {
         writeTypeInfo: Bool = false,
         hasGenerics: Bool = true
     ) throws {
-        try writeAnyHashableAnyMapGlobal(
-            value,
-            context: self,
+        let wrapped = value?.reduce(into: [AnyHashable: DynamicAnyValue]()) { result, pair in
+            result[pair.key] = DynamicAnyValue.wrapped(pair.value)
+        }
+        try wrapped.foryWrite(
+            self,
             refMode: refMode,
             writeTypeInfo: writeTypeInfo,
             hasGenerics: hasGenerics

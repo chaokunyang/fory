@@ -1186,9 +1186,25 @@ private func writeLine(for field: ParsedField) -> String {
     """
 }
 
+private enum MacroTypeId {
+    static let unknown: UInt32 = 0
+    static let compatibleStruct: UInt32 = 27
+    static let namedStruct: UInt32 = 28
+    static let namedCompatibleStruct: UInt32 = 29
+    static let enumType: UInt32 = 30
+    static let namedEnum: UInt32 = 31
+    static let ext: UInt32 = 32
+}
+
 func compatibleFieldNeedsTypeInfo(_ field: ParsedField) -> Bool {
     switch field.typeID {
-    case 0, 27, 28, 29, 30, 31, 32:
+    case MacroTypeId.unknown,
+         MacroTypeId.compatibleStruct,
+         MacroTypeId.namedStruct,
+         MacroTypeId.namedCompatibleStruct,
+         MacroTypeId.enumType,
+         MacroTypeId.namedEnum,
+         MacroTypeId.ext:
         return true
     default:
         return false

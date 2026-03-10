@@ -117,7 +117,7 @@ extension Optional: OptionalTypeMarker {
     static var noneValue: Wrapped? { nil }
 }
 
-private struct DynamicAnyValue: Serializer {
+struct DynamicAnyValue: Serializer {
     var value: Any = ForyAnyNullValue()
 
     init(_ value: Any) {

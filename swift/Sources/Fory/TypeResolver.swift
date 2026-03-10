@@ -348,11 +348,11 @@ private struct TypeNameKey: Hashable {
 final class TypeResolver {
     private let trackRef: Bool
 
-    private var bySwiftType: [ObjectIdentifier: TypeInfo] = [:]
-    private var byUserTypeID: [UInt32: TypeInfo] = [:]
+    private var bySwiftType = UInt64Map<TypeInfo>(initialCapacity: 64)
+    private var byUserTypeID = UInt64Map<TypeInfo>(initialCapacity: 64)
     private var byTypeName: [TypeNameKey: TypeInfo] = [:]
-    private var builtinTypeInfoByID: [TypeId: TypeInfo] = [:]
-    private var typeInfoByHeader: [UInt64: TypeInfo] = [:]
+    private var builtinTypeInfoByID: [TypeInfo?] = []
+    private var typeInfoByHeader = UInt64Map<TypeInfo>(initialCapacity: 64)
 
     init(trackRef: Bool = false) {
         self.trackRef = trackRef
@@ -386,7 +386,7 @@ final class TypeResolver {
             }
         )
 
-        if let existing = bySwiftType[swiftTypeID],
+        if let existing = bySwiftType.value(for: UInt64(UInt(bitPattern: swiftTypeID))),
            existing.matches(
                typeID: T.staticTypeId,
                userTypeID: id,
@@ -433,7 +433,7 @@ final class TypeResolver {
             }
         )
 
-        if let existing = bySwiftType[swiftTypeID],
+        if let existing = bySwiftType.value(for: UInt64(UInt(bitPattern: swiftTypeID))),
            existing.matches(
                typeID: T.staticTypeId,
                userTypeID: nil,
@@ -460,7 +460,7 @@ final class TypeResolver {
     }
 
     func requireTypeInfo<T: Serializer>(for type: T.Type) throws -> TypeInfo {
-        if let info = bySwiftType[ObjectIdentifier(type)] {
+        if let info = bySwiftType.value(for: UInt64(UInt(bitPattern: ObjectIdentifier(type)))) {
             return info
         }
         throw ForyError.typeNotRegistered("\(type) is not registered")
@@ -468,17 +468,17 @@ final class TypeResolver {
 
     @inline(__always)
     func getTypeInfo(forHeader header: UInt64) -> TypeInfo? {
-        typeInfoByHeader[header]
+        typeInfoByHeader.value(for: header)
     }
 
     @inline(__always)
     func cacheTypeInfo(_ typeMeta: TypeMeta, forHeader header: UInt64) throws -> TypeInfo {
-        if let cached = typeInfoByHeader[header] {
+        if let cached = typeInfoByHeader.value(for: header) {
             return cached
         }
         let localTypeInfo = try requireTypeInfo(for: typeMeta)
         if header == localTypeInfo.typeDefHeader {
-            typeInfoByHeader[header] = localTypeInfo
+            typeInfoByHeader.set(localTypeInfo, for: header)
             return localTypeInfo
         }
         let canonicalTypeMeta: TypeMeta
@@ -489,7 +489,7 @@ final class TypeResolver {
             canonicalTypeMeta = typeMeta
         }
         let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
-        typeInfoByHeader[header] = typeInfo
+        typeInfoByHeader.set(typeInfo, for: header)
         return typeInfo
     }
 
@@ -499,35 +499,42 @@ final class TypeResolver {
         userTypeID: UInt32? = nil,
         typeNameKey: TypeNameKey? = nil
     ) throws {
-        bySwiftType[swiftTypeID] = typeInfo
+        bySwiftType.set(typeInfo, for: UInt64(UInt(bitPattern: swiftTypeID)))
         if let userTypeID {
-            byUserTypeID[userTypeID] = typeInfo
+            byUserTypeID.set(typeInfo, for: UInt64(userTypeID))
         }
         if let typeNameKey {
             byTypeName[typeNameKey] = typeInfo
         }
         if let typeMeta = typeInfo.typeMeta,
            let typeDefHeader = typeInfo.typeDefHeader {
-            typeInfoByHeader[typeDefHeader] = TypeInfo(
-                dynamic: typeInfo,
-                compatibleTypeMeta: typeMeta
+            typeInfoByHeader.set(
+                TypeInfo(
+                    dynamic: typeInfo,
+                    compatibleTypeMeta: typeMeta
+                ),
+                for: typeDefHeader
             )
         }
     }
 
     @inline(__always)
     func builtinTypeInfo(for typeID: TypeId) -> TypeInfo {
-        if let cached = builtinTypeInfoByID[typeID] {
+        let index = Int(typeID.rawValue)
+        if index < builtinTypeInfoByID.count, let cached = builtinTypeInfoByID[index] {
             return cached
         }
         let info = TypeInfo(typeID: typeID)
-        builtinTypeInfoByID[typeID] = info
+        if index >= builtinTypeInfoByID.count {
+            builtinTypeInfoByID.append(contentsOf: repeatElement(nil, count: index - builtinTypeInfoByID.count + 1))
+        }
+        builtinTypeInfoByID[index] = info
         return info
     }
 
     @inline(__always)
     func requireTypeInfo(userTypeID: UInt32) throws -> TypeInfo {
-        guard let typeInfo = byUserTypeID[userTypeID] else {
+        guard let typeInfo = byUserTypeID.value(for: UInt64(userTypeID)) else {
             throw ForyError.typeNotRegistered("user_type_id=\(userTypeID)")
         }
         return typeInfo
@@ -546,7 +553,8 @@ final class TypeResolver {
         type: T.Type,
         id: UInt32
     ) throws {
-        if let existing = bySwiftType[key] {
+        let swiftKey = UInt64(UInt(bitPattern: key))
+        if let existing = bySwiftType.value(for: swiftKey) {
             if existing.registerByName {
                 throw ForyError.invalidData(
                     "\(type) was already registered by name, cannot re-register by id"
@@ -560,7 +568,7 @@ final class TypeResolver {
             }
         }
 
-        if let existing = byUserTypeID[id], existing.swiftTypeID != key {
+        if let existing = byUserTypeID.value(for: UInt64(id)), existing.swiftTypeID != key {
             throw ForyError.invalidData("user type id \(id) is already registered by another type")
         }
     }
@@ -571,7 +579,7 @@ final class TypeResolver {
         namespace: String,
         typeName: String
     ) throws {
-        if let existing = bySwiftType[key] {
+        if let existing = bySwiftType.value(for: UInt64(UInt(bitPattern: key))) {
             if !existing.registerByName {
                 throw ForyError.invalidData(
                     "\(type) was already registered by id, cannot re-register by name"
@@ -606,7 +614,7 @@ final class TypeResolver {
             return typeInfo
         }
         if let userTypeID = typeMeta.userTypeID {
-            guard let typeInfo = byUserTypeID[userTypeID] else {
+            guard let typeInfo = byUserTypeID.value(for: UInt64(userTypeID)) else {
                 throw ForyError.typeNotRegistered("user_type_id=\(userTypeID)")
             }
             return typeInfo

@@ -18,15 +18,16 @@
 import Foundation
 
 final class CompatibleTypeDefWriteState {
-    private let typeIndexBySwiftType = ObjectIdMap(initialCapacity: 8)
+    private let typeIndexBySwiftType = UInt64Map<UInt32>(initialCapacity: 8)
 
     init() {}
 
     @inline(__always)
     func assignIndexIfAbsent(for typeInfo: TypeInfo) -> (index: UInt32, isNew: Bool) {
+        let typeKey = UInt64(UInt(bitPattern: typeInfo.swiftTypeID))
         let assignment = typeIndexBySwiftType.putIfAbsent(
             UInt32(typeIndexBySwiftType.count),
-            for: typeInfo.swiftTypeID
+            for: typeKey
         )
         return (assignment.value, assignment.inserted)
     }

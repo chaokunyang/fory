@@ -18,40 +18,43 @@
 import Testing
 @testable import Fory
 
-private final class ObjectIdBox {}
+private final class UInt64MapBox {}
 
 @Test
-func objectIdMapInsertFindAndUpdate() {
-    let map = ObjectIdMap(initialCapacity: 8)
-    let first = ObjectIdBox()
-    let second = ObjectIdBox()
+func uint64MapInsertFindAndUpdate() {
+    let map = UInt64Map<UInt32>(initialCapacity: 8)
+    let first = UInt64MapBox()
+    let second = UInt64MapBox()
+    let firstKey = UInt64(UInt(bitPattern: ObjectIdentifier(first)))
+    let secondKey = UInt64(UInt(bitPattern: ObjectIdentifier(second)))
 
-    let firstInsert = map.putIfAbsent(3, for: ObjectIdentifier(first))
+    let firstInsert = map.putIfAbsent(3, for: firstKey)
     #expect(firstInsert.inserted)
     #expect(firstInsert.value == 3)
 
-    let secondInsert = map.putIfAbsent(9, for: ObjectIdentifier(second))
+    let secondInsert = map.putIfAbsent(9, for: secondKey)
     #expect(secondInsert.inserted)
     #expect(secondInsert.value == 9)
 
-    let firstExisting = map.putIfAbsent(11, for: ObjectIdentifier(first))
+    let firstExisting = map.putIfAbsent(11, for: firstKey)
     #expect(!firstExisting.inserted)
     #expect(firstExisting.value == 3)
 
-    #expect(map.value(for: ObjectIdentifier(first)) == 3)
-    #expect(map.value(for: ObjectIdentifier(second)) == 9)
+    #expect(map.value(for: firstKey) == 3)
+    #expect(map.value(for: secondKey) == 9)
     #expect(map.count == 2)
 }
 
 @Test
-func objectIdMapGrowRetainsEntries() {
-    let map = ObjectIdMap(initialCapacity: 8)
-    var boxes: [ObjectIdBox] = []
+func uint64MapGrowRetainsEntries() {
+    let map = UInt64Map<UInt32>(initialCapacity: 8)
+    var boxes: [UInt64MapBox] = []
 
     for index in 0 ..< 64 {
-        let box = ObjectIdBox()
+        let box = UInt64MapBox()
         boxes.append(box)
-        let insert = map.putIfAbsent(UInt32(index), for: ObjectIdentifier(box))
+        let key = UInt64(UInt(bitPattern: ObjectIdentifier(box)))
+        let insert = map.putIfAbsent(UInt32(index), for: key)
         #expect(insert.inserted)
         #expect(insert.value == UInt32(index))
     }
@@ -60,21 +63,22 @@ func objectIdMapGrowRetainsEntries() {
     #expect(map.count == 64)
 
     for index in 0 ..< boxes.count {
-        #expect(map.value(for: ObjectIdentifier(boxes[index])) == UInt32(index))
+        let key = UInt64(UInt(bitPattern: ObjectIdentifier(boxes[index])))
+        #expect(map.value(for: key) == UInt32(index))
     }
 }
 
 @Test
-func objectIdMapRemoveAllKeepingCapacityClearsEntries() {
-    let map = ObjectIdMap(initialCapacity: 8)
-    let box = ObjectIdBox()
-    let boxID = ObjectIdentifier(box)
-    _ = map.putIfAbsent(7, for: boxID)
+func uint64MapRemoveAllKeepingCapacityClearsEntries() {
+    let map = UInt64Map<UInt32>(initialCapacity: 8)
+    let box = UInt64MapBox()
+    let key = UInt64(UInt(bitPattern: ObjectIdentifier(box)))
+    _ = map.putIfAbsent(7, for: key)
     let previousCapacity = map.capacity
 
     map.removeAll(keepingCapacity: true)
 
     #expect(map.isEmpty)
     #expect(map.capacity == previousCapacity)
-    #expect(map.value(for: boxID) == nil)
+    #expect(map.value(for: key) == nil)
 }

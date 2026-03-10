@@ -116,7 +116,8 @@ public final class ReadContext {
     private var metaStringReadStateUsed = false
     private var dynamicAnyDepth = 0
 
-    private var typeInfoStack: [(typeKey: ObjectIdentifier, typeInfo: TypeInfo)] = []
+    private var typeInfoStack = UInt64Map<TypeInfo>(initialCapacity: 8)
+    private var typeInfoScopeStack: [(typeKey: UInt64, previousTypeInfo: TypeInfo?)] = []
     private var lastTypeInfo = TypeInfo.uncached
 
     convenience init(
@@ -600,11 +601,7 @@ public final class ReadContext {
 
     @inline(__always)
     func getTypeInfo<T: Serializer>(for type: T.Type) -> TypeInfo? {
-        let typeKey = ObjectIdentifier(type)
-        for entry in typeInfoStack.reversed() where entry.typeKey == typeKey {
-            return entry.typeInfo
-        }
-        return nil
+        typeInfoStack.value(for: UInt64(UInt(bitPattern: ObjectIdentifier(type))))
     }
 
     func withTypeInfo<T: Serializer, R>(
@@ -616,9 +613,20 @@ public final class ReadContext {
             return try body()
         }
 
-        typeInfoStack.append((ObjectIdentifier(type), typeInfo))
+        let typeKey = UInt64(UInt(bitPattern: ObjectIdentifier(type)))
+        let previousTypeInfo = typeInfoStack.value(for: typeKey)
+        typeInfoScopeStack.append((typeKey: typeKey, previousTypeInfo: previousTypeInfo))
+        typeInfoStack.set(typeInfo, for: typeKey)
         defer {
-            _ = typeInfoStack.popLast()
+            if let scope = typeInfoScopeStack.popLast() {
+                if let previousTypeInfo = scope.previousTypeInfo {
+                    typeInfoStack.set(previousTypeInfo, for: scope.typeKey)
+                } else {
+                    _ = typeInfoStack.removeValue(for: scope.typeKey)
+                }
+            } else {
+                assertionFailure("type info scope stack underflow")
+            }
         }
         return try body()
     }
@@ -637,6 +645,9 @@ public final class ReadContext {
         }
         if !typeInfoStack.isEmpty {
             typeInfoStack.removeAll(keepingCapacity: true)
+        }
+        if !typeInfoScopeStack.isEmpty {
+            typeInfoScopeStack.removeAll(keepingCapacity: true)
         }
         if typeDefStateUsed {
             typeDefState.reset()

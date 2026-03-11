@@ -405,8 +405,6 @@ class MapSerializer(Serializer):
                             value_write_ref = self.value_tracking_ref
                             if value_write_ref:
                                 buffer.write_int8(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF)
-                                if not ref_resolver.write_ref_or_null(buffer, key):
-                                    value_serializer.write(buffer, key)
                                 if not ref_resolver.write_ref_or_null(buffer, value):
                                     value_serializer.write(buffer, value)
                             else:

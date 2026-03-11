@@ -181,6 +181,9 @@ class TypeVisitor(ABC):
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
         pass
 
+    def visit_tuple(self, field_name, elem_types, types_path=None):
+        raise TypeError(f"Tuple type with elements {elem_types} is not supported")
+
     @abstractmethod
     def visit_customized(self, field_name, type_, types_path=None):
         pass
@@ -234,6 +237,8 @@ def infer_field(field_name, type_, visitor: TypeVisitor, types_path=None):
         elif origin is set or origin == typing.Set:
             elem_type = args[0]
             return visitor.visit_set(field_name, elem_type, types_path=types_path)
+        elif origin is tuple or origin == typing.Tuple:
+            return visitor.visit_tuple(field_name, args, types_path=types_path)
         elif origin is dict or origin == typing.Dict:
             key_type, value_type = args
             return visitor.visit_dict(field_name, key_type, value_type, types_path=types_path)

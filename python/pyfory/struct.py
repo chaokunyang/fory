@@ -664,6 +664,16 @@ class StructFieldSerializerVisitor(TypeVisitor):
         elem_serializer = infer_field("item", elem_type, self, types_path=types_path)
         return SetSerializer(self.fory, set, elem_serializer, elem_ref_override)
 
+    def visit_tuple(self, field_name, elem_types, types_path=None):
+        from pyfory.serializer import TupleSerializer  # Local import
+        from pyfory.type_util import unwrap_ref
+
+        if len(elem_types) == 2 and elem_types[1] is Ellipsis:
+            elem_type, elem_ref_override = unwrap_ref(elem_types[0])
+            elem_serializer = infer_field("item", elem_type, self, types_path=types_path)
+            return TupleSerializer(self.fory, tuple, elem_serializer, elem_ref_override)
+        return TupleSerializer(self.fory, tuple)
+
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
         from pyfory.serializer import MapSerializer  # Local import
         from pyfory.type_util import unwrap_ref
@@ -938,6 +948,9 @@ class StructTypeIdVisitor(TypeVisitor):
         elem_ids = infer_field("item", elem_type, self, types_path=types_path)
         return TypeId.SET, elem_ids
 
+    def visit_tuple(self, field_name, elem_types, types_path=None):
+        return [self.fory.type_resolver.get_type_info(tuple).type_id]
+
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
         # Infer type recursively for type such as Dict[str, Dict[str, str]]
         key_ids = infer_field("key", key_type, self, types_path=types_path)
@@ -972,6 +985,9 @@ class StructTypeVisitor(TypeVisitor):
         # Infer type recursively for type such as Set[Dict[str, str]]
         elem_types = infer_field("item", elem_type, self, types_path=types_path)
         return typing.Set, elem_types
+
+    def visit_tuple(self, field_name, elem_types, types_path=None):
+        return [tuple]
 
     def visit_dict(self, field_name, key_type, value_type, types_path=None):
         # Infer type recursively for type such as Dict[str, Dict[str, str]]

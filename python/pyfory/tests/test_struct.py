@@ -145,6 +145,11 @@ class BoolCoercionObject:
     b: bool
 
 
+@dataclass(frozen=True)
+class TupleFieldObject:
+    bar: tuple[str, int]
+
+
 def test_sort_fields():
     @dataclass
     class TestClass:
@@ -287,6 +292,13 @@ def test_data_class_serializer_xlang():
     )
     obj_deserialized_none = ser_de(fory, obj_with_none_complex)
     assert obj_deserialized_none == obj_with_none_complex
+
+
+@pytest.mark.parametrize("track_ref", [False, True])
+def test_dataclass_with_typed_tuple_field(track_ref):
+    fory = Fory(xlang=False, ref=track_ref, strict=False)
+    obj = TupleFieldObject(bar=("a", 1))
+    assert ser_de(fory, obj) == obj
 
 
 def test_struct_evolving_override():

@@ -19,7 +19,7 @@ import dataclasses
 from dataclasses import dataclass
 import datetime
 import enum
-from typing import Dict, Any, List, Set, Optional
+from typing import Dict, Any, List, Set, Optional, Tuple
 
 import pytest
 import typing
@@ -147,7 +147,7 @@ class BoolCoercionObject:
 
 @dataclass(frozen=True)
 class TupleFieldObject:
-    bar: tuple[str, int]
+    bar: Tuple[str, int]
 
 
 def test_sort_fields():

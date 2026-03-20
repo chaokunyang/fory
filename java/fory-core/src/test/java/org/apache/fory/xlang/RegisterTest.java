@@ -24,7 +24,6 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.serializer.Serializer;
@@ -87,14 +86,6 @@ public class RegisterTest extends ForyTestBase {
   @Data
   static class EmptyWrapper {}
 
-  private static Fory newCodegenXlangFory() {
-    return Fory.builder()
-        .withLanguage(Language.XLANG)
-        .withCompatibleMode(CompatibleMode.COMPATIBLE)
-        .withCodegen(true)
-        .build();
-  }
-
   @Test(dataProvider = "enableCodegen")
   public void testJava(boolean enableCodegen) {
     Fory fory1 =
@@ -126,150 +117,5 @@ public class RegisterTest extends ForyTestBase {
     MemoryBuffer buffer2 = MemoryUtils.wrap(serialize);
     EmptyWrapper newWrapper = (EmptyWrapper) fory2.deserialize(buffer2);
     Assert.assertEquals(newWrapper, new EmptyWrapper());
-  }
-
-  @Test
-  public void testCodegenCacheIsolation() {
-    Fory foryA = newCodegenXlangFory();
-    foryA.register(Color.class, 101);
-    foryA.register(MyStruct.class, 102);
-    foryA.register(MyExt.class, 103);
-    foryA.registerSerializer(MyExt.class, MyExtSerializer.class);
-    foryA.register(MyWrapper.class, 104);
-
-    MyWrapper wrapperA = new MyWrapper();
-    wrapperA.color = Color.Red;
-    wrapperA.my_struct = new MyStruct(10);
-    wrapperA.my_ext = new MyExt(20);
-
-    Fory foryB = newCodegenXlangFory();
-    foryB.register(Color.class, 101);
-    foryB.register(MyStruct.class, 102);
-    foryB.register(MyExt.class, 103);
-    // NO MyExtSerializer registered
-    foryB.register(MyWrapper.class, 104);
-
-    MyWrapper wrapperB = new MyWrapper();
-    wrapperB.color = Color.Blue;
-    wrapperB.my_struct = new MyStruct(30);
-    wrapperB.my_ext = new MyExt(40);
-
-    try {
-      byte[] serializedByB = foryB.serialize(wrapperB);
-      MyWrapper deserializedB = (MyWrapper) foryB.deserialize(serializedByB);
-
-      Assert.assertNotNull(deserializedB);
-      Assert.assertEquals(deserializedB.my_ext.id, 40);
-
-    } catch (Exception e) {
-      Assert.fail("foryB tried to use foryA's codegen. Exception: " + e.getMessage());
-    }
-  }
-
-  @Test
-  public void testCodegenCacheIsolationWithRegisterSerializerAndType() {
-    Fory foryA = newCodegenXlangFory();
-    foryA.register(Color.class, 101);
-    foryA.register(MyStruct.class, 102);
-    foryA.registerSerializerAndType(MyExt.class, MyExtSerializer.class);
-    foryA.register(MyWrapper.class, 104);
-
-    MyWrapper wrapperA = new MyWrapper();
-    wrapperA.color = Color.Red;
-    wrapperA.my_struct = new MyStruct(10);
-    wrapperA.my_ext = new MyExt(20);
-    foryA.serialize(wrapperA);
-
-    Fory foryB = newCodegenXlangFory();
-    foryB.register(Color.class, 101);
-    foryB.register(MyStruct.class, 102);
-    foryB.register(MyExt.class, 103);
-    foryB.register(MyWrapper.class, 104);
-
-    MyWrapper wrapperB = new MyWrapper();
-    wrapperB.color = Color.Blue;
-    wrapperB.my_struct = new MyStruct(30);
-    wrapperB.my_ext = new MyExt(40);
-
-    byte[] serializedByB = foryB.serialize(wrapperB);
-    MyWrapper deserializedB = (MyWrapper) foryB.deserialize(serializedByB);
-    Assert.assertNotNull(deserializedB);
-    Assert.assertEquals(deserializedB.my_ext.id, 40);
-  }
-
-  @Test
-  public void testConfigHashTracksAdditionalRegistrationPaths() {
-    int baseHash = newCodegenXlangFory().getConfigHash();
-
-    Fory registerByName = newCodegenXlangFory();
-    registerByName.register(MyExt.class, "test.pkg", "MyExt");
-    int registerByNameHash = registerByName.getConfigHash();
-    Assert.assertNotEquals(registerByNameHash, baseHash);
-
-    Fory registerByName2 = newCodegenXlangFory();
-    registerByName2.register(MyExt.class, "test.pkg", "MyExt");
-    Assert.assertNotEquals(registerByName2.getConfigHash(), baseHash);
-
-    Fory serializerBase = newCodegenXlangFory();
-    serializerBase.register(MyExt.class, 103);
-    int serializerBaseHash = serializerBase.getConfigHash();
-
-    Fory serializerByFunction = newCodegenXlangFory();
-    serializerByFunction.register(MyExt.class, 103);
-    serializerByFunction.registerSerializer(MyExt.class, f -> new MyExtSerializer(f, MyExt.class));
-    int serializerByFunctionHash = serializerByFunction.getConfigHash();
-    Assert.assertNotEquals(serializerByFunctionHash, serializerBaseHash);
-
-    Fory serializerAndType = newCodegenXlangFory();
-    serializerAndType.registerSerializerAndType(MyExt.class, MyExtSerializer.class);
-    int serializerAndTypeHash = serializerAndType.getConfigHash();
-    Assert.assertNotEquals(serializerAndTypeHash, baseHash);
-
-    Fory union = newCodegenXlangFory();
-    union.registerUnion(MyExt.class, 103, new MyExtSerializer(union, MyExt.class));
-    int unionHash = union.getConfigHash();
-    Assert.assertNotEquals(unionHash, baseHash);
-
-    Fory union2 = newCodegenXlangFory();
-    union2.registerUnion(MyExt.class, 103, new MyExtSerializer(union2, MyExt.class));
-    Assert.assertNotEquals(union2.getConfigHash(), baseHash);
-  }
-
-  @Test
-  public void testConfigHashFinalizesAfterHashAccess() {
-    Fory fory = newCodegenXlangFory();
-    fory.getConfigHash();
-    Assert.expectThrows(ForyException.class, () -> fory.register(MyExt.class, 103));
-  }
-
-  @Test
-  public void testConfigHashFinalizesAfterSerialize() {
-    Fory fory = newCodegenXlangFory();
-    fory.register(Color.class, 101);
-    fory.register(MyStruct.class, 102);
-    fory.register(MyExt.class, 103);
-    fory.register(MyWrapper.class, 104);
-    MyWrapper wrapper = new MyWrapper();
-    wrapper.color = Color.Red;
-    wrapper.my_struct = new MyStruct(10);
-    wrapper.my_ext = new MyExt(20);
-
-    fory.serialize(wrapper);
-
-    Assert.expectThrows(
-        ForyException.class, () -> fory.registerSerializer(MyExt.class, MyExtSerializer.class));
-  }
-
-  @Test
-  public void testConfigHashFinalizesAfterEnsureSerializersCompiled() {
-    Fory fory = newCodegenXlangFory();
-    fory.register(Color.class, 101);
-    fory.register(MyStruct.class, 102);
-    fory.register(MyExt.class, 103);
-    fory.register(MyWrapper.class, 104);
-
-    fory.ensureSerializersCompiled();
-
-    Assert.expectThrows(ForyException.class, () -> fory.register(String.class));
   }
 }

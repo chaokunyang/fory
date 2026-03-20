@@ -87,8 +87,6 @@ See [Java Benchmarks](docs/benchmarks/java) for more details.
 
 ### Rust Serialization Performance
 
-Fory Rust demonstrates competitive performance compared to other Rust serialization frameworks.
-
 <p align="center">
 <img src="docs/benchmarks/rust/ecommerce_data.png" width="90%">
 </p>
@@ -101,8 +99,6 @@ For more detailed benchmarks and methodology, see [Rust Benchmarks](benchmarks/r
 
 ### C++ Serialization Performance
 
-Fory C++ demonstrates competitive performance compared to protobuf c++ serialization framework.
-
 <p align="center">
 <img src="docs/benchmarks/cpp/throughput.png" width="95%">
 </p>
@@ -111,13 +107,19 @@ For more detailed benchmarks and methodology, see [C++ Benchmarks](benchmarks/cp
 
 ### Go Serialization Performance
 
-Fory Go demonstrates excellent performance compared to other go serialization frameworks:
-
 <p align="center">
 <img src="docs/benchmarks/go/benchmark_combined.png" width="95%">
 </p>
 
 For more detailed benchmarks and methodology, see [Go Benchmark](benchmarks/go).
+
+### Python Serialization Performance
+
+<p align="center">
+<img src="docs/benchmarks/python/throughput.png" width="95%">
+</p>
+
+For more detailed benchmarks and methodology, see [Pythonk](benchmarks/python).
 
 ### C# Serialization Performance
 

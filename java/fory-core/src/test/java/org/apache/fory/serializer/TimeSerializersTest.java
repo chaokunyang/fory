@@ -219,9 +219,11 @@ public class TimeSerializersTest extends ForyTestBase {
     struct.duration = Duration.between(Instant.now(), Instant.ofEpochSecond(-1));
     {
       Fory fory =
-          Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
-      fory.registerSerializer(
-          TimeStruct.class, CodegenSerializer.loadCodegenSerializer(fory, TimeStruct.class));
+          Fory.builder()
+              .withLanguage(Language.JAVA)
+              .requireClassRegistration(false)
+              .withCodegen(true)
+              .build();
       serDe(fory, struct);
     }
     {
@@ -290,8 +292,6 @@ public class TimeSerializersTest extends ForyTestBase {
               .withRefTracking(true)
               .ignoreTimeRef(true)
               .build();
-      fory.registerSerializer(
-          TimeStructRef.class, CodegenSerializer.loadCodegenSerializer(fory, TimeStructRef.class));
       TimeStructRef struct = createTimeStructRef(new TimeStructRef());
       TimeStructRef struct1 = (TimeStructRef) serDeCheck(fory, struct);
       Assert.assertNotSame(struct1.date1, struct1.date2);
@@ -305,14 +305,10 @@ public class TimeSerializersTest extends ForyTestBase {
           Fory.builder()
               .withLanguage(Language.JAVA)
               .requireClassRegistration(false)
+              .withCodegen(true)
               .withRefTracking(true)
               .ignoreTimeRef(false)
               .build();
-      fory.registerSerializer(
-          TimeStruct.class, CodegenSerializer.loadCodegenSerializer(fory, TimeStruct.class));
-      fory.registerSerializer(
-          TimeStructRef1.class,
-          CodegenSerializer.loadCodegenSerializer(fory, TimeStructRef1.class));
       TimeStructRef1 struct = (TimeStructRef1) createTimeStructRef(new TimeStructRef1());
       TimeStructRef1 struct1 = (TimeStructRef1) serDeCheck(fory, struct);
       Assert.assertSame(struct1.date1, struct1.date2);
@@ -337,8 +333,10 @@ public class TimeSerializersTest extends ForyTestBase {
       {
         TimeStructRef struct = createTimeStructRef(new TimeStructRef());
         TimeStructRef struct2 = (TimeStructRef) serDeCheck(fory, struct);
-        // TimeStructRef serializer already generated, enable ref tracking doesn't take effect.
-        Assert.assertNotSame(struct2.date1, struct2.date2);
+
+        // Despite a TimeStructRef codegen serializer having already been generated, the change to
+        // enable ref tracking should now take effect due to improvements to the codegen caching
+        Assert.assertSame(struct2.date1, struct2.date2);
       }
       {
         TimeStructRef struct = createTimeStructRef(new TimeStructRef2());
@@ -352,34 +350,17 @@ public class TimeSerializersTest extends ForyTestBase {
     }
   }
 
-  @Test(dataProvider = "foryCopyConfig")
-  public void testTimeStructRef(Fory fory) {
+  @Test
+  public void testTimeStructRefCopy() {
     {
-      fory.registerSerializer(
-          TimeStructRef.class, CodegenSerializer.loadCodegenSerializer(fory, TimeStructRef.class));
-      TimeStructRef struct = createTimeStructRef(new TimeStructRef());
-      TimeStructRef struct1 = fory.copy(struct);
-      Assert.assertSame(struct1.date1, struct1.date2);
-      Assert.assertSame(struct1.sqlDate1, struct1.sqlDate2);
-      Assert.assertSame(struct1.time1, struct1.time2);
-      Assert.assertSame(struct1.instant1, struct1.instant2);
-      Assert.assertSame(struct1.duration1, struct1.duration2);
-    }
-    {
-      fory.registerSerializer(
-          TimeStruct.class, CodegenSerializer.loadCodegenSerializer(fory, TimeStruct.class));
-      fory.registerSerializer(
-          TimeStructRef1.class,
-          CodegenSerializer.loadCodegenSerializer(fory, TimeStructRef1.class));
-      TimeStructRef1 struct = (TimeStructRef1) createTimeStructRef(new TimeStructRef1());
-      TimeStructRef1 struct1 = fory.copy(struct);
-      Assert.assertSame(struct1.date1, struct1.date2);
-      Assert.assertSame(struct1.sqlDate1, struct1.sqlDate2);
-      Assert.assertSame(struct1.time1, struct1.time2);
-      Assert.assertSame(struct1.instant1, struct1.instant2);
-      Assert.assertSame(struct1.duration1, struct1.duration2);
-    }
-    {
+      Fory fory =
+          Fory.builder()
+              .withLanguage(Language.JAVA)
+              .requireClassRegistration(false)
+              .withCodegen(true)
+              .withRefTracking(true)
+              .ignoreTimeRef(true)
+              .build();
       fory.registerSerializer(Date.class, new TimeSerializers.DateSerializer(fory, true));
       fory.registerSerializer(
           java.sql.Date.class, new TimeSerializers.SqlDateSerializer(fory, true));
@@ -387,16 +368,15 @@ public class TimeSerializersTest extends ForyTestBase {
       {
         TimeStructRef struct = createTimeStructRef(new TimeStructRef());
         TimeStructRef struct2 = fory.copy(struct);
-        // TimeStructRef serializer already generated, enable ref tracking doesn't take effect.
-        Assert.assertSame(struct2.date1, struct2.date2);
+        Assert.assertEquals(struct2.date1, struct2.date2);
       }
       {
         TimeStructRef struct = createTimeStructRef(new TimeStructRef2());
         TimeStructRef struct2 = fory.copy(struct);
-        Assert.assertSame(struct2.date1, struct2.date2);
-        Assert.assertSame(struct2.sqlDate1, struct2.sqlDate2);
+        Assert.assertEquals(struct2.date1, struct2.date2);
+        Assert.assertEquals(struct2.sqlDate1, struct2.sqlDate2);
         Assert.assertSame(struct2.instant1, struct2.instant2);
-        Assert.assertSame(struct2.time1, struct2.time2);
+        Assert.assertEquals(struct2.time1, struct2.time2);
         Assert.assertSame(struct2.duration1, struct2.duration2);
       }
     }

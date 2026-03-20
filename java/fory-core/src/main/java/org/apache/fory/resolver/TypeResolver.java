@@ -127,7 +127,7 @@ public abstract class TypeResolver {
   protected TypeResolver(Fory fory) {
     this.fory = fory;
     metaContextShareEnabled = fory.getConfig().isMetaShareEnabled();
-    extRegistry = new ExtRegistry();
+    extRegistry = new ExtRegistry(fory.getConfig().hashCode());
     metaStringResolver = fory.getMetaStringResolver();
   }
 
@@ -136,6 +136,53 @@ public abstract class TypeResolver {
       throw new ForyException(
           "Cannot register class/serializer after serialization/deserialization has started. "
               + "Please register all classes before invoking `serialize/deserialize` methods of Fory.");
+    }
+    if (extRegistry.configHashFrozen) {
+      throw new ForyException(
+          "Cannot register class/serializer after the config hash has been used. "
+              + "Please finish all class and serializer registrations before serializer compilation, serialization, or config hash lookup starts.");
+    }
+  }
+
+  protected final void updateConfigHash(Object... values) {
+    Object[] args = new Object[values.length + 1];
+    args[0] = extRegistry.configHash;
+    System.arraycopy(values, 0, args, 1, values.length);
+    extRegistry.configHash = Objects.hashCode(args);
+  }
+
+  protected final void updateConfigHash(TypeInfo typeInfo, Object... values) {
+    Object[] args = new Object[values.length + 5];
+    args[0] = typeInfo.getCls();
+    args[1] = typeInfo.typeId;
+    args[2] = typeInfo.userTypeId;
+    args[3] = typeInfo.typeNameBytes == null ? null : typeInfo.decodeNamespace();
+    args[4] = typeInfo.typeNameBytes == null ? null : typeInfo.decodeTypeName();
+    System.arraycopy(values, 0, args, 5, values.length);
+    updateConfigHash(args);
+  }
+
+  @Internal
+  public final int getConfigHash() {
+    if (!extRegistry.configHashFrozen) {
+      extRegistry.configHashFrozen = true;
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && !extRegistry.pendingGraalvmClasses.isEmpty()) {
+        extRegistry.pendingGraalvmClasses.forEach(
+            cls -> GraalvmSupport.registerClass(cls, extRegistry.configHash));
+        extRegistry.pendingGraalvmClasses.clear();
+      }
+    }
+    return extRegistry.configHash;
+  }
+
+  protected final void registerGraalvmClass(Class<?> cls) {
+    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return;
+    }
+    if (extRegistry.configHashFrozen) {
+      GraalvmSupport.registerClass(cls, extRegistry.configHash);
+    } else {
+      extRegistry.pendingGraalvmClasses.add(cls);
     }
   }
 
@@ -1444,7 +1491,9 @@ public abstract class TypeResolver {
   }
 
   public void setSerializerFactory(SerializerFactory serializerFactory) {
+    checkRegisterAllowed();
     extRegistry.serializerFactory = serializerFactory;
+    updateConfigHash(serializerFactory == null ? null : serializerFactory.getClass());
   }
 
   public CodeGenerator getCodeGenerator(ClassLoader... loaders) {
@@ -1467,18 +1516,14 @@ public abstract class TypeResolver {
 
   public void resetWrite() {}
 
-  // CHECKSTYLE.OFF:MethodName
-  public static void _addGraalvmClassRegistry(int foryConfigHash, ClassResolver classResolver) {
-    // CHECKSTYLE.ON:MethodName
-    if (GraalvmSupport.isGraalBuildtime()) {
-      GraalvmSupport.GraalvmClassRegistry registry =
-          GraalvmSupport.getClassRegistry(foryConfigHash);
-      registry.resolvers.add(classResolver);
-    }
-  }
-
   final GraalvmSupport.GraalvmClassRegistry getGraalvmClassRegistry() {
-    return GraalvmSupport.getClassRegistry(fory.getConfig().getConfigHash());
+    GraalvmSupport.GraalvmClassRegistry registry = GraalvmSupport.getClassRegistry(getConfigHash());
+    if (GraalvmSupport.isGraalBuildtime()
+        && this instanceof ClassResolver
+        && !registry.resolvers.contains(this)) {
+      registry.resolvers.add(this);
+    }
+    return registry;
   }
 
   final Class<? extends Serializer> getGraalvmSerializerClass(Serializer serializer) {
@@ -1489,6 +1534,9 @@ public abstract class TypeResolver {
   }
 
   final Class<? extends Serializer> getSerializerClassFromGraalvmRegistry(Class<?> cls) {
+    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return null;
+    }
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
     List<TypeResolver> resolvers = registry.resolvers;
     if (resolvers.isEmpty()) {
@@ -1518,6 +1566,9 @@ public abstract class TypeResolver {
 
   private Class<? extends Serializer> getMetaSharedDeserializerClassFromGraalvmRegistry(
       Class<?> cls, TypeDef typeDef) {
+    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return null;
+    }
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
     List<TypeResolver> resolvers = registry.resolvers;
     if (resolvers.isEmpty()) {
@@ -1550,6 +1601,9 @@ public abstract class TypeResolver {
   }
 
   static class ExtRegistry {
+    int configHash;
+    boolean configHashFrozen;
+    final Set<Class<?>> pendingGraalvmClasses = new HashSet<>();
     // Here we set it to 1 to avoid calculating it again in `register(Class<?> cls)`.
     int classIdGenerator = 1;
     int userIdGenerator = 0;
@@ -1579,6 +1633,10 @@ public abstract class TypeResolver {
     final Map<List<ClassLoader>, CodeGenerator> codeGeneratorMap = new HashMap<>();
     final Set<TypeInfo> registeredTypeInfos = new HashSet<>();
     boolean ensureSerializersCompiled;
+
+    ExtRegistry(int configHash) {
+      this.configHash = configHash;
+    }
 
     public boolean isTypeCheckerSet() {
       return typeChecker != DEFAULT_TYPE_CHECKER;

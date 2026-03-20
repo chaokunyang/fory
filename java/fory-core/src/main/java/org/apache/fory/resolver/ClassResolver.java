@@ -1944,11 +1944,15 @@ public class ClassResolver extends TypeResolver {
     if (extRegistry.ensureSerializersCompiled) {
       return;
     }
+    // Freeze the config hash before forcing any serializer resolution so later registrations
+    // cannot invalidate generated class names or GraalVM registrations.
     getConfigHash();
     extRegistry.ensureSerializersCompiled = true;
     try {
       fory.getJITContext().lock();
       if (GraalvmSupport.isGraalBuildtime()) {
+        // Materialize the final GraalVM registry bucket up front so this resolver is attached to
+        // the finalized hash even when the serializers below were already initialized earlier.
         getGraalvmClassRegistry();
       }
       // Lambda and JdkProxy serializers use java.lang.Class which is not supported in xlang mode

@@ -375,9 +375,9 @@ public class TimeSerializersTest extends ForyTestBase {
         TimeStructRef struct2 = fory.copy(struct);
         Assert.assertEquals(struct2.date1, struct2.date2);
         Assert.assertEquals(struct2.sqlDate1, struct2.sqlDate2);
-        Assert.assertEquals(struct2.instant1, struct2.instant2);
+        Assert.assertSame(struct2.instant1, struct2.instant2);
         Assert.assertEquals(struct2.time1, struct2.time2);
-        Assert.assertEquals(struct2.duration1, struct2.duration2);
+        Assert.assertSame(struct2.duration1, struct2.duration2);
       }
     }
   }

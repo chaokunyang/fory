@@ -22,7 +22,7 @@
 - [x] Update Rust benchmark execution/report generation to mirror the C++ benchmark report shape.
 - [x] Run Rust benchmark generation and refresh `docs/benchmarks/rust/**`, removing stale artifacts.
 - [x] Run verification commands and capture outcomes.
-- [ ] Commit, push, open a PR, and add final review notes.
+- [x] Commit, push, open a PR, and add final review notes.
 
 ### Review
 
@@ -39,6 +39,8 @@
   - `cd benchmarks/rust && cargo run --offline --release --bin fory_profiler -- --print-all-serialized-sizes` passed and printed the expected shared-case size table.
   - `cd benchmarks/rust && CARGO_NET_OFFLINE=true bash ./run.sh` passed, generated `benchmarks/rust/results/README.md`, and refreshed the Rust benchmark plots now copied into `docs/benchmarks/rust/`.
   - The benchmark log still includes noisy `[fory-debug] assign_field_ids ...` lines during deserialize benchmarks, but the report generator correctly parsed the Criterion `Benchmarking ... time: [...]` records and produced the final docs report.
+  - Created commit `76c7bcb42` with message `Rewrite Rust benchmarks around shared bench proto`.
+  - Pushed branch `rust-bench-proto-report` to `origin` and opened PR `#3497`: `https://github.com/apache/fory/pull/3497`.
 
 ## PR 3122 Direct Fix (2026-03-20)
 

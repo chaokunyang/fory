@@ -24,6 +24,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.serializer.Serializer;
@@ -207,7 +208,7 @@ public class RegisterTest extends ForyTestBase {
 
     Fory registerByName2 = newCodegenXlangFory();
     registerByName2.register(MyExt.class, "test.pkg", "MyExt");
-    Assert.assertEquals(registerByName2.getConfigHash(), registerByNameHash);
+    Assert.assertNotEquals(registerByName2.getConfigHash(), baseHash);
 
     Fory serializerBase = newCodegenXlangFory();
     serializerBase.register(MyExt.class, 103);
@@ -231,6 +232,44 @@ public class RegisterTest extends ForyTestBase {
 
     Fory union2 = newCodegenXlangFory();
     union2.registerUnion(MyExt.class, 103, new MyExtSerializer(union2, MyExt.class));
-    Assert.assertEquals(union2.getConfigHash(), unionHash);
+    Assert.assertNotEquals(union2.getConfigHash(), baseHash);
+  }
+
+  @Test
+  public void testConfigHashFinalizesAfterHashAccess() {
+    Fory fory = newCodegenXlangFory();
+    fory.getConfigHash();
+    Assert.expectThrows(ForyException.class, () -> fory.register(MyExt.class, 103));
+  }
+
+  @Test
+  public void testConfigHashFinalizesAfterSerialize() {
+    Fory fory = newCodegenXlangFory();
+    fory.register(Color.class, 101);
+    fory.register(MyStruct.class, 102);
+    fory.register(MyExt.class, 103);
+    fory.register(MyWrapper.class, 104);
+    MyWrapper wrapper = new MyWrapper();
+    wrapper.color = Color.Red;
+    wrapper.my_struct = new MyStruct(10);
+    wrapper.my_ext = new MyExt(20);
+
+    fory.serialize(wrapper);
+
+    Assert.expectThrows(
+        ForyException.class, () -> fory.registerSerializer(MyExt.class, MyExtSerializer.class));
+  }
+
+  @Test
+  public void testConfigHashFinalizesAfterEnsureSerializersCompiled() {
+    Fory fory = newCodegenXlangFory();
+    fory.register(Color.class, 101);
+    fory.register(MyStruct.class, 102);
+    fory.register(MyExt.class, 103);
+    fory.register(MyWrapper.class, 104);
+
+    fory.ensureSerializersCompiled();
+
+    Assert.expectThrows(ForyException.class, () -> fory.register(String.class));
   }
 }

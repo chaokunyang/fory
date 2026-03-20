@@ -184,7 +184,8 @@ public class XtypeResolver extends TypeResolver {
     TypeInfo typeInfo = classInfoMap.get(type);
     if (type.isArray()) {
       buildTypeInfo(type);
-      fory.registerGraalvmClass(type);
+      registerGraalvmClass(type);
+      updateConfigHash(classInfoMap.get(type));
       return;
     }
     Serializer<?> serializer = null;
@@ -288,7 +289,7 @@ public class XtypeResolver extends TypeResolver {
     String qualifiedName = qualifiedName(namespace, typeName);
     qualifiedType2TypeInfo.put(qualifiedName, typeInfo);
     extRegistry.registeredClasses.put(qualifiedName, type);
-    fory.registerGraalvmClass(type);
+    registerGraalvmClass(type);
     if (serializer == null) {
       if (type.isEnum()) {
         typeInfo.serializer = new EnumSerializer(fory, (Class<Enum>) type);
@@ -317,6 +318,11 @@ public class XtypeResolver extends TypeResolver {
       }
     }
     updateTypeInfo(type, typeInfo);
+    if (serializer == null) {
+      updateConfigHash(typeInfo);
+    } else {
+      updateConfigHash(typeInfo, serializer.getClass());
+    }
   }
 
   @Override
@@ -455,6 +461,7 @@ public class XtypeResolver extends TypeResolver {
     typeInfo = typeInfo.copy(foryId);
     typeInfo.serializer = serializer;
     updateTypeInfo(type, typeInfo);
+    updateConfigHash(typeInfo, serializer.getClass());
     if (typeInfo.typeNameBytes != null) {
       String qualifiedName = qualifiedName(typeInfo.decodeNamespace(), typeInfo.decodeTypeName());
       qualifiedType2TypeInfo.put(qualifiedName, typeInfo);
@@ -1258,12 +1265,13 @@ public class XtypeResolver extends TypeResolver {
    */
   @Override
   public void ensureSerializersCompiled() {
+    getConfigHash();
     if (GraalvmSupport.isGraalBuildtime()) {
       getGraalvmClassRegistry();
     }
     classInfoMap.forEach(
         (cls, classInfo) -> {
-          fory.registerGraalvmClass(cls);
+          registerGraalvmClass(cls);
           if (classInfo.serializer != null) {
             // Trigger serializer initialization and resolution for deferred serializers
             if (classInfo.serializer

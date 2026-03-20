@@ -26,7 +26,9 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -72,6 +74,7 @@ import org.apache.fory.serializer.collection.MapSerializers.HashMapSerializer;
 import org.apache.fory.type.Generics;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.ExceptionUtils;
+import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 
@@ -126,6 +129,19 @@ public final class Fory implements BaseFory {
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
   private int configHash;
+  private boolean configHashFrozen;
+  private final Set<Class<?>> pendingGraalvmClasses = new HashSet<>();
+
+  private static final int HASH_REGISTER_CLASS = 1;
+  private static final int HASH_REGISTER_CLASS_ID = 2;
+  private static final int HASH_REGISTER_CLASS_NAME = 3;
+  private static final int HASH_REGISTER_CLASS_NAME_ID = 4;
+  private static final int HASH_REGISTER_NAMED_CLASS = 5;
+  private static final int HASH_REGISTER_NAMED_CLASS_NAME = 6;
+  private static final int HASH_REGISTER_UNION_ID = 7;
+  private static final int HASH_REGISTER_UNION_NAME = 8;
+  private static final int HASH_REGISTER_SERIALIZER = 9;
+  private static final int HASH_SET_SERIALIZER_FACTORY = 10;
 
   public Fory(ForyBuilder builder, ClassLoader classLoader) {
     // Avoid set classLoader in `ForyBuilder`, which won't be clear when
@@ -162,23 +178,25 @@ public final class Fory implements BaseFory {
   @Override
   public void register(Class<?> cls) {
     getTypeResolver().register(cls);
+    updateConfigHash(HASH_REGISTER_CLASS, cls);
   }
 
   @Override
   public void register(Class<?> cls, int id) {
     getTypeResolver().register(cls, Integer.toUnsignedLong(id));
+    updateConfigHash(HASH_REGISTER_CLASS_ID, cls, Integer.toUnsignedLong(id));
   }
 
   @Deprecated
   @Override
   public void register(Class<?> cls, boolean createSerializer) {
-    getTypeResolver().register(cls);
+    register(cls);
   }
 
   @Deprecated
   @Override
   public void register(Class<?> cls, int id, boolean createSerializer) {
-    getTypeResolver().register(cls, Integer.toUnsignedLong(id));
+    register(cls, id);
   }
 
   /**
@@ -198,75 +216,150 @@ public final class Fory implements BaseFory {
 
   public void register(Class<?> cls, String namespace, String typeName) {
     getTypeResolver().register(cls, namespace, typeName);
+    updateConfigHash(HASH_REGISTER_NAMED_CLASS, cls, namespace, typeName);
   }
 
   @Override
   public void register(String className) {
     getTypeResolver().register(className);
+    updateConfigHash(HASH_REGISTER_CLASS_NAME, className);
   }
 
   @Override
   public void register(String className, int classId) {
     getTypeResolver().register(className, Integer.toUnsignedLong(classId));
+    updateConfigHash(HASH_REGISTER_CLASS_NAME_ID, className, Integer.toUnsignedLong(classId));
   }
 
   @Override
   public void register(String className, String namespace, String typeName) {
     getTypeResolver().register(className, namespace, typeName);
+    updateConfigHash(HASH_REGISTER_NAMED_CLASS_NAME, className, namespace, typeName);
   }
 
   @Override
   public void registerUnion(Class<?> cls, int id, Serializer<?> serializer) {
     getTypeResolver().registerUnion(cls, Integer.toUnsignedLong(id), serializer);
+    updateConfigHash(
+        HASH_REGISTER_UNION_ID, cls, Integer.toUnsignedLong(id), serializer.getClass());
   }
 
   @Override
   public void registerUnion(
       Class<?> cls, String namespace, String typeName, Serializer<?> serializer) {
     getTypeResolver().registerUnion(cls, namespace, typeName, serializer);
+    updateConfigHash(HASH_REGISTER_UNION_NAME, cls, namespace, typeName, serializer.getClass());
   }
 
   @Override
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
     getTypeResolver().registerSerializer(type, serializerClass);
-    this.configHash = Objects.hashCode(configHash, type, serializerClass);
+    updateConfigHash(HASH_REGISTER_SERIALIZER, type, serializerClass);
   }
 
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
     getTypeResolver().registerSerializer(type, serializer);
-    this.configHash = Objects.hashCode(configHash, type, serializer.getClass());
+    updateConfigHash(HASH_REGISTER_SERIALIZER, type, serializer.getClass());
   }
 
   @Override
   public void registerSerializer(Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
-    getTypeResolver().registerSerializer(type, serializerCreator.apply(this));
+    registerSerializer(type, serializerCreator.apply(this));
   }
 
+  /**
+   * Returns the current hash used to isolate generated serializer class names.
+   *
+   * <p>This hash remains mutable while registration is still open. State that must survive later
+   * registration changes should use {@link #getStableConfigHash()} instead.
+   */
   public int getConfigHash() {
+    return configHash;
+  }
+
+  @Internal
+  public int getStableConfigHash() {
+    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return configHash;
+    }
+    if (!configHashFrozen) {
+      configHashFrozen = true;
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && !pendingGraalvmClasses.isEmpty()) {
+        pendingGraalvmClasses.forEach(cls -> GraalvmSupport.registerClass(cls, configHash));
+        pendingGraalvmClasses.clear();
+      }
+    }
     return configHash;
   }
 
   @Override
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
+    boolean registered = typeResolver.isRegistered(type);
     getTypeResolver().registerSerializerAndType(type, serializerClass);
+    if (!registered) {
+      updateConfigHash(HASH_REGISTER_CLASS, type);
+    }
+    updateConfigHash(HASH_REGISTER_SERIALIZER, type, serializerClass);
   }
 
   @Override
   public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
+    boolean registered = typeResolver.isRegistered(type);
     getTypeResolver().registerSerializerAndType(type, serializer);
+    if (!registered) {
+      updateConfigHash(HASH_REGISTER_CLASS, type);
+    }
+    updateConfigHash(HASH_REGISTER_SERIALIZER, type, serializer.getClass());
   }
 
   @Override
   public void registerSerializerAndType(
       Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
-    getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(this));
+    registerSerializerAndType(type, serializerCreator.apply(this));
   }
 
   @Override
   public void setSerializerFactory(SerializerFactory serializerFactory) {
+    checkRegistrationAllowed();
     typeResolver.setSerializerFactory(serializerFactory);
+    updateConfigHash(
+        HASH_SET_SERIALIZER_FACTORY,
+        serializerFactory == null ? null : serializerFactory.getClass());
+  }
+
+  @Internal
+  public void registerGraalvmClass(Class<?> cls) {
+    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return;
+    }
+    if (configHashFrozen) {
+      GraalvmSupport.registerClass(cls, configHash);
+    } else {
+      pendingGraalvmClasses.add(cls);
+    }
+  }
+
+  @Internal
+  public void checkRegistrationAllowed() {
+    if (depth >= 0) {
+      throw new ForyException(
+          "Cannot register class/serializer after serialization/deserialization has started. "
+              + "Please register all classes before invoking `serialize/deserialize` methods of Fory.");
+    }
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && configHashFrozen) {
+      throw new ForyException(
+          "Cannot register class/serializer after the stable config hash has been used. "
+              + "Please finish all class and serializer registrations before GraalVM serializer compilation or lookup starts.");
+    }
+  }
+
+  private void updateConfigHash(Object... values) {
+    Object[] args = new Object[values.length + 1];
+    args[0] = configHash;
+    System.arraycopy(values, 0, args, 1, values.length);
+    configHash = Objects.hashCode(args);
   }
 
   public SerializerFactory getSerializerFactory() {

@@ -153,8 +153,8 @@ public class CodecUtils {
 
   private static <T> Class<? extends Serializer<T>> loadSerializer(
       String name, Class<?> cls, Fory fory, Callable<Class<? extends Serializer<T>>> func) {
-    int configHash = fory.getConfigHash();
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      int configHash = fory.getStableConfigHash();
       Tuple3<String, Class<?>, Integer> key = Tuple3.of(name, cls, configHash);
       Class serializerClass = graalvmSerializers.get(key);
       if (serializerClass != null) {
@@ -164,6 +164,7 @@ public class CodecUtils {
     try {
       Class serializerClass = func.call();
       if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+        int configHash = fory.getStableConfigHash();
         graalvmSerializers.putIfAbsent(Tuple3.of(name, cls, configHash), serializerClass);
       }
       return serializerClass;

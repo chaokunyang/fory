@@ -215,6 +215,39 @@
   - `cd javascript && npm publish --dry-run --workspace packages/core --access public` succeeded and produced tarball `apache-fory-core-0.16.0.tgz`.
   - `cd javascript && rg -n "@apache-fory/fory|packages/fory|apache-fory-fory" .` returned no matches.
 
+## Benchmark Markdown Image Syntax Migration (2026-03-20)
+
+### Spec
+
+- Objective: replace HTML `<img>` tags with Markdown image syntax under `docs/benchmarks` and `benchmarks`, and make every tracked benchmark report generator emit the Markdown form.
+- Scope:
+  - Update all tracked markdown files under `docs/benchmarks/**` and `benchmarks/**` that still use `<img ...>` blocks.
+  - Update `benchmark_report.py` scripts under `benchmarks/` that currently generate HTML image blocks so generated reports now write `![alt](path)` lines.
+  - Keep plot paths and surrounding report structure unchanged except for the image syntax migration.
+- Verification target:
+  - `rg -n "<img" docs/benchmarks benchmarks` returns no matches.
+  - Repo diff is limited to the benchmark docs and report generators required for the syntax migration.
+
+### Checklist
+
+- [x] Record the task scope and verification targets in `tasks/todo.md`.
+- [x] Update benchmark report generators under `benchmarks/` to emit Markdown image syntax.
+- [x] Replace tracked HTML image tags under `docs/benchmarks` and `benchmarks`.
+- [x] Verify no `<img>` tags remain under the requested directories and review the diff.
+
+### Review
+
+- Scope and output:
+  - Updated the C#, C++, Python, Rust, and Swift `benchmark_report.py` generators to emit Markdown image links with descriptive alt text instead of centered HTML `<img>` blocks.
+  - Left `benchmarks/go/benchmark_report.py` unchanged because it already generated Markdown image syntax.
+  - Replaced the remaining tracked HTML image blocks in benchmark docs under `docs/benchmarks/**` plus the benchmark READMEs in `benchmarks/**` that still used raw `<img>` tags.
+  - Updated the ignored local artifact `benchmarks/cpp/report/README.md` as well so the workspace copy matches the new generated format, but it is excluded from git by `.gitignore`.
+- Verification:
+  - `prettier --write docs/benchmarks/csharp/README.md docs/benchmarks/cpp/README.md docs/benchmarks/cpp/REPORT.md docs/benchmarks/python/README.md docs/benchmarks/rust/README.md docs/benchmarks/swift/README.md benchmarks/cpp/README.md benchmarks/go/README.md` succeeded.
+  - `python3 -m py_compile benchmarks/csharp/benchmark_report.py benchmarks/cpp/benchmark_report.py benchmarks/python/benchmark_report.py benchmarks/rust/benchmark_report.py benchmarks/swift/benchmark_report.py benchmarks/go/benchmark_report.py` succeeded.
+  - `rg -n "<img" docs/benchmarks benchmarks` returned no matches.
+  - `git diff --check -- tasks/todo.md benchmarks/csharp/benchmark_report.py benchmarks/cpp/benchmark_report.py benchmarks/python/benchmark_report.py benchmarks/rust/benchmark_report.py benchmarks/swift/benchmark_report.py docs/benchmarks/csharp/README.md docs/benchmarks/cpp/README.md docs/benchmarks/cpp/REPORT.md docs/benchmarks/python/README.md docs/benchmarks/rust/README.md docs/benchmarks/swift/README.md benchmarks/cpp/README.md benchmarks/go/README.md` succeeded.
+
 ## Cross-Repo Lessons Pattern Abstraction + Skill Creation Plan (2026-03-12)
 
 ### Spec

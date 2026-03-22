@@ -338,9 +338,10 @@ def write_report(system_info, results, sizes, plot_images, output_dir, plot_pref
         plot_images, key=lambda item: (0 if item[0] == "throughput" else 1, item[0])
     )
     for datatype, image_path in sorted_plots:
-        report.append(f"\n### {datatype_title(datatype)}\n\n")
+        plot_title = datatype_title(datatype)
+        report.append(f"\n### {plot_title}\n\n")
         report.append(
-            f'<p align="center">\n<img src="{plot_prefix}{os.path.basename(image_path)}" width="90%" />\n</p>\n'
+            f"![{plot_title}]({plot_prefix}{os.path.basename(image_path)})\n"
         )
 
     report.append("\n## Benchmark Results\n\n")

@@ -738,6 +738,7 @@ static PRIMITIVE_IO_METHODS: &[(&str, &str, &str)] = &[
     ("i16", "write_i16", "read_i16"),
     ("i32", "write_varint32", "read_varint32"),
     ("i64", "write_varint64", "read_varint64"),
+    ("float16", "write_f16", "read_f16"),
     ("f32", "write_f32", "read_f32"),
     ("f64", "write_f64", "read_f64"),
     ("u8", "write_u8", "read_u8"),
@@ -899,6 +900,85 @@ pub(super) fn get_primitive_reader_method_with_encoding(
 
     // For other types, use the default method from PRIMITIVE_IO_METHODS
     get_primitive_reader_method(type_name)
+}
+
+/// Check if a type can participate in the derive primitive block fast path.
+/// This excludes String and wider Rust-only integer types to keep the batched
+/// helpers aligned with the existing xlang-compatible primitive hot path.
+pub(super) fn is_batched_direct_primitive_type(ty: &Type) -> bool {
+    if let Type::Path(type_path) = ty {
+        if let Some(seg) = type_path.path.segments.last() {
+            if matches!(seg.arguments, PathArguments::None) {
+                return matches!(
+                    seg.ident.to_string().as_str(),
+                    "bool"
+                        | "i8"
+                        | "i16"
+                        | "i32"
+                        | "i64"
+                        | "float16"
+                        | "f32"
+                        | "f64"
+                        | "u8"
+                        | "u16"
+                        | "u32"
+                        | "u64"
+                );
+            }
+        }
+    }
+    false
+}
+
+pub(super) fn get_primitive_slice_writer_with_encoding(
+    type_name: &str,
+    meta: &super::field_meta::ForyFieldMeta,
+) -> (&'static str, usize) {
+    match get_primitive_writer_method_with_encoding(type_name, meta) {
+        "write_bool" => ("write_bool_to_slice", 1),
+        "write_i8" => ("write_i8_to_slice", 1),
+        "write_i16" => ("write_i16_to_slice", 2),
+        "write_i32" => ("write_i32_to_slice", 4),
+        "write_varint32" => ("write_varint32_to_slice", 5),
+        "write_varint64" => ("write_varint64_to_slice", 10),
+        "write_f16" => ("write_f16_to_slice", 2),
+        "write_f32" => ("write_f32_to_slice", 4),
+        "write_f64" => ("write_f64_to_slice", 8),
+        "write_u8" => ("write_u8_to_slice", 1),
+        "write_u16" => ("write_u16_to_slice", 2),
+        "write_u32" => ("write_u32_to_slice", 4),
+        "write_var_uint32" => ("write_varuint32_to_slice", 5),
+        "write_u64" => ("write_u64_to_slice", 8),
+        "write_var_uint64" => ("write_varuint64_to_slice", 10),
+        "write_tagged_u64" => ("write_tagged_u64_to_slice", 9),
+        method => panic!("unsupported primitive block writer method '{method}'"),
+    }
+}
+
+pub(super) fn get_primitive_slice_reader_with_encoding(
+    type_name: &str,
+    meta: &super::field_meta::ForyFieldMeta,
+) -> &'static str {
+    match get_primitive_reader_method_with_encoding(type_name, meta) {
+        "read_bool" => "read_bool_from_slice",
+        "read_i8" => "read_i8_from_slice",
+        "read_i16" => "read_i16_from_slice",
+        "read_i32" => "read_i32_from_slice",
+        "read_varint32" => "read_varint32_from_slice",
+        "read_i64" => "read_i64_from_slice",
+        "read_varint64" => "read_varint64_from_slice",
+        "read_f16" => "read_f16_from_slice",
+        "read_f32" => "read_f32_from_slice",
+        "read_f64" => "read_f64_from_slice",
+        "read_u8" => "read_u8_from_slice",
+        "read_u16" => "read_u16_from_slice",
+        "read_u32" => "read_u32_from_slice",
+        "read_varuint32" => "read_varuint32_from_slice",
+        "read_u64" => "read_u64_from_slice",
+        "read_varuint64" => "read_varuint64_from_slice",
+        "read_tagged_u64" => "read_tagged_u64_from_slice",
+        method => panic!("unsupported primitive block reader method '{method}'"),
+    }
 }
 
 /// Check if a type is `Option<i32>`, `Option<u32>`, or `Option<u64>` that needs encoding-aware handling

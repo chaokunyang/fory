@@ -20,9 +20,9 @@ use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
     determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts, get_field_accessor,
     get_field_name, get_filtered_source_fields_iter, get_option_inner_primitive_name,
-    get_primitive_writer_method_with_encoding, get_struct_name, get_type_id_by_type_ast,
-    is_debug_enabled, is_direct_primitive_type, is_option_encoding_primitive, FieldRefMode,
-    StructField,
+    get_primitive_slice_writer_with_encoding, get_primitive_writer_method_with_encoding,
+    get_struct_name, get_type_id_by_type_ast, is_batched_direct_primitive_type, is_debug_enabled,
+    is_direct_primitive_type, is_option_encoding_primitive, FieldRefMode, StructField,
 };
 use crate::util::SourceField;
 use fory_core::types::TypeId;
@@ -114,7 +114,7 @@ pub fn gen_reserved_space(fields: &[&Field]) -> TokenStream {
 
 pub fn gen_write_type_info() -> TokenStream {
     quote! {
-        fory_core::serializer::struct_::write_type_info::<Self>(context)
+        fory_core::serializer::struct_::write_type_info_fast::<Self>(context)
     }
 }
 
@@ -359,9 +359,17 @@ fn gen_write_field_impl(
 
 pub fn gen_write_data(source_fields: &[SourceField<'_>]) -> TokenStream {
     let fields: Vec<&Field> = source_fields.iter().map(|sf| sf.field).collect();
-    let write_fields_ts: Vec<_> = get_filtered_source_fields_iter(source_fields)
-        .map(|sf| gen_write_field_with_index(sf.field, sf.original_index, true))
-        .collect();
+    let write_body = if let Some(ts) = gen_batched_primitive_write_data(source_fields) {
+        ts
+    } else {
+        let write_fields_ts: Vec<_> = get_filtered_source_fields_iter(source_fields)
+            .map(|sf| gen_write_field_with_index(sf.field, sf.original_index, true))
+            .collect();
+        quote! {
+            #(#write_fields_ts)*
+            Ok(())
+        }
+    };
 
     let version_hash_ts = gen_struct_version_hash_ts(&fields);
     quote! {
@@ -369,8 +377,7 @@ pub fn gen_write_data(source_fields: &[SourceField<'_>]) -> TokenStream {
             let version_hash: i32 = #version_hash_ts;
             context.writer.write_i32(version_hash);
         }
-        #(#write_fields_ts)*
-        Ok(())
+        #write_body
     }
 }
 
@@ -378,4 +385,46 @@ pub fn gen_write() -> TokenStream {
     quote! {
         fory_core::serializer::struct_::write::<Self>(self, context, ref_mode, write_type_info)
     }
+}
+
+fn gen_batched_primitive_write_data(source_fields: &[SourceField<'_>]) -> Option<TokenStream> {
+    if is_debug_enabled() {
+        return None;
+    }
+
+    let filtered: Vec<_> = get_filtered_source_fields_iter(source_fields).collect();
+    if filtered.is_empty() || filtered.len() != source_fields.len() {
+        return None;
+    }
+
+    let mut max_size = 0usize;
+    let mut writes = Vec::with_capacity(filtered.len());
+    for sf in filtered {
+        let field = sf.field;
+        if determine_field_ref_mode(field) != FieldRefMode::None
+            || !is_batched_direct_primitive_type(&field.ty)
+        {
+            return None;
+        }
+
+        let meta = parse_field_meta(field).unwrap_or_default();
+        let type_name = extract_type_name(&field.ty);
+        let (helper_name, field_max_size) =
+            get_primitive_slice_writer_with_encoding(&type_name, &meta);
+        let helper_ident = syn::Ident::new(helper_name, proc_macro2::Span::call_site());
+        let value_ts = get_field_accessor(field, sf.original_index, true);
+        max_size += field_max_size;
+        writes.push(quote! {
+            offset += fory_core::buffer::#helper_ident(buffer, offset, #value_ts);
+        });
+    }
+
+    Some(quote! {
+        context.writer.write_reserved(#max_size, |buffer| {
+            let mut offset = 0usize;
+            #(#writes)*
+            offset
+        });
+        Ok(())
+    })
 }

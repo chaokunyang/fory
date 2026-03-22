@@ -25,6 +25,466 @@ use std::cmp::max;
 /// For buffers smaller than this, direct copy is faster than SIMD setup overhead.
 const SIMD_THRESHOLD: usize = 128;
 
+#[inline(always)]
+fn slice_bound_error(offset: usize, len: usize, total_len: usize) -> Error {
+    Error::buffer_out_of_bound(offset, len, total_len)
+}
+
+#[inline(always)]
+fn ensure_slice_bound(slice: &[u8], offset: usize, len: usize) -> Result<(), Error> {
+    let end = offset
+        .checked_add(len)
+        .ok_or_else(|| slice_bound_error(offset, len, slice.len()))?;
+    if end > slice.len() {
+        Err(slice_bound_error(offset, len, slice.len()))
+    } else {
+        Ok(())
+    }
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_bool_to_slice(dst: &mut [u8], offset: usize, value: bool) -> usize {
+    write_u8_to_slice(dst, offset, if value { 1 } else { 0 })
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_i8_to_slice(dst: &mut [u8], offset: usize, value: i8) -> usize {
+    write_u8_to_slice(dst, offset, value as u8)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_u8_to_slice(dst: &mut [u8], offset: usize, value: u8) -> usize {
+    debug_assert!(offset < dst.len());
+    dst[offset] = value;
+    1
+}
+
+macro_rules! impl_fixed_width_slice_io {
+    ($write_name:ident, $read_name:ident, $ty:ty, $bytes:expr) => {
+        #[doc(hidden)]
+        #[inline(always)]
+        pub fn $write_name(dst: &mut [u8], offset: usize, value: $ty) -> usize {
+            let end = offset + $bytes;
+            debug_assert!(end <= dst.len());
+            dst[offset..end].copy_from_slice(&value.to_le_bytes());
+            $bytes
+        }
+
+        #[doc(hidden)]
+        #[inline(always)]
+        pub fn $read_name(src: &[u8], offset: &mut usize) -> Result<$ty, Error> {
+            let start = *offset;
+            ensure_slice_bound(src, start, $bytes)?;
+            let end = start + $bytes;
+            *offset = end;
+            Ok(<$ty>::from_le_bytes(src[start..end].try_into().unwrap()))
+        }
+    };
+}
+
+impl_fixed_width_slice_io!(write_u16_to_slice, read_u16_from_slice, u16, 2);
+impl_fixed_width_slice_io!(write_u32_to_slice, read_u32_from_slice, u32, 4);
+impl_fixed_width_slice_io!(write_u64_to_slice, read_u64_from_slice, u64, 8);
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_i16_to_slice(dst: &mut [u8], offset: usize, value: i16) -> usize {
+    write_u16_to_slice(dst, offset, value as u16)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_i32_to_slice(dst: &mut [u8], offset: usize, value: i32) -> usize {
+    write_u32_to_slice(dst, offset, value as u32)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_f16_to_slice(dst: &mut [u8], offset: usize, value: float16) -> usize {
+    write_u16_to_slice(dst, offset, value.to_bits())
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_f32_to_slice(dst: &mut [u8], offset: usize, value: f32) -> usize {
+    write_u32_to_slice(dst, offset, value.to_bits())
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_f64_to_slice(dst: &mut [u8], offset: usize, value: f64) -> usize {
+    write_u64_to_slice(dst, offset, value.to_bits())
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_varuint32_to_slice(dst: &mut [u8], offset: usize, value: u32) -> usize {
+    debug_assert!(offset < dst.len());
+    if value < 0x80 {
+        dst[offset] = value as u8;
+        1
+    } else if value < 0x4000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (value >> 7) as u8;
+        2
+    } else if value < 0x200000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (value >> 14) as u8;
+        3
+    } else if value < 0x10000000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (((value >> 14) as u8) & 0x7F) | 0x80;
+        dst[offset + 3] = (value >> 21) as u8;
+        4
+    } else {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (((value >> 14) as u8) & 0x7F) | 0x80;
+        dst[offset + 3] = (((value >> 21) as u8) & 0x7F) | 0x80;
+        dst[offset + 4] = (value >> 28) as u8;
+        5
+    }
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_varint32_to_slice(dst: &mut [u8], offset: usize, value: i32) -> usize {
+    let zigzag = ((value as i64) << 1) ^ ((value as i64) >> 31);
+    write_varuint32_to_slice(dst, offset, zigzag as u32)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_varuint64_to_slice(dst: &mut [u8], offset: usize, value: u64) -> usize {
+    debug_assert!(offset < dst.len());
+    if value < 0x80 {
+        dst[offset] = value as u8;
+        1
+    } else if value < 0x4000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (value >> 7) as u8;
+        2
+    } else if value < 0x200000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (value >> 14) as u8;
+        3
+    } else if value < 0x10000000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (((value >> 14) as u8) & 0x7F) | 0x80;
+        dst[offset + 3] = (value >> 21) as u8;
+        4
+    } else if value < 0x800000000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (((value >> 14) as u8) & 0x7F) | 0x80;
+        dst[offset + 3] = (((value >> 21) as u8) & 0x7F) | 0x80;
+        dst[offset + 4] = (value >> 28) as u8;
+        5
+    } else if value < 0x40000000000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (((value >> 14) as u8) & 0x7F) | 0x80;
+        dst[offset + 3] = (((value >> 21) as u8) & 0x7F) | 0x80;
+        dst[offset + 4] = (((value >> 28) as u8) & 0x7F) | 0x80;
+        dst[offset + 5] = (value >> 35) as u8;
+        6
+    } else if value < 0x2000000000000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (((value >> 14) as u8) & 0x7F) | 0x80;
+        dst[offset + 3] = (((value >> 21) as u8) & 0x7F) | 0x80;
+        dst[offset + 4] = (((value >> 28) as u8) & 0x7F) | 0x80;
+        dst[offset + 5] = (((value >> 35) as u8) & 0x7F) | 0x80;
+        dst[offset + 6] = (value >> 42) as u8;
+        7
+    } else if value < 0x100000000000000 {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (((value >> 14) as u8) & 0x7F) | 0x80;
+        dst[offset + 3] = (((value >> 21) as u8) & 0x7F) | 0x80;
+        dst[offset + 4] = (((value >> 28) as u8) & 0x7F) | 0x80;
+        dst[offset + 5] = (((value >> 35) as u8) & 0x7F) | 0x80;
+        dst[offset + 6] = (((value >> 42) as u8) & 0x7F) | 0x80;
+        dst[offset + 7] = (value >> 49) as u8;
+        8
+    } else {
+        dst[offset] = ((value as u8) & 0x7F) | 0x80;
+        dst[offset + 1] = (((value >> 7) as u8) & 0x7F) | 0x80;
+        dst[offset + 2] = (((value >> 14) as u8) & 0x7F) | 0x80;
+        dst[offset + 3] = (((value >> 21) as u8) & 0x7F) | 0x80;
+        dst[offset + 4] = (((value >> 28) as u8) & 0x7F) | 0x80;
+        dst[offset + 5] = (((value >> 35) as u8) & 0x7F) | 0x80;
+        dst[offset + 6] = (((value >> 42) as u8) & 0x7F) | 0x80;
+        dst[offset + 7] = (((value >> 49) as u8) & 0x7F) | 0x80;
+        dst[offset + 8] = (value >> 56) as u8;
+        9
+    }
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_varint64_to_slice(dst: &mut [u8], offset: usize, value: i64) -> usize {
+    let zigzag = ((value << 1) ^ (value >> 63)) as u64;
+    write_varuint64_to_slice(dst, offset, zigzag)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn write_tagged_u64_to_slice(dst: &mut [u8], offset: usize, value: u64) -> usize {
+    if value <= i32::MAX as u64 {
+        write_u32_to_slice(dst, offset, (value as u32) << 1)
+    } else {
+        dst[offset] = 0b1;
+        1 + write_u64_to_slice(dst, offset + 1, value)
+    }
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_bool_from_slice(src: &[u8], offset: &mut usize) -> Result<bool, Error> {
+    Ok(read_u8_from_slice(src, offset)? != 0)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_i8_from_slice(src: &[u8], offset: &mut usize) -> Result<i8, Error> {
+    Ok(read_u8_from_slice(src, offset)? as i8)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_u8_from_slice(src: &[u8], offset: &mut usize) -> Result<u8, Error> {
+    let start = *offset;
+    if start >= src.len() {
+        return Err(slice_bound_error(start, 1, src.len()));
+    }
+    let value = unsafe { *src.get_unchecked(start) };
+    *offset = start + 1;
+    Ok(value)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_i16_from_slice(src: &[u8], offset: &mut usize) -> Result<i16, Error> {
+    Ok(read_u16_from_slice(src, offset)? as i16)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_i32_from_slice(src: &[u8], offset: &mut usize) -> Result<i32, Error> {
+    Ok(read_u32_from_slice(src, offset)? as i32)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_varuint32_from_slice(src: &[u8], offset: &mut usize) -> Result<u32, Error> {
+    let start = *offset;
+    if start >= src.len() {
+        return Err(slice_bound_error(start, 1, src.len()));
+    }
+    let remaining = src.len() - start;
+    let ptr = unsafe { src.as_ptr().add(start) };
+    let b0 = unsafe { *ptr } as u32;
+    if b0 < 0x80 {
+        *offset = start + 1;
+        return Ok(b0);
+    }
+
+    if remaining < 2 {
+        return Err(slice_bound_error(start, 2, src.len()));
+    }
+    let b1 = unsafe { *ptr.add(1) } as u32;
+    let mut encoded = (b0 & 0x7F) | ((b1 & 0x7F) << 7);
+    if b1 < 0x80 {
+        *offset = start + 2;
+        return Ok(encoded);
+    }
+
+    if remaining < 3 {
+        return Err(slice_bound_error(start, 3, src.len()));
+    }
+    let b2 = unsafe { *ptr.add(2) } as u32;
+    encoded |= (b2 & 0x7F) << 14;
+    if b2 < 0x80 {
+        *offset = start + 3;
+        return Ok(encoded);
+    }
+
+    if remaining < 4 {
+        return Err(slice_bound_error(start, 4, src.len()));
+    }
+    let b3 = unsafe { *ptr.add(3) } as u32;
+    encoded |= (b3 & 0x7F) << 21;
+    if b3 < 0x80 {
+        *offset = start + 4;
+        return Ok(encoded);
+    }
+
+    if remaining < 5 {
+        return Err(slice_bound_error(start, 5, src.len()));
+    }
+    let b4 = unsafe { *ptr.add(4) } as u32;
+    encoded |= b4 << 28;
+    *offset = start + 5;
+    Ok(encoded)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_varint32_from_slice(src: &[u8], offset: &mut usize) -> Result<i32, Error> {
+    let encoded = read_varuint32_from_slice(src, offset)?;
+    Ok(((encoded >> 1) as i32) ^ -((encoded & 1) as i32))
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_i64_from_slice(src: &[u8], offset: &mut usize) -> Result<i64, Error> {
+    Ok(read_u64_from_slice(src, offset)? as i64)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_varuint64_from_slice(src: &[u8], offset: &mut usize) -> Result<u64, Error> {
+    let start = *offset;
+    if start >= src.len() {
+        return Err(slice_bound_error(start, 1, src.len()));
+    }
+    let remaining = src.len() - start;
+    let ptr = unsafe { src.as_ptr().add(start) };
+    let b0 = unsafe { *ptr } as u64;
+    if b0 < 0x80 {
+        *offset = start + 1;
+        return Ok(b0);
+    }
+
+    if remaining < 2 {
+        return Err(slice_bound_error(start, 2, src.len()));
+    }
+    let b1 = unsafe { *ptr.add(1) } as u64;
+    let mut encoded = (b0 & 0x7F) | ((b1 & 0x7F) << 7);
+    if b1 < 0x80 {
+        *offset = start + 2;
+        return Ok(encoded);
+    }
+
+    if remaining < 3 {
+        return Err(slice_bound_error(start, 3, src.len()));
+    }
+    let b2 = unsafe { *ptr.add(2) } as u64;
+    encoded |= (b2 & 0x7F) << 14;
+    if b2 < 0x80 {
+        *offset = start + 3;
+        return Ok(encoded);
+    }
+
+    if remaining < 4 {
+        return Err(slice_bound_error(start, 4, src.len()));
+    }
+    let b3 = unsafe { *ptr.add(3) } as u64;
+    encoded |= (b3 & 0x7F) << 21;
+    if b3 < 0x80 {
+        *offset = start + 4;
+        return Ok(encoded);
+    }
+
+    if remaining < 5 {
+        return Err(slice_bound_error(start, 5, src.len()));
+    }
+    let b4 = unsafe { *ptr.add(4) } as u64;
+    encoded |= (b4 & 0x7F) << 28;
+    if b4 < 0x80 {
+        *offset = start + 5;
+        return Ok(encoded);
+    }
+
+    if remaining < 6 {
+        return Err(slice_bound_error(start, 6, src.len()));
+    }
+    let b5 = unsafe { *ptr.add(5) } as u64;
+    encoded |= (b5 & 0x7F) << 35;
+    if b5 < 0x80 {
+        *offset = start + 6;
+        return Ok(encoded);
+    }
+
+    if remaining < 7 {
+        return Err(slice_bound_error(start, 7, src.len()));
+    }
+    let b6 = unsafe { *ptr.add(6) } as u64;
+    encoded |= (b6 & 0x7F) << 42;
+    if b6 < 0x80 {
+        *offset = start + 7;
+        return Ok(encoded);
+    }
+
+    if remaining < 8 {
+        return Err(slice_bound_error(start, 8, src.len()));
+    }
+    let b7 = unsafe { *ptr.add(7) } as u64;
+    encoded |= (b7 & 0x7F) << 49;
+    if b7 < 0x80 {
+        *offset = start + 8;
+        return Ok(encoded);
+    }
+
+    if remaining < 9 {
+        return Err(slice_bound_error(start, 9, src.len()));
+    }
+    let b8 = unsafe { *ptr.add(8) } as u64;
+    encoded |= b8 << 56;
+    *offset = start + 9;
+    Ok(encoded)
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_varint64_from_slice(src: &[u8], offset: &mut usize) -> Result<i64, Error> {
+    let encoded = read_varuint64_from_slice(src, offset)?;
+    Ok(((encoded >> 1) as i64) ^ -((encoded & 1) as i64))
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_tagged_u64_from_slice(src: &[u8], offset: &mut usize) -> Result<u64, Error> {
+    let start = *offset;
+    ensure_slice_bound(src, start, 4)?;
+    let head = LittleEndian::read_u32(&src[start..start + 4]);
+    if (head & 0b1) != 0b1 {
+        *offset = start + 4;
+        Ok((head >> 1) as u64)
+    } else {
+        ensure_slice_bound(src, start, 9)?;
+        let value = LittleEndian::read_u64(&src[start + 1..start + 9]);
+        *offset = start + 9;
+        Ok(value)
+    }
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_f16_from_slice(src: &[u8], offset: &mut usize) -> Result<float16, Error> {
+    Ok(float16::from_bits(read_u16_from_slice(src, offset)?))
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_f32_from_slice(src: &[u8], offset: &mut usize) -> Result<f32, Error> {
+    Ok(f32::from_bits(read_u32_from_slice(src, offset)?))
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub fn read_f64_from_slice(src: &[u8], offset: &mut usize) -> Result<f64, Error> {
+    Ok(f64::from_bits(read_u64_from_slice(src, offset)?))
+}
+
 pub struct Writer<'a> {
     pub(crate) bf: &'a mut Vec<u8>,
 }
@@ -80,6 +540,32 @@ impl<'a> Writer<'a> {
     pub fn write_bytes(&mut self, v: &[u8]) -> usize {
         self.bf.extend_from_slice(v);
         v.len()
+    }
+
+    #[doc(hidden)]
+    #[inline(always)]
+    pub fn write_reserved<F>(&mut self, max_additional: usize, fill: F)
+    where
+        F: FnOnce(&mut [u8]) -> usize,
+    {
+        self.reserve(max_additional);
+        let base = self.bf.len();
+        let spare = self.bf.spare_capacity_mut();
+        assert!(
+            spare.len() >= max_additional,
+            "insufficient spare capacity for reserved write"
+        );
+        let dst = unsafe {
+            std::slice::from_raw_parts_mut(spare.as_mut_ptr().cast::<u8>(), max_additional)
+        };
+        let written = fill(dst);
+        assert!(
+            written <= max_additional,
+            "reserved write exceeded requested capacity"
+        );
+        unsafe {
+            self.bf.set_len(base + written);
+        }
     }
 
     // ============ BOOL (TypeId = 1) ============
@@ -608,6 +1094,25 @@ impl<'a> Reader<'a> {
 
     pub fn set_cursor(&mut self, cursor: usize) {
         self.cursor = cursor;
+    }
+
+    #[doc(hidden)]
+    #[inline(always)]
+    pub fn read_with_cursor<T, F>(&mut self, read: F) -> Result<T, Error>
+    where
+        F: FnOnce(&[u8]) -> Result<(usize, T), Error>,
+    {
+        let start = self.cursor;
+        let (consumed, value) = read(&self.bf[start..])?;
+        let end = start
+            .checked_add(consumed)
+            .ok_or_else(|| Error::buffer_out_of_bound(start, consumed, self.bf.len()))?;
+        if end > self.bf.len() {
+            Err(Error::buffer_out_of_bound(start, consumed, self.bf.len()))
+        } else {
+            self.cursor = end;
+            Ok(value)
+        }
     }
 
     // ============ BOOL (TypeId = 1) ============

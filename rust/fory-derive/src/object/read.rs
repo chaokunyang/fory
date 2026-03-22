@@ -23,7 +23,8 @@ use super::field_meta::{extract_option_inner_type, parse_field_meta};
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
     determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts,
-    get_option_inner_primitive_name, get_primitive_reader_method_with_encoding, get_struct_name,
+    get_option_inner_primitive_name, get_primitive_reader_method_with_encoding,
+    get_primitive_slice_reader_with_encoding, get_struct_name, is_batched_direct_primitive_type,
     is_debug_enabled, is_direct_primitive_type, is_option_encoding_primitive, is_primitive_type,
     is_skip_field, should_skip_type_info_for_field, FieldRefMode, StructField,
 };
@@ -466,6 +467,19 @@ pub fn gen_read_data(source_fields: &[SourceField<'_>]) -> TokenStream {
     let fields: Vec<&Field> = source_fields.iter().map(|sf| sf.field).collect();
     // Generate runtime version hash computation that detects enum fields
     let version_hash_ts = gen_struct_version_hash_ts(&fields);
+    if let Some(read_body) = gen_batched_primitive_read_data(source_fields) {
+        return quote! {
+            // Read and check version hash when class version checking is enabled
+            if context.is_check_struct_version() {
+                let read_version = context.reader.read_i32()?;
+                let type_name = std::any::type_name::<Self>();
+                let local_version: i32 = #version_hash_ts;
+                fory_core::meta::TypeMeta::check_struct_version(read_version, local_version, type_name)?;
+            }
+            #read_body
+        };
+    }
+
     let read_fields = if source_fields.is_empty() {
         quote! {}
     } else {
@@ -508,6 +522,59 @@ pub fn gen_read_data(source_fields: &[SourceField<'_>]) -> TokenStream {
         #read_fields
         #self_construction
     }
+}
+
+fn gen_batched_primitive_read_data(source_fields: &[SourceField<'_>]) -> Option<TokenStream> {
+    if is_debug_enabled() {
+        return None;
+    }
+
+    let filtered: Vec<_> = source_fields
+        .iter()
+        .filter(|sf| !is_skip_field(sf.field))
+        .collect();
+    if filtered.is_empty() || filtered.len() != source_fields.len() {
+        return None;
+    }
+
+    let mut reads = Vec::with_capacity(filtered.len());
+    let mut indexed: Vec<_> = Vec::with_capacity(filtered.len());
+    for sf in filtered {
+        let field = sf.field;
+        if determine_field_ref_mode(field) != FieldRefMode::None
+            || !is_batched_direct_primitive_type(&field.ty)
+        {
+            return None;
+        }
+
+        let meta = parse_field_meta(field).unwrap_or_default();
+        let type_name = extract_type_name(&field.ty);
+        let helper_name = get_primitive_slice_reader_with_encoding(&type_name, &meta);
+        let helper_ident = syn::Ident::new(helper_name, proc_macro2::Span::call_site());
+        let private_ident = create_private_field_name(field, sf.original_index);
+        reads.push(quote! {
+            let #private_ident = fory_core::buffer::#helper_ident(buffer, &mut offset)?;
+        });
+        indexed.push((sf.original_index, sf.field_init(quote! { #private_ident })));
+    }
+
+    let is_tuple = source_fields
+        .first()
+        .map(|sf| sf.is_tuple_struct)
+        .unwrap_or(false);
+    if is_tuple {
+        indexed.sort_by_key(|(idx, _)| *idx);
+    }
+    let field_inits: Vec<_> = indexed.into_iter().map(|(_, ts)| ts).collect();
+    let self_construction = crate::util::self_construction(is_tuple, &field_inits);
+
+    Some(quote! {
+        context.reader.read_with_cursor(|buffer| {
+            let mut offset = 0usize;
+            #(#reads)*
+            Ok((offset, #self_construction))
+        })
+    })
 }
 
 pub(crate) fn gen_read_compatible_match_arm_body(

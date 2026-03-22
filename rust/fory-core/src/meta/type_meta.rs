@@ -1004,7 +1004,6 @@ impl TypeMeta {
         Ok(meta)
     }
 
-    #[inline(always)]
     pub fn skip_bytes(reader: &mut Reader, header: i64) -> Result<(), Error> {
         let mut meta_size = header & META_SIZE_MASK;
         if meta_size == META_SIZE_MASK {

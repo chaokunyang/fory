@@ -222,6 +222,69 @@ impl<'a> WriteContext<'a> {
             .write_type_meta(&mut self.writer, type_id, &self.type_resolver)
     }
 
+    #[inline(always)]
+    pub fn write_registered_type_info_by_index(
+        &mut self,
+        rust_type_id: std::any::TypeId,
+        type_index: u32,
+    ) -> Result<(), Error> {
+        let fory_type_id = self.type_resolver.get_type_id_by_index(type_index)? as u32;
+        self.writer.write_u8(fory_type_id as u8);
+        match fory_type_id {
+            x if x == TypeId::ENUM as u32
+                || x == TypeId::STRUCT as u32
+                || x == TypeId::EXT as u32
+                || x == TypeId::TYPED_UNION as u32 =>
+            {
+                let user_type_id = self
+                    .type_resolver
+                    .get_user_type_id_by_index(&rust_type_id, type_index)?;
+                self.writer.write_var_uint32(user_type_id);
+            }
+            x if x == TypeId::COMPATIBLE_STRUCT as u32
+                || x == TypeId::NAMED_COMPATIBLE_STRUCT as u32 =>
+            {
+                let type_meta = self
+                    .type_resolver
+                    .get_type_meta_by_index_ref(&rust_type_id, type_index)?;
+                self.meta_resolver.write_type_meta_by_type_index(
+                    &mut self.writer,
+                    rust_type_id,
+                    type_index,
+                    type_meta,
+                )?;
+            }
+            x if x == TypeId::NAMED_ENUM as u32
+                || x == TypeId::NAMED_EXT as u32
+                || x == TypeId::NAMED_STRUCT as u32
+                || x == TypeId::NAMED_UNION as u32 =>
+            {
+                if self.is_share_meta() {
+                    let type_meta = self
+                        .type_resolver
+                        .get_type_meta_by_index_ref(&rust_type_id, type_index)?;
+                    self.meta_resolver.write_type_meta_by_type_index(
+                        &mut self.writer,
+                        rust_type_id,
+                        type_index,
+                        type_meta,
+                    )?;
+                } else {
+                    let (namespace, type_name) = {
+                        let type_info = self
+                            .type_resolver
+                            .get_type_info_by_type_index_ref(&rust_type_id, type_index)?;
+                        (type_info.get_namespace(), type_info.get_type_name())
+                    };
+                    self.write_meta_string_bytes(namespace)?;
+                    self.write_meta_string_bytes(type_name)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     pub fn write_any_type_info(
         &mut self,
         fory_type_id: u32,

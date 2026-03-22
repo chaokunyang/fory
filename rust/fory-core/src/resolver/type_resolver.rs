@@ -504,6 +504,8 @@ pub struct TypeResolver {
     user_type_id_index: Vec<u32>,
     // Mapping from type index to Rust TypeId for fast meta lookup
     rust_type_id_by_index: Vec<Option<std::any::TypeId>>,
+    // Fast lookup by type index for fully built TypeInfo
+    type_info_by_type_index: Vec<Option<Rc<TypeInfo>>>,
     // Fast lookup by type index for TypeMeta
     type_meta_by_index: Vec<Option<Rc<crate::meta::TypeMeta>>>,
     compatible: bool,
@@ -529,6 +531,7 @@ impl Default for TypeResolver {
             type_id_index: Vec::new(),
             user_type_id_index: Vec::new(),
             rust_type_id_by_index: Vec::new(),
+            type_info_by_type_index: Vec::new(),
             type_meta_by_index: Vec::new(),
             partial_type_infos: HashMap::new(),
             compatible: false,
@@ -672,6 +675,44 @@ impl TypeResolver {
         }
         Err(Error::type_error(format!(
             "TypeId {:?} not found in type_meta_by_index, maybe you forgot to register some types",
+            type_id
+        )))
+    }
+
+    /// Fast path for getting TypeInfo by type index without hashing Rust TypeId.
+    #[inline(always)]
+    pub fn get_type_info_by_type_index(
+        &self,
+        type_id: &std::any::TypeId,
+        index: u32,
+    ) -> Result<Rc<TypeInfo>, Error> {
+        let index = index as usize;
+        if index < self.type_info_by_type_index.len() {
+            if let Some(type_info) = &self.type_info_by_type_index[index] {
+                return Ok(type_info.clone());
+            }
+        }
+        Err(Error::type_error(format!(
+            "TypeId {:?} not found in type_info_by_type_index, maybe you forgot to register some types",
+            type_id
+        )))
+    }
+
+    /// Fast path for getting TypeInfo by type index without cloning Rc.
+    #[inline(always)]
+    pub fn get_type_info_by_type_index_ref(
+        &self,
+        type_id: &std::any::TypeId,
+        index: u32,
+    ) -> Result<&TypeInfo, Error> {
+        let index = index as usize;
+        if index < self.type_info_by_type_index.len() {
+            if let Some(type_info) = &self.type_info_by_type_index[index] {
+                return Ok(type_info.as_ref());
+            }
+        }
+        Err(Error::type_error(format!(
+            "TypeId {:?} not found in type_info_by_type_index, maybe you forgot to register some types",
             type_id
         )))
     }
@@ -952,6 +993,7 @@ impl TypeResolver {
             self.type_id_index.resize(index + 1, NO_TYPE_ID);
             self.user_type_id_index.resize(index + 1, NO_USER_TYPE_ID);
             self.rust_type_id_by_index.resize(index + 1, None);
+            self.type_info_by_type_index.resize(index + 1, None);
         } else if self.type_id_index[index] != NO_TYPE_ID {
             return Err(Error::type_error(format!(
                 "Type index {:?} already registered",
@@ -1277,11 +1319,14 @@ impl TypeResolver {
             }
         }
 
-        let type_meta_by_index: Vec<Option<Rc<crate::meta::TypeMeta>>> = rust_type_id_by_index
+        let type_info_by_type_index: Vec<Option<Rc<TypeInfo>>> = rust_type_id_by_index
             .iter()
-            .map(|id| {
-                id.and_then(|rust_id| type_info_map.get(&rust_id).map(|info| info.get_type_meta()))
-            })
+            .map(|id| id.and_then(|rust_id| type_info_map.get(&rust_id).cloned()))
+            .collect();
+
+        let type_meta_by_index: Vec<Option<Rc<crate::meta::TypeMeta>>> = type_info_by_type_index
+            .iter()
+            .map(|info| info.as_ref().map(|info| info.get_type_meta()))
             .collect();
 
         Ok(TypeResolver {
@@ -1294,6 +1339,7 @@ impl TypeResolver {
             type_id_index,
             user_type_id_index,
             rust_type_id_by_index,
+            type_info_by_type_index,
             type_meta_by_index,
             compatible: self.compatible,
             xlang: self.xlang,
@@ -1376,6 +1422,16 @@ impl TypeResolver {
             })
             .collect();
 
+        let type_info_by_type_index: Vec<Option<Rc<TypeInfo>>> = self
+            .rust_type_id_by_index
+            .iter()
+            .map(|id| id.and_then(|rust_id| type_info_map.get(&rust_id).cloned()))
+            .collect();
+        let type_meta_by_index = type_info_by_type_index
+            .iter()
+            .map(|info| info.as_ref().map(|info| info.get_type_meta()))
+            .collect();
+
         TypeResolver {
             internal_type_info_by_id,
             user_type_info_by_id,
@@ -1386,7 +1442,8 @@ impl TypeResolver {
             type_id_index: self.type_id_index.clone(),
             user_type_id_index: self.user_type_id_index.clone(),
             rust_type_id_by_index: self.rust_type_id_by_index.clone(),
-            type_meta_by_index: self.type_meta_by_index.clone(),
+            type_info_by_type_index,
+            type_meta_by_index,
             compatible: self.compatible,
             xlang: self.xlang,
         }

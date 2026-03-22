@@ -71,7 +71,6 @@ import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
-import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
@@ -1131,13 +1130,7 @@ public abstract class TypeResolver {
 
   public final TypeDef getTypeDef(Class<?> cls, boolean resolveParent) {
     if (resolveParent) {
-      TypeDef typeDef = typeDefMap.get(cls);
-      if (typeDef != null) {
-        return typeDef;
-      }
-      typeDef = TypeDef.buildTypeDef(fory, cls);
-      typeDefMap.put(cls, typeDef);
-      return typeDef;
+      return typeDefMap.computeIfAbsent(cls, k -> TypeDef.buildTypeDef(fory, cls));
     }
     TypeDef typeDef = extRegistry.currentLayerTypeDef.get(cls);
     if (typeDef == null) {

@@ -24,6 +24,8 @@ import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import java.io.Serializable;
+import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiFunction;
@@ -54,6 +56,9 @@ public class LambdaSerializerTest extends ForyTestBase {
     }
     assertSame(
         fory.getTypeResolver().getSerializerClass(Class.class), Serializers.ClassSerializer.class);
+    assertSame(
+        fory.getTypeResolver().getSerializerClass(SerializedLambda.class),
+        SerializedLambdaSerializer.class);
   }
 
   @Test(dataProvider = "foryCopyConfig")
@@ -86,5 +91,17 @@ public class LambdaSerializerTest extends ForyTestBase {
     } catch (Exception e) {
       assertTrue(e.getMessage().contains("LambdaSerializerTest"));
     }
+  }
+
+  @Test(dataProvider = "javaFory")
+  public void testSerializedLambda(Fory fory) throws Exception {
+    Function<Integer, Integer> function =
+        (Serializable & Function<Integer, Integer>) (x) -> x + x;
+    Method writeReplace = function.getClass().getDeclaredMethod("writeReplace");
+    writeReplace.setAccessible(true);
+    SerializedLambda serializedLambda = (SerializedLambda) writeReplace.invoke(function);
+    Function<Integer, Integer> newFunc =
+        (Function<Integer, Integer>) fory.deserialize(fory.serialize(serializedLambda));
+    assertEquals(newFunc.apply(10), Integer.valueOf(20));
   }
 }

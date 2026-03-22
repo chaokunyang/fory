@@ -165,6 +165,7 @@ public abstract class TypeResolver {
   @Internal
   public final int getConfigHash() {
     if (!extRegistry.configHashFrozen) {
+      extRegistry.configHash = computeStableConfigHash();
       extRegistry.configHashFrozen = true;
       if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && !extRegistry.pendingGraalvmClasses.isEmpty()) {
         extRegistry.pendingGraalvmClasses.forEach(
@@ -173,6 +174,38 @@ public abstract class TypeResolver {
       }
     }
     return extRegistry.configHash;
+  }
+
+  private int computeStableConfigHash() {
+    int hash =
+        Objects.hash(
+            fory.getConfig().hashCode(),
+            extRegistry.serializerFactory == null ? null : extRegistry.serializerFactory.getClass());
+    Set<Class<?>> registeredClasses = new HashSet<>();
+    extRegistry.registeredClassIdMap.forEach((cls, id) -> registeredClasses.add(cls));
+    extRegistry.registeredClasses.forEach((name, cls) -> registeredClasses.add(cls));
+    List<Class<?>> sortedClasses = new ArrayList<>(registeredClasses);
+    sortedClasses.sort(Comparator.comparing(Class::getName));
+    for (Class<?> cls : sortedClasses) {
+      TypeInfo typeInfo = classInfoMap.get(cls);
+      if (typeInfo == null) {
+        continue;
+      }
+      Class<?> serializerClass =
+          extRegistry.registeredTypeInfos.contains(typeInfo) && typeInfo.serializer != null
+              ? typeInfo.serializer.getClass()
+              : null;
+      hash =
+          Objects.hash(
+              hash,
+              typeInfo.getCls(),
+              typeInfo.typeId,
+              typeInfo.userTypeId,
+              typeInfo.typeNameBytes == null ? null : typeInfo.decodeNamespace(),
+              typeInfo.typeNameBytes == null ? null : typeInfo.decodeTypeName(),
+              serializerClass);
+    }
+    return hash;
   }
 
   protected final void registerGraalvmClass(Class<?> cls) {

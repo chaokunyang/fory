@@ -26,8 +26,11 @@ import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.Internal;
+import org.apache.fory.builder.JITContext;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
@@ -37,7 +40,9 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeInfo;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
@@ -47,6 +52,10 @@ import org.apache.fory.util.unsafe._JDKAccess;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ReplaceResolveSerializer extends Serializer {
   private static final Logger LOG = LoggerFactory.getLogger(ReplaceResolveSerializer.class);
+  private static final int OBJECT_SERIALIZER_REGISTRY_NAMESPACE =
+      ReplaceResolveSerializer.class.getName().hashCode();
+  private static final ConcurrentHashMap<Long, Class<? extends Serializer>>
+      GRAALVM_INTERNAL_OBJECT_SERIALIZERS = new ConcurrentHashMap<>();
 
   /**
    * Mock class of all class which has `writeReplace` method defined, so we can skip serialize those
@@ -168,6 +177,7 @@ public class ReplaceResolveSerializer extends Serializer {
     protected final ReplaceResolveInfo info;
 
     protected Serializer objectSerializer;
+    protected Class<? extends Serializer> objectSerializerClass;
 
     public MethodInfoCache(Class<?> cls, ReplaceResolveInfo info) {
       this.cls = cls;
@@ -180,21 +190,50 @@ public class ReplaceResolveSerializer extends Serializer {
 
     public Serializer getObjectSerializer(Fory fory) {
       if (objectSerializer == null) {
-        Class<? extends Serializer> serializerClass;
-        if (Externalizable.class.isAssignableFrom(cls)) {
-          serializerClass = ExternalizableSerializer.class;
-        } else if (JavaSerializer.getReadObjectMethod(cls, true) == null
-            && JavaSerializer.getWriteObjectMethod(cls, true) == null) {
-          serializerClass =
-              ((ClassResolver) fory.getTypeResolver())
-                  .getObjectSerializerClass(
-                      cls, sc -> setObjectSerializer(createDataSerializer(fory, cls, sc)));
-        } else {
-          serializerClass = fory.getDefaultJDKStreamSerializerType();
-        }
-        setObjectSerializer(createDataSerializer(fory, cls, serializerClass));
+        setObjectSerializer(createDataSerializer(fory, cls, getObjectSerializerClass(fory)));
       }
       return objectSerializer;
+    }
+
+    private Class<? extends Serializer> getObjectSerializerClass(Fory fory) {
+      Class<? extends Serializer> serializerClass = objectSerializerClass;
+      if (serializerClass != null) {
+        return serializerClass;
+      }
+      if (Externalizable.class.isAssignableFrom(cls)) {
+        serializerClass = ExternalizableSerializer.class;
+      } else if (JavaSerializer.getReadObjectMethod(cls, true) == null
+          && JavaSerializer.getWriteObjectMethod(cls, true) == null) {
+        serializerClass = getRegisteredObjectSerializerClass(fory, cls);
+        if (serializerClass == null) {
+          if (GraalvmSupport.isGraalRuntime()) {
+            throw new IllegalStateException(
+                String.format("Data serializer for %s is not registered", cls));
+          }
+          ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
+          serializerClass =
+              classResolver.getObjectSerializerClass(
+                  cls,
+                  new JITContext.SerializerJITCallback<Class<? extends Serializer>>() {
+                    @Override
+                    public void onSuccess(Class<? extends Serializer> result) {
+                      registerObjectSerializerClass(fory, cls, result);
+                      objectSerializerClass = result;
+                      setObjectSerializer(createDataSerializer(fory, cls, result));
+                    }
+
+                    @Override
+                    public Object id() {
+                      return cls;
+                    }
+                  });
+          registerObjectSerializerClass(fory, cls, serializerClass);
+        }
+      } else {
+        serializerClass = fory.getDefaultJDKStreamSerializerType();
+      }
+      objectSerializerClass = serializerClass;
+      return serializerClass;
     }
   }
 
@@ -216,6 +255,50 @@ public class ReplaceResolveSerializer extends Serializer {
     Serializer serializer = Serializers.newSerializer(fory, cls, sc);
     classResolver.resetSerializer(cls, prev);
     return serializer;
+  }
+
+  private static Class<? extends Serializer> getRegisteredObjectSerializerClass(
+      Fory fory, Class<?> cls) {
+    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return null;
+    }
+    Long internalSerializerHash = getGraalvmInternalObjectSerializerHash(fory, cls);
+    if (internalSerializerHash != null) {
+      Class<? extends Serializer> serializerClass =
+          GRAALVM_INTERNAL_OBJECT_SERIALIZERS.get(internalSerializerHash);
+      if (serializerClass != null) {
+        return serializerClass;
+      }
+    }
+    return GraalvmSupport.getClassRegistry(getObjectSerializerRegistryKey(fory))
+        .serializerClassMap
+        .get(cls);
+  }
+
+  private static void registerObjectSerializerClass(
+      Fory fory, Class<?> cls, Class<? extends Serializer> serializerClass) {
+    if (serializerClass == null || !GraalvmSupport.isGraalBuildtime()) {
+      return;
+    }
+    Long internalSerializerHash = getGraalvmInternalObjectSerializerHash(fory, cls);
+    if (internalSerializerHash != null) {
+      GRAALVM_INTERNAL_OBJECT_SERIALIZERS.put(internalSerializerHash, serializerClass);
+    }
+    GraalvmSupport.getClassRegistry(getObjectSerializerRegistryKey(fory))
+        .serializerClassMap
+        .put(cls, serializerClass);
+  }
+
+  private static Long getGraalvmInternalObjectSerializerHash(Fory fory, Class<?> cls) {
+    TypeInfo typeInfo = ((ClassResolver) fory.getTypeResolver()).getTypeInfo(cls, false);
+    if (typeInfo != null && !Types.isUserDefinedType((byte) typeInfo.getTypeId())) {
+      return (((long) fory.getConfig().hashCode()) << 32) | (typeInfo.getTypeId() & 0xffffffffL);
+    }
+    return null;
+  }
+
+  private static int getObjectSerializerRegistryKey(Fory fory) {
+    return 31 * OBJECT_SERIALIZER_REGISTRY_NAMESPACE + fory.getConfigHash();
   }
 
   protected final RefResolver refResolver;
@@ -244,8 +327,8 @@ public class ReplaceResolveSerializer extends Serializer {
     if (type != ReplaceStub.class) {
       jdkMethodInfoWriteCache = newJDKMethodInfoCache(type);
       classTypeInfoHolderMap.put(type, jdkMethodInfoWriteCache);
-      if (fory.getCompatibleMode() == CompatibleMode.COMPATIBLE) {
-        // Build the delegated payload serializer before shared-meta writes a placeholder TypeDef.
+      if (fory.getCompatibleMode() == CompatibleMode.COMPATIBLE
+          && !GraalvmSupport.isGraalRuntime()) {
         jdkMethodInfoWriteCache.getObjectSerializer(fory);
       }
       if (isFinalField) {
@@ -258,6 +341,13 @@ public class ReplaceResolveSerializer extends Serializer {
     } else {
       jdkMethodInfoWriteCache = null;
       writeTypeInfo = null;
+    }
+  }
+
+  @Internal
+  public void ensureDataSerializerRegistered() {
+    if (jdkMethodInfoWriteCache != null) {
+      jdkMethodInfoWriteCache.getObjectSerializer(fory);
     }
   }
 

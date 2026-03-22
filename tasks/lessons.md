@@ -22,6 +22,14 @@
 - Prevention rule:
   - Place new tests by subsystem ownership, not by whichever helper class is convenient; serializer/codegen registration coverage should live under `org.apache.fory.serializer` unless the scenario depends on xlang semantics.
   - Before finalizing a test addition, do a quick package-scope review: ask whether the assertions would still make sense in another language mode, and if yes, move the test to the more general test suite.
+- User correction: `SerializedLambda` should use its own serializer path and must not be explained or fixed as a `ReplaceResolveSerializer` issue.
+- Prevention rule:
+  - For lambda serialization failures, separate the lambda wrapper serializer, direct `SerializedLambda` serializer, and replace/resolve logic before proposing a fix.
+  - If the type is an internal registered JDK payload like `SerializedLambda`, prefer a dedicated serializer-local registration strategy over repurposing replace/resolve caches.
+- User correction: keep lazy GraalVM registration fixes anchored in `ensureSerializersCompiled()` and minimize extra public/internal surface.
+- Prevention rule:
+  - For native-image lazy serializer issues, first ask which serializer is only materialized from `ensureSerializersCompiled()` and register it there instead of broadening constructors or resolver behavior.
+  - Before finalizing, remove any helper method or warmup path that is no longer needed once the targeted `ensureSerializersCompiled()` registration is in place.
 - User correction: in `TimeSerializersTest`, `Instant` and `Duration` copy assertions should use identity checks.
 - Prevention rule:
   - When a serializer extends `ImmutableSerializer`, default copy semantics are identity-preserving unless overridden; prefer `assertSame` in copy tests for those types.
@@ -195,3 +203,18 @@
 - User correction: Use `AI Contribution Checklist` label instead of `Contributor Checklist` for clearer AI-specific context in PR/disclosure text.
 - Prevention rule:
   - When linking AI-policy checklist content from PR/contribution docs, prefer explicit AI-scoped link labels (`AI Contribution Checklist`) even if anchor targets remain unchanged.
+
+## 2026-03-23
+
+- User correction: when a GraalVM regression is isolated to `ObjectStreamSerializer`, do not broaden generic resolver or serializer behavior first.
+- Prevention rule:
+  - Compare the changed serializer against `apache/main` and keep the fix inside the serializer’s own GraalVM build-time/runtime handoff path unless the root cause clearly sits elsewhere.
+  - For lazy registration fixes, prefer triggering or materializing serializer state from `ensureSerializersCompiled()` and serializer-local helpers before touching shared resolver contracts.
+- User correction: `SerializedLambda` should not be dragged through `ReplaceResolveSerializer` just because it has `readResolve`; use a dedicated serializer path and keep lambda payload handling separate from replace/resolve semantics.
+- Prevention rule:
+  - When debugging lambda or `SerializedLambda` failures, trace the actual serializer selection path first (`LambdaSerializer` payload path vs. class-level serializer lookup) before changing `ReplaceResolveSerializer`.
+  - If a JDK type needs special deserialization semantics like `readResolve`, prefer a dedicated serializer over reusing a broader serializer family with different registration and GraalVM behavior.
+- User correction: for internal native-image serializer caches, prefer a direct long key derived from stable internal type identity instead of routing everything through the config-hash bucket.
+- Prevention rule:
+  - When a GraalVM cache entry is for an internal registered type or internal layer meta, key it by a stable internal identifier first (for example type id or layer typedef id) before falling back to config-scoped registries.
+  - Before adding another config-hash bucket for native-image serializer lookup, check whether the type is internal and can use a direct internal key instead.

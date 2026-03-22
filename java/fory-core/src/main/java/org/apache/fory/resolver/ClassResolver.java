@@ -114,9 +114,11 @@ import org.apache.fory.serializer.LambdaSerializer;
 import org.apache.fory.serializer.LocaleSerializer;
 import org.apache.fory.serializer.NoneSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
+import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.OptionalSerializers;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
+import org.apache.fory.serializer.SerializedLambdaSerializer;
 import org.apache.fory.serializer.SerializationUtils;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -382,7 +384,6 @@ public class ClassResolver extends TypeResolver {
     registerInternal(AtomicReference.class);
     registerInternal(EnumSet.allOf(Language.class).getClass());
     registerInternal(EnumSet.of(Language.JAVA).getClass());
-    registerInternal(SerializedLambda.class);
     registerInternal(
         Throwable.class,
         StackTraceElement.class,
@@ -1998,6 +1999,15 @@ public class ClassResolver extends TypeResolver {
                   getSerializer(enumValueClass);
                 }
               }
+            }
+            if (classInfo.serializer instanceof ReplaceResolveSerializer) {
+              ((ReplaceResolveSerializer) classInfo.serializer).ensureDataSerializerRegistered();
+            }
+            if (classInfo.serializer instanceof SerializedLambdaSerializer) {
+              ((SerializedLambdaSerializer) classInfo.serializer).ensureDataSerializerRegistered();
+            }
+            if (classInfo.serializer instanceof ObjectStreamSerializer) {
+              ((ObjectStreamSerializer) classInfo.serializer).ensureLayerSerializersRegistered();
             }
           });
       if (GraalvmSupport.isGraalBuildtime()) {

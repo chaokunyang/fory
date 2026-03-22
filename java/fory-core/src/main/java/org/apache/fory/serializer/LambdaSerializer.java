@@ -44,30 +44,11 @@ import org.apache.fory.util.unsafe._JDKAccess;
 public class LambdaSerializer extends Serializer {
   public static Class<?> STUB_LAMBDA_CLASS =
       ((SerializableFunction<Integer, Integer>) (x -> x * 2)).getClass();
-  private static final Class<SerializedLambda> SERIALIZED_LAMBDA = SerializedLambda.class;
-  private static final MethodHandle READ_RESOLVE_HANDLE;
-  private static final boolean SERIALIZED_LAMBDA_HAS_JDK_WRITE =
-      JavaSerializer.getWriteObjectMethod(SERIALIZED_LAMBDA) != null;
-  private static final boolean SERIALIZED_LAMBDA_HAS_JDK_READ =
-      JavaSerializer.getReadObjectMethod(SERIALIZED_LAMBDA) != null;
   private static final ClassValueCache<MethodHandle> writeReplaceMethodCache =
       ClassValueCache.newClassKeySoftCache(32);
 
   private final MethodHandle writeReplaceHandle;
-  private Serializer dataSerializer;
-
-  static {
-    try {
-      // Initialize READ_RESOLVE_HANDLE
-      MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(SERIALIZED_LAMBDA);
-      Object readResolveMethod =
-          ReflectionUtils.getObjectFieldValue(
-              ObjectStreamClass.lookup(SERIALIZED_LAMBDA), "readResolveMethod");
-      READ_RESOLVE_HANDLE = lookup.unreflect((java.lang.reflect.Method) readResolveMethod);
-    } catch (IllegalAccessException e) {
-      throw new ForyException(e);
-    }
-  }
+  private SerializedLambdaSerializer serializedLambdaSerializer;
 
   public LambdaSerializer(Fory fory, Class<?> cls) {
     super(fory, cls);
@@ -99,9 +80,6 @@ public class LambdaSerializer extends Serializer {
     } else {
       writeReplaceHandle = null;
     }
-    if (cls == STUB_LAMBDA_CLASS) {
-      getDataSerializer();
-    }
   }
 
   @Override
@@ -109,8 +87,8 @@ public class LambdaSerializer extends Serializer {
     assert value.getClass() != ReplaceStub.class;
     try {
       Object replacement = writeReplaceHandle.invoke(value);
-      Preconditions.checkArgument(SERIALIZED_LAMBDA.isInstance(replacement));
-      getDataSerializer().write(buffer, replacement);
+      Preconditions.checkArgument(SerializedLambdaSerializer.SERIALIZED_LAMBDA.isInstance(replacement));
+      getSerializedLambdaSerializer().writeUnresolved(buffer, replacement);
     } catch (Throwable e) {
       throw new RuntimeException("Can't serialize lambda " + value, e);
     }
@@ -120,8 +98,8 @@ public class LambdaSerializer extends Serializer {
   public Object copy(Object value) {
     try {
       Object replacement = writeReplaceHandle.invoke(value);
-      Object newReplacement = getDataSerializer().copy(replacement);
-      return READ_RESOLVE_HANDLE.invoke(newReplacement);
+      Object newReplacement = getSerializedLambdaSerializer().copyUnresolved(replacement);
+      return SerializedLambdaSerializer.readResolve(newReplacement);
     } catch (Throwable e) {
       throw new RuntimeException("Can't copy lambda " + value, e);
     }
@@ -130,35 +108,23 @@ public class LambdaSerializer extends Serializer {
   @Override
   public Object read(MemoryBuffer buffer) {
     try {
-      Object replacement = getDataSerializer().read(buffer);
-      return READ_RESOLVE_HANDLE.invoke(replacement);
+      Object replacement = getSerializedLambdaSerializer().readUnresolved(buffer);
+      return SerializedLambdaSerializer.readResolve(replacement);
     } catch (Throwable e) {
       throw new RuntimeException("Can't deserialize lambda", e);
     }
   }
 
-  private Serializer getDataSerializer() {
-    // Create serializer lazily to avoid creation cost if no lambda to be serialized.
-    Serializer dataSerializer = this.dataSerializer;
-    if (dataSerializer == null) {
-      Class<? extends Serializer> sc;
-      if (SERIALIZED_LAMBDA_HAS_JDK_WRITE || SERIALIZED_LAMBDA_HAS_JDK_READ) {
-        sc = fory.getDefaultJDKStreamSerializerType();
-      } else {
-        sc =
-            fory.getJITContext()
-                .registerSerializerJITCallback(
-                    () -> ObjectSerializer.class,
-                    () -> CodegenSerializer.loadCodegenSerializer(fory, SERIALIZED_LAMBDA),
-                    c -> {
-                      this.dataSerializer = Serializers.newSerializer(fory, SERIALIZED_LAMBDA, c);
-                      ((ClassResolver) fory.getTypeResolver()).clearSerializer(SERIALIZED_LAMBDA);
-                    });
-      }
-      this.dataSerializer = dataSerializer = Serializers.newSerializer(fory, SERIALIZED_LAMBDA, sc);
-      ((ClassResolver) fory.getTypeResolver()).clearSerializer(SERIALIZED_LAMBDA);
+  private SerializedLambdaSerializer getSerializedLambdaSerializer() {
+    SerializedLambdaSerializer serializer = serializedLambdaSerializer;
+    if (serializer == null) {
+      serializer =
+          (SerializedLambdaSerializer)
+              ((ClassResolver) fory.getTypeResolver())
+                  .getSerializer(SerializedLambdaSerializer.SERIALIZED_LAMBDA);
+      serializedLambdaSerializer = serializer;
     }
-    return dataSerializer;
+    return serializer;
   }
 
   /**

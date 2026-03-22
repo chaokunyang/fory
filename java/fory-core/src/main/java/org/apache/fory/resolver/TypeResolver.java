@@ -1133,13 +1133,6 @@ public abstract class TypeResolver {
     if (resolveParent) {
       TypeDef typeDef = typeDefMap.get(cls);
       if (typeDef != null) {
-        TypeInfo typeInfo = classInfoMap.get(cls);
-        if (typeInfo != null
-            && typeInfo.serializer instanceof ReplaceResolveSerializer
-            && !typeDef.hasFieldsMeta()) {
-          typeDef = TypeDef.buildTypeDef(fory, cls);
-          typeDefMap.put(cls, typeDef);
-        }
         return typeDef;
       }
       typeDef = TypeDef.buildTypeDef(fory, cls);

@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -243,6 +244,10 @@ public class ReplaceResolveSerializer extends Serializer {
     if (type != ReplaceStub.class) {
       jdkMethodInfoWriteCache = newJDKMethodInfoCache(type);
       classTypeInfoHolderMap.put(type, jdkMethodInfoWriteCache);
+      if (fory.getCompatibleMode() == CompatibleMode.COMPATIBLE) {
+        // Build the delegated payload serializer before shared-meta writes a placeholder TypeDef.
+        jdkMethodInfoWriteCache.getObjectSerializer(fory);
+      }
       if (isFinalField) {
         writeTypeInfo = null;
       } else {

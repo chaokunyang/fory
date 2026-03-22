@@ -343,7 +343,6 @@ public abstract class TypeResolver {
         || serializer instanceof GeneratedMetaSharedSerializer
         || serializer instanceof LazyInitBeanSerializer
         || serializer instanceof ObjectSerializer
-        || serializer instanceof ReplaceResolveSerializer
         || serializer instanceof MetaSharedSerializer);
   }
 
@@ -1132,7 +1131,20 @@ public abstract class TypeResolver {
 
   public final TypeDef getTypeDef(Class<?> cls, boolean resolveParent) {
     if (resolveParent) {
-      return typeDefMap.computeIfAbsent(cls, k -> TypeDef.buildTypeDef(fory, cls));
+      TypeDef typeDef = typeDefMap.get(cls);
+      if (typeDef != null) {
+        TypeInfo typeInfo = classInfoMap.get(cls);
+        if (typeInfo != null
+            && typeInfo.serializer instanceof ReplaceResolveSerializer
+            && !typeDef.hasFieldsMeta()) {
+          typeDef = TypeDef.buildTypeDef(fory, cls);
+          typeDefMap.put(cls, typeDef);
+        }
+        return typeDef;
+      }
+      typeDef = TypeDef.buildTypeDef(fory, cls);
+      typeDefMap.put(cls, typeDef);
+      return typeDef;
     }
     TypeDef typeDef = extRegistry.currentLayerTypeDef.get(cls);
     if (typeDef == null) {

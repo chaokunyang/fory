@@ -651,8 +651,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       this.layerMarkerClass = markerClass;
 
       // Create interpreter-mode serializer first
-      this.slotsSerializer =
-          new MetaSharedLayerSerializer(fory, type, layerTypeDef, markerClass);
+      this.slotsSerializer = new MetaSharedLayerSerializer(fory, type, layerTypeDef, markerClass);
 
       // In GraalVM, ensure serializers are generated for all field types at build time
       // so they're available when new Fory instances are created at runtime

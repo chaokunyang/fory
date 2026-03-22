@@ -613,6 +613,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final StreamTypeInfo streamTypeInfo;
     // mark non-final for async-jit to update it to jit-serializer.
     private MetaSharedLayerSerializerBase slotsSerializer;
+    private boolean slotsSerializerJitRegistered;
+    private final TypeDef layerTypeDef;
+    private final Class<?> layerMarkerClass;
     private final ObjectIntMap<String> fieldIndexMap;
     private final int numPutFields;
     private final Class<?>[] putFieldTypes;
@@ -641,28 +644,15 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         // Fallback when ObjectStreamClass is not available (e.g., GraalVM native image)
         layerTypeDef = fory.getTypeResolver().getTypeDef(type, false);
       }
+      this.layerTypeDef = layerTypeDef;
       // Generate marker class for this layer. Use 0 as layer index since each class
       // has its own SlotsInfo, and the (class, 0) pair is unique for each class.
-      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
+      Class<?> markerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
+      this.layerMarkerClass = markerClass;
 
       // Create interpreter-mode serializer first
       this.slotsSerializer =
-          new MetaSharedLayerSerializer(fory, type, layerTypeDef, layerMarkerClass);
-
-      // Register JIT callback to replace with JIT serializer when ready
-      if (fory.getConfig().isCodeGenEnabled()) {
-        SlotsInfo thisInfo = this;
-        fory.getJITContext()
-            .registerSerializerJITCallback(
-                () -> MetaSharedLayerSerializer.class,
-                () ->
-                    CodecUtils.loadOrGenMetaSharedLayerCodecClass(
-                        type, fory, layerTypeDef, layerMarkerClass),
-                c ->
-                    thisInfo.slotsSerializer =
-                        (MetaSharedLayerSerializerBase)
-                            Serializers.newSerializer(fory, type, (Class<? extends Serializer>) c));
-      }
+          new MetaSharedLayerSerializer(fory, type, layerTypeDef, markerClass);
 
       // In GraalVM, ensure serializers are generated for all field types at build time
       // so they're available when new Fory instances are created at runtime
@@ -687,7 +677,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
       if (streamTypeInfo != null && streamTypeInfo.writeObjectMethod != null) {
         try {
-          objectOutputStream = new ForyObjectOutputStream(this);
+          objectOutputStream = new ForyObjectOutputStream(this, fory);
         } catch (IOException e) {
           Platform.throwException(e);
           throw new IllegalStateException("unreachable");
@@ -697,7 +687,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       }
       if (streamTypeInfo != null && streamTypeInfo.readObjectMethod != null) {
         try {
-          objectInputStream = new ForyObjectInputStream(this);
+          objectInputStream = new ForyObjectInputStream(this, fory);
         } catch (IOException e) {
           Platform.throwException(e);
           throw new IllegalStateException("unreachable");
@@ -706,6 +696,26 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         objectInputStream = null;
       }
       getFieldPool = new ObjectArray();
+    }
+
+    private void ensureSlotsSerializerJitRegistered() {
+      if (slotsSerializerJitRegistered
+          || !ObjectStreamSerializer.this.fory.getConfig().isCodeGenEnabled()) {
+        return;
+      }
+      slotsSerializerJitRegistered = true;
+      Fory fory = ObjectStreamSerializer.this.fory;
+      SlotsInfo thisInfo = this;
+      fory.getJITContext()
+          .registerSerializerJITCallback(
+              () -> MetaSharedLayerSerializer.class,
+              () ->
+                  CodecUtils.loadOrGenMetaSharedLayerCodecClass(
+                      cls, fory, layerTypeDef, layerMarkerClass),
+              c ->
+                  thisInfo.slotsSerializer =
+                      (MetaSharedLayerSerializerBase)
+                          Serializers.newSerializer(fory, cls, (Class<? extends Serializer>) c));
     }
 
     @Override
@@ -720,6 +730,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     public MetaSharedLayerSerializerBase getSlotsSerializer() {
+      ensureSlotsSerializerJitRegistered();
       return slotsSerializer;
     }
 
@@ -759,12 +770,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       MetaSharedLayerSerializerBase result;
       if (!fory.getConfig().isMetaShareEnabled()) {
         // Meta share not enabled - use the default slots serializer
-        result = slotsSerializer;
+        result = getSlotsSerializer();
       } else {
         // Read TypeInfo from buffer (creates new or returns existing)
         TypeInfo typeInfo = readLayerTypeInfo(fory, buffer);
         if (typeInfo == null) {
-          result = slotsSerializer;
+          result = getSlotsSerializer();
         } else {
           // Get or create serializer from TypeInfo
           Serializer<?> serializer = typeInfo.getSerializer();
@@ -840,10 +851,10 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private Object targetObject;
     private boolean fieldsWritten;
 
-    protected ForyObjectOutputStream(SlotInfo slotsInfo) throws IOException {
+    protected ForyObjectOutputStream(SlotInfo slotsInfo, Fory fory) throws IOException {
       super();
       this.slotsInfo = slotsInfo;
-      this.fory = slotsInfo.getSlotsSerializer().fory;
+      this.fory = fory;
       this.compressInt = fory.compressInt();
     }
 
@@ -876,9 +887,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         int index = slotsInfo.getFieldIndexMap().get(name, -1);
         if (index == -1) {
           throw new IllegalArgumentException(
-              String.format(
-                  "Field name %s not exist in class %s",
-                  name, slotsInfo.getSlotsSerializer().type));
+              String.format("Field name %s not exist in class %s", name, slotsInfo.getCls()));
         }
         vals[index] = val;
       }
@@ -931,7 +940,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       @Deprecated
       @Override
       public void write(ObjectOutput out) throws IOException {
-        Class cls = slotsInfo.getSlotsSerializer().getType();
+        Class cls = slotsInfo.getCls();
         throwUnsupportedEncodingException(cls);
       }
     }
@@ -1007,7 +1016,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     public void reset() throws IOException {
-      Class cls = slotsInfo.getSlotsSerializer().getType();
+      Class cls = slotsInfo.getCls();
       // Fory won't invoke this method, throw exception if the user invokes it.
       throwUnsupportedEncodingException(cls);
     }
@@ -1155,8 +1164,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private boolean fieldsRead;
     private TreeMap<Integer, ObjectInputValidation> callbacks;
 
-    protected ForyObjectInputStream(SlotInfo slotsInfo) throws IOException {
-      this.fory = slotsInfo.getSlotsSerializer().fory;
+    protected ForyObjectInputStream(SlotInfo slotsInfo, Fory fory) throws IOException {
+      this.fory = fory;
       this.compressInt = fory.compressInt();
       this.slotsInfo = slotsInfo;
     }
@@ -1289,9 +1298,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       private void checkFieldExists(String name, int index) {
         if (index == -1) {
           throw new IllegalArgumentException(
-              String.format(
-                  "Field name %s not exist in class %s",
-                  name, slotsInfo.getSlotsSerializer().getType()));
+              String.format("Field name %s not exist in class %s", name, slotsInfo.getCls()));
         }
       }
     }

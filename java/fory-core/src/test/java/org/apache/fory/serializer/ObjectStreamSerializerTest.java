@@ -190,24 +190,25 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   public void testJDKCompatiblePutFieldsCopy(Fory fory) {
     fory.registerSerializer(
         StringBuffer.class, new ObjectStreamSerializer(fory, StringBuffer.class));
-    StringBuffer newStringBuffer = fory.copy(new StringBuffer("abc"));
-    assertEquals(newStringBuffer.toString(), "abc");
-    BigInteger bigInteger = BigInteger.valueOf(1000);
     fory.registerSerializer(BigInteger.class, new ObjectStreamSerializer(fory, BigInteger.class));
-    copyCheck(fory, bigInteger);
     fory.registerSerializer(InetAddress.class, new ObjectStreamSerializer(fory, InetAddress.class));
     fory.registerSerializer(
         Inet4Address.class, new ObjectStreamSerializer(fory, Inet4Address.class));
+    fory.registerSerializer(
+        WriteObjectTestClass2.class, new ObjectStreamSerializer(fory, WriteObjectTestClass2.class));
+    fory.registerSerializer(
+        WriteObjectTestClass3.class, new ObjectStreamSerializer(fory, WriteObjectTestClass3.class));
+
+    StringBuffer newStringBuffer = fory.copy(new StringBuffer("abc"));
+    assertEquals(newStringBuffer.toString(), "abc");
+    BigInteger bigInteger = BigInteger.valueOf(1000);
+    copyCheck(fory, bigInteger);
     InetAddress inetAddress = InetAddress.getLoopbackAddress();
     copyCheck(fory, inetAddress);
     WriteObjectTestClass2 testClassObj2 = new WriteObjectTestClass2(new char[] {'a', 'b'}, "abc");
-    fory.registerSerializer(
-        WriteObjectTestClass2.class, new ObjectStreamSerializer(fory, WriteObjectTestClass2.class));
     copyCheck(fory, testClassObj2);
     // test defaultReadObject compatible with putFields.
     WriteObjectTestClass3 testClassObj3 = new WriteObjectTestClass3(new char[] {'a', 'b'}, "abc");
-    fory.registerSerializer(
-        WriteObjectTestClass3.class, new ObjectStreamSerializer(fory, WriteObjectTestClass3.class));
     copyCheck(fory, testClassObj3);
   }
 
@@ -249,6 +250,9 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test(dataProvider = "foryCopyConfig")
   public void testJDKCompatibleMapCopy(Fory fory) {
     ImmutableMap<String, Integer> mapData = ImmutableMap.of("k1", 1, "k2", 2);
+    fory.registerSerializer(
+        ConcurrentHashMap.class, new ObjectStreamSerializer(fory, ConcurrentHashMap.class));
+    fory.registerSerializer(HashMap.class, new ObjectStreamSerializer(fory, HashMap.class));
     {
       ObjectStreamSerializer serializer = new ObjectStreamSerializer(fory, ConcurrentHashMap.class);
       ConcurrentHashMap<String, Integer> map = new ConcurrentHashMap<>(mapData);
@@ -256,13 +260,10 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
       assertEquals(copy, map);
     }
     {
-      fory.registerSerializer(
-          ConcurrentHashMap.class, new ObjectStreamSerializer(fory, ConcurrentHashMap.class));
       copyCheck(fory, new ConcurrentHashMap<>(mapData));
     }
     {
       Map<String, Integer> map = new HashMap<>(mapData);
-      fory.registerSerializer(map.getClass(), new ObjectStreamSerializer(fory, map.getClass()));
       copyCheck(fory, map);
     }
   }
@@ -282,11 +283,11 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test(dataProvider = "foryCopyConfig")
   public void testJDKCompatibleListCopy(Fory fory) {
     fory.registerSerializer(ArrayList.class, new ObjectStreamSerializer(fory, ArrayList.class));
+    fory.registerSerializer(LinkedList.class, new ObjectStreamSerializer(fory, LinkedList.class));
+    fory.registerSerializer(Vector.class, new ObjectStreamSerializer(fory, Vector.class));
     List<String> list = new ArrayList<>(ImmutableList.of("a", "b", "c", "d"));
     copyCheck(fory, list);
-    fory.registerSerializer(LinkedList.class, new ObjectStreamSerializer(fory, LinkedList.class));
     copyCheck(fory, new LinkedList<>(list));
-    fory.registerSerializer(Vector.class, new ObjectStreamSerializer(fory, Vector.class));
     copyCheck(fory, new Vector<>(list));
   }
 
@@ -437,10 +438,10 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
 
   @Test(dataProvider = "foryCopyConfig")
   public void testWriteObjectReplaceCopy(Fory fory) throws MalformedURLException {
-    copyCheck(fory, new URL("http://test"));
-    WriteObjectTestClass4 testClassObj4 = new WriteObjectTestClass4(new char[] {'a', 'b'});
     fory.registerSerializer(
         WriteObjectTestClass4.class, new ObjectStreamSerializer(fory, WriteObjectTestClass4.class));
+    copyCheck(fory, new URL("http://test"));
+    WriteObjectTestClass4 testClassObj4 = new WriteObjectTestClass4(new char[] {'a', 'b'});
     copyCheck(fory, testClassObj4);
   }
 

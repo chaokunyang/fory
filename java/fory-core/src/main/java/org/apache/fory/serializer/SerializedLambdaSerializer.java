@@ -39,8 +39,8 @@ import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Serializer for {@link SerializedLambda}. It writes the lambda payload using the normal struct
- * serializer path, but applies {@code readResolve} when reading/copying so direct
- * {@code SerializedLambda} serialization preserves JDK semantics.
+ * serializer path, but applies {@code readResolve} when reading/copying so direct {@code
+ * SerializedLambda} serialization preserves JDK semantics.
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class SerializedLambdaSerializer extends Serializer {
@@ -173,7 +173,8 @@ public class SerializedLambdaSerializer extends Serializer {
     return GRAALVM_DATA_SERIALIZER_CLASSES.get(getDataSerializerHash());
   }
 
-  private void registerSerializedLambdaSerializerClass(Class<? extends Serializer> serializerClass) {
+  private void registerSerializedLambdaSerializerClass(
+      Class<? extends Serializer> serializerClass) {
     if (serializerClass == null || !GraalvmSupport.isGraalBuildtime()) {
       return;
     }
@@ -181,7 +182,8 @@ public class SerializedLambdaSerializer extends Serializer {
   }
 
   private long getDataSerializerHash() {
-    TypeInfo typeInfo = ((ClassResolver) fory.getTypeResolver()).getTypeInfo(SERIALIZED_LAMBDA, false);
+    TypeInfo typeInfo =
+        ((ClassResolver) fory.getTypeResolver()).getTypeInfo(SERIALIZED_LAMBDA, false);
     Preconditions.checkState(typeInfo != null, "SerializedLambda type info should be registered");
     Preconditions.checkState(
         !Types.isUserDefinedType((byte) typeInfo.getTypeId()),

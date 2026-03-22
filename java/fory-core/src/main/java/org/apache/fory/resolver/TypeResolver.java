@@ -180,7 +180,9 @@ public abstract class TypeResolver {
     int hash =
         Objects.hash(
             fory.getConfig().hashCode(),
-            extRegistry.serializerFactory == null ? null : extRegistry.serializerFactory.getClass());
+            extRegistry.serializerFactory == null
+                ? null
+                : extRegistry.serializerFactory.getClass());
     Set<Class<?>> registeredClasses = new HashSet<>();
     extRegistry.registeredClassIdMap.forEach((cls, id) -> registeredClasses.add(cls));
     extRegistry.registeredClasses.forEach((name, cls) -> registeredClasses.add(cls));
@@ -191,9 +193,9 @@ public abstract class TypeResolver {
       if (typeInfo == null) {
         continue;
       }
-      Class<?> serializerClass =
+      Long serializerHash =
           extRegistry.registeredTypeInfos.contains(typeInfo) && typeInfo.serializer != null
-              ? typeInfo.serializer.getClass()
+              ? computeSerializerConfigHash(typeInfo)
               : null;
       hash =
           Objects.hash(
@@ -203,9 +205,23 @@ public abstract class TypeResolver {
               typeInfo.userTypeId,
               typeInfo.typeNameBytes == null ? null : typeInfo.decodeNamespace(),
               typeInfo.typeNameBytes == null ? null : typeInfo.decodeTypeName(),
-              serializerClass);
+              serializerHash);
     }
     return hash;
+  }
+
+  private long computeSerializerConfigHash(TypeInfo typeInfo) {
+    Serializer<?> serializer = typeInfo.serializer;
+    long serializerHash =
+        Objects.hash(
+            serializer.getClass(),
+            serializer.needToWriteRef(),
+            serializer.needToCopyRef(),
+            serializer.isImmutable());
+    if (!Types.isUserDefinedType((byte) typeInfo.getTypeId())) {
+      return (((long) typeInfo.getTypeId()) << 32) | (serializerHash & 0xffffffffL);
+    }
+    return Objects.hash(serializerHash, typeInfo.getCls());
   }
 
   protected final void registerGraalvmClass(Class<?> cls) {

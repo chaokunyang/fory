@@ -23,10 +23,10 @@ import static org.apache.fory.util.function.Functions.makeGetterFunction;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import java.lang.invoke.SerializedLambda;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;

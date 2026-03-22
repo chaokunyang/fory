@@ -41,8 +41,8 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.type.Types;
-import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /**

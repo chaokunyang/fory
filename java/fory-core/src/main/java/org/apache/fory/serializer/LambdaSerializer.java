@@ -23,11 +23,9 @@ import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.invoke.SerializedLambda;
 import java.util.Objects;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.ClassValueCache;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
@@ -87,7 +85,8 @@ public class LambdaSerializer extends Serializer {
     assert value.getClass() != ReplaceStub.class;
     try {
       Object replacement = writeReplaceHandle.invoke(value);
-      Preconditions.checkArgument(SerializedLambdaSerializer.SERIALIZED_LAMBDA.isInstance(replacement));
+      Preconditions.checkArgument(
+          SerializedLambdaSerializer.SERIALIZED_LAMBDA.isInstance(replacement));
       getSerializedLambdaSerializer().writeUnresolved(buffer, replacement);
     } catch (Throwable e) {
       throw new RuntimeException("Can't serialize lambda " + value, e);

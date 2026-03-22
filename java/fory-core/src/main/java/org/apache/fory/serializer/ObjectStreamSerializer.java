@@ -481,7 +481,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
   }
 
-  private static void ensureFieldSerializerGenerated(ClassResolver classResolver, Class<?> fieldType) {
+  private static void ensureFieldSerializerGenerated(
+      ClassResolver classResolver, Class<?> fieldType) {
     if (fieldType.isArray()) {
       Class<?> componentType = TypeUtils.getArrayComponent(fieldType);
       if (!componentType.isPrimitive() && classResolver.isSerializable(componentType)) {
@@ -540,7 +541,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
               .get(type);
     }
     if (serializerClass != null) {
-      classResolver.setSerializerIfAbsent(type, Serializers.newSerializer(fory, type, serializerClass));
+      classResolver.setSerializerIfAbsent(
+          type, Serializers.newSerializer(fory, type, serializerClass));
     }
   }
 
@@ -557,7 +559,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         serializer instanceof GraalvmSerializerHolder
             ? ((GraalvmSerializerHolder) serializer).getSerializerClass()
             : serializer.getClass();
-    GraalvmSupport.getClassRegistry(classResolver.getConfigHash()).serializerClassMap.put(type, serializerClass);
+    GraalvmSupport.getClassRegistry(classResolver.getConfigHash())
+        .serializerClassMap
+        .put(type, serializerClass);
     GraalvmSupport.getClassRegistry(getFieldSerializerRegistryKey(classResolver.getFory()))
         .serializerClassMap
         .put(type, serializerClass);
@@ -573,7 +577,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       return;
     }
     Long internalSerializerHash =
-        getGraalvmInternalLayerSerializerHash((ClassResolver) fory.getTypeResolver(), type, layerTypeDef);
+        getGraalvmInternalLayerSerializerHash(
+            (ClassResolver) fory.getTypeResolver(), type, layerTypeDef);
     if (internalSerializerHash != null) {
       GRAALVM_INTERNAL_LAYER_SERIALIZERS.put(internalSerializerHash, serializerClass);
     }
@@ -588,7 +593,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       return null;
     }
     Long internalSerializerHash =
-        getGraalvmInternalLayerSerializerHash((ClassResolver) fory.getTypeResolver(), type, layerTypeDef);
+        getGraalvmInternalLayerSerializerHash(
+            (ClassResolver) fory.getTypeResolver(), type, layerTypeDef);
     if (internalSerializerHash != null) {
       Class<? extends Serializer> serializerClass =
           GRAALVM_INTERNAL_LAYER_SERIALIZERS.get(internalSerializerHash);
@@ -849,8 +855,10 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
                 String.format("Layer serializer %s is not registered", layerMarkerClass));
           }
           serializerClass =
-              CodecUtils.loadOrGenMetaSharedLayerCodecClass(cls, fory, layerTypeDef, layerMarkerClass);
-          registerGraalvmLayerSerializer(fory, cls, layerTypeDef, layerMarkerClass, serializerClass);
+              CodecUtils.loadOrGenMetaSharedLayerCodecClass(
+                  cls, fory, layerTypeDef, layerMarkerClass);
+          registerGraalvmLayerSerializer(
+              fory, cls, layerTypeDef, layerMarkerClass, serializerClass);
         }
         return;
       }

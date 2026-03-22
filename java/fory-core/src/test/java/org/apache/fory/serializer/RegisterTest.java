@@ -19,6 +19,7 @@
 
 package org.apache.fory.serializer;
 
+import java.util.Date;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
@@ -46,6 +47,15 @@ public class RegisterTest extends ForyTestBase {
     wrapper.myExt = new MyExt();
     wrapper.myExt.id = id;
     return wrapper;
+  }
+
+  private static Fory newCodegenJavaForyIgnoringTimeRef() {
+    return Fory.builder()
+        .withLanguage(Language.JAVA)
+        .requireClassRegistration(false)
+        .withCodegen(true)
+        .ignoreTimeRef(true)
+        .build();
   }
 
   @Test(dataProvider = "enableCodegen")
@@ -229,6 +239,24 @@ public class RegisterTest extends ForyTestBase {
     Fory union2 = newCodegenJavaFory();
     union2.registerUnion(MyExt.class, 103, new MyExtSerializer(union2));
     Assert.assertNotEquals(union2.getConfigHash(), baseHash);
+  }
+
+  @Test
+  public void testConfigHashTracksSerializerState() {
+    int baseHash = newCodegenJavaForyIgnoringTimeRef().getConfigHash();
+
+    Fory customDateSerializer1 = newCodegenJavaForyIgnoringTimeRef();
+    customDateSerializer1.registerSerializer(
+        Date.class, new TimeSerializers.DateSerializer(customDateSerializer1, true));
+    int customHash1 = customDateSerializer1.getConfigHash();
+
+    Fory customDateSerializer2 = newCodegenJavaForyIgnoringTimeRef();
+    customDateSerializer2.registerSerializer(
+        Date.class, new TimeSerializers.DateSerializer(customDateSerializer2, true));
+    int customHash2 = customDateSerializer2.getConfigHash();
+
+    Assert.assertNotEquals(customHash1, baseHash);
+    Assert.assertEquals(customHash1, customHash2);
   }
 
   @Test

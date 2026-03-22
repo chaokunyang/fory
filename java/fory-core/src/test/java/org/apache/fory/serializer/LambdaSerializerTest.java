@@ -95,8 +95,7 @@ public class LambdaSerializerTest extends ForyTestBase {
 
   @Test(dataProvider = "javaFory")
   public void testSerializedLambda(Fory fory) throws Exception {
-    Function<Integer, Integer> function =
-        (Serializable & Function<Integer, Integer>) (x) -> x + x;
+    Function<Integer, Integer> function = (Serializable & Function<Integer, Integer>) (x) -> x + x;
     Method writeReplace = function.getClass().getDeclaredMethod("writeReplace");
     writeReplace.setAccessible(true);
     SerializedLambda serializedLambda = (SerializedLambda) writeReplace.invoke(function);

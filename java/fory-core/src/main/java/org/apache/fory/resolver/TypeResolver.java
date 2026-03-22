@@ -71,6 +71,7 @@ import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
+import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
@@ -342,6 +343,7 @@ public abstract class TypeResolver {
         || serializer instanceof GeneratedMetaSharedSerializer
         || serializer instanceof LazyInitBeanSerializer
         || serializer instanceof ObjectSerializer
+        || serializer instanceof ReplaceResolveSerializer
         || serializer instanceof MetaSharedSerializer);
   }
 

@@ -258,8 +258,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
             () -> {
               fory.setClassLoader(structClass1.getClassLoader(), staging);
               fory.setTypeChecker((classResolver, className1) -> true);
-              Assert.expectThrows(
-                  ForyException.class, () -> fory.setSerializerFactory((fory1, cls) -> null));
+              fory.setSerializerFactory((fory1, cls) -> null);
               Assert.assertEquals(fory.deserialize(newBytes1), struct1);
             })
         .join();

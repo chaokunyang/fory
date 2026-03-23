@@ -169,13 +169,13 @@ public final class Fory implements BaseFory {
   @Deprecated
   @Override
   public void register(Class<?> cls, boolean createSerializer) {
-    register(cls);
+    getTypeResolver().register(cls);
   }
 
   @Deprecated
   @Override
   public void register(Class<?> cls, int id, boolean createSerializer) {
-    register(cls, id);
+    getTypeResolver().register(cls, Integer.toUnsignedLong(id));
   }
 
   /**
@@ -235,16 +235,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public void registerSerializer(Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
-    registerSerializer(type, serializerCreator.apply(this));
-  }
-
-  /**
-   * Returns the current config hash used to isolate generated serializer class names.
-   *
-   * <p>The first access finalizes the hash and closes further registration.
-   */
-  public int getConfigHash() {
-    return typeResolver.getConfigHash();
+    getTypeResolver().registerSerializer(type, serializerCreator.apply(this));
   }
 
   @Override
@@ -261,7 +252,7 @@ public final class Fory implements BaseFory {
   @Override
   public void registerSerializerAndType(
       Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
-    registerSerializerAndType(type, serializerCreator.apply(this));
+    getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(this));
   }
 
   @Override
@@ -276,10 +267,6 @@ public final class Fory implements BaseFory {
   public <T> Serializer<T> getSerializer(Class<T> cls) {
     Preconditions.checkNotNull(cls);
     return typeResolver.getSerializer(cls);
-  }
-
-  private void finalizeConfigHash() {
-    typeResolver.getConfigHash();
   }
 
   @Override
@@ -316,7 +303,6 @@ public final class Fory implements BaseFory {
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj, BufferCallback callback) {
-    finalizeConfigHash();
     byte bitmap = 0;
     if (crossLanguage) {
       bitmap |= isCrossLanguageFlag;
@@ -719,7 +705,6 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(MemoryBuffer buffer, Class<T> type) {
-    finalizeConfigHash();
     try {
       jitContext.lock();
       if (depth > 0) {
@@ -786,7 +771,6 @@ public final class Fory implements BaseFory {
    */
   @Override
   public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
-    finalizeConfigHash();
     try {
       jitContext.lock();
       if (depth > 0) {
@@ -1033,7 +1017,6 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T copy(T obj) {
-    finalizeConfigHash();
     try {
       return copyObject(obj);
     } catch (Throwable e) {

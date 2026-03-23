@@ -26,7 +26,6 @@ import com.google.common.cache.CacheBuilder;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -559,8 +558,6 @@ public class Serializers {
   public static void registerDefaultSerializers(Fory fory) {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.registerInternalSerializer(Class.class, new ClassSerializer(fory));
-    resolver.registerInternalSerializer(
-        SerializedLambda.class, new SerializedLambdaSerializer(fory, SerializedLambda.class));
     resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(fory));
     resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(fory));
     resolver.registerInternalSerializer(BigInteger.class, new BigIntegerSerializer(fory));

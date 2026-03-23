@@ -38,11 +38,15 @@ import org.apache.fory.util.unsafe._JDKAccess;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class LambdaSerializer extends Serializer {
-  public static final Class<?> STUB_LAMBDA_CLASS =
-      ((SerializableFunction<Integer, Integer>) (x -> x * 2)).getClass();
+  public static final Class<?> STUB_LAMBDA_CLASS = stubLambdaClass();
 
   private final MethodHandle writeReplaceHandle;
   private final SerializedLambdaSerializer serializedLambdaSerializer;
+
+  private static Class<?> stubLambdaClass() {
+    SerializableFunction<Integer, Integer> function = x -> x * 2;
+    return function.getClass();
+  }
 
   public LambdaSerializer(Fory fory, Class<?> cls) {
     super(fory, cls);
@@ -78,7 +82,8 @@ public class LambdaSerializer extends Serializer {
   @Override
   public Object read(MemoryBuffer buffer) {
     try {
-      return SerializedLambdaSerializer.readResolve(serializedLambdaSerializer.readUnresolved(buffer));
+      return SerializedLambdaSerializer.readResolve(
+          serializedLambdaSerializer.readUnresolved(buffer));
     } catch (Throwable e) {
       throw new RuntimeException("Can't deserialize lambda", e);
     }

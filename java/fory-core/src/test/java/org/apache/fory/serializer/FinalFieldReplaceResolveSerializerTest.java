@@ -445,8 +445,9 @@ public class FinalFieldReplaceResolveSerializerTest extends ForyTestBase {
         (ContainerWithFinalImmutableIntArray) fory.deserialize(bytes);
     assertEquals(deserialized.getIntArray(), ImmutableIntArray.of(1, 2, 3, 4, 5));
 
-    // The key point: FieldReplaceResolveSerializer.writeObject() writes through the cached
-    // data serializer without calling classResolver.writeClassInternal(buffer, writeTypeInfo).
+    // The key point: FieldReplaceResolveSerializer.writeObject() directly calls
+    // jdkMethodInfoCache.objectSerializer.write(buffer, value)
+    // without calling classResolver.writeClassInternal(buffer, writeTypeInfo)
   }
 
   // TODO fix: bug with CompatibleMode and final field replace/resolve on main branch

@@ -40,11 +40,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.apache.fory.Fory;
-import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.collection.LongMap;
@@ -69,7 +67,6 @@ import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
-import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.unsafe._JDKAccess;
 
@@ -88,8 +85,6 @@ import org.apache.fory.util.unsafe._JDKAccess;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ObjectStreamSerializer extends AbstractObjectSerializer {
   private static final Logger LOG = LoggerFactory.getLogger(ObjectStreamSerializer.class);
-  private static final ConcurrentHashMap<Long, Class<? extends Serializer>>
-      GRAALVM_INTERNAL_LAYER_SERIALIZERS = new ConcurrentHashMap<>();
 
   private final SlotInfo[] slotsInfos;
   // Instance-level cache: TypeDef ID -> TypeInfo (shared across all slots)
@@ -466,154 +461,19 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    */
   private static void ensureFieldSerializersGenerated(
       Fory fory, TypeDef layerTypeDef, Class<?> type) {
-    ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
     Collection<Descriptor> descriptors = layerTypeDef.getDescriptors(fory.getTypeResolver(), type);
     for (Descriptor descriptor : descriptors) {
       Class<?> fieldType = descriptor.getRawType();
       if (fieldType != null && !fieldType.isPrimitive()) {
         try {
-          ensureFieldSerializerGenerated(classResolver, fieldType);
+          // Trigger serializer generation for this field type
+          fory.getTypeResolver().getSerializerClass(fieldType);
         } catch (Exception e) {
           // Ignore errors - some types may not need serializers or may be handled specially
           ExceptionUtils.ignore(e);
         }
       }
     }
-  }
-
-  private static void ensureFieldSerializerGenerated(
-      ClassResolver classResolver, Class<?> fieldType) {
-    if (fieldType.isArray()) {
-      Class<?> componentType = TypeUtils.getArrayComponent(fieldType);
-      if (!componentType.isPrimitive() && classResolver.isSerializable(componentType)) {
-        Serializer<?> componentSerializer = classResolver.getSerializer(componentType);
-        registerGraalvmFieldSerializer(classResolver, componentType, componentSerializer);
-      }
-    }
-    Serializer<?> serializer = classResolver.getSerializer(fieldType);
-    registerGraalvmFieldSerializer(classResolver, fieldType, serializer);
-  }
-
-  private static void ensureFieldSerializersLoaded(
-      Fory fory, TypeDef layerTypeDef, Class<?> ownerType) {
-    ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
-    Collection<Descriptor> descriptors =
-        layerTypeDef.getDescriptors(fory.getTypeResolver(), ownerType);
-    for (Descriptor descriptor : descriptors) {
-      Class<?> fieldType = descriptor.getRawType();
-      if (fieldType != null && !fieldType.isPrimitive()) {
-        try {
-          ensureFieldSerializerLoaded(fory, classResolver, ownerType, fieldType);
-        } catch (Exception e) {
-          ExceptionUtils.ignore(e);
-        }
-      }
-    }
-  }
-
-  private static void ensureFieldSerializerLoaded(
-      Fory fory, ClassResolver classResolver, Class<?> ownerType, Class<?> fieldType) {
-    if (fieldType.isArray()) {
-      Class<?> componentType = TypeUtils.getArrayComponent(fieldType);
-      if (!componentType.isPrimitive()
-          && componentType != ownerType
-          && classResolver.isSerializable(componentType)) {
-        ensureSerializerLoadedFromRegistry(fory, classResolver, componentType);
-      }
-    }
-    if (fieldType != ownerType) {
-      ensureSerializerLoadedFromRegistry(fory, classResolver, fieldType);
-    }
-  }
-
-  private static void ensureSerializerLoadedFromRegistry(
-      Fory fory, ClassResolver classResolver, Class<?> type) {
-    TypeInfo typeInfo = classResolver.getTypeInfo(type, false);
-    if (typeInfo != null && typeInfo.getSerializer() != null) {
-      return;
-    }
-    Class<? extends Serializer> serializerClass =
-        GraalvmSupport.getClassRegistry(classResolver.getConfigHash()).serializerClassMap.get(type);
-    if (serializerClass == null) {
-      serializerClass =
-          GraalvmSupport.getClassRegistry(getFieldSerializerRegistryKey(fory))
-              .serializerClassMap
-              .get(type);
-    }
-    if (serializerClass != null) {
-      classResolver.setSerializerIfAbsent(
-          type, Serializers.newSerializer(fory, type, serializerClass));
-    }
-  }
-
-  private static int getFieldSerializerRegistryKey(Fory fory) {
-    return fory.getConfig().hashCode();
-  }
-
-  private static void registerGraalvmFieldSerializer(
-      ClassResolver classResolver, Class<?> type, Serializer<?> serializer) {
-    if (!GraalvmSupport.isGraalBuildtime() || serializer == null) {
-      return;
-    }
-    Class<? extends Serializer> serializerClass =
-        serializer instanceof GraalvmSerializerHolder
-            ? ((GraalvmSerializerHolder) serializer).getSerializerClass()
-            : serializer.getClass();
-    GraalvmSupport.getClassRegistry(classResolver.getConfigHash())
-        .serializerClassMap
-        .put(type, serializerClass);
-    GraalvmSupport.getClassRegistry(getFieldSerializerRegistryKey(classResolver.getFory()))
-        .serializerClassMap
-        .put(type, serializerClass);
-  }
-
-  private static void registerGraalvmLayerSerializer(
-      Fory fory,
-      Class<?> type,
-      TypeDef layerTypeDef,
-      Class<?> layerMarkerClass,
-      Class<? extends Serializer> serializerClass) {
-    if (!GraalvmSupport.isGraalBuildtime() || serializerClass == null) {
-      return;
-    }
-    Long internalSerializerHash =
-        getGraalvmInternalLayerSerializerHash(
-            (ClassResolver) fory.getTypeResolver(), type, layerTypeDef);
-    if (internalSerializerHash != null) {
-      GRAALVM_INTERNAL_LAYER_SERIALIZERS.put(internalSerializerHash, serializerClass);
-    }
-    GraalvmSupport.getClassRegistry(fory.getConfigHash())
-        .serializerClassMap
-        .put(layerMarkerClass, serializerClass);
-  }
-
-  private static Class<? extends Serializer> getRegisteredGraalvmLayerSerializer(
-      Fory fory, Class<?> type, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
-    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      return null;
-    }
-    Long internalSerializerHash =
-        getGraalvmInternalLayerSerializerHash(
-            (ClassResolver) fory.getTypeResolver(), type, layerTypeDef);
-    if (internalSerializerHash != null) {
-      Class<? extends Serializer> serializerClass =
-          GRAALVM_INTERNAL_LAYER_SERIALIZERS.get(internalSerializerHash);
-      if (serializerClass != null) {
-        return serializerClass;
-      }
-    }
-    return GraalvmSupport.getClassRegistry(fory.getConfigHash())
-        .serializerClassMap
-        .get(layerMarkerClass);
-  }
-
-  private static Long getGraalvmInternalLayerSerializerHash(
-      ClassResolver classResolver, Class<?> type, TypeDef layerTypeDef) {
-    TypeInfo typeInfo = classResolver.getTypeInfo(type, false);
-    if (typeInfo != null && !Types.isUserDefinedType((byte) typeInfo.getTypeId())) {
-      return layerTypeDef.getId();
-    }
-    return null;
   }
 
   /**
@@ -753,9 +613,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final StreamTypeInfo streamTypeInfo;
     // mark non-final for async-jit to update it to jit-serializer.
     private MetaSharedLayerSerializerBase slotsSerializer;
-    private boolean slotsSerializerJitRegistered;
-    private final TypeDef layerTypeDef;
-    private final Class<?> layerMarkerClass;
     private final ObjectIntMap<String> fieldIndexMap;
     private final int numPutFields;
     private final Class<?>[] putFieldTypes;
@@ -784,22 +641,34 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         // Fallback when ObjectStreamClass is not available (e.g., GraalVM native image)
         layerTypeDef = fory.getTypeResolver().getTypeDef(type, false);
       }
-      this.layerTypeDef = layerTypeDef;
       // Generate marker class for this layer. Use 0 as layer index since each class
       // has its own SlotsInfo, and the (class, 0) pair is unique for each class.
-      Class<?> markerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
-      this.layerMarkerClass = markerClass;
+      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, type, 0);
+
+      // Create interpreter-mode serializer first
+      this.slotsSerializer =
+          new MetaSharedLayerSerializer(fory, type, layerTypeDef, layerMarkerClass);
+
+      // Register JIT callback to replace with JIT serializer when ready
+      if (fory.getConfig().isCodeGenEnabled()) {
+        SlotsInfo thisInfo = this;
+        fory.getJITContext()
+            .registerSerializerJITCallback(
+                () -> MetaSharedLayerSerializer.class,
+                () ->
+                    CodecUtils.loadOrGenMetaSharedLayerCodecClass(
+                        type, fory, layerTypeDef, layerMarkerClass),
+                c ->
+                    thisInfo.slotsSerializer =
+                        (MetaSharedLayerSerializerBase)
+                            Serializers.newSerializer(fory, type, (Class<? extends Serializer>) c));
+      }
 
       // In GraalVM, ensure serializers are generated for all field types at build time
       // so they're available when new Fory instances are created at runtime
       if (GraalvmSupport.isGraalBuildtime()) {
         ensureFieldSerializersGenerated(fory, layerTypeDef, type);
-      } else if (GraalvmSupport.isGraalRuntime()) {
-        ensureFieldSerializersLoaded(fory, layerTypeDef, type);
       }
-
-      // Create interpreter-mode serializer first
-      this.slotsSerializer = new MetaSharedLayerSerializer(fory, type, layerTypeDef, markerClass);
 
       // Build fieldIndexMap and putFieldTypes from serializer's field order.
       // This ensures putFields/writeFields API uses the same order as the serializer
@@ -818,7 +687,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
       if (streamTypeInfo != null && streamTypeInfo.writeObjectMethod != null) {
         try {
-          objectOutputStream = new ForyObjectOutputStream(this, fory);
+          objectOutputStream = new ForyObjectOutputStream(this);
         } catch (IOException e) {
           Platform.throwException(e);
           throw new IllegalStateException("unreachable");
@@ -828,7 +697,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       }
       if (streamTypeInfo != null && streamTypeInfo.readObjectMethod != null) {
         try {
-          objectInputStream = new ForyObjectInputStream(this, fory);
+          objectInputStream = new ForyObjectInputStream(this);
         } catch (IOException e) {
           Platform.throwException(e);
           throw new IllegalStateException("unreachable");
@@ -837,42 +706,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         objectInputStream = null;
       }
       getFieldPool = new ObjectArray();
-    }
-
-    private void ensureSlotsSerializerJitRegistered() {
-      if (slotsSerializerJitRegistered
-          || !ObjectStreamSerializer.this.fory.getConfig().isCodeGenEnabled()) {
-        return;
-      }
-      slotsSerializerJitRegistered = true;
-      Fory fory = ObjectStreamSerializer.this.fory;
-      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-        Class<? extends Serializer> serializerClass =
-            getRegisteredGraalvmLayerSerializer(fory, cls, layerTypeDef, layerMarkerClass);
-        if (serializerClass == null) {
-          if (GraalvmSupport.isGraalRuntime()) {
-            throw new IllegalStateException(
-                String.format("Layer serializer %s is not registered", layerMarkerClass));
-          }
-          serializerClass =
-              CodecUtils.loadOrGenMetaSharedLayerCodecClass(
-                  cls, fory, layerTypeDef, layerMarkerClass);
-          registerGraalvmLayerSerializer(
-              fory, cls, layerTypeDef, layerMarkerClass, serializerClass);
-        }
-        return;
-      }
-      SlotsInfo thisInfo = this;
-      fory.getJITContext()
-          .registerSerializerJITCallback(
-              () -> MetaSharedLayerSerializer.class,
-              () ->
-                  CodecUtils.loadOrGenMetaSharedLayerCodecClass(
-                      cls, fory, layerTypeDef, layerMarkerClass),
-              c ->
-                  thisInfo.slotsSerializer =
-                      (MetaSharedLayerSerializerBase)
-                          Serializers.newSerializer(fory, cls, (Class<? extends Serializer>) c));
     }
 
     @Override
@@ -887,7 +720,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     public MetaSharedLayerSerializerBase getSlotsSerializer() {
-      ensureSlotsSerializerJitRegistered();
       return slotsSerializer;
     }
 
@@ -927,12 +759,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       MetaSharedLayerSerializerBase result;
       if (!fory.getConfig().isMetaShareEnabled()) {
         // Meta share not enabled - use the default slots serializer
-        result = getSlotsSerializer();
+        result = slotsSerializer;
       } else {
         // Read TypeInfo from buffer (creates new or returns existing)
         TypeInfo typeInfo = readLayerTypeInfo(fory, buffer);
         if (typeInfo == null) {
-          result = getSlotsSerializer();
+          result = slotsSerializer;
         } else {
           // Get or create serializer from TypeInfo
           Serializer<?> serializer = typeInfo.getSerializer();
@@ -993,13 +825,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
   }
 
-  @Internal
-  public void ensureLayerSerializersRegistered() {
-    for (SlotInfo slotsInfo : slotsInfos) {
-      slotsInfo.getSlotsSerializer();
-    }
-  }
-
   /**
    * Implement serialization for object output with `writeObject/readObject` defined by java
    * serialization output spec.
@@ -1015,10 +840,10 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private Object targetObject;
     private boolean fieldsWritten;
 
-    protected ForyObjectOutputStream(SlotInfo slotsInfo, Fory fory) throws IOException {
+    protected ForyObjectOutputStream(SlotInfo slotsInfo) throws IOException {
       super();
       this.slotsInfo = slotsInfo;
-      this.fory = fory;
+      this.fory = slotsInfo.getSlotsSerializer().fory;
       this.compressInt = fory.compressInt();
     }
 
@@ -1051,7 +876,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         int index = slotsInfo.getFieldIndexMap().get(name, -1);
         if (index == -1) {
           throw new IllegalArgumentException(
-              String.format("Field name %s not exist in class %s", name, slotsInfo.getCls()));
+              String.format(
+                  "Field name %s not exist in class %s",
+                  name, slotsInfo.getSlotsSerializer().type));
         }
         vals[index] = val;
       }
@@ -1104,7 +931,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       @Deprecated
       @Override
       public void write(ObjectOutput out) throws IOException {
-        Class cls = slotsInfo.getCls();
+        Class cls = slotsInfo.getSlotsSerializer().getType();
         throwUnsupportedEncodingException(cls);
       }
     }
@@ -1180,7 +1007,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     public void reset() throws IOException {
-      Class cls = slotsInfo.getCls();
+      Class cls = slotsInfo.getSlotsSerializer().getType();
       // Fory won't invoke this method, throw exception if the user invokes it.
       throwUnsupportedEncodingException(cls);
     }
@@ -1328,8 +1155,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private boolean fieldsRead;
     private TreeMap<Integer, ObjectInputValidation> callbacks;
 
-    protected ForyObjectInputStream(SlotInfo slotsInfo, Fory fory) throws IOException {
-      this.fory = fory;
+    protected ForyObjectInputStream(SlotInfo slotsInfo) throws IOException {
+      this.fory = slotsInfo.getSlotsSerializer().fory;
       this.compressInt = fory.compressInt();
       this.slotsInfo = slotsInfo;
     }
@@ -1462,7 +1289,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       private void checkFieldExists(String name, int index) {
         if (index == -1) {
           throw new IllegalArgumentException(
-              String.format("Field name %s not exist in class %s", name, slotsInfo.getCls()));
+              String.format(
+                  "Field name %s not exist in class %s",
+                  name, slotsInfo.getSlotsSerializer().getType()));
         }
       }
     }

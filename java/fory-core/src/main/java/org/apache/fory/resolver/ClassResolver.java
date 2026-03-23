@@ -118,7 +118,6 @@ import org.apache.fory.serializer.OptionalSerializers;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.SerializationUtils;
-import org.apache.fory.serializer.SerializedLambdaSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.StringSerializer;
@@ -2001,9 +2000,6 @@ public class ClassResolver extends TypeResolver {
             }
             if (classInfo.serializer instanceof ReplaceResolveSerializer) {
               ((ReplaceResolveSerializer) classInfo.serializer).ensureDataSerializerRegistered();
-            }
-            if (classInfo.serializer instanceof SerializedLambdaSerializer) {
-              ((SerializedLambdaSerializer) classInfo.serializer).ensureDataSerializerRegistered();
             }
             if (classInfo.serializer instanceof ObjectStreamSerializer) {
               ((ObjectStreamSerializer) classInfo.serializer).ensureLayerSerializersRegistered();

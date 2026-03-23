@@ -20,6 +20,7 @@
 package org.apache.fory.serializer;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
@@ -95,12 +96,33 @@ public class LambdaSerializerTest extends ForyTestBase {
 
   @Test(dataProvider = "javaFory")
   public void testSerializedLambda(Fory fory) throws Exception {
-    Function<Integer, Integer> function = (Serializable & Function<Integer, Integer>) (x) -> x + x;
-    Method writeReplace = function.getClass().getDeclaredMethod("writeReplace");
-    writeReplace.setAccessible(true);
-    SerializedLambda serializedLambda = (SerializedLambda) writeReplace.invoke(function);
+    int delta = 7;
+    Function<Integer, Integer> function =
+        (Serializable & Function<Integer, Integer>) (x) -> x + delta;
+    SerializedLambda serializedLambda = extractSerializedLambda(function);
     Function<Integer, Integer> newFunc =
         (Function<Integer, Integer>) fory.deserialize(fory.serialize(serializedLambda));
-    assertEquals(newFunc.apply(10), Integer.valueOf(20));
+    assertEquals(newFunc.apply(10), Integer.valueOf(17));
+  }
+
+  @Test(dataProvider = "foryCopyConfig")
+  public void testSerializedLambdaCopy(Fory fory) throws Exception {
+    int delta = 7;
+    Function<Integer, Integer> function =
+        (Serializable & Function<Integer, Integer>) (x) -> x + delta;
+    SerializedLambda serializedLambda = extractSerializedLambda(function);
+    SerializedLambda copied = (SerializedLambda) fory.copy((Object) serializedLambda);
+    assertNotSame(copied, serializedLambda);
+    assertEquals(copied.getCapturedArgCount(), 1);
+    assertEquals(copied.getCapturedArg(0), Integer.valueOf(delta));
+    Function<Integer, Integer> newFunc =
+        (Function<Integer, Integer>) SerializedLambdaSerializer.readResolve(copied);
+    assertEquals(newFunc.apply(10), Integer.valueOf(17));
+  }
+
+  private SerializedLambda extractSerializedLambda(Object function) throws Exception {
+    Method writeReplace = function.getClass().getDeclaredMethod("writeReplace");
+    writeReplace.setAccessible(true);
+    return (SerializedLambda) writeReplace.invoke(function);
   }
 }

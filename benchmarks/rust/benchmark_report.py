@@ -161,9 +161,7 @@ def load_serialized_sizes(size_file):
     if not os.path.exists(size_file):
         return {}
 
-    pattern = re.compile(
-        r"^\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|$"
-    )
+    pattern = re.compile(r"^\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|$")
     sizes = {}
     with open(size_file, "r", encoding="utf-8") as file:
         for line in file:
@@ -238,7 +236,10 @@ def plot_combined_subplot(ax, results, datatypes, operation, title):
     available = [
         serializer
         for serializer in SERIALIZER_ORDER
-        if any(results[datatype][operation].get(serializer, 0) > 0 for datatype in datatypes)
+        if any(
+            results[datatype][operation].get(serializer, 0) > 0
+            for datatype in datatypes
+        )
     ]
     if not available:
         ax.set_title(f"{title}\nNo Data")
@@ -286,16 +287,32 @@ def generate_plots(results, output_dir):
         plt.close(fig)
         plot_images.append((datatype, plot_path))
 
-    non_list = [datatype for datatype in DATATYPE_ORDER if datatype in results and not datatype.endswith("list")]
-    list_only = [datatype for datatype in DATATYPE_ORDER if datatype in results and datatype.endswith("list")]
+    non_list = [
+        datatype
+        for datatype in DATATYPE_ORDER
+        if datatype in results and not datatype.endswith("list")
+    ]
+    list_only = [
+        datatype
+        for datatype in DATATYPE_ORDER
+        if datatype in results and datatype.endswith("list")
+    ]
 
     fig, axes = plt.subplots(1, 4, figsize=(28, 6))
     fig.supylabel("Throughput (ops/sec)")
     plot_combined_subplot(
-        axes[0], results, non_list, "serialize", "Serialize Throughput (higher is better)"
+        axes[0],
+        results,
+        non_list,
+        "serialize",
+        "Serialize Throughput (higher is better)",
     )
     plot_combined_subplot(
-        axes[1], results, non_list, "deserialize", "Deserialize Throughput (higher is better)"
+        axes[1],
+        results,
+        non_list,
+        "deserialize",
+        "Deserialize Throughput (higher is better)",
     )
     plot_combined_subplot(
         axes[2], results, list_only, "serialize", "Serialize Throughput (*List)"
@@ -338,16 +355,13 @@ def write_report(system_info, results, sizes, plot_images, output_dir, plot_pref
         plot_images, key=lambda item: (0 if item[0] == "throughput" else 1, item[0])
     )
     for datatype, image_path in sorted_plots:
-        report.append(f"\n### {datatype_title(datatype)}\n\n")
-        report.append(
-            f'<p align="center">\n<img src="{plot_prefix}{os.path.basename(image_path)}" width="90%" />\n</p>\n'
-        )
+        plot_title = datatype_title(datatype)
+        report.append(f"\n### {plot_title}\n\n")
+        report.append(f"![{plot_title}]({plot_prefix}{os.path.basename(image_path)})\n")
 
     report.append("\n## Benchmark Results\n\n")
     report.append("### Timing Results (nanoseconds)\n\n")
-    report.append(
-        "| Datatype | Operation | fory (ns) | protobuf (ns) | Fastest |\n"
-    )
+    report.append("| Datatype | Operation | fory (ns) | protobuf (ns) | Fastest |\n")
     report.append("|----------|-----------|-----------|---------------|---------|\n")
 
     for datatype in DATATYPE_ORDER:
@@ -388,7 +402,9 @@ def write_report(system_info, results, sizes, plot_images, output_dir, plot_pref
                 "| "
                 + f"{datatype_title(datatype)} | {operation.capitalize()} | "
                 + " | ".join(
-                    f"{throughput[serializer]:,.0f}" if throughput[serializer] > 0 else "N/A"
+                    f"{throughput[serializer]:,.0f}"
+                    if throughput[serializer] > 0
+                    else "N/A"
                     for serializer in SERIALIZER_ORDER
                 )
                 + f" | {fastest} |\n"

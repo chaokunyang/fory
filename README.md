@@ -88,11 +88,7 @@ See [Java Benchmarks](docs/benchmarks/java) for more details.
 ### Rust Serialization Performance
 
 <p align="center">
-<img src="docs/benchmarks/rust/ecommerce_data.png" width="90%">
-</p>
-
-<p align="center">
-<img src="docs/benchmarks/rust/system_data.png" width="90%">
+<img src="docs/benchmarks/rust/throughput.png" width="95%">
 </p>
 
 For more detailed benchmarks and methodology, see [Rust Benchmarks](benchmarks/rust).

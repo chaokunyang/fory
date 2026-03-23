@@ -237,7 +237,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     nameBuilder.append("Codec").append(codecSuffix());
     Map<String, Integer> subGenerator =
         idGenerator.computeIfAbsent(nameBuilder.toString(), k -> new ConcurrentHashMap<>());
-    String key = fory.getConfigHash() + "_" + CodeGenerator.getClassUniqueId(beanClass);
+    String key = fory.getConfig().getConfigHash() + "_" + CodeGenerator.getClassUniqueId(beanClass);
     Integer id = subGenerator.get(key);
     if (id == null) {
       synchronized (subGenerator) {
@@ -761,6 +761,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     if (serializerRef == null) {
       // potential recursive call for seq codec generation is handled in `getSerializerClass`.
       Class<? extends Serializer> serializerClass = typeResolver(r -> r.getSerializerClass(cls));
+      TypeInfo typeInfo = typeResolver(r -> r.getTypeInfo(cls, false));
+      if (typeInfo != null && typeInfo.getTypeId() == Types.EXT) {
+        serializerClass = Serializer.class;
+      }
       boolean finalClassAsFieldCondition =
           !fory.isShareMeta()
               && !fory.isCompatible()

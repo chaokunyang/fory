@@ -118,7 +118,9 @@ import org.apache.fory.serializer.OptionalSerializers;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.SerializationUtils;
+import org.apache.fory.serializer.SerializedLambdaSerializer;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.serializer.TimeSerializers;
@@ -236,6 +238,7 @@ public class ClassResolver extends TypeResolver {
     typeInfoCache = NIL_TYPE_INFO;
     extRegistry.classIdGenerator = NONEXISTENT_META_SHARED_ID + 1;
     shimDispatcher = new ShimDispatcher(fory);
+    _addGraalvmClassRegistry(fory.getConfig().getConfigHash(), this);
   }
 
   @Override
@@ -321,6 +324,8 @@ public class ClassResolver extends TypeResolver {
     CollectionSerializers.registerDefaultSerializers(fory);
     MapSerializers.registerDefaultSerializers(fory);
     addDefaultSerializer(Locale.class, new LocaleSerializer(fory));
+    addDefaultSerializer(
+        SerializedLambda.class, new SerializedLambdaSerializer(fory, SerializedLambda.class));
     addDefaultSerializer(
         LambdaSerializer.ReplaceStub.class,
         new LambdaSerializer(fory, LambdaSerializer.ReplaceStub.class));
@@ -493,8 +498,7 @@ public class ClassResolver extends TypeResolver {
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.hashCode, nameBytes.hashCode), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
-    registerGraalvmClass(cls);
-    updateConfigHash(typeInfo);
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   @Override
@@ -514,8 +518,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    registerGraalvmClass(cls);
-    updateConfigHash(typeInfo, serializer.getClass());
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   @Override
@@ -547,8 +550,7 @@ public class ClassResolver extends TypeResolver {
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.hashCode, nameBytes.hashCode), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
-    registerGraalvmClass(cls);
-    updateConfigHash(typeInfo, serializer.getClass());
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   /**
@@ -621,7 +623,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    registerGraalvmClass(cls);
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   private void registerUserImpl(Class<?> cls, int userId) {
@@ -638,8 +640,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    registerGraalvmClass(cls);
-    updateConfigHash(typeInfo);
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   private int buildUserTypeId(Class<?> cls, Serializer<?> serializer) {
@@ -1022,12 +1023,19 @@ public class ClassResolver extends TypeResolver {
     TypeInfo typeInfo = classInfoMap.get(type);
     classInfoMap.put(type, typeInfo);
     extRegistry.registeredTypeInfos.add(typeInfo);
-    updateConfigHash(typeInfo, serializer.getClass());
     // in order to support customized serializer for abstract or interface.
     if (!type.isPrimitive() && (ReflectionUtils.isAbstract(type) || type.isInterface())) {
       extRegistry.absTypeInfo.put(type, typeInfo);
       extRegistry.registeredTypeInfos.add(typeInfo);
     }
+  }
+
+  public void setSerializerFactory(SerializerFactory serializerFactory) {
+    this.extRegistry.serializerFactory = serializerFactory;
+  }
+
+  public SerializerFactory getSerializerFactory() {
+    return extRegistry.serializerFactory;
   }
 
   /**
@@ -1944,17 +1952,9 @@ public class ClassResolver extends TypeResolver {
     if (extRegistry.ensureSerializersCompiled) {
       return;
     }
-    // Freeze the config hash before forcing any serializer resolution so later registrations
-    // cannot invalidate generated class names or GraalVM registrations.
-    getConfigHash();
     extRegistry.ensureSerializersCompiled = true;
     try {
       fory.getJITContext().lock();
-      if (GraalvmSupport.isGraalBuildtime()) {
-        // Materialize the final GraalVM registry bucket up front so this resolver is attached to
-        // the finalized hash even when the serializers below were already initialized earlier.
-        getGraalvmClassRegistry();
-      }
       // Lambda and JdkProxy serializers use java.lang.Class which is not supported in xlang mode
       if (!fory.isCrossLanguage()) {
         Serializers.newSerializer(fory, LambdaSerializer.STUB_LAMBDA_CLASS, LambdaSerializer.class);
@@ -1963,7 +1963,7 @@ public class ClassResolver extends TypeResolver {
       }
       classInfoMap.forEach(
           (cls, classInfo) -> {
-            registerGraalvmClass(cls);
+            GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
             if (classInfo.serializer == null) {
               if (isSerializable(classInfo.cls)) {
                 createSerializer0(cls);

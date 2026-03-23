@@ -24,29 +24,11 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class RegisterTest extends ForyTestBase {
-
-  private static Fory newCodegenJavaFory() {
-    return Fory.builder()
-        .withLanguage(Language.JAVA)
-        .requireClassRegistration(false)
-        .withCodegen(true)
-        .build();
-  }
-
-  private static CodegenWrapper newCodegenWrapper(String id, int number) {
-    CodegenWrapper wrapper = new CodegenWrapper();
-    wrapper.name = "wrapper-" + number;
-    wrapper.number = number;
-    wrapper.myExt = new MyExt();
-    wrapper.myExt.id = id;
-    return wrapper;
-  }
 
   @Test(dataProvider = "enableCodegen")
   public void testRegisterForCompatible(boolean enableCodegen) {
@@ -88,12 +70,6 @@ public class RegisterTest extends ForyTestBase {
   }
 
   public static class B {}
-
-  public static class CodegenWrapper {
-    public String name;
-    public int number;
-    public MyExt myExt;
-  }
 
   @Test
   public void testRegisterThenRegisterSerializer() {
@@ -164,94 +140,41 @@ public class RegisterTest extends ForyTestBase {
   }
 
   @Test
-  public void testCodegenCacheIsolation() {
-    Fory foryA = newCodegenJavaFory();
-    foryA.registerSerializer(MyExt.class, MyExtSerializer.class);
-    foryA.serialize(newCodegenWrapper("20", 20));
+  public void testRegisterExtSerializerWithSharedGeneratedCodec() {
+    ForyBuilder builder =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .suppressClassRegistrationWarnings(true)
+            .withName("testRegisterExtSerializerWithSharedGeneratedCodec");
 
-    Fory foryB = newCodegenJavaFory();
-    CodegenWrapper deserialized =
-        foryB.deserialize(foryB.serialize(newCodegenWrapper("40", 40)), CodegenWrapper.class);
+    Fory fory1 = builder.build();
+    fory1.register(MyExt.class, 105);
+    fory1.registerSerializer(MyExt.class, MyExtSerializer.class);
+    ExtHolder holder1 = new ExtHolder();
+    holder1.ext = new MyExt();
+    holder1.ext.id = "first";
 
-    Assert.assertNotNull(deserialized);
-    Assert.assertNotNull(deserialized.myExt);
-    Assert.assertEquals(deserialized.myExt.id, "40");
+    ExtHolder copy1 = serDe(fory1, holder1);
+    Assert.assertEquals(copy1.ext.id, "first");
+
+    Fory fory2 = builder.build();
+    fory2.register(MyExt.class, 105);
+    fory2.registerSerializer(MyExt.class, AlternativeMyExtSerializer.class);
+    ExtHolder holder2 = new ExtHolder();
+    holder2.ext = new MyExt();
+    holder2.ext.id = "second";
+
+    ExtHolder copy2 = serDe(fory2, holder2);
+    Assert.assertEquals(copy2.ext.id, "second");
+    Assert.assertEquals(
+        fory2.getTypeResolver().getSerializer(MyExt.class).getClass(),
+        AlternativeMyExtSerializer.class);
   }
 
-  @Test
-  public void testCodegenCacheIsolationWithRegisterSerializerAndType() {
-    Fory foryA = newCodegenJavaFory();
-    foryA.registerSerializerAndType(MyExt.class, MyExtSerializer.class);
-    foryA.serialize(newCodegenWrapper("20", 20));
-
-    Fory foryB = newCodegenJavaFory();
-    CodegenWrapper deserialized =
-        foryB.deserialize(foryB.serialize(newCodegenWrapper("40", 40)), CodegenWrapper.class);
-
-    Assert.assertNotNull(deserialized);
-    Assert.assertNotNull(deserialized.myExt);
-    Assert.assertEquals(deserialized.myExt.id, "40");
-  }
-
-  @Test
-  public void testConfigHashTracksAdditionalRegistrationPaths() {
-    int baseHash = newCodegenJavaFory().getConfigHash();
-
-    Fory registerByName = newCodegenJavaFory();
-    registerByName.register(MyExt.class, "test.pkg", "MyExt");
-    int registerByNameHash = registerByName.getConfigHash();
-    Assert.assertNotEquals(registerByNameHash, baseHash);
-
-    Fory registerByName2 = newCodegenJavaFory();
-    registerByName2.register(MyExt.class, "test.pkg", "MyExt");
-    Assert.assertNotEquals(registerByName2.getConfigHash(), baseHash);
-
-    Fory serializerBase = newCodegenJavaFory();
-    serializerBase.register(MyExt.class, 103);
-    int serializerBaseHash = serializerBase.getConfigHash();
-
-    Fory serializerByFunction = newCodegenJavaFory();
-    serializerByFunction.register(MyExt.class, 103);
-    serializerByFunction.registerSerializer(MyExt.class, MyExtSerializer::new);
-    int serializerByFunctionHash = serializerByFunction.getConfigHash();
-    Assert.assertNotEquals(serializerByFunctionHash, serializerBaseHash);
-
-    Fory serializerAndType = newCodegenJavaFory();
-    serializerAndType.registerSerializerAndType(MyExt.class, MyExtSerializer.class);
-    int serializerAndTypeHash = serializerAndType.getConfigHash();
-    Assert.assertNotEquals(serializerAndTypeHash, baseHash);
-
-    Fory union = newCodegenJavaFory();
-    union.registerUnion(MyExt.class, 103, new MyExtSerializer(union));
-    int unionHash = union.getConfigHash();
-    Assert.assertNotEquals(unionHash, baseHash);
-
-    Fory union2 = newCodegenJavaFory();
-    union2.registerUnion(MyExt.class, 103, new MyExtSerializer(union2));
-    Assert.assertNotEquals(union2.getConfigHash(), baseHash);
-  }
-
-  @Test
-  public void testConfigHashFinalizesAfterHashAccess() {
-    Fory fory = newCodegenJavaFory();
-    fory.getConfigHash();
-    Assert.expectThrows(ForyException.class, () -> fory.register(MyExt.class, 103));
-  }
-
-  @Test
-  public void testConfigHashFinalizesAfterSerialize() {
-    Fory fory = newCodegenJavaFory();
-    fory.serialize(newCodegenWrapper("20", 20));
-    Assert.expectThrows(
-        ForyException.class, () -> fory.registerSerializer(MyExt.class, MyExtSerializer.class));
-  }
-
-  @Test
-  public void testConfigHashFinalizesAfterEnsureSerializersCompiled() {
-    Fory fory = newCodegenJavaFory();
-    fory.register(CodegenWrapper.class);
-    fory.ensureSerializersCompiled();
-    Assert.expectThrows(ForyException.class, () -> fory.register(MyExt.class, 103));
+  public static class ExtHolder {
+    public MyExt ext;
   }
 
   public static class MyExt {
@@ -280,6 +203,24 @@ public class RegisterTest extends ForyTestBase {
       } else {
         result.id = fory.readString(buffer);
       }
+      return result;
+    }
+  }
+
+  public static class AlternativeMyExtSerializer extends Serializer<MyExt> {
+    public AlternativeMyExtSerializer(Fory fory) {
+      super(fory, MyExt.class);
+    }
+
+    @Override
+    public void write(MemoryBuffer buffer, MyExt value) {
+      fory.writeString(buffer, value.id);
+    }
+
+    @Override
+    public MyExt read(MemoryBuffer buffer) {
+      MyExt result = new MyExt();
+      result.id = fory.readString(buffer);
       return result;
     }
   }

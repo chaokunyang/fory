@@ -40,14 +40,14 @@ Examples:
 
 ## Benchmark Cases
 
-| Benchmark case       | Description |
-| -------------------- | ----------- |
-| `Struct`             | Numeric struct with 8 int32 fields |
-| `Sample`             | Mixed primitive and array payload matching the shared benchmark schema |
-| `MediaContent`       | Media and image payload matching the Java/C++ benchmark data |
-| `StructList`         | List of shared `Struct` payloads |
-| `SampleList`         | List of shared `Sample` payloads |
-| `MediaContentList`   | List of shared `MediaContent` payloads |
+| Benchmark case     | Description                                                            |
+| ------------------ | ---------------------------------------------------------------------- |
+| `Struct`           | Numeric struct with 8 int32 fields                                     |
+| `Sample`           | Mixed primitive and array payload matching the shared benchmark schema |
+| `MediaContent`     | Media and image payload matching the Java/C++ benchmark data           |
+| `StructList`       | List of shared `Struct` payloads                                       |
+| `SampleList`       | List of shared `Sample` payloads                                       |
+| `MediaContentList` | List of shared `MediaContent` payloads                                 |
 
 ## Shared Proto Schema
 

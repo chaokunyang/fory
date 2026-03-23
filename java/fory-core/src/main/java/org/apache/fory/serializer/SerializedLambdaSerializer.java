@@ -42,7 +42,8 @@ public class SerializedLambdaSerializer extends Serializer {
     try {
       Method readResolveMethod = JavaSerializer.getReadResolveMethod(SERIALIZED_LAMBDA);
       Preconditions.checkNotNull(readResolveMethod, "Missing readResolve for " + SERIALIZED_LAMBDA);
-      READ_RESOLVE_HANDLE = _JDKAccess._trustedLookup(SERIALIZED_LAMBDA).unreflect(readResolveMethod);
+      READ_RESOLVE_HANDLE =
+          _JDKAccess._trustedLookup(SERIALIZED_LAMBDA).unreflect(readResolveMethod);
     } catch (IllegalAccessException e) {
       throw new ForyException(e);
     }

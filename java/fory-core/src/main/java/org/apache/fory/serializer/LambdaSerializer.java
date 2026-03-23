@@ -19,14 +19,13 @@
 
 package org.apache.fory.serializer;
 
-import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.Method;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.SerializableFunction;
 import org.apache.fory.util.unsafe._JDKAccess;
@@ -39,6 +38,8 @@ import org.apache.fory.util.unsafe._JDKAccess;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class LambdaSerializer extends Serializer {
   public static final Class<?> STUB_LAMBDA_CLASS = stubLambdaClass();
+  private static final ClassValueCache<MethodHandle> writeReplaceMethodCache =
+      ClassValueCache.newClassKeySoftCache(32);
 
   private final MethodHandle writeReplaceHandle;
   private final SerializedLambdaSerializer serializedLambdaSerializer;
@@ -64,7 +65,12 @@ public class LambdaSerializer extends Serializer {
               cls, Serializable.class.getName());
       throw new UnsupportedOperationException(msg);
     }
-    writeReplaceHandle = createWriteReplaceHandle(cls);
+    MethodHandle methodHandle = writeReplaceMethodCache.getIfPresent(cls);
+    if (methodHandle == null) {
+      methodHandle = createWriteReplaceHandle(cls);
+      writeReplaceMethodCache.put(cls, methodHandle);
+    }
+    writeReplaceHandle = methodHandle;
   }
 
   @Override
@@ -91,11 +97,9 @@ public class LambdaSerializer extends Serializer {
 
   private MethodHandle createWriteReplaceHandle(Class<?> cls) {
     try {
-      MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(cls);
-      Object writeReplaceMethod =
-          ReflectionUtils.getObjectFieldValue(ObjectStreamClass.lookup(cls), "writeReplaceMethod");
+      Method writeReplaceMethod = JavaSerializer.getWriteReplaceMethod(cls);
       Preconditions.checkNotNull(writeReplaceMethod, "Missing writeReplace for " + cls);
-      return lookup.unreflect((java.lang.reflect.Method) writeReplaceMethod);
+      return _JDKAccess._trustedLookup(cls).unreflect(writeReplaceMethod);
     } catch (Throwable e) {
       throw new RuntimeException(
           String.format("Failed to create writeReplace MethodHandle for %s", cls), e);

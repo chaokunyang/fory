@@ -33,6 +33,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.config.CompatibleMode;
 import org.testng.annotations.Test;
 
 @SuppressWarnings("unchecked")
@@ -118,6 +119,13 @@ public class LambdaSerializerTest extends ForyTestBase {
     Function<Integer, Integer> newFunc =
         (Function<Integer, Integer>) SerializedLambdaSerializer.readResolve(copied);
     assertEquals(newFunc.apply(10), Integer.valueOf(17));
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testLambdaStubSerializerConstruction(boolean codegen) {
+    Fory fory = builder().withCodegen(codegen).withCompatibleMode(CompatibleMode.COMPATIBLE).build();
+    new LambdaSerializer(fory, LambdaSerializer.STUB_LAMBDA_CLASS);
+    fory.ensureSerializersCompiled();
   }
 
   private SerializedLambda extractSerializedLambda(Object function) throws Exception {

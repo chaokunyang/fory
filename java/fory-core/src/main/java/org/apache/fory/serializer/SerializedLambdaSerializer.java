@@ -19,14 +19,12 @@
 
 package org.apache.fory.serializer;
 
-import java.io.ObjectStreamClass;
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.Method;
 import org.apache.fory.Fory;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.unsafe._JDKAccess;
 
@@ -42,11 +40,9 @@ public class SerializedLambdaSerializer extends Serializer {
 
   static {
     try {
-      MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(SERIALIZED_LAMBDA);
-      Object readResolveMethod =
-          ReflectionUtils.getObjectFieldValue(
-              ObjectStreamClass.lookup(SERIALIZED_LAMBDA), "readResolveMethod");
-      READ_RESOLVE_HANDLE = lookup.unreflect((java.lang.reflect.Method) readResolveMethod);
+      Method readResolveMethod = JavaSerializer.getReadResolveMethod(SERIALIZED_LAMBDA);
+      Preconditions.checkNotNull(readResolveMethod, "Missing readResolve for " + SERIALIZED_LAMBDA);
+      READ_RESOLVE_HANDLE = _JDKAccess._trustedLookup(SERIALIZED_LAMBDA).unreflect(readResolveMethod);
     } catch (IllegalAccessException e) {
       throw new ForyException(e);
     }

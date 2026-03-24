@@ -1079,6 +1079,40 @@ public class MapSerializersTest extends ForyTestBase {
   }
 
   @Data
+  public static class PrivateFinalMapFieldStruct {
+    private final Map<String, PrivateFinalValue> valueMap = new LinkedHashMap<>();
+    private final Map<PrivateFinalKey, String> keyMap = new LinkedHashMap<>();
+  }
+
+  @Data
+  private static final class PrivateFinalKey {
+    private int id;
+  }
+
+  @Data
+  private static final class PrivateFinalValue {
+    private int id;
+  }
+
+  @Test(dataProvider = "referenceTrackingConfig")
+  public void testPrivateFinalMapFieldCodegen(boolean referenceTrackingConfig) {
+    Fory fory =
+        builder()
+            .withRefTracking(referenceTrackingConfig)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    PrivateFinalMapFieldStruct struct = new PrivateFinalMapFieldStruct();
+    PrivateFinalValue value = new PrivateFinalValue();
+    value.setId(1);
+    PrivateFinalKey key = new PrivateFinalKey();
+    key.setId(2);
+    struct.getValueMap().put("k1", value);
+    struct.getKeyMap().put(key, "v1");
+    serDeCheck(fory, struct);
+  }
+
+  @Data
   static class Wildcard<T> {
     public int c = 9;
     public T t;

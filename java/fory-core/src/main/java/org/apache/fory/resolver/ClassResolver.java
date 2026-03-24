@@ -78,6 +78,7 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.JITContext;
 import org.apache.fory.collection.BoolList;
+import org.apache.fory.collection.Float16List;
 import org.apache.fory.collection.Float32List;
 import org.apache.fory.collection.Float64List;
 import org.apache.fory.collection.Int16List;
@@ -147,6 +148,7 @@ import org.apache.fory.serializer.shim.ProtobufDispatcher;
 import org.apache.fory.serializer.shim.ShimDispatcher;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.Float16;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
@@ -265,6 +267,7 @@ public class ClassResolver extends TypeResolver {
     registerInternal(Float.class, Types.FLOAT32);
     registerInternal(Long.class, Types.INT64);
     registerInternal(Double.class, Types.FLOAT64);
+    registerInternal(Float16.class, Types.FLOAT16);
     registerInternal(String.class, Types.STRING);
     registerInternal(Uint8.class, Types.UINT8);
     registerInternal(Uint16.class, Types.UINT16);
@@ -278,6 +281,7 @@ public class ClassResolver extends TypeResolver {
     registerInternal(float[].class, PRIMITIVE_FLOAT_ARRAY_ID);
     registerInternal(long[].class, PRIMITIVE_LONG_ARRAY_ID);
     registerInternal(double[].class, PRIMITIVE_DOUBLE_ARRAY_ID);
+    registerInternal(Float16[].class);
     registerInternal(String[].class, STRING_ARRAY_ID);
     registerInternal(Object[].class, OBJECT_ARRAY_ID);
     registerInternal(BoolList.class, Types.BOOL_ARRAY);
@@ -291,6 +295,7 @@ public class ClassResolver extends TypeResolver {
     registerInternal(Uint64List.class, Types.UINT64_ARRAY);
     registerInternal(Float32List.class, Types.FLOAT32_ARRAY);
     registerInternal(Float64List.class, Types.FLOAT64_ARRAY);
+    registerInternal(Float16List.class, Types.FLOAT16_ARRAY);
     registerInternal(ArrayList.class, ARRAYLIST_ID);
     registerInternal(HashMap.class, HASHMAP_ID);
     registerInternal(HashSet.class, HASHSET_ID);
@@ -675,7 +680,8 @@ public class ClassResolver extends TypeResolver {
         if (classId < typeIdToTypeInfo.length && typeIdToTypeInfo[classId] != null) {
           throw new IllegalArgumentException(
               String.format(
-                  "Class %s with id %s has been registered, registering class %s with same id are not allowed.",
+                  "Class %s with id %s has been registered, registering class %s with same id are"
+                      + " not allowed.",
                   typeIdToTypeInfo[classId].getCls(), classId, cls.getName()));
         }
       } else {
@@ -683,7 +689,8 @@ public class ClassResolver extends TypeResolver {
         if (existingInfo != null) {
           throw new IllegalArgumentException(
               String.format(
-                  "Class %s with id %s has been registered, registering class %s with same id are not allowed.",
+                  "Class %s with id %s has been registered, registering class %s with same id are"
+                      + " not allowed.",
                   existingInfo.getCls(), classId, cls.getName()));
         }
       }
@@ -692,7 +699,8 @@ public class ClassResolver extends TypeResolver {
         || extRegistry.registeredClasses.inverse().containsKey(cls)) {
       throw new IllegalArgumentException(
           String.format(
-              "Class %s with name %s has been registered, registering class %s with same name are not allowed.",
+              "Class %s with name %s has been registered, registering class %s with same name are"
+                  + " not allowed.",
               extRegistry.registeredClasses.get(name), name, cls));
     }
   }

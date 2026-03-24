@@ -1504,6 +1504,14 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return Tuple2.of(keySerializer, valueSerializer);
   }
 
+  private TypeRef<?> getMapChunkLocalType(TypeRef<?> typeRef) {
+    Class<?> rawType = typeRef.getRawType();
+    if (sourcePublicAccessible(rawType)) {
+      return typeRef;
+    }
+    return TypeRef.of(CodeGenerator.getSourcePublicAccessibleParentClass(rawType));
+  }
+
   protected Expression writeChunk(
       Expression buffer,
       Expression entry,
@@ -1515,11 +1523,15 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean valueMonomorphic = isMonomorphic(valueType);
     Class<?> keyTypeRawType = keyType.getRawType();
     Class<?> valueTypeRawType = valueType.getRawType();
+    TypeRef<?> keyLocalType = keyMonomorphic ? getMapChunkLocalType(keyType) : keyType;
+    TypeRef<?> valueLocalType = valueMonomorphic ? getMapChunkLocalType(valueType) : valueType;
     Expression key =
-        keyMonomorphic ? new Variable("key", keyType) : invoke(entry, "getKey", "key", keyType);
+        keyMonomorphic
+            ? new Variable("key", keyLocalType)
+            : invoke(entry, "getKey", "key", keyType);
     Expression value =
         valueMonomorphic
-            ? new Variable("value", valueType)
+            ? new Variable("value", valueLocalType)
             : invoke(entry, "getValue", "value", valueType);
     Expression keyTypeExpr =
         keyMonomorphic
@@ -1642,9 +1654,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         new While(
             Literal.ofBoolean(true),
             () -> {
-              Expression keyAssign = new Assign(key, invokeInline(entry, "getKey", keyType));
+              Expression keyAssign = new Assign(key, invokeInline(entry, "getKey", keyLocalType));
               Expression valueAssign =
-                  new Assign(value, invokeInline(entry, "getValue", valueType));
+                  new Assign(value, invokeInline(entry, "getValue", valueLocalType));
               Expression breakCondition;
               if (keyMonomorphic && valueMonomorphic) {
                 breakCondition = or(eqNull(key), eqNull(value));

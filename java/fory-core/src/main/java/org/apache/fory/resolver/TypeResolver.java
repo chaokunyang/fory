@@ -61,6 +61,7 @@ import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.exception.SerializerUnregisteredException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -861,6 +862,15 @@ public abstract class TypeResolver {
       clz = UnknownStruct.class;
     }
     Class<?> cls = clz;
+    int streamTypeId = typeDef.getClassSpec().typeId;
+    if (Types.isExtType(streamTypeId) || Types.isUnionType(streamTypeId) || cls.isEnum()) {
+      TypeInfo localTypeInfo = getTypeInfo(cls);
+      if ((Types.isExtType(streamTypeId) && !Types.isExtType(localTypeInfo.typeId))
+          || (Types.isUnionType(streamTypeId) && !Types.isUnionType(localTypeInfo.typeId))) {
+        throw new SerializerUnregisteredException(typeDef.getClassName());
+      }
+      return localTypeInfo;
+    }
     Integer classId = getRegisteredClassIdLocalOrFrozen(cls);
     int typeId;
     if (classId != null) {

@@ -1132,6 +1132,12 @@ public class ClassResolver extends TypeResolver {
         compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
       }
     }
+    if (typeInfo.namespaceBytes != null && typeInfo.typeNameBytes != null) {
+      TypeNameBytes typeNameBytes =
+          new TypeNameBytes(
+              typeInfo.namespaceBytes.encoded.hash, typeInfo.typeNameBytes.encoded.hash);
+      compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
+    }
 
     // 2. Set `Serializer` for `TypeInfo`.
     typeInfo.setSerializer(this, serializer);

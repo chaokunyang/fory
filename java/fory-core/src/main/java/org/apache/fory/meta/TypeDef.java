@@ -31,10 +31,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.MetaSharedCodecBuilder;
-import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.logging.Logger;
@@ -108,7 +108,7 @@ public class TypeDef implements Serializable {
   // be same too.
   private final long id;
   private final byte[] encoded;
-  private transient ConcurrentIdentityMap<TypeResolver, List<Descriptor>> descriptorsCache;
+  private transient ConcurrentHashMap<DescriptorCacheKey, List<Descriptor>> descriptorsCache;
 
   TypeDef(
       ClassSpec classSpec,
@@ -374,7 +374,8 @@ public class TypeDef implements Serializable {
    * @param cls class load in current process.
    */
   public List<Descriptor> getDescriptors(TypeResolver resolver, Class<?> cls) {
-    return getDescriptorsCache().computeIfAbsent(resolver, key -> buildDescriptors(key, cls));
+    DescriptorCacheKey key = new DescriptorCacheKey(resolver, cls);
+    return getDescriptorsCache().computeIfAbsent(key, ignored -> buildDescriptors(resolver, cls));
   }
 
   private List<Descriptor> buildDescriptors(TypeResolver resolver, Class<?> cls) {
@@ -430,13 +431,40 @@ public class TypeDef implements Serializable {
     return descriptors;
   }
 
-  private ConcurrentIdentityMap<TypeResolver, List<Descriptor>> getDescriptorsCache() {
-    ConcurrentIdentityMap<TypeResolver, List<Descriptor>> cache = descriptorsCache;
+  private ConcurrentHashMap<DescriptorCacheKey, List<Descriptor>> getDescriptorsCache() {
+    ConcurrentHashMap<DescriptorCacheKey, List<Descriptor>> cache = descriptorsCache;
     if (cache == null) {
-      cache = new ConcurrentIdentityMap<>();
+      cache = new ConcurrentHashMap<>();
       descriptorsCache = cache;
     }
     return cache;
+  }
+
+  private static final class DescriptorCacheKey {
+    private final TypeResolver resolver;
+    private final Class<?> cls;
+
+    private DescriptorCacheKey(TypeResolver resolver, Class<?> cls) {
+      this.resolver = Objects.requireNonNull(resolver);
+      this.cls = Objects.requireNonNull(cls);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof DescriptorCacheKey)) {
+        return false;
+      }
+      DescriptorCacheKey that = (DescriptorCacheKey) o;
+      return resolver == that.resolver && cls == that.cls;
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * System.identityHashCode(resolver) + System.identityHashCode(cls);
+    }
   }
 
   public static TypeDef buildTypeDef(Fory fory, Class<?> cls) {

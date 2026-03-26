@@ -130,6 +130,9 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static MetaSharedLayerSerializerBase setCodegenSerializer(
       Fory fory, Class<?> cls, GeneratedMetaSharedLayerSerializer s) {
+    // In native-image mode, including build time, do not rely on the cached layer bootstrap
+    // context. We only populate that cache on the regular JVM path, so native-image execution
+    // must resolve through the type resolver instead.
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return (MetaSharedLayerSerializerBase) typeResolver(fory, r -> r.getSerializer(s.getType()));
     }
@@ -140,7 +143,11 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     CodecUtils.MetaSharedLayerCodecContext context =
         CodecUtils.getMetaSharedLayerCodecContext(s.getClass());
     Preconditions.checkNotNull(
-        context, "Missing layer codec context for generated serializer " + s.getClass());
+        context,
+        "Missing layer codec context for generated serializer "
+            + s.getClass()
+            + "; loadOrGenMetaSharedLayerCodecClass should cache it before serializer"
+            + " instantiation.");
     s.serializer =
         new MetaSharedLayerSerializer(fory, cls, context.layerTypeDef, context.layerMarkerClass);
     return s.serializer;

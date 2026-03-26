@@ -42,6 +42,8 @@ public class CodecUtils {
       graalvmSerializers = new ConcurrentHashMap<>();
   // Generated layer serializers need the original layer metadata to bootstrap their delegate
   // synchronously in the constructor.
+  // This is a process-lifetime cache keyed by generated serializer class, which mirrors the
+  // existing codegen cache behavior and is populated only on the regular JVM path.
   private static final ConcurrentHashMap<Class<?>, MetaSharedLayerCodecContext>
       metaSharedLayerCodecContexts = new ConcurrentHashMap<>();
 

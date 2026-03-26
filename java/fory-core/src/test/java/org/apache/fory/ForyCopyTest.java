@@ -81,9 +81,9 @@ import java.util.regex.Pattern;
 import org.apache.fory.collection.LazyMap;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.EnumSerializerTest;
 import org.apache.fory.serializer.EnumSerializerTest.EnumFoo;
+import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.collection.ChildContainerSerializersTest.ChildArrayDeque;
 import org.apache.fory.serializer.collection.SynchronizedSerializersTest;
 import org.apache.fory.serializer.collection.UnmodifiableSerializersTest;
@@ -214,7 +214,8 @@ public class ForyCopyTest extends ForyTestBase {
         builder().withCodegen(false).withRefCopy(false).requireClassRegistration(true).build();
     fory.registerSerializerAndType(ExplodingCopyBean.class, new ExplodingCopyBeanSerializer(fory));
     Assert.assertThrows(Throwable.class, () -> fory.copy(new ExplodingCopyBean()));
-    Assert.assertThrows(ForyException.class, () -> fory.serialize(new UnregisteredAfterCopyFailure()));
+    Assert.assertThrows(
+        ForyException.class, () -> fory.serialize(new UnregisteredAfterCopyFailure()));
   }
 
   private void objectCopyTest() {

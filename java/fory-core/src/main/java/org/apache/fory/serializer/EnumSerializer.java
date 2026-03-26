@@ -59,7 +59,8 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
 
       for (Enum enumConstant : enumConstants) {
         if (enumConstant != null) {
-          MetaStringRef msb = metaStringResolver.getOrCreateGenericMetaStringBytes(enumConstant.name());
+          MetaStringRef msb =
+              metaStringResolver.getOrCreateGenericMetaStringBytes(enumConstant.name());
           metaStringtoEnumRepresentation.put(msb, enumConstant);
           metaStringStateArrByEnumOrdinal[enumConstant.ordinal()] = msb;
         }

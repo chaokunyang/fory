@@ -486,8 +486,7 @@ public class ClassResolver extends TypeResolver {
     TypeInfo existingInfo = classInfoMap.get(cls);
     int typeId =
         buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
-    TypeInfo typeInfo =
-        new TypeInfo(cls, nsBytes, nameBytes, false, null, typeId, -1);
+    TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, false, null, typeId, -1);
     classInfoMap.put(cls, typeInfo);
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
@@ -994,11 +993,14 @@ public class ClassResolver extends TypeResolver {
     if (classId != null && !isInternalRegisteredClassId(type, classId)) {
       throw new IllegalArgumentException(
           String.format(
-              "Class %s is not registered with an internal id (< %d).", type, INTERNAL_NATIVE_ID_LIMIT));
+              "Class %s is not registered with an internal id (< %d).",
+              type, INTERNAL_NATIVE_ID_LIMIT));
     }
     if (classId != null) {
       Preconditions.checkArgument(
-          classId >= 0 && classId < INTERNAL_NATIVE_ID_LIMIT, "Internal type id overflow: %s", classId);
+          classId >= 0 && classId < INTERNAL_NATIVE_ID_LIMIT,
+          "Internal type id overflow: %s",
+          classId);
     }
     if (classId == null) {
       registerInternal(type);
@@ -1666,14 +1668,14 @@ public class ClassResolver extends TypeResolver {
         serializer.getClass() != UnknownClassSerializers.UnknownStructSerializer.class);
     if (needToWriteTypeDef(serializer)) {
       typeDef =
-          cacheTypeDef(typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls)));
+          cacheTypeDef(
+              typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls)));
     } else {
       // Some type will use other serializers such MapSerializer and so on.
       typeDef =
           cacheTypeDef(
               typeDefMap.computeIfAbsent(
-                  typeInfo.cls,
-                  cls -> TypeDef.buildTypeDef(this, cls, new ArrayList<>(), false)));
+                  typeInfo.cls, cls -> TypeDef.buildTypeDef(this, cls, new ArrayList<>(), false)));
     }
     typeInfo.typeDef = typeDef;
     return typeDef;
@@ -1810,9 +1812,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   private TypeInfo populateBytesToTypeInfo(
-      TypeNameBytes typeNameBytes,
-      MetaStringRef packageBytes,
-      MetaStringRef simpleClassNameBytes) {
+      TypeNameBytes typeNameBytes, MetaStringRef packageBytes, MetaStringRef simpleClassNameBytes) {
     String packageName = packageBytes.decode(PACKAGE_DECODER);
     String className = simpleClassNameBytes.decode(TYPE_NAME_DECODER);
     ClassSpec classSpec = Encoders.decodePkgAndClass(packageName, className);
@@ -1820,13 +1820,7 @@ public class ClassResolver extends TypeResolver {
     int typeId = buildUnregisteredTypeId(cls, null);
     TypeInfo typeInfo =
         new TypeInfo(
-            cls,
-            packageBytes,
-            simpleClassNameBytes,
-            false,
-            null,
-            typeId,
-            INVALID_USER_TYPE_ID);
+            cls, packageBytes, simpleClassNameBytes, false, null, typeId, INVALID_USER_TYPE_ID);
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       typeInfo.serializer =
           UnknownClassSerializers.getSerializer(fory, classSpec.entireClassName, cls);

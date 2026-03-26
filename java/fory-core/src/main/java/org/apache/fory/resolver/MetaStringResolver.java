@@ -77,8 +77,7 @@ public final class MetaStringResolver {
     return getOrCreateGenericMetaStringBytes(str, Encoders.computeGenericEncoding(str));
   }
 
-  public MetaStringRef getOrCreateGenericMetaStringBytes(
-      String str, MetaString.Encoding encoding) {
+  public MetaStringRef getOrCreateGenericMetaStringBytes(String str, MetaString.Encoding encoding) {
     return getOrCreateMetaStringBytes(
         str, Encoders.GENERIC_ENCODER, encoding, Encoders.GENERIC_ENCODER_TYPE_KEY);
   }
@@ -100,10 +99,7 @@ public final class MetaStringResolver {
   }
 
   MetaStringRef getOrCreateMetaStringBytes(
-      String str,
-      MetaStringEncoder encoder,
-      MetaString.Encoding encoding,
-      String encoderTypeKey) {
+      String str, MetaStringEncoder encoder, MetaString.Encoding encoding, String encoderTypeKey) {
     EncodedMetaString encodedMetaString =
         sharedRegistry.getOrCreateEncodedMetaString(str, encoder, encoding, encoderTypeKey);
     return getOrCreateMetaStringRef(encodedMetaString);
@@ -248,8 +244,7 @@ public final class MetaStringResolver {
     }
   }
 
-  private MetaStringRef readBigMetaStringBytes(
-      MemoryBuffer buffer, MetaStringRef cache, int len) {
+  private MetaStringRef readBigMetaStringBytes(MemoryBuffer buffer, MetaStringRef cache, int len) {
     long hashCode = buffer.readInt64();
     if (cache.encoded.hash == hashCode) {
       // skip byteString data
@@ -325,8 +320,7 @@ public final class MetaStringResolver {
     long hashCode = MurmurHash3.murmurhash3_x64_128(data, 0, len, 47)[0];
     hashCode = Math.abs(hashCode);
     hashCode = (hashCode & 0xffffffffffffff00L) | encoding;
-    EncodedMetaString encodedMetaString =
-        new EncodedMetaString(Arrays.copyOf(data, len), hashCode);
+    EncodedMetaString encodedMetaString = new EncodedMetaString(Arrays.copyOf(data, len), hashCode);
     MetaStringRef metaStringRef = getOrCreateMetaStringRef(encodedMetaString);
     longLongMetaStringMap.put(v1, v2, encoding, metaStringRef.encoded);
     return metaStringRef;

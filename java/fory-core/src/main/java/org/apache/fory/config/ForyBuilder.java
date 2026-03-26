@@ -555,8 +555,8 @@ public final class ForyBuilder {
    *
    * <p>This variant uses {@link FastForyPool} with a shared {@link SharedRegistry}. The {@code
    * maxPoolSize} parameter limits how many idle pooled {@link Fory} instances are retained for
-   * reuse after operations complete. It does not cap the number of concurrently active {@link
-   * Fory} instances during a burst.
+   * reuse after operations complete. It does not cap the number of concurrently active {@link Fory}
+   * instances during a burst.
    *
    * @param maxPoolSize maximum number of idle pooled {@link Fory} instances to retain, must be
    *     non-negative

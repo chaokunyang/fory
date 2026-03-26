@@ -58,8 +58,7 @@ public final class ConcurrentIdentityMap<K, V> {
 
   public void removeIf(BiPredicate<? super K, ? super V> predicate) {
     Objects.requireNonNull(predicate, "predicate");
-    map.entrySet()
-        .removeIf(entry -> predicate.test(entry.getKey().ref, entry.getValue()));
+    map.entrySet().removeIf(entry -> predicate.test(entry.getKey().ref, entry.getValue()));
   }
 
   private static <K> K requireKey(K key) {

@@ -404,8 +404,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   private Serializer writeKeyTypeInfo(
       TypeResolver classResolver, Class keyType, MemoryBuffer buffer) {
-    TypeInfo typeInfo =
-        classResolver.getTypeInfo(keyType, mapTypeCache().keyTypeInfoWriteCache);
+    TypeInfo typeInfo = classResolver.getTypeInfo(keyType, mapTypeCache().keyTypeInfoWriteCache);
     classResolver.writeTypeInfo(buffer, typeInfo);
     return typeInfo.getSerializer();
   }

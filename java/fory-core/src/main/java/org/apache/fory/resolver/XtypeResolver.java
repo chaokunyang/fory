@@ -1021,7 +1021,8 @@ public class XtypeResolver extends TypeResolver {
   @Override
   protected TypeDef buildTypeDef(TypeInfo typeInfo) {
     TypeDef typeDef =
-        cacheTypeDef(typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls)));
+        cacheTypeDef(
+            typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls)));
     typeInfo.typeDef = typeDef;
     return typeDef;
   }

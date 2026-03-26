@@ -239,10 +239,9 @@ public abstract class TypeResolver {
    * Freezes the mutable registration phase and switches this resolver to the shared read-only
    * registration maps.
    *
-   * <p>Before this method runs, registration data lives in the local mutable maps inside
-   * {@link ExtRegistry}. The first caller publishes shared registration maps to
-   * {@link SharedRegistry}; later callers adopt those same maps. This method is idempotent so
-   * top-level runtime entry
+   * <p>Before this method runs, registration data lives in the local mutable maps inside {@link
+   * ExtRegistry}. The first caller publishes shared registration maps to {@link SharedRegistry};
+   * later callers adopt those same maps. This method is idempotent so top-level runtime entry
    * points can call it defensively.
    */
   public final void finishRegistration() {
@@ -1262,9 +1261,7 @@ public abstract class TypeResolver {
 
   public List<Descriptor> getFieldDescriptors(Class<?> clz, boolean searchParent) {
     return sharedRegistry.getOrCreateFieldDescriptors(
-        clz,
-        searchParent,
-        () -> buildFieldDescriptors(clz, searchParent));
+        clz, searchParent, () -> buildFieldDescriptors(clz, searchParent));
   }
 
   private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {
@@ -1505,7 +1502,8 @@ public abstract class TypeResolver {
   }
 
   public void setCodeGenerator(ClassLoader[] loaders, CodeGenerator codeGenerator) {
-    extRegistry.codeGeneratorMap.putIfAbsent(Arrays.asList(Arrays.copyOf(loaders, loaders.length)), codeGenerator);
+    extRegistry.codeGeneratorMap.putIfAbsent(
+        Arrays.asList(Arrays.copyOf(loaders, loaders.length)), codeGenerator);
   }
 
   public SerializerFactory getSerializerFactory() {
@@ -1615,8 +1613,8 @@ public abstract class TypeResolver {
   }
 
   /**
-   * Reads a registered class lookup by name from the mutable local maps before freeze or the
-   * shared maps after {@link #finishRegistration()}.
+   * Reads a registered class lookup by name from the mutable local maps before freeze or the shared
+   * maps after {@link #finishRegistration()}.
    */
   final Class<?> getRegisteredClassLocalOrFrozen(String className) {
     return extRegistry.registeredClasses.get(className);
@@ -1648,7 +1646,8 @@ public abstract class TypeResolver {
     final LongMap<TypeInfo> typeInfoByTypeDefId = new LongMap<>(2, 0.5f);
 
     // cache absTypeInfo, support customized serializer for abstract or interface.
-    // IdentityHashMap is more memory efficient than fory IdentityMap, and this is not in hotpath for query
+    // IdentityHashMap is more memory efficient than fory IdentityMap, and this is not in hotpath
+    // for query
     final IdentityHashMap<Class<?>, TypeInfo> abstractTypeInfo = new IdentityHashMap<>();
     // Tuple2<Class, Class>: Tuple2<From Class, To Class>
     final IdentityHashMap<Class<?>, Tuple2<Class<?>, TypeInfo>[]> transformedTypeInfo =
@@ -1667,7 +1666,8 @@ public abstract class TypeResolver {
     boolean ensureSerializersCompiled;
 
     // shared across multiple fory instances.
-    IdentityHashMap<Class<?>, Integer> registeredClassIdMap = new IdentityHashMap<>(fory.isCrossLanguage() ? 4 : 200);
+    IdentityHashMap<Class<?>, Integer> registeredClassIdMap =
+        new IdentityHashMap<>(fory.isCrossLanguage() ? 4 : 200);
     BiMap<String, Class<?>> registeredClasses = HashBiMap.create(fory.isCrossLanguage() ? 4 : 200);
     final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef;
     // TODO(chaokunyang) Better to  use soft reference, see ObjectStreamClass.

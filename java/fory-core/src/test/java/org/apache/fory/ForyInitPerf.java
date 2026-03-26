@@ -54,10 +54,12 @@ public class ForyInitPerf {
         perf.runMemoryBenchmark("shared-registry", true, DEFAULT_MEMORY_COUNT);
         return;
       case "creation-private":
-        perf.runCreationBenchmark("private-registry", false, parseCount(args, DEFAULT_CREATION_COUNT));
+        perf.runCreationBenchmark(
+            "private-registry", false, parseCount(args, DEFAULT_CREATION_COUNT));
         return;
       case "creation-shared":
-        perf.runCreationBenchmark("shared-registry", true, parseCount(args, DEFAULT_CREATION_COUNT));
+        perf.runCreationBenchmark(
+            "shared-registry", true, parseCount(args, DEFAULT_CREATION_COUNT));
         return;
       case "memory-private":
         perf.runMemoryBenchmark("private-registry", false, parseCount(args, DEFAULT_MEMORY_COUNT));
@@ -89,11 +91,7 @@ public class ForyInitPerf {
     double elapsedMillis = elapsedNanos / 1_000_000.0;
     double tps = count * 1_000_000_000.0 / elapsedNanos;
     System.out.printf(
-        "%s create %d fory in %.3f ms, throughput %.2f ops/s%n",
-        name,
-        count,
-        elapsedMillis,
-        tps);
+        "%s create %d fory in %.3f ms, throughput %.2f ops/s%n", name, count, elapsedMillis, tps);
   }
 
   private void runMemoryBenchmark(String name, boolean useSharedRegistry, int count)
@@ -115,10 +113,7 @@ public class ForyInitPerf {
     long retainedBytes = usedMemory() - before;
     System.out.printf(
         "%s retained %d bytes for %d initialized fory, %.2f bytes/fory%n",
-        name,
-        retainedBytes,
-        count,
-        retainedBytes / (double) count);
+        name, retainedBytes, count, retainedBytes / (double) count);
     sink = null;
     forceGc();
   }
@@ -154,7 +149,8 @@ public class ForyInitPerf {
   }
 
   private static Fory newFory(BenchmarkContext context, boolean useSharedRegistry) {
-    SharedRegistry sharedRegistry = useSharedRegistry ? context.sharedRegistry : new SharedRegistry();
+    SharedRegistry sharedRegistry =
+        useSharedRegistry ? context.sharedRegistry : new SharedRegistry();
     return new Fory(context.builder, context.classLoader, sharedRegistry);
   }
 
@@ -192,7 +188,8 @@ public class ForyInitPerf {
     private final ClassLoader classLoader;
     private final SharedRegistry sharedRegistry;
 
-    private BenchmarkContext(ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
+    private BenchmarkContext(
+        ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
       this.builder = builder;
       this.classLoader = classLoader;
       this.sharedRegistry = sharedRegistry;

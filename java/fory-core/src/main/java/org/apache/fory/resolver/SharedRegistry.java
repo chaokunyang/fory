@@ -99,9 +99,7 @@ public final class SharedRegistry {
   }
 
   List<Descriptor> getOrCreateFieldDescriptors(
-      Class<?> type,
-      boolean searchParent,
-      java.util.function.Supplier<List<Descriptor>> factory) {
+      Class<?> type, boolean searchParent, java.util.function.Supplier<List<Descriptor>> factory) {
     FieldDescriptorsKey key = new FieldDescriptorsKey(type, searchParent);
     List<Descriptor> descriptors =
         fieldDescriptorsCache.computeIfAbsent(
@@ -131,18 +129,21 @@ public final class SharedRegistry {
     clearSharedRegistrationIfClassLoader(loader);
     typeDefMap.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
     currentLayerTypeDef.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
-    typeDefById.entrySet()
+    typeDefById
+        .entrySet()
         .removeIf(
             entry -> {
               Class<?> cls = entry.getValue().getClassSpec().type;
               return cls != null && cls.getClassLoader() == loader;
-        });
+            });
     descriptorsCache.entrySet().removeIf(entry -> entry.getKey().f0.getClassLoader() == loader);
-    fieldDescriptorsCache.entrySet()
+    fieldDescriptorsCache
+        .entrySet()
         .removeIf(entry -> entry.getKey().type.getClassLoader() == loader);
     fieldDescriptorCollectionKeys.removeIf(
         (descriptors, key) -> key.type.getClassLoader() == loader);
-    descriptorGrouperCache.entrySet()
+    descriptorGrouperCache
+        .entrySet()
         .removeIf(entry -> entry.getKey().fieldDescriptorsKey.type.getClassLoader() == loader);
     codeGeneratorMap.entrySet().removeIf(entry -> entry.getKey().contains(loader));
   }
@@ -160,8 +161,7 @@ public final class SharedRegistry {
     }
   }
 
-  private static boolean containsClassLoader(
-      Iterable<Class<?>> classes, ClassLoader loader) {
+  private static boolean containsClassLoader(Iterable<Class<?>> classes, ClassLoader loader) {
     for (Class<?> cls : classes) {
       if (cls.getClassLoader() == loader) {
         return true;
@@ -190,8 +190,7 @@ public final class SharedRegistry {
     private final String encoderTypeKey;
     private final MetaString.Encoding encoding;
 
-    private MetaStringKey(
-        String string, String encoderTypeKey, MetaString.Encoding encoding) {
+    private MetaStringKey(String string, String encoderTypeKey, MetaString.Encoding encoding) {
       this.string = Objects.requireNonNull(string);
       this.encoderTypeKey = Objects.requireNonNull(encoderTypeKey);
       this.encoding = Objects.requireNonNull(encoding);

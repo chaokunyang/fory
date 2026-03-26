@@ -96,6 +96,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BufferSerializers;
@@ -1578,7 +1579,7 @@ public class ClassResolver extends TypeResolver {
         RecordUtils.getRecordConstructor(cls);
         RecordUtils.getRecordComponents(cls);
       }
-      fory.getSharedRegistry().getOrCreateObjectCreator(cls);
+      ObjectCreators.getObjectCreator(cls);
     }
   }
 

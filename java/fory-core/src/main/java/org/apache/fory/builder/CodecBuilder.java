@@ -57,9 +57,9 @@ import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
-import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.type.Descriptor;
@@ -494,6 +494,7 @@ public abstract class CodecBuilder {
       return new Expression.NewInstance(beanType);
     } else {
       if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
+        ObjectCreators.getObjectCreator(beanClass); // trigger cache
         return new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
       }
       return new StaticInvoke(Platform.class, "newInstance", OBJECT_TYPE, beanClassExpr());
@@ -501,16 +502,17 @@ public abstract class CodecBuilder {
   }
 
   protected Expression getObjectCreator(Class<?> type) {
+    ObjectCreators.getObjectCreator(type); // trigger cache
     return getOrCreateField(
         true,
         ObjectCreator.class,
         ctx.newName("objectCreator_" + type.getSimpleName()),
         () ->
-            new Invoke(
-                new Invoke(foryRef, "getSharedRegistry", TypeRef.of(SharedRegistry.class)),
-                "getOrCreateObjectCreator",
+            new StaticInvoke(
+                ObjectCreators.class,
+                "getObjectCreator",
                 TypeRef.of(ObjectCreator.class),
-                beanClassExpr(type)));
+                staticBeanClassExpr()));
   }
 
   protected void buildRecordComponentDefaultValues() {

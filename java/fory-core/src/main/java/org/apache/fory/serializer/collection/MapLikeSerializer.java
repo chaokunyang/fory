@@ -39,7 +39,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.CodegenInvoke;
-import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -69,7 +68,10 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   // support map subclass whose key or value generics only are available,
   // or one of types is already instantiated in subclass, ex: `Subclass<T> implements Map<String,
   // T>`
-  private final IdentityMap<GenericType, GenericType> partialGenericKVTypeMap;
+  private GenericType partialGenericKVTypeKey0;
+  private GenericType partialGenericKVTypeValue0;
+  private GenericType partialGenericKVTypeKey1;
+  private GenericType partialGenericKVTypeValue1;
   private final GenericType objType;
   // For subclass whose kv type are instantiated already, such as
   // `Subclass implements Map<String, Long>`. If declared `Map` doesn't specify
@@ -81,7 +83,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   // With kv header in future, we can write this kv classes only once, the cost won't be too much.
   private int numElements;
   private final TypeResolver typeResolver;
-  private boolean trackRef;
+  private final boolean trackRef;
 
   public MapLikeSerializer(Fory fory, Class<T> cls) {
     this(fory, cls, !ReflectionUtils.isDynamicGeneratedCLass(cls));
@@ -100,7 +102,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     keyTypeInfoReadCache = typeResolver.nilTypeInfoHolder();
     valueTypeInfoWriteCache = typeResolver.nilTypeInfoHolder();
     valueTypeInfoReadCache = typeResolver.nilTypeInfoHolder();
-    partialGenericKVTypeMap = new IdentityMap<>(1);
     objType = typeResolver.buildGenericType(Object.class);
   }
 
@@ -512,19 +513,35 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   private GenericType getKVGenericType(GenericType genericType) {
-    GenericType mapGenericType = partialGenericKVTypeMap.get(genericType);
+    GenericType mapGenericType = getCachedMapGenericType(genericType);
     if (mapGenericType == null) {
       TypeRef<?> typeRef = genericType.getTypeRef();
       if (!MAP_TYPE.isSupertypeOf(typeRef)) {
         mapGenericType = GenericType.build(TypeUtils.mapOf(Object.class, Object.class));
-        partialGenericKVTypeMap.put(genericType, mapGenericType);
-        return mapGenericType;
+      } else {
+        Tuple2<TypeRef<?>, TypeRef<?>> mapKeyValueType = TypeUtils.getMapKeyValueType(typeRef);
+        mapGenericType = GenericType.build(TypeUtils.mapOf(mapKeyValueType.f0, mapKeyValueType.f1));
       }
-      Tuple2<TypeRef<?>, TypeRef<?>> mapKeyValueType = TypeUtils.getMapKeyValueType(typeRef);
-      mapGenericType = GenericType.build(TypeUtils.mapOf(mapKeyValueType.f0, mapKeyValueType.f1));
-      partialGenericKVTypeMap.put(genericType, mapGenericType);
+      cacheMapGenericType(genericType, mapGenericType);
     }
     return mapGenericType;
+  }
+
+  private GenericType getCachedMapGenericType(GenericType genericType) {
+    if (genericType == partialGenericKVTypeKey0) {
+      return partialGenericKVTypeValue0;
+    }
+    if (genericType == partialGenericKVTypeKey1) {
+      return partialGenericKVTypeValue1;
+    }
+    return null;
+  }
+
+  private void cacheMapGenericType(GenericType genericType, GenericType mapGenericType) {
+    partialGenericKVTypeKey1 = partialGenericKVTypeKey0;
+    partialGenericKVTypeValue1 = partialGenericKVTypeValue0;
+    partialGenericKVTypeKey0 = genericType;
+    partialGenericKVTypeValue0 = mapGenericType;
   }
 
   protected <K, V> void copyEntry(Map<K, V> originMap, Map<K, V> newMap) {

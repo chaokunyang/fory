@@ -125,7 +125,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   private void writeContainerFields(MemoryBuffer buffer, T value) {
     Generics generics = fory.getGenerics();
     for (SerializationFieldInfo fieldInfo : containerFields) {
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
       AbstractObjectSerializer.writeContainerFieldValue(
           fory, typeResolver, refResolver, generics, fieldInfo, buffer, fieldValue);
@@ -134,7 +134,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   private void writeOtherFields(MemoryBuffer buffer, T value) {
     for (SerializationFieldInfo fieldInfo : otherFields) {
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
       AbstractObjectSerializer.writeField(
           fory, typeResolver, refResolver, fieldInfo, buffer, fieldValue);
@@ -210,16 +210,15 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       ObjectIntMap fieldIndexMap,
       Class<?>[] fieldTypes,
       int index) {
-    ResolvedFieldInfo resolvedFieldInfo = fieldInfo.resolvedFieldInfo;
-    FieldAccessor fieldAccessor = resolvedFieldInfo.fieldAccessor;
+    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
     if (fieldAccessor != null) {
       fieldIndexMap.put(fieldAccessor.getField().getName(), index);
       fieldTypes[index] = fieldAccessor.getField().getType();
     } else {
       // Field doesn't exist in actual class (e.g., from serialPersistentFields).
       // Use descriptor info instead.
-      fieldIndexMap.put(resolvedFieldInfo.descriptor.getName(), index);
-      fieldTypes[index] = resolvedFieldInfo.descriptor.getRawType();
+      fieldIndexMap.put(fieldInfo.descriptor.getName(), index);
+      fieldTypes[index] = fieldInfo.descriptor.getRawType();
     }
   }
 
@@ -268,7 +267,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   private void readFinalFields(MemoryBuffer buffer, T targetObject) {
     for (SerializationFieldInfo fieldInfo : buildInFields) {
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         AbstractObjectSerializer.readBuildInFieldValue(
             fory, typeResolver, refResolver, fieldInfo, buffer, targetObject);
@@ -285,7 +284,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       Object fieldValue =
           AbstractObjectSerializer.readContainerFieldValue(
               fory, typeResolver, refResolver, generics, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(obj, fieldValue);
       }
@@ -296,7 +295,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     for (SerializationFieldInfo fieldInfo : otherFields) {
       Object fieldValue =
           AbstractObjectSerializer.readField(fory, typeResolver, refResolver, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(obj, fieldValue);
       }
@@ -329,7 +328,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       Object obj, ObjectIntMap fieldIndexMap, Object[] vals, SerializationFieldInfo[] fieldInfos) {
     // Set other fields
     for (SerializationFieldInfo fieldInfo : fieldInfos) {
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         String fieldName = fieldAccessor.getField().getName();
         int index = fieldIndexMap.get(fieldName, -1);
@@ -368,7 +367,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       Object[] vals,
       SerializationFieldInfo[] buildInFields) {
     for (SerializationFieldInfo fieldInfo : buildInFields) {
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         String fieldName = fieldAccessor.getField().getName();
         int index = fieldIndexMap.get(fieldName, -1);

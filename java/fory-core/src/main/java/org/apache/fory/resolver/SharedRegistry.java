@@ -20,9 +20,7 @@
 package org.apache.fory.resolver;
 
 import com.google.common.collect.BiMap;
-import java.lang.reflect.Field;
 import java.lang.reflect.Member;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -39,12 +37,7 @@ import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
-import org.apache.fory.reflect.TypeRef;
-import org.apache.fory.serializer.ResolvedFieldInfo;
 import org.apache.fory.type.Descriptor;
-import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
 
 /** Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances. */
@@ -58,23 +51,14 @@ public final class SharedRegistry {
       descriptorsCache = new ConcurrentHashMap<>();
   final ConcurrentHashMap<FieldDescriptorsKey, List<Descriptor>> fieldDescriptorsCache =
       new ConcurrentHashMap<>();
-  final ConcurrentHashMap<Field, Descriptor> fieldDescriptorCache = new ConcurrentHashMap<>();
-  final ConcurrentHashMap<FieldReadMethodKey, Descriptor> fieldReadMethodDescriptorCache =
-      new ConcurrentHashMap<>();
-  final ConcurrentIdentityMap<Descriptor, Boolean> sharedFieldDescriptors =
-      new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Collection<Descriptor>, FieldDescriptorsKey>
       fieldDescriptorCollectionKeys = new ConcurrentIdentityMap<>();
-  final ConcurrentIdentityMap<Descriptor, ResolvedFieldInfo> resolvedFieldInfoCache =
-      new ConcurrentIdentityMap<>();
   final ConcurrentHashMap<DescriptorGrouperKey, DescriptorGrouper> descriptorGrouperCache =
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap =
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
       new ConcurrentHashMap<>();
-  final ConcurrentIdentityMap<Class<?>, ObjectCreator<?>> objectCreatorCache =
-      new ConcurrentIdentityMap<>();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
@@ -114,58 +98,6 @@ public final class SharedRegistry {
     return existingTypeDef == null ? typeDef : existingTypeDef;
   }
 
-  @SuppressWarnings("unchecked")
-  public <T> ObjectCreator<T> getOrCreateObjectCreator(Class<T> type) {
-    return getOrCreateObjectCreator(type, () -> ObjectCreators.getObjectCreator(type));
-  }
-
-  @SuppressWarnings("unchecked")
-  public <T> ObjectCreator<T> getOrCreateObjectCreator(
-      Class<T> type, java.util.function.Supplier<ObjectCreator<T>> factory) {
-    return (ObjectCreator<T>)
-        objectCreatorCache.computeIfAbsent(type, key -> factory.get());
-  }
-
-  public Descriptor getOrCreateDescriptor(
-      Field field, Method readMethod, boolean trackingRef, boolean nullable) {
-    Objects.requireNonNull(field, "field");
-    Descriptor descriptor;
-    if (readMethod == null) {
-      descriptor =
-          fieldDescriptorCache.computeIfAbsent(
-              field,
-              ignored -> {
-                Descriptor base =
-                    new Descriptor(field, TypeRef.of(field.getAnnotatedType()), null, null);
-                if (trackingRef == base.isTrackingRef() && nullable == base.isNullable()) {
-                  return base;
-                }
-                return new DescriptorBuilder(base)
-                    .trackingRef(trackingRef)
-                    .nullable(nullable)
-                    .build();
-              });
-    } else {
-      FieldReadMethodKey key = new FieldReadMethodKey(field, readMethod);
-      descriptor =
-          fieldReadMethodDescriptorCache.computeIfAbsent(
-              key,
-              ignored -> {
-                Descriptor base =
-                    new Descriptor(field, TypeRef.of(field.getAnnotatedType()), readMethod, null);
-                if (trackingRef == base.isTrackingRef() && nullable == base.isNullable()) {
-                  return base;
-                }
-                return new DescriptorBuilder(base)
-                    .trackingRef(trackingRef)
-                    .nullable(nullable)
-                    .build();
-              });
-    }
-    sharedFieldDescriptors.putIfAbsent(descriptor, Boolean.TRUE);
-    return descriptor;
-  }
-
   List<Descriptor> getOrCreateFieldDescriptors(
       Class<?> type,
       boolean searchParent,
@@ -175,29 +107,7 @@ public final class SharedRegistry {
         fieldDescriptorsCache.computeIfAbsent(
             key, ignored -> Collections.unmodifiableList(new ArrayList<>(factory.get())));
     fieldDescriptorCollectionKeys.putIfAbsent(descriptors, key);
-    for (Descriptor descriptor : descriptors) {
-      Field field = descriptor.getField();
-      if (field != null) {
-        Method readMethod = descriptor.getReadMethod();
-        if (readMethod == null) {
-          fieldDescriptorCache.putIfAbsent(field, descriptor);
-        } else {
-          fieldReadMethodDescriptorCache.putIfAbsent(
-              new FieldReadMethodKey(field, readMethod), descriptor);
-        }
-      }
-      sharedFieldDescriptors.putIfAbsent(descriptor, Boolean.TRUE);
-    }
     return descriptors;
-  }
-
-  public ResolvedFieldInfo getOrCreateResolvedFieldInfo(
-      Descriptor descriptor,
-      java.util.function.Supplier<ResolvedFieldInfo> factory) {
-    if (sharedFieldDescriptors.get(descriptor) == null) {
-      return factory.get();
-    }
-    return resolvedFieldInfoCache.computeIfAbsent(descriptor, ignored -> factory.get());
   }
 
   DescriptorGrouper getOrCreateDescriptorGrouper(
@@ -230,19 +140,11 @@ public final class SharedRegistry {
     descriptorsCache.entrySet().removeIf(entry -> entry.getKey().f0.getClassLoader() == loader);
     fieldDescriptorsCache.entrySet()
         .removeIf(entry -> entry.getKey().type.getClassLoader() == loader);
-    fieldDescriptorCache.entrySet()
-        .removeIf(entry -> entry.getKey().getDeclaringClass().getClassLoader() == loader);
-    fieldReadMethodDescriptorCache.entrySet()
-        .removeIf(entry -> hasClassLoader(entry.getKey(), loader));
-    sharedFieldDescriptors.removeIf(
-        (descriptor, ignored) -> hasClassLoader(descriptor, loader));
     fieldDescriptorCollectionKeys.removeIf(
         (descriptors, key) -> key.type.getClassLoader() == loader);
-    resolvedFieldInfoCache.removeIf((descriptor, ignored) -> hasClassLoader(descriptor, loader));
     descriptorGrouperCache.entrySet()
         .removeIf(entry -> entry.getKey().fieldDescriptorsKey.type.getClassLoader() == loader);
     codeGeneratorMap.entrySet().removeIf(entry -> entry.getKey().contains(loader));
-    objectCreatorCache.removeIf((cls, creator) -> cls.getClassLoader() == loader);
   }
 
   private synchronized void clearSharedRegistrationIfClassLoader(ClassLoader loader) {
@@ -281,17 +183,6 @@ public final class SharedRegistry {
       return true;
     }
     return false;
-  }
-
-  private static boolean hasClassLoader(Descriptor descriptor, ClassLoader loader) {
-    java.lang.reflect.Field field = descriptor.getField();
-    return (field != null && field.getDeclaringClass().getClassLoader() == loader)
-        || descriptor.getRawType().getClassLoader() == loader;
-  }
-
-  private static boolean hasClassLoader(FieldReadMethodKey key, ClassLoader loader) {
-    return key.field.getDeclaringClass().getClassLoader() == loader
-        || key.readMethod.getDeclaringClass().getClassLoader() == loader;
   }
 
   private static final class MetaStringKey {
@@ -350,35 +241,6 @@ public final class SharedRegistry {
     @Override
     public int hashCode() {
       return Objects.hash(System.identityHashCode(type), searchParent);
-    }
-  }
-
-  private static final class FieldReadMethodKey {
-    private final Field field;
-    private final Method readMethod;
-    private final int hash;
-
-    private FieldReadMethodKey(Field field, Method readMethod) {
-      this.field = Objects.requireNonNull(field);
-      this.readMethod = Objects.requireNonNull(readMethod);
-      this.hash = 31 * field.hashCode() + readMethod.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (!(o instanceof FieldReadMethodKey)) {
-        return false;
-      }
-      FieldReadMethodKey that = (FieldReadMethodKey) o;
-      return field.equals(that.field) && readMethod.equals(that.readMethod);
-    }
-
-    @Override
-    public int hashCode() {
-      return hash;
     }
   }
 

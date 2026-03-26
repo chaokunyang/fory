@@ -147,20 +147,18 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private void printWriteFieldDebugInfo(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    ResolvedFieldInfo resolvedFieldInfo = fieldInfo.resolvedFieldInfo;
     LOG.info(
         "[Java] write field {} of type {}, writer index {}",
-        resolvedFieldInfo.descriptor.getName(),
-        resolvedFieldInfo.typeRef,
+        fieldInfo.descriptor.getName(),
+        fieldInfo.typeRef,
         buffer.writerIndex());
   }
 
   private void printReadFieldDebugInfo(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    ResolvedFieldInfo resolvedFieldInfo = fieldInfo.resolvedFieldInfo;
     LOG.info(
         "[Java] read field {} of type {}, reader index {}",
-        resolvedFieldInfo.descriptor.getName(),
-        resolvedFieldInfo.typeRef,
+        fieldInfo.descriptor.getName(),
+        fieldInfo.typeRef,
         buffer.readerIndex());
   }
 
@@ -169,7 +167,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printWriteFieldDebugInfo(fieldInfo, buffer);
       }
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
       AbstractObjectSerializer.writeField(
           fory, typeResolver, refResolver, fieldInfo, buffer, fieldValue);
@@ -193,7 +191,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printWriteFieldDebugInfo(fieldInfo, buffer);
       }
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
       writeContainerFieldValue(
           fory, typeResolver, refResolver, generics, fieldInfo, buffer, fieldValue);
@@ -271,7 +269,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       }
       Object fieldValue =
           readContainerFieldValue(fory, typeResolver, refResolver, generics, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       fieldAccessor.putObject(obj, fieldValue);
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
@@ -279,7 +277,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue = readField(fory, typeResolver, refResolver, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       fieldAccessor.putObject(obj, fieldValue);
     }
     return obj;

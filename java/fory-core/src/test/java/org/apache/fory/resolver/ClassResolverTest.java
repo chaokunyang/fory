@@ -38,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -317,43 +318,6 @@ public class ClassResolverTest extends ForyTestBase {
         resolver2.createDescriptorGrouper(descriptors2, false, descriptorUpdator);
     assertSame(updatedGrouper1, updatedGrouper2);
     assertEquals(updatedGrouper1.getSortedDescriptors(), updatedGrouper2.getSortedDescriptors());
-
-    FieldGroups fieldGroups1 = FieldGroups.buildFieldInfos(fory1, grouper1);
-    FieldGroups fieldGroups2 = FieldGroups.buildFieldInfos(fory2, grouper2);
-    assertEquals(fieldGroups1.allFields.length, fieldGroups2.allFields.length);
-    for (int i = 0; i < fieldGroups1.allFields.length; i++) {
-      assertSame(
-          fieldGroups1.allFields[i].resolvedFieldInfo, fieldGroups2.allFields[i].resolvedFieldInfo);
-    }
-
-    FieldGroups directFieldGroups1 =
-        FieldGroups.buildFieldsInfo(fory1, ReflectionUtils.getFields(BeanB.class, true));
-    FieldGroups directFieldGroups2 =
-        FieldGroups.buildFieldsInfo(fory2, ReflectionUtils.getFields(BeanB.class, true));
-    assertEquals(directFieldGroups1.allFields.length, directFieldGroups2.allFields.length);
-    for (int i = 0; i < directFieldGroups1.allFields.length; i++) {
-      assertSame(
-          directFieldGroups1.allFields[i].resolvedFieldInfo.descriptor,
-          directFieldGroups2.allFields[i].resolvedFieldInfo.descriptor);
-    }
-  }
-
-  @Test
-  public void testSharedRegistryCachesObjectCreator() {
-    ForyBuilder builder =
-        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false);
-    finishBuilder(builder);
-    SharedRegistry sharedRegistry = new SharedRegistry();
-    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
-    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
-
-    new ObjectSerializer<>(fory1, BeanB.class);
-    Object creator1 = sharedRegistry.objectCreatorCache.get(BeanB.class);
-    Assert.assertNotNull(creator1);
-
-    new ObjectSerializer<>(fory2, BeanB.class);
-    assertSame(sharedRegistry.objectCreatorCache.get(BeanB.class), creator1);
-    assertSame(sharedRegistry.getOrCreateObjectCreator(BeanB.class), creator1);
   }
 
   @Test

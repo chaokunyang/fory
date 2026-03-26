@@ -26,9 +26,14 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import org.apache.fory.Fory;
+import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.DispatchId;
@@ -66,7 +71,7 @@ public class FieldGroups {
     List<Descriptor> descriptors = new ArrayList<>();
     for (Field field : fields) {
       if (!Modifier.isTransient(field.getModifiers()) && !Modifier.isStatic(field.getModifiers())) {
-        descriptors.add(fory.getTypeResolver().getOrCreateFieldDescriptor(field, null));
+        descriptors.add(new Descriptor(field, TypeRef.of(field.getAnnotatedType()), null, null));
       }
     }
     DescriptorGrouper descriptorGrouper =
@@ -126,7 +131,21 @@ public class FieldGroups {
   }
 
   public static final class SerializationFieldInfo {
-    public final ResolvedFieldInfo resolvedFieldInfo;
+    public final Descriptor descriptor;
+    public final Class<?> type;
+    public final TypeRef<?> typeRef;
+    public final int dispatchId;
+    public final String qualifiedFieldName;
+    public final FieldAccessor fieldAccessor;
+    public final FieldConverter<?> fieldConverter;
+    public final RefMode refMode;
+    public final boolean nullable;
+    public final boolean trackingRef;
+    public final boolean isPrimitiveField;
+    public final boolean isArray;
+    // Use declared type for serialization/deserialization
+    public final boolean useDeclaredTypeInfo;
+
     public final TypeInfo typeInfo;
     public final Serializer serializer;
     public final GenericType genericType;
@@ -134,12 +153,14 @@ public class FieldGroups {
     public final TypeInfo containerTypeInfo;
 
     SerializationFieldInfo(Fory fory, Descriptor d) {
-      resolvedFieldInfo =
-          fory.getSharedRegistry().getOrCreateResolvedFieldInfo(
-              d, () -> new ResolvedFieldInfo(fory, d));
+      this.descriptor = d;
+      this.type = descriptor.getRawType();
+      this.typeRef = d.getTypeRef();
+      this.dispatchId = DispatchId.getDispatchId(fory, d);
       TypeResolver resolver = fory.getTypeResolver();
-      if (resolvedFieldInfo.useDeclaredTypeInfo) {
-        typeInfo = SerializationUtils.getTypeInfo(fory, resolvedFieldInfo.type);
+      // invoke `copy` to avoid ObjectSerializer construct clear serializer by `clearSerializer`.
+      if (resolver.isMonomorphic(descriptor)) {
+        typeInfo = SerializationUtils.getTypeInfo(fory, typeRef.getRawType());
         if (!fory.isShareMeta()
             && !fory.isCompatible()
             && typeInfo.getSerializer() instanceof ReplaceResolveSerializer) {
@@ -149,13 +170,36 @@ public class FieldGroups {
       } else {
         typeInfo = null;
       }
+      useDeclaredTypeInfo = typeInfo != null && resolver.isMonomorphic(descriptor);
       if (typeInfo != null) {
         serializer = typeInfo.getSerializer();
       } else {
         serializer = null;
       }
 
-      GenericType t = resolver.buildGenericType(resolvedFieldInfo.typeRef);
+      this.qualifiedFieldName = d.getDeclaringClass() + "." + d.getName();
+      if (d.getField() != null) {
+        this.fieldAccessor = FieldAccessor.createAccessor(d.getField());
+      } else {
+        this.fieldAccessor = null;
+      }
+      // Use local field type to determine if field is primitive.
+      // This determines how to write the value to the object (Platform.putInt vs putObject).
+      isPrimitiveField = typeRef.getRawType().isPrimitive();
+      fieldConverter = d.getFieldConverter();
+      // For xlang compatibility, check TypeExtMeta first (from remote peer's type meta)
+      // This ensures we read data correctly when remote's nullable differs from local
+      TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+      if (extMeta != null) {
+        nullable = extMeta.nullable();
+        trackingRef = extMeta.trackingRef();
+      } else {
+        nullable = d.isNullable();
+        trackingRef = d.isTrackingRef();
+      }
+      refMode = RefMode.of(trackingRef, nullable);
+
+      GenericType t = resolver.buildGenericType(typeRef);
       Class<?> cls = t.getCls();
       if (t.getTypeParametersCount() > 0) {
         boolean skip =
@@ -165,11 +209,16 @@ public class FieldGroups {
         }
       }
       genericType = t;
-      Field field = resolvedFieldInfo.descriptor.getField();
+      Field field = descriptor.getField();
       if (field != null) {
         TypeUtils.applyRefTrackingOverride(t, field.getAnnotatedType(), fory.trackingRef());
       }
-      classInfoHolder = resolver.nilTypeInfoHolder();
+      if (needsClassInfoHolder(resolver, cls)) {
+        classInfoHolder = resolver.nilTypeInfoHolder();
+      } else {
+        classInfoHolder = null;
+      }
+      isArray = cls.isArray();
       if (!fory.isCrossLanguage()) {
         containerTypeInfo = null;
       } else {
@@ -181,27 +230,34 @@ public class FieldGroups {
       }
     }
 
+    private boolean needsClassInfoHolder(TypeResolver resolver, Class<?> cls) {
+      return !useDeclaredTypeInfo
+          || resolver.isCollection(cls)
+          || resolver.isMap(cls)
+          || resolver.isSet(cls);
+    }
+
     public String getName() {
-      if (resolvedFieldInfo.fieldAccessor != null) {
-        return resolvedFieldInfo.fieldAccessor.getField().getName();
+      if (fieldAccessor != null) {
+        return fieldAccessor.getField().getName();
       }
-      return resolvedFieldInfo.qualifiedFieldName;
+      return qualifiedFieldName;
     }
 
     @Override
     public String toString() {
-      String[] rsplit = StringUtils.rsplit(resolvedFieldInfo.qualifiedFieldName, ".", 1);
+      String[] rsplit = StringUtils.rsplit(qualifiedFieldName, ".", 1);
       return "InternalFieldInfo{"
           + "fieldName='"
           + rsplit[1]
           + ", typeRef="
-          + resolvedFieldInfo.typeRef
+          + typeRef
           + ", classId="
-          + resolvedFieldInfo.dispatchId
+          + dispatchId
           + ", fieldAccessor="
-          + resolvedFieldInfo.fieldAccessor
+          + fieldAccessor
           + ", nullable="
-          + resolvedFieldInfo.nullable
+          + nullable
           + '}';
     }
   }

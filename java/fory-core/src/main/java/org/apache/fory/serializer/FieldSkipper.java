@@ -36,7 +36,7 @@ public class FieldSkipper {
 
   /**
    * Skip a field value in the buffer. Handles all dispatch IDs including basic types and complex
-   * types. Whether to read a null flag is determined by fieldInfo.resolvedFieldInfo.refMode.
+   * types. Whether to read a null flag is determined by fieldInfo.refMode.
    *
    * @param fory fory runtime
    * @param typeResolver resolver used for type metadata read
@@ -50,9 +50,8 @@ public class FieldSkipper {
       RefResolver refResolver,
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
-    ResolvedFieldInfo resolvedFieldInfo = fieldInfo.resolvedFieldInfo;
-    int dispatchId = resolvedFieldInfo.dispatchId;
-    RefMode refMode = resolvedFieldInfo.refMode;
+    int dispatchId = fieldInfo.dispatchId;
+    RefMode refMode = fieldInfo.refMode;
 
     // For non-basic types, fall back to binding.readField
     if (!DispatchId.isBasicType(dispatchId)) {

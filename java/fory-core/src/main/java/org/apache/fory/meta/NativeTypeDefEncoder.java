@@ -35,7 +35,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
@@ -79,7 +78,7 @@ public class NativeTypeDefEncoder {
             .createDescriptorGrouper(
                 fory.getTypeResolver().getFieldDescriptors(cls, resolveParent),
                 false,
-                Function.identity());
+                TypeDefEncoder.IDENTITY_DESCRIPTOR_UPDATOR);
     List<Field> fields = new ArrayList<>();
     descriptorGrouper
         .getPrimitiveDescriptors()

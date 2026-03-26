@@ -92,6 +92,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   public ObjectCodecBuilder(Class<?> beanClass, Fory fory) {
     super(TypeRef.of(beanClass), fory, Generated.GeneratedObjectSerializer.class);
     Collection<Descriptor> descriptors;
+    DescriptorGrouper grouper;
     boolean shareMeta = fory.getConfig().isMetaShareEnabled();
     if (shareMeta) {
       descriptors =
@@ -100,11 +101,12 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
                   f.getTypeResolver()
                       .getTypeDef(beanClass, true)
                       .getDescriptors(SerializationUtils.getTypeResolver(fory), beanClass));
+      Collection<Descriptor> sharedDescriptors = descriptors;
+      grouper = typeResolver(r -> r.createDescriptorGrouper(sharedDescriptors, false));
     } else {
-      descriptors = typeResolver(r -> r.getFieldDescriptors(beanClass, true));
+      grouper = typeResolver(r -> r.getFieldDescriptorGrouper(beanClass, true, false));
+      descriptors = grouper.getSortedDescriptors();
     }
-    Collection<Descriptor> p = descriptors;
-    DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(p, false));
     if (org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info(
           "========== {} sorted descriptors for {} ==========",

@@ -119,7 +119,6 @@ import org.apache.fory.serializer.SerializedLambdaSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
-import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.serializer.TimeSerializers;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
@@ -1926,7 +1925,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   @Override
-  public DescriptorGrouper createDescriptorGrouper(
+  protected DescriptorGrouper newDescriptorGrouper(
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator) {

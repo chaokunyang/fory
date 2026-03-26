@@ -85,7 +85,6 @@ import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.SerializationUtils;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
-import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.serializer.TimeSerializers;
 import org.apache.fory.serializer.UnionSerializer;
 import org.apache.fory.serializer.UnknownClass;
@@ -1177,7 +1176,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
-  public DescriptorGrouper createDescriptorGrouper(
+  protected DescriptorGrouper newDescriptorGrouper(
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator) {

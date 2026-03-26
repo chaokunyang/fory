@@ -21,6 +21,9 @@ package org.apache.fory.resolver;
 
 import com.google.common.collect.BiMap;
 import java.lang.reflect.Member;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -29,13 +32,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.ConcurrentIdentityMap;
-import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.DescriptorGrouper;
 
 /** Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances. */
 @Internal
@@ -46,6 +49,12 @@ public final class SharedRegistry {
   final ConcurrentHashMap<Long, TypeDef> typeDefById = new ConcurrentHashMap<>();
   final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>
       descriptorsCache = new ConcurrentHashMap<>();
+  final ConcurrentHashMap<FieldDescriptorsKey, List<Descriptor>> fieldDescriptorsCache =
+      new ConcurrentHashMap<>();
+  final ConcurrentIdentityMap<Collection<Descriptor>, FieldDescriptorsKey>
+      fieldDescriptorCollectionKeys = new ConcurrentIdentityMap<>();
+  final ConcurrentHashMap<DescriptorGrouperKey, DescriptorGrouper> descriptorGrouperCache =
+      new ConcurrentHashMap<>();
   final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap =
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
@@ -89,6 +98,32 @@ public final class SharedRegistry {
     return existingTypeDef == null ? typeDef : existingTypeDef;
   }
 
+  List<Descriptor> getOrCreateFieldDescriptors(
+      Class<?> type,
+      boolean searchParent,
+      java.util.function.Supplier<List<Descriptor>> factory) {
+    FieldDescriptorsKey key = new FieldDescriptorsKey(type, searchParent);
+    List<Descriptor> descriptors =
+        fieldDescriptorsCache.computeIfAbsent(
+            key, ignored -> Collections.unmodifiableList(new ArrayList<>(factory.get())));
+    fieldDescriptorCollectionKeys.putIfAbsent(descriptors, key);
+    return descriptors;
+  }
+
+  DescriptorGrouper getOrCreateDescriptorGrouper(
+      Collection<Descriptor> descriptors,
+      boolean descriptorsGroupedOrdered,
+      java.util.function.Function<Descriptor, Descriptor> descriptorUpdator,
+      java.util.function.Supplier<DescriptorGrouper> factory) {
+    FieldDescriptorsKey fieldDescriptorsKey = fieldDescriptorCollectionKeys.get(descriptors);
+    if (fieldDescriptorsKey == null) {
+      return factory.get();
+    }
+    DescriptorGrouperKey key =
+        new DescriptorGrouperKey(fieldDescriptorsKey, descriptorsGroupedOrdered, descriptorUpdator);
+    return descriptorGrouperCache.computeIfAbsent(key, ignored -> factory.get());
+  }
+
   public void clearClassLoader(ClassLoader loader) {
     if (loader == null) {
       return;
@@ -103,6 +138,12 @@ public final class SharedRegistry {
               return cls != null && cls.getClassLoader() == loader;
         });
     descriptorsCache.entrySet().removeIf(entry -> entry.getKey().f0.getClassLoader() == loader);
+    fieldDescriptorsCache.entrySet()
+        .removeIf(entry -> entry.getKey().type.getClassLoader() == loader);
+    fieldDescriptorCollectionKeys.removeIf(
+        (descriptors, key) -> key.type.getClassLoader() == loader);
+    descriptorGrouperCache.entrySet()
+        .removeIf(entry -> entry.getKey().fieldDescriptorsKey.type.getClassLoader() == loader);
     codeGeneratorMap.entrySet().removeIf(entry -> entry.getKey().contains(loader));
   }
 
@@ -173,6 +214,70 @@ public final class SharedRegistry {
     @Override
     public int hashCode() {
       return Objects.hash(string, encoderTypeKey, encoding);
+    }
+  }
+
+  private static final class FieldDescriptorsKey {
+    private final Class<?> type;
+    private final boolean searchParent;
+
+    private FieldDescriptorsKey(Class<?> type, boolean searchParent) {
+      this.type = Objects.requireNonNull(type);
+      this.searchParent = searchParent;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof FieldDescriptorsKey)) {
+        return false;
+      }
+      FieldDescriptorsKey that = (FieldDescriptorsKey) o;
+      return type == that.type && searchParent == that.searchParent;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(System.identityHashCode(type), searchParent);
+    }
+  }
+
+  private static final class DescriptorGrouperKey {
+    private final FieldDescriptorsKey fieldDescriptorsKey;
+    private final boolean descriptorsGroupedOrdered;
+    private final java.util.function.Function<Descriptor, Descriptor> descriptorUpdator;
+
+    private DescriptorGrouperKey(
+        FieldDescriptorsKey fieldDescriptorsKey,
+        boolean descriptorsGroupedOrdered,
+        java.util.function.Function<Descriptor, Descriptor> descriptorUpdator) {
+      this.fieldDescriptorsKey = Objects.requireNonNull(fieldDescriptorsKey);
+      this.descriptorsGroupedOrdered = descriptorsGroupedOrdered;
+      this.descriptorUpdator = descriptorUpdator;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof DescriptorGrouperKey)) {
+        return false;
+      }
+      DescriptorGrouperKey that = (DescriptorGrouperKey) o;
+      return descriptorsGroupedOrdered == that.descriptorsGroupedOrdered
+          && fieldDescriptorsKey.equals(that.fieldDescriptorsKey)
+          && descriptorUpdator == that.descriptorUpdator;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+          fieldDescriptorsKey,
+          descriptorsGroupedOrdered,
+          System.identityHashCode(descriptorUpdator));
     }
   }
 }

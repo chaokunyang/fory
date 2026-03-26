@@ -135,8 +135,6 @@ public class FieldGroups {
     public final Class<?> type;
     public final TypeRef<?> typeRef;
     public final int dispatchId;
-    public final TypeInfo typeInfo;
-    public final Serializer serializer;
     public final String qualifiedFieldName;
     public final FieldAccessor fieldAccessor;
     public final FieldConverter<?> fieldConverter;
@@ -144,12 +142,14 @@ public class FieldGroups {
     public final boolean nullable;
     public final boolean trackingRef;
     public final boolean isPrimitiveField;
+    public final boolean isArray;
     // Use declared type for serialization/deserialization
     public final boolean useDeclaredTypeInfo;
 
+    public final TypeInfo typeInfo;
+    public final Serializer serializer;
     public final GenericType genericType;
     public final TypeInfoHolder classInfoHolder;
-    public final boolean isArray;
     public final TypeInfo containerTypeInfo;
 
     SerializationFieldInfo(Fory fory, Descriptor d) {

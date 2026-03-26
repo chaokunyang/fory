@@ -42,6 +42,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
@@ -66,6 +67,8 @@ import org.apache.fory.serializer.collection.CollectionSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializers;
 import org.apache.fory.serializer.collection.MapSerializers;
 import org.apache.fory.test.bean.BeanB;
+import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.testng.Assert;
@@ -280,6 +283,38 @@ public class ClassResolverTest extends ForyTestBase {
     assertSame(resolver1.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()), typeInfo1);
     assertSame(resolver2.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()), typeInfo2);
     assertNotSame(typeInfo1, typeInfo2);
+  }
+
+  @Test
+  public void testSharedRegistryCachesFieldDescriptorsAndDescriptorGrouper() {
+    ForyBuilder builder =
+        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+
+    ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
+    ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
+    resolver1.finishRegistration();
+    resolver2.finishRegistration();
+
+    List<Descriptor> descriptors1 = resolver1.getFieldDescriptors(BeanB.class, true);
+    List<Descriptor> descriptors2 = resolver2.getFieldDescriptors(BeanB.class, true);
+    assertSame(descriptors1, descriptors2);
+
+    DescriptorGrouper grouper1 = resolver1.getFieldDescriptorGrouper(BeanB.class, true, false);
+    DescriptorGrouper grouper2 = resolver2.getFieldDescriptorGrouper(BeanB.class, true, false);
+    assertSame(grouper1, grouper2);
+    assertEquals(grouper1.getSortedDescriptors(), grouper2.getSortedDescriptors());
+
+    Function<Descriptor, Descriptor> descriptorUpdator = Function.identity();
+    DescriptorGrouper updatedGrouper1 =
+        resolver1.createDescriptorGrouper(descriptors1, false, descriptorUpdator);
+    DescriptorGrouper updatedGrouper2 =
+        resolver2.createDescriptorGrouper(descriptors2, false, descriptorUpdator);
+    assertSame(updatedGrouper1, updatedGrouper2);
+    assertEquals(updatedGrouper1.getSortedDescriptors(), updatedGrouper2.getSortedDescriptors());
   }
 
   @Test

@@ -99,6 +99,9 @@ public class ForyInitPerf {
   private void runMemoryBenchmark(String name, boolean useSharedRegistry, int count)
       throws Exception {
     BenchmarkContext benchmarkContext = newBenchmarkContext();
+    if (useSharedRegistry) {
+      warmSharedRegistry(benchmarkContext);
+    }
     forceGc();
     long before = usedMemory();
     List<Fory> foryList = new ArrayList<>(count);
@@ -118,6 +121,11 @@ public class ForyInitPerf {
         retainedBytes / (double) count);
     sink = null;
     forceGc();
+  }
+
+  private void warmSharedRegistry(BenchmarkContext benchmarkContext) {
+    Fory warmupFory = newFory(benchmarkContext, true);
+    initializeFory(warmupFory);
   }
 
   private static void initializeFory(Fory fory) {

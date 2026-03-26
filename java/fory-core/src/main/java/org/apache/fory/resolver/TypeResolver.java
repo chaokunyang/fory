@@ -1228,16 +1228,39 @@ public abstract class TypeResolver {
     return createDescriptorGrouper(descriptors, descriptorsGroupedOrdered, null);
   }
 
-  public abstract DescriptorGrouper createDescriptorGrouper(
+  public final DescriptorGrouper createDescriptorGrouper(
+      Collection<Descriptor> descriptors,
+      boolean descriptorsGroupedOrdered,
+      Function<Descriptor, Descriptor> descriptorUpdator) {
+    return sharedRegistry.getOrCreateDescriptorGrouper(
+        descriptors,
+        descriptorsGroupedOrdered,
+        descriptorUpdator,
+        () -> newDescriptorGrouper(descriptors, descriptorsGroupedOrdered, descriptorUpdator));
+  }
+
+  protected abstract DescriptorGrouper newDescriptorGrouper(
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator);
 
+  public final DescriptorGrouper getFieldDescriptorGrouper(
+      Class<?> clz, boolean searchParent, boolean descriptorsGroupedOrdered) {
+    return createDescriptorGrouper(
+        getFieldDescriptors(clz, searchParent), descriptorsGroupedOrdered, null);
+  }
+
   public List<Descriptor> getFieldDescriptors(Class<?> clz, boolean searchParent) {
+    return sharedRegistry.getOrCreateFieldDescriptors(
+        clz,
+        searchParent,
+        () -> buildFieldDescriptors(clz, searchParent));
+  }
+
+  private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {
     SortedMap<Member, Descriptor> allDescriptors = getAllDescriptorsMap(clz, searchParent);
     List<Descriptor> result = new ArrayList<>(allDescriptors.size());
 
-    Map<Member, Descriptor> newDescriptorMap = new HashMap<>();
     boolean globalRefTracking = fory.trackingRef();
     boolean isXlang = fory.isCrossLanguage();
 
@@ -1275,7 +1298,6 @@ public abstract class TypeResolver {
         Descriptor newDescriptor =
             new DescriptorBuilder(descriptor).trackingRef(ref).nullable(nullable).build();
         result.add(newDescriptor);
-        newDescriptorMap.put(member, newDescriptor);
       } else {
         result.add(descriptor);
       }

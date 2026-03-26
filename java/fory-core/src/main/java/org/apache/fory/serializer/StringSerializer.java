@@ -121,12 +121,15 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   private final boolean compressString;
   private final boolean writeNumUtf16BytesForUtf8Encoding;
   private final boolean xlang;
+
   // set default length to 0, since char array and bytes array won't be used at the same time.
-  private byte[] byteArray = new byte[0];
+  private static final byte[] EMPTY_BYTES_STUB = new byte[0];
+  private static final char[] EMPTY_CHARS_STUB = new char[0];
+  private byte[] byteArray = EMPTY_BYTES_STUB;
   private int smoothByteArrayLength = DEFAULT_BUFFER_SIZE;
-  private char[] charArray = new char[0];
+  private char[] charArray = EMPTY_CHARS_STUB;
   private int smoothCharArrayLength = DEFAULT_BUFFER_SIZE;
-  private byte[] byteArray2 = new byte[0];
+  private byte[] byteArray2 = EMPTY_BYTES_STUB;
 
   public StringSerializer(Fory fory) {
     super(fory, String.class, fory.trackingRef() && !fory.isStringRefIgnored());
@@ -1198,13 +1201,13 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   public void clearBuffer(int size) {
     if (byteArray.length >= size) {
-      byteArray = new byte[0];
+      byteArray = EMPTY_BYTES_STUB;
     }
     if (byteArray2.length >= size) {
-      byteArray2 = new byte[0];
+      byteArray2 = EMPTY_BYTES_STUB;
     }
     if (charArray.length >= size) {
-      this.charArray = new char[0];
+      this.charArray = EMPTY_CHARS_STUB;
     }
   }
 }

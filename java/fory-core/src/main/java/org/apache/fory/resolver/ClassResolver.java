@@ -312,7 +312,7 @@ public class ClassResolver extends TypeResolver {
   private void addDefaultSerializers() {
     // primitive types will be boxed.
     addDefaultSerializer(void.class, NoneSerializer.class);
-    addDefaultSerializer(String.class, new StringSerializer(fory));
+    addDefaultSerializer(String.class, fory.getStringSerializer());
     PrimitiveSerializers.registerDefaultSerializers(fory);
     UnsignedSerializers.registerDefaultSerializers(fory);
     Serializers.registerDefaultSerializers(fory);
@@ -784,7 +784,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   public List<Class<?>> getRegisteredClasses() {
-    List<Class<?>> classes = new ArrayList<>(extRegistry.registeredClassIdMap.size);
+    List<Class<?>> classes = new ArrayList<>(extRegistry.registeredClassIdMap.size());
     extRegistry.registeredClassIdMap.forEach((cls, id) -> classes.add(cls));
     return classes;
   }

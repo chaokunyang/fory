@@ -21,6 +21,7 @@ package org.apache.fory.resolver;
 
 import com.google.common.collect.BiMap;
 import java.lang.reflect.Member;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.SortedMap;
@@ -49,11 +50,11 @@ public final class SharedRegistry {
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
       new ConcurrentHashMap<>();
-  volatile IdentityMap<Class<?>, Integer> registeredClassIdMap;
+  volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
   synchronized void setRegistrationIfAbsent(
-      IdentityMap<Class<?>, Integer> candidateRegisteredClassIdMap,
+      IdentityHashMap<Class<?>, Integer> candidateRegisteredClassIdMap,
       BiMap<String, Class<?>> candidateRegisteredClasses) {
     Objects.requireNonNull(candidateRegisteredClassIdMap);
     Objects.requireNonNull(candidateRegisteredClasses);
@@ -63,7 +64,7 @@ public final class SharedRegistry {
     }
   }
 
-  synchronized IdentityMap<Class<?>, Integer> getRegisteredClassIdMap() {
+  synchronized IdentityHashMap<Class<?>, Integer> getRegisteredClassIdMap() {
     return Objects.requireNonNull(registeredClassIdMap);
   }
 
@@ -106,7 +107,7 @@ public final class SharedRegistry {
   }
 
   private synchronized void clearSharedRegistrationIfClassLoader(ClassLoader loader) {
-    IdentityMap<Class<?>, Integer> sharedRegisteredClassIdMap = registeredClassIdMap;
+    IdentityHashMap<Class<?>, Integer> sharedRegisteredClassIdMap = registeredClassIdMap;
     BiMap<String, Class<?>> sharedRegisteredClasses = registeredClasses;
     if (sharedRegisteredClassIdMap == null || sharedRegisteredClasses == null) {
       return;
@@ -129,7 +130,7 @@ public final class SharedRegistry {
   }
 
   private static boolean containsClassLoader(
-      IdentityMap<Class<?>, ?> classMap, ClassLoader loader) {
+      IdentityHashMap<Class<?>, ?> classMap, ClassLoader loader) {
     final boolean[] found = new boolean[1];
     classMap.forEach(
         (cls, value) -> {

@@ -935,7 +935,7 @@ public class ArraySerializers {
 
     public StringArraySerializer(Fory fory) {
       super(fory, String[].class);
-      stringSerializer = new StringSerializer(fory);
+      stringSerializer = fory.getStringSerializer();
       collectionSerializer = new ForyArrayAsListSerializer(fory);
       list = new ForyArrayAsListSerializer.ArrayAsList(0);
     }

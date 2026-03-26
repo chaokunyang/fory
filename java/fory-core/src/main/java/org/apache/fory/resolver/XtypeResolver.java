@@ -863,7 +863,7 @@ public class XtypeResolver extends TypeResolver {
         Types.FLOAT64, double.class, new PrimitiveSerializers.DoubleSerializer(fory, double.class));
 
     // String types
-    registerType(Types.STRING, String.class, new StringSerializer(fory));
+    registerType(Types.STRING, String.class, fory.getStringSerializer());
     registerType(Types.STRING, StringBuilder.class, new Serializers.StringBuilderSerializer(fory));
     registerType(Types.STRING, StringBuffer.class, new Serializers.StringBufferSerializer(fory));
 

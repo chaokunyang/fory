@@ -103,7 +103,6 @@ public abstract class TypeResolver {
       new TypeInfo(null, null, null, false, null, Types.UNKNOWN, INVALID_USER_TYPE_ID);
   // use a lower load factor to minimize hash collision
   static final float foryMapLoadFactor = 0.5f;
-  static final int estimatedNumRegistered = 150;
   static final String SET_META__CONTEXT_MSG =
       "Meta context must be set before serialization, "
           + "please set meta context by SerializationContext.setMetaContext";
@@ -1603,9 +1602,9 @@ public abstract class TypeResolver {
     return getRegisteredClassLocalOrFrozen(className) != null;
   }
 
-  static class ExtRegistry {
-    static final TypeChecker DEFAULT_TYPE_CHECKER = (resolver, className) -> true;
+  static final TypeChecker DEFAULT_TYPE_CHECKER = (resolver, className) -> true;
 
+  class ExtRegistry {
     // Here we set it to 1 to avoid calculating it again in `register(Class<?> cls)`.
     int classIdGenerator = 1;
     int userIdGenerator = 0;
@@ -1627,12 +1626,13 @@ public abstract class TypeResolver {
 
     final Map<Type, GenericType> genericTypes = new HashMap<>();
     final Map<Class, Map<String, GenericType>> classGenericTypes = new HashMap<>();
-    final Set<TypeInfo> registeredTypeInfos = new HashSet<>();
+    // will be clear after ensureSerializersCompiled
+    final Set<TypeInfo> registeredTypeInfos = new HashSet<>(fory.isCrossLanguage() ? 4 : 180);
     boolean ensureSerializersCompiled;
 
     // shared across multiple fory instances.
-    IdentityMap<Class<?>, Integer> registeredClassIdMap = new IdentityMap<>(2);
-    BiMap<String, Class<?>> registeredClasses = HashBiMap.create(2);
+    IdentityHashMap<Class<?>, Integer> registeredClassIdMap = new IdentityHashMap<>(fory.isCrossLanguage() ? 4 : 200);
+    BiMap<String, Class<?>> registeredClasses = HashBiMap.create(fory.isCrossLanguage() ? 4 : 200);
     final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef;
     // TODO(chaokunyang) Better to  use soft reference, see ObjectStreamClass.
     final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>
@@ -1646,7 +1646,7 @@ public abstract class TypeResolver {
     }
 
     void finishRegistration(
-        IdentityMap<Class<?>, Integer> sharedRegisteredClassIdMap,
+        IdentityHashMap<Class<?>, Integer> sharedRegisteredClassIdMap,
         BiMap<String, Class<?>> sharedRegisteredClasses) {
       registeredClassIdMap = sharedRegisteredClassIdMap;
       registeredClasses = sharedRegisteredClasses;

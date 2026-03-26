@@ -153,12 +153,13 @@ public final class Fory implements BaseFory {
     }
     jitContext = new JITContext(this);
     generics = new Generics(this);
+    // init stringSerializer first, so other places can share same StringSerializer.
+    stringSerializer = new StringSerializer(this);
     metaStringResolver = new MetaStringResolver(sharedRegistry);
     typeResolver = crossLanguage ? new XtypeResolver(this) : new ClassResolver(this);
     typeResolver.initialize();
     serializationContext = new SerializationContext(config);
     this.classLoader = classLoader;
-    stringSerializer = new StringSerializer(this);
     arrayListSerializer = new ArrayListSerializer(this);
     hashMapSerializer = new HashMapSerializer(this);
     originToCopyMap = new IdentityMap<>(2);

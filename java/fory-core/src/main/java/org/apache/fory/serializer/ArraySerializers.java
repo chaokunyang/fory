@@ -54,7 +54,7 @@ public class ArraySerializers {
       super(fory, cls);
       TypeResolver resolver = fory.getTypeResolver();
       if (resolver instanceof ClassResolver) {
-        ((ClassResolver) resolver).setSerializer(cls, this);
+        resolver.setSerializer(cls, this);
       }
       Preconditions.checkArgument(cls.isArray());
       Class<?> t = cls;

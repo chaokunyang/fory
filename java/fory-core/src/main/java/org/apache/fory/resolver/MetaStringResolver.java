@@ -39,9 +39,9 @@ import org.apache.fory.util.MurmurHash3;
  * share common immutable datastructure globally across multiple fory.
  */
 public final class MetaStringResolver {
-  private static final int initialCapacity = 8;
+  private static final int initialCapacity = 4;
   // use a lower load factor to minimize hash collision
-  private static final float foryMapLoadFactor = 0.25f;
+  private static final float foryMapLoadFactor = 0.5f;
   private static final int SMALL_STRING_THRESHOLD = 16;
 
   // Every deserialization for unregistered string will query it, performance is important.
@@ -55,8 +55,8 @@ public final class MetaStringResolver {
       new ObjectMap<>(initialCapacity, foryMapLoadFactor);
   private final SharedRegistry sharedRegistry;
   private final MetaStringRef emptyMetaStringRef;
-  private MetaStringRef[] dynamicWrittenString = new MetaStringRef[32];
-  private MetaStringRef[] dynamicReadStringIds = new MetaStringRef[32];
+  private MetaStringRef[] dynamicWrittenString = new MetaStringRef[initialCapacity];
+  private MetaStringRef[] dynamicReadStringIds = new MetaStringRef[initialCapacity];
   private short dynamicWriteStringId;
   private short dynamicReadStringId;
 

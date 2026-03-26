@@ -114,16 +114,46 @@ public final class SharedRegistry {
     if (frozen == null) {
       return;
     }
+    if (containsClassLoader(frozen.classIdByClass, loader)
+        || containsClassLoader(frozen.nameByClass, loader)
+        || containsClassLoader(frozen.classByName.values(), loader)) {
+      frozenRegistration = null;
+    }
+  }
+
+  private static boolean containsClassLoader(
+      Iterable<Class<?>> classes, ClassLoader loader) {
+    for (Class<?> cls : classes) {
+      if (cls.getClassLoader() == loader) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean containsClassLoader(
+      IdentityMap<Class<?>, ?> classMap, ClassLoader loader) {
     final boolean[] found = new boolean[1];
-    frozen.classIdByClass.forEach(
-        (cls, id) -> {
+    classMap.forEach(
+        (cls, value) -> {
           if (cls.getClassLoader() == loader) {
             found[0] = true;
           }
         });
     if (found[0]) {
-      frozenRegistration = null;
+      return true;
     }
+    return false;
+  }
+
+  private static boolean containsClassLoader(
+      Map<String, Class<?>> classByName, ClassLoader loader) {
+    for (Class<?> cls : classByName.values()) {
+      if (cls.getClassLoader() == loader) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static final class MetaStringKey {

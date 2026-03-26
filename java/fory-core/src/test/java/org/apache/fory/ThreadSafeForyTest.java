@@ -455,6 +455,13 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
+  public void testRegisterAfterDeserializeThrowsExceptionWithFory() {
+    Fory fory = Fory.builder().requireClassRegistration(true).build();
+    fory.deserialize(fory.serialize("ok"));
+    Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
+  }
+
+  @Test
   public void testBuildThreadSafeForyKeepsPlatformThreadClassLoaderLocal() {
     ThreadSafeFory fory = Fory.builder().requireClassRegistration(false).buildThreadSafeFory();
     ClassLoader original = Thread.currentThread().getContextClassLoader();

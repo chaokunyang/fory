@@ -19,9 +19,9 @@
 
 package org.apache.fory.resolver;
 
+import com.google.common.collect.BiMap;
 import java.lang.reflect.Member;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,21 +39,6 @@ import org.apache.fory.type.Descriptor;
 /** Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances. */
 @Internal
 public final class SharedRegistry {
-  static final class FrozenRegistration {
-    final IdentityMap<Class<?>, Integer> classIdByClass;
-    final Map<String, Class<?>> classByName;
-    final IdentityMap<Class<?>, String> nameByClass;
-
-    FrozenRegistration(
-        IdentityMap<Class<?>, Integer> classIdByClass,
-        Map<String, Class<?>> classByName,
-        IdentityMap<Class<?>, String> nameByClass) {
-      this.classIdByClass = classIdByClass;
-      this.classByName = classByName;
-      this.nameByClass = nameByClass;
-    }
-  }
-
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef =
       new ConcurrentIdentityMap<>();
@@ -64,14 +49,18 @@ public final class SharedRegistry {
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
       new ConcurrentHashMap<>();
-  volatile FrozenRegistration frozenRegistration;
+  volatile IdentityMap<Class<?>, Integer> registeredClassIdMap;
+  volatile BiMap<String, Class<?>> registeredClasses;
 
-  synchronized FrozenRegistration publishOrGetFrozenRegistration(FrozenRegistration candidate) {
-    Objects.requireNonNull(candidate);
-    if (frozenRegistration == null) {
-      frozenRegistration = candidate;
+  synchronized void publishOrGetRegistration(
+      IdentityMap<Class<?>, Integer> candidateRegisteredClassIdMap,
+      BiMap<String, Class<?>> candidateRegisteredClasses) {
+    Objects.requireNonNull(candidateRegisteredClassIdMap);
+    Objects.requireNonNull(candidateRegisteredClasses);
+    if (registeredClassIdMap == null) {
+      registeredClassIdMap = candidateRegisteredClassIdMap;
+      registeredClasses = candidateRegisteredClasses;
     }
-    return frozenRegistration;
   }
 
   EncodedMetaString getOrCreateEncodedMetaString(
@@ -95,7 +84,7 @@ public final class SharedRegistry {
     if (loader == null) {
       return;
     }
-    clearFrozenRegistrationIfClassLoader(loader);
+    clearSharedRegistrationIfClassLoader(loader);
     typeDefMap.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
     currentLayerTypeDef.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
     typeDefById.entrySet()
@@ -103,20 +92,21 @@ public final class SharedRegistry {
             entry -> {
               Class<?> cls = entry.getValue().getClassSpec().type;
               return cls != null && cls.getClassLoader() == loader;
-            });
+        });
     descriptorsCache.entrySet().removeIf(entry -> entry.getKey().f0.getClassLoader() == loader);
     codeGeneratorMap.entrySet().removeIf(entry -> entry.getKey().contains(loader));
   }
 
-  private synchronized void clearFrozenRegistrationIfClassLoader(ClassLoader loader) {
-    FrozenRegistration frozen = frozenRegistration;
-    if (frozen == null) {
+  private synchronized void clearSharedRegistrationIfClassLoader(ClassLoader loader) {
+    IdentityMap<Class<?>, Integer> sharedRegisteredClassIdMap = registeredClassIdMap;
+    BiMap<String, Class<?>> sharedRegisteredClasses = registeredClasses;
+    if (sharedRegisteredClassIdMap == null || sharedRegisteredClasses == null) {
       return;
     }
-    if (containsClassLoader(frozen.classIdByClass, loader)
-        || containsClassLoader(frozen.nameByClass, loader)
-        || containsClassLoader(frozen.classByName.values(), loader)) {
-      frozenRegistration = null;
+    if (containsClassLoader(sharedRegisteredClassIdMap, loader)
+        || containsClassLoader(sharedRegisteredClasses.values(), loader)) {
+      registeredClassIdMap = null;
+      registeredClasses = null;
     }
   }
 
@@ -141,16 +131,6 @@ public final class SharedRegistry {
         });
     if (found[0]) {
       return true;
-    }
-    return false;
-  }
-
-  private static boolean containsClassLoader(
-      Map<String, Class<?>> classByName, ClassLoader loader) {
-    for (Class<?> cls : classByName.values()) {
-      if (cls.getClassLoader() == loader) {
-        return true;
-      }
     }
     return false;
   }

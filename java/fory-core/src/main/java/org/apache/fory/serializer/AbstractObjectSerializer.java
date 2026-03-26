@@ -957,9 +957,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       return copyRecord(originObj);
     }
     T newObj = newBean();
-    if (needToCopyRef) {
-      fory.reference(originObj, newObj);
-    }
+    fory.reference(originObj, newObj);
     copyFields(originObj, newObj);
     return newObj;
   }
@@ -967,7 +965,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private T copyRecord(T originObj) {
     Object[] fieldValues = copyFields(originObj);
     try {
-      T t = (T) objectCreator.newInstanceWithArguments(fieldValues);
+      T t = objectCreator.newInstanceWithArguments(fieldValues);
       Arrays.fill(copyRecordInfo.getRecordComponents(), null);
       fory.reference(originObj, t);
       return t;

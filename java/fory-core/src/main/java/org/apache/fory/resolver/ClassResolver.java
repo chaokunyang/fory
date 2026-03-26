@@ -783,17 +783,8 @@ public class ClassResolver extends TypeResolver {
   }
 
   public List<Class<?>> getRegisteredClasses() {
-    SharedRegistry.FrozenRegistration frozenRegistration = extRegistry.frozenRegistration;
-    int size =
-        frozenRegistration != null
-            ? frozenRegistration.classIdByClass.size
-            : extRegistry.registeredClassIdMap.size;
-    List<Class<?>> classes = new ArrayList<>(size);
-    if (frozenRegistration != null) {
-      frozenRegistration.classIdByClass.forEach((cls, id) -> classes.add(cls));
-    } else {
-      extRegistry.registeredClassIdMap.forEach((cls, id) -> classes.add(cls));
-    }
+    List<Class<?>> classes = new ArrayList<>(extRegistry.registeredClassIdMap.size);
+    extRegistry.registeredClassIdMap.forEach((cls, id) -> classes.add(cls));
     return classes;
   }
 

@@ -316,7 +316,8 @@ public class ClassResolverTest extends ForyTestBase {
 
     resolver1.finishRegister();
 
-    assertEquals(sharedRegistry.frozenRegistration.classIdByClass.get(BeanB.class), Integer.valueOf(1));
+    assertEquals(sharedRegistry.registeredClassIdMap.get(BeanB.class), Integer.valueOf(1));
+    assertEquals(sharedRegistry.registeredClasses.get("ns.C1"), C1.class);
     resolver2.finishRegister();
     assertEquals(resolver2.getRegisteredClassId(BeanB.class), Integer.valueOf(1));
     assertEquals(resolver2.getRegisteredClass("ns.C1"), C1.class);

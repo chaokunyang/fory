@@ -129,9 +129,7 @@ public class ArraySerializers {
     public T[] copy(T[] originArray) {
       int length = originArray.length;
       Object[] newArray = newArray(length);
-      if (needToCopyRef) {
-        fory.reference(originArray, newArray);
-      }
+      fory.reference(originArray, newArray);
       Serializer componentSerializer = this.componentTypeSerializer;
       if (componentSerializer != null) {
         if (componentSerializer.isImmutable()) {

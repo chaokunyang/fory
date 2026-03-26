@@ -74,7 +74,7 @@ public final class UnknownClassSerializers {
     public UnknownStructSerializer(Fory fory, TypeDef typeDef) {
       super(fory, UnknownClass.UnknownStruct.class);
       this.typeDef = typeDef;
-      fieldsInfoMap = new LongMap<>();
+      fieldsInfoMap = new LongMap<>(1);
       Preconditions.checkArgument(fory.getConfig().isMetaShareEnabled());
       if (Utils.DEBUG_OUTPUT_ENABLED && typeDef != null) {
         LOG.info("========== UnknownClassSerializer TypeDef for {} ==========", type.getName());

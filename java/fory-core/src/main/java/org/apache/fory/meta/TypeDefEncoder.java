@@ -63,7 +63,7 @@ class TypeDefEncoder {
     XtypeResolver resolver = (XtypeResolver) fory.getTypeResolver();
     DescriptorGrouper descriptorGrouper =
         resolver.createDescriptorGrouper(
-            resolver.getFieldDescriptors(type, true), false, DescriptorUpdaters.IDENTITY);
+            resolver.getFieldDescriptors(type, true), false, descriptor -> descriptor);
     TypeInfo typeInfo = resolver.getTypeInfo(type);
     List<Field> fields;
     int typeId = typeInfo.getTypeId();

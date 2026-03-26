@@ -19,11 +19,11 @@
 
 package org.apache.fory;
 
+import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import java.util.concurrent.atomic.AtomicReference;
-import org.apache.fory.memory.Platform;
 import org.testng.annotations.Test;
 
 public class VirtualThreadSafeForyTest {
@@ -37,7 +37,7 @@ public class VirtualThreadSafeForyTest {
   @Test
   public void testPlatformDetectsVirtualThreads() throws InterruptedException {
     AtomicReference<Boolean> isVirtual = new AtomicReference<>();
-    Thread thread = Thread.startVirtualThread(() -> isVirtual.set(Platform.isCurrentThreadVirtual()));
+    Thread thread = Thread.startVirtualThread(() -> isVirtual.set(Thread.currentThread().isVirtual()));
     thread.join();
     assertTrue(Boolean.TRUE.equals(isVirtual.get()));
   }
@@ -53,12 +53,41 @@ public class VirtualThreadSafeForyTest {
               ClassLoader original = Thread.currentThread().getContextClassLoader();
               ClassLoader classLoader = new CustomClassLoader(original);
               try {
-                assertTrue(Platform.isCurrentThreadVirtual());
+                assertTrue(Thread.currentThread().isVirtual());
+                fory.setClassLoader(classLoader);
+                assertSame(fory.getClassLoader(), classLoader);
+                fory.clearClassLoader(classLoader);
+                assertSame(Thread.currentThread().getContextClassLoader(), original);
+              } catch (Throwable t) {
+                error.set(t);
+              } finally {
+                Thread.currentThread().setContextClassLoader(original);
+              }
+            });
+    thread.join();
+    if (error.get() != null) {
+      throw new AssertionError(error.get());
+    }
+  }
+
+  @Test
+  public void testBuildVirtualThreadSafeForyUsesThreadContextClassLoaderAndSerializes()
+      throws InterruptedException {
+    ThreadSafeFory fory =
+        Fory.builder().requireClassRegistration(false).buildVirtualThreadSafeFory();
+    AtomicReference<Throwable> error = new AtomicReference<>();
+    Thread thread =
+        Thread.startVirtualThread(
+            () -> {
+              ClassLoader original = Thread.currentThread().getContextClassLoader();
+              ClassLoader classLoader = new CustomClassLoader(original);
+              try {
+                assertTrue(Thread.currentThread().isVirtual());
                 fory.setClassLoader(classLoader);
                 assertSame(Thread.currentThread().getContextClassLoader(), classLoader);
                 assertSame(fory.getClassLoader(), classLoader);
-                fory.clearClassLoader(classLoader);
-                assertSame(Thread.currentThread().getContextClassLoader(), classLoader);
+                byte[] bytes = fory.serialize("abc");
+                assertEquals(fory.deserialize(bytes), "abc");
               } catch (Throwable t) {
                 error.set(t);
               } finally {

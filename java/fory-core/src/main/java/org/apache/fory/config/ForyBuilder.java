@@ -535,13 +535,43 @@ public final class ForyBuilder {
     return newFory(this, loader);
   }
 
+  /**
+   * Builds a thread-safe {@link Fory} optimized for JDK 21+ virtual-thread workloads.
+   *
+   * <p>This variant uses {@link FastForyPool} with a shared {@link SharedRegistry} and retains at
+   * most 3000 idle pooled {@link Fory} instances for reuse. Active concurrent operations may still
+   * create more instances temporarily, but at most 3000 idle instances are kept after the burst.
+   *
+   * <p>The returned serializer uses the current thread context class loader for virtual-thread
+   * execution. Use {@link #buildVirtualThreadSafeFory(int)} to choose a different idle pool cap.
+   */
   public ThreadSafeFory buildVirtualThreadSafeFory() {
+    // each fory instance use 30+ kb memory.
+    return buildVirtualThreadSafeFory(3000);
+  }
+
+  /**
+   * Builds a thread-safe {@link Fory} optimized for JDK 21+ virtual-thread workloads.
+   *
+   * <p>This variant uses {@link FastForyPool} with a shared {@link SharedRegistry}. The {@code
+   * maxPoolSize} parameter limits how many idle pooled {@link Fory} instances are retained for
+   * reuse after operations complete. It does not cap the number of concurrently active {@link
+   * Fory} instances during a burst.
+   *
+   * @param maxPoolSize maximum number of idle pooled {@link Fory} instances to retain, must be
+   *     non-negative
+   */
+  public ThreadSafeFory buildVirtualThreadSafeFory(int maxPoolSize) {
+    forVirtualThread = true;
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
     SharedRegistry sharedRegistry = new SharedRegistry();
     return new FastForyPool(
-            classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry, loader);
+        classLoader -> newFory(this, classLoader, sharedRegistry),
+        sharedRegistry,
+        loader,
+        maxPoolSize);
   }
 
   /** Build thread safe fory. */
@@ -554,13 +584,7 @@ public final class ForyBuilder {
         new ThreadLocalFory(
             classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry);
     threadLocalFory.setClassLoader(loader);
-    if (!Platform.hasVirtualThreadSupport()) {
-      return threadLocalFory;
-    }
-    FastForyPool fastForyPool =
-        new FastForyPool(
-            classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry, loader);
-    return new AdaptiveThreadSafeFory(threadLocalFory, fastForyPool);
+    return threadLocalFory;
   }
 
   /** Build thread safe fory backed by {@link ThreadLocalFory}. */

@@ -23,6 +23,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Semaphore;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.AbstractThreadSafeFory;
@@ -45,19 +46,35 @@ public class FastForyPool extends AbstractThreadSafeFory {
   private final ConcurrentLinkedQueue<Fory> pool = new ConcurrentLinkedQueue<>();
   private final Object callbackLock = new Object();
   private final ClassLoader defaultClassLoader;
+  private final int maxPoolSize;
+  private final Semaphore idleSlots;
   private Consumer<Fory> factoryCallback = f -> {};
 
   public FastForyPool(Function<ClassLoader, Fory> foryFactory, SharedRegistry sharedRegistry) {
-    this(foryFactory, sharedRegistry, null);
+    this(foryFactory, sharedRegistry, null, Integer.MAX_VALUE);
   }
 
   public FastForyPool(
       Function<ClassLoader, Fory> foryFactory,
       SharedRegistry sharedRegistry,
       ClassLoader defaultClassLoader) {
+    this(foryFactory, sharedRegistry, defaultClassLoader, Integer.MAX_VALUE);
+  }
+
+  public FastForyPool(
+      Function<ClassLoader, Fory> foryFactory,
+      SharedRegistry sharedRegistry,
+      ClassLoader defaultClassLoader,
+      int maxPoolSize) {
     this.foryFactory = Objects.requireNonNull(foryFactory);
     this.sharedRegistry = Objects.requireNonNull(sharedRegistry);
     this.defaultClassLoader = defaultClassLoader;
+    if (maxPoolSize < 0) {
+      throw new IllegalArgumentException(
+          String.format("FastForyPool maxPoolSize must be >= 0, got %s", maxPoolSize));
+    }
+    this.maxPoolSize = maxPoolSize;
+    idleSlots = maxPoolSize == Integer.MAX_VALUE ? null : new Semaphore(maxPoolSize);
   }
 
   @Override
@@ -223,6 +240,7 @@ public class FastForyPool extends AbstractThreadSafeFory {
   private Fory acquire() {
     Fory fory = pool.poll();
     if (fory != null) {
+      releaseIdleSlot();
       return fory;
     }
     ClassLoader loader = getClassLoader();
@@ -235,7 +253,27 @@ public class FastForyPool extends AbstractThreadSafeFory {
 
   private void release(Fory fory) {
     if (fory != null) {
+      if (!reserveIdleSlot()) {
+        return;
+      }
       pool.add(fory);
+    }
+  }
+
+  int pooledForyCount() {
+    if (idleSlots == null) {
+      return pool.size();
+    }
+    return maxPoolSize - idleSlots.availablePermits();
+  }
+
+  private boolean reserveIdleSlot() {
+    return idleSlots == null || idleSlots.tryAcquire();
+  }
+
+  private void releaseIdleSlot() {
+    if (idleSlots != null) {
+      idleSlots.release();
     }
   }
 }

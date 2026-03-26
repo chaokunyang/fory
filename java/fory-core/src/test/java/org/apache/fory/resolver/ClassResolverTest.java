@@ -297,6 +297,29 @@ public class ClassResolverTest extends ForyTestBase {
     assertEquals(sharedRegistry.metaStringMap.size() - before, 2);
   }
 
+  @Test
+  public void testFinishRegisterPublishesAndAdoptsSharedRegistration() {
+    ForyBuilder builder =
+        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+
+    ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
+    ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
+
+    resolver1.register(BeanB.class, 1);
+    resolver1.register(C1.class, "ns", "C1");
+
+    resolver1.finishRegister();
+
+    assertSame(
+        sharedRegistry.frozenRegistration.classIdByClass.get(BeanB.class), Integer.valueOf(1));
+    resolver2.finishRegister();
+    assertEquals(resolver2.getRegisteredClass("ns.C1"), C1.class);
+  }
+
   private static void finishBuilder(ForyBuilder builder) {
     try {
       Method finish = ForyBuilder.class.getDeclaredMethod("finish");

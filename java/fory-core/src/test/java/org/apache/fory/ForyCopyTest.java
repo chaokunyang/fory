@@ -79,6 +79,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.apache.fory.collection.LazyMap;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.serializer.EnumSerializerTest;
 import org.apache.fory.serializer.EnumSerializerTest.EnumFoo;
 import org.apache.fory.serializer.collection.ChildContainerSerializersTest.ChildArrayDeque;
@@ -184,6 +185,15 @@ public class ForyCopyTest extends ForyTestBase {
     }
     TimeUnit.SECONDS.sleep(5);
     Assert.assertFalse(flag.get());
+  }
+
+  @Test
+  public void testCopyFinalizesRegistrationPhase() {
+    Fory fory =
+        builder().withCodegen(false).withRefCopy(true).requireClassRegistration(true).build();
+    fory.register(BeanA.class);
+    assertEquals(fory.copy(BeanA.createBeanA(2)), BeanA.createBeanA(2));
+    Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
   }
 
   private void objectCopyTest() {

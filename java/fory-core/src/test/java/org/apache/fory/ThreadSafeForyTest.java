@@ -113,6 +113,21 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
+  public void testThreadSafeRegistrationStillWorksAfterSnapshotPublished() {
+    BeanB bean = BeanB.createBeanB(2);
+    ThreadSafeFory fory =
+        Fory.builder().requireClassRegistration(true).buildThreadSafeForyPool(2, 4);
+    fory.register(BeanB.class);
+
+    assertEquals(fory.deserialize(fory.serialize(bean)), bean);
+
+    CompletableFuture<Void> secondThread =
+        CompletableFuture.runAsync(
+            () -> assertEquals(fory.deserialize(fory.serialize(bean)), bean));
+    secondThread.join();
+  }
+
+  @Test
   public void testSerialize() throws Exception {
     BeanA beanA = BeanA.createBeanA(2);
     ThreadSafeFory fory =

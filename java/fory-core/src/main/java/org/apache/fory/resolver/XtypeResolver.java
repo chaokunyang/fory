@@ -21,9 +21,7 @@ package org.apache.fory.resolver;
 
 import static org.apache.fory.Fory.NOT_SUPPORT_XLANG;
 import static org.apache.fory.builder.Generated.GeneratedSerializer;
-import static org.apache.fory.meta.Encoders.GENERIC_ENCODER;
 import static org.apache.fory.meta.Encoders.PACKAGE_DECODER;
-import static org.apache.fory.meta.Encoders.PACKAGE_ENCODER;
 import static org.apache.fory.meta.Encoders.TYPE_NAME_DECODER;
 import static org.apache.fory.serializer.collection.MapSerializers.HashMapSerializer;
 import static org.apache.fory.type.TypeUtils.qualifiedName;
@@ -76,7 +74,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
-import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -425,12 +422,9 @@ public class XtypeResolver extends TypeResolver {
       int typeId,
       int userTypeId) {
     MetaStringBytes fullClassNameBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(
-            GENERIC_ENCODER.encode(type.getName(), MetaString.Encoding.UTF_8));
-    MetaStringBytes nsBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(Encoders.encodePackage(namespace));
-    MetaStringBytes classNameBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(Encoders.encodeTypeName(typeName));
+        metaStringResolver.getOrCreateGenericMetaStringBytes(type.getName(), MetaString.Encoding.UTF_8);
+    MetaStringBytes nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringBytes classNameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
     return new TypeInfo(
         type, fullClassNameBytes, nsBytes, classNameBytes, false, serializer, typeId, userTypeId);
   }
@@ -1168,8 +1162,8 @@ public class XtypeResolver extends TypeResolver {
         throw new ClassUnregisteredException(qualifiedName);
       }
       MetaStringBytes fullClassNameBytes =
-          metaStringResolver.getOrCreateMetaStringBytes(
-              PACKAGE_ENCODER.encode(qualifiedName, MetaString.Encoding.UTF_8));
+          metaStringResolver.getOrCreateGenericMetaStringBytes(
+              qualifiedName, MetaString.Encoding.UTF_8);
       typeInfo =
           new TypeInfo(
               type,

@@ -24,7 +24,6 @@ import org.apache.fory.Fory;
 import org.apache.fory.collection.ForyObjectMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.Encoders;
-import org.apache.fory.meta.MetaString;
 import org.apache.fory.resolver.MetaStringBytes;
 import org.apache.fory.resolver.MetaStringResolver;
 import org.apache.fory.util.Preconditions;
@@ -60,8 +59,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
 
       for (Enum enumConstant : enumConstants) {
         if (enumConstant != null) {
-          MetaString ms = Encoders.GENERIC_ENCODER.encode(enumConstant.name());
-          MetaStringBytes msb = metaStringResolver.getOrCreateMetaStringBytes(ms);
+          MetaStringBytes msb = metaStringResolver.getOrCreateGenericMetaStringBytes(enumConstant.name());
           metaStringtoEnumRepresentation.put(msb, enumConstant);
           metaStringBytesArrByEnumOrdinal[enumConstant.ordinal()] = msb;
         }

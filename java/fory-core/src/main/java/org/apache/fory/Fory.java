@@ -54,6 +54,7 @@ import org.apache.fory.resolver.MetaStringResolver;
 import org.apache.fory.resolver.NoRefResolver;
 import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.SerializationContext;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
@@ -106,6 +107,7 @@ public final class Fory implements BaseFory {
   private final TypeResolver typeResolver;
   private final MetaStringResolver metaStringResolver;
   private final SerializationContext serializationContext;
+  private final SharedRegistry sharedRegistry;
   private final ClassLoader classLoader;
   private final JITContext jitContext;
   private MemoryBuffer buffer;
@@ -126,8 +128,13 @@ public final class Fory implements BaseFory {
   private final IdentityMap<Object, Object> originToCopyMap;
 
   public Fory(ForyBuilder builder, ClassLoader classLoader) {
+    this(builder, classLoader, new SharedRegistry());
+  }
+
+  public Fory(ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
     // Avoid set classLoader in `ForyBuilder`, which won't be clear when
     // `org.apache.fory.ThreadSafeFory.clearClassLoader` is called.
+    this.sharedRegistry = sharedRegistry;
     config = new Config(builder);
     crossLanguage = config.isXlang();
     this.refTracking = config.trackingRef();
@@ -143,7 +150,7 @@ public final class Fory implements BaseFory {
     }
     jitContext = new JITContext(this);
     generics = new Generics(this);
-    metaStringResolver = new MetaStringResolver();
+    metaStringResolver = new MetaStringResolver(sharedRegistry);
     depth = -1;
     typeResolver = crossLanguage ? new XtypeResolver(this) : new ClassResolver(this);
     typeResolver.initialize();
@@ -1329,6 +1336,11 @@ public final class Fory implements BaseFory {
 
   public ClassLoader getClassLoader() {
     return classLoader;
+  }
+
+  @Internal
+  public SharedRegistry getSharedRegistry() {
+    return sharedRegistry;
   }
 
   public boolean isCrossLanguage() {

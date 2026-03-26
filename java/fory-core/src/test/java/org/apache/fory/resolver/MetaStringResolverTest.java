@@ -20,11 +20,15 @@
 package org.apache.fory.resolver;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotSame;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.util.StringUtils;
@@ -38,9 +42,8 @@ public class MetaStringResolverTest {
     String str = StringUtils.random(128, 0);
     MetaStringResolver stringResolver = new MetaStringResolver();
     for (int i = 0; i < 128; i++) {
-      MetaString metaString = new MetaStringEncoder('.', '_').encode(str);
       stringResolver.writeMetaStringBytes(
-          buffer, stringResolver.getOrCreateMetaStringBytes(metaString));
+          buffer, stringResolver.getOrCreateGenericMetaStringBytes(str));
     }
     for (int i = 0; i < 128; i++) {
       String metaString = stringResolver.readMetaString(buffer);
@@ -60,12 +63,95 @@ public class MetaStringResolverTest {
         String str = StringUtils.random(i, 0);
         MetaStringResolver resolver = new MetaStringResolver();
         resolver.writeMetaStringBytes(
-            buffer,
-            resolver.getOrCreateMetaStringBytes(new MetaStringEncoder('.', '_').encode(str)));
+            buffer, resolver.getOrCreateGenericMetaStringBytes(str));
         String metaString2 = resolver.readMetaString(buffer);
         assertEquals(metaString2.hashCode(), str.hashCode());
         assertEquals(metaString2.getBytes(), str.getBytes());
       }
+    }
+  }
+
+  @Test
+  public void testSharedRegistrySharesEncodedBytesButKeepsDynamicIdsLocal() {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    MetaStringResolver resolver1 = new MetaStringResolver(sharedRegistry);
+    MetaStringResolver resolver2 = new MetaStringResolver(sharedRegistry);
+
+    MetaStringBytes bytes1 = resolver1.getOrCreateGenericMetaStringBytes("thread_safe_fory");
+    MetaStringBytes bytes2 = resolver2.getOrCreateGenericMetaStringBytes("thread_safe_fory");
+
+    assertNotSame(bytes1, bytes2);
+    assertSame(bytes1.bytes, bytes2.bytes);
+    assertEquals(bytes1.dynamicWriteStringId, MetaStringBytes.DEFAULT_DYNAMIC_WRITE_STRING_ID);
+    assertEquals(bytes2.dynamicWriteStringId, MetaStringBytes.DEFAULT_DYNAMIC_WRITE_STRING_ID);
+
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    resolver1.writeMetaStringBytes(buffer, bytes1);
+
+    assertTrue(bytes1.dynamicWriteStringId >= 0);
+    assertEquals(bytes2.dynamicWriteStringId, MetaStringBytes.DEFAULT_DYNAMIC_WRITE_STRING_ID);
+  }
+
+  @Test
+  public void testSharedRegistryDoesNotMergeDifferentEncoderTypeKeys() {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    MetaStringResolver resolver1 = new MetaStringResolver(sharedRegistry);
+    MetaStringResolver resolver2 = new MetaStringResolver(sharedRegistry);
+    MetaStringEncoder encoder = new MetaStringEncoder('$', '_');
+
+    MetaStringBytes typeNameBytes =
+        resolver1.getOrCreateMetaStringBytes(
+            "ExampleValue",
+            encoder,
+            MetaString.Encoding.LOWER_UPPER_DIGIT_SPECIAL,
+            Encoders.TYPE_NAME_ENCODER_TYPE_KEY);
+    MetaStringBytes fieldNameBytes =
+        resolver2.getOrCreateMetaStringBytes(
+            "ExampleValue",
+            encoder,
+            MetaString.Encoding.LOWER_UPPER_DIGIT_SPECIAL,
+            Encoders.FIELD_NAME_ENCODER_TYPE_KEY);
+
+    assertNotSame(typeNameBytes, fieldNameBytes);
+    assertNotSame(typeNameBytes.bytes, fieldNameBytes.bytes);
+  }
+
+  @Test
+  public void testSharedRegistryCreatesMetaStringOnlyOnCacheMiss() {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    MetaStringResolver resolver1 = new MetaStringResolver(sharedRegistry);
+    MetaStringResolver resolver2 = new MetaStringResolver(sharedRegistry);
+    CountingMetaStringEncoder encoder = new CountingMetaStringEncoder('.', '_');
+
+    MetaStringBytes bytes1 =
+        resolver1.getOrCreateMetaStringBytes(
+            "thread_safe_fory",
+            encoder,
+            MetaString.Encoding.LOWER_SPECIAL,
+            Encoders.GENERIC_ENCODER_TYPE_KEY);
+    MetaStringBytes bytes2 =
+        resolver2.getOrCreateMetaStringBytes(
+            "thread_safe_fory",
+            encoder,
+            MetaString.Encoding.LOWER_SPECIAL,
+            Encoders.GENERIC_ENCODER_TYPE_KEY);
+
+    assertEquals(encoder.encodeCalls.get(), 1);
+    assertNotSame(bytes1, bytes2);
+    assertSame(bytes1.bytes, bytes2.bytes);
+  }
+
+  private static final class CountingMetaStringEncoder extends MetaStringEncoder {
+    private final AtomicInteger encodeCalls = new AtomicInteger();
+
+    private CountingMetaStringEncoder(char specialChar1, char specialChar2) {
+      super(specialChar1, specialChar2);
+    }
+
+    @Override
+    public MetaString encode(String input, MetaString.Encoding encoding) {
+      encodeCalls.incrementAndGet();
+      return super.encode(input, encoding);
     }
   }
 }

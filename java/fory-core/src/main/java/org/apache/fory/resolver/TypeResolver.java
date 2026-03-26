@@ -53,6 +53,7 @@ import org.apache.fory.builder.JITContext;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
+import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
@@ -112,10 +113,11 @@ public abstract class TypeResolver {
   final Fory fory;
   final boolean metaContextShareEnabled;
   final MetaStringResolver metaStringResolver;
+  final SharedRegistry sharedRegistry;
   // IdentityMap has better lookup performance, when loadFactor is 0.05f, performance is better
   final IdentityMap<Class<?>, TypeInfo> classInfoMap = new IdentityMap<>(64, foryMapLoadFactor);
   final ExtRegistry extRegistry;
-  final Map<Class<?>, TypeDef> typeDefMap = new HashMap<>();
+  final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap;
   // Map for internal type ids (non-user-defined).
   TypeInfo[] typeIdToTypeInfo = new TypeInfo[] {};
   // Map for user-registered type ids, keyed by user id.
@@ -127,7 +129,9 @@ public abstract class TypeResolver {
   protected TypeResolver(Fory fory) {
     this.fory = fory;
     metaContextShareEnabled = fory.getConfig().isMetaShareEnabled();
-    extRegistry = new ExtRegistry();
+    sharedRegistry = fory.getSharedRegistry();
+    extRegistry = new ExtRegistry(sharedRegistry);
+    typeDefMap = sharedRegistry.typeDefMap;
     metaStringResolver = fory.getMetaStringResolver();
   }
 
@@ -1085,12 +1089,8 @@ public abstract class TypeResolver {
     if (resolveParent) {
       return typeDefMap.computeIfAbsent(cls, k -> TypeDef.buildTypeDef(fory, cls));
     }
-    TypeDef typeDef = extRegistry.currentLayerTypeDef.get(cls);
-    if (typeDef == null) {
-      typeDef = TypeDef.buildTypeDef(fory, cls, false);
-      extRegistry.currentLayerTypeDef.put(cls, typeDef);
-    }
-    return typeDef;
+    return extRegistry.currentLayerTypeDef.computeIfAbsent(
+        cls, key -> TypeDef.buildTypeDef(fory, key, false));
   }
 
   public final boolean isSerializable(Class<?> cls) {
@@ -1451,12 +1451,19 @@ public abstract class TypeResolver {
     return extRegistry.codeGeneratorMap.get(Arrays.asList(loaders));
   }
 
+  public CodeGenerator getOrCreateCodeGenerator(
+      ClassLoader[] loaders, Function<ClassLoader[], CodeGenerator> factory) {
+    ClassLoader[] keyLoaders = Arrays.copyOf(loaders, loaders.length);
+    List<ClassLoader> key = Arrays.asList(keyLoaders);
+    return extRegistry.codeGeneratorMap.computeIfAbsent(key, unused -> factory.apply(keyLoaders));
+  }
+
   public void setCodeGenerator(ClassLoader loader, CodeGenerator codeGenerator) {
     setCodeGenerator(new ClassLoader[] {loader}, codeGenerator);
   }
 
   public void setCodeGenerator(ClassLoader[] loaders, CodeGenerator codeGenerator) {
-    extRegistry.codeGeneratorMap.put(Arrays.asList(loaders), codeGenerator);
+    extRegistry.codeGeneratorMap.putIfAbsent(Arrays.asList(Arrays.copyOf(loaders, loaders.length)), codeGenerator);
   }
 
   public SerializerFactory getSerializerFactory() {
@@ -1564,21 +1571,27 @@ public abstract class TypeResolver {
     // ex. A->field1: B, B.field1: A
     final Set<Class<?>> getClassCtx = new HashSet<>();
     final LongMap<Tuple2<TypeDef, TypeInfo>> classIdToDef = new LongMap<>();
-    final Map<Class<?>, TypeDef> currentLayerTypeDef = new HashMap<>();
+    final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef;
     // Tuple2<Class, Class>: Tuple2<From Class, To Class>
     final IdentityMap<Class<?>, Tuple2<Class<?>, TypeInfo>[]> transformedTypeInfo =
         new IdentityMap<>();
     // TODO(chaokunyang) Better to  use soft reference, see ObjectStreamClass.
     final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>
-        descriptorsCache = new ConcurrentHashMap<>();
+        descriptorsCache;
     static final TypeChecker DEFAULT_TYPE_CHECKER = (resolver, className) -> true;
     TypeChecker typeChecker = DEFAULT_TYPE_CHECKER;
     GenericType objectGenericType;
     final IdentityMap<Type, GenericType> genericTypes = new IdentityMap<>();
     final Map<Class, Map<String, GenericType>> classGenericTypes = new HashMap<>();
-    final Map<List<ClassLoader>, CodeGenerator> codeGeneratorMap = new HashMap<>();
+    final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap;
     final Set<TypeInfo> registeredTypeInfos = new HashSet<>();
     boolean ensureSerializersCompiled;
+
+    ExtRegistry(SharedRegistry sharedRegistry) {
+      currentLayerTypeDef = sharedRegistry.currentLayerTypeDef;
+      descriptorsCache = sharedRegistry.descriptorsCache;
+      codeGeneratorMap = sharedRegistry.codeGeneratorMap;
+    }
 
     public boolean isTypeCheckerSet() {
       return typeChecker != DEFAULT_TYPE_CHECKER;

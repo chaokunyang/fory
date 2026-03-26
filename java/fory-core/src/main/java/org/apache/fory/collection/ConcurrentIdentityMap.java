@@ -21,6 +21,7 @@ package org.apache.fory.collection;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 
 /**
@@ -53,6 +54,12 @@ public final class ConcurrentIdentityMap<K, V> {
     Objects.requireNonNull(mappingFunction, "mappingFunction");
     return map.computeIfAbsent(
         new IdentityKey<K>(requireKey(key)), identityKey -> mappingFunction.apply(identityKey.ref));
+  }
+
+  public void removeIf(BiPredicate<? super K, ? super V> predicate) {
+    Objects.requireNonNull(predicate, "predicate");
+    map.entrySet()
+        .removeIf(entry -> predicate.test(entry.getKey().ref, entry.getValue()));
   }
 
   private static <K> K requireKey(K key) {

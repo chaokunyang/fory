@@ -21,6 +21,7 @@ package org.apache.fory;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import java.util.WeakHashMap;
@@ -398,5 +399,19 @@ public class ThreadSafeForyTest extends ForyTestBase {
     fory.register(BeanA.class);
     fory.serialize("ok");
     Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
+  }
+
+  @Test
+  public void testBuildThreadSafeForyKeepsPlatformThreadClassLoaderLocal() {
+    ThreadSafeFory fory = Fory.builder().requireClassRegistration(false).buildThreadSafeFory();
+    ClassLoader original = Thread.currentThread().getContextClassLoader();
+    ClassLoader classLoader = new CustomClassLoader(original);
+    try {
+      fory.setClassLoader(classLoader);
+      assertSame(Thread.currentThread().getContextClassLoader(), original);
+      assertSame(fory.getClassLoader(), classLoader);
+    } finally {
+      Thread.currentThread().setContextClassLoader(original);
+    }
   }
 }

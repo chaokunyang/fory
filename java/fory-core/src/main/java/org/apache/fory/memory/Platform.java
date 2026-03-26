@@ -17,6 +17,9 @@
 
 package org.apache.fory.memory;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
@@ -54,6 +57,7 @@ public final class Platform {
   public static final int DOUBLE_ARRAY_OFFSET;
 
   private static final boolean unaligned;
+  private static final MethodHandle THREAD_IS_VIRTUAL;
 
   /**
    * Limits the number of bytes to copy per {@link Unsafe#copyMemory(long, long, long)} to allow
@@ -70,6 +74,7 @@ public final class Platform {
     LONG_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(long[].class);
     FLOAT_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(float[].class);
     DOUBLE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(double[].class);
+    THREAD_IS_VIRTUAL = loadThreadIsVirtualHandle();
   }
 
   // This requires `JAVA_VERSION` and `_UNSAFE`.
@@ -111,6 +116,34 @@ public final class Platform {
    */
   public static boolean unaligned() {
     return unaligned;
+  }
+
+  public static boolean hasVirtualThreadSupport() {
+    return THREAD_IS_VIRTUAL != null;
+  }
+
+  public static boolean isCurrentThreadVirtual() {
+    MethodHandle threadIsVirtual = THREAD_IS_VIRTUAL;
+    if (threadIsVirtual == null) {
+      return false;
+    }
+    try {
+      return (boolean) threadIsVirtual.invoke(Thread.currentThread());
+    } catch (Throwable t) {
+      return false;
+    }
+  }
+
+  private static MethodHandle loadThreadIsVirtualHandle() {
+    if (JAVA_VERSION < 21) {
+      return null;
+    }
+    try {
+      return MethodHandles.publicLookup()
+          .findVirtual(Thread.class, "isVirtual", MethodType.methodType(boolean.class));
+    } catch (Throwable t) {
+      return null;
+    }
   }
 
   public static long objectFieldOffset(Field f) {

@@ -31,22 +31,33 @@ import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
 import org.apache.fory.util.LoaderBinding;
 
 /**
- * A simple pool for fory, the instance will never expire, and set ClassLoader won't take effect.
+ * A fast pool for fory, the instance will never expire and classloader changes use thread context
+ * classloader.
  */
-public class SimpleForyPool extends AbstractThreadSafeFory {
+public class FastForyPool extends AbstractThreadSafeFory {
   private final Function<ClassLoader, Fory> foryFactory;
-  private final ThreadLocal<MemoryBuffer> bufferLocal =
-      ThreadLocal.withInitial(() -> MemoryUtils.buffer(32));
+  private final SharedRegistry sharedRegistry;
   private final ConcurrentLinkedQueue<Fory> pool = new ConcurrentLinkedQueue<>();
   private final Object callbackLock = new Object();
+  private final ClassLoader defaultClassLoader;
   private Consumer<Fory> factoryCallback = f -> {};
 
-  public SimpleForyPool(Function<ClassLoader, Fory> foryFactory) {
+  public FastForyPool(Function<ClassLoader, Fory> foryFactory, SharedRegistry sharedRegistry) {
+    this(foryFactory, sharedRegistry, null);
+  }
+
+  public FastForyPool(
+      Function<ClassLoader, Fory> foryFactory,
+      SharedRegistry sharedRegistry,
+      ClassLoader defaultClassLoader) {
     this.foryFactory = Objects.requireNonNull(foryFactory);
+    this.sharedRegistry = Objects.requireNonNull(sharedRegistry);
+    this.defaultClassLoader = defaultClassLoader;
   }
 
   @Override
@@ -60,15 +71,22 @@ public class SimpleForyPool extends AbstractThreadSafeFory {
   }
 
   @Override
-  public void setClassLoader(ClassLoader classLoader) {}
+  public void setClassLoader(ClassLoader classLoader) {
+    setClassLoader(classLoader, LoaderBinding.StagingType.NO_STAGING);
+  }
 
   @Override
-  public void setClassLoader(ClassLoader classLoader, LoaderBinding.StagingType stagingType) {}
+  public void setClassLoader(ClassLoader classLoader, LoaderBinding.StagingType stagingType) {
+    Thread.currentThread().setContextClassLoader(classLoader);
+  }
 
   @Override
   public ClassLoader getClassLoader() {
     ClassLoader loader = Thread.currentThread().getContextClassLoader();
-    return loader == null ? Fory.class.getClassLoader() : loader;
+    if (loader != null) {
+      return loader;
+    }
+    return defaultClassLoader == null ? Fory.class.getClassLoader() : defaultClassLoader;
   }
 
   @Override
@@ -86,26 +104,12 @@ public class SimpleForyPool extends AbstractThreadSafeFory {
 
   @Override
   public byte[] serialize(Object obj) {
-    MemoryBuffer buffer = bufferLocal.get();
-    buffer.writerIndex(0);
-    execute(
-        fory -> {
-          fory.serialize(buffer, obj);
-          return null;
-        });
-    return buffer.getBytes(0, buffer.writerIndex());
+    return execute(fory -> fory.serialize(obj));
   }
 
   @Override
   public byte[] serialize(Object obj, BufferCallback callback) {
-    MemoryBuffer buffer = bufferLocal.get();
-    buffer.writerIndex(0);
-    execute(
-        fory -> {
-          fory.serialize(buffer, obj, callback);
-          return null;
-        });
-    return buffer.getBytes(0, buffer.writerIndex());
+    return execute(fory -> fory.serialize(obj, callback));
   }
 
   @Override
@@ -221,10 +225,7 @@ public class SimpleForyPool extends AbstractThreadSafeFory {
     if (fory != null) {
       return fory;
     }
-    ClassLoader loader = Thread.currentThread().getContextClassLoader();
-    if (loader == null) {
-      loader = Fory.class.getClassLoader();
-    }
+    ClassLoader loader = getClassLoader();
     synchronized (callbackLock) {
       fory = foryFactory.apply(loader);
       factoryCallback.accept(fory);

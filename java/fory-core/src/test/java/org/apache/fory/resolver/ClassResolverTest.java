@@ -20,12 +20,14 @@
 package org.apache.fory.resolver;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Primitives;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,11 +48,13 @@ import lombok.ToString;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.builder.Generated;
+import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.longlongpkg.C1;
 import org.apache.fory.resolver.longlongpkg.C2;
@@ -216,6 +220,40 @@ public class ClassResolverTest extends ForyTestBase {
         classResolver.getSerializerClass(
             Class.forName("org.apache.fory.serializer.collection.MapContainer")),
         MapSerializers.DefaultJavaMapSerializer.class);
+  }
+
+  @Test
+  public void testSharedRegistrySharesTypeDefCachesAcrossForyInstances() {
+    ForyBuilder builder =
+        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+
+    ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
+    ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
+
+    assertSame(resolver1.typeDefMap, resolver2.typeDefMap);
+    assertSame(
+        resolver1.extRegistry.currentLayerTypeDef, resolver2.extRegistry.currentLayerTypeDef);
+    assertSame(resolver1.extRegistry.descriptorsCache, resolver2.extRegistry.descriptorsCache);
+    assertSame(resolver1.extRegistry.codeGeneratorMap, resolver2.extRegistry.codeGeneratorMap);
+
+    TypeDef first = resolver1.getTypeDef(BeanB.class, true);
+    TypeDef second = resolver2.getTypeDef(BeanB.class, true);
+    assertSame(first, second);
+    assertNotSame(resolver1, resolver2);
+  }
+
+  private static void finishBuilder(ForyBuilder builder) {
+    try {
+      Method finish = ForyBuilder.class.getDeclaredMethod("finish");
+      finish.setAccessible(true);
+      finish.invoke(builder);
+    } catch (ReflectiveOperationException e) {
+      throw new AssertionError(e);
+    }
   }
 
   interface Interface1 {}

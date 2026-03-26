@@ -34,6 +34,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.MetaSharedCodecBuilder;
+import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.logging.Logger;
@@ -107,7 +108,7 @@ public class TypeDef implements Serializable {
   // be same too.
   private final long id;
   private final byte[] encoded;
-  private transient List<Descriptor> descriptors;
+  private transient ConcurrentIdentityMap<TypeResolver, List<Descriptor>> descriptorsCache;
 
   TypeDef(
       ClassSpec classSpec,
@@ -373,58 +374,69 @@ public class TypeDef implements Serializable {
    * @param cls class load in current process.
    */
   public List<Descriptor> getDescriptors(TypeResolver resolver, Class<?> cls) {
-    if (descriptors == null) {
-      // getFieldDescriptors already handles ref tracking computation and cache update
-      Collection<Descriptor> fieldDescriptors = resolver.getFieldDescriptors(cls, true);
-      Map<String, Descriptor> descriptorsMap = new HashMap<>();
-      Map<Short, Descriptor> fieldIdToDescriptorMap = new HashMap<>();
+    return getDescriptorsCache().computeIfAbsent(resolver, key -> buildDescriptors(key, cls));
+  }
 
-      for (Descriptor desc : fieldDescriptors) {
-        String fullName = desc.getDeclaringClass() + "." + desc.getName();
-        if (descriptorsMap.put(fullName, desc) != null) {
-          throw new IllegalStateException("Duplicate key");
-        }
-        // If the field has @ForyField annotation with field ID, index by field ID
-        if (desc.getForyField() != null) {
-          int fieldId = desc.getForyField().id();
-          if (fieldId >= 0) {
-            if (fieldIdToDescriptorMap.containsKey((short) fieldId)) {
-              throw new IllegalArgumentException(
-                  "Duplicate field id "
-                      + fieldId
-                      + " for field "
-                      + desc.getName()
-                      + " in class "
-                      + cls.getName());
-            }
-            fieldIdToDescriptorMap.put((short) fieldId, desc);
-          }
-        }
+  private List<Descriptor> buildDescriptors(TypeResolver resolver, Class<?> cls) {
+    // getFieldDescriptors already handles ref tracking computation and cache update
+    Collection<Descriptor> fieldDescriptors = resolver.getFieldDescriptors(cls, true);
+    Map<String, Descriptor> descriptorsMap = new HashMap<>();
+    Map<Short, Descriptor> fieldIdToDescriptorMap = new HashMap<>();
+
+    for (Descriptor desc : fieldDescriptors) {
+      String fullName = desc.getDeclaringClass() + "." + desc.getName();
+      if (descriptorsMap.put(fullName, desc) != null) {
+        throw new IllegalStateException("Duplicate key");
       }
-      descriptors = new ArrayList<>(fieldsInfo.size());
-      boolean isXlang = resolver.getFory().isCrossLanguage();
-      for (FieldInfo fieldInfo : fieldsInfo) {
-        Descriptor descriptor;
-        // Try to match by field ID first if the FieldInfo has an ID
-        if (fieldInfo.hasFieldId()) {
-          descriptor = fieldIdToDescriptorMap.get(fieldInfo.getFieldId());
-        } else {
-          String fieldName = fieldInfo.getFieldName();
-          String definedClass = fieldInfo.getDefinedClass();
-          // First try camelCase field name (decoded name from TypeDefDecoder)
-          descriptor = descriptorsMap.get(definedClass + "." + fieldName);
-          // If not found and in xlang mode, also try snake_case field name
-          // This supports users who use snake_case field names in Java for xlang compatibility
-          if (descriptor == null && isXlang) {
-            String snakeCaseName = StringUtils.lowerCamelToLowerUnderscore(fieldName);
-            descriptor = descriptorsMap.get(definedClass + "." + snakeCaseName);
+      // If the field has @ForyField annotation with field ID, index by field ID
+      if (desc.getForyField() != null) {
+        int fieldId = desc.getForyField().id();
+        if (fieldId >= 0) {
+          if (fieldIdToDescriptorMap.containsKey((short) fieldId)) {
+            throw new IllegalArgumentException(
+                "Duplicate field id "
+                    + fieldId
+                    + " for field "
+                    + desc.getName()
+                    + " in class "
+                    + cls.getName());
           }
+          fieldIdToDescriptorMap.put((short) fieldId, desc);
         }
-        Descriptor newDesc = fieldInfo.toDescriptor(resolver, descriptor);
-        descriptors.add(newDesc);
       }
     }
+    List<Descriptor> descriptors = new ArrayList<>(fieldsInfo.size());
+    boolean isXlang = resolver.getFory().isCrossLanguage();
+    for (FieldInfo fieldInfo : fieldsInfo) {
+      Descriptor descriptor;
+      // Try to match by field ID first if the FieldInfo has an ID
+      if (fieldInfo.hasFieldId()) {
+        descriptor = fieldIdToDescriptorMap.get(fieldInfo.getFieldId());
+      } else {
+        String fieldName = fieldInfo.getFieldName();
+        String definedClass = fieldInfo.getDefinedClass();
+        // First try camelCase field name (decoded name from TypeDefDecoder)
+        descriptor = descriptorsMap.get(definedClass + "." + fieldName);
+        // If not found and in xlang mode, also try snake_case field name
+        // This supports users who use snake_case field names in Java for xlang compatibility
+        if (descriptor == null && isXlang) {
+          String snakeCaseName = StringUtils.lowerCamelToLowerUnderscore(fieldName);
+          descriptor = descriptorsMap.get(definedClass + "." + snakeCaseName);
+        }
+      }
+      Descriptor newDesc = fieldInfo.toDescriptor(resolver, descriptor);
+      descriptors.add(newDesc);
+    }
     return descriptors;
+  }
+
+  private ConcurrentIdentityMap<TypeResolver, List<Descriptor>> getDescriptorsCache() {
+    ConcurrentIdentityMap<TypeResolver, List<Descriptor>> cache = descriptorsCache;
+    if (cache == null) {
+      cache = new ConcurrentIdentityMap<>();
+      descriptorsCache = cache;
+    }
+    return cache;
   }
 
   public static TypeDef buildTypeDef(Fory fory, Class<?> cls) {

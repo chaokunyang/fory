@@ -19,12 +19,8 @@
 
 package org.apache.fory.resolver;
 
-import static org.apache.fory.meta.Encoders.GENERIC_ENCODER;
 import static org.apache.fory.meta.Encoders.PACKAGE_DECODER;
-import static org.apache.fory.meta.Encoders.PACKAGE_ENCODER;
 import static org.apache.fory.meta.Encoders.TYPE_NAME_DECODER;
-import static org.apache.fory.meta.Encoders.encodePackage;
-import static org.apache.fory.meta.Encoders.encodeTypeName;
 import static org.apache.fory.serializer.CodegenSerializer.loadCodegenSerializer;
 import static org.apache.fory.serializer.CodegenSerializer.supportCodegenForJavaSerialization;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
@@ -489,11 +485,9 @@ public class ClassResolver extends TypeResolver {
     }
     checkRegistration(cls, -1, fullname, false);
     MetaStringBytes fullNameBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(
-            GENERIC_ENCODER.encode(fullname, MetaString.Encoding.UTF_8));
-    MetaStringBytes nsBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(encodePackage(namespace));
-    MetaStringBytes nameBytes = metaStringResolver.getOrCreateMetaStringBytes(encodeTypeName(name));
+        metaStringResolver.getOrCreateGenericMetaStringBytes(fullname, MetaString.Encoding.UTF_8);
+    MetaStringBytes nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringBytes nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
     TypeInfo existingInfo = classInfoMap.get(cls);
     int typeId =
         buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
@@ -542,11 +536,9 @@ public class ClassResolver extends TypeResolver {
     }
     checkRegistration(cls, -1, fullname, false);
     MetaStringBytes fullNameBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(
-            GENERIC_ENCODER.encode(fullname, MetaString.Encoding.UTF_8));
-    MetaStringBytes nsBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(encodePackage(namespace));
-    MetaStringBytes nameBytes = metaStringResolver.getOrCreateMetaStringBytes(encodeTypeName(name));
+        metaStringResolver.getOrCreateGenericMetaStringBytes(fullname, MetaString.Encoding.UTF_8);
+    MetaStringBytes nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringBytes nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
     int typeId = Types.NAMED_UNION;
     TypeInfo typeInfo =
         new TypeInfo(cls, fullNameBytes, nsBytes, nameBytes, false, serializer, typeId, -1);
@@ -1816,8 +1808,8 @@ public class ClassResolver extends TypeResolver {
     String className = simpleClassNameBytes.decode(TYPE_NAME_DECODER);
     ClassSpec classSpec = Encoders.decodePkgAndClass(packageName, className);
     MetaStringBytes fullClassNameBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(
-            PACKAGE_ENCODER.encode(classSpec.entireClassName, MetaString.Encoding.UTF_8));
+        metaStringResolver.getOrCreateGenericMetaStringBytes(
+            classSpec.entireClassName, MetaString.Encoding.UTF_8);
     Class<?> cls = loadClass(classSpec.entireClassName, classSpec.isEnum, classSpec.dimension);
     int typeId = buildUnregisteredTypeId(cls, null);
     TypeInfo typeInfo =
@@ -1847,9 +1839,8 @@ public class ClassResolver extends TypeResolver {
   public Class<?> loadClassForMeta(String className, boolean isEnum, int arrayDims) {
     String pkg = ReflectionUtils.getPackage(className);
     String typeName = ReflectionUtils.getClassNameWithoutPackage(className);
-    MetaStringBytes pkgBytes = metaStringResolver.getOrCreateMetaStringBytes(encodePackage(pkg));
-    MetaStringBytes typeBytes =
-        metaStringResolver.getOrCreateMetaStringBytes(encodeTypeName(typeName));
+    MetaStringBytes pkgBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(pkg);
+    MetaStringBytes typeBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
     TypeInfo cachedInfo =
         compositeNameBytes2TypeInfo.get(new TypeNameBytes(pkgBytes.hashCode, typeBytes.hashCode));
     if (cachedInfo != null) {

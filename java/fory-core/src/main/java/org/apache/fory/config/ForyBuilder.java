@@ -29,8 +29,10 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.apache.fory.meta.MetaCompressor;
+import org.apache.fory.pool.FastForyPool;
 import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.Serializer;
@@ -505,8 +507,13 @@ public final class ForyBuilder {
    * exception explicitly for better debugging.
    */
   private static Fory newFory(ForyBuilder builder, ClassLoader classLoader) {
+    return newFory(builder, classLoader, new SharedRegistry());
+  }
+
+  private static Fory newFory(
+      ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
     try {
-      return new Fory(builder, classLoader);
+      return new Fory(builder, classLoader, sharedRegistry);
     } catch (Throwable t) {
       t.printStackTrace();
       LOG.error("Fory creation failed with classloader {}", classLoader);
@@ -526,7 +533,21 @@ public final class ForyBuilder {
 
   /** Build thread safe fory. */
   public ThreadSafeFory buildThreadSafeFory() {
-    return buildThreadLocalFory();
+    finish();
+    ClassLoader loader = this.classLoader;
+    this.classLoader = null;
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    ThreadLocalFory threadLocalFory =
+        new ThreadLocalFory(
+            classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry);
+    threadLocalFory.setClassLoader(loader);
+    if (!Platform.hasVirtualThreadSupport()) {
+      return threadLocalFory;
+    }
+    FastForyPool fastForyPool =
+        new FastForyPool(
+            classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry, loader);
+    return new AdaptiveThreadSafeFory(threadLocalFory, fastForyPool);
   }
 
   /** Build thread safe fory backed by {@link ThreadLocalFory}. */
@@ -536,7 +557,10 @@ public final class ForyBuilder {
     // clear classLoader to avoid `LoaderBinding#foryFactory` lambda capture classLoader by
     // capturing `ForyBuilder`,  which make `classLoader` not able to be gc.
     this.classLoader = null;
-    ThreadLocalFory threadSafeFory = new ThreadLocalFory(classLoader -> newFory(this, classLoader));
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    ThreadLocalFory threadSafeFory =
+        new ThreadLocalFory(
+            classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry);
     threadSafeFory.setClassLoader(loader);
     return threadSafeFory;
   }
@@ -572,9 +596,11 @@ public final class ForyBuilder {
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
+    SharedRegistry sharedRegistry = new SharedRegistry();
     ThreadSafeFory threadSafeFory =
         new ThreadPoolFory(
-            classLoader -> newFory(this, classLoader),
+            classLoader -> newFory(this, classLoader, sharedRegistry),
+            sharedRegistry,
             minPoolSize,
             maxPoolSize,
             expireTime,

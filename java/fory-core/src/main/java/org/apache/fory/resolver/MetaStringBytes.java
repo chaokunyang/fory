@@ -63,7 +63,10 @@ public final class MetaStringBytes {
   }
 
   static MetaStringBytes of(MetaString metaString) {
-    byte[] bytes = metaString.getBytes();
+    return of(metaString, metaString.getBytes());
+  }
+
+  static MetaStringBytes of(MetaString metaString, byte[] bytes) {
     // Set seed to ensure hash is deterministic.
     long hashCode = MurmurHash3.murmurhash3_x64_128(bytes, 0, bytes.length, 47)[0];
     hashCode = Math.abs(hashCode);

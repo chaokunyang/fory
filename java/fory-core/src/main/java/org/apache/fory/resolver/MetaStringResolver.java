@@ -28,6 +28,7 @@ import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.MetaString;
+import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.util.MurmurHash3;
 
 /**
@@ -52,21 +53,59 @@ public final class MetaStringResolver {
   // Every enum bytes should be singleton at every fory, since we keep state in it.
   private final ObjectMap<MetaString, MetaStringBytes> metaString2BytesMap =
       new ObjectMap<>(initialCapacity, foryMapLoadFactor);
+  private final SharedRegistry sharedRegistry;
   private MetaStringBytes[] dynamicWrittenString = new MetaStringBytes[32];
   private MetaStringBytes[] dynamicReadStringIds = new MetaStringBytes[32];
   private short dynamicWriteStringId;
   private short dynamicReadStringId;
 
   public MetaStringResolver() {
+    this(new SharedRegistry());
+  }
+
+  public MetaStringResolver(SharedRegistry sharedRegistry) {
+    this.sharedRegistry = Objects.requireNonNull(sharedRegistry);
     dynamicWriteStringId = 0;
     dynamicReadStringId = 0;
   }
 
-  public MetaStringBytes getOrCreateMetaStringBytes(MetaString str) {
-    MetaStringBytes metaStringBytes = metaString2BytesMap.get(str);
+  public MetaStringBytes getOrCreateGenericMetaStringBytes(String str) {
+    return getOrCreateGenericMetaStringBytes(str, Encoders.computeGenericEncoding(str));
+  }
+
+  public MetaStringBytes getOrCreateGenericMetaStringBytes(
+      String str, MetaString.Encoding encoding) {
+    return getOrCreateMetaStringBytes(
+        str, Encoders.GENERIC_ENCODER, encoding, Encoders.GENERIC_ENCODER_TYPE_KEY);
+  }
+
+  public MetaStringBytes getOrCreatePackageMetaStringBytes(String str) {
+    return getOrCreateMetaStringBytes(
+        str,
+        Encoders.PACKAGE_ENCODER,
+        Encoders.computePackageEncoding(str),
+        Encoders.PACKAGE_ENCODER_TYPE_KEY);
+  }
+
+  public MetaStringBytes getOrCreateTypeNameMetaStringBytes(String str) {
+    return getOrCreateMetaStringBytes(
+        str,
+        Encoders.TYPE_NAME_ENCODER,
+        Encoders.computeTypeNameEncoding(str),
+        Encoders.TYPE_NAME_ENCODER_TYPE_KEY);
+  }
+
+  MetaStringBytes getOrCreateMetaStringBytes(
+      String str,
+      MetaStringEncoder encoder,
+      MetaString.Encoding encoding,
+      String encoderTypeKey) {
+    MetaString canonicalMetaString =
+        sharedRegistry.getOrCreateMetaString(str, encoder, encoding, encoderTypeKey);
+    MetaStringBytes metaStringBytes = metaString2BytesMap.get(canonicalMetaString);
     if (metaStringBytes == null) {
-      metaStringBytes = MetaStringBytes.of(str);
-      metaString2BytesMap.put(str, metaStringBytes);
+      metaStringBytes = MetaStringBytes.of(canonicalMetaString);
+      metaString2BytesMap.put(canonicalMetaString, metaStringBytes);
     }
     return metaStringBytes;
   }

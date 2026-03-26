@@ -199,6 +199,16 @@ public class ForyCopyTest extends ForyTestBase {
   }
 
   @Test
+  public void testCopyOnlySerializerStillRejectsSerialize() {
+    Fory fory =
+        builder().withCodegen(false).withRefCopy(true).requireClassRegistration(true).build();
+    BeanA beanA = BeanA.createBeanA(2);
+    fory.register(BeanA.class);
+    assertEquals(fory.copy(beanA), beanA);
+    Assert.assertThrows(ForyException.class, () -> fory.serialize(beanA));
+  }
+
+  @Test
   public void testCopyFailureDoesNotLeakCopyDepth() {
     Fory fory =
         builder().withCodegen(false).withRefCopy(false).requireClassRegistration(true).build();

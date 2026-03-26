@@ -125,7 +125,6 @@ public final class Fory implements BaseFory {
   private final int maxDepth;
   private boolean registrationFinished;
   private int copyDepth;
-  private boolean copying;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
 
@@ -279,7 +278,7 @@ public final class Fory implements BaseFory {
 
   private void ensureRegistrationFinished() {
     if (!registrationFinished) {
-      typeResolver.finishRegister();
+      typeResolver.finishRegistration();
       registrationFinished = true;
     }
   }
@@ -1034,7 +1033,6 @@ public final class Fory implements BaseFory {
   public <T> T copy(T obj) {
     assert copyDepth == 0 : "copy should only be invoked at top level; use copyObject instead";
     ensureRegistrationFinished();
-    copying = true;
     try {
       return copyObject(obj);
     } catch (Throwable e) {
@@ -1239,7 +1237,6 @@ public final class Fory implements BaseFory {
       originToCopyMap.clear();
     }
     copyDepth = 0;
-    copying = false;
   }
 
   private void throwDepthSerializationException() {
@@ -1383,10 +1380,6 @@ public final class Fory implements BaseFory {
 
   public boolean copyTrackingRef() {
     return copyRefTracking;
-  }
-
-  public boolean isCopying() {
-    return copying || copyDepth > 0;
   }
 
   public boolean isStringRefIgnored() {

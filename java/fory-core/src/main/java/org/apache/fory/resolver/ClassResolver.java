@@ -101,6 +101,7 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BufferSerializers;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
+import org.apache.fory.serializer.CopyOnlyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.ExternalizableSerializer;
 import org.apache.fory.serializer.ForyCopyableSerializer;
@@ -1486,9 +1487,16 @@ public class ClassResolver extends TypeResolver {
 
   private Serializer createSerializer(Class<?> cls) {
     DisallowedList.checkNotInDisallowedList(cls.getName());
-    if (!fory.isCopying() && !isSecure(cls)) {
+    if (!isSecure(cls)) {
+      if (getSerializerClass(cls, false) == ObjectSerializer.class) {
+        Serializer serializer = new CopyOnlyObjectSerializer<>(fory, cls);
+        if (ForyCopyable.class.isAssignableFrom(cls)) {
+          serializer = new ForyCopyableSerializer<>(fory, cls, serializer);
+        }
+        return serializer;
+      }
       throw new InsecureException(generateSecurityMsg(cls));
-    } else if (!fory.isCopying()) {
+    } else {
       if (!fory.getConfig().suppressClassRegistrationWarnings()
           && !Functions.isLambda(cls)
           && !ReflectionUtils.isJdkProxy(cls)

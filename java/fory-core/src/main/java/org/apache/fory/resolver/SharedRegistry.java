@@ -52,7 +52,7 @@ public final class SharedRegistry {
   volatile IdentityMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
-  synchronized void publishOrGetRegistration(
+  synchronized void setRegistrationIfAbsent(
       IdentityMap<Class<?>, Integer> candidateRegisteredClassIdMap,
       BiMap<String, Class<?>> candidateRegisteredClasses) {
     Objects.requireNonNull(candidateRegisteredClassIdMap);
@@ -61,6 +61,14 @@ public final class SharedRegistry {
       registeredClassIdMap = candidateRegisteredClassIdMap;
       registeredClasses = candidateRegisteredClasses;
     }
+  }
+
+  synchronized IdentityMap<Class<?>, Integer> getRegisteredClassIdMap() {
+    return Objects.requireNonNull(registeredClassIdMap);
+  }
+
+  synchronized BiMap<String, Class<?>> getRegisteredClasses() {
+    return Objects.requireNonNull(registeredClasses);
   }
 
   EncodedMetaString getOrCreateEncodedMetaString(

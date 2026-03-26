@@ -120,7 +120,6 @@ public abstract class TypeResolver {
   final IdentityMap<Class<?>, TypeInfo> classInfoMap = new IdentityMap<>(64, foryMapLoadFactor);
   final ExtRegistry extRegistry;
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap;
-  private volatile boolean registrationFinished;
   // Map for internal type ids (non-user-defined).
   final TypeInfo[] typeIdToTypeInfo;
   // Map for user-registered type ids, keyed by user id.
@@ -141,7 +140,7 @@ public abstract class TypeResolver {
   }
 
   protected final void checkRegisterAllowed() {
-    if (registrationFinished || fory.isRegistrationFinished()) {
+    if (fory.isRegistrationFinished()) {
       throw new ForyException(
           "Cannot register class/serializer after registration has been frozen. Please register "
               + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
@@ -245,25 +244,15 @@ public abstract class TypeResolver {
    * top-level runtime entry
    * points can call it defensively.
    */
-  public final void finishRegister() {
-    if (registrationFinished) {
-      fory.setRegistrationFinished();
+  public final void finishRegistration() {
+    if (fory.isRegistrationFinished()) {
       return;
     }
-    synchronized (this) {
-      if (registrationFinished) {
-        fory.setRegistrationFinished();
-        return;
-      }
-      if (sharedRegistry.registeredClassIdMap == null) {
-        sharedRegistry.publishOrGetRegistration(
-            buildSharedRegisteredClassIdMap(), buildSharedRegisteredClasses());
-      }
-      extRegistry.finishRegistration(
-          sharedRegistry.registeredClassIdMap, sharedRegistry.registeredClasses);
-      registrationFinished = true;
-      fory.setRegistrationFinished();
-    }
+    sharedRegistry.setRegistrationIfAbsent(
+        extRegistry.registeredClassIdMap, extRegistry.registeredClasses);
+    extRegistry.finishRegistration(
+        sharedRegistry.getRegisteredClassIdMap(), sharedRegistry.getRegisteredClasses());
+    fory.setRegistrationFinished();
   }
 
   /**
@@ -1579,7 +1568,7 @@ public abstract class TypeResolver {
 
   /**
    * Reads a registered class id from the mutable local maps before freeze or the shared maps after
-   * {@link #finishRegister()}.
+   * {@link #finishRegistration()}.
    */
   final Integer getRegisteredClassIdLocalOrFrozen(Class<?> cls) {
     return extRegistry.registeredClassIdMap.get(cls);
@@ -1587,7 +1576,7 @@ public abstract class TypeResolver {
 
   /**
    * Reads a registered class name from the mutable local maps before freeze or the shared maps
-   * after {@link #finishRegister()}.
+   * after {@link #finishRegistration()}.
    */
   final String getRegisteredNameLocalOrFrozen(Class<?> cls) {
     return extRegistry.registeredClasses.inverse().get(cls);
@@ -1595,7 +1584,7 @@ public abstract class TypeResolver {
 
   /**
    * Reads a registered class lookup by name from the mutable local maps before freeze or the
-   * shared maps after {@link #finishRegister()}.
+   * shared maps after {@link #finishRegistration()}.
    */
   final Class<?> getRegisteredClassLocalOrFrozen(String className) {
     return extRegistry.registeredClasses.get(className);
@@ -1611,24 +1600,6 @@ public abstract class TypeResolver {
 
   final boolean isRegisteredByNameLocalOrFrozen(String className) {
     return getRegisteredClassLocalOrFrozen(className) != null;
-  }
-
-  final boolean isRegistrationFinished() {
-    return registrationFinished;
-  }
-
-  private IdentityMap<Class<?>, Integer> buildSharedRegisteredClassIdMap() {
-    IdentityMap<Class<?>, Integer> classIdByClass =
-        new IdentityMap<>(Math.max(1, extRegistry.registeredClassIdMap.size));
-    extRegistry.registeredClassIdMap.forEach(classIdByClass::put);
-    return classIdByClass;
-  }
-
-  private BiMap<String, Class<?>> buildSharedRegisteredClasses() {
-    int registeredClassCount = Math.max(1, extRegistry.registeredClasses.size());
-    BiMap<String, Class<?>> classByName = HashBiMap.create(registeredClassCount);
-    extRegistry.registeredClasses.forEach(classByName::put);
-    return classByName;
   }
 
   static class ExtRegistry {

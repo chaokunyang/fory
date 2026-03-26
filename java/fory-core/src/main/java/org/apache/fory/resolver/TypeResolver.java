@@ -99,7 +99,7 @@ public abstract class TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ClassResolver.class);
 
   static final TypeInfo NIL_TYPE_INFO =
-      new TypeInfo(null, null, null, null, false, null, Types.UNKNOWN, INVALID_USER_TYPE_ID);
+      new TypeInfo(null, null, null, false, null, Types.UNKNOWN, INVALID_USER_TYPE_ID);
   // use a lower load factor to minimize hash collision
   static final float foryMapLoadFactor = 0.25f;
   static final int estimatedNumRegistered = 150;

@@ -282,6 +282,21 @@ public class ClassResolverTest extends ForyTestBase {
     assertNotSame(typeInfo1, typeInfo2);
   }
 
+  @Test
+  public void testRegisterNamedClassCachesOnlyNamespaceAndTypeName() {
+    ForyBuilder builder =
+        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
+
+    int before = sharedRegistry.metaStringMap.size();
+    classResolver.register(C1.class, "ns", "C1");
+
+    assertEquals(sharedRegistry.metaStringMap.size() - before, 2);
+  }
+
   private static void finishBuilder(ForyBuilder builder) {
     try {
       Method finish = ForyBuilder.class.getDeclaredMethod("finish");

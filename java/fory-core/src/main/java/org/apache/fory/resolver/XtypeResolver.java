@@ -74,7 +74,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
-import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
@@ -421,12 +420,9 @@ public class XtypeResolver extends TypeResolver {
       String typeName,
       int typeId,
       int userTypeId) {
-    MetaStringRef fullClassNameBytes =
-        metaStringResolver.getOrCreateGenericMetaStringBytes(type.getName(), MetaString.Encoding.UTF_8);
     MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
     MetaStringRef classNameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
-    return new TypeInfo(
-        type, fullClassNameBytes, nsBytes, classNameBytes, false, serializer, typeId, userTypeId);
+    return new TypeInfo(type, nsBytes, classNameBytes, false, serializer, typeId, userTypeId);
   }
 
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
@@ -1163,13 +1159,9 @@ public class XtypeResolver extends TypeResolver {
       } else {
         throw new ClassUnregisteredException(qualifiedName);
       }
-      MetaStringRef fullClassNameBytes =
-          metaStringResolver.getOrCreateGenericMetaStringBytes(
-              qualifiedName, MetaString.Encoding.UTF_8);
       typeInfo =
           new TypeInfo(
               type,
-              fullClassNameBytes,
               packageBytes,
               simpleClassNameBytes,
               false,

@@ -95,7 +95,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.Encoders;
-import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -482,15 +481,13 @@ public class ClassResolver extends TypeResolver {
       fullname = namespace + "." + name;
     }
     checkRegistration(cls, -1, fullname, false);
-    MetaStringRef fullNameBytes =
-        metaStringResolver.getOrCreateGenericMetaStringBytes(fullname, MetaString.Encoding.UTF_8);
     MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
     MetaStringRef nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
     TypeInfo existingInfo = classInfoMap.get(cls);
     int typeId =
         buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
     TypeInfo typeInfo =
-        new TypeInfo(cls, fullNameBytes, nsBytes, nameBytes, false, null, typeId, -1);
+        new TypeInfo(cls, nsBytes, nameBytes, false, null, typeId, -1);
     classInfoMap.put(cls, typeInfo);
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
@@ -533,13 +530,10 @@ public class ClassResolver extends TypeResolver {
       fullname = namespace + "." + name;
     }
     checkRegistration(cls, -1, fullname, false);
-    MetaStringRef fullNameBytes =
-        metaStringResolver.getOrCreateGenericMetaStringBytes(fullname, MetaString.Encoding.UTF_8);
     MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
     MetaStringRef nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
     int typeId = Types.NAMED_UNION;
-    TypeInfo typeInfo =
-        new TypeInfo(cls, fullNameBytes, nsBytes, nameBytes, false, serializer, typeId, -1);
+    TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, false, serializer, typeId, -1);
     typeInfo.setSerializer(this, serializer);
     classInfoMap.put(cls, typeInfo);
     compositeNameBytes2TypeInfo.put(
@@ -1810,15 +1804,11 @@ public class ClassResolver extends TypeResolver {
     String packageName = packageBytes.decode(PACKAGE_DECODER);
     String className = simpleClassNameBytes.decode(TYPE_NAME_DECODER);
     ClassSpec classSpec = Encoders.decodePkgAndClass(packageName, className);
-    MetaStringRef fullClassNameBytes =
-        metaStringResolver.getOrCreateGenericMetaStringBytes(
-            classSpec.entireClassName, MetaString.Encoding.UTF_8);
     Class<?> cls = loadClass(classSpec.entireClassName, classSpec.isEnum, classSpec.dimension);
     int typeId = buildUnregisteredTypeId(cls, null);
     TypeInfo typeInfo =
         new TypeInfo(
             cls,
-            fullClassNameBytes,
             packageBytes,
             simpleClassNameBytes,
             false,

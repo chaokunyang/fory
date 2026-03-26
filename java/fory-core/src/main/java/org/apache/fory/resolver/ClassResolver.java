@@ -1018,7 +1018,7 @@ public class ClassResolver extends TypeResolver {
     extRegistry.registeredTypeInfos.add(typeInfo);
     // in order to support customized serializer for abstract or interface.
     if (!type.isPrimitive() && (ReflectionUtils.isAbstract(type) || type.isInterface())) {
-      extRegistry.absTypeInfo.put(type, typeInfo);
+      extRegistry.abstractTypeInfo.put(type, typeInfo);
       extRegistry.registeredTypeInfos.add(typeInfo);
     }
   }
@@ -1529,16 +1529,16 @@ public class ClassResolver extends TypeResolver {
     }
 
     // support customized serializer for abstract or interface.
-    if (!extRegistry.absTypeInfo.isEmpty()) {
+    if (!extRegistry.abstractTypeInfo.isEmpty()) {
       Class<?> tmpCls = cls;
       while (tmpCls != null && tmpCls != Object.class) {
-        TypeInfo absClass;
-        if ((absClass = extRegistry.absTypeInfo.get(tmpCls.getSuperclass())) != null) {
-          return absClass.serializer;
+        TypeInfo abstractClass;
+        if ((abstractClass = extRegistry.abstractTypeInfo.get(tmpCls.getSuperclass())) != null) {
+          return abstractClass.serializer;
         }
         for (Class<?> tmpI : tmpCls.getInterfaces()) {
-          if ((absClass = extRegistry.absTypeInfo.get(tmpI)) != null) {
-            return absClass.serializer;
+          if ((abstractClass = extRegistry.abstractTypeInfo.get(tmpI)) != null) {
+            return abstractClass.serializer;
           }
         }
         tmpCls = tmpCls.getSuperclass();
@@ -2010,6 +2010,8 @@ public class ClassResolver extends TypeResolver {
               }
             });
       }
+      // clear it to reduce memory footprint for massive virtual threads.
+      extRegistry.registeredTypeInfos.clear();
     } finally {
       fory.getJITContext().unlock();
     }

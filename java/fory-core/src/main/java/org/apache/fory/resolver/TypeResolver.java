@@ -34,6 +34,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -101,7 +102,7 @@ public abstract class TypeResolver {
   static final TypeInfo NIL_TYPE_INFO =
       new TypeInfo(null, null, null, false, null, Types.UNKNOWN, INVALID_USER_TYPE_ID);
   // use a lower load factor to minimize hash collision
-  static final float foryMapLoadFactor = 0.25f;
+  static final float foryMapLoadFactor = 0.5f;
   static final int estimatedNumRegistered = 150;
   static final String SET_META__CONTEXT_MSG =
       "Meta context must be set before serialization, "
@@ -1603,35 +1604,40 @@ public abstract class TypeResolver {
   }
 
   static class ExtRegistry {
+    static final TypeChecker DEFAULT_TYPE_CHECKER = (resolver, className) -> true;
+
     // Here we set it to 1 to avoid calculating it again in `register(Class<?> cls)`.
     int classIdGenerator = 1;
     int userIdGenerator = 0;
     SerializerFactory serializerFactory;
-    IdentityMap<Class<?>, Integer> registeredClassIdMap =
-        new IdentityMap<>(estimatedNumRegistered);
-    BiMap<String, Class<?>> registeredClasses = HashBiMap.create(estimatedNumRegistered);
+    final LongMap<TypeInfo> typeInfoByTypeDefId = new LongMap<>(2, 0.5f);
+
     // cache absTypeInfo, support customized serializer for abstract or interface.
-    final IdentityMap<Class<?>, TypeInfo> absTypeInfo =
-        new IdentityMap<>(estimatedNumRegistered, foryMapLoadFactor);
+    // IdentityHashMap is more memory efficient than fory IdentityMap, and this is not in hotpath for query
+    final IdentityHashMap<Class<?>, TypeInfo> abstractTypeInfo = new IdentityHashMap<>();
+    // Tuple2<Class, Class>: Tuple2<From Class, To Class>
+    final IdentityHashMap<Class<?>, Tuple2<Class<?>, TypeInfo>[]> transformedTypeInfo =
+        new IdentityHashMap<>();
+
     // avoid potential recursive call for seq codec generation.
     // ex. A->field1: B, B.field1: A
     final Set<Class<?>> getClassCtx = new HashSet<>();
-    final LongMap<TypeInfo> typeInfoByTypeDefId = new LongMap<>();
+    TypeChecker typeChecker = DEFAULT_TYPE_CHECKER;
+    GenericType objectGenericType;
+
+    final Map<Type, GenericType> genericTypes = new HashMap<>();
+    final Map<Class, Map<String, GenericType>> classGenericTypes = new HashMap<>();
+    final Set<TypeInfo> registeredTypeInfos = new HashSet<>();
+    boolean ensureSerializersCompiled;
+
+    // shared across multiple fory instances.
+    IdentityMap<Class<?>, Integer> registeredClassIdMap = new IdentityMap<>(2);
+    BiMap<String, Class<?>> registeredClasses = HashBiMap.create(2);
     final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef;
-    // Tuple2<Class, Class>: Tuple2<From Class, To Class>
-    final IdentityMap<Class<?>, Tuple2<Class<?>, TypeInfo>[]> transformedTypeInfo =
-        new IdentityMap<>(1);
     // TODO(chaokunyang) Better to  use soft reference, see ObjectStreamClass.
     final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>
         descriptorsCache;
-    static final TypeChecker DEFAULT_TYPE_CHECKER = (resolver, className) -> true;
-    TypeChecker typeChecker = DEFAULT_TYPE_CHECKER;
-    GenericType objectGenericType;
-    final IdentityMap<Type, GenericType> genericTypes = new IdentityMap<>(1);
-    final Map<Class, Map<String, GenericType>> classGenericTypes = new HashMap<>();
     final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap;
-    final Set<TypeInfo> registeredTypeInfos = new HashSet<>();
-    boolean ensureSerializersCompiled;
 
     ExtRegistry(SharedRegistry sharedRegistry) {
       currentLayerTypeDef = sharedRegistry.currentLayerTypeDef;

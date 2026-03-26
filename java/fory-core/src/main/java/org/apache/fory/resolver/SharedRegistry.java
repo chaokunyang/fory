@@ -96,6 +96,7 @@ public final class SharedRegistry {
     if (loader == null) {
       return;
     }
+    clearFrozenRegistrationIfClassLoader(loader);
     typeDefMap.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
     currentLayerTypeDef.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
     typeDefById.entrySet()
@@ -106,6 +107,23 @@ public final class SharedRegistry {
             });
     descriptorsCache.entrySet().removeIf(entry -> entry.getKey().f0.getClassLoader() == loader);
     codeGeneratorMap.entrySet().removeIf(entry -> entry.getKey().contains(loader));
+  }
+
+  private synchronized void clearFrozenRegistrationIfClassLoader(ClassLoader loader) {
+    FrozenRegistration frozen = frozenRegistration;
+    if (frozen == null) {
+      return;
+    }
+    final boolean[] found = new boolean[1];
+    frozen.classIdByClass.forEach(
+        (cls, id) -> {
+          if (cls.getClassLoader() == loader) {
+            found[0] = true;
+          }
+        });
+    if (found[0]) {
+      frozenRegistration = null;
+    }
   }
 
   private static final class MetaStringKey {

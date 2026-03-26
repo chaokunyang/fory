@@ -100,7 +100,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     keyTypeInfoReadCache = typeResolver.nilTypeInfoHolder();
     valueTypeInfoWriteCache = typeResolver.nilTypeInfoHolder();
     valueTypeInfoReadCache = typeResolver.nilTypeInfoHolder();
-    partialGenericKVTypeMap = new IdentityMap<>();
+    partialGenericKVTypeMap = new IdentityMap<>(1);
     objType = typeResolver.buildGenericType(Object.class);
   }
 

@@ -159,7 +159,7 @@ public final class Fory implements BaseFory {
     stringSerializer = new StringSerializer(this);
     arrayListSerializer = new ArrayListSerializer(this);
     hashMapSerializer = new HashMapSerializer(this);
-    originToCopyMap = new IdentityMap<>();
+    originToCopyMap = new IdentityMap<>(2);
     LOG.info("Created new fory {}", this);
   }
 

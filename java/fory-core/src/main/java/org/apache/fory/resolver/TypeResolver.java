@@ -1573,14 +1573,14 @@ public abstract class TypeResolver {
     final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef;
     // Tuple2<Class, Class>: Tuple2<From Class, To Class>
     final IdentityMap<Class<?>, Tuple2<Class<?>, TypeInfo>[]> transformedTypeInfo =
-        new IdentityMap<>();
+        new IdentityMap<>(1);
     // TODO(chaokunyang) Better to  use soft reference, see ObjectStreamClass.
     final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>
         descriptorsCache;
     static final TypeChecker DEFAULT_TYPE_CHECKER = (resolver, className) -> true;
     TypeChecker typeChecker = DEFAULT_TYPE_CHECKER;
     GenericType objectGenericType;
-    final IdentityMap<Type, GenericType> genericTypes = new IdentityMap<>();
+    final IdentityMap<Type, GenericType> genericTypes = new IdentityMap<>(1);
     final Map<Class, Map<String, GenericType>> classGenericTypes = new HashMap<>();
     final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap;
     final Set<TypeInfo> registeredTypeInfos = new HashSet<>();

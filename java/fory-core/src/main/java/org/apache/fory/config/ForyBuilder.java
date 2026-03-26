@@ -87,10 +87,11 @@ public final class ForyBuilder {
   boolean suppressClassRegistrationWarnings = true;
   UnknownEnumValueStrategy unknownEnumValueStrategy = UnknownEnumValueStrategy.NOT_ALLOWED;
   boolean serializeEnumByName = false;
-  int bufferSizeLimitBytes = 128 * 1024;
+  Integer bufferSizeLimitBytes = -1;
   MetaCompressor metaCompressor = new DeflaterMetaCompressor();
   int maxDepth = 50;
   float mapRefLoadFactor = 0.51f;
+  boolean forVirtualThread = false;
 
   public ForyBuilder() {}
 
@@ -427,6 +428,9 @@ public final class ForyBuilder {
   }
 
   private void finish() {
+    if (bufferSizeLimitBytes == -1) {
+      bufferSizeLimitBytes = forVirtualThread ? 1024 : 128 * 1024;
+    }
     if (classLoader == null) {
       classLoader = Thread.currentThread().getContextClassLoader();
       if (classLoader == null) {
@@ -503,7 +507,7 @@ public final class ForyBuilder {
 
   /**
    * Create Fory and print exception when failed. Many application will create fory as a static
-   * variable, Fory creation exception will be swallowed by {@link NoTypeDefFoundError}. We print
+   * variable, Fory creation exception will be swallowed by {@link NoClassDefFoundError}. We print
    * exception explicitly for better debugging.
    */
   private static Fory newFory(ForyBuilder builder, ClassLoader classLoader) {
@@ -529,6 +533,15 @@ public final class ForyBuilder {
     // capturing `ForyBuilder`, which make `classLoader` not able to be gc.
     this.classLoader = null;
     return newFory(this, loader);
+  }
+
+  public ThreadSafeFory buildVirtualThreadSafeFory() {
+    finish();
+    ClassLoader loader = this.classLoader;
+    this.classLoader = null;
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    return new FastForyPool(
+            classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry, loader);
   }
 
   /** Build thread safe fory. */

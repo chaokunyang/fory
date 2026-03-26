@@ -121,11 +121,12 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   private final boolean compressString;
   private final boolean writeNumUtf16BytesForUtf8Encoding;
   private final boolean xlang;
-  private byte[] byteArray = new byte[DEFAULT_BUFFER_SIZE];
+  // set default length to 0, since char array and bytes array won't be used at the same time.
+  private byte[] byteArray = new byte[0];
   private int smoothByteArrayLength = DEFAULT_BUFFER_SIZE;
-  private char[] charArray = new char[16];
+  private char[] charArray = new char[0];
   private int smoothCharArrayLength = DEFAULT_BUFFER_SIZE;
-  private byte[] byteArray2 = new byte[16];
+  private byte[] byteArray2 = new byte[0];
 
   public StringSerializer(Fory fory) {
     super(fory, String.class, fory.trackingRef() && !fory.isStringRefIgnored());
@@ -1193,5 +1194,17 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       }
     }
     return byteArray2;
+  }
+
+  public void clearBuffer(int size) {
+    if (byteArray.length >= size) {
+      byteArray = new byte[0];
+    }
+    if (byteArray2.length >= size) {
+      byteArray2 = new byte[0];
+    }
+    if (charArray.length >= size) {
+      this.charArray = new char[0];
+    }
   }
 }

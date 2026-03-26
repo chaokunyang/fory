@@ -124,6 +124,7 @@ public final class Fory implements BaseFory {
   private int depth;
   private final int maxDepth;
   private boolean registrationFinished;
+  private boolean forVirtualThread;
   private int copyDepth;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
@@ -137,6 +138,7 @@ public final class Fory implements BaseFory {
     // `org.apache.fory.ThreadSafeFory.clearClassLoader` is called.
     this.sharedRegistry = sharedRegistry;
     config = new Config(builder);
+    this.forVirtualThread = config.forVirtualThread();
     crossLanguage = config.isXlang();
     this.refTracking = config.trackingRef();
     this.copyRefTracking = config.copyRef();
@@ -1221,6 +1223,9 @@ public final class Fory implements BaseFory {
     serializationContext.resetWrite();
     bufferCallback = null;
     depth = 0;
+    if (forVirtualThread) {
+      stringSerializer.clearBuffer(config.bufferSizeLimitBytes());
+    }
   }
 
   public void resetRead() {
@@ -1230,6 +1235,9 @@ public final class Fory implements BaseFory {
     serializationContext.resetRead();
     peerOutOfBandEnabled = false;
     depth = 0;
+    if (forVirtualThread) {
+      stringSerializer.clearBuffer(config.bufferSizeLimitBytes());
+    }
   }
 
   public void resetCopy() {

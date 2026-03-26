@@ -246,6 +246,42 @@ public class ClassResolverTest extends ForyTestBase {
     assertNotSame(resolver1, resolver2);
   }
 
+  @Test
+  public void testSharedRegistryCachesTypeDefByIdButKeepsTypeInfoLocal() {
+    ForyBuilder builder =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withMetaShare(true);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+
+    ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
+    ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
+    TypeDef typeDef = resolver1.getTypeDef(BeanB.class, true);
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    typeDef.writeTypeDef(buffer);
+
+    buffer.readerIndex(0);
+    TypeDef canonicalTypeDef1 = resolver1.readTypeDef(buffer, buffer.readInt64());
+    buffer.readerIndex(0);
+    TypeDef canonicalTypeDef2 = resolver2.readTypeDef(buffer, buffer.readInt64());
+
+    assertSame(sharedRegistry.typeDefById.get(typeDef.getId()), canonicalTypeDef1);
+    assertSame(canonicalTypeDef1, canonicalTypeDef2);
+    assertNull(resolver1.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()));
+    assertNull(resolver2.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()));
+
+    TypeInfo typeInfo1 = resolver1.buildMetaSharedTypeInfo(canonicalTypeDef1);
+    TypeInfo typeInfo2 = resolver2.buildMetaSharedTypeInfo(canonicalTypeDef2);
+
+    assertSame(resolver1.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()), typeInfo1);
+    assertSame(resolver2.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()), typeInfo2);
+    assertNotSame(typeInfo1, typeInfo2);
+  }
+
   private static void finishBuilder(ForyBuilder builder) {
     try {
       Method finish = ForyBuilder.class.getDeclaredMethod("finish");

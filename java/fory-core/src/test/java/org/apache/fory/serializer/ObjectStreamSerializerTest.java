@@ -24,6 +24,8 @@ import static org.testng.Assert.assertSame;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -45,8 +47,13 @@ import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
+import org.apache.fory.collection.LongMap;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.resolver.SharedRegistry;
+import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.util.Preconditions;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -994,6 +1001,54 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     assertEquals(result.value, 99);
   }
 
+  @Test(dataProvider = "compatibleModeProvider")
+  public void testObjectStreamSharedRegistryCanonicalizesTypeDef(CompatibleMode compatible)
+      throws Exception {
+    ForyBuilder builder =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .withCompatibleMode(compatible)
+            .withMetaShare(true);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory writerFory =
+        new Fory(builder, ObjectStreamSerializerTest.class.getClassLoader(), sharedRegistry);
+    Fory readerFory1 =
+        new Fory(builder, ObjectStreamSerializerTest.class.getClassLoader(), sharedRegistry);
+    Fory readerFory2 =
+        new Fory(builder, ObjectStreamSerializerTest.class.getClassLoader(), sharedRegistry);
+    writerFory.registerSerializer(
+        MixedSerializationClass.class,
+        new ObjectStreamSerializer(writerFory, MixedSerializationClass.class));
+    readerFory1.registerSerializer(
+        MixedSerializationClass.class,
+        new ObjectStreamSerializer(readerFory1, MixedSerializationClass.class));
+    readerFory2.registerSerializer(
+        MixedSerializationClass.class,
+        new ObjectStreamSerializer(readerFory2, MixedSerializationClass.class));
+
+    writerFory.getSerializationContext().setMetaContext(new MetaContext());
+    byte[] bytes = writerFory.serialize(new MixedSerializationClass("shared", 7));
+
+    readerFory1.getSerializationContext().setMetaContext(new MetaContext());
+    readerFory1.deserialize(bytes);
+    readerFory2.getSerializationContext().setMetaContext(new MetaContext());
+    readerFory2.deserialize(bytes);
+
+    TypeInfo typeInfo1 =
+        getFirstTypeInfo(
+            getTypeDefIdToTypeInfo(
+                (ObjectStreamSerializer) readerFory1.getSerializer(MixedSerializationClass.class)));
+    TypeInfo typeInfo2 =
+        getFirstTypeInfo(
+            getTypeDefIdToTypeInfo(
+                (ObjectStreamSerializer) readerFory2.getSerializer(MixedSerializationClass.class)));
+
+    assertSame(typeInfo1.getTypeDef(), typeInfo2.getTypeDef());
+  }
+
   // ==================== Default Value Tests ====================
 
   /** Class to test default values when fields are missing. */
@@ -1031,6 +1086,45 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
       boolField = fields.get("boolField", true);
       doubleField = fields.get("doubleField", 99.9);
       objectField = fields.get("objectField", "defaultObject");
+    }
+  }
+
+  private static LongMap<TypeInfo> getTypeDefIdToTypeInfo(ObjectStreamSerializer serializer)
+      throws ReflectiveOperationException {
+    Field field = ObjectStreamSerializer.class.getDeclaredField("typeDefIdToTypeInfo");
+    field.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    LongMap<TypeInfo> typeDefIdToTypeInfo = (LongMap<TypeInfo>) field.get(serializer);
+    return typeDefIdToTypeInfo;
+  }
+
+  private static TypeInfo getFirstTypeInfo(LongMap<TypeInfo> typeDefIdToTypeInfo)
+      throws ReflectiveOperationException {
+    Field zeroValueField = LongMap.class.getDeclaredField("zeroValue");
+    zeroValueField.setAccessible(true);
+    TypeInfo zeroValue = (TypeInfo) zeroValueField.get(typeDefIdToTypeInfo);
+    if (zeroValue != null) {
+      return zeroValue;
+    }
+    Field valueTableField = LongMap.class.getDeclaredField("valueTable");
+    valueTableField.setAccessible(true);
+    Object[] valueTable = (Object[]) valueTableField.get(typeDefIdToTypeInfo);
+    for (Object value : valueTable) {
+      if (value != null) {
+        return (TypeInfo) value;
+      }
+    }
+    Assert.fail("Expected at least one cached TypeInfo in ObjectStreamSerializer");
+    return null;
+  }
+
+  private static void finishBuilder(ForyBuilder builder) {
+    try {
+      Method finish = ForyBuilder.class.getDeclaredMethod("finish");
+      finish.setAccessible(true);
+      finish.invoke(builder);
+    } catch (ReflectiveOperationException e) {
+      throw new AssertionError(e);
     }
   }
 

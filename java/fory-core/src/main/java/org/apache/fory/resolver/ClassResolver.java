@@ -1558,14 +1558,13 @@ public class ClassResolver extends TypeResolver {
       if (typeDef == null) {
         typeDef = buildTypeDef(typeInfo);
       }
-      deserializationTypeInfo = buildMetaSharedTypeInfo(Tuple2.of(typeDef, null), typeDef);
+      deserializationTypeInfo = buildMetaSharedTypeInfo(typeDef);
       if (deserializationTypeInfo != null && GraalvmSupport.isGraalBuildtime()) {
         getGraalvmClassRegistry()
             .deserializerClassMap
             .put(typeDef.getId(), getGraalvmSerializerClass(deserializationTypeInfo.serializer));
-        Tuple2<TypeDef, TypeInfo> typeDefTuple = extRegistry.classIdToDef.get(typeDef.getId());
         typeInfoCache = NIL_TYPE_INFO;
-        extRegistry.classIdToDef.put(typeDef.getId(), Tuple2.of(typeDefTuple.f0, null));
+        extRegistry.typeInfoByTypeDefId.remove(typeDef.getId());
       }
     }
     if (GraalvmSupport.isGraalBuildtime()) {
@@ -1658,12 +1657,15 @@ public class ClassResolver extends TypeResolver {
     Preconditions.checkArgument(
         serializer.getClass() != UnknownClassSerializers.UnknownStructSerializer.class);
     if (needToWriteTypeDef(serializer)) {
-      typeDef = typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls));
+      typeDef =
+          cacheTypeDef(typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls)));
     } else {
       // Some type will use other serializers such MapSerializer and so on.
       typeDef =
-          typeDefMap.computeIfAbsent(
-              typeInfo.cls, cls -> TypeDef.buildTypeDef(this, cls, new ArrayList<>(), false));
+          cacheTypeDef(
+              typeDefMap.computeIfAbsent(
+                  typeInfo.cls,
+                  cls -> TypeDef.buildTypeDef(this, cls, new ArrayList<>(), false)));
     }
     typeInfo.typeDef = typeDef;
     return typeDef;

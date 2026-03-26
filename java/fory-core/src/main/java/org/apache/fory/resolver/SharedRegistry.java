@@ -39,6 +39,7 @@ public final class SharedRegistry {
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef =
       new ConcurrentIdentityMap<>();
+  final ConcurrentHashMap<Long, TypeDef> typeDefById = new ConcurrentHashMap<>();
   final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>
       descriptorsCache = new ConcurrentHashMap<>();
   final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap =
@@ -57,12 +58,23 @@ public final class SharedRegistry {
     return metaStringMap.computeIfAbsent(key, ignored -> encoder.encode(string, encoding));
   }
 
+  TypeDef getOrCreateTypeDef(TypeDef typeDef) {
+    TypeDef existingTypeDef = typeDefById.putIfAbsent(typeDef.getId(), typeDef);
+    return existingTypeDef == null ? typeDef : existingTypeDef;
+  }
+
   public void clearClassLoader(ClassLoader loader) {
     if (loader == null) {
       return;
     }
     typeDefMap.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
     currentLayerTypeDef.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
+    typeDefById.entrySet()
+        .removeIf(
+            entry -> {
+              Class<?> cls = entry.getValue().getClassSpec().type;
+              return cls != null && cls.getClassLoader() == loader;
+            });
     descriptorsCache.entrySet().removeIf(entry -> entry.getKey().f0.getClassLoader() == loader);
     codeGeneratorMap.entrySet().removeIf(entry -> entry.getKey().contains(loader));
   }

@@ -673,21 +673,17 @@ public abstract class TypeResolver {
     } else {
       // New type in stream - but may already be known from registry
       long id = buffer.readInt64();
-      Tuple2<TypeDef, TypeInfo> tuple2 = extRegistry.classIdToDef.get(id);
-      if (tuple2 != null) {
-        // Already known - skip the TypeDef bytes, reuse existing TypeInfo
+      typeInfo = extRegistry.typeInfoByTypeDefId.get(id);
+      if (typeInfo != null) {
         TypeDef.skipTypeDef(buffer, id);
-        typeInfo = tuple2.f1;
-        if (typeInfo == null) {
-          typeInfo = buildMetaSharedTypeInfo(tuple2, tuple2.f0);
-        }
       } else {
-        // Unknown - read TypeDef and create TypeInfo
-        tuple2 = readTypeDef(buffer, id);
-        typeInfo = tuple2.f1;
-        if (typeInfo == null) {
-          typeInfo = buildMetaSharedTypeInfo(tuple2, tuple2.f0);
+        TypeDef typeDef = sharedRegistry.typeDefById.get(id);
+        if (typeDef != null) {
+          TypeDef.skipTypeDef(buffer, id);
+        } else {
+          typeDef = readTypeDef(buffer, id);
         }
+        typeInfo = buildMetaSharedTypeInfo(typeDef);
       }
       // index == readTypeInfos.size() since types are written sequentially
       metaContext.readTypeInfos.add(typeInfo);
@@ -813,10 +809,10 @@ public abstract class TypeResolver {
     return userTypeIdToTypeInfo.containsKey(userId);
   }
 
-  final TypeInfo buildMetaSharedTypeInfo(Tuple2<TypeDef, TypeInfo> typeDefTuple, TypeDef typeDef) {
-    TypeInfo typeInfo;
-    if (typeDefTuple != null) {
-      typeDef = typeDefTuple.f0;
+  final TypeInfo buildMetaSharedTypeInfo(TypeDef typeDef) {
+    TypeInfo typeInfo = extRegistry.typeInfoByTypeDefId.get(typeDef.getId());
+    if (typeInfo != null) {
+      return typeInfo;
     }
     Class<?> cls = loadClass(typeDef.getClassSpec());
     // For nonexistent classes, always create a new TypeInfo with the correct typeDef,
@@ -832,9 +828,7 @@ public abstract class TypeResolver {
     } else {
       typeInfo = getMetaSharedTypeInfo(typeDef, cls);
     }
-    // Share serializer for same version class def to avoid too much different meta
-    // context take up too much memory.
-    putTypeDef(typeDef, typeInfo);
+    extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
     return typeInfo;
   }
 
@@ -936,19 +930,9 @@ public abstract class TypeResolver {
         || serializer instanceof MetaSharedSerializer;
   }
 
-  protected Tuple2<TypeDef, TypeInfo> readTypeDef(MemoryBuffer buffer, long header) {
+  protected TypeDef readTypeDef(MemoryBuffer buffer, long header) {
     TypeDef readTypeDef = TypeDef.readTypeDef(fory, buffer, header);
-    Tuple2<TypeDef, TypeInfo> tuple2 = extRegistry.classIdToDef.get(readTypeDef.getId());
-    if (tuple2 == null) {
-      tuple2 = putTypeDef(readTypeDef, null);
-    }
-    return tuple2;
-  }
-
-  private Tuple2<TypeDef, TypeInfo> putTypeDef(TypeDef typeDef, TypeInfo typeInfo) {
-    Tuple2<TypeDef, TypeInfo> tuple2 = Tuple2.of(typeDef, typeInfo);
-    extRegistry.classIdToDef.put(typeDef.getId(), tuple2);
-    return tuple2;
+    return cacheTypeDef(readTypeDef);
   }
 
   final Class<?> loadClass(ClassSpec classSpec) {
@@ -1086,10 +1070,15 @@ public abstract class TypeResolver {
 
   public final TypeDef getTypeDef(Class<?> cls, boolean resolveParent) {
     if (resolveParent) {
-      return typeDefMap.computeIfAbsent(cls, k -> TypeDef.buildTypeDef(fory, cls));
+      return cacheTypeDef(typeDefMap.computeIfAbsent(cls, k -> TypeDef.buildTypeDef(fory, cls)));
     }
-    return extRegistry.currentLayerTypeDef.computeIfAbsent(
-        cls, key -> TypeDef.buildTypeDef(fory, key, false));
+    return cacheTypeDef(
+        extRegistry.currentLayerTypeDef.computeIfAbsent(
+            cls, key -> TypeDef.buildTypeDef(fory, key, false)));
+  }
+
+  public final TypeDef cacheTypeDef(TypeDef typeDef) {
+    return sharedRegistry.getOrCreateTypeDef(typeDef);
   }
 
   public final boolean isSerializable(Class<?> cls) {
@@ -1569,7 +1558,7 @@ public abstract class TypeResolver {
     // avoid potential recursive call for seq codec generation.
     // ex. A->field1: B, B.field1: A
     final Set<Class<?>> getClassCtx = new HashSet<>();
-    final LongMap<Tuple2<TypeDef, TypeInfo>> classIdToDef = new LongMap<>();
+    final LongMap<TypeInfo> typeInfoByTypeDefId = new LongMap<>();
     final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef;
     // Tuple2<Class, Class>: Tuple2<From Class, To Class>
     final IdentityMap<Class<?>, Tuple2<Class<?>, TypeInfo>[]> transformedTypeInfo =

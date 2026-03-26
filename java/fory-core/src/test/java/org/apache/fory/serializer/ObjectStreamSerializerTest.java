@@ -39,14 +39,18 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.builder.Generated;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.Preconditions;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -1136,6 +1140,107 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     assertEquals(result.nestedList.get(1).nestedValue, "list2");
   }
 
+  public static class AsyncTreeSetSubclass extends TreeSet<String> {
+    public AsyncTreeSetSubclass() {}
+  }
+
+  public static class AsyncTreeMapSubclass extends TreeMap<String, String> {
+    public AsyncTreeMapSubclass() {}
+  }
+
+  @EqualsAndHashCode
+  public static class AsyncLayerJitContainer implements Serializable {
+    private String name;
+    private AsyncTreeSetSubclass values;
+    private AsyncTreeMapSubclass attributes;
+
+    public AsyncLayerJitContainer() {}
+
+    public AsyncLayerJitContainer(
+        String name, AsyncTreeSetSubclass values, AsyncTreeMapSubclass attributes) {
+      this.name = name;
+      this.values = values;
+      this.attributes = attributes;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      s.defaultWriteObject();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  @Test(timeOut = 60000)
+  public void testAsyncCompilationNestedTreeCollectionsCompatibleMode()
+      throws InterruptedException {
+    Fory fory = newCompatibleAsyncObjectStreamFory(true);
+    fory.registerSerializer(
+        AsyncLayerJitContainer.class,
+        new ObjectStreamSerializer(fory, AsyncLayerJitContainer.class));
+    fory.registerSerializer(
+        AsyncTreeSetSubclass.class, new ObjectStreamSerializer(fory, AsyncTreeSetSubclass.class));
+    fory.registerSerializer(
+        AsyncTreeMapSubclass.class, new ObjectStreamSerializer(fory, AsyncTreeMapSubclass.class));
+
+    AsyncTreeSetSubclass values = new AsyncTreeSetSubclass();
+    values.add("one");
+    values.add("two");
+    AsyncTreeMapSubclass attributes = new AsyncTreeMapSubclass();
+    attributes.put("alpha", "A");
+    attributes.put("beta", "B");
+    AsyncLayerJitContainer obj = new AsyncLayerJitContainer("container", values, attributes);
+
+    serDeCheckSerializer(fory, obj, "ObjectStreamSerializer");
+
+    waitForGeneratedLayerSerializer(fory, AsyncLayerJitContainer.class);
+    waitForGeneratedLayerSerializer(fory, AsyncTreeSetSubclass.class);
+    waitForGeneratedLayerSerializer(fory, AsyncTreeMapSubclass.class);
+
+    serDeCheckSerializer(fory, obj, "ObjectStreamSerializer");
+  }
+
+  @Test(timeOut = 60000)
+  public void testAsyncCompilationTreeSetSubclassObjectStreamSerializer()
+      throws InterruptedException {
+    Fory fory = newCompatibleAsyncObjectStreamFory(true);
+    fory.registerSerializer(
+        AsyncTreeSetSubclass.class, new ObjectStreamSerializer(fory, AsyncTreeSetSubclass.class));
+
+    AsyncTreeSetSubclass values = new AsyncTreeSetSubclass();
+    values.add("one");
+    values.add("two");
+
+    serDeCheckSerializer(fory, values, "ObjectStreamSerializer");
+    waitForGeneratedLayerSerializer(fory, AsyncTreeSetSubclass.class);
+    serDeCheckSerializer(fory, values, "ObjectStreamSerializer");
+  }
+
+  @Test
+  public void testTreeCollectionsStillWorkWithoutAsyncCompilation() {
+    Fory fory = newCompatibleAsyncObjectStreamFory(false);
+    fory.registerSerializer(
+        AsyncLayerJitContainer.class,
+        new ObjectStreamSerializer(fory, AsyncLayerJitContainer.class));
+    fory.registerSerializer(
+        AsyncTreeSetSubclass.class, new ObjectStreamSerializer(fory, AsyncTreeSetSubclass.class));
+    fory.registerSerializer(
+        AsyncTreeMapSubclass.class, new ObjectStreamSerializer(fory, AsyncTreeMapSubclass.class));
+
+    AsyncTreeSetSubclass values = new AsyncTreeSetSubclass();
+    values.add("one");
+    values.add("two");
+    AsyncTreeMapSubclass attributes = new AsyncTreeMapSubclass();
+    attributes.put("alpha", "A");
+    attributes.put("beta", "B");
+
+    serDeCheckSerializer(
+        fory,
+        new AsyncLayerJitContainer("container", values, attributes),
+        "ObjectStreamSerializer");
+  }
+
   // ==================== Circular Reference in Custom Serialization ====================
 
   /** Class with potential circular reference. */
@@ -1278,5 +1383,46 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     assertEquals(result.doubleVal, 6.6, 0.001);
     assertEquals(result.charVal, 'A');
     assertEquals(result.boolVal, true);
+  }
+
+  private Fory newCompatibleAsyncObjectStreamFory(boolean asyncCompilation) {
+    return Fory.builder()
+        .withLanguage(Language.JAVA)
+        .requireClassRegistration(false)
+        .withRefTracking(true)
+        .withCodegen(true)
+        .withCompatibleMode(CompatibleMode.COMPATIBLE)
+        .withAsyncCompilation(asyncCompilation)
+        .build();
+  }
+
+  private void waitForGeneratedLayerSerializer(Fory fory, Class<?> type)
+      throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 30_000;
+    while (System.currentTimeMillis() < deadline) {
+      if (hasGeneratedLayerSerializer(fory, type)) {
+        return;
+      }
+      Thread.sleep(10);
+    }
+    Assert.fail("Timed out waiting for generated layer serializer for " + type.getName());
+  }
+
+  private boolean hasGeneratedLayerSerializer(Fory fory, Class<?> type) {
+    Serializer<?> serializer = fory.getTypeResolver().getSerializer(type);
+    if (!(serializer instanceof ObjectStreamSerializer)) {
+      return false;
+    }
+    Object[] slotsInfos = (Object[]) ReflectionUtils.getObjectFieldValue(serializer, "slotsInfos");
+    if (slotsInfos.length == 0) {
+      return false;
+    }
+    for (Object slotsInfo : slotsInfos) {
+      Object slotsSerializer = ReflectionUtils.getObjectFieldValue(slotsInfo, "slotsSerializer");
+      if (!(slotsSerializer instanceof Generated)) {
+        return false;
+      }
+    }
+    return true;
   }
 }

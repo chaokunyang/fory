@@ -32,10 +32,8 @@ import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
-import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializerBase;
-import org.apache.fory.serializer.Serializers;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.ExceptionUtils;
@@ -132,22 +130,20 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static MetaSharedLayerSerializerBase setCodegenSerializer(
       Fory fory, Class<?> cls, GeneratedMetaSharedLayerSerializer s) {
-    if (GraalvmSupport.isGraalRuntime()) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return (MetaSharedLayerSerializerBase) typeResolver(fory, r -> r.getSerializer(s.getType()));
     }
-    // This method hold jit lock, so create jit serializer async to avoid block serialization.
-    // Use MetaSharedLayerSerializer as fallback since it's compatible with
-    // MetaSharedLayerSerializerBase
-    Class serializerClass =
-        fory.getJITContext()
-            .registerSerializerJITCallback(
-                () -> MetaSharedLayerSerializer.class,
-                () -> CodegenSerializer.loadCodegenSerializer(fory, s.getType()),
-                c ->
-                    s.serializer =
-                        (MetaSharedLayerSerializerBase)
-                            Serializers.newSerializer(fory, s.getType(), c));
-    return (MetaSharedLayerSerializerBase) Serializers.newSerializer(fory, cls, serializerClass);
+    // Layer serializers don't have a generic no-arg/newSerializer construction path. The
+    // outer ObjectStreamSerializer JIT step already resolved the layer TypeDef and marker, so
+    // generated serializers look up that cached context here and bootstrap the interpreter
+    // delegate synchronously in their constructor.
+    CodecUtils.MetaSharedLayerCodecContext context =
+        CodecUtils.getMetaSharedLayerCodecContext(s.getClass());
+    Preconditions.checkNotNull(
+        context, "Missing layer codec context for generated serializer " + s.getClass());
+    s.serializer =
+        new MetaSharedLayerSerializer(fory, cls, context.layerTypeDef, context.layerMarkerClass);
+    return s.serializer;
   }
 
   @Override

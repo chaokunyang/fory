@@ -310,6 +310,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj, BufferCallback callback) {
+    typeResolver.finishRegister();
     byte bitmap = 0;
     if (crossLanguage) {
       bitmap |= isCrossLanguageFlag;
@@ -712,6 +713,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public <T> T deserialize(MemoryBuffer buffer, Class<T> type) {
+    typeResolver.finishRegister();
     try {
       jitContext.lock();
       if (depth > 0) {
@@ -778,6 +780,7 @@ public final class Fory implements BaseFory {
    */
   @Override
   public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
+    typeResolver.finishRegister();
     try {
       jitContext.lock();
       if (depth > 0) {
@@ -1025,12 +1028,19 @@ public final class Fory implements BaseFory {
   @Override
   public <T> T copy(T obj) {
     try {
+      if (obj != null) {
+        copyDepth++;
+        typeResolver.getTypeInfo(obj.getClass(), true);
+      }
+      typeResolver.finishRegister();
       return copyObject(obj);
     } catch (Throwable e) {
       throw processCopyError(e);
     } finally {
       if (copyRefTracking) {
         resetCopy();
+      } else if (obj != null) {
+        copyDepth--;
       }
     }
   }
@@ -1361,6 +1371,10 @@ public final class Fory implements BaseFory {
 
   public boolean copyTrackingRef() {
     return copyRefTracking;
+  }
+
+  public boolean isCopying() {
+    return copyDepth > 0;
   }
 
   public boolean isStringRefIgnored() {

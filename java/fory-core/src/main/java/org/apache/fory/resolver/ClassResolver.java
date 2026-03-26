@@ -699,25 +699,24 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   public boolean isRegistered(Class<?> cls) {
-    return extRegistry.registeredClassIdMap.containsKey(cls)
-        || extRegistry.registeredClasses.inverse().containsKey(cls);
+    return isRegisteredByIdLocalOrFrozen(cls) || isRegisteredByNameLocalOrFrozen(cls);
   }
 
   public boolean isRegisteredByName(String name) {
-    return extRegistry.registeredClasses.containsKey(name);
+    return isRegisteredByNameLocalOrFrozen(name);
   }
 
   @Override
   public boolean isRegisteredByName(Class<?> cls) {
-    return extRegistry.registeredClasses.inverse().containsKey(cls);
+    return isRegisteredByNameLocalOrFrozen(cls);
   }
 
   public String getRegisteredName(Class<?> cls) {
-    return extRegistry.registeredClasses.inverse().get(cls);
+    return getRegisteredNameLocalOrFrozen(cls);
   }
 
   public Tuple2<String, String> getRegisteredNameTuple(Class<?> cls) {
-    String name = extRegistry.registeredClasses.inverse().get(cls);
+    String name = getRegisteredNameLocalOrFrozen(cls);
     Preconditions.checkNotNull(name);
     int index = name.lastIndexOf(".");
     if (index != -1) {
@@ -729,11 +728,11 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   public boolean isRegisteredById(Class<?> cls) {
-    return extRegistry.registeredClassIdMap.get(cls) != null;
+    return isRegisteredByIdLocalOrFrozen(cls);
   }
 
   public Integer getRegisteredClassId(Class<?> cls) {
-    return extRegistry.registeredClassIdMap.get(cls);
+    return getRegisteredClassIdLocalOrFrozen(cls);
   }
 
   public Class<?> getRegisteredClass(short id) {
@@ -747,7 +746,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   public Class<?> getRegisteredClass(String className) {
-    return extRegistry.registeredClasses.get(className);
+    return getRegisteredClassLocalOrFrozen(className);
   }
 
   public Class<?> getRegisteredClassByTypeId(int typeId) {
@@ -784,17 +783,26 @@ public class ClassResolver extends TypeResolver {
   }
 
   public List<Class<?>> getRegisteredClasses() {
-    List<Class<?>> classes = new ArrayList<>(extRegistry.registeredClassIdMap.size);
-    extRegistry.registeredClassIdMap.forEach((cls, id) -> classes.add(cls));
+    SharedRegistry.FrozenRegistration frozenRegistration = extRegistry.frozenRegistration;
+    int size =
+        frozenRegistration != null
+            ? frozenRegistration.classIdByClass.size
+            : extRegistry.registeredClassIdMap.size;
+    List<Class<?>> classes = new ArrayList<>(size);
+    if (frozenRegistration != null) {
+      frozenRegistration.classIdByClass.forEach((cls, id) -> classes.add(cls));
+    } else {
+      extRegistry.registeredClassIdMap.forEach((cls, id) -> classes.add(cls));
+    }
     return classes;
   }
 
   public String getTypeAlias(Class<?> cls) {
-    Integer id = extRegistry.registeredClassIdMap.get(cls);
+    Integer id = getRegisteredClassIdLocalOrFrozen(cls);
     if (id != null) {
       return Integer.toUnsignedString(id);
     }
-    String name = extRegistry.registeredClasses.inverse().get(cls);
+    String name = getRegisteredNameLocalOrFrozen(cls);
     if (name != null) {
       return name;
     }
@@ -810,7 +818,7 @@ public class ClassResolver extends TypeResolver {
     if (typeInfo != null) {
       return typeInfo.typeId;
     }
-    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    Integer classId = getRegisteredClassIdLocalOrFrozen(cls);
     if (classId != null) {
       typeInfo = classInfoMap.get(cls);
       if (typeInfo == null) {
@@ -839,7 +847,7 @@ public class ClassResolver extends TypeResolver {
     if (typeInfo != null) {
       return typeInfo.userTypeId;
     }
-    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    Integer classId = getRegisteredClassIdLocalOrFrozen(cls);
     if (classId != null && !isInternalRegisteredClassId(cls, classId)) {
       return classId;
     }
@@ -991,7 +999,7 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public void registerInternalSerializer(Class<?> type, Serializer<?> serializer) {
-    Integer classId = extRegistry.registeredClassIdMap.get(type);
+    Integer classId = getRegisteredClassIdLocalOrFrozen(type);
     if (classId != null && !isInternalRegisteredClassId(type, classId)) {
       throw new IllegalArgumentException(
           String.format(
@@ -1045,7 +1053,7 @@ public class ClassResolver extends TypeResolver {
   /** Set serializer for class whose name is {@code className}. */
   public void setSerializer(String className, Class<? extends Serializer> serializer) {
     for (Map.Entry<Class<?>, TypeInfo> entry : classInfoMap.iterable()) {
-      if (extRegistry.registeredClasses.containsKey(className)) {
+      if (isRegisteredByNameLocalOrFrozen(className)) {
         LOG.warn("Skip clear serializer for registered class {}", className);
         return;
       }
@@ -1064,7 +1072,7 @@ public class ClassResolver extends TypeResolver {
     for (Map.Entry<Class<?>, TypeInfo> entry : classInfoMap.iterable()) {
       Class<?> cls = entry.getKey();
       String className = cls.getName();
-      if (extRegistry.registeredClasses.containsKey(className)) {
+      if (isRegisteredByNameLocalOrFrozen(className)) {
         continue;
       }
       if (className.startsWith(classNamePrefix)) {
@@ -1101,7 +1109,7 @@ public class ClassResolver extends TypeResolver {
   public void addSerializer(Class<?> type, Serializer<?> serializer) {
     Preconditions.checkNotNull(serializer);
     TypeInfo typeInfo;
-    Integer classId = extRegistry.registeredClassIdMap.get(type);
+    Integer classId = getRegisteredClassIdLocalOrFrozen(type);
     boolean registered = classId != null;
     if (registered) {
       int id = classId;
@@ -1487,13 +1495,13 @@ public class ClassResolver extends TypeResolver {
 
   private Serializer createSerializer(Class<?> cls) {
     DisallowedList.checkNotInDisallowedList(cls.getName());
-    if (!isSecure(cls)) {
+    if (!fory.isCopying() && !isSecure(cls)) {
       throw new InsecureException(generateSecurityMsg(cls));
-    } else {
+    } else if (!fory.isCopying()) {
       if (!fory.getConfig().suppressClassRegistrationWarnings()
           && !Functions.isLambda(cls)
           && !ReflectionUtils.isJdkProxy(cls)
-          && !extRegistry.registeredClassIdMap.containsKey(cls)
+          && !isRegisteredByIdLocalOrFrozen(cls)
           && !shimDispatcher.contains(cls)
           && !extRegistry.isTypeCheckerSet()) {
         LOG.warn(generateSecurityMsg(cls));
@@ -1588,7 +1596,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   private boolean isSecure(Class<?> cls) {
-    if (extRegistry.registeredClasses.inverse().containsKey(cls) || shimDispatcher.contains(cls)) {
+    if (isRegisteredByNameLocalOrFrozen(cls) || shimDispatcher.contains(cls)) {
       return true;
     }
     if (cls.isArray()) {
@@ -1605,7 +1613,7 @@ public class ClassResolver extends TypeResolver {
     if (fory.getConfig().requireClassRegistration()) {
       return Functions.isLambda(cls)
           || ReflectionUtils.isJdkProxy(cls)
-          || extRegistry.registeredClassIdMap.containsKey(cls)
+          || isRegisteredByIdLocalOrFrozen(cls)
           || shimDispatcher.contains(cls);
     } else {
       return extRegistry.typeChecker.checkType(this, cls.getName());
@@ -1706,7 +1714,7 @@ public class ClassResolver extends TypeResolver {
 
   private TypeInfo buildClassInfo(Class<?> cls) {
     TypeInfo typeInfo;
-    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    Integer classId = getRegisteredClassIdLocalOrFrozen(cls);
     // Don't create serializer in case the object for class is non-serializable,
     // Or class is abstract or interface.
     int typeId;

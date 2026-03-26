@@ -1608,6 +1608,18 @@ public abstract class TypeResolver {
     return extRegistry.registeredClasses.get(className);
   }
 
+  final boolean isRegisteredByIdLocalOrFrozen(Class<?> cls) {
+    return getRegisteredClassIdLocalOrFrozen(cls) != null;
+  }
+
+  final boolean isRegisteredByNameLocalOrFrozen(Class<?> cls) {
+    return getRegisteredNameLocalOrFrozen(cls) != null;
+  }
+
+  final boolean isRegisteredByNameLocalOrFrozen(String className) {
+    return getRegisteredClassLocalOrFrozen(className) != null;
+  }
+
   final boolean isRegistrationFinished() {
     return registrationFinished;
   }
@@ -1634,9 +1646,9 @@ public abstract class TypeResolver {
     int classIdGenerator = 1;
     int userIdGenerator = 0;
     SerializerFactory serializerFactory;
-    final IdentityMap<Class<?>, Integer> registeredClassIdMap =
+    IdentityMap<Class<?>, Integer> registeredClassIdMap =
         new IdentityMap<>(estimatedNumRegistered);
-    final BiMap<String, Class<?>> registeredClasses = HashBiMap.create(estimatedNumRegistered);
+    BiMap<String, Class<?>> registeredClasses = HashBiMap.create(estimatedNumRegistered);
     SharedRegistry.FrozenRegistration frozenRegistration;
     // cache absTypeInfo, support customized serializer for abstract or interface.
     final IdentityMap<Class<?>, TypeInfo> absTypeInfo =
@@ -1669,6 +1681,8 @@ public abstract class TypeResolver {
 
     void finishRegistration(SharedRegistry.FrozenRegistration frozenRegistration) {
       this.frozenRegistration = frozenRegistration;
+      registeredClassIdMap = new IdentityMap<>(1);
+      registeredClasses = HashBiMap.create(1);
     }
 
     public boolean isTypeCheckerSet() {

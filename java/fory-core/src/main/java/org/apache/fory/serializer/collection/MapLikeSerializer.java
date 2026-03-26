@@ -59,19 +59,26 @@ import org.apache.fory.util.Preconditions;
 public abstract class MapLikeSerializer<T> extends Serializer<T> {
   public static final int MAX_CHUNK_SIZE = 255;
 
+  static final class MapTypeCache {
+    final TypeInfoHolder keyTypeInfoWriteCache;
+    final TypeInfoHolder keyTypeInfoReadCache;
+    final TypeInfoHolder valueTypeInfoWriteCache;
+    final TypeInfoHolder valueTypeInfoReadCache;
+    GenericType partialGenericKVTypeKey0;
+    GenericType partialGenericKVTypeValue0;
+    GenericType partialGenericKVTypeKey1;
+    GenericType partialGenericKVTypeValue1;
+
+    private MapTypeCache(TypeResolver typeResolver) {
+      keyTypeInfoWriteCache = typeResolver.nilTypeInfoHolder();
+      keyTypeInfoReadCache = typeResolver.nilTypeInfoHolder();
+      valueTypeInfoWriteCache = typeResolver.nilTypeInfoHolder();
+      valueTypeInfoReadCache = typeResolver.nilTypeInfoHolder();
+    }
+  }
+
   protected MethodHandle constructor;
   protected final boolean supportCodegenHook;
-  protected final TypeInfoHolder keyTypeInfoWriteCache;
-  protected final TypeInfoHolder keyTypeInfoReadCache;
-  protected final TypeInfoHolder valueTypeInfoWriteCache;
-  protected final TypeInfoHolder valueTypeInfoReadCache;
-  // support map subclass whose key or value generics only are available,
-  // or one of types is already instantiated in subclass, ex: `Subclass<T> implements Map<String,
-  // T>`
-  private GenericType partialGenericKVTypeKey0;
-  private GenericType partialGenericKVTypeValue0;
-  private GenericType partialGenericKVTypeKey1;
-  private GenericType partialGenericKVTypeValue1;
   private final GenericType objType;
   // For subclass whose kv type are instantiated already, such as
   // `Subclass implements Map<String, Long>`. If declared `Map` doesn't specify
@@ -84,6 +91,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   private int numElements;
   private final TypeResolver typeResolver;
   private final boolean trackRef;
+  private MapTypeCache mapTypeCache;
 
   public MapLikeSerializer(Fory fory, Class<T> cls) {
     this(fory, cls, !ReflectionUtils.isDynamicGeneratedCLass(cls));
@@ -98,11 +106,16 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     this.typeResolver = fory.getTypeResolver();
     trackRef = fory.trackingRef();
     this.supportCodegenHook = supportCodegenHook;
-    keyTypeInfoWriteCache = typeResolver.nilTypeInfoHolder();
-    keyTypeInfoReadCache = typeResolver.nilTypeInfoHolder();
-    valueTypeInfoWriteCache = typeResolver.nilTypeInfoHolder();
-    valueTypeInfoReadCache = typeResolver.nilTypeInfoHolder();
     objType = typeResolver.buildGenericType(Object.class);
+  }
+
+  final MapTypeCache mapTypeCache() {
+    MapTypeCache state = mapTypeCache;
+    if (state == null) {
+      state = new MapTypeCache(typeResolver);
+      mapTypeCache = state;
+    }
+    return state;
   }
 
   @Override
@@ -176,7 +189,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       }
     } else {
       buffer.writeByte(VALUE_HAS_NULL | TRACKING_KEY_REF);
-      fory.writeRef(buffer, key, keyTypeInfoWriteCache);
+      fory.writeRef(buffer, key, mapTypeCache().keyTypeInfoWriteCache);
     }
   }
 
@@ -198,7 +211,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         }
       } else {
         buffer.writeByte(KEY_HAS_NULL | TRACKING_VALUE_REF);
-        fory.writeRef(buffer, value, valueTypeInfoWriteCache);
+        fory.writeRef(buffer, value, mapTypeCache().valueTypeInfoWriteCache);
       }
     } else {
       buffer.writeByte(KV_NULL);
@@ -263,7 +276,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     if (!keyType.isMonomorphic()) {
       if (trackingRef) {
         buffer.writeByte(VALUE_HAS_NULL | TRACKING_KEY_REF);
-        fory.writeRef(buffer, key, keyTypeInfoWriteCache);
+        fory.writeRef(buffer, key, mapTypeCache().keyTypeInfoWriteCache);
       } else {
         buffer.writeByte(VALUE_HAS_NULL);
         fory.writeNonRef(buffer, key);
@@ -294,7 +307,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     if (!valueType.isMonomorphic()) {
       if (trackingRef) {
         buffer.writeByte(KEY_HAS_NULL | TRACKING_VALUE_REF);
-        fory.writeRef(buffer, value, valueTypeInfoWriteCache);
+        fory.writeRef(buffer, value, mapTypeCache().valueTypeInfoWriteCache);
       } else {
         buffer.writeByte(KEY_HAS_NULL);
         fory.writeNonRef(buffer, value);
@@ -391,14 +404,16 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   private Serializer writeKeyTypeInfo(
       TypeResolver classResolver, Class keyType, MemoryBuffer buffer) {
-    TypeInfo typeInfo = classResolver.getTypeInfo(keyType, keyTypeInfoWriteCache);
+    TypeInfo typeInfo =
+        classResolver.getTypeInfo(keyType, mapTypeCache().keyTypeInfoWriteCache);
     classResolver.writeTypeInfo(buffer, typeInfo);
     return typeInfo.getSerializer();
   }
 
   private Serializer writeValueTypeInfo(
       TypeResolver classResolver, Class valueType, MemoryBuffer buffer) {
-    TypeInfo typeInfo = classResolver.getTypeInfo(valueType, valueTypeInfoWriteCache);
+    TypeInfo typeInfo =
+        classResolver.getTypeInfo(valueType, mapTypeCache().valueTypeInfoWriteCache);
     classResolver.writeTypeInfo(buffer, typeInfo);
     return typeInfo.getSerializer();
   }
@@ -528,35 +543,42 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   private GenericType getCachedMapGenericType(GenericType genericType) {
-    if (genericType == partialGenericKVTypeKey0) {
-      return partialGenericKVTypeValue0;
+    MapTypeCache state = mapTypeCache;
+    if (state == null) {
+      return null;
     }
-    if (genericType == partialGenericKVTypeKey1) {
-      return partialGenericKVTypeValue1;
+    if (genericType == state.partialGenericKVTypeKey0) {
+      return state.partialGenericKVTypeValue0;
+    }
+    if (genericType == state.partialGenericKVTypeKey1) {
+      return state.partialGenericKVTypeValue1;
     }
     return null;
   }
 
   private void cacheMapGenericType(GenericType genericType, GenericType mapGenericType) {
-    partialGenericKVTypeKey1 = partialGenericKVTypeKey0;
-    partialGenericKVTypeValue1 = partialGenericKVTypeValue0;
-    partialGenericKVTypeKey0 = genericType;
-    partialGenericKVTypeValue0 = mapGenericType;
+    MapTypeCache state = mapTypeCache();
+    state.partialGenericKVTypeKey1 = state.partialGenericKVTypeKey0;
+    state.partialGenericKVTypeValue1 = state.partialGenericKVTypeValue0;
+    state.partialGenericKVTypeKey0 = genericType;
+    state.partialGenericKVTypeValue0 = mapGenericType;
   }
 
   protected <K, V> void copyEntry(Map<K, V> originMap, Map<K, V> newMap) {
     TypeResolver classResolver = typeResolver;
+    MapTypeCache state = mapTypeCache();
     for (Map.Entry<K, V> entry : originMap.entrySet()) {
       K key = entry.getKey();
       if (key != null) {
-        TypeInfo typeInfo = classResolver.getTypeInfo(key.getClass(), keyTypeInfoWriteCache);
+        TypeInfo typeInfo = classResolver.getTypeInfo(key.getClass(), state.keyTypeInfoWriteCache);
         if (!typeInfo.getSerializer().isImmutable()) {
           key = fory.copyObject(key, typeInfo.getTypeId());
         }
       }
       V value = entry.getValue();
       if (value != null) {
-        TypeInfo typeInfo = classResolver.getTypeInfo(value.getClass(), valueTypeInfoWriteCache);
+        TypeInfo typeInfo =
+            classResolver.getTypeInfo(value.getClass(), state.valueTypeInfoWriteCache);
         if (!typeInfo.getSerializer().isImmutable()) {
           value = fory.copyObject(value, typeInfo.getTypeId());
         }
@@ -567,17 +589,19 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   protected <K, V> void copyEntry(Map<K, V> originMap, Builder<K, V> builder) {
     TypeResolver classResolver = typeResolver;
+    MapTypeCache state = mapTypeCache();
     for (Entry<K, V> entry : originMap.entrySet()) {
       K key = entry.getKey();
       if (key != null) {
-        TypeInfo typeInfo = classResolver.getTypeInfo(key.getClass(), keyTypeInfoWriteCache);
+        TypeInfo typeInfo = classResolver.getTypeInfo(key.getClass(), state.keyTypeInfoWriteCache);
         if (!typeInfo.getSerializer().isImmutable()) {
           key = fory.copyObject(key, typeInfo.getTypeId());
         }
       }
       V value = entry.getValue();
       if (value != null) {
-        TypeInfo typeInfo = classResolver.getTypeInfo(value.getClass(), valueTypeInfoWriteCache);
+        TypeInfo typeInfo =
+            classResolver.getTypeInfo(value.getClass(), state.valueTypeInfoWriteCache);
         if (!typeInfo.getSerializer().isImmutable()) {
           value = fory.copyObject(value, typeInfo.getTypeId());
         }
@@ -588,18 +612,20 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   protected <K, V> void copyEntry(Map<K, V> originMap, Object[] elements) {
     TypeResolver classResolver = typeResolver;
+    MapTypeCache state = mapTypeCache();
     int index = 0;
     for (Entry<K, V> entry : originMap.entrySet()) {
       K key = entry.getKey();
       if (key != null) {
-        TypeInfo typeInfo = classResolver.getTypeInfo(key.getClass(), keyTypeInfoWriteCache);
+        TypeInfo typeInfo = classResolver.getTypeInfo(key.getClass(), state.keyTypeInfoWriteCache);
         if (!typeInfo.getSerializer().isImmutable()) {
           key = fory.copyObject(key, typeInfo.getTypeId());
         }
       }
       V value = entry.getValue();
       if (value != null) {
-        TypeInfo typeInfo = classResolver.getTypeInfo(value.getClass(), valueTypeInfoWriteCache);
+        TypeInfo typeInfo =
+            classResolver.getTypeInfo(value.getClass(), state.valueTypeInfoWriteCache);
         if (!typeInfo.getSerializer().isImmutable()) {
           value = fory.copyObject(value, typeInfo.getTypeId());
         }
@@ -649,6 +675,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       long size,
       Serializer keySerializer,
       Serializer valueSerializer) {
+    MapTypeCache state = mapTypeCache();
     while (true) {
       boolean keyHasNull = (chunkHeader & KEY_HAS_NULL) != 0;
       boolean valueHasNull = (chunkHeader & VALUE_HAS_NULL) != 0;
@@ -672,9 +699,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
             }
           } else {
             if (trackKeyRef) {
-              key = fory.readRef(buffer, keyTypeInfoReadCache);
+              key = fory.readRef(buffer, state.keyTypeInfoReadCache);
             } else {
-              key = fory.readNonRef(buffer, keyTypeInfoReadCache);
+              key = fory.readNonRef(buffer, state.keyTypeInfoReadCache);
             }
           }
           map.put(key, null);
@@ -701,6 +728,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       int chunkHeader,
       Serializer valueSerializer,
       boolean valueHasNull) {
+    MapTypeCache state = mapTypeCache();
     if (!valueHasNull) {
       Object value;
       boolean trackValueRef = (chunkHeader & TRACKING_VALUE_REF) != 0;
@@ -718,9 +746,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         }
       } else {
         if (trackValueRef) {
-          value = fory.readRef(buffer, valueTypeInfoReadCache);
+          value = fory.readRef(buffer, state.valueTypeInfoReadCache);
         } else {
-          value = fory.readNonRef(buffer, valueTypeInfoReadCache);
+          value = fory.readNonRef(buffer, state.valueTypeInfoReadCache);
         }
       }
       map.put(null, value);
@@ -791,6 +819,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       int chunkHeader,
       Serializer keySerializer,
       Serializer valueSerializer) {
+    MapTypeCache state = mapTypeCache();
     // noinspection Duplicates
     boolean trackKeyRef = (chunkHeader & TRACKING_KEY_REF) != 0;
     boolean trackValueRef = (chunkHeader & TRACKING_VALUE_REF) != 0;
@@ -801,10 +830,11 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     boolean valueIsDeclaredType = (chunkHeader & VALUE_DECL_TYPE) != 0;
     int chunkSize = buffer.readUnsignedByte();
     if (!keyIsDeclaredType) {
-      keySerializer = typeResolver.readTypeInfo(buffer, keyTypeInfoReadCache).getSerializer();
+      keySerializer = typeResolver.readTypeInfo(buffer, state.keyTypeInfoReadCache).getSerializer();
     }
     if (!valueIsDeclaredType) {
-      valueSerializer = typeResolver.readTypeInfo(buffer, valueTypeInfoReadCache).getSerializer();
+      valueSerializer =
+          typeResolver.readTypeInfo(buffer, state.valueTypeInfoReadCache).getSerializer();
     }
     fory.incReadDepth();
     for (int i = 0; i < chunkSize; i++) {
@@ -831,6 +861,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       Map map,
       long size,
       int chunkHeader) {
+    MapTypeCache state = mapTypeCache();
     // type parameters count for `Map field` will be 0;
     // type parameters count for `SubMap<V> field` which SubMap is
     // `SubMap<V> implements Map<String, V>` will be 1;
@@ -850,12 +881,13 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     int chunkSize = buffer.readUnsignedByte();
     Serializer keySerializer, valueSerializer;
     if (!keyIsDeclaredType) {
-      keySerializer = typeResolver.readTypeInfo(buffer, keyTypeInfoReadCache).getSerializer();
+      keySerializer = typeResolver.readTypeInfo(buffer, state.keyTypeInfoReadCache).getSerializer();
     } else {
       keySerializer = keyGenericType.getSerializer(typeResolver);
     }
     if (!valueIsDeclaredType) {
-      valueSerializer = typeResolver.readTypeInfo(buffer, valueTypeInfoReadCache).getSerializer();
+      valueSerializer =
+          typeResolver.readTypeInfo(buffer, state.valueTypeInfoReadCache).getSerializer();
     } else {
       valueSerializer = valueGenericType.getSerializer(typeResolver);
     }

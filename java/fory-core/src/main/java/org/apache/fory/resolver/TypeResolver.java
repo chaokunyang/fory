@@ -1624,6 +1624,10 @@ public abstract class TypeResolver {
     return getRegisteredClassLocalOrFrozen(className) != null;
   }
 
+  public GenericType getObjectGenericType() {
+    return extRegistry.objectGenericType;
+  }
+
   static final TypeChecker DEFAULT_TYPE_CHECKER = (resolver, className) -> true;
 
   class ExtRegistry {

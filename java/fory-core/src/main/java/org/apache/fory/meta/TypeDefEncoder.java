@@ -31,7 +31,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
@@ -58,14 +57,13 @@ import org.apache.fory.util.Utils;
  */
 class TypeDefEncoder {
   private static final Logger LOG = LoggerFactory.getLogger(TypeDefEncoder.class);
-  static final Function<Descriptor, Descriptor> IDENTITY_DESCRIPTOR_UPDATOR = Function.identity();
 
   /** Build class definition from fields of class. */
   static TypeDef buildTypeDef(Fory fory, Class<?> type) {
     XtypeResolver resolver = (XtypeResolver) fory.getTypeResolver();
     DescriptorGrouper descriptorGrouper =
         resolver.createDescriptorGrouper(
-            resolver.getFieldDescriptors(type, true), false, IDENTITY_DESCRIPTOR_UPDATOR);
+            resolver.getFieldDescriptors(type, true), false, DescriptorUpdaters.IDENTITY);
     TypeInfo typeInfo = resolver.getTypeInfo(type);
     List<Field> fields;
     int typeId = typeInfo.getTypeId();

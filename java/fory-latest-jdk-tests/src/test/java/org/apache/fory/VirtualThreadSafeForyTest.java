@@ -37,7 +37,8 @@ public class VirtualThreadSafeForyTest {
   @Test
   public void testPlatformDetectsVirtualThreads() throws InterruptedException {
     AtomicReference<Boolean> isVirtual = new AtomicReference<>();
-    Thread thread = Thread.startVirtualThread(() -> isVirtual.set(Thread.currentThread().isVirtual()));
+    Thread thread =
+        Thread.startVirtualThread(() -> isVirtual.set(Thread.currentThread().isVirtual()));
     thread.join();
     assertTrue(Boolean.TRUE.equals(isVirtual.get()));
   }

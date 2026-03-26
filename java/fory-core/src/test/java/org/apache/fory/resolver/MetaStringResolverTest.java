@@ -63,8 +63,7 @@ public class MetaStringResolverTest {
       for (int i = 0; i < 32; i++) {
         String str = StringUtils.random(i, 0);
         MetaStringResolver resolver = new MetaStringResolver();
-        resolver.writeMetaStringBytes(
-            buffer, resolver.getOrCreateGenericMetaStringBytes(str));
+        resolver.writeMetaStringBytes(buffer, resolver.getOrCreateGenericMetaStringBytes(str));
         String metaString2 = resolver.readMetaString(buffer);
         assertEquals(metaString2.hashCode(), str.hashCode());
         assertEquals(metaString2.getBytes(), str.getBytes());

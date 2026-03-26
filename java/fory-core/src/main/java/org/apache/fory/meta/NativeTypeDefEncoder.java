@@ -78,7 +78,7 @@ public class NativeTypeDefEncoder {
             .createDescriptorGrouper(
                 fory.getTypeResolver().getFieldDescriptors(cls, resolveParent),
                 false,
-                TypeDefEncoder.IDENTITY_DESCRIPTOR_UPDATOR);
+                DescriptorUpdaters.IDENTITY);
     List<Field> fields = new ArrayList<>();
     descriptorGrouper
         .getPrimitiveDescriptors()

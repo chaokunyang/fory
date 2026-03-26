@@ -361,8 +361,7 @@ public class TimeSerializersTest extends ForyTestBase {
     fory.registerSerializer(
         TimeStructRef1.class, CodegenSerializer.loadCodegenSerializer(fory, TimeStructRef1.class));
     fory.registerSerializer(Date.class, new TimeSerializers.DateSerializer(fory, true));
-    fory.registerSerializer(
-        java.sql.Date.class, new TimeSerializers.SqlDateSerializer(fory, true));
+    fory.registerSerializer(java.sql.Date.class, new TimeSerializers.SqlDateSerializer(fory, true));
     fory.registerSerializer(Instant.class, new TimeSerializers.InstantSerializer(fory, true));
     {
       TimeStructRef struct = createTimeStructRef(new TimeStructRef());

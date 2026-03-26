@@ -38,7 +38,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -57,12 +56,10 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.longlongpkg.C1;
 import org.apache.fory.resolver.longlongpkg.C2;
 import org.apache.fory.resolver.longlongpkg.C3;
-import org.apache.fory.serializer.FieldGroups;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -322,8 +319,7 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testRegisterNamedClassCachesOnlyNamespaceAndTypeName() {
-    ForyBuilder builder =
-        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true);
+    ForyBuilder builder = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
@@ -337,8 +333,7 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testFinishRegisterPublishesAndAdoptsSharedRegistration() {
-    ForyBuilder builder =
-        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true);
+    ForyBuilder builder = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);

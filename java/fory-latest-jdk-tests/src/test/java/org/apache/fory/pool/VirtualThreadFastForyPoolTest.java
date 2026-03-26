@@ -36,8 +36,7 @@ public class VirtualThreadFastForyPoolTest {
   @Test
   public void testBuildVirtualThreadSafeForyRespectsMaxIdlePoolSize() throws Exception {
     FastForyPool fory =
-        (FastForyPool)
-            Fory.builder().requireClassRegistration(false).buildVirtualThreadSafeFory(1);
+        (FastForyPool) Fory.builder().requireClassRegistration(false).buildVirtualThreadSafeFory(1);
     int threadCount = 8;
     CountDownLatch acquired = new CountDownLatch(threadCount);
     CountDownLatch release = new CountDownLatch(1);

@@ -37,9 +37,9 @@ import org.apache.fory.util.function.Functions;
  */
 public class TypeInfo {
   final Class<?> cls;
-  final MetaStringBytes fullNameBytes;
-  final MetaStringBytes namespaceBytes;
-  final MetaStringBytes typeNameBytes;
+  final MetaStringRef fullNameBytes;
+  final MetaStringRef namespaceBytes;
+  final MetaStringRef typeNameBytes;
   final boolean isDynamicGeneratedClass;
   // Fory type ID for both native and xlang modes.
   // - Types 0-30: Shared internal types (Types.BOOL, Types.STRING, etc.)
@@ -53,9 +53,9 @@ public class TypeInfo {
 
   TypeInfo(
       Class<?> cls,
-      MetaStringBytes fullNameBytes,
-      MetaStringBytes namespaceBytes,
-      MetaStringBytes typeNameBytes,
+      MetaStringRef fullNameBytes,
+      MetaStringRef namespaceBytes,
+      MetaStringRef typeNameBytes,
       boolean isDynamicGeneratedClass,
       Serializer<?> serializer,
       int typeId,

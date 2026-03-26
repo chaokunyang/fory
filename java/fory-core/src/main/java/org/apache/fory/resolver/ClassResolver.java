@@ -482,10 +482,10 @@ public class ClassResolver extends TypeResolver {
       fullname = namespace + "." + name;
     }
     checkRegistration(cls, -1, fullname, false);
-    MetaStringBytes fullNameBytes =
+    MetaStringRef fullNameBytes =
         metaStringResolver.getOrCreateGenericMetaStringBytes(fullname, MetaString.Encoding.UTF_8);
-    MetaStringBytes nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
-    MetaStringBytes nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
+    MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringRef nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
     TypeInfo existingInfo = classInfoMap.get(cls);
     int typeId =
         buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
@@ -493,7 +493,7 @@ public class ClassResolver extends TypeResolver {
         new TypeInfo(cls, fullNameBytes, nsBytes, nameBytes, false, null, typeId, -1);
     classInfoMap.put(cls, typeInfo);
     compositeNameBytes2TypeInfo.put(
-        new TypeNameBytes(nsBytes.hashCode, nameBytes.hashCode), typeInfo);
+        new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
     GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
@@ -533,17 +533,17 @@ public class ClassResolver extends TypeResolver {
       fullname = namespace + "." + name;
     }
     checkRegistration(cls, -1, fullname, false);
-    MetaStringBytes fullNameBytes =
+    MetaStringRef fullNameBytes =
         metaStringResolver.getOrCreateGenericMetaStringBytes(fullname, MetaString.Encoding.UTF_8);
-    MetaStringBytes nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
-    MetaStringBytes nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
+    MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringRef nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
     int typeId = Types.NAMED_UNION;
     TypeInfo typeInfo =
         new TypeInfo(cls, fullNameBytes, nsBytes, nameBytes, false, serializer, typeId, -1);
     typeInfo.setSerializer(this, serializer);
     classInfoMap.put(cls, typeInfo);
     compositeNameBytes2TypeInfo.put(
-        new TypeNameBytes(nsBytes.hashCode, nameBytes.hashCode), typeInfo);
+        new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
     GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
@@ -829,7 +829,8 @@ public class ClassResolver extends TypeResolver {
     classInfoMap.put(cls, typeInfo);
     if (typeInfo.namespaceBytes != null && typeInfo.typeNameBytes != null) {
       TypeNameBytes typeNameBytes =
-          new TypeNameBytes(typeInfo.namespaceBytes.hashCode, typeInfo.typeNameBytes.hashCode);
+          new TypeNameBytes(
+              typeInfo.namespaceBytes.encoded.hash, typeInfo.typeNameBytes.encoded.hash);
       compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
     return typeId;
@@ -1133,7 +1134,8 @@ public class ClassResolver extends TypeResolver {
       // This is important for dynamically created classes that can't be loaded by name.
       if (typeInfo.namespaceBytes != null && typeInfo.typeNameBytes != null) {
         TypeNameBytes typeNameBytes =
-            new TypeNameBytes(typeInfo.namespaceBytes.hashCode, typeInfo.typeNameBytes.hashCode);
+            new TypeNameBytes(
+                typeInfo.namespaceBytes.encoded.hash, typeInfo.typeNameBytes.encoded.hash);
         compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
       }
     }
@@ -1735,8 +1737,8 @@ public class ClassResolver extends TypeResolver {
     if ((header & 0b1) != 0) {
       // let the lowermost bit of next byte be set, so the deserialization can know
       // whether need to read class by name in advance
-      MetaStringBytes packageBytes = metaStringResolver.readMetaStringBytesWithFlag(buffer, header);
-      MetaStringBytes simpleClassNameBytes = metaStringResolver.readMetaStringBytes(buffer);
+      MetaStringRef packageBytes = metaStringResolver.readMetaStringBytesWithFlag(buffer, header);
+      MetaStringRef simpleClassNameBytes = metaStringResolver.readMetaStringBytes(buffer);
       return loadBytesToTypeInfo(packageBytes, simpleClassNameBytes).cls;
     }
     int typeId = header >>> 1;
@@ -1767,9 +1769,9 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   protected TypeInfo loadBytesToTypeInfo(
-      MetaStringBytes packageBytes, MetaStringBytes simpleClassNameBytes) {
+      MetaStringRef packageBytes, MetaStringRef simpleClassNameBytes) {
     TypeNameBytes typeNameBytes =
-        new TypeNameBytes(packageBytes.hashCode, simpleClassNameBytes.hashCode);
+        new TypeNameBytes(packageBytes.encoded.hash, simpleClassNameBytes.encoded.hash);
     TypeInfo typeInfo = compositeNameBytes2TypeInfo.get(typeNameBytes);
     if (typeInfo == null) {
       typeInfo = populateBytesToTypeInfo(typeNameBytes, packageBytes, simpleClassNameBytes);
@@ -1792,7 +1794,8 @@ public class ClassResolver extends TypeResolver {
       // Update the cache with the correct TypeInfo that has a serializer
       if (typeInfo.typeNameBytes != null) {
         TypeNameBytes typeNameBytes =
-            new TypeNameBytes(typeInfo.namespaceBytes.hashCode, typeInfo.typeNameBytes.hashCode);
+            new TypeNameBytes(
+                typeInfo.namespaceBytes.encoded.hash, typeInfo.typeNameBytes.encoded.hash);
         compositeNameBytes2TypeInfo.put(typeNameBytes, newTypeInfo);
       }
       return newTypeInfo;
@@ -1802,12 +1805,12 @@ public class ClassResolver extends TypeResolver {
 
   private TypeInfo populateBytesToTypeInfo(
       TypeNameBytes typeNameBytes,
-      MetaStringBytes packageBytes,
-      MetaStringBytes simpleClassNameBytes) {
+      MetaStringRef packageBytes,
+      MetaStringRef simpleClassNameBytes) {
     String packageName = packageBytes.decode(PACKAGE_DECODER);
     String className = simpleClassNameBytes.decode(TYPE_NAME_DECODER);
     ClassSpec classSpec = Encoders.decodePkgAndClass(packageName, className);
-    MetaStringBytes fullClassNameBytes =
+    MetaStringRef fullClassNameBytes =
         metaStringResolver.getOrCreateGenericMetaStringBytes(
             classSpec.entireClassName, MetaString.Encoding.UTF_8);
     Class<?> cls = loadClass(classSpec.entireClassName, classSpec.isEnum, classSpec.dimension);
@@ -1839,10 +1842,11 @@ public class ClassResolver extends TypeResolver {
   public Class<?> loadClassForMeta(String className, boolean isEnum, int arrayDims) {
     String pkg = ReflectionUtils.getPackage(className);
     String typeName = ReflectionUtils.getClassNameWithoutPackage(className);
-    MetaStringBytes pkgBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(pkg);
-    MetaStringBytes typeBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
+    MetaStringRef pkgBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(pkg);
+    MetaStringRef typeBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
     TypeInfo cachedInfo =
-        compositeNameBytes2TypeInfo.get(new TypeNameBytes(pkgBytes.hashCode, typeBytes.hashCode));
+        compositeNameBytes2TypeInfo.get(
+            new TypeNameBytes(pkgBytes.encoded.hash, typeBytes.encoded.hash));
     if (cachedInfo != null) {
       return cachedInfo.cls;
     }

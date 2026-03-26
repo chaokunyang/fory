@@ -421,10 +421,10 @@ public class XtypeResolver extends TypeResolver {
       String typeName,
       int typeId,
       int userTypeId) {
-    MetaStringBytes fullClassNameBytes =
+    MetaStringRef fullClassNameBytes =
         metaStringResolver.getOrCreateGenericMetaStringBytes(type.getName(), MetaString.Encoding.UTF_8);
-    MetaStringBytes nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
-    MetaStringBytes classNameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
+    MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringRef classNameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
     return new TypeInfo(
         type, fullClassNameBytes, nsBytes, classNameBytes, false, serializer, typeId, userTypeId);
   }
@@ -455,7 +455,8 @@ public class XtypeResolver extends TypeResolver {
       String qualifiedName = qualifiedName(typeInfo.decodeNamespace(), typeInfo.decodeTypeName());
       qualifiedType2TypeInfo.put(qualifiedName, typeInfo);
       TypeNameBytes typeNameBytes =
-          new TypeNameBytes(typeInfo.namespaceBytes.hashCode, typeInfo.typeNameBytes.hashCode);
+          new TypeNameBytes(
+              typeInfo.namespaceBytes.encoded.hash, typeInfo.typeNameBytes.encoded.hash);
       compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
   }
@@ -1087,14 +1088,14 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   protected TypeInfo loadBytesToTypeInfo(
-      MetaStringBytes packageBytes, MetaStringBytes simpleClassNameBytes) {
+      MetaStringRef packageBytes, MetaStringRef simpleClassNameBytes) {
     // Default to NAMED_STRUCT when called without internalTypeId
     return loadBytesToTypeInfoWithTypeId(Types.NAMED_STRUCT, packageBytes, simpleClassNameBytes);
   }
 
   @Override
   protected TypeInfo loadBytesToTypeInfo(
-      int typeId, MetaStringBytes packageBytes, MetaStringBytes simpleClassNameBytes) {
+      int typeId, MetaStringRef packageBytes, MetaStringRef simpleClassNameBytes) {
     return loadBytesToTypeInfoWithTypeId(typeId, packageBytes, simpleClassNameBytes);
   }
 
@@ -1110,7 +1111,8 @@ public class XtypeResolver extends TypeResolver {
       // Update the cache with the correct TypeInfo that has a serializer
       if (typeInfo.typeNameBytes != null) {
         TypeNameBytes typeNameBytes =
-            new TypeNameBytes(typeInfo.namespaceBytes.hashCode, typeInfo.typeNameBytes.hashCode);
+            new TypeNameBytes(
+                typeInfo.namespaceBytes.encoded.hash, typeInfo.typeNameBytes.encoded.hash);
         compositeClassNameBytes2TypeInfo.put(typeNameBytes, newTypeInfo);
       }
       return newTypeInfo;
@@ -1119,9 +1121,9 @@ public class XtypeResolver extends TypeResolver {
   }
 
   private TypeInfo loadBytesToTypeInfoWithTypeId(
-      int internalTypeId, MetaStringBytes packageBytes, MetaStringBytes simpleClassNameBytes) {
+      int internalTypeId, MetaStringRef packageBytes, MetaStringRef simpleClassNameBytes) {
     TypeNameBytes typeNameBytes =
-        new TypeNameBytes(packageBytes.hashCode, simpleClassNameBytes.hashCode);
+        new TypeNameBytes(packageBytes.encoded.hash, simpleClassNameBytes.encoded.hash);
     TypeInfo typeInfo = compositeClassNameBytes2TypeInfo.get(typeNameBytes);
     if (typeInfo == null) {
       typeInfo =
@@ -1134,8 +1136,8 @@ public class XtypeResolver extends TypeResolver {
   private TypeInfo populateBytesToTypeInfo(
       int typeId,
       TypeNameBytes typeNameBytes,
-      MetaStringBytes packageBytes,
-      MetaStringBytes simpleClassNameBytes) {
+      MetaStringRef packageBytes,
+      MetaStringRef simpleClassNameBytes) {
     String namespace = packageBytes.decode(PACKAGE_DECODER);
     String typeName = simpleClassNameBytes.decode(TYPE_NAME_DECODER);
     String qualifiedName = qualifiedName(namespace, typeName);
@@ -1161,7 +1163,7 @@ public class XtypeResolver extends TypeResolver {
       } else {
         throw new ClassUnregisteredException(qualifiedName);
       }
-      MetaStringBytes fullClassNameBytes =
+      MetaStringRef fullClassNameBytes =
           metaStringResolver.getOrCreateGenericMetaStringBytes(
               qualifiedName, MetaString.Encoding.UTF_8);
       typeInfo =

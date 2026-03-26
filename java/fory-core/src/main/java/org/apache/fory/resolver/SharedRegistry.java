@@ -28,6 +28,7 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
@@ -44,18 +45,19 @@ public final class SharedRegistry {
       descriptorsCache = new ConcurrentHashMap<>();
   final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap =
       new ConcurrentHashMap<>();
-  final ConcurrentHashMap<MetaStringKey, MetaString> metaStringMap = new ConcurrentHashMap<>();
+  final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
+      new ConcurrentHashMap<>();
 
-  MetaString getOrCreateMetaString(
+  EncodedMetaString getOrCreateEncodedMetaString(
       String string,
       MetaStringEncoder encoder,
       MetaString.Encoding encoding,
       String encoderTypeKey) {
     if (string.isEmpty()) {
-      return MetaString.EMPTY;
+      return EncodedMetaString.EMPTY;
     }
     MetaStringKey key = new MetaStringKey(string, encoderTypeKey, encoding);
-    return metaStringMap.computeIfAbsent(key, ignored -> encoder.encode(string, encoding));
+    return metaStringMap.computeIfAbsent(key, ignored -> encoder.encodeBinary(string, encoding));
   }
 
   TypeDef getOrCreateTypeDef(TypeDef typeDef) {

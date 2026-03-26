@@ -630,20 +630,20 @@ public abstract class TypeResolver {
    */
   protected final TypeInfo readTypeInfoFromBytes(
       MemoryBuffer buffer, TypeInfo typeInfoCache, int header) {
-    MetaStringBytes typeNameBytesCache = typeInfoCache != null ? typeInfoCache.typeNameBytes : null;
-    MetaStringBytes namespaceBytes;
-    MetaStringBytes simpleClassNameBytes;
+    MetaStringRef typeNameBytesCache = typeInfoCache != null ? typeInfoCache.typeNameBytes : null;
+    MetaStringRef namespaceBytes;
+    MetaStringRef simpleClassNameBytes;
 
     if (typeNameBytesCache != null) {
       // Use cache for faster comparison
-      MetaStringBytes packageNameBytesCache = typeInfoCache.namespaceBytes;
+      MetaStringRef packageNameBytesCache = typeInfoCache.namespaceBytes;
       namespaceBytes = metaStringResolver.readMetaStringBytes(buffer, packageNameBytesCache);
       assert packageNameBytesCache != null;
       simpleClassNameBytes = metaStringResolver.readMetaStringBytes(buffer, typeNameBytesCache);
 
       // Fast path: if hashes match, return cached TypeInfo (already has serializer)
-      if (typeNameBytesCache.hashCode == simpleClassNameBytes.hashCode
-          && packageNameBytesCache.hashCode == namespaceBytes.hashCode) {
+      if (typeNameBytesCache.encoded.hash == simpleClassNameBytes.encoded.hash
+          && packageNameBytesCache.encoded.hash == namespaceBytes.encoded.hash) {
         return typeInfoCache;
       }
     } else {
@@ -747,14 +747,14 @@ public abstract class TypeResolver {
    * #ensureSerializerForTypeInfo} after calling this if a serializer is needed.
    */
   protected abstract TypeInfo loadBytesToTypeInfo(
-      MetaStringBytes namespaceBytes, MetaStringBytes simpleClassNameBytes);
+      MetaStringRef namespaceBytes, MetaStringRef simpleClassNameBytes);
 
   /**
    * Load class info from namespace and type name bytes, with the type id from the stream.
    * Subclasses can override this to use the incoming type id (e.g. NAMED_EXT/NAMED_ENUM).
    */
   protected TypeInfo loadBytesToTypeInfo(
-      int typeId, MetaStringBytes namespaceBytes, MetaStringBytes simpleClassNameBytes) {
+      int typeId, MetaStringRef namespaceBytes, MetaStringRef simpleClassNameBytes) {
     return loadBytesToTypeInfo(namespaceBytes, simpleClassNameBytes);
   }
 

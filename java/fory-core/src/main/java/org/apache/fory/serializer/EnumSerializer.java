@@ -24,7 +24,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.collection.ForyObjectMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.Encoders;
-import org.apache.fory.resolver.MetaStringBytes;
+import org.apache.fory.resolver.MetaStringRef;
 import org.apache.fory.resolver.MetaStringResolver;
 import org.apache.fory.util.Preconditions;
 
@@ -32,8 +32,8 @@ import org.apache.fory.util.Preconditions;
 public class EnumSerializer extends ImmutableSerializer<Enum> {
   private final MetaStringResolver metaStringResolver;
   private final Enum[] enumConstants;
-  private final ForyObjectMap<MetaStringBytes, Enum> metaStringtoEnumRepresentation;
-  private final MetaStringBytes[] metaStringBytesArrByEnumOrdinal;
+  private final ForyObjectMap<MetaStringRef, Enum> metaStringtoEnumRepresentation;
+  private final MetaStringRef[] metaStringStateArrByEnumOrdinal;
 
   public EnumSerializer(Fory fory, Class<Enum> cls) {
     super(fory, cls, false);
@@ -49,7 +49,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
       enumConstants = enclosingClass.getEnumConstants();
     }
 
-    metaStringBytesArrByEnumOrdinal = new MetaStringBytes[enumConstants.length];
+    metaStringStateArrByEnumOrdinal = new MetaStringRef[enumConstants.length];
 
     if (fory.getConfig().serializeEnumByName()) {
       // as we know the size of enum is fixed, initialize the size of map with that value
@@ -59,9 +59,9 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
 
       for (Enum enumConstant : enumConstants) {
         if (enumConstant != null) {
-          MetaStringBytes msb = metaStringResolver.getOrCreateGenericMetaStringBytes(enumConstant.name());
+          MetaStringRef msb = metaStringResolver.getOrCreateGenericMetaStringBytes(enumConstant.name());
           metaStringtoEnumRepresentation.put(msb, enumConstant);
-          metaStringBytesArrByEnumOrdinal[enumConstant.ordinal()] = msb;
+          metaStringStateArrByEnumOrdinal[enumConstant.ordinal()] = msb;
         }
       }
 
@@ -73,8 +73,8 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   @Override
   public void write(MemoryBuffer buffer, Enum value) {
     if (isJava && fory.getConfig().serializeEnumByName()) {
-      MetaStringBytes metaStringBytes = metaStringBytesArrByEnumOrdinal[value.ordinal()];
-      metaStringResolver.writeMetaStringBytes(buffer, metaStringBytes);
+      MetaStringRef metaStringState = metaStringStateArrByEnumOrdinal[value.ordinal()];
+      metaStringResolver.writeMetaStringBytes(buffer, metaStringState);
     } else {
       buffer.writeVarUint32Small7(value.ordinal());
     }
@@ -83,12 +83,12 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   @Override
   public Enum read(MemoryBuffer buffer) {
     if (isJava && fory.getConfig().serializeEnumByName()) {
-      MetaStringBytes metaStringBytes = metaStringResolver.readMetaStringBytes(buffer);
-      Enum e = metaStringtoEnumRepresentation.get(metaStringBytes);
+      MetaStringRef metaStringState = metaStringResolver.readMetaStringBytes(buffer);
+      Enum e = metaStringtoEnumRepresentation.get(metaStringState);
       if (e != null) {
         return e;
       }
-      return handleUnknownEnumValue(metaStringBytes.decode(Encoders.GENERIC_DECODER));
+      return handleUnknownEnumValue(metaStringState.decode(Encoders.GENERIC_DECODER));
     } else {
       int value = buffer.readVarUint32Small7();
       if (value >= enumConstants.length) {

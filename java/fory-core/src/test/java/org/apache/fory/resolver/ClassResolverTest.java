@@ -56,10 +56,12 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.longlongpkg.C1;
 import org.apache.fory.resolver.longlongpkg.C2;
 import org.apache.fory.resolver.longlongpkg.C3;
+import org.apache.fory.serializer.FieldGroups;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -315,6 +317,25 @@ public class ClassResolverTest extends ForyTestBase {
         resolver2.createDescriptorGrouper(descriptors2, false, descriptorUpdator);
     assertSame(updatedGrouper1, updatedGrouper2);
     assertEquals(updatedGrouper1.getSortedDescriptors(), updatedGrouper2.getSortedDescriptors());
+
+    FieldGroups fieldGroups1 = FieldGroups.buildFieldInfos(fory1, grouper1);
+    FieldGroups fieldGroups2 = FieldGroups.buildFieldInfos(fory2, grouper2);
+    assertEquals(fieldGroups1.allFields.length, fieldGroups2.allFields.length);
+    for (int i = 0; i < fieldGroups1.allFields.length; i++) {
+      assertSame(
+          fieldGroups1.allFields[i].resolvedFieldInfo, fieldGroups2.allFields[i].resolvedFieldInfo);
+    }
+
+    FieldGroups directFieldGroups1 =
+        FieldGroups.buildFieldsInfo(fory1, ReflectionUtils.getFields(BeanB.class, true));
+    FieldGroups directFieldGroups2 =
+        FieldGroups.buildFieldsInfo(fory2, ReflectionUtils.getFields(BeanB.class, true));
+    assertEquals(directFieldGroups1.allFields.length, directFieldGroups2.allFields.length);
+    for (int i = 0; i < directFieldGroups1.allFields.length; i++) {
+      assertSame(
+          directFieldGroups1.allFields[i].resolvedFieldInfo.descriptor,
+          directFieldGroups2.allFields[i].resolvedFieldInfo.descriptor);
+    }
   }
 
   @Test

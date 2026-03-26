@@ -27,6 +27,7 @@ import com.google.common.collect.HashBiMap;
 import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
+import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1257,12 +1258,22 @@ public abstract class TypeResolver {
         () -> buildFieldDescriptors(clz, searchParent));
   }
 
+  public Descriptor getOrCreateFieldDescriptor(Field field, Method readMethod) {
+    TypeRef<?> typeRef = TypeRef.of(field.getAnnotatedType());
+    ForyField foryField = field.getAnnotation(ForyField.class);
+    boolean trackingRef =
+        resolveFieldTrackingRef(typeRef, foryField, foryField != null && foryField.ref());
+    boolean nullable =
+        resolveFieldNullable(
+            typeRef,
+            foryField,
+            !typeRef.isPrimitive() && (foryField == null || foryField.nullable()));
+    return sharedRegistry.getOrCreateDescriptor(field, readMethod, trackingRef, nullable);
+  }
+
   private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {
     SortedMap<Member, Descriptor> allDescriptors = getAllDescriptorsMap(clz, searchParent);
     List<Descriptor> result = new ArrayList<>(allDescriptors.size());
-
-    boolean globalRefTracking = fory.trackingRef();
-    boolean isXlang = fory.isCrossLanguage();
 
     for (Map.Entry<Member, Descriptor> entry : allDescriptors.entrySet()) {
       Member member = entry.getKey();
@@ -1270,27 +1281,12 @@ public abstract class TypeResolver {
       if (!(member instanceof Field)) {
         continue;
       }
-      boolean hasForyField = descriptor.getForyField() != null;
-      // Compute the final isTrackingRef value:
-      // For xlang mode: "Reference tracking is disabled by default" (xlang spec)
-      //   - Only enable ref tracking if explicitly set via @ForyField(ref=true)
-      // For Java mode:
-      //   - If global ref tracking is enabled and no @ForyField, use global setting
-      //   - If @ForyField(ref=true) is set, use that (but can be overridden if global is off)
-      boolean ref = globalRefTracking;
-      if (globalRefTracking) {
-        if (isXlang) {
-          // In xlang mode, only track refs if explicitly annotated with @ForyField(ref=true)
-          ref = hasForyField && descriptor.isTrackingRef();
-        } else {
-          if (hasForyField) {
-            ref = descriptor.isTrackingRef();
-          } else {
-            ref = needToWriteRef(descriptor.getTypeRef());
-          }
-        }
-      }
-      boolean nullable = isFieldNullable(descriptor);
+      boolean ref =
+          resolveFieldTrackingRef(
+              descriptor.getTypeRef(), descriptor.getForyField(), descriptor.isTrackingRef());
+      boolean nullable =
+          resolveFieldNullable(
+              descriptor.getTypeRef(), descriptor.getForyField(), descriptor.isNullable());
       boolean needsUpdate =
           ref != descriptor.isTrackingRef() || nullable != descriptor.isNullable();
 
@@ -1391,23 +1387,38 @@ public abstract class TypeResolver {
    * serialization must use the same defaults to ensure consistency across languages.
    */
   private boolean isFieldNullable(Descriptor descriptor) {
-    Class<?> rawType = descriptor.getTypeRef().getRawType();
+    return resolveFieldNullable(
+        descriptor.getTypeRef(), descriptor.getForyField(), descriptor.isNullable());
+  }
+
+  private boolean resolveFieldTrackingRef(
+      TypeRef<?> typeRef, ForyField foryField, boolean descriptorTrackingRef) {
+    boolean globalRefTracking = fory.trackingRef();
+    if (!globalRefTracking) {
+      return false;
+    }
+    if (fory.isCrossLanguage()) {
+      return foryField != null && descriptorTrackingRef;
+    }
+    if (foryField != null) {
+      return descriptorTrackingRef;
+    }
+    return needToWriteRef(typeRef);
+  }
+
+  private boolean resolveFieldNullable(
+      TypeRef<?> typeRef, ForyField foryField, boolean descriptorNullable) {
+    Class<?> rawType = typeRef.getRawType();
     if (rawType.isPrimitive()) {
       return false;
     }
     if (fory.isCrossLanguage()) {
-      // For xlang mode: apply xlang defaults
-      // This must match what TypeDefEncoder.buildFieldType uses for TypeDef metadata
-      ForyField foryField = descriptor.getForyField();
       if (foryField != null) {
-        // Use explicit annotation value
         return foryField.nullable();
       }
-      // Default for xlang: false for all non-primitives, except Optional types
       return TypeUtils.isOptionalType(rawType);
     }
-    // For native mode: use descriptor's nullable (true for non-primitives by default)
-    return descriptor.isNullable();
+    return descriptorNullable;
   }
 
   // thread safe

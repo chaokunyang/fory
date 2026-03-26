@@ -194,12 +194,12 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printFieldDebugInfo(fieldInfo, buffer);
       }
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         AbstractObjectSerializer.readBuildInFieldValue(
             fory, typeResolver, refResolver, fieldInfo, buffer, targetObject);
       } else {
-        if (fieldInfo.fieldConverter == null) {
+        if (fieldInfo.resolvedFieldInfo.fieldConverter == null) {
           // Skip the field value from buffer since it doesn't exist in current class
           FieldSkipper.skipField(fory, typeResolver, refResolver, fieldInfo, buffer);
         } else {
@@ -215,7 +215,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       Object fieldValue =
           AbstractObjectSerializer.readContainerFieldValue(
               fory, typeResolver, refResolver, generics, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(targetObject, fieldValue);
       }
@@ -226,7 +226,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       }
       Object fieldValue =
           AbstractObjectSerializer.readField(fory, typeResolver, refResolver, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+      FieldAccessor fieldAccessor = fieldInfo.resolvedFieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(targetObject, fieldValue);
       }
@@ -238,7 +238,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     Object fieldValue =
         AbstractObjectSerializer.readBuildInFieldValue(
             fory, typeResolver, refResolver, fieldInfo, buffer);
-    fieldInfo.fieldConverter.set(obj, fieldValue);
+    fieldInfo.resolvedFieldInfo.fieldConverter.set(obj, fieldValue);
   }
 
   private void readFields(MemoryBuffer buffer, Object[] fields) {
@@ -250,7 +250,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       if (Utils.DEBUG_OUTPUT_ENABLED) {
         printFieldDebugInfo(fieldInfo, buffer);
       }
-      if (fieldInfo.fieldAccessor != null) {
+      if (fieldInfo.resolvedFieldInfo.fieldAccessor != null) {
         fields[counter++] =
             AbstractObjectSerializer.readBuildInFieldValue(
                 fory, typeResolver, refResolver, fieldInfo, buffer);
@@ -286,8 +286,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private void printFieldDebugInfo(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
     LOG.info(
         "[Java] read field {} of type {}, reader index {}",
-        fieldInfo.descriptor.getName(),
-        fieldInfo.typeRef,
+        fieldInfo.resolvedFieldInfo.descriptor.getName(),
+        fieldInfo.resolvedFieldInfo.typeRef,
         buffer.readerIndex());
   }
 

@@ -184,18 +184,18 @@ public final class UnknownClassSerializers {
       }
       // write order: primitive,boxed,final,other,collection,map
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
-        Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
+        Object fieldValue = value.get(fieldInfo.resolvedFieldInfo.qualifiedFieldName);
         AbstractObjectSerializer.writeBuildInFieldValue(
             fory, typeResolver, refResolver, fieldInfo, buffer, fieldValue);
       }
       Generics generics = fory.getGenerics();
       for (SerializationFieldInfo fieldInfo : fieldsInfo.containerFields) {
-        Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
+        Object fieldValue = value.get(fieldInfo.resolvedFieldInfo.qualifiedFieldName);
         AbstractObjectSerializer.writeContainerFieldValue(
             fory, typeResolver, refResolver, generics, fieldInfo, buffer, fieldValue);
       }
       for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
-        Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
+        Object fieldValue = value.get(fieldInfo.resolvedFieldInfo.qualifiedFieldName);
         AbstractObjectSerializer.writeField(
             fory, typeResolver, refResolver, fieldInfo, buffer, fieldValue);
       }
@@ -236,19 +236,19 @@ public final class UnknownClassSerializers {
         Object fieldValue =
             AbstractObjectSerializer.readBuildInFieldValue(
                 fory, typeResolver, refResolver, fieldInfo, buffer);
-        entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
+        entries.add(new MapEntry(fieldInfo.resolvedFieldInfo.qualifiedFieldName, fieldValue));
       }
       Generics generics = fory.getGenerics();
       for (SerializationFieldInfo fieldInfo : allFieldsInfo.containerFields) {
         Object fieldValue =
             AbstractObjectSerializer.readContainerFieldValue(
                 fory, typeResolver, refResolver, generics, fieldInfo, buffer);
-        entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
+        entries.add(new MapEntry(fieldInfo.resolvedFieldInfo.qualifiedFieldName, fieldValue));
       }
       for (SerializationFieldInfo fieldInfo : allFieldsInfo.otherFields) {
         Object fieldValue =
             AbstractObjectSerializer.readField(fory, typeResolver, refResolver, fieldInfo, buffer);
-        entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
+        entries.add(new MapEntry(fieldInfo.resolvedFieldInfo.qualifiedFieldName, fieldValue));
       }
       obj.setEntries(entries);
       return obj;

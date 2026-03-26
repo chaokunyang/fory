@@ -163,7 +163,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   }
 
   public ObjectStreamSerializer(Fory fory, Class<?> type) {
-    super(fory, type, createObjectCreatorForGraalVM(type));
+    super(fory, type, createObjectCreator(fory, type));
     if (!Serializable.class.isAssignableFrom(type)) {
       throw new IllegalArgumentException(
           String.format("Class %s should implement %s.", type, Serializable.class));
@@ -196,14 +196,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    * Creates an appropriate ObjectCreator for GraalVM native image environment. In GraalVM, we
    * prefer UnsafeObjectCreator to avoid serialization constructor issues.
    */
-  private static <T> ObjectCreator<T> createObjectCreatorForGraalVM(Class<T> type) {
+  private static <T> ObjectCreator<T> createObjectCreator(Fory fory, Class<T> type) {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      // In GraalVM native image, use Unsafe to avoid serialization constructor issues
-      return new ObjectCreators.UnsafeObjectCreator<>(type);
-    } else {
-      // In regular JVM, use the standard object creator
-      return ObjectCreators.getObjectCreator(type);
+      return fory.getSharedRegistry()
+          .getOrCreateObjectCreator(type, () -> new ObjectCreators.UnsafeObjectCreator<>(type));
     }
+    return fory.getSharedRegistry().getOrCreateObjectCreator(type);
   }
 
   @Override

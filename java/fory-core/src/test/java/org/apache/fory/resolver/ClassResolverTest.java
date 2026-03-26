@@ -339,6 +339,24 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
+  public void testSharedRegistryCachesObjectCreator() {
+    ForyBuilder builder =
+        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+
+    new ObjectSerializer<>(fory1, BeanB.class);
+    Object creator1 = sharedRegistry.objectCreatorCache.get(BeanB.class);
+    Assert.assertNotNull(creator1);
+
+    new ObjectSerializer<>(fory2, BeanB.class);
+    assertSame(sharedRegistry.objectCreatorCache.get(BeanB.class), creator1);
+    assertSame(sharedRegistry.getOrCreateObjectCreator(BeanB.class), creator1);
+  }
+
+  @Test
   public void testRegisterNamedClassCachesOnlyNamespaceAndTypeName() {
     ForyBuilder builder =
         Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(true);

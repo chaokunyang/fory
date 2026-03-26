@@ -32,7 +32,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.RefResolver;
@@ -61,7 +60,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private RecordInfo copyRecordInfo;
 
   public AbstractObjectSerializer(Fory fory, Class<T> type) {
-    this(fory, type, ObjectCreators.getObjectCreator(type));
+    this(fory, type, fory.getSharedRegistry().getOrCreateObjectCreator(type));
   }
 
   public AbstractObjectSerializer(Fory fory, Class<T> type, ObjectCreator<T> objectCreator) {

@@ -39,6 +39,8 @@ import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.ResolvedFieldInfo;
 import org.apache.fory.type.Descriptor;
@@ -71,6 +73,8 @@ public final class SharedRegistry {
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
       new ConcurrentHashMap<>();
+  final ConcurrentIdentityMap<Class<?>, ObjectCreator<?>> objectCreatorCache =
+      new ConcurrentIdentityMap<>();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
@@ -108,6 +112,18 @@ public final class SharedRegistry {
   TypeDef getOrCreateTypeDef(TypeDef typeDef) {
     TypeDef existingTypeDef = typeDefById.putIfAbsent(typeDef.getId(), typeDef);
     return existingTypeDef == null ? typeDef : existingTypeDef;
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T> ObjectCreator<T> getOrCreateObjectCreator(Class<T> type) {
+    return getOrCreateObjectCreator(type, () -> ObjectCreators.getObjectCreator(type));
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T> ObjectCreator<T> getOrCreateObjectCreator(
+      Class<T> type, java.util.function.Supplier<ObjectCreator<T>> factory) {
+    return (ObjectCreator<T>)
+        objectCreatorCache.computeIfAbsent(type, key -> factory.get());
   }
 
   public Descriptor getOrCreateDescriptor(
@@ -226,6 +242,7 @@ public final class SharedRegistry {
     descriptorGrouperCache.entrySet()
         .removeIf(entry -> entry.getKey().fieldDescriptorsKey.type.getClassLoader() == loader);
     codeGeneratorMap.entrySet().removeIf(entry -> entry.getKey().contains(loader));
+    objectCreatorCache.removeIf((cls, creator) -> cls.getClassLoader() == loader);
   }
 
   private synchronized void clearSharedRegistrationIfClassLoader(ClassLoader loader) {

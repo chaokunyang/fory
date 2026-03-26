@@ -184,8 +184,6 @@ import org.apache.fory.util.record.RecordUtils;
 public class ClassResolver extends TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ClassResolver.class);
 
-  // reserved last 5 internal type ids for future use
-  private static final int INTERNAL_ID_LIMIT = 250;
   public static final int NATIVE_START_ID = Types.BOUND;
   // reserved 5 small internal type ids for future use
   private static final int INTERNAL_TYPE_START_ID = NATIVE_START_ID + 5;
@@ -575,7 +573,7 @@ public class ClassResolver extends TypeResolver {
   public void registerInternal(Class<?> cls) {
     if (!extRegistry.registeredClassIdMap.containsKey(cls)) {
       Preconditions.checkArgument(
-          extRegistry.classIdGenerator < INTERNAL_ID_LIMIT,
+          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
           "Internal type id overflow: %s",
           extRegistry.classIdGenerator);
       while (extRegistry.classIdGenerator < typeIdToTypeInfo.length
@@ -583,7 +581,7 @@ public class ClassResolver extends TypeResolver {
         extRegistry.classIdGenerator++;
       }
       Preconditions.checkArgument(
-          extRegistry.classIdGenerator < INTERNAL_ID_LIMIT,
+          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
           "Internal type id overflow: %s",
           extRegistry.classIdGenerator);
       registerInternal(cls, extRegistry.classIdGenerator);
@@ -603,13 +601,13 @@ public class ClassResolver extends TypeResolver {
    * @throws IllegalArgumentException if the ID is out of range or already in use
    */
   public void registerInternal(Class<?> cls, int classId) {
-    Preconditions.checkArgument(classId >= 0 && classId < INTERNAL_ID_LIMIT);
+    Preconditions.checkArgument(classId >= 0 && classId < INTERNAL_NATIVE_ID_LIMIT);
     registerInternalImpl(cls, classId);
   }
 
   private void registerInternalImpl(Class<?> cls, int typeId) {
     checkRegisterAllowed();
-    Preconditions.checkArgument(typeId >= 0 && typeId < INTERNAL_ID_LIMIT);
+    Preconditions.checkArgument(typeId >= 0 && typeId < INTERNAL_NATIVE_ID_LIMIT);
     checkRegistration(cls, typeId, cls.getName(), true);
     extRegistry.registeredClassIdMap.put(cls, typeId);
     TypeInfo typeInfo = classInfoMap.get(cls);
@@ -1002,11 +1000,11 @@ public class ClassResolver extends TypeResolver {
     if (classId != null && !isInternalRegisteredClassId(type, classId)) {
       throw new IllegalArgumentException(
           String.format(
-              "Class %s is not registered with an internal id (< %d).", type, INTERNAL_ID_LIMIT));
+              "Class %s is not registered with an internal id (< %d).", type, INTERNAL_NATIVE_ID_LIMIT));
     }
     if (classId != null) {
       Preconditions.checkArgument(
-          classId >= 0 && classId < INTERNAL_ID_LIMIT, "Internal type id overflow: %s", classId);
+          classId >= 0 && classId < INTERNAL_NATIVE_ID_LIMIT, "Internal type id overflow: %s", classId);
     }
     if (classId == null) {
       registerInternal(type);

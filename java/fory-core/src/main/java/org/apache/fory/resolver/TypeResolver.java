@@ -106,6 +106,8 @@ public abstract class TypeResolver {
   static final String SET_META__CONTEXT_MSG =
       "Meta context must be set before serialization, "
           + "please set meta context by SerializationContext.setMetaContext";
+  // reserved last 5 internal type ids for future use
+  static final int INTERNAL_NATIVE_ID_LIMIT = 250;
   private static final GenericType OBJECT_GENERIC_TYPE = GenericType.build(Object.class);
   private static final float TYPE_ID_MAP_LOAD_FACTOR = 0.5f;
   static final long MAX_USER_TYPE_ID = 0xffff_fffEL;
@@ -119,7 +121,7 @@ public abstract class TypeResolver {
   final ExtRegistry extRegistry;
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap;
   // Map for internal type ids (non-user-defined).
-  TypeInfo[] typeIdToTypeInfo = new TypeInfo[] {};
+  final TypeInfo[] typeIdToTypeInfo;
   // Map for user-registered type ids, keyed by user id.
   final LongMap<TypeInfo> userTypeIdToTypeInfo = new LongMap<>(4, TYPE_ID_MAP_LOAD_FACTOR);
   // Cache for readTypeInfo(MemoryBuffer) - persists between calls to avoid reloading
@@ -133,6 +135,8 @@ public abstract class TypeResolver {
     extRegistry = new ExtRegistry(sharedRegistry);
     typeDefMap = sharedRegistry.typeDefMap;
     metaStringResolver = fory.getMetaStringResolver();
+    int length = fory.isCrossLanguage() ? Types.BOUND : INTERNAL_NATIVE_ID_LIMIT;
+    typeIdToTypeInfo = new TypeInfo[length];
   }
 
   protected final void checkRegisterAllowed() {
@@ -798,11 +802,6 @@ public abstract class TypeResolver {
   }
 
   protected final void putInternalTypeInfo(int typeId, TypeInfo typeInfo) {
-    if (typeIdToTypeInfo.length <= typeId) {
-      TypeInfo[] tmp = new TypeInfo[(typeId + 1) * 2];
-      System.arraycopy(typeIdToTypeInfo, 0, tmp, 0, typeIdToTypeInfo.length);
-      typeIdToTypeInfo = tmp;
-    }
     typeIdToTypeInfo[typeId] = typeInfo;
   }
 

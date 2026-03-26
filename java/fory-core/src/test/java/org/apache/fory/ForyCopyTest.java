@@ -80,6 +80,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.apache.fory.collection.LazyMap;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.EnumSerializerTest;
 import org.apache.fory.serializer.EnumSerializerTest.EnumFoo;
 import org.apache.fory.serializer.collection.ChildContainerSerializersTest.ChildArrayDeque;
@@ -196,6 +198,15 @@ public class ForyCopyTest extends ForyTestBase {
     Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
   }
 
+  @Test
+  public void testCopyFailureDoesNotLeakCopyDepth() {
+    Fory fory =
+        builder().withCodegen(false).withRefCopy(false).requireClassRegistration(true).build();
+    fory.registerSerializerAndType(ExplodingCopyBean.class, new ExplodingCopyBeanSerializer(fory));
+    Assert.assertThrows(Throwable.class, () -> fory.copy(new ExplodingCopyBean()));
+    Assert.assertThrows(ForyException.class, () -> fory.serialize(new UnregisteredAfterCopyFailure()));
+  }
+
   private void objectCopyTest() {
     for (int i = 1; i <= 10; i++) {
       BeanA beanA = BeanA.createBeanA(i);
@@ -300,6 +311,31 @@ public class ForyCopyTest extends ForyTestBase {
     Object newObj = fory.copy(obj);
     Assert.assertEquals(obj, newObj);
     Assert.assertNotSame(obj, newObj);
+  }
+
+  private static final class ExplodingCopyBean {}
+
+  private static final class UnregisteredAfterCopyFailure {}
+
+  private static final class ExplodingCopyBeanSerializer extends Serializer<ExplodingCopyBean> {
+    private ExplodingCopyBeanSerializer(Fory fory) {
+      super(fory, ExplodingCopyBean.class);
+    }
+
+    @Override
+    public void write(MemoryBuffer buffer, ExplodingCopyBean value) {
+      throw new UnsupportedOperationException("unused");
+    }
+
+    @Override
+    public ExplodingCopyBean read(MemoryBuffer buffer) {
+      throw new UnsupportedOperationException("unused");
+    }
+
+    @Override
+    public ExplodingCopyBean copy(ExplodingCopyBean value) {
+      throw new IllegalStateException("copy failed");
+    }
   }
 
   public static class A {

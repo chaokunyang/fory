@@ -1149,18 +1149,21 @@ public final class Fory implements BaseFory {
 
   public <T> T copyObject(T obj, Serializer<T> serializer) {
     copyDepth++;
-    T copyObject;
-    if (serializer.needToCopyRef()) {
-      copyObject = getCopyObject(obj);
-      if (copyObject == null) {
+    try {
+      T copyObject;
+      if (serializer.needToCopyRef()) {
+        copyObject = getCopyObject(obj);
+        if (copyObject == null) {
+          copyObject = serializer.copy(obj);
+          originToCopyMap.put(obj, copyObject);
+        }
+      } else {
         copyObject = serializer.copy(obj);
-        originToCopyMap.put(obj, copyObject);
       }
-    } else {
-      copyObject = serializer.copy(obj);
+      return copyObject;
+    } finally {
+      copyDepth--;
     }
-    copyDepth--;
-    return copyObject;
   }
 
   /**

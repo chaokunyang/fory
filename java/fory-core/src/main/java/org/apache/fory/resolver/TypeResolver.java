@@ -120,6 +120,7 @@ public abstract class TypeResolver {
   final IdentityMap<Class<?>, TypeInfo> classInfoMap = new IdentityMap<>(64, foryMapLoadFactor);
   final ExtRegistry extRegistry;
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap;
+  private volatile boolean registrationFinished;
   // Map for internal type ids (non-user-defined).
   final TypeInfo[] typeIdToTypeInfo;
   // Map for user-registered type ids, keyed by user id.
@@ -140,10 +141,11 @@ public abstract class TypeResolver {
   }
 
   protected final void checkRegisterAllowed() {
-    if (fory.getDepth() >= 0) {
+    if (registrationFinished || fory.getDepth() >= 0) {
       throw new ForyException(
-          "Cannot register class/serializer after serialization/deserialization has started. "
-              + "Please register all classes before invoking `serialize/deserialize` methods of Fory.");
+          "Cannot register class/serializer after registration has been frozen or after "
+              + "serialization/deserialization has started. Please register all classes before "
+              + "invoking `serialize/deserialize` methods of Fory.");
     }
   }
 
@@ -232,6 +234,32 @@ public abstract class TypeResolver {
    * @param serializer the serializer to use
    */
   public abstract void registerInternalSerializer(Class<?> type, Serializer<?> serializer);
+
+  /**
+   * Freezes the mutable registration phase and switches this resolver to the shared read-only
+   * snapshot.
+   *
+   * <p>Before this method runs, registration data lives in the local mutable maps inside
+   * {@link ExtRegistry}. The first caller publishes a frozen snapshot to {@link SharedRegistry};
+   * later callers adopt that same snapshot. This method is idempotent so top-level runtime entry
+   * points can call it defensively.
+   */
+  public final void finishRegister() {
+    if (registrationFinished) {
+      return;
+    }
+    synchronized (this) {
+      if (registrationFinished) {
+        return;
+      }
+      SharedRegistry.FrozenRegistration frozenRegistration = extRegistry.frozenRegistration;
+      if (frozenRegistration == null) {
+        frozenRegistration = sharedRegistry.publishOrGetFrozenRegistration(buildFrozenRegistration());
+      }
+      extRegistry.finishRegistration(frozenRegistration);
+      registrationFinished = true;
+    }
+  }
 
   /**
    * Registers a type (if not already registered) and then registers the serializer class.
@@ -839,7 +867,7 @@ public abstract class TypeResolver {
       clz = UnknownStruct.class;
     }
     Class<?> cls = clz;
-    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    Integer classId = getRegisteredClassIdLocalOrFrozen(cls);
     int typeId;
     if (classId != null) {
       TypeInfo registeredInfo = classInfoMap.get(cls);
@@ -953,7 +981,7 @@ public abstract class TypeResolver {
   final Class<?> loadClass(
       String className, boolean isEnum, int arrayDims, boolean deserializeUnknownClass) {
     extRegistry.typeChecker.checkType(this, className);
-    Class<?> cls = extRegistry.registeredClasses.get(className);
+    Class<?> cls = getRegisteredClassLocalOrFrozen(className);
     if (cls != null) {
       return cls;
     }
@@ -1544,6 +1572,63 @@ public abstract class TypeResolver {
     return metaStringResolver;
   }
 
+  /**
+   * Reads a registered class id from the mutable local maps before freeze or the frozen shared
+   * snapshot after {@link #finishRegister()}.
+   */
+  final Integer getRegisteredClassIdLocalOrFrozen(Class<?> cls) {
+    SharedRegistry.FrozenRegistration frozenRegistration = extRegistry.frozenRegistration;
+    if (frozenRegistration != null) {
+      return frozenRegistration.classIdByClass.get(cls);
+    }
+    return extRegistry.registeredClassIdMap.get(cls);
+  }
+
+  /**
+   * Reads a registered class name from the mutable local maps before freeze or the frozen shared
+   * snapshot after {@link #finishRegister()}.
+   */
+  final String getRegisteredNameLocalOrFrozen(Class<?> cls) {
+    SharedRegistry.FrozenRegistration frozenRegistration = extRegistry.frozenRegistration;
+    if (frozenRegistration != null) {
+      return frozenRegistration.nameByClass.get(cls);
+    }
+    return extRegistry.registeredClasses.inverse().get(cls);
+  }
+
+  /**
+   * Reads a registered class lookup by name from the mutable local maps before freeze or the
+   * frozen shared snapshot after {@link #finishRegister()}.
+   */
+  final Class<?> getRegisteredClassLocalOrFrozen(String className) {
+    SharedRegistry.FrozenRegistration frozenRegistration = extRegistry.frozenRegistration;
+    if (frozenRegistration != null) {
+      return frozenRegistration.classByName.get(className);
+    }
+    return extRegistry.registeredClasses.get(className);
+  }
+
+  final boolean isRegistrationFinished() {
+    return registrationFinished;
+  }
+
+  private SharedRegistry.FrozenRegistration buildFrozenRegistration() {
+    IdentityMap<Class<?>, Integer> classIdByClass =
+        new IdentityMap<>(Math.max(1, extRegistry.registeredClassIdMap.size));
+    extRegistry.registeredClassIdMap.forEach(classIdByClass::put);
+
+    int registeredClassCount = Math.max(1, extRegistry.registeredClasses.size());
+    Map<String, Class<?>> classByName = new HashMap<>(registeredClassCount);
+    IdentityMap<Class<?>, String> nameByClass =
+        new IdentityMap<>(registeredClassCount);
+    extRegistry.registeredClasses.forEach(
+        (name, cls) -> {
+          classByName.put(name, cls);
+          nameByClass.put(cls, name);
+        });
+    return new SharedRegistry.FrozenRegistration(classIdByClass, classByName, nameByClass);
+  }
+
   static class ExtRegistry {
     // Here we set it to 1 to avoid calculating it again in `register(Class<?> cls)`.
     int classIdGenerator = 1;
@@ -1552,6 +1637,7 @@ public abstract class TypeResolver {
     final IdentityMap<Class<?>, Integer> registeredClassIdMap =
         new IdentityMap<>(estimatedNumRegistered);
     final BiMap<String, Class<?>> registeredClasses = HashBiMap.create(estimatedNumRegistered);
+    SharedRegistry.FrozenRegistration frozenRegistration;
     // cache absTypeInfo, support customized serializer for abstract or interface.
     final IdentityMap<Class<?>, TypeInfo> absTypeInfo =
         new IdentityMap<>(estimatedNumRegistered, foryMapLoadFactor);
@@ -1579,6 +1665,10 @@ public abstract class TypeResolver {
       currentLayerTypeDef = sharedRegistry.currentLayerTypeDef;
       descriptorsCache = sharedRegistry.descriptorsCache;
       codeGeneratorMap = sharedRegistry.codeGeneratorMap;
+    }
+
+    void finishRegistration(SharedRegistry.FrozenRegistration frozenRegistration) {
+      this.frozenRegistration = frozenRegistration;
     }
 
     public boolean isTypeCheckerSet() {

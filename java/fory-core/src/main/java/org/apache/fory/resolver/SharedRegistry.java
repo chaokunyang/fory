@@ -20,6 +20,8 @@
 package org.apache.fory.resolver;
 
 import java.lang.reflect.Member;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.SortedMap;
@@ -27,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.ConcurrentIdentityMap;
+import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.MetaString;
@@ -37,6 +40,21 @@ import org.apache.fory.type.Descriptor;
 /** Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances. */
 @Internal
 public final class SharedRegistry {
+  static final class FrozenRegistration {
+    final IdentityMap<Class<?>, Integer> classIdByClass;
+    final Map<String, Class<?>> classByName;
+    final IdentityMap<Class<?>, String> nameByClass;
+
+    FrozenRegistration(
+        IdentityMap<Class<?>, Integer> classIdByClass,
+        Map<String, Class<?>> classByName,
+        IdentityMap<Class<?>, String> nameByClass) {
+      this.classIdByClass = classIdByClass;
+      this.classByName = classByName;
+      this.nameByClass = nameByClass;
+    }
+  }
+
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef =
       new ConcurrentIdentityMap<>();
@@ -47,6 +65,15 @@ public final class SharedRegistry {
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
       new ConcurrentHashMap<>();
+  volatile FrozenRegistration frozenRegistration;
+
+  synchronized FrozenRegistration publishOrGetFrozenRegistration(FrozenRegistration candidate) {
+    Objects.requireNonNull(candidate);
+    if (frozenRegistration == null) {
+      frozenRegistration = candidate;
+    }
+    return frozenRegistration;
+  }
 
   EncodedMetaString getOrCreateEncodedMetaString(
       String string,

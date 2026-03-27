@@ -21,7 +21,6 @@ package org.apache.fory.builder;
 
 import static org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer.SERIALIZER_FIELD_NAME;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;

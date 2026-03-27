@@ -20,7 +20,6 @@
 package org.apache.fory.serializer;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.IdentityObjectIntMap;
@@ -38,7 +37,6 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.Serializers.CrossLanguageCompatibleSerializer;
 import org.apache.fory.serializer.UnknownClass.UnknownEnum;
-import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 import org.apache.fory.type.Types;

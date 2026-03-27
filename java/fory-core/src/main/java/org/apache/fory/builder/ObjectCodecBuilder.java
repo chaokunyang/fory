@@ -60,7 +60,6 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.ObjectSerializer;
-import org.apache.fory.serializer.SerializationUtils;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.DispatchId;

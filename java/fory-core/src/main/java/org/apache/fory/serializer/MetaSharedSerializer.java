@@ -35,7 +35,6 @@ import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.MapRefResolver;
 import org.apache.fory.resolver.RefResolver;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;

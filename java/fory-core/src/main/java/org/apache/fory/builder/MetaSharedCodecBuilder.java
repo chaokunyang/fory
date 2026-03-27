@@ -25,7 +25,6 @@ import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;

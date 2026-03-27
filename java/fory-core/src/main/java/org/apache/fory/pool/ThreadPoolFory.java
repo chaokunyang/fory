@@ -21,7 +21,6 @@ package org.apache.fory.pool;
 
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;

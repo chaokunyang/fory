@@ -19,7 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import java.util.Collection;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.ObjectIntMap;
@@ -29,7 +28,6 @@ import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
-import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
 

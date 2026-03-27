@@ -21,10 +21,7 @@ package org.apache.fory.serializer;
 
 import java.util.Collection;
 import java.util.Map;
-import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.resolver.TypeInfo;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionSerializer;
 import org.apache.fory.serializer.collection.MapSerializer;
 

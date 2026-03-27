@@ -24,10 +24,12 @@ import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Semaphore;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.AbstractThreadSafeFory;
 import org.apache.fory.Fory;
+import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
@@ -41,7 +43,8 @@ import org.apache.fory.util.LoaderBinding;
  * classloader.
  */
 public class FastForyPool extends AbstractThreadSafeFory {
-  private final Function<ClassLoader, Fory> foryFactory;
+  private static final int DEFAULT_POOL_SIZE = 1024;
+  private final BiFunction<SharedRegistry, ClassLoader, Fory> foryFactory;
   private final SharedRegistry sharedRegistry;
   private final ConcurrentLinkedQueue<Fory> pool = new ConcurrentLinkedQueue<>();
   private final Object callbackLock = new Object();
@@ -50,19 +53,32 @@ public class FastForyPool extends AbstractThreadSafeFory {
   private final Semaphore idleSlots;
   private Consumer<Fory> factoryCallback = f -> {};
 
-  public FastForyPool(Function<ClassLoader, Fory> foryFactory, SharedRegistry sharedRegistry) {
-    this(foryFactory, sharedRegistry, null, Integer.MAX_VALUE);
+  public FastForyPool(ForyBuilder builder) {
+    this(builder, new SharedRegistry(), null, DEFAULT_POOL_SIZE);
+  }
+
+  public FastForyPool(ForyBuilder builder, SharedRegistry sharedRegistry, ClassLoader classLoader, int maxPoolSize) {
+    this((r, c) -> builder.withSharedRegistry(r).withClassLoader(c).build(),
+        new SharedRegistry(), classLoader, DEFAULT_POOL_SIZE);
+  }
+
+  public FastForyPool(BiFunction<SharedRegistry, ClassLoader, Fory> foryFactory) {
+    this(foryFactory, new SharedRegistry(), null, DEFAULT_POOL_SIZE);
+  }
+
+  public FastForyPool(BiFunction<SharedRegistry, ClassLoader, Fory> foryFactory, SharedRegistry sharedRegistry) {
+    this(foryFactory, sharedRegistry, null, DEFAULT_POOL_SIZE);
   }
 
   public FastForyPool(
-      Function<ClassLoader, Fory> foryFactory,
+      BiFunction<SharedRegistry, ClassLoader, Fory> foryFactory,
       SharedRegistry sharedRegistry,
       ClassLoader defaultClassLoader) {
-    this(foryFactory, sharedRegistry, defaultClassLoader, Integer.MAX_VALUE);
+    this(foryFactory, sharedRegistry, defaultClassLoader, DEFAULT_POOL_SIZE);
   }
 
   public FastForyPool(
-      Function<ClassLoader, Fory> foryFactory,
+      BiFunction<SharedRegistry, ClassLoader, Fory> foryFactory,
       SharedRegistry sharedRegistry,
       ClassLoader defaultClassLoader,
       int maxPoolSize) {
@@ -245,7 +261,7 @@ public class FastForyPool extends AbstractThreadSafeFory {
     }
     ClassLoader loader = getClassLoader();
     synchronized (callbackLock) {
-      fory = foryFactory.apply(loader);
+      fory = foryFactory.apply(sharedRegistry, loader);
       factoryCallback.accept(fory);
     }
     return fory;

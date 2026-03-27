@@ -124,7 +124,7 @@ public final class Fory implements BaseFory {
   private int depth;
   private final int maxDepth;
   private boolean registrationFinished;
-  private boolean forVirtualThread;
+  private final boolean forVirtualThread;
   private int copyDepth;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;

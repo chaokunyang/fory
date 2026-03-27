@@ -67,6 +67,7 @@ public final class ForyBuilder {
   boolean stringRefIgnored = true;
   boolean timeRefIgnored = true;
   ClassLoader classLoader;
+  SharedRegistry sharedRegistry;
   boolean compressInt = true;
   public LongEncoding longEncoding = LongEncoding.TAGGED;
   boolean compressIntArray = false;
@@ -250,6 +251,11 @@ public final class ForyBuilder {
    */
   public ForyBuilder withClassLoader(ClassLoader classLoader) {
     this.classLoader = classLoader;
+    return this;
+  }
+
+  public ForyBuilder withSharedRegistry(SharedRegistry sharedRegistry) {
+    this.sharedRegistry = sharedRegistry;
     return this;
   }
 
@@ -517,6 +523,9 @@ public final class ForyBuilder {
   private static Fory newFory(
       ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
     try {
+      if (sharedRegistry == null) {
+        sharedRegistry = new SharedRegistry();
+      }
       return new Fory(builder, classLoader, sharedRegistry);
     } catch (Throwable t) {
       t.printStackTrace();
@@ -532,7 +541,7 @@ public final class ForyBuilder {
     // clear classLoader to avoid `LoaderBinding#foryFactory` lambda capture classLoader by
     // capturing `ForyBuilder`, which make `classLoader` not able to be gc.
     this.classLoader = null;
-    return newFory(this, loader);
+    return newFory(this, loader, sharedRegistry);
   }
 
   /**
@@ -567,11 +576,7 @@ public final class ForyBuilder {
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
     SharedRegistry sharedRegistry = new SharedRegistry();
-    return new FastForyPool(
-        classLoader -> newFory(this, classLoader, sharedRegistry),
-        sharedRegistry,
-        loader,
-        maxPoolSize);
+    return new FastForyPool(this, sharedRegistry, loader, maxPoolSize);
   }
 
   /** Build thread safe fory. */

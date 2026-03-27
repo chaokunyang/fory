@@ -35,7 +35,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
 import org.apache.fory.util.LoaderBinding;
 
@@ -45,7 +44,6 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   private static final Logger LOG = LoggerFactory.getLogger(ThreadPoolFory.class);
 
   private final ForyPooledObjectFactory foryPooledObjectFactory;
-  private final SharedRegistry sharedRegistry;
   private Consumer<Fory> factoryCallback = f -> {};
   private final Object callbackLock = new Object();
 
@@ -55,17 +53,6 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
       int maxPoolSize,
       long expireTime,
       TimeUnit timeUnit) {
-    this(foryFactory, new SharedRegistry(), minPoolSize, maxPoolSize, expireTime, timeUnit);
-  }
-
-  public ThreadPoolFory(
-      Function<ClassLoader, Fory> foryFactory,
-      SharedRegistry sharedRegistry,
-      int minPoolSize,
-      int maxPoolSize,
-      long expireTime,
-      TimeUnit timeUnit) {
-    this.sharedRegistry = Objects.requireNonNull(sharedRegistry);
     this.foryPooledObjectFactory =
         new ForyPooledObjectFactory(
             foryFactory,

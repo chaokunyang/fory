@@ -606,6 +606,11 @@ public final class ForyBuilder {
     return newFory(this, loader, sharedRegistry);
   }
 
+  /** Build thread safe fory. */
+  public ThreadSafeFory buildThreadSafeFory() {
+    return buildFastForyPool();
+  }
+
   public ThreadSafeFory buildFastForyPool() {
     return buildVirtualThreadSafeFory();
   }
@@ -655,19 +660,6 @@ public final class ForyBuilder {
     }, sharedRegistry, loader, maxPoolSize);
   }
 
-  /** Build thread safe fory. */
-  public ThreadSafeFory buildThreadSafeFory() {
-    finish();
-    ClassLoader loader = this.classLoader;
-    this.classLoader = null;
-    SharedRegistry sharedRegistry = new SharedRegistry();
-    ThreadLocalFory threadLocalFory =
-        new ThreadLocalFory(
-            classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry);
-    threadLocalFory.setClassLoader(loader);
-    return threadLocalFory;
-  }
-
   /** Build thread safe fory backed by {@link ThreadLocalFory}. */
   public ThreadLocalFory buildThreadLocalFory() {
     finish();
@@ -675,10 +667,9 @@ public final class ForyBuilder {
     // clear classLoader to avoid `LoaderBinding#foryFactory` lambda capture classLoader by
     // capturing `ForyBuilder`,  which make `classLoader` not able to be gc.
     this.classLoader = null;
-    SharedRegistry sharedRegistry = new SharedRegistry();
     ThreadLocalFory threadSafeFory =
         new ThreadLocalFory(
-            classLoader -> newFory(this, classLoader, sharedRegistry), sharedRegistry);
+            classLoader -> newFory(this, classLoader));
     threadSafeFory.setClassLoader(loader);
     return threadSafeFory;
   }
@@ -714,11 +705,9 @@ public final class ForyBuilder {
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
-    SharedRegistry sharedRegistry = new SharedRegistry();
     ThreadSafeFory threadSafeFory =
         new ThreadPoolFory(
-            classLoader -> newFory(this, classLoader, sharedRegistry),
-            sharedRegistry,
+            classLoader -> newFory(this, classLoader),
             minPoolSize,
             maxPoolSize,
             expireTime,

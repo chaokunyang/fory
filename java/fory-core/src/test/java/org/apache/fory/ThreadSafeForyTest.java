@@ -334,7 +334,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   private WeakHashMap<Class<?>, Boolean> generateClassForGC() {
-    ThreadSafeFory fory1 = Fory.builder().requireClassRegistration(false).buildThreadSafeFory();
+    ThreadSafeFory fory1 = Fory.builder().requireClassRegistration(false).buildThreadLocalFory();
     ThreadSafeFory fory2 =
         Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(1, 2);
     String className = "DuplicateStruct";

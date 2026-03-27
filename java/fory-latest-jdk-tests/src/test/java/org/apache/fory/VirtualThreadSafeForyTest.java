@@ -144,8 +144,7 @@ public class VirtualThreadSafeForyTest {
           assertTrue(config.trackingRef());
           assertTrue(config.copyRef());
           assertFalse(config.isStringRefIgnored());
-          assertEquals(
-              config.getUnknownEnumValueStrategy(), UnknownEnumValueStrategy.RETURN_NULL);
+          assertEquals(config.getUnknownEnumValueStrategy(), UnknownEnumValueStrategy.RETURN_NULL);
           assertTrue(config.serializeEnumByName());
           assertFalse(config.isTimeRefIgnored());
           assertFalse(config.compressInt());

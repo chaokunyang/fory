@@ -53,11 +53,10 @@ public final class SharedRegistry {
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<TypeDefDescriptorsKey, List<Descriptor>> typeDefDescriptorsCache =
       new ConcurrentHashMap<>();
-  final ConcurrentHashMap<FieldDescriptorGrouperKey, DescriptorGrouper> fieldDescriptorGrouperCache =
-      new ConcurrentHashMap<>();
+  final ConcurrentHashMap<FieldDescriptorGrouperKey, DescriptorGrouper>
+      fieldDescriptorGrouperCache = new ConcurrentHashMap<>();
   final ConcurrentHashMap<TypeDefDescriptorGrouperKey, DescriptorGrouper>
-      typeDefDescriptorGrouperCache =
-      new ConcurrentHashMap<>();
+      typeDefDescriptorGrouperCache = new ConcurrentHashMap<>();
   final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap =
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =

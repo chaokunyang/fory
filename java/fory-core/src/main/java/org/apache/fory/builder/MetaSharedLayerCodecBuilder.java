@@ -66,7 +66,8 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
         "Class version check should be disabled when compatible mode is enabled.");
     this.layerTypeDef = layerTypeDef;
     this.layerMarkerClass = layerMarkerClass;
-    DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(layerTypeDef, beanClass));
+    DescriptorGrouper grouper =
+        typeResolver(r -> r.createDescriptorGrouper(layerTypeDef, beanClass));
     objectCodecOptimizer = new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
   }
 

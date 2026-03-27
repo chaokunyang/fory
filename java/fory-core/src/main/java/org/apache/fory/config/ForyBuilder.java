@@ -249,8 +249,7 @@ public final class ForyBuilder {
   public ForyBuilder withWriteNumUtf16BytesForUtf8Encoding(
       boolean writeNumUtf16BytesForUtf8Encoding) {
     this.writeNumUtf16BytesForUtf8Encoding = writeNumUtf16BytesForUtf8Encoding;
-    recordAction(
-        b -> b.withWriteNumUtf16BytesForUtf8Encoding(writeNumUtf16BytesForUtf8Encoding));
+    recordAction(b -> b.withWriteNumUtf16BytesForUtf8Encoding(writeNumUtf16BytesForUtf8Encoding));
     return this;
   }
 
@@ -298,8 +297,7 @@ public final class ForyBuilder {
   }
 
   public ForyBuilder withCompatible(boolean compatible) {
-    this.compatibleMode =
-        compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT;
+    this.compatibleMode = compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT;
     recordAction(b -> b.withCompatible(compatible));
     return this;
   }
@@ -649,12 +647,16 @@ public final class ForyBuilder {
     this.classLoader = null;
     SharedRegistry sharedRegistry = new SharedRegistry();
     List<Consumer<ForyBuilder>> actions = new ArrayList<>(this.actions);
-    return new FastForyPool(builder -> {
-      builder.replayActions(actions);
-      builder.forVirtualThread = true;
-      builder.finish();
-      return newFory(builder, loader, sharedRegistry);
-    }, sharedRegistry, loader, maxPoolSize);
+    return new FastForyPool(
+        builder -> {
+          builder.replayActions(actions);
+          builder.forVirtualThread = true;
+          builder.finish();
+          return newFory(builder, loader, sharedRegistry);
+        },
+        sharedRegistry,
+        loader,
+        maxPoolSize);
   }
 
   /** Build thread safe fory backed by {@link ThreadLocalFory}. */
@@ -664,9 +666,7 @@ public final class ForyBuilder {
     // clear classLoader to avoid `LoaderBinding#foryFactory` lambda capture classLoader by
     // capturing `ForyBuilder`,  which make `classLoader` not able to be gc.
     this.classLoader = null;
-    ThreadLocalFory threadSafeFory =
-        new ThreadLocalFory(
-            classLoader -> newFory(this, classLoader));
+    ThreadLocalFory threadSafeFory = new ThreadLocalFory(classLoader -> newFory(this, classLoader));
     threadSafeFory.setClassLoader(loader);
     return threadSafeFory;
   }

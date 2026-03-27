@@ -501,7 +501,8 @@ public class PyCrossLanguageTest extends ForyTestBase {
             "computeStructHash", Fory.class, DescriptorGrouper.class);
     method.setAccessible(true);
     TypeResolver resolver = fory.getTypeResolver();
-    DescriptorGrouper grouper = resolver.getFieldDescriptorGrouper(ComplexObject1.class, false, false);
+    DescriptorGrouper grouper =
+        resolver.getFieldDescriptorGrouper(ComplexObject1.class, false, false);
     Integer hash = (Integer) method.invoke(objSerializer, fory, grouper);
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(4);
     buffer.writeInt32(hash);

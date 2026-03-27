@@ -66,7 +66,9 @@ public class FastForyPool extends AbstractThreadSafeFory {
     this(foryFactory, new SharedRegistry(), null, DEFAULT_POOL_SIZE);
   }
 
-  /** Creates a pool that reuses the provided shared registry and the default idle retention limit. */
+  /**
+   * Creates a pool that reuses the provided shared registry and the default idle retention limit.
+   */
   public FastForyPool(Function<ForyBuilder, Fory> foryFactory, SharedRegistry sharedRegistry) {
     this(foryFactory, sharedRegistry, null, DEFAULT_POOL_SIZE);
   }
@@ -331,5 +333,4 @@ public class FastForyPool extends AbstractThreadSafeFory {
   private void freeIdleCapacity() {
     idleCapacity.release();
   }
-
 }

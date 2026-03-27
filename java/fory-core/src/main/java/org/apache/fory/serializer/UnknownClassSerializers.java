@@ -203,7 +203,8 @@ public final class UnknownClassSerializers {
       if (fieldsInfo == null) {
         // Use `UnknownEmptyStruct` since it doesn't have any field.
         DescriptorGrouper grouper =
-            fory.getTypeResolver().createDescriptorGrouper(typeDef, UnknownClass.UnknownEmptyStruct.class);
+            fory.getTypeResolver()
+                .createDescriptorGrouper(typeDef, UnknownClass.UnknownEmptyStruct.class);
         FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, grouper);
         int classVersionHash = 0;
         if (fory.checkClassVersion()) {

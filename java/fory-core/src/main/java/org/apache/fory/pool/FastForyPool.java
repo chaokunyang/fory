@@ -249,9 +249,8 @@ public class FastForyPool extends AbstractThreadSafeFory {
       releaseIdleSlot();
       return fory;
     }
-    ClassLoader loader = getClassLoader();
     synchronized (callbackLock) {
-      ForyBuilder builder = new ForyBuilder().withSharedRegistry(sharedRegistry).withClassLoader(loader);
+      ForyBuilder builder = new ForyBuilder().withSharedRegistry(sharedRegistry).withClassLoader(defaultClassLoader);
       fory = foryFactory.apply(builder);
       factoryCallback.accept(fory);
     }
@@ -265,13 +264,6 @@ public class FastForyPool extends AbstractThreadSafeFory {
       }
       pool.add(fory);
     }
-  }
-
-  int pooledForyCount() {
-    if (idleSlots == null) {
-      return pool.size();
-    }
-    return maxPoolSize - idleSlots.availablePermits();
   }
 
   private boolean reserveIdleSlot() {

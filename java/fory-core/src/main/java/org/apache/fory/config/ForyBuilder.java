@@ -585,9 +585,6 @@ public final class ForyBuilder {
   private static Fory newFory(
       ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
     try {
-      if (sharedRegistry == null) {
-        sharedRegistry = new SharedRegistry();
-      }
       return new Fory(builder, classLoader, sharedRegistry);
     } catch (Throwable t) {
       t.printStackTrace();

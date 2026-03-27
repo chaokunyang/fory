@@ -229,6 +229,5 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   @Override
   public void clearClassLoader(ClassLoader loader) {
     foryPooledObjectFactory.clearClassLoader(loader);
-    sharedRegistry.clearClassLoader(loader);
   }
 }

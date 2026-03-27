@@ -136,7 +136,17 @@ public final class Fory implements BaseFory {
   public Fory(ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
     // Avoid set classLoader in `ForyBuilder`, which won't be clear when
     // `org.apache.fory.ThreadSafeFory.clearClassLoader` is called.
+    if (sharedRegistry == null) {
+      sharedRegistry = new SharedRegistry();
+    }
+    if (classLoader == null) {
+      classLoader = Thread.currentThread().getContextClassLoader();
+      if (classLoader == null) {
+        classLoader = Fory.class.getClassLoader();
+      }
+    }
     this.sharedRegistry = sharedRegistry;
+    this.classLoader = classLoader;
     config = new Config(builder);
     this.forVirtualThread = config.forVirtualThread();
     crossLanguage = config.isXlang();
@@ -159,7 +169,6 @@ public final class Fory implements BaseFory {
     typeResolver = crossLanguage ? new XtypeResolver(this) : new ClassResolver(this);
     typeResolver.initialize();
     serializationContext = new SerializationContext(config);
-    this.classLoader = classLoader;
     arrayListSerializer = new ArrayListSerializer(this);
     hashMapSerializer = new HashMapSerializer(this);
     originToCopyMap = new IdentityMap<>(2);

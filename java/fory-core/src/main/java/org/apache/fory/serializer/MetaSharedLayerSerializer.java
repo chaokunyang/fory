@@ -70,8 +70,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
     TypeResolver typeResolver = fory.getTypeResolver();
 
     // Build field infos from layerTypeDef
-    Collection<Descriptor> descriptors = layerTypeDef.getDescriptors(typeResolver, type);
-    DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(descriptors, false);
+    DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(layerTypeDef, type);
     FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, descriptorGrouper);
     this.buildInFields = fieldGroups.buildInFields;
     this.otherFields = fieldGroups.userTypeFields;

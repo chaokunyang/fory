@@ -91,9 +91,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         LOG.info("  [{}] {}", i, typeDef.getFieldsInfo().get(i));
       }
     }
-    Collection<Descriptor> descriptors = consolidateFields(fory.getTypeResolver(), type, typeDef);
     DescriptorGrouper descriptorGrouper =
-        fory.getTypeResolver().createDescriptorGrouper(descriptors, false);
+        fory.getTypeResolver().createDescriptorGrouper(typeDef, type);
     if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info(
           "========== MetaSharedSerializer sorted descriptors for {} ==========", type.getName());

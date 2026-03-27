@@ -1232,6 +1232,15 @@ public abstract class TypeResolver {
             && ScalaTypes.getScalaMapType().isAssignableFrom(cls));
   }
 
+  public final Collection<Descriptor> consolidateFieldDescriptors(TypeDef typeDef, Class<?> cls) {
+    return MetaSharedSerializer.consolidateFields(this, cls, typeDef);
+  }
+
+  public final DescriptorGrouper createDescriptorGrouper(TypeDef typeDef, Class<?> cls) {
+    // consolidateFieldDescriptors first
+    return createDescriptorGrouper(consolidateFieldDescriptors(typeDef, cls), false);
+  }
+
   public final DescriptorGrouper createDescriptorGrouper(
       Collection<Descriptor> descriptors, boolean descriptorsGroupedOrdered) {
     return createDescriptorGrouper(descriptors, descriptorsGroupedOrdered, null);

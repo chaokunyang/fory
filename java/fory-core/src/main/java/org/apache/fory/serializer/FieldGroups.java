@@ -160,7 +160,7 @@ public class FieldGroups {
       TypeResolver resolver = fory.getTypeResolver();
       // invoke `copy` to avoid ObjectSerializer construct clear serializer by `clearSerializer`.
       if (resolver.isMonomorphic(descriptor)) {
-        typeInfo = SerializationUtils.getTypeInfo(fory, typeRef.getRawType());
+        typeInfo = fory.getTypeResolver().getTypeInfo(typeRef.getRawType());
         if (!fory.isShareMeta()
             && !fory.isCompatible()
             && typeInfo.getSerializer() instanceof ReplaceResolveSerializer) {

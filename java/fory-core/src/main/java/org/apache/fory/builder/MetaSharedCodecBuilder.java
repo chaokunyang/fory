@@ -89,9 +89,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
     this.typeDef = typeDef;
-    Collection<Descriptor> descriptors =
-        fory(f -> MetaSharedSerializer.consolidateFields(f.getTypeResolver(), beanClass, typeDef));
-    DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(descriptors, false));
+    DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(typeDef, beanClass));
     List<Descriptor> sortedDescriptors = grouper.getSortedDescriptors();
     if (org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info(

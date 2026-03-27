@@ -30,14 +30,6 @@ import org.apache.fory.serializer.collection.MapSerializer;
 
 @Internal
 public class SerializationUtils {
-  public static TypeResolver getTypeResolver(Fory fory) {
-    return fory.isCrossLanguage() ? fory.getTypeResolver() : fory.getTypeResolver();
-  }
-
-  public static TypeInfo getTypeInfo(Fory fory, Class<?> cls) {
-    return getTypeResolver(fory).getTypeInfo(cls);
-  }
-
   public static void validateSerializer(
       Class<?> type,
       Class<? extends Serializer> serializerClass,

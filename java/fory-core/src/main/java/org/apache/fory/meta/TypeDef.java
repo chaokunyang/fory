@@ -108,7 +108,6 @@ public class TypeDef implements Serializable {
   // be same too.
   private final long id;
   private final byte[] encoded;
-  private transient ConcurrentHashMap<DescriptorCacheKey, List<Descriptor>> descriptorsCache;
 
   TypeDef(
       ClassSpec classSpec,
@@ -374,8 +373,7 @@ public class TypeDef implements Serializable {
    * @param cls class load in current process.
    */
   public List<Descriptor> getDescriptors(TypeResolver resolver, Class<?> cls) {
-    DescriptorCacheKey key = new DescriptorCacheKey(resolver, cls);
-    return getDescriptorsCache().computeIfAbsent(key, ignored -> buildDescriptors(resolver, cls));
+    return  buildDescriptors(resolver, cls);
   }
 
   private List<Descriptor> buildDescriptors(TypeResolver resolver, Class<?> cls) {
@@ -429,42 +427,6 @@ public class TypeDef implements Serializable {
       descriptors.add(newDesc);
     }
     return descriptors;
-  }
-
-  private ConcurrentHashMap<DescriptorCacheKey, List<Descriptor>> getDescriptorsCache() {
-    ConcurrentHashMap<DescriptorCacheKey, List<Descriptor>> cache = descriptorsCache;
-    if (cache == null) {
-      cache = new ConcurrentHashMap<>();
-      descriptorsCache = cache;
-    }
-    return cache;
-  }
-
-  private static final class DescriptorCacheKey {
-    private final TypeResolver resolver;
-    private final Class<?> cls;
-
-    private DescriptorCacheKey(TypeResolver resolver, Class<?> cls) {
-      this.resolver = Objects.requireNonNull(resolver);
-      this.cls = Objects.requireNonNull(cls);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (!(o instanceof DescriptorCacheKey)) {
-        return false;
-      }
-      DescriptorCacheKey that = (DescriptorCacheKey) o;
-      return resolver == that.resolver && cls == that.cls;
-    }
-
-    @Override
-    public int hashCode() {
-      return 31 * System.identityHashCode(resolver) + System.identityHashCode(cls);
-    }
   }
 
   public static TypeDef buildTypeDef(Fory fory, Class<?> cls) {

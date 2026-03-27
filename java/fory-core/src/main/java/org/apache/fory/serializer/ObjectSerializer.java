@@ -93,7 +93,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         }
       }
       descriptors = typeDef.getDescriptors(typeResolver, cls);
-      grouper = typeResolver.createDescriptorGrouper(descriptors, false);
+      grouper = typeResolver.createDescriptorGrouper(typeDef, cls);
     } else {
       grouper = typeResolver.getFieldDescriptorGrouper(cls, resolveParent, false);
       descriptors = grouper.getSortedDescriptors();

@@ -19,8 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import static org.apache.fory.serializer.SerializationUtils.getTypeResolver;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -203,14 +201,11 @@ public final class UnknownClassSerializers {
 
     private ClassFieldsInfo getClassFieldsInfo(TypeDef typeDef) {
       ClassFieldsInfo fieldsInfo = fieldsInfoMap.get(typeDef.getId());
-      TypeResolver resolver = getTypeResolver(fory);
+      TypeResolver resolver = fory.getTypeResolver();
       if (fieldsInfo == null) {
         // Use `UnknownEmptyStruct` since it doesn't have any field.
-        Collection<Descriptor> descriptors =
-            MetaSharedSerializer.consolidateFields(
-                resolver, UnknownClass.UnknownEmptyStruct.class, typeDef);
         DescriptorGrouper grouper =
-            fory.getTypeResolver().createDescriptorGrouper(descriptors, false);
+            fory.getTypeResolver().createDescriptorGrouper(typeDef, UnknownClass.UnknownEmptyStruct.class);
         FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, grouper);
         int classVersionHash = 0;
         if (fory.checkClassVersion()) {

@@ -38,8 +38,15 @@ import org.apache.fory.serializer.BufferCallback;
 import org.apache.fory.util.LoaderBinding;
 
 /**
- * A fast pool for fory, the instance will never expire and classloader changes use thread context
- * classloader.
+ * A lightweight non-expiring {@link Fory} pool optimized for fast borrow and return.
+ *
+ * <p>The pool keeps at most {@code maxPoolSize} idle {@link Fory} instances for reuse after
+ * operations complete. Bursts may still create more instances temporarily, but any returned
+ * instance beyond the idle retention limit is dropped instead of retained.
+ *
+ * <p>Class loader control is based on the current thread context class loader (TCCL). {@link
+ * #setClassLoader(ClassLoader)} updates the current thread TCCL, and {@link #getClassLoader()}
+ * reads from TCCL with {@code defaultClassLoader} as a fallback when TCCL is null.
  */
 public class FastForyPool extends AbstractThreadSafeFory {
   private static final int DEFAULT_POOL_SIZE = 1024;
@@ -49,17 +56,25 @@ public class FastForyPool extends AbstractThreadSafeFory {
   private final Object callbackLock = new Object();
   private final ClassLoader defaultClassLoader;
   private final int maxPoolSize;
-  private final Semaphore idleSlots;
+  // Tracks remaining idle capacity, not the number of borrowed instances.
+  private final Semaphore idleCapacity;
   private Consumer<Fory> factoryCallback = f -> {};
 
+  /** Creates a pool with a private shared registry and the default idle retention limit. */
   public FastForyPool(Function<ForyBuilder, Fory> foryFactory) {
     this(foryFactory, new SharedRegistry(), null, DEFAULT_POOL_SIZE);
   }
 
+  /** Creates a pool that reuses the provided shared registry and the default idle retention limit. */
   public FastForyPool(Function<ForyBuilder, Fory> foryFactory, SharedRegistry sharedRegistry) {
     this(foryFactory, sharedRegistry, null, DEFAULT_POOL_SIZE);
   }
 
+  /**
+   * Creates a pool with the provided shared registry and default class loader fallback.
+   *
+   * <p>The default class loader is used only when the current thread context class loader is null.
+   */
   public FastForyPool(
       Function<ForyBuilder, Fory> foryFactory,
       SharedRegistry sharedRegistry,
@@ -67,6 +82,12 @@ public class FastForyPool extends AbstractThreadSafeFory {
     this(foryFactory, sharedRegistry, defaultClassLoader, DEFAULT_POOL_SIZE);
   }
 
+  /**
+   * Creates a pool with explicit shared state, class loader fallback, and idle retention limit.
+   *
+   * <p>{@code maxPoolSize} limits how many idle {@link Fory} instances are retained after
+   * operations complete.
+   */
   public FastForyPool(
       Function<ForyBuilder, Fory> foryFactory,
       SharedRegistry sharedRegistry,
@@ -80,7 +101,7 @@ public class FastForyPool extends AbstractThreadSafeFory {
           String.format("FastForyPool maxPoolSize must be >= 0, got %s", maxPoolSize));
     }
     this.maxPoolSize = maxPoolSize;
-    idleSlots = maxPoolSize == Integer.MAX_VALUE ? null : new Semaphore(maxPoolSize);
+    idleCapacity = new Semaphore(maxPoolSize);
   }
 
   @Override
@@ -243,36 +264,44 @@ public class FastForyPool extends AbstractThreadSafeFory {
     return execute(fory -> fory.copy(obj));
   }
 
+  /** Borrows a pooled instance or creates a new one when the idle pool is empty. */
   private Fory acquire() {
     Fory fory = pool.poll();
     if (fory != null) {
-      releaseIdleSlot();
+      freeIdleCapacity();
       return fory;
     }
     synchronized (callbackLock) {
-      ForyBuilder builder = new ForyBuilder().withSharedRegistry(sharedRegistry).withClassLoader(defaultClassLoader);
+      ForyBuilder builder =
+          new ForyBuilder().withSharedRegistry(sharedRegistry).withClassLoader(defaultClassLoader);
       fory = foryFactory.apply(builder);
       factoryCallback.accept(fory);
     }
     return fory;
   }
 
+  /** Returns an instance to the idle pool only when there is idle capacity left to occupy. */
   private void release(Fory fory) {
     if (fory != null) {
-      if (!reserveIdleSlot()) {
+      if (!tryOccupyIdleCapacity()) {
         return;
       }
       pool.add(fory);
     }
   }
 
-  private boolean reserveIdleSlot() {
-    return idleSlots == null || idleSlots.tryAcquire();
+  /** Visible for tests to validate idle retention accounting. */
+  int pooledForyCount() {
+    return maxPoolSize - idleCapacity.availablePermits();
   }
 
-  private void releaseIdleSlot() {
-    if (idleSlots != null) {
-      idleSlots.release();
-    }
+  /** Attempts to consume one unit of idle capacity before retaining a returned instance. */
+  private boolean tryOccupyIdleCapacity() {
+    return idleCapacity.tryAcquire();
+  }
+
+  /** Frees one unit of idle capacity after a pooled instance is borrowed. */
+  private void freeIdleCapacity() {
+    idleCapacity.release();
   }
 }

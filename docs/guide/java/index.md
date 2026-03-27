@@ -164,12 +164,7 @@ ThreadSafeFory fory = Fory.builder()
   .buildVirtualThreadSafeFory();
 ```
 
-Use this when serialization is done with byte arrays or `MemoryBuffer` directly.
-
-If serialization or deserialization goes through stream/channel based APIs such as `OutputStream`,
-`ForyInputStream`, or `ForyReadableChannel`, a blocked virtual thread can keep a borrowed `Fory`
-instance occupied while waiting on I/O. In that case, review the pool-size and memory tradeoff
-carefully. See [Virtual Threads](virtual-threads.md).
+See more details in [Virtual Threads](virtual-threads.md).
 
 ### ThreadSafeForyPool
 

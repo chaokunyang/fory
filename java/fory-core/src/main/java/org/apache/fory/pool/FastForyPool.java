@@ -59,6 +59,7 @@ public class FastForyPool extends AbstractThreadSafeFory {
   // Tracks remaining idle capacity, not the number of borrowed instances.
   private final Semaphore idleCapacity;
   private Consumer<Fory> factoryCallback = f -> {};
+  private volatile boolean callbackRegistrationClosed;
 
   /** Creates a pool with a private shared registry and the default idle retention limit. */
   public FastForyPool(Function<ForyBuilder, Fory> foryFactory) {
@@ -138,41 +139,52 @@ public class FastForyPool extends AbstractThreadSafeFory {
 
   @Override
   public void registerCallback(Consumer<Fory> callback) {
+    if (callbackRegistrationClosed) {
+      throw new IllegalStateException(
+          "registerCallback must be invoked before FastForyPool serialize/deserialize starts.");
+    }
     synchronized (callbackLock) {
-      factoryCallback = factoryCallback.andThen(callback);
-      for (Fory fory : pool) {
-        callback.accept(fory);
+      if (callbackRegistrationClosed) {
+        throw new IllegalStateException(
+            "registerCallback must be invoked before FastForyPool serialize/deserialize starts.");
       }
+      factoryCallback = factoryCallback.andThen(callback);
     }
   }
 
   @Override
   public byte[] serialize(Object obj) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.serialize(obj));
   }
 
   @Override
   public byte[] serialize(Object obj, BufferCallback callback) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.serialize(obj, callback));
   }
 
   @Override
   public MemoryBuffer serialize(Object obj, long address, int size) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.serialize(obj, address, size));
   }
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.serialize(buffer, obj));
   }
 
   @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj, BufferCallback callback) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.serialize(buffer, obj, callback));
   }
 
   @Override
   public void serialize(OutputStream outputStream, Object obj) {
+    callbackRegistrationClosed = true;
     execute(
         fory -> {
           fory.serialize(outputStream, obj);
@@ -182,6 +194,7 @@ public class FastForyPool extends AbstractThreadSafeFory {
 
   @Override
   public void serialize(OutputStream outputStream, Object obj, BufferCallback callback) {
+    callbackRegistrationClosed = true;
     execute(
         fory -> {
           fory.serialize(outputStream, obj, callback);
@@ -191,71 +204,85 @@ public class FastForyPool extends AbstractThreadSafeFory {
 
   @Override
   public Object deserialize(ByteBuffer byteBuffer) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(MemoryUtils.wrap(byteBuffer)));
   }
 
   @Override
   public Object deserialize(byte[] bytes) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(bytes));
   }
 
   @Override
   public <T> T deserialize(byte[] bytes, Class<T> type) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(bytes, type));
   }
 
   @Override
   public <T> T deserialize(MemoryBuffer buffer, Class<T> type) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(buffer, type));
   }
 
   @Override
   public <T> T deserialize(ForyInputStream inputStream, Class<T> type) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(inputStream, type));
   }
 
   @Override
   public <T> T deserialize(ForyReadableChannel channel, Class<T> type) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(channel, type));
   }
 
   @Override
   public Object deserialize(byte[] bytes, Iterable<MemoryBuffer> outOfBandBuffers) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(bytes, outOfBandBuffers));
   }
 
   @Override
   public Object deserialize(long address, int size) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(address, size));
   }
 
   @Override
   public Object deserialize(MemoryBuffer buffer) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(buffer));
   }
 
   @Override
   public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(buffer, outOfBandBuffers));
   }
 
   @Override
   public Object deserialize(ForyInputStream inputStream) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(inputStream));
   }
 
   @Override
   public Object deserialize(ForyInputStream inputStream, Iterable<MemoryBuffer> outOfBandBuffers) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(inputStream, outOfBandBuffers));
   }
 
   @Override
   public Object deserialize(ForyReadableChannel channel) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(channel));
   }
 
   @Override
   public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
+    callbackRegistrationClosed = true;
     return execute(fory -> fory.deserialize(channel, outOfBandBuffers));
   }
 
@@ -304,4 +331,5 @@ public class FastForyPool extends AbstractThreadSafeFory {
   private void freeIdleCapacity() {
     idleCapacity.release();
   }
+
 }

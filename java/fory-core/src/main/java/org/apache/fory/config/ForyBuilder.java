@@ -605,7 +605,7 @@ public final class ForyBuilder {
 
   /** Build thread safe fory. */
   public ThreadSafeFory buildThreadSafeFory() {
-    return buildFastForyPool();
+    return buildThreadLocalFory();
   }
 
   public ThreadSafeFory buildFastForyPool() {

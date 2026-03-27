@@ -20,35 +20,32 @@
 package org.apache.fory.pool;
 
 import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertThrows;
 
-import java.lang.reflect.Field;
-import java.util.concurrent.Semaphore;
 import org.apache.fory.Fory;
-import org.apache.fory.resolver.SharedRegistry;
+import org.apache.fory.test.bean.BeanB;
 import org.testng.annotations.Test;
 
 public class FastForyPoolTest {
 
   @Test
-  public void testAlwaysUsesSemaphoreForIdleCapacityAccounting() throws Exception {
+  public void testRegisterBeforeFirstUseAppliesToCreatedInstance() {
     FastForyPool pool =
-        new FastForyPool(
-            builder -> builder.requireClassRegistration(false).build(),
-            new SharedRegistry(),
-            null,
-            Integer.MAX_VALUE);
+        (FastForyPool) Fory.builder().requireClassRegistration(true).buildFastForyPool(1);
 
-    pool.execute(
-        fory -> {
-          assertEquals(fory.deserialize(fory.serialize("abc")), "abc");
-          return null;
-        });
+    pool.register(BeanB.class);
 
-    Field field = FastForyPool.class.getDeclaredField("idleCapacity");
-    field.setAccessible(true);
-    Semaphore semaphore = (Semaphore) field.get(pool);
-    assertNotNull(semaphore);
-    assertEquals(pool.pooledForyCount(), 1);
+    BeanB bean = BeanB.createBeanB(2);
+    assertEquals(pool.deserialize(pool.serialize(bean)), bean);
+  }
+
+  @Test
+  public void testRegisterCallbackAfterSerializationStartsThrows() {
+    FastForyPool pool =
+        (FastForyPool) Fory.builder().requireClassRegistration(true).buildFastForyPool(1);
+
+    assertEquals(pool.deserialize(pool.serialize("abc")), "abc");
+    assertThrows(IllegalStateException.class, () -> pool.registerCallback(fory -> {}));
+    assertThrows(IllegalStateException.class, () -> pool.register(BeanB.class));
   }
 }

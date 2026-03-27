@@ -57,13 +57,14 @@ import org.apache.fory.util.Utils;
  */
 class TypeDefEncoder {
   private static final Logger LOG = LoggerFactory.getLogger(TypeDefEncoder.class);
+  private static final java.util.function.Function<Descriptor, Descriptor> IDENTITY_DESCRIPTOR =
+      descriptor -> descriptor;
 
   /** Build class definition from fields of class. */
   static TypeDef buildTypeDef(Fory fory, Class<?> type) {
     XtypeResolver resolver = (XtypeResolver) fory.getTypeResolver();
     DescriptorGrouper descriptorGrouper =
-        resolver.createDescriptorGrouper(
-            resolver.getFieldDescriptors(type, true), false, descriptor -> descriptor);
+        resolver.getFieldDescriptorGrouper(type, true, false, IDENTITY_DESCRIPTOR);
     TypeInfo typeInfo = resolver.getTypeInfo(type);
     List<Field> fields;
     int typeId = typeInfo.getTypeId();

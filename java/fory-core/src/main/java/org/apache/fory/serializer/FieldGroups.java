@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.FieldAccessor;
@@ -74,9 +75,24 @@ public class FieldGroups {
         descriptors.add(new Descriptor(field, TypeRef.of(field.getAnnotatedType()), null, null));
       }
     }
-    DescriptorGrouper descriptorGrouper =
-        fory.getTypeResolver().createDescriptorGrouper(descriptors, false);
+    DescriptorGrouper descriptorGrouper = buildDescriptorGrouper(fory, descriptors, false, null);
     return buildFieldInfos(fory, descriptorGrouper);
+  }
+
+  static DescriptorGrouper buildDescriptorGrouper(
+      Fory fory,
+      Collection<Descriptor> descriptors,
+      boolean descriptorsGroupedOrdered,
+      Function<Descriptor, Descriptor> descriptorUpdator) {
+    TypeResolver typeResolver = fory.getTypeResolver();
+    return DescriptorGrouper.createDescriptorGrouper(
+            typeResolver::isBuildIn,
+            descriptors,
+            descriptorsGroupedOrdered,
+            descriptorUpdator,
+            typeResolver.getPrimitiveComparator(),
+            typeResolver.getDescriptorComparator())
+        .sort();
   }
 
   public static FieldGroups buildFieldInfos(Fory fory, DescriptorGrouper grouper) {

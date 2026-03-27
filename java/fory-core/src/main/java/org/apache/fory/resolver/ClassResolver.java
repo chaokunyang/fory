@@ -65,7 +65,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyCopyable;
@@ -142,7 +141,6 @@ import org.apache.fory.serializer.scala.SingletonObjectSerializer;
 import org.apache.fory.serializer.shim.ProtobufDispatcher;
 import org.apache.fory.serializer.shim.ShimDispatcher;
 import org.apache.fory.type.Descriptor;
-import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
@@ -1925,18 +1923,8 @@ public class ClassResolver extends TypeResolver {
   }
 
   @Override
-  protected DescriptorGrouper newDescriptorGrouper(
-      Collection<Descriptor> descriptors,
-      boolean descriptorsGroupedOrdered,
-      Function<Descriptor, Descriptor> descriptorUpdator) {
-    return DescriptorGrouper.createDescriptorGrouper(
-            this::isBuildIn,
-            descriptors,
-            descriptorsGroupedOrdered,
-            descriptorUpdator,
-            getPrimitiveComparator(),
-            createTypeAndNameComparator())
-        .sort();
+  public Comparator<Descriptor> getDescriptorComparator() {
+    return createTypeAndNameComparator();
   }
 
   /**

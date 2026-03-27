@@ -310,11 +310,49 @@ public class ClassResolverTest extends ForyTestBase {
 
     Function<Descriptor, Descriptor> descriptorUpdator = Function.identity();
     DescriptorGrouper updatedGrouper1 =
-        resolver1.createDescriptorGrouper(descriptors1, false, descriptorUpdator);
+        resolver1.getFieldDescriptorGrouper(BeanB.class, true, false, descriptorUpdator);
     DescriptorGrouper updatedGrouper2 =
-        resolver2.createDescriptorGrouper(descriptors2, false, descriptorUpdator);
+        resolver2.getFieldDescriptorGrouper(BeanB.class, true, false, descriptorUpdator);
     assertSame(updatedGrouper1, updatedGrouper2);
     assertEquals(updatedGrouper1.getSortedDescriptors(), updatedGrouper2.getSortedDescriptors());
+  }
+
+  @Test
+  public void testSharedRegistryCachesTypeDefDescriptorsAndDescriptorGrouperBySemanticKey() {
+    ForyBuilder builder =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withMetaShare(true)
+            .requireClassRegistration(false);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+
+    ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
+    ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
+    resolver1.finishRegistration();
+    resolver2.finishRegistration();
+
+    TypeDef canonicalTypeDef = resolver1.getTypeDef(BeanB.class, true);
+    MemoryBuffer buffer1 = MemoryBuffer.newHeapBuffer(256);
+    canonicalTypeDef.writeTypeDef(buffer1);
+    TypeDef typeDef1 = TypeDef.readTypeDef(fory1, buffer1);
+    MemoryBuffer buffer2 = MemoryBuffer.newHeapBuffer(256);
+    canonicalTypeDef.writeTypeDef(buffer2);
+    TypeDef typeDef2 = TypeDef.readTypeDef(fory2, buffer2);
+
+    assertNotSame(typeDef1, typeDef2);
+    assertEquals(typeDef1.getId(), typeDef2.getId());
+
+    List<Descriptor> descriptors1 = typeDef1.getDescriptors(resolver1, BeanB.class);
+    List<Descriptor> descriptors2 = typeDef2.getDescriptors(resolver2, BeanB.class);
+    assertSame(descriptors1, descriptors2);
+
+    DescriptorGrouper grouper1 = resolver1.createDescriptorGrouper(typeDef1, BeanB.class);
+    DescriptorGrouper grouper2 = resolver2.createDescriptorGrouper(typeDef2, BeanB.class);
+    assertSame(grouper1, grouper2);
+    assertEquals(grouper1.getSortedDescriptors(), grouper2.getSortedDescriptors());
   }
 
   @Test

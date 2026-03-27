@@ -336,6 +336,13 @@ public abstract class TypeResolver {
 
   public abstract boolean isBuildIn(Descriptor descriptor);
 
+  @Internal
+  public abstract Comparator<Descriptor> getDescriptorComparator();
+
+  protected DescriptorGrouper configureDescriptorGrouper(DescriptorGrouper descriptorGrouper) {
+    return descriptorGrouper;
+  }
+
   public abstract boolean isMonomorphic(Descriptor descriptor);
 
   public abstract boolean isMonomorphic(Class<?> clz);
@@ -1232,45 +1239,70 @@ public abstract class TypeResolver {
             && ScalaTypes.getScalaMapType().isAssignableFrom(cls));
   }
 
-  public final Collection<Descriptor> consolidateFieldDescriptors(TypeDef typeDef, Class<?> cls) {
-    return MetaSharedSerializer.consolidateFields(this, cls, typeDef);
-  }
-
+  @Internal
   public final DescriptorGrouper createDescriptorGrouper(TypeDef typeDef, Class<?> cls) {
-    // consolidateFieldDescriptors first
-    return createDescriptorGrouper(consolidateFieldDescriptors(typeDef, cls), false);
+    return createDescriptorGrouper(typeDef, cls, false, null);
   }
 
+  @Internal
   public final DescriptorGrouper createDescriptorGrouper(
-      Collection<Descriptor> descriptors, boolean descriptorsGroupedOrdered) {
-    return createDescriptorGrouper(descriptors, descriptorsGroupedOrdered, null);
-  }
-
-  public final DescriptorGrouper createDescriptorGrouper(
-      Collection<Descriptor> descriptors,
+      TypeDef typeDef,
+      Class<?> cls,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator) {
-    return sharedRegistry.getOrCreateDescriptorGrouper(
-        descriptors,
+    return sharedRegistry.getOrCreateTypeDefDescriptorGrouper(
+        typeDef,
+        cls,
         descriptorsGroupedOrdered,
         descriptorUpdator,
-        () -> newDescriptorGrouper(descriptors, descriptorsGroupedOrdered, descriptorUpdator));
+        () ->
+            buildDescriptorGrouper(
+                typeDef.getDescriptors(this, cls), descriptorsGroupedOrdered, descriptorUpdator));
   }
 
-  protected abstract DescriptorGrouper newDescriptorGrouper(
-      Collection<Descriptor> descriptors,
-      boolean descriptorsGroupedOrdered,
-      Function<Descriptor, Descriptor> descriptorUpdator);
-
+  @Internal
   public final DescriptorGrouper getFieldDescriptorGrouper(
       Class<?> clz, boolean searchParent, boolean descriptorsGroupedOrdered) {
-    return createDescriptorGrouper(
-        getFieldDescriptors(clz, searchParent), descriptorsGroupedOrdered, null);
+    return getFieldDescriptorGrouper(clz, searchParent, descriptorsGroupedOrdered, null);
   }
 
+  @Internal
+  public final DescriptorGrouper getFieldDescriptorGrouper(
+      Class<?> clz,
+      boolean searchParent,
+      boolean descriptorsGroupedOrdered,
+      Function<Descriptor, Descriptor> descriptorUpdator) {
+    return sharedRegistry.getOrCreateFieldDescriptorGrouper(
+        clz,
+        searchParent,
+        descriptorsGroupedOrdered,
+        descriptorUpdator,
+        () ->
+            buildDescriptorGrouper(
+                getFieldDescriptors(clz, searchParent),
+                descriptorsGroupedOrdered,
+                descriptorUpdator));
+  }
+
+  @Internal
   public List<Descriptor> getFieldDescriptors(Class<?> clz, boolean searchParent) {
     return sharedRegistry.getOrCreateFieldDescriptors(
         clz, searchParent, () -> buildFieldDescriptors(clz, searchParent));
+  }
+
+  private DescriptorGrouper buildDescriptorGrouper(
+      Collection<Descriptor> descriptors,
+      boolean descriptorsGroupedOrdered,
+      Function<Descriptor, Descriptor> descriptorUpdator) {
+    return configureDescriptorGrouper(
+            DescriptorGrouper.createDescriptorGrouper(
+                this::isBuildIn,
+                descriptors,
+                descriptorsGroupedOrdered,
+                descriptorUpdator,
+                getPrimitiveComparator(),
+                getDescriptorComparator()))
+        .sort();
   }
 
   private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {

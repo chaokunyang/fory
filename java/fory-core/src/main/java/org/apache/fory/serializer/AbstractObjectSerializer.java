@@ -1187,7 +1187,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       }
     }
     DescriptorGrouper descriptorGrouper =
-        fory.getTypeResolver().createDescriptorGrouper(descriptors, false);
+        FieldGroups.buildDescriptorGrouper(fory, descriptors, false, null);
     FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, descriptorGrouper);
     fieldInfos = fieldGroups.allFields;
     if (isRecord) {

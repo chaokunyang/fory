@@ -20,7 +20,6 @@
 package org.apache.fory.serializer;
 
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
@@ -288,10 +287,5 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         fieldInfo.descriptor.getName(),
         fieldInfo.typeRef,
         buffer.readerIndex());
-  }
-
-  public static Collection<Descriptor> consolidateFields(
-      TypeResolver resolver, Class<?> cls, TypeDef typeDef) {
-    return typeDef.getDescriptors(resolver, cls);
   }
 }

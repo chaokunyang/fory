@@ -49,7 +49,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
@@ -1177,27 +1176,22 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
-  protected DescriptorGrouper newDescriptorGrouper(
-      Collection<Descriptor> descriptors,
-      boolean descriptorsGroupedOrdered,
-      Function<Descriptor, Descriptor> descriptorUpdator) {
-    return DescriptorGrouper.createDescriptorGrouper(
-            this::isBuildIn,
-            descriptors,
-            descriptorsGroupedOrdered,
-            descriptorUpdator,
-            getPrimitiveComparator(),
-            (o1, o2) -> {
-              int typeId1 = getInternalTypeId(o1);
-              int typeId2 = getInternalTypeId(o2);
-              if (typeId1 == typeId2) {
-                return getFieldSortKey(o1).compareTo(getFieldSortKey(o2));
-              } else {
-                return typeId1 - typeId2;
-              }
-            })
-        .setOtherDescriptorComparator(Comparator.comparing(TypeResolver::getFieldSortKey))
-        .sort();
+  public Comparator<Descriptor> getDescriptorComparator() {
+    return (o1, o2) -> {
+      int typeId1 = getInternalTypeId(o1);
+      int typeId2 = getInternalTypeId(o2);
+      if (typeId1 == typeId2) {
+        return getFieldSortKey(o1).compareTo(getFieldSortKey(o2));
+      } else {
+        return typeId1 - typeId2;
+      }
+    };
+  }
+
+  @Override
+  protected DescriptorGrouper configureDescriptorGrouper(DescriptorGrouper descriptorGrouper) {
+    return descriptorGrouper.setOtherDescriptorComparator(
+        Comparator.comparing(TypeResolver::getFieldSortKey));
   }
 
   private byte getInternalTypeId(Descriptor descriptor) {

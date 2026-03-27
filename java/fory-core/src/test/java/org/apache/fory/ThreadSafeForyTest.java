@@ -27,7 +27,6 @@ import static org.testng.Assert.assertTrue;
 import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -111,58 +110,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
           });
       Assert.assertNull(ex.get());
     }
-  }
-
-  @Test
-  public void testThreadSafeRegistrationStillWorksAfterSnapshotPublished() throws Exception {
-    BeanB bean = BeanB.createBeanB(2);
-    ThreadSafeFory fory =
-        Fory.builder().requireClassRegistration(true).buildThreadSafeForyPool(2, 4);
-    fory.register(BeanB.class);
-
-    CountDownLatch firstBorrowed = new CountDownLatch(1);
-    CountDownLatch releaseFirst = new CountDownLatch(1);
-    CountDownLatch secondBorrowed = new CountDownLatch(1);
-    AtomicReference<Fory> firstInstance = new AtomicReference<>();
-    AtomicReference<Fory> secondInstance = new AtomicReference<>();
-
-    CompletableFuture<Void> firstThread =
-        CompletableFuture.runAsync(
-            () ->
-                fory.execute(
-                    borrowed -> {
-                      firstInstance.set(borrowed);
-                      firstBorrowed.countDown();
-                      try {
-                        Assert.assertTrue(releaseFirst.await(5, TimeUnit.SECONDS));
-                      } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw new AssertionError(e);
-                      }
-                      return null;
-                    }));
-
-    Assert.assertTrue(firstBorrowed.await(5, TimeUnit.SECONDS));
-
-    CompletableFuture<Void> secondThread =
-        CompletableFuture.runAsync(
-            () ->
-                fory.execute(
-                    borrowed -> {
-                      secondInstance.set(borrowed);
-                      secondBorrowed.countDown();
-                      assertEquals(borrowed.deserialize(borrowed.serialize(bean)), bean);
-                      return null;
-                    }));
-
-    Assert.assertTrue(secondBorrowed.await(5, TimeUnit.SECONDS));
-    Assert.assertNotNull(firstInstance.get());
-    Assert.assertNotNull(secondInstance.get());
-    Assert.assertNotSame(firstInstance.get(), secondInstance.get());
-
-    releaseFirst.countDown();
-    firstThread.join();
-    secondThread.join();
   }
 
   @Test

@@ -36,8 +36,7 @@ public class MemoryBufferObjectOutputTest {
     Fory fory = Fory.builder().build();
     MemoryBuffer buffer = MemoryUtils.buffer(32);
     try (MemoryBufferObjectOutput output =
-        new MemoryBufferObjectOutput(
-            fory.getConfig(), new StringSerializer(fory.getConfig()), buffer)) {
+        new MemoryBufferObjectOutput(fory.getConfig(), fory.getTypeResolver(), buffer)) {
       output.writeByte(1);
       output.writeInt(2);
       output.writeLong(3);
@@ -48,7 +47,7 @@ public class MemoryBufferObjectOutputTest {
       output.writeUTF("abc");
     }
     try (MemoryBufferObjectInput input =
-        new MemoryBufferObjectInput(fory.getConfig(), new StringSerializer(fory.getConfig()), buffer)) {
+        new MemoryBufferObjectInput(fory.getConfig(), fory.getTypeResolver(), buffer)) {
       assertEquals(input.readByte(), 1);
       assertEquals(input.readInt(), 2);
       assertEquals(input.readLong(), 3);

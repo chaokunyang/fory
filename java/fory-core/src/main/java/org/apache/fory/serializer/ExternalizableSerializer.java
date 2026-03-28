@@ -37,8 +37,8 @@ public class ExternalizableSerializer<T extends Externalizable>
 
   public ExternalizableSerializer(TypeResolver typeResolver, Class<T> cls) {
     super(typeResolver, cls);
-    objectInput = new MemoryBufferObjectInput(config, typeResolver.getStringSerializer(), null);
-    objectOutput = new MemoryBufferObjectOutput(config, typeResolver.getStringSerializer(), null);
+    objectInput = new MemoryBufferObjectInput(config, typeResolver, null);
+    objectOutput = new MemoryBufferObjectOutput(config, typeResolver, null);
   }
 
   @Override

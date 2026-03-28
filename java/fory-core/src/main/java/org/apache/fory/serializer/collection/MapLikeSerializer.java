@@ -44,6 +44,7 @@ import java.util.Map.Entry;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.config.Config;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
@@ -81,6 +82,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   protected MethodHandle constructor;
+  protected final Config config;
   protected final boolean supportCodegenHook;
   private final GenericType objType;
   // For subclass whose kv type are instantiated already, such as
@@ -107,6 +109,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   public MapLikeSerializer(
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook, boolean immutable) {
     super(typeResolver, cls, immutable);
+    this.config = typeResolver.getConfig();
     this.typeResolver = typeResolver;
     trackRef = typeResolver.getConfig().trackingRef();
     this.supportCodegenHook = supportCodegenHook;
@@ -187,14 +190,14 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       if (keySerializer != null) {
         if (keySerializer.needToWriteRef()) {
           buffer.writeByte(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF);
-          keySerializer.write(WriteContext.current(), RefMode.TRACKING, key);
+          keySerializer.write(typeResolver.getWriteContext(), RefMode.TRACKING, key);
         } else {
           buffer.writeByte(NULL_VALUE_KEY_DECL_TYPE);
-          keySerializer.write(WriteContext.current(), key);
+          keySerializer.write(typeResolver.getWriteContext(), key);
         }
     } else {
       buffer.writeByte(VALUE_HAS_NULL | TRACKING_KEY_REF);
-      WriteContext.current().writeRef(key, mapTypeCache().keyTypeInfoWriteCache);
+      typeResolver.getWriteContext().writeRef(key, mapTypeCache().keyTypeInfoWriteCache);
     }
   }
 
@@ -209,14 +212,14 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       if (valueSerializer != null) {
         if (valueSerializer.needToWriteRef()) {
           buffer.writeByte(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF);
-          valueSerializer.write(WriteContext.current(), RefMode.TRACKING, value);
+          valueSerializer.write(typeResolver.getWriteContext(), RefMode.TRACKING, value);
         } else {
           buffer.writeByte(NULL_KEY_VALUE_DECL_TYPE);
-          valueSerializer.write(WriteContext.current(), value);
+          valueSerializer.write(typeResolver.getWriteContext(), value);
         }
       } else {
         buffer.writeByte(KEY_HAS_NULL | TRACKING_VALUE_REF);
-        WriteContext.current().writeRef(value, mapTypeCache().valueTypeInfoWriteCache);
+        typeResolver.getWriteContext().writeRef(value, mapTypeCache().valueTypeInfoWriteCache);
       }
     } else {
       buffer.writeByte(KV_NULL);
@@ -238,7 +241,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
           return entry;
         }
         buffer.writeByte(NULL_VALUE_KEY_DECL_TYPE);
-        keySerializer.write(WriteContext.current(), key);
+        keySerializer.write(typeResolver.getWriteContext(), key);
       } else {
         writeNullKeyChunk(buffer, valueSerializer, value);
       }
@@ -281,16 +284,16 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     if (!keyType.isMonomorphic()) {
       if (trackingRef) {
         buffer.writeByte(VALUE_HAS_NULL | TRACKING_KEY_REF);
-        WriteContext.current().writeRef(key, mapTypeCache().keyTypeInfoWriteCache);
+        typeResolver.getWriteContext().writeRef(key, mapTypeCache().keyTypeInfoWriteCache);
       } else {
         buffer.writeByte(VALUE_HAS_NULL);
-        WriteContext.current().writeNonRef(key);
+        typeResolver.getWriteContext().writeNonRef(key);
       }
       return;
     }
     Serializer serializer = keyType.getSerializer(typeResolver);
     Generics generics = typeResolver.getGenerics();
-    WriteContext writeContext = WriteContext.current();
+    WriteContext writeContext = typeResolver.getWriteContext();
     if (keyType.hasGenericParameters()) {
       generics.pushGenericType(keyType);
       writeContext.incDepth();
@@ -314,16 +317,16 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     if (!valueType.isMonomorphic()) {
       if (trackingRef) {
         buffer.writeByte(KEY_HAS_NULL | TRACKING_VALUE_REF);
-        WriteContext.current().writeRef(value, mapTypeCache().valueTypeInfoWriteCache);
+        typeResolver.getWriteContext().writeRef(value, mapTypeCache().valueTypeInfoWriteCache);
       } else {
         buffer.writeByte(KEY_HAS_NULL);
-        WriteContext.current().writeNonRef(value);
+        typeResolver.getWriteContext().writeNonRef(value);
       }
       return;
     }
     Serializer serializer = valueType.getSerializer(typeResolver);
     Generics generics = typeResolver.getGenerics();
-    WriteContext writeContext = WriteContext.current();
+    WriteContext writeContext = typeResolver.getWriteContext();
     if (valueType.hasGenericParameters()) {
       generics.pushGenericType(valueType);
       writeContext.incDepth();
@@ -349,7 +352,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       Iterator<Entry<Object, Object>> iterator,
       Serializer keySerializer,
       Serializer valueSerializer) {
-    WriteContext writeContext = WriteContext.current();
+    WriteContext writeContext = typeResolver.getWriteContext();
     Object key = entry.getKey();
     Object value = entry.getValue();
     Class keyType = key.getClass();
@@ -434,7 +437,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       MemoryBuffer buffer,
       Entry<Object, Object> entry,
       Iterator<Entry<Object, Object>> iterator) {
-    WriteContext writeContext = WriteContext.current();
+    WriteContext writeContext = typeResolver.getWriteContext();
     // type parameters count for `Map field` will be 0;
     // type parameters count for `SubMap<V> field` which SubMap is
     // `SubMap<V> implements Map<String, V>` will be 1;
@@ -452,13 +455,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     // Stack depth to avoid push generics repeatedly in loop.
     // Note push two generic type changed generics stack top, which is depth index,
     // stack top should be updated when using for serialization k/v.
-    // int depth = fory.getDepth();
-    // // depth + 1 to leave a slot for value generics, otherwise value generics will
-    // // be overwritten by nested key generics.
-    // fory.setDepth(depth + 1);
-    // generics.pushGenericType(keyGenericType);
-    // fory.setDepth(depth);
-    // generics.pushGenericType(valueGenericType);
     boolean keyGenericTypeFinal = keyGenericType.isMonomorphic();
     boolean valueGenericTypeFinal = valueGenericType.isMonomorphic();
     Object key = entry.getKey();
@@ -686,7 +682,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       long size,
       Serializer keySerializer,
       Serializer valueSerializer) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     MapTypeCache state = mapTypeCache();
     while (true) {
       boolean keyHasNull = (chunkHeader & KEY_HAS_NULL) != 0;
@@ -740,7 +736,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       int chunkHeader,
       Serializer valueSerializer,
       boolean valueHasNull) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     MapTypeCache state = mapTypeCache();
     if (!valueHasNull) {
       Object value;
@@ -772,7 +768,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   private Object readNonEmptyValueFromNullChunk(
       MemoryBuffer buffer, boolean trackRef, boolean isKey) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     Generics generics = typeResolver.getGenerics();
     GenericType genericType = generics.nextGenericType();
     if (genericType.getTypeParametersCount() < 2) {
@@ -801,7 +797,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       long size,
       Serializer keySerializer,
       Serializer valueSerializer) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     while (true) {
       boolean keyHasNull = (chunkHeader & KEY_HAS_NULL) != 0;
       boolean valueHasNull = (chunkHeader & VALUE_HAS_NULL) != 0;
@@ -833,7 +829,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       int chunkHeader,
       Serializer keySerializer,
       Serializer valueSerializer) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     MapTypeCache state = mapTypeCache();
     // noinspection Duplicates
     boolean trackKeyRef = (chunkHeader & TRACKING_KEY_REF) != 0;
@@ -875,7 +871,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       Map map,
       long size,
       int chunkHeader) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     MapTypeCache state = mapTypeCache();
     // type parameters count for `Map field` will be 0;
     // type parameters count for `SubMap<V> field` which SubMap is
@@ -980,7 +976,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     }
     try {
       Map instance = (Map) constructor.invoke();
-      ReadContext.current().reference(instance);
+      typeResolver.getReadContext().reference(instance);
       return instance;
     } catch (Throwable e) {
       throw new IllegalArgumentException(

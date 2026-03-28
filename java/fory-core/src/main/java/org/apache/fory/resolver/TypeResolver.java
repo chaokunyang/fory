@@ -138,18 +138,18 @@ public abstract class TypeResolver {
   // dynamically created classes that can't be found by Class.forName
   private TypeInfo typeInfoCache;
   private boolean registrationFinished;
+  private WriteContext writeContext;
+  private ReadContext readContext;
 
   protected TypeResolver(
       Config config,
       ClassLoader classLoader,
-      Generics generics,
-      StringSerializer stringSerializer,
       SharedRegistry sharedRegistry,
       JITContext jitContext) {
     this.config = config;
     this.classLoader = classLoader;
-    this.generics = generics;
-    this.stringSerializer = stringSerializer;
+    this.stringSerializer = new StringSerializer(config);
+    this.generics = new Generics(this);
     this.sharedRegistry = sharedRegistry;
     this.jitContext = jitContext;
     metaContextShareEnabled = config.isMetaShareEnabled();
@@ -181,6 +181,153 @@ public abstract class TypeResolver {
 
   public final JITContext getJITContext() {
     return jitContext;
+  }
+
+  public final void bindContexts(WriteContext writeContext, ReadContext readContext) {
+    this.writeContext = writeContext;
+    this.readContext = readContext;
+  }
+
+  public final WriteContext getWriteContext() {
+    return Preconditions.checkNotNull(writeContext);
+  }
+
+  public final ReadContext getReadContext() {
+    return Preconditions.checkNotNull(readContext);
+  }
+
+  public final int getActiveDepth() {
+    ReadContext activeReadContext = readContext;
+    if (activeReadContext != null && activeReadContext.getBuffer() != null) {
+      return activeReadContext.getDepth();
+    }
+    WriteContext activeWriteContext = writeContext;
+    if (activeWriteContext != null && activeWriteContext.getBufferOrNull() != null) {
+      return activeWriteContext.getDepth();
+    }
+    return 0;
+  }
+
+  @Internal
+  public final <T extends Serializer<?>> T cacheThreadSafeSerializer(Class<?> cls, T serializer) {
+    if (serializer == null || !serializer.threadSafe()) {
+      return serializer;
+    }
+    return sharedRegistry.cacheThreadSafeSerializer(cls, serializer);
+  }
+
+  @FunctionalInterface
+  public interface SerializerCreator<T extends Serializer<?>> {
+    T create() throws Throwable;
+  }
+
+  private static final class SerializerCreationFailure extends RuntimeException {
+    private SerializerCreationFailure(Throwable cause) {
+      super(cause);
+    }
+  }
+
+  @Internal
+  public final <T extends Serializer<?>> T getOrCreateSharedSerializer(
+      Class<?> cls, Class<? extends Serializer> serializerClass, SerializerCreator<T> creator)
+      throws Throwable {
+    try {
+      return sharedRegistry.getOrCreateThreadSafeSerializer(
+          cls,
+          serializerClass,
+          () -> {
+            try {
+              return creator.create();
+            } catch (Throwable t) {
+              throw new SerializerCreationFailure(t);
+            }
+          });
+    } catch (SerializerCreationFailure e) {
+      throw e.getCause();
+    }
+  }
+
+  @Internal
+  protected final <T extends Serializer<?>> T replaceThreadSafeSerializer(
+      Class<?> cls, T serializer) {
+    if (serializer == null || !serializer.threadSafe()) {
+      return serializer;
+    }
+    return sharedRegistry.replaceThreadSafeSerializer(cls, serializer);
+  }
+
+  protected final TypeInfo getSharedTypeInfo(Class<?> cls) {
+    return sharedRegistry.getThreadSafeTypeInfo(cls);
+  }
+
+  protected final TypeInfo rebindSharedTypeInfoIfNeeded(Class<?> cls, TypeInfo typeInfo) {
+    TypeInfo sharedTypeInfo = getSharedTypeInfo(cls);
+    if (sharedTypeInfo == null || sharedTypeInfo == typeInfo) {
+      return typeInfo;
+    }
+    if (typeInfo != null) {
+      if (typeInfo.getTypeId() != sharedTypeInfo.getTypeId()
+          || typeInfo.getUserTypeId() != sharedTypeInfo.getUserTypeId()) {
+        return typeInfo;
+      }
+      Serializer<?> serializer = typeInfo.getSerializer();
+      if (serializer != null
+          && (!serializer.threadSafe() || !shouldCacheThreadSafeTypeInfo(typeInfo))) {
+        return typeInfo;
+      }
+    }
+    updateTypeInfo(cls, sharedTypeInfo);
+    return sharedTypeInfo;
+  }
+
+  protected final TypeInfo detachSharedTypeInfoIfNeeded(Class<?> cls, TypeInfo typeInfo) {
+    if (typeInfo != null && typeInfo == getSharedTypeInfo(cls)) {
+      return typeInfo.copy();
+    }
+    return typeInfo;
+  }
+
+  protected final TypeInfo cacheThreadSafeTypeInfo(Class<?> cls, TypeInfo typeInfo) {
+    if (cls == null || typeInfo == null) {
+      return typeInfo;
+    }
+    Serializer<?> serializer = typeInfo.getSerializer();
+    if (serializer == null || !serializer.threadSafe() || !shouldCacheThreadSafeTypeInfo(typeInfo)) {
+      return typeInfo;
+    }
+    // Any shareable thread-safe TypeInfo must use the canonical SharedRegistry instance.
+    return sharedRegistry.cacheThreadSafeTypeInfo(cls, typeInfo);
+  }
+
+  protected final TypeInfo replaceThreadSafeTypeInfo(Class<?> cls, TypeInfo typeInfo) {
+    if (cls == null || typeInfo == null) {
+      return typeInfo;
+    }
+    Serializer<?> serializer = typeInfo.getSerializer();
+    if (serializer == null || !serializer.threadSafe() || !shouldCacheThreadSafeTypeInfo(typeInfo)) {
+      return typeInfo;
+    }
+    return sharedRegistry.replaceThreadSafeTypeInfo(cls, typeInfo);
+  }
+
+  protected final TypeInfo cacheThreadSafeSerializerAndTypeInfo(
+      Class<?> cls, TypeInfo typeInfo, Serializer<?> serializer) {
+    TypeInfo localTypeInfo = detachSharedTypeInfoIfNeeded(cls, typeInfo);
+    localTypeInfo.setSerializer(this, cacheThreadSafeSerializer(cls, serializer));
+    return cacheThreadSafeTypeInfo(cls, localTypeInfo);
+  }
+
+  protected final TypeInfo replaceThreadSafeSerializerAndTypeInfo(
+      Class<?> cls, TypeInfo typeInfo, Serializer<?> serializer) {
+    TypeInfo localTypeInfo = detachSharedTypeInfoIfNeeded(cls, typeInfo);
+    localTypeInfo.setSerializer(this, replaceThreadSafeSerializer(cls, serializer));
+    return replaceThreadSafeTypeInfo(cls, localTypeInfo);
+  }
+
+  protected abstract boolean isBuiltInTypeInfo(TypeInfo typeInfo);
+
+  private boolean shouldCacheThreadSafeTypeInfo(TypeInfo typeInfo) {
+    return typeInfo.getUserTypeId() != INVALID_USER_TYPE_ID || isBuiltInTypeInfo(typeInfo);
   }
 
   public final boolean isRegistrationFinished() {
@@ -470,9 +617,9 @@ public abstract class TypeResolver {
       case Types.NAMED_UNION:
         if (!metaContextShareEnabled) {
           Preconditions.checkNotNull(typeInfo.namespaceBytes);
-          WriteContext.current().getMetaStringWriter().writeMetaStringBytes(buffer, typeInfo.namespaceBytes);
+          getWriteContext().getMetaStringWriter().writeMetaStringBytes(buffer, typeInfo.namespaceBytes);
           Preconditions.checkNotNull(typeInfo.typeNameBytes);
-          WriteContext.current().getMetaStringWriter().writeMetaStringBytes(buffer, typeInfo.typeNameBytes);
+          getWriteContext().getMetaStringWriter().writeMetaStringBytes(buffer, typeInfo.typeNameBytes);
         } else {
           writeSharedClassMeta(buffer, typeInfo);
         }
@@ -509,7 +656,7 @@ public abstract class TypeResolver {
    * <p>This method is shared between XtypeResolver and ClassResolver.
    */
   protected final void writeSharedClassMeta(MemoryBuffer buffer, TypeInfo typeInfo) {
-    MetaContext metaContext = WriteContext.current().getMetaContext();
+    MetaContext metaContext = getWriteContext().getMetaContext();
     assert metaContext != null : SET_META__CONTEXT_MSG;
     IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
     int newId = classMap.size;
@@ -750,12 +897,12 @@ public abstract class TypeResolver {
       // Use cache for faster comparison
       MetaStringRef packageNameBytesCache = typeInfoCache.namespaceBytes;
       namespaceBytes =
-          ReadContext.current()
+          getReadContext()
               .getMetaStringReader()
               .readMetaStringBytes(buffer, packageNameBytesCache);
       assert packageNameBytesCache != null;
       simpleClassNameBytes =
-          ReadContext.current().getMetaStringReader().readMetaStringBytes(buffer, typeNameBytesCache);
+          getReadContext().getMetaStringReader().readMetaStringBytes(buffer, typeNameBytesCache);
 
       // Fast path: if hashes match, return cached TypeInfo (already has serializer)
       if (typeNameBytesCache.encoded.hash == simpleClassNameBytes.encoded.hash
@@ -764,8 +911,8 @@ public abstract class TypeResolver {
       }
     } else {
       // No cache available, read fresh
-      namespaceBytes = ReadContext.current().getMetaStringReader().readMetaStringBytes(buffer);
-      simpleClassNameBytes = ReadContext.current().getMetaStringReader().readMetaStringBytes(buffer);
+      namespaceBytes = getReadContext().getMetaStringReader().readMetaStringBytes(buffer);
+      simpleClassNameBytes = getReadContext().getMetaStringReader().readMetaStringBytes(buffer);
     }
 
     // Load class info from bytes (subclass-specific).
@@ -777,7 +924,7 @@ public abstract class TypeResolver {
    * ClassResolver and XtypeResolver.
    */
   protected final TypeInfo readSharedClassMeta(MemoryBuffer buffer) {
-    MetaContext metaContext = ReadContext.current().getMetaContext();
+    MetaContext metaContext = getReadContext().getMetaContext();
     assert metaContext != null : SET_META__CONTEXT_MSG;
     int indexMarker = buffer.readVarUint32Small14();
     boolean isRef = (indexMarker & 1) == 1;
@@ -1124,7 +1271,9 @@ public abstract class TypeResolver {
     if (serializer == null) {
       TypeInfo typeInfo = getTypeInfo(cls, false);
       if (typeInfo != null) {
-        typeInfo.setSerializer(this, null);
+        TypeInfo localTypeInfo = detachSharedTypeInfoIfNeeded(cls, typeInfo);
+        localTypeInfo.setSerializer(this, null);
+        updateTypeInfo(cls, localTypeInfo);
       }
     } else {
       setSerializer(cls, serializer);

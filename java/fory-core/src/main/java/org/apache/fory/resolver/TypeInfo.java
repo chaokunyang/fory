@@ -143,6 +143,21 @@ public class TypeInfo {
         userTypeId);
   }
 
+  public TypeInfo copy() {
+    TypeInfo copied =
+        new TypeInfo(
+            cls,
+            namespaceBytes,
+            typeNameBytes,
+            isDynamicGeneratedClass,
+            serializer,
+            typeId,
+            userTypeId);
+    copied.typeDef = typeDef;
+    copied.needToWriteTypeDef = needToWriteTypeDef;
+    return copied;
+  }
+
   public TypeInfo copy(int typeId, int userTypeId) {
     if (typeId == this.typeId && userTypeId == this.userTypeId) {
       return this;

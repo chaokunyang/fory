@@ -19,6 +19,7 @@
 
 package org.apache.fory.context;
 
+import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 
 public interface RefWriter {
@@ -31,4 +32,38 @@ public interface RefWriter {
   void replaceRef(Object original, Object newObject);
 
   void reset();
+
+  final class NoRefWriter implements RefWriter {
+    @Override
+    public boolean writeRefOrNull(MemoryBuffer buffer, Object obj) {
+      if (obj == null) {
+        buffer.writeByte(Fory.NULL_FLAG);
+        return true;
+      }
+      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+      return false;
+    }
+
+    @Override
+    public boolean writeRefValueFlag(MemoryBuffer buffer, Object obj) {
+      assert obj != null;
+      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+      return true;
+    }
+
+    @Override
+    public boolean writeNullFlag(MemoryBuffer buffer, Object obj) {
+      if (obj == null) {
+        buffer.writeByte(Fory.NULL_FLAG);
+        return true;
+      }
+      return false;
+    }
+
+    @Override
+    public void replaceRef(Object original, Object newObject) {}
+
+    @Override
+    public void reset() {}
+  }
 }

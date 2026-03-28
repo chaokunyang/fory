@@ -221,7 +221,7 @@ public class GenericsTest extends ForyTestBase {
   @Test
   public void testGenerics() throws NoSuchFieldException {
     Fory fory = Fory.builder().withLanguage(Language.JAVA).build();
-    Generics generics = new Generics(fory);
+    Generics generics = new Generics(fory.getTypeResolver());
     {
       GenericType genericType =
           GenericType.build(Test4.class, Test2.class.getField("fromFieldNested").getGenericType());

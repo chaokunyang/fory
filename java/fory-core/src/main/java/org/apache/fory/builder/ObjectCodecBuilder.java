@@ -118,7 +118,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       }
     }
     classVersionHash =
-        fory.checkClassVersion()
+        typeResolver.checkClassVersion()
             ? new Literal(
                 ObjectSerializer.computeStructHash(typeResolver, grouper), PRIMITIVE_INT_TYPE)
             : null;
@@ -164,7 +164,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     ListExpression expressions = new ListExpression();
     Expression bean = tryCastIfPublic(inputObject, beanType, ctx.newName(beanClass));
     expressions.add(bean);
-    if (fory.checkClassVersion()) {
+    if (typeResolver.checkClassVersion()) {
       expressions.add(new Invoke(buffer, "writeInt32", classVersionHash));
     }
     expressions.addAll(serializePrimitives(bean, buffer, objectCodecOptimizer.primitiveGroups));
@@ -226,7 +226,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     if (inline) {
       return expressionSupplier.get();
     }
-    return objectCodecOptimizer.invokeGenerated(expressionSupplier, "writeFields");
+    return objectCodecOptimizer.invokeGenerated(
+        writeCutPoints(bean, buffer), expressionSupplier.get(), "writeFields");
   }
 
   /**
@@ -239,7 +240,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     if (totalSize == 0) {
       return new ArrayList<>();
     }
-    if (fory.compressInt() || fory.compressLong()) {
+    if (typeResolver.getConfig().compressInt() || typeResolver.getConfig().compressLong()) {
       return serializePrimitivesCompressed(bean, buffer, primitiveGroups, totalSize);
     } else {
       return serializePrimitivesUnCompressed(bean, buffer, primitiveGroups, totalSize);
@@ -466,7 +467,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   public Expression buildDecodeExpression() {
     Reference buffer = new Reference(BUFFER_NAME, bufferTypeRef, false);
     ListExpression expressions = new ListExpression();
-    if (fory.checkClassVersion()) {
+    if (typeResolver.checkClassVersion()) {
       expressions.add(checkClassVersion(buffer));
     }
     Expression bean;
@@ -603,7 +604,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     if (inline) {
       return exprSupplier.get();
     } else {
-      return objectCodecOptimizer.invokeGenerated(exprSupplier, "readFields");
+      return objectCodecOptimizer.invokeGenerated(
+          readCutPoints(bean, buffer), exprSupplier.get(), "readFields");
     }
   }
 
@@ -641,7 +643,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     if (totalSize == 0) {
       return new ArrayList<>();
     }
-    if (fory.compressInt() || fory.compressLong()) {
+    if (typeResolver.getConfig().compressInt() || typeResolver.getConfig().compressLong()) {
       return deserializeCompressedPrimitives(bean, buffer, primitiveGroups);
     } else {
       return deserializeUnCompressedPrimitives(bean, buffer, primitiveGroups, totalSize);

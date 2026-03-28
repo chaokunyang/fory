@@ -68,8 +68,8 @@ public class JavaSerializer extends AbstractObjectSerializer {
           Serializer.class.getName(),
           Externalizable.class.getName());
     }
-    objectInput = new MemoryBufferObjectInput(config, typeResolver.getStringSerializer(), null);
-    objectOutput = new MemoryBufferObjectOutput(config, typeResolver.getStringSerializer(), null);
+    objectInput = new MemoryBufferObjectInput(config, typeResolver, null);
+    objectOutput = new MemoryBufferObjectOutput(config, typeResolver, null);
   }
 
   @Override

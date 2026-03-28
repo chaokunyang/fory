@@ -24,10 +24,9 @@ import java.io.InputStream;
 import java.io.ObjectInput;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
-import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
-import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
 /** ObjectInput based on {@link MemoryBuffer}. */
@@ -35,13 +34,13 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
   private final boolean compressInt;
   private final LongEncoding longEncoding;
   private MemoryBuffer buffer;
-  private final StringSerializer stringSerializer;
+  private final TypeResolver typeResolver;
 
-  public MemoryBufferObjectInput(Config config, StringSerializer stringSerializer, MemoryBuffer buffer) {
+  public MemoryBufferObjectInput(Config config, TypeResolver typeResolver, MemoryBuffer buffer) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
     this.buffer = buffer;
-    this.stringSerializer = stringSerializer;
+    this.typeResolver = typeResolver;
   }
 
   public MemoryBuffer getBuffer() {
@@ -54,7 +53,7 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
 
   @Override
   public Object readObject() throws ClassNotFoundException, IOException {
-    return ReadContext.current().readRef();
+    return typeResolver.getReadContext().readRef();
   }
 
   @Override
@@ -164,6 +163,6 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
 
   @Override
   public String readUTF() throws IOException {
-    return stringSerializer.readString(buffer);
+    return typeResolver.getStringSerializer().readString(buffer);
   }
 }

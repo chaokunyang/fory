@@ -142,11 +142,13 @@ public class GraalvmSupport {
   }
 
   public static class GraalvmSerializerHolder extends Serializer {
+    private final Config config;
     private final Class serializerClass;
     private Serializer serializer;
 
     public GraalvmSerializerHolder(Config config, Class<?> type, Class<?> serializerClass) {
       super(config, type);
+      this.config = config;
       this.serializerClass = Objects.requireNonNull(serializerClass);
     }
 

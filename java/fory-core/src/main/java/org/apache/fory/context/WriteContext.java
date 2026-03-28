@@ -20,7 +20,6 @@
 package org.apache.fory.context;
 
 import java.util.IdentityHashMap;
-import java.util.function.Supplier;
 import org.apache.fory.Fory;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
@@ -42,39 +41,33 @@ import org.apache.fory.util.Preconditions;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class WriteContext {
-  private static final ThreadLocal<WriteContext> CURRENT = new ThreadLocal<>();
   private final Config config;
   private final Generics generics;
   private final TypeResolver typeResolver;
   private final RefWriter refWriter;
   private final MetaStringWriter metaStringWriter;
-  private final StringSerializer stringSerializer;
   private final boolean crossLanguage;
   private final boolean compressInt;
   private final LongEncoding longEncoding;
   private final boolean forVirtualThread;
   private final boolean scopedMetaShareEnabled;
   private final IdentityHashMap<Object, Object> objects = new IdentityHashMap<>();
-  private MemoryBuffer defaultBuffer;
   private MemoryBuffer buffer;
   private BufferCallback bufferCallback;
   private MetaContext metaContext;
   private int depth;
-  private boolean active;
 
   public WriteContext(
       Config config,
       Generics generics,
       TypeResolver typeResolver,
       RefWriter refWriter,
-      MetaStringWriter metaStringWriter,
-      StringSerializer stringSerializer) {
+      MetaStringWriter metaStringWriter) {
     this.config = config;
     this.generics = generics;
     this.typeResolver = typeResolver;
     this.refWriter = refWriter;
     this.metaStringWriter = metaStringWriter;
-    this.stringSerializer = stringSerializer;
     crossLanguage = config.isXlang();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();
@@ -88,62 +81,14 @@ public final class WriteContext {
   public void prepare(MemoryBuffer buffer, BufferCallback callback) {
     this.buffer = buffer;
     bufferCallback = callback;
-    active = true;
-  }
-
-  public <T> T run(MemoryBuffer buffer, BufferCallback callback, Supplier<T> action) {
-    prepare(buffer, callback);
-    WriteContext previous = enter(this);
-    try {
-      return action.get();
-    } finally {
-      restore(previous);
-      reset();
-    }
-  }
-
-  public static WriteContext current() {
-    WriteContext context = CURRENT.get();
-    if (context == null) {
-      throw new IllegalStateException("WriteContext is only available during serialization");
-    }
-    return context;
-  }
-
-  public static WriteContext enter(WriteContext context) {
-    WriteContext previous = CURRENT.get();
-    CURRENT.set(context);
-    return previous;
-  }
-
-  public static void restore(WriteContext previous) {
-    if (previous == null) {
-      CURRENT.remove();
-    } else {
-      CURRENT.set(previous);
-    }
-  }
-
-  public boolean isActive() {
-    return active;
   }
 
   public MemoryBuffer getBuffer() {
-    if (active) {
-      return buffer;
-    }
-    MemoryBuffer buf = defaultBuffer;
-    if (buf == null) {
-      buf = defaultBuffer = MemoryBuffer.newHeapBuffer(64);
-    }
-    return buf;
+    return Preconditions.checkNotNull(buffer);
   }
 
-  public void resetBuffer() {
-    MemoryBuffer buf = defaultBuffer;
-    if (buf != null && buf.size() > config.bufferSizeLimitBytes()) {
-      defaultBuffer = MemoryBuffer.newHeapBuffer(config.bufferSizeLimitBytes());
-    }
+  public MemoryBuffer getBufferOrNull() {
+    return buffer;
   }
 
   public void reset() {
@@ -161,9 +106,8 @@ public final class WriteContext {
     buffer = null;
     bufferCallback = null;
     depth = 0;
-    active = false;
     if (forVirtualThread) {
-      stringSerializer.clearBuffer(config.bufferSizeLimitBytes());
+      typeResolver.getStringSerializer().clearBuffer(config.bufferSizeLimitBytes());
     }
   }
 
@@ -204,7 +148,7 @@ public final class WriteContext {
   }
 
   public StringSerializer getStringSerializer() {
-    return stringSerializer;
+    return typeResolver.getStringSerializer();
   }
 
   public Object add(Object key, Object value) {
@@ -439,7 +383,7 @@ public final class WriteContext {
         break;
       case Types.STRING:
         if (typeInfo.getCls() == String.class) {
-          stringSerializer.writeString(buffer, (String) obj);
+          typeResolver.getStringSerializer().writeString(buffer, (String) obj);
           break;
         }
         depth++;
@@ -490,11 +434,12 @@ public final class WriteContext {
   }
 
   public void writeString(String str) {
-    stringSerializer.writeString(buffer, str);
+    typeResolver.getStringSerializer().writeString(buffer, str);
   }
 
   public void writeStringRef(String str) {
     MemoryBuffer buffer = this.buffer;
+    StringSerializer stringSerializer = typeResolver.getStringSerializer();
     if (stringSerializer.needToWriteRef()) {
       if (!refWriter.writeRefOrNull(buffer, str)) {
         stringSerializer.writeString(buffer, str);

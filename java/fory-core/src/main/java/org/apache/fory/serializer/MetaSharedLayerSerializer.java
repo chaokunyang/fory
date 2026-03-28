@@ -90,7 +90,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   @Override
   public void writeLayerClassMeta(MemoryBuffer buffer) {
-    MetaContext metaContext = WriteContext.current().getMetaContext();
+    MetaContext metaContext = typeResolver.getWriteContext().getMetaContext();
     if (metaContext == null) {
       return;
     }
@@ -110,7 +110,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   @Override
   public void writeFieldsOnly(MemoryBuffer buffer, T value) {
     // Write fields in order: buildIn, container, other
-    RefWriter refWriter = WriteContext.current().getRefWriter();
+    RefWriter refWriter = typeResolver.getWriteContext().getRefWriter();
     writeBuildInFields(buffer, value, refWriter);
     writeContainerFields(buffer, value, refWriter);
     writeOtherFields(buffer, value);
@@ -134,7 +134,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   }
 
   private void writeOtherFields(MemoryBuffer buffer, T value) {
-    RefWriter refWriter = WriteContext.current().getRefWriter();
+    RefWriter refWriter = typeResolver.getWriteContext().getRefWriter();
     for (SerializationFieldInfo fieldInfo : otherFields) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
@@ -145,7 +145,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   @Override
   public void writeFieldValues(MemoryBuffer buffer, Object[] vals) {
-    RefWriter refWriter = WriteContext.current().getRefWriter();
+    RefWriter refWriter = typeResolver.getWriteContext().getRefWriter();
     // Write fields from array in order: buildIn, container, other
     int index = 0;
     // Write buildIn fields
@@ -168,7 +168,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
 
   @Override
   public Object[] readFieldValues(MemoryBuffer buffer) {
-    RefReader refReader = ReadContext.current().getRefReader();
+    RefReader refReader = typeResolver.getReadContext().getRefReader();
     Object[] vals = new Object[getNumFields()];
     int index = 0;
     // Read buildIn fields
@@ -264,7 +264,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   @SuppressWarnings("unchecked")
   public T readFieldsOnly(MemoryBuffer buffer, Object obj) {
     // Read fields in order: final, container, other
-    RefReader refReader = ReadContext.current().getRefReader();
+    RefReader refReader = typeResolver.getReadContext().getRefReader();
     readFinalFields(buffer, (T) obj, refReader);
     readContainerFields(buffer, (T) obj, refReader);
     readUserTypeFields(buffer, (T) obj, refReader);
@@ -400,7 +400,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   }
 
   private void skipBuildInFields(MemoryBuffer buffer) {
-    RefReader refReader = ReadContext.current().getRefReader();
+    RefReader refReader = typeResolver.getReadContext().getRefReader();
     for (SerializationFieldInfo fieldInfo : buildInFields) {
       // Read the field value (discarding the result) to advance buffer position
       FieldSkipper.skipField(typeResolver, refReader, fieldInfo, buffer);
@@ -408,7 +408,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   }
 
   private void skipContainerFields(MemoryBuffer buffer) {
-    RefReader refReader = ReadContext.current().getRefReader();
+    RefReader refReader = typeResolver.getReadContext().getRefReader();
     Generics generics = typeResolver.getGenerics();
     for (SerializationFieldInfo fieldInfo : containerFields) {
       // Read container field value to advance buffer position
@@ -418,7 +418,7 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   }
 
   private void skipOtherFields(MemoryBuffer buffer) {
-    RefReader refReader = ReadContext.current().getRefReader();
+    RefReader refReader = typeResolver.getReadContext().getRefReader();
     for (SerializationFieldInfo fieldInfo : otherFields) {
       // Read field value to advance buffer position
       AbstractObjectSerializer.readField(typeResolver, refReader, fieldInfo, buffer);

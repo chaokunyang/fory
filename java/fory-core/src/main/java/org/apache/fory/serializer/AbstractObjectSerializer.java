@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
@@ -59,6 +60,7 @@ import org.apache.fory.util.record.RecordUtils;
 
 public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(AbstractObjectSerializer.class);
+  protected final Config config;
   protected final TypeResolver typeResolver;
   protected final boolean isRecord;
   protected final ObjectCreator<T> objectCreator;
@@ -72,6 +74,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   public AbstractObjectSerializer(
       TypeResolver typeResolver, Class<T> type, ObjectCreator<T> objectCreator) {
     super(typeResolver, type);
+    this.config = typeResolver.getConfig();
     this.typeResolver = typeResolver;
     this.isRecord = RecordUtils.isRecord(type);
     this.objectCreator = objectCreator;
@@ -95,7 +98,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       Object fieldValue) {
     if (fieldInfo.useDeclaredTypeInfo) {
       Serializer<Object> serializer = fieldInfo.typeInfo.getSerializer();
-      WriteContext writeContext = WriteContext.current();
+      WriteContext writeContext = typeResolver.getWriteContext();
       if (refMode == RefMode.TRACKING) {
         if (!refWriter.writeRefOrNull(buffer, fieldValue)) {
           serializer.write(writeContext, fieldValue);
@@ -112,7 +115,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       }
       return;
     }
-    WriteContext writeContext = WriteContext.current();
+    WriteContext writeContext = typeResolver.getWriteContext();
     if (refMode == RefMode.TRACKING) {
       writeContext.writeRef(fieldValue, fieldInfo.classInfoHolder);
     } else if (refMode == RefMode.NULL_ONLY) {
@@ -142,7 +145,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       RefMode refMode,
       MemoryBuffer buffer) {
     if (fieldInfo.useDeclaredTypeInfo) {
-      ReadContext readContext = ReadContext.current();
+      ReadContext readContext = typeResolver.getReadContext();
       if (refMode == RefMode.TRACKING) {
         return readContext.readRef(fieldInfo.typeInfo);
       }
@@ -159,7 +162,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
             typeResolver
                 .readTypeInfo(buffer, fieldInfo.type)
                 .getSerializer()
-                .read(ReadContext.current());
+                .read(typeResolver.getReadContext());
         refReader.setReadObject(nextReadRefId, value);
         return value;
       }
@@ -169,7 +172,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       TypeInfo typeInfo = typeResolver.readTypeInfo(buffer, fieldInfo.type);
       return typeInfo
           .getSerializer()
-          .read(ReadContext.current(), RefMode.NONE);
+          .read(typeResolver.getReadContext(), RefMode.NONE);
     }
     return null;
   }
@@ -381,7 +384,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     // add time types serialization here.
     switch (fieldInfo.dispatchId) {
       case DispatchId.STRING: // fastpath for string.
-        WriteContext.current().writeString((String) fieldValue);
+        typeResolver.getWriteContext().writeString((String) fieldValue);
         return;
       case DispatchId.BOOL:
         buffer.writeBoolean((Boolean) fieldValue);
@@ -482,7 +485,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
     }
     generics.pushGenericType(fieldInfo.genericType);
-    WriteContext writeContext = WriteContext.current();
+    WriteContext writeContext = typeResolver.getWriteContext();
     if (writeContext.isCrossLanguage() && fieldInfo.useDeclaredTypeInfo) {
       TypeInfo typeInfo =
           typeResolver.getTypeInfo(fieldValue.getClass(), fieldInfo.classInfoHolder);
@@ -520,7 +523,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case NONE:
         refReader.preserveRefId(-1);
         generics.pushGenericType(fieldInfo.genericType);
-        fieldValue = readContainerFieldValueNoRef(fieldInfo, buffer);
+        fieldValue = readContainerFieldValueNoRef(typeResolver, fieldInfo, buffer);
         generics.popGenericType();
         break;
       case NULL_ONLY:
@@ -531,7 +534,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
             return null;
           }
           generics.pushGenericType(fieldInfo.genericType);
-          fieldValue = readContainerFieldValueNoRef(fieldInfo, buffer);
+          fieldValue = readContainerFieldValueNoRef(typeResolver, fieldInfo, buffer);
           generics.popGenericType();
         }
         break;
@@ -547,8 +550,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   private static Object readContainerFieldValueNoRef(
+      TypeResolver typeResolver,
       SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     if (readContext.getConfig().isXlang()) {
       return readContext.readNonRef(fieldInfo.containerTypeInfo);
     }
@@ -561,7 +565,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
     int nextReadRefId = refReader.tryPreserveRefId(buffer);
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       Object value;
       if (readContext.getConfig().isXlang()) {
@@ -714,7 +718,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.FLOAT16:
         return Float16.fromBits(buffer.readInt16());
       case DispatchId.STRING:
-        return ReadContext.current().readString();
+        return typeResolver.getReadContext().readString();
       default:
         return readField(typeResolver, refReader, fieldInfo, RefMode.NONE, buffer);
     }
@@ -936,7 +940,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         fieldAccessor.putObject(targetObject, Float16.fromBits(buffer.readInt16()));
         return;
       case DispatchId.STRING:
-        fieldAccessor.putObject(targetObject, ReadContext.current().readString());
+        fieldAccessor.putObject(targetObject, typeResolver.getReadContext().readString());
         return;
       default:
         // Use RefMode.NONE because null flag was already handled by caller

@@ -117,7 +117,7 @@ public class FieldSkipper {
         buffer.readTaggedUint64();
         break;
       case DispatchId.STRING:
-        ReadContext.current().readString();
+        typeResolver.getReadContext().readString();
         break;
       default:
         throw new IllegalStateException("Unexpected basic dispatchId: " + dispatchId);

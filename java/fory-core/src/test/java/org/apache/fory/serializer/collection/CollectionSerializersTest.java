@@ -157,11 +157,11 @@ public class CollectionSerializersTest extends ForyTestBase {
             .build();
     List<String> data = new ArrayList<>(ImmutableList.of("a", "b", "c"));
     byte[] bytes1 = fory.serialize(data);
-    fory.getGenerics().pushGenericType(GenericType.build(new TypeRef<List<String>>() {}));
+    fory.getTypeResolver().getGenerics().pushGenericType(GenericType.build(new TypeRef<List<String>>() {}));
     byte[] bytes2 = fory.serialize(data);
     Assert.assertTrue(bytes1.length > bytes2.length);
     assertEquals(fory.deserialize(bytes2), data);
-    fory.getGenerics().popGenericType();
+    fory.getTypeResolver().getGenerics().popGenericType();
     assertThrowsCause(RuntimeException.class, () -> fory.deserialize(bytes2));
   }
 
@@ -191,10 +191,10 @@ public class CollectionSerializersTest extends ForyTestBase {
     TreeSet<String> data = new TreeSet<>(ImmutableSet.of("a", "b", "c"));
     serDeCheckSerializer(fory, data, "SortedSet");
     byte[] bytes1 = fory.serialize(data);
-    fory.getGenerics().pushGenericType(GenericType.build(new TypeRef<List<String>>() {}));
+    fory.getTypeResolver().getGenerics().pushGenericType(GenericType.build(new TypeRef<List<String>>() {}));
     byte[] bytes2 = fory.serialize(data);
     Assert.assertTrue(bytes1.length > bytes2.length);
-    fory.getGenerics().popGenericType();
+    fory.getTypeResolver().getGenerics().popGenericType();
     assertThrowsCause(RuntimeException.class, () -> fory.deserialize(bytes2));
   }
 
@@ -559,7 +559,7 @@ public class CollectionSerializersTest extends ForyTestBase {
         fory.getTypeResolver().getSerializerClass(set.getClass()),
         CollectionSerializers.SetFromMapSerializer.class);
     CollectionViewTestStruct struct1 = serDeCheck(fory, new CollectionViewTestStruct(set, set));
-    if (fory.trackingRef()) {
+    if (fory.getConfig().trackingRef()) {
       assertSame(struct1.collection, struct1.set);
     }
     set = Collections.newSetFromMap(new HashMap<String, Boolean>() {});
@@ -567,7 +567,7 @@ public class CollectionSerializersTest extends ForyTestBase {
     set.add("b");
     serDeCheck(fory, set);
     CollectionViewTestStruct struct2 = serDeCheck(fory, new CollectionViewTestStruct(set, set));
-    if (fory.trackingRef()) {
+    if (fory.getConfig().trackingRef()) {
       assertSame(struct2.collection, struct2.set);
     }
   }
@@ -592,12 +592,12 @@ public class CollectionSerializersTest extends ForyTestBase {
         fory.getTypeResolver().getSerializerClass(set.getClass()),
         CollectionSerializers.ConcurrentHashMapKeySetViewSerializer.class);
     CollectionViewTestStruct o = serDeCheck(fory, new CollectionViewTestStruct(set, set));
-    if (fory.trackingRef()) {
+    if (fory.getConfig().trackingRef()) {
       assertSame(o.collection, o.set);
     }
     ConcurrentHashMap<String, String> map = new ConcurrentHashMap<>();
     map.put("k1", "v1");
-    if (fory.trackingRef()) {
+    if (fory.getConfig().trackingRef()) {
       ArrayList<Serializable> list = serDeCheck(fory, ofArrayList(map.keySet("v0"), map));
       assertSame(((ConcurrentHashMap.KeySetView) (list.get(0))).getMap(), list.get(1));
     }

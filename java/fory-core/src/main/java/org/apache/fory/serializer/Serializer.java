@@ -39,7 +39,6 @@ import org.apache.fory.type.TypeUtils;
 @NotThreadSafe
 @SuppressWarnings("unchecked")
 public abstract class Serializer<T> {
-  protected final Config config;
   protected final Class<T> type;
   protected final boolean needToWriteRef;
 
@@ -84,7 +83,6 @@ public abstract class Serializer<T> {
   }
 
   public Serializer(Config config, Class<T> type, boolean needToWriteRef, boolean immutable) {
-    this.config = config;
     this.type = type;
     this.needToWriteRef = needToWriteRef;
     this.needToCopyRef = config.copyRef() && !immutable;

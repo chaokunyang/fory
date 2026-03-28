@@ -194,7 +194,7 @@ public class ForyTest extends ForyTestBase {
   }
 
   public void assertSerializationToBuffer(Fory fory1, Fory fory2, MemoryBuffer buffer) {
-    if (fory1.isCrossLanguage()) {
+    if (fory1.getConfig().isXlang()) {
       fory1.register(EnumSerializerTest.EnumFoo.class);
       fory2.register(EnumSerializerTest.EnumFoo.class);
       fory1.register(EnumSerializerTest.EnumSubClass.class);
@@ -651,8 +651,7 @@ public class ForyTest extends ForyTestBase {
   }
 
   private static MemoryBuffer getDefaultWriteBuffer(Fory fory) {
-    Object writeContext = ReflectionUtils.getObjectFieldValue(fory, "writeContext");
-    return (MemoryBuffer) ReflectionUtils.getObjectFieldValue(writeContext, "defaultBuffer");
+    return (MemoryBuffer) ReflectionUtils.getObjectFieldValue(fory, "writeBuffer");
   }
 
   @EqualsAndHashCode

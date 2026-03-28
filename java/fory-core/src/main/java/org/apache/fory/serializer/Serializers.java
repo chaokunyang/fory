@@ -107,38 +107,44 @@ public class Serializers {
     Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
     Config config = typeResolver.getConfig();
     try {
-      if (serializerClass == ObjectSerializer.class) {
-        return new ObjectSerializer(typeResolver, type);
-      }
-      if (serializerClass == MetaSharedSerializer.class) {
-        TypeDef typeDef = typeResolver.getTypeDef(type, true);
-        return new MetaSharedSerializer(typeResolver, type, typeDef);
-      }
-      Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
-      if (ctrInfo != null) {
-        if (GraalvmSupport.isGraalBuildtime()) {
-          if (Generated.class.isAssignableFrom(serializerClass)) {
-            return new GraalvmSerializerHolder(config, type, serializerClass);
-          }
-        }
-        MethodType sig = ctrInfo.f0;
-        MethodHandle handle = ctrInfo.f1;
-        if (sig.equals(SIG1)) {
-          return (Serializer<T>) handle.invoke(typeResolver, type);
-        } else if (sig.equals(SIG2)) {
-          return (Serializer<T>) handle.invoke(typeResolver);
-        } else if (sig.equals(SIG3)) {
-          return (Serializer<T>) handle.invoke(config, type);
-        } else if (sig.equals(SIG4)) {
-          return (Serializer<T>) handle.invoke(config);
-        } else if (sig.equals(SIG5)) {
-          return (Serializer<T>) handle.invoke(type);
-        } else {
-          return (Serializer<T>) handle.invoke();
-        }
-      } else {
-        return createSerializer(typeResolver, type, serializerClass);
-      }
+      return typeResolver.getOrCreateSharedSerializer(
+          type,
+          serializerClass,
+          new TypeResolver.SerializerCreator<Serializer<T>>() {
+            @Override
+            public Serializer<T> create() throws Throwable {
+              if (serializerClass == ObjectSerializer.class) {
+                return new ObjectSerializer(typeResolver, type);
+              }
+              if (serializerClass == MetaSharedSerializer.class) {
+                TypeDef typeDef = typeResolver.getTypeDef(type, true);
+                return new MetaSharedSerializer(typeResolver, type, typeDef);
+              }
+              Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
+              if (ctrInfo != null) {
+                if (GraalvmSupport.isGraalBuildtime()
+                    && Generated.class.isAssignableFrom(serializerClass)) {
+                  return new GraalvmSerializerHolder(config, type, serializerClass);
+                }
+                MethodType sig = ctrInfo.f0;
+                MethodHandle handle = ctrInfo.f1;
+                if (sig.equals(SIG1)) {
+                  return (Serializer<T>) handle.invoke(typeResolver, type);
+                } else if (sig.equals(SIG2)) {
+                  return (Serializer<T>) handle.invoke(typeResolver);
+                } else if (sig.equals(SIG3)) {
+                  return (Serializer<T>) handle.invoke(config, type);
+                } else if (sig.equals(SIG4)) {
+                  return (Serializer<T>) handle.invoke(config);
+                } else if (sig.equals(SIG5)) {
+                  return (Serializer<T>) handle.invoke(type);
+                } else {
+                  return (Serializer<T>) handle.invoke();
+                }
+              }
+              return createSerializer(typeResolver, type, serializerClass);
+            }
+          });
     } catch (InvocationTargetException e) {
       typeResolver.resetSerializer(type, serializer);
       if (e.getCause() != null) {
@@ -273,8 +279,11 @@ public class Serializers {
 
   public abstract static class AbstractStringBuilderSerializer<T extends CharSequence>
       extends Serializer<T> {
+    private final Config config;
+
     public AbstractStringBuilderSerializer(Config config, Class<T> type) {
       super(config, type);
+      this.config = config;
     }
 
     @Override
@@ -323,8 +332,7 @@ public class Serializers {
 
     @Override
     public StringBuilder read(ReadContext readContext) {
-      return new StringBuilder(
-          readContext.getStringSerializer().readString(readContext.getBuffer()));
+      return new StringBuilder(readContext.readString());
     }
   }
 
@@ -342,8 +350,7 @@ public class Serializers {
 
     @Override
     public StringBuffer read(ReadContext readContext) {
-      return new StringBuffer(
-          readContext.getStringSerializer().readString(readContext.getBuffer()));
+      return new StringBuffer(readContext.readString());
     }
   }
 

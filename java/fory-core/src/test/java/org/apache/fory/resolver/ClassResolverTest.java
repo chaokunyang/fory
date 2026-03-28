@@ -45,6 +45,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -52,6 +53,7 @@ import lombok.ToString;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.builder.Generated;
+import org.apache.fory.config.Config;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.logging.Logger;
@@ -66,6 +68,7 @@ import org.apache.fory.resolver.longlongpkg.C3;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializers;
 import org.apache.fory.serializer.collection.MapSerializers;
@@ -289,6 +292,79 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
+  public void testSharedRegistrySharesThreadSafeSerializerAndEligibleTypeInfo() {
+    ForyBuilder builder =
+        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+
+    ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
+    ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
+
+    TypeInfo stringInfo1 = resolver1.getTypeInfo(String.class);
+    TypeInfo stringInfo2 = resolver2.getTypeInfo(String.class);
+    assertNotSame(stringInfo1, stringInfo2);
+    assertNotSame(stringInfo1.getSerializer(), stringInfo2.getSerializer());
+    assertNull(sharedRegistry.getThreadSafeTypeInfo(String.class));
+    assertNull(sharedRegistry.getThreadSafeSerializer(String.class, StringSerializer.class));
+
+    resolver1.register(ThreadSafeRegisteredType.class, 2048L);
+    resolver1.registerSerializer(
+        ThreadSafeRegisteredType.class, ThreadSafeRegisteredTypeSerializer.class);
+    resolver2.register(ThreadSafeRegisteredType.class, 2048L);
+    resolver2.registerSerializer(
+        ThreadSafeRegisteredType.class, ThreadSafeRegisteredTypeSerializer.class);
+
+    TypeInfo registeredInfo1 = resolver1.getTypeInfo(ThreadSafeRegisteredType.class);
+    TypeInfo registeredInfo2 = resolver2.getTypeInfo(ThreadSafeRegisteredType.class);
+    assertSame(registeredInfo1, registeredInfo2);
+    assertSame(registeredInfo1.getSerializer(), registeredInfo2.getSerializer());
+    assertSame(sharedRegistry.getThreadSafeTypeInfo(ThreadSafeRegisteredType.class), registeredInfo1);
+    assertSame(
+        sharedRegistry.getThreadSafeSerializer(
+            ThreadSafeRegisteredType.class, ThreadSafeRegisteredTypeSerializer.class),
+        registeredInfo1.getSerializer());
+  }
+
+  @Test
+  public void testSharedRegistryReusesThreadSafeSerializerWithoutReconstruction() {
+    CountingThreadSafeRegisteredTypeSerializer.constructorCalls.set(0);
+    ForyBuilder builder =
+        Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory1 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    Fory fory2 = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+
+    ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
+    ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
+
+    resolver1.register(CountingThreadSafeRegisteredType.class, 2049L);
+    resolver1.registerSerializer(
+        CountingThreadSafeRegisteredType.class, CountingThreadSafeRegisteredTypeSerializer.class);
+    assertEquals(CountingThreadSafeRegisteredTypeSerializer.constructorCalls.get(), 1);
+
+    resolver2.register(CountingThreadSafeRegisteredType.class, 2049L);
+    resolver2.registerSerializer(
+        CountingThreadSafeRegisteredType.class, CountingThreadSafeRegisteredTypeSerializer.class);
+    assertEquals(CountingThreadSafeRegisteredTypeSerializer.constructorCalls.get(), 1);
+
+    Serializer<?> sharedSerializer =
+        sharedRegistry.getThreadSafeSerializer(
+            CountingThreadSafeRegisteredType.class, CountingThreadSafeRegisteredTypeSerializer.class);
+    assertSame(sharedSerializer, resolver1.getTypeInfo(CountingThreadSafeRegisteredType.class).getSerializer());
+    assertSame(sharedSerializer, resolver2.getTypeInfo(CountingThreadSafeRegisteredType.class).getSerializer());
+    assertSame(
+        sharedRegistry.getThreadSafeTypeInfo(CountingThreadSafeRegisteredType.class),
+        resolver1.getTypeInfo(CountingThreadSafeRegisteredType.class));
+    assertSame(
+        sharedRegistry.getThreadSafeTypeInfo(CountingThreadSafeRegisteredType.class),
+        resolver2.getTypeInfo(CountingThreadSafeRegisteredType.class));
+  }
+
+  @Test
   public void testSharedRegistryCachesFieldDescriptorsAndDescriptorGrouper() {
     ForyBuilder builder =
         Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false);
@@ -451,10 +527,15 @@ public class ClassResolverTest extends ForyTestBase {
               .build();
       ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
       MemoryBuffer buffer = MemoryUtils.buffer(32);
-      classResolver.writeClassInternal(buffer, getClass());
-      int writerIndex = buffer.writerIndex();
-      classResolver.writeClassInternal(buffer, getClass());
-      Assert.assertEquals(buffer.writerIndex(), writerIndex + 2);
+      fory.getWriteContext().prepare(buffer, null);
+      try {
+        classResolver.writeClassInternal(buffer, getClass());
+        int writerIndex = buffer.writerIndex();
+        classResolver.writeClassInternal(buffer, getClass());
+        Assert.assertEquals(buffer.writerIndex(), writerIndex + 2);
+      } finally {
+        fory.getWriteContext().reset();
+      }
       buffer.writerIndex(0);
     }
     {
@@ -466,10 +547,20 @@ public class ClassResolverTest extends ForyTestBase {
               .build();
       ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
       MemoryBuffer buffer = MemoryUtils.buffer(32);
-      classResolver.writeClassAndUpdateCache(buffer, getClass());
-      classResolver.writeClassAndUpdateCache(buffer, getClass());
-      Assert.assertSame(classResolver.readTypeInfo(buffer).getCls(), getClass());
-      Assert.assertSame(classResolver.readTypeInfo(buffer).getCls(), getClass());
+      fory.getWriteContext().prepare(buffer, null);
+      try {
+        classResolver.writeClassAndUpdateCache(buffer, getClass());
+        classResolver.writeClassAndUpdateCache(buffer, getClass());
+      } finally {
+        fory.getWriteContext().reset();
+      }
+      fory.getReadContext().prepare(buffer, null, false);
+      try {
+        Assert.assertSame(classResolver.readTypeInfo(buffer).getCls(), getClass());
+        Assert.assertSame(classResolver.readTypeInfo(buffer).getCls(), getClass());
+      } finally {
+        fory.getReadContext().reset();
+      }
       classResolver.reset();
       buffer.writerIndex(0);
       buffer.readerIndex(0);
@@ -882,5 +973,63 @@ public class ClassResolverTest extends ForyTestBase {
     Assert.assertEquals(result[1], AbstractEnum.VALUE2);
     Assert.assertEquals(result[0].getValue(), 1);
     Assert.assertEquals(result[1].getValue(), 2);
+  }
+
+  @Data
+  private static class ThreadSafeRegisteredType {
+    private final int value;
+  }
+
+  @Data
+  private static class CountingThreadSafeRegisteredType {
+    private final int value;
+  }
+
+  private static final class ThreadSafeRegisteredTypeSerializer
+      extends Serializer<ThreadSafeRegisteredType> {
+    private ThreadSafeRegisteredTypeSerializer(Config config, Class<ThreadSafeRegisteredType> cls) {
+      super(config, cls);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, ThreadSafeRegisteredType value) {
+      writeContext.getBuffer().writeVarInt32(value.getValue());
+    }
+
+    @Override
+    public ThreadSafeRegisteredType read(ReadContext readContext) {
+      return new ThreadSafeRegisteredType(readContext.getBuffer().readVarInt32());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
+  }
+
+  private static final class CountingThreadSafeRegisteredTypeSerializer
+      extends Serializer<CountingThreadSafeRegisteredType> {
+    private static final AtomicInteger constructorCalls = new AtomicInteger();
+
+    private CountingThreadSafeRegisteredTypeSerializer(
+        Config config, Class<CountingThreadSafeRegisteredType> cls) {
+      super(config, cls);
+      constructorCalls.incrementAndGet();
+    }
+
+    @Override
+    public void write(WriteContext writeContext, CountingThreadSafeRegisteredType value) {
+      writeContext.getBuffer().writeVarInt32(value.getValue());
+    }
+
+    @Override
+    public CountingThreadSafeRegisteredType read(ReadContext readContext) {
+      return new CountingThreadSafeRegisteredType(readContext.getBuffer().readVarInt32());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 }

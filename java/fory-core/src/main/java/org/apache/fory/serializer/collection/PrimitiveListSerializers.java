@@ -43,11 +43,19 @@ import org.apache.fory.serializer.Serializers;
 /** Serializers for primitive list types. */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class PrimitiveListSerializers {
+  public abstract static class PrimitiveListSerializer<T>
+      extends Serializers.CrossLanguageCompatibleSerializer<T> {
+    protected final Config config;
 
-  public static final class BoolListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<BoolList> {
+    public PrimitiveListSerializer(Config config, Class<T> type) {
+      super(config, type, false, true);
+      this.config = config;
+    }
+  }
+
+  public static final class BoolListSerializer extends PrimitiveListSerializer<BoolList> {
     public BoolListSerializer(Config config) {
-      super(config, BoolList.class, false, true);
+      super(config, BoolList.class);
     }
 
     @Override
@@ -72,10 +80,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Int8ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Int8List> {
+  public static final class Int8ListSerializer extends PrimitiveListSerializer<Int8List> {
     public Int8ListSerializer(Config config) {
-      super(config, Int8List.class, false, true);
+      super(config, Int8List.class);
     }
 
     @Override
@@ -95,10 +102,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Int16ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Int16List> {
+  public static final class Int16ListSerializer extends PrimitiveListSerializer<Int16List> {
     public Int16ListSerializer(Config config) {
-      super(config, Int16List.class, false, true);
+      super(config, Int16List.class);
     }
 
     @Override
@@ -134,10 +140,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Int32ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Int32List> {
+  public static final class Int32ListSerializer extends PrimitiveListSerializer<Int32List> {
     public Int32ListSerializer(Config config) {
-      super(config, Int32List.class, false, true);
+      super(config, Int32List.class);
     }
 
     @Override
@@ -197,12 +202,11 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Int64ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Int64List> {
+  public static final class Int64ListSerializer extends PrimitiveListSerializer<Int64List> {
     private final boolean compressLongArray;
 
     public Int64ListSerializer(Config config) {
-      super(config, Int64List.class, false, true);
+      super(config, Int64List.class);
       compressLongArray =
           config.compressLongArray()
               && config.longEncoding() != LongEncoding.FIXED;
@@ -279,10 +283,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Uint8ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Uint8List> {
+  public static final class Uint8ListSerializer extends PrimitiveListSerializer<Uint8List> {
     public Uint8ListSerializer(Config config) {
-      super(config, Uint8List.class, false, true);
+      super(config, Uint8List.class);
     }
 
     @Override
@@ -302,10 +305,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Uint16ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Uint16List> {
+  public static final class Uint16ListSerializer extends PrimitiveListSerializer<Uint16List> {
     public Uint16ListSerializer(Config config) {
-      super(config, Uint16List.class, false, true);
+      super(config, Uint16List.class);
     }
 
     @Override
@@ -341,10 +343,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Uint32ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Uint32List> {
+  public static final class Uint32ListSerializer extends PrimitiveListSerializer<Uint32List> {
     public Uint32ListSerializer(Config config) {
-      super(config, Uint32List.class, false, true);
+      super(config, Uint32List.class);
     }
 
     @Override
@@ -404,12 +405,11 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Uint64ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Uint64List> {
+  public static final class Uint64ListSerializer extends PrimitiveListSerializer<Uint64List> {
     private final boolean compressLongArray;
 
     public Uint64ListSerializer(Config config) {
-      super(config, Uint64List.class, false, true);
+      super(config, Uint64List.class);
       compressLongArray =
           config.compressLongArray()
               && config.longEncoding() != LongEncoding.FIXED;
@@ -486,10 +486,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Float32ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Float32List> {
+  public static final class Float32ListSerializer extends PrimitiveListSerializer<Float32List> {
     public Float32ListSerializer(Config config) {
-      super(config, Float32List.class, false, true);
+      super(config, Float32List.class);
     }
 
     @Override
@@ -525,10 +524,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Float64ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Float64List> {
+  public static final class Float64ListSerializer extends PrimitiveListSerializer<Float64List> {
     public Float64ListSerializer(Config config) {
-      super(config, Float64List.class, false, true);
+      super(config, Float64List.class);
     }
 
     @Override
@@ -564,10 +562,9 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class Float16ListSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Float16List> {
+  public static final class Float16ListSerializer extends PrimitiveListSerializer<Float16List> {
     public Float16ListSerializer(Config config) {
-      super(config, Float16List.class, false, true);
+      super(config, Float16List.class);
     }
 
     @Override

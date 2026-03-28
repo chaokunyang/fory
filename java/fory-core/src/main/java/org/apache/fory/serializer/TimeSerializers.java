@@ -50,24 +50,30 @@ import org.apache.fory.util.DateTimeUtils;
 /** Serializers for all time related types. */
 public class TimeSerializers {
   public abstract static class TimeSerializer<T> extends Serializer<T> {
+    protected final Config config;
 
     public TimeSerializer(Config config, Class<T> type) {
       super(config, type, !config.isTimeRefIgnored(), false);
+      this.config = config;
     }
 
     public TimeSerializer(Config config, Class<T> type, boolean needToWriteRef) {
       super(config, type, needToWriteRef, false);
+      this.config = config;
     }
   }
 
   public abstract static class ImmutableTimeSerializer<T> extends ImmutableSerializer<T> {
+    protected final Config config;
 
     public ImmutableTimeSerializer(Config config, Class<T> type) {
       super(config, type, !config.isTimeRefIgnored());
+      this.config = config;
     }
 
     public ImmutableTimeSerializer(Config config, Class<T> type, boolean needToWriteRef) {
       super(config, type, needToWriteRef);
+      this.config = config;
     }
   }
 

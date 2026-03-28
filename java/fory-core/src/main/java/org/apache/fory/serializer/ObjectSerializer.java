@@ -167,7 +167,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private void writeOtherFields(MemoryBuffer buffer, T value) {
-    RefWriter refWriter = WriteContext.current().getRefWriter();
+    RefWriter refWriter = typeResolver.getWriteContext().getRefWriter();
     for (SerializationFieldInfo fieldInfo : otherFields) {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printWriteFieldDebugInfo(fieldInfo, buffer);
@@ -216,7 +216,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   public Object[] readFields(MemoryBuffer buffer) {
-    RefReader refReader = ReadContext.current().getRefReader();
+    RefReader refReader = typeResolver.getReadContext().getRefReader();
     if (typeResolver.checkClassVersion()) {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);
@@ -252,7 +252,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   public T readAndSetFields(MemoryBuffer buffer, T obj) {
-    RefReader refReader = ReadContext.current().getRefReader();
+    RefReader refReader = typeResolver.getReadContext().getRefReader();
     if (typeResolver.checkClassVersion()) {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);

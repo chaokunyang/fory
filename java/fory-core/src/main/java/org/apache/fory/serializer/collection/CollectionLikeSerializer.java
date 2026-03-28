@@ -23,6 +23,7 @@ import java.lang.invoke.MethodHandle;
 import java.util.Collection;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.CodegenInvoke;
+import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -44,6 +45,7 @@ import org.apache.fory.util.Preconditions;
 public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   private MethodHandle constructor;
   private int numElements;
+  protected final Config config;
   protected final boolean supportCodegenHook;
   protected final TypeInfoHolder elementTypeInfoHolder;
   protected final TypeResolver typeResolver;
@@ -64,6 +66,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   public CollectionLikeSerializer(
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook) {
     super(typeResolver, cls);
+    this.config = typeResolver.getConfig();
     this.supportCodegenHook = supportCodegenHook;
     elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
     this.typeResolver = typeResolver;
@@ -72,6 +75,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   public CollectionLikeSerializer(
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook, boolean immutable) {
     super(typeResolver, cls, immutable);
+    this.config = typeResolver.getConfig();
     this.supportCodegenHook = supportCodegenHook;
     elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
     this.typeResolver = typeResolver;
@@ -358,7 +362,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   private <T extends Collection> void writeSameTypeElements(
       MemoryBuffer buffer, Serializer serializer, int flags, T collection) {
-    WriteContext writeContext = WriteContext.current();
+    WriteContext writeContext = typeResolver.getWriteContext();
     writeContext.incDepth();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (Object elem : collection) {
@@ -387,7 +391,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   private <T extends Collection> void writeDifferentTypeElements(
       MemoryBuffer buffer, int flags, T collection) {
-    WriteContext writeContext = WriteContext.current();
+    WriteContext writeContext = typeResolver.getWriteContext();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (Object elem : collection) {
         writeContext.writeRef(elem);
@@ -447,7 +451,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     }
     try {
       T instance = (T) constructor.invoke();
-      ReadContext.current().reference(instance);
+      typeResolver.getReadContext().reference(instance);
       return (Collection) instance;
     } catch (Throwable e) {
       // reduce code size of critical path.
@@ -585,7 +589,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       int flags,
       T collection,
       int numElements) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     readContext.incReadDepth();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (int i = 0; i < numElements; i++) {
@@ -612,7 +616,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   /** Read elements whose type are different. */
   private <T extends Collection> void readDifferentTypeElements(
       MemoryBuffer buffer, int flags, T collection, int numElements) {
-    ReadContext readContext = ReadContext.current();
+    ReadContext readContext = typeResolver.getReadContext();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       Preconditions.checkState(config.trackingRef(), "Reference tracking is not enabled");
       for (int i = 0; i < numElements; i++) {

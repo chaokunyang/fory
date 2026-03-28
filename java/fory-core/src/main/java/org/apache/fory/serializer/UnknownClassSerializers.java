@@ -25,6 +25,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.MapEntry;
+import org.apache.fory.config.Config;
 import org.apache.fory.context.MetaContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -64,12 +65,14 @@ public final class UnknownClassSerializers {
   public static final class UnknownStructSerializer extends Serializer {
     private static final int NONEXISTENT_META_SHARED_ID_SIZE =
         computeVarUint32Size(ClassResolver.NONEXISTENT_META_SHARED_ID);
+    private final Config config;
     private final TypeResolver typeResolver;
     private final TypeDef typeDef;
     private final LongMap<ClassFieldsInfo> fieldsInfoMap;
 
     public UnknownStructSerializer(TypeResolver typeResolver, TypeDef typeDef) {
       super(typeResolver, UnknownClass.UnknownStruct.class);
+      this.config = typeResolver.getConfig();
       this.typeResolver = typeResolver;
       this.typeDef = typeDef;
       fieldsInfoMap = new LongMap<>(1);
@@ -93,7 +96,7 @@ public final class UnknownClassSerializers {
      * shared TypeDef inline using the stream meta protocol.
      */
     private void writeTypeDef(MemoryBuffer buffer, UnknownClass.UnknownStruct value) {
-      MetaContext metaContext = WriteContext.current().getMetaContext();
+      MetaContext metaContext = typeResolver.getWriteContext().getMetaContext();
       IdentityObjectIntMap classMap = metaContext.classMap;
       int newId = classMap.size;
       // class not exist, use class def id for identity.
@@ -247,10 +250,12 @@ public final class UnknownClassSerializers {
   }
 
   public static final class UnknownEnumSerializer extends CrossLanguageCompatibleSerializer {
+    private final Config config;
     private final UnknownEnum[] enumConstants;
 
     public UnknownEnumSerializer(TypeResolver typeResolver) {
       super(typeResolver.getConfig(), UnknownEnum.class);
+      this.config = typeResolver.getConfig();
       enumConstants = UnknownEnum.class.getEnumConstants();
     }
 

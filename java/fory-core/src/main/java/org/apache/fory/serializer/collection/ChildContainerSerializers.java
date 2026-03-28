@@ -149,7 +149,7 @@ public class ChildContainerSerializers {
     public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
       for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(WriteContext.current(), value);
+        slotsSerializer.write(typeResolver.getWriteContext(), value);
       }
       return value;
     }
@@ -210,7 +210,7 @@ public class ChildContainerSerializers {
     public Map onMapWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
       for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(WriteContext.current(), value);
+        slotsSerializer.write(typeResolver.getWriteContext(), value);
       }
       return value;
     }
@@ -266,7 +266,7 @@ public class ChildContainerSerializers {
         // Read layer class meta first if meta share is enabled
         // This corresponds to writeLayerClassMeta() in MetaSharedLayerSerializer.write()
         if (typeResolver.getConfig().isMetaShareEnabled()) {
-          readAndSkipLayerClassMeta(buffer);
+          readAndSkipLayerClassMeta(typeResolver, buffer);
         }
         metaSerializer.readAndSetFields(buffer, collection);
       } else {
@@ -281,8 +281,8 @@ public class ChildContainerSerializers {
    * ChildContainerSerializers, we use the same serializer on both write and read sides, so we just
    * need to skip the meta without actually parsing it.
    */
-  private static void readAndSkipLayerClassMeta(MemoryBuffer buffer) {
-    MetaContext metaContext = ReadContext.current().getMetaContext();
+  private static void readAndSkipLayerClassMeta(TypeResolver typeResolver, MemoryBuffer buffer) {
+    MetaContext metaContext = typeResolver.getReadContext().getMetaContext();
     if (metaContext == null) {
       return;
     }

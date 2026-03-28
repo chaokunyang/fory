@@ -43,13 +43,13 @@ public class FinalFieldReplaceResolveSerializer extends ReplaceResolveSerializer
   @Override
   protected void writeObject(
       MemoryBuffer buffer, Object value, MethodInfoCache jdkMethodInfoCache) {
-    jdkMethodInfoCache.objectSerializer.write(WriteContext.current(), value);
+    jdkMethodInfoCache.objectSerializer.write(typeResolver.getWriteContext(), value);
   }
 
   @Override
   protected Object readObject(MemoryBuffer buffer) {
     MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(type);
-    Object o = jdkMethodInfoCache.objectSerializer.read(ReadContext.current());
+    Object o = jdkMethodInfoCache.objectSerializer.read(typeResolver.getReadContext());
     ReplaceResolveInfo replaceResolveInfo = jdkMethodInfoCache.info;
     if (replaceResolveInfo.readResolveMethod == null) {
       return o;

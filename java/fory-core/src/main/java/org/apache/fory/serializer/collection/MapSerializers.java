@@ -66,7 +66,7 @@ public class MapSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashMap hashMap = new HashMap(numElements);
-      ReadContext.current().reference(hashMap);
+      typeResolver.getReadContext().reference(hashMap);
       return hashMap;
     }
 
@@ -86,7 +86,7 @@ public class MapSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       LinkedHashMap hashMap = new LinkedHashMap(numElements);
-      ReadContext.current().reference(hashMap);
+      typeResolver.getReadContext().reference(hashMap);
       return hashMap;
     }
 
@@ -106,7 +106,7 @@ public class MapSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       LazyMap map = new LazyMap(numElements);
-      ReadContext.current().reference(map);
+      typeResolver.getReadContext().reference(map);
       return map;
     }
 
@@ -144,7 +144,7 @@ public class MapSerializers {
       if (config.isXlang()) {
         return value;
       } else {
-        WriteContext.current().writeRef(value.comparator());
+        typeResolver.getWriteContext().writeRef(value.comparator());
       }
       return value;
     }
@@ -155,7 +155,7 @@ public class MapSerializers {
       assert !config.isXlang();
       setNumElements(buffer.readVarUint32Small7());
       T map;
-      Comparator comparator = (Comparator) ReadContext.current().readRef();
+      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
       if (type == TreeMap.class) {
         map = (T) new TreeMap(comparator);
       } else {
@@ -169,7 +169,7 @@ public class MapSerializers {
           throw new RuntimeException(e);
         }
       }
-      ReadContext.current().reference(map);
+      typeResolver.getReadContext().reference(map);
       return map;
     }
 
@@ -277,7 +277,7 @@ public class MapSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ConcurrentHashMap map = new ConcurrentHashMap(numElements);
-      ReadContext.current().reference(map);
+      typeResolver.getReadContext().reference(map);
       return map;
     }
 
@@ -300,7 +300,7 @@ public class MapSerializers {
       if (config.isXlang()) {
         return snapshot;
       }
-      WriteContext.current().writeRef(value.comparator());
+      typeResolver.getWriteContext().writeRef(value.comparator());
       return snapshot;
     }
 
@@ -308,9 +308,9 @@ public class MapSerializers {
     public ConcurrentSkipListMap newMap(MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      Comparator comparator = (Comparator) ReadContext.current().readRef();
+      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
       ConcurrentSkipListMap map = new ConcurrentSkipListMap(comparator);
-      ReadContext.current().reference(map);
+      typeResolver.getReadContext().reference(map);
       return map;
     }
 
@@ -511,7 +511,7 @@ public class MapSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashMap<Object, Object> map = new HashMap<>(numElements);
-      ReadContext.current().reference(map);
+      typeResolver.getReadContext().reference(map);
       return map;
     }
 

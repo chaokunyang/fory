@@ -23,6 +23,7 @@ import java.lang.reflect.Array;
 import java.util.Arrays;
 import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
@@ -46,6 +47,7 @@ public class ArraySerializers {
   /** May be multi-dimension array, or multi-dimension primitive array. */
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static final class ObjectArraySerializer<T> extends Serializer<T[]> {
+    private final Config config;
     private final Class<T> innerType;
     private final TypeResolver typeResolver;
     private final Serializer componentTypeSerializer;
@@ -55,6 +57,7 @@ public class ArraySerializers {
 
     public ObjectArraySerializer(TypeResolver typeResolver, Class<T[]> cls) {
       super(typeResolver, cls);
+      this.config = typeResolver.getConfig();
       this.typeResolver = typeResolver;
       TypeResolver resolver = typeResolver;
       if (resolver instanceof ClassResolver) {
@@ -252,10 +255,12 @@ public class ArraySerializers {
   // virtual method call cost.
   public abstract static class PrimitiveArraySerializer<T>
       extends Serializers.CrossLanguageCompatibleSerializer<T> {
+    protected final Config config;
     protected final TypeResolver typeResolver;
 
     public PrimitiveArraySerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver.getConfig(), cls);
+      this.config = typeResolver.getConfig();
       this.typeResolver = typeResolver;
     }
   }
@@ -943,12 +948,14 @@ public class ArraySerializers {
   }
 
   public static final class StringArraySerializer extends Serializer<String[]> {
+    private final Config config;
     private final StringSerializer stringSerializer;
     private final ForyArrayAsListSerializer collectionSerializer;
     private final ForyArrayAsListSerializer.ArrayAsList list;
 
     public StringArraySerializer(TypeResolver typeResolver) {
       super(typeResolver, String[].class);
+      this.config = typeResolver.getConfig();
       stringSerializer = typeResolver.getStringSerializer();
       collectionSerializer = new ForyArrayAsListSerializer(typeResolver);
       list = new ForyArrayAsListSerializer.ArrayAsList(0);
@@ -983,7 +990,7 @@ public class ArraySerializers {
       StringSerializer stringSerializer = this.stringSerializer;
       if ((flags & CollectionFlags.HAS_NULL) != CollectionFlags.HAS_NULL) {
         for (String elem : value) {
-          stringSerializer.write(WriteContext.current(), elem);
+          stringSerializer.write(writeContext, elem);
         }
       } else {
         for (String elem : value) {
@@ -991,7 +998,7 @@ public class ArraySerializers {
             buffer.writeByte(Fory.NULL_FLAG);
           } else {
             buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            stringSerializer.write(WriteContext.current(), elem);
+            stringSerializer.write(writeContext, elem);
           }
         }
       }
@@ -1094,31 +1101,33 @@ public class ArraySerializers {
 
   public abstract static class AbstractUnknownArraySerializer extends Serializer {
     protected final String className;
+    protected final TypeResolver typeResolver;
     private final int dims;
 
     public AbstractUnknownArraySerializer(
         TypeResolver typeResolver, String className, Class<?> stubClass) {
       super(typeResolver, stubClass);
+      this.typeResolver = typeResolver;
       this.className = className;
       this.dims = TypeUtils.getArrayDimensions(stubClass);
     }
 
     @Override
     public void write(WriteContext writeContext, Object value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       throw new UnsupportedOperationException();
     }
 
     @Override
     public Object[] read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       switch (dims) {
         case 1:
-          return read1DArray(buffer);
+          return read1DArray(readContext, buffer);
         case 2:
-          return read2DArray(buffer);
+          return read2DArray(readContext, buffer);
         case 3:
-          return read3DArray(buffer);
+          return read3DArray(readContext, buffer);
         default:
           throw new UnsupportedOperationException(
               String.format("Unsupported array dimension %s for class %s", dims, className));
@@ -1127,11 +1136,10 @@ public class ArraySerializers {
 
     protected abstract Object readInnerElement(MemoryBuffer buffer);
 
-    private Object[] read1DArray(MemoryBuffer buffer) {
+    private Object[] read1DArray(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       boolean isFinal = (numElements & 0b1) != 0;
       numElements >>>= 1;
-      ReadContext readContext = ReadContext.current();
       Object[] value = new Object[numElements];
       readContext.reference(value);
 
@@ -1155,11 +1163,10 @@ public class ArraySerializers {
       return value;
     }
 
-    private Object[][] read2DArray(MemoryBuffer buffer) {
+    private Object[][] read2DArray(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       boolean isFinal = (numElements & 0b1) != 0;
       numElements >>>= 1;
-      ReadContext readContext = ReadContext.current();
       Object[][] value = new Object[numElements][];
       readContext.reference(value);
       if (isFinal) {
@@ -1167,7 +1174,7 @@ public class ArraySerializers {
           Object[] elem;
           int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-            elem = read1DArray(buffer);
+            elem = read1DArray(readContext, buffer);
             readContext.setReadObject(nextReadRefId, elem);
           } else {
             elem = (Object[]) readContext.getReadObject();
@@ -1182,11 +1189,10 @@ public class ArraySerializers {
       return value;
     }
 
-    private Object[] read3DArray(MemoryBuffer buffer) {
+    private Object[] read3DArray(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       boolean isFinal = (numElements & 0b1) != 0;
       numElements >>>= 1;
-      ReadContext readContext = ReadContext.current();
       Object[][][] value = new Object[numElements][][];
       readContext.reference(value);
       if (isFinal) {
@@ -1194,7 +1200,7 @@ public class ArraySerializers {
           Object[][] elem;
           int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-            elem = read2DArray(buffer);
+            elem = read2DArray(readContext, buffer);
             readContext.setReadObject(nextReadRefId, elem);
           } else {
             elem = (Object[][]) readContext.getReadObject();
@@ -1238,7 +1244,7 @@ public class ArraySerializers {
         throw new IllegalStateException(
             String.format("Class %s should serialize elements as non-morphic", className));
       }
-      return componentSerializer.read(ReadContext.current());
+      return componentSerializer.read(typeResolver.getReadContext());
     }
   }
 }

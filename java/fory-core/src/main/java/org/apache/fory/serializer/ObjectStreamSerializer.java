@@ -398,7 +398,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     // Read TypeInfo from buffer (maintains index alignment with readTypeInfos)
-    MetaContext metaContext = ReadContext.current().getMetaContext();
+    MetaContext metaContext = typeResolver.getReadContext().getMetaContext();
     if (metaContext == null) {
       throw new IllegalStateException("MetaContext is null but meta share is enabled");
     }
@@ -803,7 +803,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     private TypeInfo readLayerTypeInfo(TypeResolver typeResolver, MemoryBuffer buffer) {
-      MetaContext metaContext = ReadContext.current().getMetaContext();
+      MetaContext metaContext = typeResolver.getReadContext().getMetaContext();
       if (metaContext == null) {
         return null;
       }
@@ -848,6 +848,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final boolean compressInt;
     private final LongEncoding longEncoding;
     private final SlotInfo slotsInfo;
+    private final TypeResolver typeResolver;
     private MemoryBuffer buffer;
     private Object targetObject;
     private boolean fieldsWritten;
@@ -855,18 +856,19 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     protected ForyObjectOutputStream(SlotInfo slotsInfo) throws IOException {
       super();
       this.slotsInfo = slotsInfo;
+      this.typeResolver = slotsInfo.getSlotsSerializer().typeResolver;
       this.compressInt = slotsInfo.getSlotsSerializer().config.compressInt();
       this.longEncoding = slotsInfo.getSlotsSerializer().config.longEncoding();
     }
 
     @Override
     protected final void writeObjectOverride(Object obj) throws IOException {
-      WriteContext.current().writeRef(obj);
+      typeResolver.getWriteContext().writeRef(obj);
     }
 
     @Override
     public void writeUnshared(Object obj) throws IOException {
-      WriteContext.current().writeNonRef(obj);
+      typeResolver.getWriteContext().writeNonRef(obj);
     }
 
     /**
@@ -1002,7 +1004,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         buffer.writeFloat64(value == null ? 0d : (Double) value);
       } else {
         // Object reference
-        WriteContext.current().writeRef(value);
+        typeResolver.getWriteContext().writeRef(value);
       }
     }
 
@@ -1124,13 +1126,13 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     @Override
     public void writeChars(String s) throws IOException {
       Preconditions.checkNotNull(s);
-      WriteContext.current().writeString(s);
+      typeResolver.getWriteContext().writeString(s);
     }
 
     @Override
     public void writeUTF(String s) throws IOException {
       Preconditions.checkNotNull(s);
-      WriteContext.current().writeString(s);
+      typeResolver.getWriteContext().writeString(s);
     }
 
     @Override
@@ -1160,6 +1162,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final boolean compressInt;
     private final LongEncoding longEncoding;
     private final SlotInfo slotsInfo;
+    private final TypeResolver typeResolver;
     private MemoryBuffer buffer;
     private Object targetObject;
     private GetFieldImpl getField;
@@ -1170,16 +1173,17 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       this.compressInt = slotsInfo.getSlotsSerializer().config.compressInt();
       this.longEncoding = slotsInfo.getSlotsSerializer().config.longEncoding();
       this.slotsInfo = slotsInfo;
+      this.typeResolver = slotsInfo.getSlotsSerializer().typeResolver;
     }
 
     @Override
     protected Object readObjectOverride() {
-      return ReadContext.current().readRef();
+      return typeResolver.getReadContext().readRef();
     }
 
     @Override
     public Object readUnshared() {
-      return ReadContext.current().readNonRef();
+      return typeResolver.getReadContext().readNonRef();
     }
 
     private static final Object NO_VALUE_STUB = new Object();
@@ -1344,7 +1348,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         return buffer.readFloat64();
       } else {
         // Object reference
-        return ReadContext.current().readRef();
+        return typeResolver.getReadContext().readRef();
       }
     }
 
@@ -1479,7 +1483,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     public String readUTF() throws IOException {
-      return ReadContext.current().readString();
+      return typeResolver.getReadContext().readString();
     }
 
     @Override

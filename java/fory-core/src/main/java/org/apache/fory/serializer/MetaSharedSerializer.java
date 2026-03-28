@@ -231,13 +231,13 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private void compatibleRead(MemoryBuffer buffer, SerializationFieldInfo fieldInfo, Object obj) {
     Object fieldValue =
         AbstractObjectSerializer.readBuildInFieldValue(
-            typeResolver, ReadContext.current().getRefReader(), fieldInfo, buffer);
+            typeResolver, typeResolver.getReadContext().getRefReader(), fieldInfo, buffer);
     fieldInfo.fieldConverter.set(obj, fieldValue);
   }
 
   private void readFields(MemoryBuffer buffer, Object[] fields) {
     int counter = 0;
-    RefReader refReader = ReadContext.current().getRefReader();
+    RefReader refReader = typeResolver.getReadContext().getRefReader();
     // read order: primitive,boxed,final,other,collection,map
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       if (Utils.DEBUG_OUTPUT_ENABLED) {

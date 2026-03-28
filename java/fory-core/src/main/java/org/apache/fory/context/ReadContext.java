@@ -21,7 +21,6 @@ package org.apache.fory.context;
 
 import java.util.IdentityHashMap;
 import java.util.Iterator;
-import java.util.function.Supplier;
 import org.apache.fory.Fory;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
@@ -40,13 +39,11 @@ import org.apache.fory.util.Preconditions;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class ReadContext {
-  private static final ThreadLocal<ReadContext> CURRENT = new ThreadLocal<>();
   private final Config config;
   private final Generics generics;
   private final TypeResolver typeResolver;
   private final RefReader refReader;
   private final MetaStringReader metaStringReader;
-  private final StringSerializer stringSerializer;
   private final boolean crossLanguage;
   private final boolean compressInt;
   private final LongEncoding longEncoding;
@@ -58,21 +55,18 @@ public final class ReadContext {
   private MetaContext metaContext;
   private boolean peerOutOfBandEnabled;
   private int depth;
-  private boolean active;
 
   public ReadContext(
       Config config,
       Generics generics,
       TypeResolver typeResolver,
       RefReader refReader,
-      MetaStringReader metaStringReader,
-      StringSerializer stringSerializer) {
+      MetaStringReader metaStringReader) {
     this.config = config;
     this.generics = generics;
     this.typeResolver = typeResolver;
     this.refReader = refReader;
     this.metaStringReader = metaStringReader;
-    this.stringSerializer = stringSerializer;
     crossLanguage = config.isXlang();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();
@@ -88,48 +82,6 @@ public final class ReadContext {
     this.buffer = buffer;
     this.peerOutOfBandEnabled = peerOutOfBandEnabled;
     this.outOfBandBuffers = outOfBandBuffers == null ? null : outOfBandBuffers.iterator();
-    active = true;
-  }
-
-  public <T> T run(
-      MemoryBuffer buffer,
-      Iterable<MemoryBuffer> outOfBandBuffers,
-      boolean peerOutOfBandEnabled,
-      Supplier<T> action) {
-    prepare(buffer, outOfBandBuffers, peerOutOfBandEnabled);
-    ReadContext previous = enter(this);
-    try {
-      return action.get();
-    } finally {
-      restore(previous);
-      reset();
-    }
-  }
-
-  public static ReadContext current() {
-    ReadContext context = CURRENT.get();
-    if (context == null) {
-      throw new IllegalStateException("ReadContext is only available during deserialization");
-    }
-    return context;
-  }
-
-  public static ReadContext enter(ReadContext context) {
-    ReadContext previous = CURRENT.get();
-    CURRENT.set(context);
-    return previous;
-  }
-
-  public static void restore(ReadContext previous) {
-    if (previous == null) {
-      CURRENT.remove();
-    } else {
-      CURRENT.set(previous);
-    }
-  }
-
-  public boolean isActive() {
-    return active;
   }
 
   public MemoryBuffer getBuffer() {
@@ -152,7 +104,6 @@ public final class ReadContext {
     outOfBandBuffers = null;
     peerOutOfBandEnabled = false;
     depth = 0;
-    active = false;
   }
 
   public Config getConfig() {
@@ -216,7 +167,7 @@ public final class ReadContext {
   }
 
   public StringSerializer getStringSerializer() {
-    return stringSerializer;
+    return typeResolver.getStringSerializer();
   }
 
   public Object add(Object key, Object value) {
@@ -294,11 +245,12 @@ public final class ReadContext {
 
   public String readString() {
     MemoryBuffer buffer = this.buffer;
-    return stringSerializer.readString(buffer);
+    return typeResolver.getStringSerializer().readString(buffer);
   }
 
   public String readStringRef() {
     MemoryBuffer buffer = this.buffer;
+    StringSerializer stringSerializer = typeResolver.getStringSerializer();
     if (stringSerializer.needToWriteRef()) {
       int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
@@ -458,7 +410,7 @@ public final class ReadContext {
         return buffer.readFloat64();
       case Types.STRING:
         if (typeInfo.getCls() == String.class) {
-          return stringSerializer.readString(buffer);
+          return typeResolver.getStringSerializer().readString(buffer);
         }
         incReadDepth();
         Object stringLike = typeInfo.getSerializer().read(this);

@@ -72,7 +72,7 @@ public class SubListSerializers {
     // ImmutableCollectionSerializers
     for (Class<?> cls :
         new Class[] {SubListClass, RandomAccessSubListClass, ArrayListSubListClass}) {
-      if (fory.trackingRef() && preserveView && !fory.isCrossLanguage()) {
+      if (classResolver.trackingRef() && preserveView && !classResolver.isCrossLanguage()) {
         classResolver.registerInternalSerializer(
             cls, new SubListViewSerializer(classResolver, cls));
       } else {

@@ -19,10 +19,10 @@
 
 package org.apache.fory.type;
 
-import org.apache.fory.Fory;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeInfo;
+import org.apache.fory.resolver.TypeResolver;
 
 // Derived from
 // https://github.com/EsotericSoftware/kryo/blob/135df69526615bb3f6b34846e58ba3fec3b631c3/src/com/esotericsoftware/kryo/util/DefaultGenerics.java.
@@ -33,7 +33,7 @@ import org.apache.fory.resolver.TypeInfo;
  * loop.
  */
 public class Generics {
-  private final Fory fory;
+  private final TypeResolver typeResolver;
   private int genericTypesSize;
   private GenericType[] genericTypes = new GenericType[1];
   // Use depth and `genericTypesSize` as index to query `genericTypes`, this
@@ -41,8 +41,8 @@ public class Generics {
   // circular serialization.
   private int[] depths = new int[1];
 
-  public Generics(Fory fory) {
-    this.fory = fory;
+  public Generics(TypeResolver typeResolver) {
+    this.typeResolver = typeResolver;
   }
 
   /**
@@ -60,7 +60,7 @@ public class Generics {
       genericTypes = allocateGenericTypes(genericTypes, size);
     }
     genericTypes[size] = fieldType;
-    depths[size] = fory.getDepth();
+    depths[size] = typeResolver.getActiveDepth();
   }
 
   private GenericType[] allocateGenericTypes(GenericType[] genericTypes, int size) {
@@ -87,7 +87,7 @@ public class Generics {
       return;
     }
     size--;
-    if (depths[size] < fory.getDepth()) {
+    if (depths[size] < typeResolver.getActiveDepth()) {
       return;
     }
     genericTypes[size] = null;
@@ -106,7 +106,7 @@ public class Generics {
       GenericType genericType = genericTypes[index];
       // The depth must match to prevent the types being wrong if a serializer doesn't call
       // nextGenericType.
-      if (depths[index] == fory.getDepth() - 1) {
+      if (depths[index] == typeResolver.getActiveDepth() - 1) {
         return genericType;
       }
     }

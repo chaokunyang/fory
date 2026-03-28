@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.ConcurrentIdentityMap;
@@ -36,11 +37,19 @@ import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
 
-/** Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances. */
+/**
+ * Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances.
+ *
+ * <p>A {@code SharedRegistry} is scoped to one effective config hash. Do not share it across
+ * incompatible configs. Thread-safe serializer and type-info caches therefore key directly by
+ * class identity.
+ */
 @Internal
 public final class SharedRegistry {
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
@@ -65,6 +74,11 @@ public final class SharedRegistry {
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<EncodedMetaString, MetaStringRef> metaStringRefsByEncoded =
       new ConcurrentHashMap<>();
+  final ConcurrentIdentityMap<Class<?>, Serializer<?>> threadSafeSerializers =
+      new ConcurrentIdentityMap<>();
+  // Invariant: every shareable thread-safe TypeInfo must point to this canonical instance.
+  final ConcurrentIdentityMap<Class<?>, TypeInfo> threadSafeTypeInfos =
+      new ConcurrentIdentityMap<>();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
@@ -114,6 +128,77 @@ public final class SharedRegistry {
         ignored ->
             new MetaStringRef(
                 getOrCreateEncodedMetaString(string, encoder, encoding, encoderTypeKey)));
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T> Serializer<T> getThreadSafeSerializer(
+      Class<T> type, Class<? extends Serializer> serializerClass) {
+    Serializer<?> serializer = threadSafeSerializers.get(type);
+    if (serializer == null || !matchesSerializerClass(serializer, serializerClass)) {
+      return null;
+    }
+    return (Serializer<T>) serializer;
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T extends Serializer<?>> T getOrCreateThreadSafeSerializer(
+      Class<?> type, Class<? extends Serializer> serializerClass, Supplier<T> factory) {
+    Serializer<?> existing = threadSafeSerializers.get(type);
+    if (existing != null && matchesSerializerClass(existing, serializerClass)) {
+      return (T) existing;
+    }
+    T serializer = factory.get();
+    if (serializer == null || !serializer.threadSafe()) {
+      return serializer;
+    }
+    Serializer<?> winner = threadSafeSerializers.putIfAbsent(type, serializer);
+    if (winner == null) {
+      return serializer;
+    }
+    if (matchesSerializerClass(winner, serializer)) {
+      return (T) winner;
+    }
+    threadSafeSerializers.put(type, serializer);
+    return serializer;
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T extends Serializer<?>> T cacheThreadSafeSerializer(Class<?> type, T serializer) {
+    Serializer<?> existing = threadSafeSerializers.putIfAbsent(type, serializer);
+    if (existing == null) {
+      return serializer;
+    }
+    if (matchesSerializerClass(existing, serializer)) {
+      return (T) existing;
+    }
+    threadSafeSerializers.put(type, serializer);
+    return serializer;
+  }
+
+  public <T extends Serializer<?>> T replaceThreadSafeSerializer(Class<?> type, T serializer) {
+    threadSafeSerializers.put(type, serializer);
+    return serializer;
+  }
+
+  public TypeInfo getThreadSafeTypeInfo(Class<?> type) {
+    return threadSafeTypeInfos.get(type);
+  }
+
+  public TypeInfo cacheThreadSafeTypeInfo(Class<?> type, TypeInfo typeInfo) {
+    TypeInfo existing = threadSafeTypeInfos.putIfAbsent(type, typeInfo);
+    if (existing == null) {
+      return typeInfo;
+    }
+    if (matchesTypeInfo(existing, typeInfo)) {
+      return existing;
+    }
+    threadSafeTypeInfos.put(type, typeInfo);
+    return typeInfo;
+  }
+
+  public TypeInfo replaceThreadSafeTypeInfo(Class<?> type, TypeInfo typeInfo) {
+    threadSafeTypeInfos.put(type, typeInfo);
+    return typeInfo;
   }
 
   TypeDef getOrCreateTypeDef(TypeDef typeDef) {
@@ -211,6 +296,36 @@ public final class SharedRegistry {
       return true;
     }
     return false;
+  }
+
+  private static boolean matchesTypeInfo(TypeInfo left, TypeInfo right) {
+    Serializer<?> leftSerializer = left.getSerializer();
+    Serializer<?> rightSerializer = right.getSerializer();
+    if (leftSerializer == null || rightSerializer == null) {
+      return leftSerializer == rightSerializer
+          && left.getTypeId() == right.getTypeId()
+          && left.getUserTypeId() == right.getUserTypeId();
+    }
+    return left.getTypeId() == right.getTypeId()
+        && left.getUserTypeId() == right.getUserTypeId()
+        && matchesSerializerClass(leftSerializer, rightSerializer);
+  }
+
+  private static boolean matchesSerializerClass(
+      Serializer<?> serializer, Class<? extends Serializer> serializerClass) {
+    return serializerClass(serializer) == serializerClass;
+  }
+
+  private static boolean matchesSerializerClass(Serializer<?> left, Serializer<?> right) {
+    return serializerClass(left) == serializerClass(right);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Class<? extends Serializer> serializerClass(Serializer<?> serializer) {
+    if (serializer instanceof GraalvmSerializerHolder) {
+      return ((GraalvmSerializerHolder) serializer).getSerializerClass();
+    }
+    return (Class<? extends Serializer>) serializer.getClass();
   }
 
   private static final class MetaStringKey {

@@ -300,7 +300,7 @@ public class ReplaceResolveSerializer extends Serializer {
   protected void writeObject(
       MemoryBuffer buffer, Object value, MethodInfoCache jdkMethodInfoCache) {
     classResolver.writeClassInternal(buffer, writeTypeInfo);
-    jdkMethodInfoCache.objectSerializer.write(WriteContext.current(), value);
+    jdkMethodInfoCache.objectSerializer.write(typeResolver.getWriteContext(), value);
   }
 
   @Override
@@ -340,7 +340,7 @@ public class ReplaceResolveSerializer extends Serializer {
   protected Object readObject(MemoryBuffer buffer) {
     Class cls = classResolver.readClassInternal(buffer);
     MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(cls);
-    Object o = jdkMethodInfoCache.objectSerializer.read(ReadContext.current());
+    Object o = jdkMethodInfoCache.objectSerializer.read(typeResolver.getReadContext());
     ReplaceResolveInfo replaceResolveInfo = jdkMethodInfoCache.info;
     if (replaceResolveInfo.readResolveMethod == null) {
       return o;

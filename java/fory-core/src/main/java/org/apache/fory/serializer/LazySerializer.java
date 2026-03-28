@@ -20,6 +20,7 @@
 package org.apache.fory.serializer;
 
 import java.util.function.Supplier;
+import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -27,12 +28,14 @@ import org.apache.fory.resolver.TypeResolver;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class LazySerializer extends Serializer {
+  private final Config config;
   private final TypeResolver typeResolver;
   private final Supplier<Serializer> serializerSupplier;
   private Serializer serializer;
 
   public LazySerializer(TypeResolver typeResolver, Class type, Supplier<Serializer> serializerSupplier) {
     super(typeResolver, type);
+    this.config = typeResolver.getConfig();
     this.typeResolver = typeResolver;
     this.serializerSupplier = serializerSupplier;
   }

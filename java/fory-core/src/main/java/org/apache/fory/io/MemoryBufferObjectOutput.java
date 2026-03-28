@@ -24,25 +24,23 @@ import java.io.ObjectOutput;
 import java.io.OutputStream;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
-import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
 /** ObjectOutput based on {@link MemoryBuffer}. */
 public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutput {
   private final boolean compressInt;
   private final LongEncoding longEncoding;
-  private final StringSerializer stringSerializer;
+  private final TypeResolver typeResolver;
   private MemoryBuffer buffer;
 
-  public MemoryBufferObjectOutput(
-      Config config, StringSerializer stringSerializer, MemoryBuffer buffer) {
+  public MemoryBufferObjectOutput(Config config, TypeResolver typeResolver, MemoryBuffer buffer) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
     this.buffer = buffer;
-    this.stringSerializer = stringSerializer;
+    this.typeResolver = typeResolver;
   }
 
   public MemoryBuffer getBuffer() {
@@ -55,7 +53,7 @@ public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutp
 
   @Override
   public void writeObject(Object obj) throws IOException {
-    WriteContext.current().writeRef(obj);
+    typeResolver.getWriteContext().writeRef(obj);
   }
 
   @Override
@@ -129,13 +127,13 @@ public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutp
   @Override
   public void writeChars(String s) throws IOException {
     Preconditions.checkNotNull(s);
-    stringSerializer.writeString(buffer, s);
+    typeResolver.getStringSerializer().writeString(buffer, s);
   }
 
   @Override
   public void writeUTF(String s) throws IOException {
     Preconditions.checkNotNull(s);
-    stringSerializer.writeString(buffer, s);
+    typeResolver.getStringSerializer().writeString(buffer, s);
   }
 
   @Override

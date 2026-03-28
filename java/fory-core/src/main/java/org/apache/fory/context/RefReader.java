@@ -43,4 +43,55 @@ public interface RefReader {
   void setReadObject(int id, Object object);
 
   void reset();
+
+  final class NoRefReader implements RefReader {
+    @Override
+    public byte readRefOrNull(MemoryBuffer buffer) {
+      return buffer.readByte();
+    }
+
+    @Override
+    public int preserveRefId() {
+      return -1;
+    }
+
+    @Override
+    public int preserveRefId(int refId) {
+      return -1;
+    }
+
+    @Override
+    public int tryPreserveRefId(MemoryBuffer buffer) {
+      return buffer.readByte();
+    }
+
+    @Override
+    public int lastPreservedRefId() {
+      return -1;
+    }
+
+    @Override
+    public boolean hasPreservedRefId() {
+      return false;
+    }
+
+    @Override
+    public void reference(Object object) {}
+
+    @Override
+    public Object getReadObject(int id) {
+      return null;
+    }
+
+    @Override
+    public Object getReadObject() {
+      return null;
+    }
+
+    @Override
+    public void setReadObject(int id, Object object) {}
+
+    @Override
+    public void reset() {}
+  }
 }

@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import java.util.Arrays;
 import org.apache.fory.collection.ForyObjectMap;
+import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
@@ -31,12 +32,14 @@ import org.apache.fory.util.Preconditions;
 
 @SuppressWarnings("rawtypes")
 public class EnumSerializer extends ImmutableSerializer<Enum> {
+  private final Config config;
   private final Enum[] enumConstants;
   private final ForyObjectMap<MetaStringRef, Enum> metaStringtoEnumRepresentation;
   private final MetaStringRef[] metaStringStateArrByEnumOrdinal;
 
   public EnumSerializer(TypeResolver typeResolver, Class<Enum> cls) {
     super(typeResolver, cls, false);
+    this.config = typeResolver.getConfig();
     if (cls.isEnum()) {
       enumConstants = cls.getEnumConstants();
     } else {

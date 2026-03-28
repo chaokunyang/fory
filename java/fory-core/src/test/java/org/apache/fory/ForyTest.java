@@ -651,7 +651,7 @@ public class ForyTest extends ForyTestBase {
   }
 
   private static MemoryBuffer getDefaultWriteBuffer(Fory fory) {
-    return (MemoryBuffer) ReflectionUtils.getObjectFieldValue(fory, "writeBuffer");
+    return (MemoryBuffer) ReflectionUtils.getObjectFieldValue(fory, "buffer");
   }
 
   @EqualsAndHashCode

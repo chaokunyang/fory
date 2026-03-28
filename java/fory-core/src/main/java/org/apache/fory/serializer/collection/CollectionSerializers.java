@@ -484,8 +484,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(
-        CopyContext copyContext, Collection originCollection) {
+    public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       Comparator comparator =
           copyContext.copyObject(((ConcurrentSkipListSet) originCollection).comparator());
       return new ConcurrentSkipListSet(comparator);

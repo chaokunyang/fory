@@ -507,7 +507,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * Read a container field value (Collection or Map). Handles reference tracking, nullable fields,
    * and pushes/pops generic type information for proper deserialization of parameterized types.
    *
-   * @param fory fory runtime
    * @param typeResolver resolver used for type metadata read
    * @param refReader resolver used for reference tracking
    * @param generics the generics context for tracking parameterized types
@@ -585,22 +584,21 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
    * Read field value from buffer and return it. Handles primitive types, unsigned/compressed
    * numbers, and common types like String with optimized fast paths.
    *
-   * <p>This method is similar to {@link #readBuildInFieldValue(Fory, TypeResolver, RefReader,
-   * SerializationFieldInfo, MemoryBuffer, Object)}, but returns the field value instead of setting
-   * it into the target object.
+   * <p>This method is similar to {@link #readBuildInFieldValue(ReadContext, TypeResolver,
+   * RefReader, SerializationFieldInfo, MemoryBuffer)}, but returns the field value instead of
+   * setting it into the target object.
    *
    * <p>The refMode determines how to read the value from buffer: - RefMode.NONE: read directly
    * without null flag - RefMode.NULL_ONLY: read null flag first, then value if not null -
    * RefMode.TRACKING: use reference tracking
    *
-   * @param fory fory runtime
    * @param typeResolver resolver used for type metadata read
    * @param refReader resolver used for reference tracking
    * @param fieldInfo the field metadata including type and nullability info
    * @param buffer the buffer to read from
    * @return the deserialized field value, or null if the field is nullable and was null
-   * @see #readBuildInFieldValue(Fory, TypeResolver, RefReader, SerializationFieldInfo,
-   *     MemoryBuffer, Object)
+   * @see #readBuildInFieldValue(ReadContext, TypeResolver, RefReader, SerializationFieldInfo,
+   *     MemoryBuffer)
    */
   static Object readBuildInFieldValue(
       ReadContext readContext,

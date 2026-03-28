@@ -785,8 +785,7 @@ public class XtypeResolver extends TypeResolver {
 
   public TypeInfo getTypeInfo(Class<?> cls, TypeInfoHolder classInfoHolder) {
     TypeInfo typeInfo = classInfoHolder.typeInfo;
-    if (typeInfo.getCls() == cls) {
-    } else {
+    if (typeInfo.getCls() != cls) {
       typeInfo = getCachedTypeInfo(cls);
       if (typeInfo == null) {
         typeInfo = buildTypeInfo(cls);

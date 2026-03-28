@@ -617,7 +617,6 @@ public abstract class TypeResolver {
    * #readTypeInfo(ReadContext)} because it uses the provided classInfoCache to reduce map lookups
    * when reading class from binary.
    *
-   * @param buffer the buffer to read from
    * @param typeInfoCache cache for class info to speed up repeated reads
    * @return the TypeInfo read from buffer
    */
@@ -666,7 +665,6 @@ public abstract class TypeResolver {
    * Read class info from buffer with TypeInfoHolder cache. This version updates the classInfoHolder
    * if the cache doesn't hit, allowing callers to maintain the cache across calls.
    *
-   * @param buffer the buffer to read from
    * @param classInfoHolder holder containing cache, will be updated on cache miss
    * @return the TypeInfo read from buffer
    */

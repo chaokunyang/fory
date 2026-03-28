@@ -209,14 +209,6 @@ public final class ReadContext {
     this.depth = depth;
   }
 
-  public void increaseDepth(int diff) {
-    depth += diff;
-  }
-
-  public void decreaseDepth() {
-    depth -= 1;
-  }
-
   public void increaseDepth() {
     if ((depth += 1) > maxDepth) {
       throw new InsecureException(
@@ -226,6 +218,14 @@ public final class ReadContext {
                   + "ForyBuilder#withMaxDepth(largerDepth)",
               maxDepth));
     }
+  }
+
+  public void increaseDepth(int diff) {
+    depth += diff;
+  }
+
+  public void decreaseDepth() {
+    depth -= 1;
   }
 
   public MemoryBuffer readBufferObject() {

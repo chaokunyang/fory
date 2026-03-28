@@ -482,6 +482,14 @@ public class CollectionSerializers {
       readContext.setReadObject(refId, skipListSet);
       return skipListSet;
     }
+
+    @Override
+    public Collection newCollection(
+        CopyContext copyContext, Collection originCollection) {
+      Comparator comparator =
+          copyContext.copyObject(((ConcurrentSkipListSet) originCollection).comparator());
+      return new ConcurrentSkipListSet(comparator);
+    }
   }
 
   public static final class SetFromMapSerializer extends CollectionSerializer<Set<?>> {

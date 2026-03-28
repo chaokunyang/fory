@@ -158,16 +158,17 @@ public class CollectionSerializersTest extends ForyTestBase {
             .build();
     List<String> data = new ArrayList<>(ImmutableList.of("a", "b", "c"));
     byte[] bytes1 = fory.serialize(data);
+    GenericType genericType = GenericType.build(new TypeRef<List<String>>() {});
     fory
         .getWriteContext()
         .getGenerics()
-        .pushGenericType(
-            GenericType.build(new TypeRef<List<String>>() {}),
-            fory.getWriteContext().getDepth());
+        .pushGenericType(genericType, fory.getWriteContext().getDepth());
+    fory.getReadContext().getGenerics().pushGenericType(genericType, fory.getReadContext().getDepth());
     byte[] bytes2 = fory.serialize(data);
     Assert.assertTrue(bytes1.length > bytes2.length);
     assertEquals(fory.deserialize(bytes2), data);
     fory.getWriteContext().getGenerics().popGenericType(fory.getWriteContext().getDepth());
+    fory.getReadContext().getGenerics().popGenericType(fory.getReadContext().getDepth());
     assertThrowsCause(RuntimeException.class, () -> fory.deserialize(bytes2));
   }
 

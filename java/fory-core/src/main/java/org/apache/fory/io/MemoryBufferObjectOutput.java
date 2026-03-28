@@ -27,18 +27,21 @@ import org.apache.fory.config.LongEncoding;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
+import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
 /** ObjectOutput based on {@link MemoryBuffer}. */
 public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutput {
   private final boolean compressInt;
   private final LongEncoding longEncoding;
+  private final StringSerializer stringSerializer;
   private WriteContext writeContext;
   private MemoryBuffer buffer;
 
   public MemoryBufferObjectOutput(Config config, MemoryBuffer buffer) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
+    this.stringSerializer = new StringSerializer(config);
     this.buffer = buffer;
   }
 
@@ -130,13 +133,21 @@ public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutp
   @Override
   public void writeChars(String s) throws IOException {
     Preconditions.checkNotNull(s);
-    writeContext.getStringSerializer().writeString(buffer, s);
+    if (writeContext != null) {
+      writeContext.getStringSerializer().writeString(buffer, s);
+    } else {
+      stringSerializer.writeString(buffer, s);
+    }
   }
 
   @Override
   public void writeUTF(String s) throws IOException {
     Preconditions.checkNotNull(s);
-    writeContext.getStringSerializer().writeString(buffer, s);
+    if (writeContext != null) {
+      writeContext.getStringSerializer().writeString(buffer, s);
+    } else {
+      stringSerializer.writeString(buffer, s);
+    }
   }
 
   @Override

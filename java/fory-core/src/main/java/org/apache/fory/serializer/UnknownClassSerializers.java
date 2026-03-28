@@ -272,19 +272,21 @@ public final class UnknownClassSerializers {
 
     @Override
     public void write(WriteContext writeContext, UnknownEnum value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeVarUint32Small7(value.ordinal());
+      if (!config.isXlang() && config.serializeEnumByName()) {
+        writeContext.writeString(value.name());
+      } else {
+        writeContext.getBuffer().writeVarUint32Small7(value.ordinal());
+      }
     }
 
     @Override
     public UnknownEnum read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      if (config.serializeEnumByName()) {
-        readContext.getMetaStringReader().readMetaStringBytes(buffer);
+      if (!config.isXlang() && config.serializeEnumByName()) {
+        readContext.readString();
         return UnknownEnum.UNKNOWN;
       }
 
-      int ordinal = buffer.readVarUint32Small7();
+      int ordinal = readContext.getBuffer().readVarUint32Small7();
       if (ordinal >= enumConstants.length) {
         return UnknownEnum.UNKNOWN;
       }

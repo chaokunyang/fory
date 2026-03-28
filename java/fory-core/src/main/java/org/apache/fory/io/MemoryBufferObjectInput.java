@@ -27,18 +27,21 @@ import org.apache.fory.config.LongEncoding;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
+import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
 /** ObjectInput based on {@link MemoryBuffer}. */
 public class MemoryBufferObjectInput extends InputStream implements ObjectInput {
   private final boolean compressInt;
   private final LongEncoding longEncoding;
+  private final StringSerializer stringSerializer;
   private MemoryBuffer buffer;
   private ReadContext readContext;
 
   public MemoryBufferObjectInput(Config config, MemoryBuffer buffer) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
+    this.stringSerializer = new StringSerializer(config);
     this.buffer = buffer;
   }
 
@@ -166,6 +169,9 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
 
   @Override
   public String readUTF() throws IOException {
-    return readContext.getStringSerializer().readString(buffer);
+    if (readContext != null) {
+      return readContext.getStringSerializer().readString(buffer);
+    }
+    return stringSerializer.readString(buffer);
   }
 }

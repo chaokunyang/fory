@@ -96,7 +96,7 @@ public final class Fory implements BaseFory {
   private final WriteContext writeContext;
   private final ReadContext readContext;
   private final CopyContext copyContext;
-  private MemoryBuffer writeBuffer;
+  private MemoryBuffer buffer;
 
   public Fory(ForyBuilder builder, ClassLoader classLoader) {
     this(builder, classLoader, new SharedRegistry());
@@ -621,19 +621,19 @@ public final class Fory implements BaseFory {
   }
 
   private MemoryBuffer getWriteBuffer() {
-    MemoryBuffer buffer = writeBuffer;
+    MemoryBuffer buffer = this.buffer;
     if (buffer == null) {
       buffer = MemoryBuffer.newHeapBuffer(64);
-      writeBuffer = buffer;
+      this.buffer = buffer;
     }
     return buffer;
   }
 
   private void recycleWriteBuffer(MemoryBuffer buffer) {
     if (buffer.size() > config.bufferSizeLimitBytes()) {
-      writeBuffer = MemoryBuffer.newHeapBuffer(config.bufferSizeLimitBytes());
+      this.buffer = MemoryBuffer.newHeapBuffer(config.bufferSizeLimitBytes());
     } else {
-      writeBuffer = buffer;
+      this.buffer = buffer;
     }
   }
 

@@ -20,6 +20,8 @@
 package org.apache.fory;
 
 import java.util.function.Function;
+import org.apache.fory.resolver.AllowListChecker;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeChecker;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
@@ -119,7 +121,14 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
 
   @Override
   public void setTypeChecker(TypeChecker typeChecker) {
-    registerCallback(fory -> fory.getTypeResolver().setTypeChecker(typeChecker));
+    registerCallback(
+        fory -> {
+          TypeResolver typeResolver = fory.getTypeResolver();
+          typeResolver.setTypeChecker(typeChecker);
+          if (typeChecker instanceof AllowListChecker && typeResolver instanceof ClassResolver) {
+            ((AllowListChecker) typeChecker).addListener((ClassResolver) typeResolver);
+          }
+        });
   }
 
   @Override

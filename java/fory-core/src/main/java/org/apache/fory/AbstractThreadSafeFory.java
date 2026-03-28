@@ -32,21 +32,10 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   }
 
   @Override
-  public void register(Class<?> cls, boolean createSerializer) {
-    registerCallback(fory -> fory.register(cls, createSerializer));
-  }
-
-  @Override
   public void register(Class<?> cls, int id) {
     registerCallback(fory -> fory.register(cls, id));
   }
 
-  @Override
-  public void register(Class<?> cls, int id, boolean createSerializer) {
-    registerCallback(fory -> fory.register(cls, id, createSerializer));
-  }
-
-  @Deprecated
   @Override
   public void register(Class<?> cls, String typeName) {
     registerCallback(fory -> fory.register(cls, typeName));
@@ -96,8 +85,9 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   }
 
   @Override
-  public void registerSerializer(Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
-    registerCallback(fory -> fory.registerSerializer(type, serializerCreator.apply(fory)));
+  public void registerSerializer(
+      Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
+    registerCallback(fory -> fory.registerSerializer(type, serializerCreator));
   }
 
   @Override
@@ -113,7 +103,7 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
 
   @Override
   public void registerSerializerAndType(
-      Class<?> type, Function<Fory, Serializer<?>> serializerCreator) {
+      Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
     registerCallback(fory -> fory.registerSerializerAndType(type, serializerCreator));
   }
 

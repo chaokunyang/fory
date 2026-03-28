@@ -27,6 +27,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.Preconditions;
@@ -40,8 +41,8 @@ public interface Generated {
 
   /** Base class for all generated serializers. */
   abstract class GeneratedSerializer extends AbstractObjectSerializer implements Generated {
-    public GeneratedSerializer(Fory fory, Class<?> cls) {
-      super(fory, cls);
+    public GeneratedSerializer(TypeResolver typeResolver, Class<?> cls) {
+      super(typeResolver, cls);
     }
 
     /**
@@ -95,8 +96,8 @@ public interface Generated {
 
   /** Base class for all type consist serializers. */
   abstract class GeneratedObjectSerializer extends GeneratedSerializer implements Generated {
-    public GeneratedObjectSerializer(Fory fory, Class<?> cls) {
-      super(fory, cls);
+    public GeneratedObjectSerializer(TypeResolver typeResolver, Class<?> cls) {
+      super(typeResolver, cls);
     }
   }
 
@@ -107,13 +108,13 @@ public interface Generated {
     /** Will be set in generated constructor by {@link MetaSharedCodecBuilder}. */
     public Serializer serializer;
 
-    public GeneratedMetaSharedSerializer(Fory fory, Class<?> cls) {
-      super(fory, cls);
+    public GeneratedMetaSharedSerializer(TypeResolver typeResolver, Class<?> cls) {
+      super(typeResolver, cls);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Object value) {
-      serializer.write(buffer, value);
+    public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+      serializer.write(writeContext, value);
     }
   }
 
@@ -129,13 +130,13 @@ public interface Generated {
     /** Will be set in generated constructor by MetaSharedLayerCodecBuilder. */
     public org.apache.fory.serializer.MetaSharedLayerSerializerBase serializer;
 
-    public GeneratedMetaSharedLayerSerializer(Fory fory, Class<?> cls) {
-      super(fory, cls);
+    public GeneratedMetaSharedLayerSerializer(TypeResolver typeResolver, Class<?> cls) {
+      super(typeResolver, cls);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Object value) {
-      serializer.write(buffer, value);
+    public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+      serializer.write(writeContext, value);
     }
 
     @Override

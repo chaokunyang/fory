@@ -195,9 +195,9 @@ public class JITContextTest extends ForyTestBase {
                           .requireClassRegistration(true)
                           .withAsyncCompilation(true)
                           .withCompatibleMode(CompatibleMode.COMPATIBLE)
-                          .buildThreadSafeForyPool(2, 4, 1, java.util.concurrent.TimeUnit.MINUTES);
-                  fory.register(BeanB.class, true);
-                  // fory.register(BeanA.class, true);
+                          .buildThreadSafeForyPool(4);
+                  fory.register(BeanB.class);
+                  // fory.register(BeanA.class);
                 } catch (Throwable t) {
                   errors.add(t);
                 } finally {

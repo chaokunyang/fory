@@ -150,11 +150,10 @@ public class ProxyExample {
 
 ## Thread-Safe Fory
 
-For multi-threaded applications, use `ThreadLocalFory`:
+For multi-threaded applications, use `ThreadSafeForyPool` through the builder:
 
 ```java
 import org.apache.fory.Fory;
-import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
 
 public class ThreadSafeExample {
@@ -163,12 +162,9 @@ public class ThreadSafeExample {
   static ThreadSafeFory fory;
 
   static {
-    fory = new ThreadLocalFory(classLoader -> {
-      Fory f = Fory.builder().build();
-      f.register(Foo.class);
-      f.ensureSerializersCompiled();
-      return f;
-    });
+    fory = Fory.builder().buildThreadSafeFory();
+    fory.register(Foo.class);
+    fory.ensureSerializersCompiled();
   }
 
   public static void main(String[] args) {

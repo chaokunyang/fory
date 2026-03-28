@@ -86,6 +86,7 @@ import org.apache.fory.collection.Uint16List;
 import org.apache.fory.collection.Uint32List;
 import org.apache.fory.collection.Uint64List;
 import org.apache.fory.collection.Uint8List;
+import org.apache.fory.config.Config;
 import org.apache.fory.config.Language;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.Logger;
@@ -307,30 +308,31 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void addDefaultSerializers() {
+    Config config = fory.getConfig();
     // primitive types will be boxed.
     addDefaultSerializer(void.class, NoneSerializer.class);
     addDefaultSerializer(String.class, fory.getStringSerializer());
     PrimitiveSerializers.registerDefaultSerializers(fory);
-    UnsignedSerializers.registerDefaultSerializers(fory);
+    UnsignedSerializers.registerDefaultSerializers(this);
     Serializers.registerDefaultSerializers(fory);
     ArraySerializers.registerDefaultSerializers(fory);
-    PrimitiveListSerializers.registerDefaultSerializers(fory);
-    TimeSerializers.registerDefaultSerializers(fory);
-    OptionalSerializers.registerDefaultSerializers(fory);
+    PrimitiveListSerializers.registerDefaultSerializers(this);
+    TimeSerializers.registerDefaultSerializers(this);
+    OptionalSerializers.registerDefaultSerializers(this);
     CollectionSerializers.registerDefaultSerializers(fory);
     MapSerializers.registerDefaultSerializers(fory);
-    addDefaultSerializer(Locale.class, new LocaleSerializer(fory));
+    addDefaultSerializer(Locale.class, new LocaleSerializer(config));
     addDefaultSerializer(
-        SerializedLambda.class, new SerializedLambdaSerializer(fory, SerializedLambda.class));
+        SerializedLambda.class, new SerializedLambdaSerializer(this, SerializedLambda.class));
     addDefaultSerializer(
         LambdaSerializer.ReplaceStub.class,
-        new LambdaSerializer(fory, LambdaSerializer.ReplaceStub.class));
+        new LambdaSerializer(this, LambdaSerializer.ReplaceStub.class));
     addDefaultSerializer(
         JdkProxySerializer.ReplaceStub.class,
-        new JdkProxySerializer(fory, JdkProxySerializer.ReplaceStub.class));
+        new JdkProxySerializer(this, JdkProxySerializer.ReplaceStub.class));
     addDefaultSerializer(
         ReplaceResolveSerializer.ReplaceStub.class,
-        new ReplaceResolveSerializer(fory, ReplaceResolveSerializer.ReplaceStub.class));
+        new ReplaceResolveSerializer(this, ReplaceResolveSerializer.ReplaceStub.class));
     SynchronizedSerializers.registerSerializers(fory);
     UnmodifiableSerializers.registerSerializers(fory);
     ImmutableCollectionSerializers.registerSerializers(fory);
@@ -342,7 +344,7 @@ public class ClassResolver extends TypeResolver {
       if (metaContextShareEnabled) {
         registerInternal(UnknownStruct.class, NONEXISTENT_META_SHARED_ID);
         registerInternalSerializer(
-            UnknownStruct.class, new UnknownClassSerializers.UnknownStructSerializer(fory, null));
+            UnknownStruct.class, new UnknownClassSerializers.UnknownStructSerializer(this, null));
       } else {
         registerInternal(UnknownEmptyStruct.class);
       }
@@ -1197,7 +1199,7 @@ public class ClassResolver extends TypeResolver {
       return typeInfo.serializer.getClass();
     } else {
       if (getSerializerFactory() != null) {
-        Serializer serializer = getSerializerFactory().createSerializer(fory, cls);
+        Serializer serializer = getSerializerFactory().createSerializer(this, cls);
         if (serializer != null) {
           return serializer.getClass();
         }
@@ -1494,9 +1496,9 @@ public class ClassResolver extends TypeResolver {
     DisallowedList.checkNotInDisallowedList(cls.getName());
     if (!isSecure(cls)) {
       if (getSerializerClass(cls, false) == ObjectSerializer.class) {
-        Serializer serializer = new CopyOnlyObjectSerializer<>(fory, cls);
+        Serializer serializer = new CopyOnlyObjectSerializer<>(this, cls);
         if (ForyCopyable.class.isAssignableFrom(cls)) {
-          serializer = new ForyCopyableSerializer<>(fory, cls, serializer);
+          serializer = new ForyCopyableSerializer<>(fory.getConfig(), cls, serializer);
         }
         return serializer;
       }
@@ -1522,7 +1524,7 @@ public class ClassResolver extends TypeResolver {
     }
 
     if (extRegistry.serializerFactory != null) {
-      Serializer serializer = extRegistry.serializerFactory.createSerializer(fory, cls);
+      Serializer serializer = extRegistry.serializerFactory.createSerializer(this, cls);
       if (serializer != null) {
         return serializer;
       }
@@ -1553,7 +1555,7 @@ public class ClassResolver extends TypeResolver {
     Class<? extends Serializer> serializerClass = getSerializerClass(cls);
     Serializer serializer = Serializers.newSerializer(fory, cls, serializerClass);
     if (ForyCopyable.class.isAssignableFrom(cls)) {
-      serializer = new ForyCopyableSerializer<>(fory, cls, serializer);
+      serializer = new ForyCopyableSerializer<>(fory.getConfig(), cls, serializer);
     }
     return serializer;
   }

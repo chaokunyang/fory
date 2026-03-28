@@ -20,21 +20,22 @@
 package org.apache.fory.serializer;
 
 import java.util.function.Supplier;
-import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class LazySerializer extends Serializer {
   private final Supplier<Serializer> serializerSupplier;
   private Serializer serializer;
 
-  public LazySerializer(Fory fory, Class type, Supplier<Serializer> serializerSupplier) {
-    super(fory, type);
+  public LazySerializer(TypeResolver typeResolver, Class type, Supplier<Serializer> serializerSupplier) {
+    super(typeResolver, type);
     this.serializerSupplier = serializerSupplier;
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Object value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     if (serializer == null) {
       serializer = serializerSupplier.get();
       fory.getTypeResolver().setSerializer(value.getClass(), serializer);
@@ -42,16 +43,17 @@ public class LazySerializer extends Serializer {
         fory.getTypeResolver().getTypeInfo(value.getClass()).setSerializer(serializer);
       }
     }
-    serializer.write(buffer, value);
+    serializer.write(org.apache.fory.context.WriteContext.current(), value);
   }
 
   @Override
-  public Object read(MemoryBuffer buffer) {
+  public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     boolean unInit = serializer == null;
     if (unInit) {
       serializer = serializerSupplier.get();
     }
-    Object value = serializer.read(buffer);
+    Object value = serializer.read(org.apache.fory.context.ReadContext.current());
     if (unInit) {
       fory.getTypeResolver().setSerializer(value.getClass(), serializer);
       if (!isJava) {
@@ -71,8 +73,9 @@ public class LazySerializer extends Serializer {
   }
 
   public static class LazyObjectSerializer extends LazySerializer {
-    public LazyObjectSerializer(Fory fory, Class type, Supplier<Serializer> serializerSupplier) {
-      super(fory, type, serializerSupplier);
+    public LazyObjectSerializer(
+        TypeResolver typeResolver, Class type, Supplier<Serializer> serializerSupplier) {
+      super(typeResolver, type, serializerSupplier);
     }
   }
 }

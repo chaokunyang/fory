@@ -29,6 +29,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.io.ClassLoaderObjectInputStream;
 import org.apache.fory.io.MemoryBufferObjectInput;
 import org.apache.fory.io.MemoryBufferObjectOutput;
@@ -53,8 +54,8 @@ public class JavaSerializer extends AbstractObjectSerializer {
   private final MemoryBufferObjectInput objectInput;
   private final MemoryBufferObjectOutput objectOutput;
 
-  public JavaSerializer(Fory fory, Class<?> cls) {
-    super(fory, cls);
+  public JavaSerializer(TypeResolver typeResolver, Class<?> cls) {
+    super(typeResolver, cls);
     // TODO(chgaokunyang) enable this check when ObjectSerializer is implemented.
     // Preconditions.checkArgument(ClassResolver.requireJavaSerialization(cls));
     if (cls != SerializedLambda.class) {
@@ -65,12 +66,13 @@ public class JavaSerializer extends AbstractObjectSerializer {
           Serializer.class.getName(),
           Externalizable.class.getName());
     }
-    objectInput = new MemoryBufferObjectInput(fory, null);
-    objectOutput = new MemoryBufferObjectOutput(fory, null);
+    objectInput = new MemoryBufferObjectInput(fory.getFory(), null);
+    objectOutput = new MemoryBufferObjectOutput(fory.getFory(), null);
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Object value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     try {
       objectOutput.setBuffer(buffer);
       ObjectOutputStream objectOutputStream =
@@ -87,7 +89,8 @@ public class JavaSerializer extends AbstractObjectSerializer {
   }
 
   @Override
-  public Object read(MemoryBuffer buffer) {
+  public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     try {
       objectInput.setBuffer(buffer);
       ObjectInputStream objectInputStream =

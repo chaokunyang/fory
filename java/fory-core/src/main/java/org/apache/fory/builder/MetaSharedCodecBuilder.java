@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
@@ -51,6 +52,7 @@ import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -162,9 +164,11 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     String constructorCode =
         StringUtils.format(
             ""
-                + "super(${fory}, ${cls});\n"
-                + "this.${fory} = ${fory};\n"
-                + "${serializer} = ${builderClass}.setCodegenSerializer(${fory}, ${cls}, this);\n",
+                + "super(${typeResolver}, ${cls});\n"
+                + "this.${fory} = ${typeResolver}.getFory();\n"
+                + "${serializer} = ${builderClass}.setCodegenSerializer(this.${fory}, ${cls}, this);\n",
+            "typeResolver",
+            CONSTRUCTOR_TYPE_RESOLVER_NAME,
             "fory",
             FORY_NAME,
             "cls",
@@ -177,9 +181,25 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     Expression decodeExpr = buildDecodeExpression();
     String decodeCode = decodeExpr.genCode(ctx).code();
     decodeCode = ctx.optimizeMethodCode(decodeCode);
-    ctx.overrideMethod(readMethodName, decodeCode, Object.class, MemoryBuffer.class, BUFFER_NAME);
+    decodeCode =
+        StringUtils.format(
+            "${bufferType} ${buffer} = ${readContext}.getBuffer();\n${code}",
+            "bufferType",
+            ctx.type(MemoryBuffer.class),
+            "buffer",
+            BUFFER_NAME,
+            "readContext",
+            READ_CONTEXT_NAME,
+            "code",
+            decodeCode);
+    ctx.overrideMethod(readMethodName, decodeCode, Object.class, ReadContext.class, READ_CONTEXT_NAME);
     registerJITNotifyCallback();
-    ctx.addConstructor(constructorCode, Fory.class, FORY_NAME, Class.class, POJO_CLASS_TYPE_NAME);
+    ctx.addConstructor(
+        constructorCode,
+        TypeResolver.class,
+        CONSTRUCTOR_TYPE_RESOLVER_NAME,
+        Class.class,
+        POJO_CLASS_TYPE_NAME);
     return ctx.genCode();
   }
 

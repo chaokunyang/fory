@@ -20,9 +20,9 @@
 package org.apache.fory.serializer;
 
 import java.util.function.Supplier;
-import org.apache.fory.Fory;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class DeferedLazySerializer extends Serializer {
@@ -30,19 +30,21 @@ public class DeferedLazySerializer extends Serializer {
   private Serializer serializer;
 
   public DeferedLazySerializer(
-      Fory fory, Class type, Supplier<Tuple2<Boolean, Serializer>> serializerSupplier) {
-    super(fory, type);
+      TypeResolver typeResolver, Class type, Supplier<Tuple2<Boolean, Serializer>> serializerSupplier) {
+    super(typeResolver, type);
     this.serializerSupplier = serializerSupplier;
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Object value) {
-    getSerializer().write(buffer, value);
+  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+    getSerializer().write(writeContext, value);
   }
 
   @Override
-  public Object read(MemoryBuffer buffer) {
-    return getSerializer().read(buffer);
+  public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    return getSerializer().read(readContext);
   }
 
   private Serializer getSerializer() {
@@ -75,8 +77,10 @@ public class DeferedLazySerializer extends Serializer {
 
   public static class DeferredLazyObjectSerializer extends DeferedLazySerializer {
     public DeferredLazyObjectSerializer(
-        Fory fory, Class type, Supplier<Tuple2<Boolean, Serializer>> serializerSupplier) {
-      super(fory, type, serializerSupplier);
+        TypeResolver typeResolver,
+        Class type,
+        Supplier<Tuple2<Boolean, Serializer>> serializerSupplier) {
+      super(typeResolver, type, serializerSupplier);
     }
   }
 }

@@ -21,6 +21,7 @@ package org.apache.fory.serializer.collection;
 
 import java.util.Map;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.collection.MapSnapshot;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.memory.MemoryBuffer;
@@ -55,12 +56,12 @@ public class ConcurrentMapSerializer<T extends Map> extends MapSerializer<T> {
   /**
    * Constructs a new ConcurrentMapSerializer for the specified concurrent map type.
    *
-   * @param fory the Fory instance for serialization context
+   * @param typeResolver the resolver used for nested type handling
    * @param type the class type of the concurrent map to serialize
    * @param supportCodegen whether code generation is supported for this serializer
    */
-  public ConcurrentMapSerializer(Fory fory, Class<T> type, boolean supportCodegen) {
-    super(fory, type, supportCodegen);
+  public ConcurrentMapSerializer(TypeResolver typeResolver, Class<T> type, boolean supportCodegen) {
+    super(typeResolver, type, supportCodegen);
   }
 
   /**

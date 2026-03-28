@@ -20,24 +20,25 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Collection;
-import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 
 /** Base serializer for all java collections. */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class CollectionSerializer<T extends Collection> extends CollectionLikeSerializer<T> {
-  public CollectionSerializer(Fory fory, Class<T> type) {
-    super(fory, type);
-  }
-
-  public CollectionSerializer(Fory fory, Class<T> type, boolean supportCodegenHook) {
-    super(fory, type, supportCodegenHook);
+  public CollectionSerializer(TypeResolver typeResolver, Class<T> type) {
+    super(typeResolver, type);
   }
 
   public CollectionSerializer(
-      Fory fory, Class<T> type, boolean supportCodegenHook, boolean immutable) {
-    super(fory, type, supportCodegenHook, immutable);
+      TypeResolver typeResolver, Class<T> type, boolean supportCodegenHook) {
+    super(typeResolver, type, supportCodegenHook);
+  }
+
+  public CollectionSerializer(
+      TypeResolver typeResolver, Class<T> type, boolean supportCodegenHook, boolean immutable) {
+    super(typeResolver, type, supportCodegenHook, immutable);
   }
 
   @Override

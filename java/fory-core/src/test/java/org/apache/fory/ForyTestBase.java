@@ -29,6 +29,7 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -37,12 +38,15 @@ import java.util.stream.Collectors;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.io.ClassLoaderObjectInputStream;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.serializer.BufferObject;
+import org.apache.fory.serializer.Serializer;
 import org.testng.Assert;
 import org.testng.Assert.ThrowingRunnable;
 import org.testng.annotations.DataProvider;
@@ -344,6 +348,33 @@ public abstract class ForyTestBase {
   public static Object serDe(Fory fory1, Fory fory2, MemoryBuffer buffer, Object obj) {
     fory1.serialize(buffer, obj);
     return fory2.deserialize(buffer);
+  }
+
+  public static void withWriteContext(Fory fory, MemoryBuffer buffer, Consumer<WriteContext> action) {
+    WriteContext context =
+        (WriteContext) ReflectionUtils.getObjectFieldValue(fory, "writeContext");
+    context.run(
+        buffer,
+        null,
+        () -> {
+          action.accept(context);
+          return null;
+        });
+  }
+
+  public static <T> T withReadContext(
+      Fory fory, MemoryBuffer buffer, Function<ReadContext, T> action) {
+    ReadContext context = (ReadContext) ReflectionUtils.getObjectFieldValue(fory, "readContext");
+    return context.run(buffer, null, false, () -> action.apply(context));
+  }
+
+  public static <T> void writeSerializer(
+      Fory fory, Serializer<T> serializer, MemoryBuffer buffer, T value) {
+    withWriteContext(fory, buffer, context -> serializer.write(context, value));
+  }
+
+  public static <T> T readSerializer(Fory fory, Serializer<T> serializer, MemoryBuffer buffer) {
+    return withReadContext(fory, buffer, serializer::read);
   }
 
   public static Object serDeCheckIndex(Fory fory1, Fory fory2, MemoryBuffer buffer, Object obj) {

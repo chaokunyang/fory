@@ -60,6 +60,7 @@ import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.config.Config;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.SerializerUnregisteredException;
 import org.apache.fory.logging.Logger;
@@ -77,6 +78,7 @@ import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
 import org.apache.fory.serializer.UnknownClass.UnknownStruct;
@@ -85,6 +87,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.GenericType;
+import org.apache.fory.type.Generics;
 import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
@@ -138,6 +141,26 @@ public abstract class TypeResolver {
     metaStringResolver = fory.getMetaStringResolver();
     int length = fory.isCrossLanguage() ? Types.BOUND : INTERNAL_NATIVE_ID_LIMIT;
     typeIdToTypeInfo = new TypeInfo[length];
+  }
+
+  public final Fory getFory() {
+    return fory;
+  }
+
+  public final Config getConfig() {
+    return fory.getConfig();
+  }
+
+  public final RefResolver getRefResolver() {
+    return fory.getRefResolver();
+  }
+
+  public final Generics getGenerics() {
+    return fory.getGenerics();
+  }
+
+  public final StringSerializer getStringSerializer() {
+    return fory.getStringSerializer();
   }
 
   protected final void checkRegisterAllowed() {
@@ -898,7 +921,7 @@ public abstract class TypeResolver {
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       if (cls == UnknownStruct.class) {
         typeInfo.setSerializer(
-            this, new UnknownClassSerializers.UnknownStructSerializer(fory, typeDef));
+            this, new UnknownClassSerializers.UnknownStructSerializer(this, typeDef));
         // Ensure UnknownStruct is registered so writeTypeInfo emits a placeholder typeId
         // that UnknownStructSerializer can rewrite to the original typeId.
         if (!fory.isCrossLanguage()) {
@@ -932,7 +955,7 @@ public abstract class TypeResolver {
       }
     }
     if (sc == MetaSharedSerializer.class) {
-      typeInfo.setSerializer(this, new MetaSharedSerializer(fory, cls, typeDef));
+      typeInfo.setSerializer(this, new MetaSharedSerializer(this, cls, typeDef));
     } else {
       typeInfo.setSerializer(this, Serializers.newSerializer(fory, cls, sc));
     }
@@ -1627,10 +1650,6 @@ public abstract class TypeResolver {
               cls, registry.deserializerClassMap));
     }
     return null;
-  }
-
-  public final Fory getFory() {
-    return fory;
   }
 
   public final MetaStringResolver getMetaStringResolver() {

@@ -60,6 +60,8 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -627,12 +629,13 @@ public class PyCrossLanguageTest extends ForyTestBase {
 
   private static class ComplexObject1Serializer extends Serializer<ComplexObject1> {
 
-    public ComplexObject1Serializer(Fory fory, Class<ComplexObject1> cls) {
-      super(fory, cls);
+    public ComplexObject1Serializer(TypeResolver typeResolver, Class<ComplexObject1> cls) {
+      super(typeResolver, cls);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, ComplexObject1 value) {
+    public void write(WriteContext writeContext, ComplexObject1 value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       fory.writeRef(buffer, value.f1);
       fory.writeRef(buffer, value.f2);
       fory.writeRef(buffer, value.f3);
@@ -640,7 +643,8 @@ public class PyCrossLanguageTest extends ForyTestBase {
 
     @SuppressWarnings("unchecked")
     @Override
-    public ComplexObject1 read(MemoryBuffer buffer) {
+    public ComplexObject1 read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       ComplexObject1 obj = new ComplexObject1();
       fory.getRefResolver().reference(obj);
       obj.f1 = fory.readRef(buffer);

@@ -27,6 +27,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
@@ -68,12 +69,12 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   private final SerializationFieldInfo[] containerFields;
   private final int classVersionHash;
 
-  public ObjectSerializer(Fory fory, Class<T> cls) {
-    this(fory, cls, true);
+  public ObjectSerializer(TypeResolver typeResolver, Class<T> cls) {
+    this(typeResolver, cls, true);
   }
 
-  public ObjectSerializer(Fory fory, Class<T> cls, boolean resolveParent) {
-    super(fory, cls);
+  public ObjectSerializer(TypeResolver typeResolver, Class<T> cls, boolean resolveParent) {
+    super(typeResolver, cls);
     // avoid recursive building serializers.
     // Use `setSerializerIfAbsent` to avoid overwriting existing serializer for class when used
     // as data serializer.
@@ -123,19 +124,20 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       recordInfo = null;
     }
     if (fory.checkClassVersion()) {
-      classVersionHash = computeStructHash(fory, grouper);
+      classVersionHash = computeStructHash(fory.getFory(), grouper);
     } else {
       classVersionHash = 0;
     }
-    FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, grouper);
+    FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory.getFory(), grouper);
     buildInFields = fieldGroups.buildInFields;
     otherFields = fieldGroups.userTypeFields;
     containerFields = fieldGroups.containerFields;
   }
 
   @Override
-  public void write(MemoryBuffer buffer, T value) {
-    Fory fory = this.fory;
+  public void write(org.apache.fory.context.WriteContext writeContext, T value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+    Fory fory = this.fory.getFory();
     RefResolver refResolver = this.refResolver;
     if (fory.checkClassVersion()) {
       buffer.writeInt32(classVersionHash);
@@ -163,6 +165,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private void writeOtherFields(MemoryBuffer buffer, T value) {
+    Fory fory = this.fory.getFory();
     for (SerializationFieldInfo fieldInfo : otherFields) {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printWriteFieldDebugInfo(fieldInfo, buffer);
@@ -199,7 +202,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   @Override
-  public T read(MemoryBuffer buffer) {
+  public T read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     if (isRecord) {
       Object[] fields = readFields(buffer);
       fields = RecordUtils.remapping(recordInfo, fields);
@@ -213,7 +217,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   public Object[] readFields(MemoryBuffer buffer) {
-    Fory fory = this.fory;
+    Fory fory = this.fory.getFory();
     if (fory.checkClassVersion()) {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);
@@ -249,7 +253,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   public T readAndSetFields(MemoryBuffer buffer, T obj) {
-    Fory fory = this.fory;
+    Fory fory = this.fory.getFory();
     if (fory.checkClassVersion()) {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);

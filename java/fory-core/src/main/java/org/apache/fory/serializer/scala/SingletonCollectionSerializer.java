@@ -22,6 +22,7 @@ package org.apache.fory.serializer.scala;
 import java.lang.reflect.Field;
 import java.util.Collection;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.serializer.collection.CollectionLikeSerializer;
@@ -39,8 +40,8 @@ public class SingletonCollectionSerializer extends CollectionLikeSerializer {
   private Object base = null;
   private long offset = -1;
 
-  public SingletonCollectionSerializer(Fory fory, Class cls) {
-    super(fory, cls, false);
+  public SingletonCollectionSerializer(TypeResolver typeResolver, Class cls) {
+    super(typeResolver, cls, false);
     try {
       field = type.getDeclaredField("MODULE$");
     } catch (NoSuchFieldException e) {
@@ -54,10 +55,12 @@ public class SingletonCollectionSerializer extends CollectionLikeSerializer {
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Object value) {}
+  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();}
 
   @Override
-  public Object read(MemoryBuffer buffer) {
+  public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     long offset = this.offset;
     if (offset == -1) {
       Preconditions.checkArgument(!GraalvmSupport.isGraalBuildtime());

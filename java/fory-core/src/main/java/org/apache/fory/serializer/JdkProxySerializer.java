@@ -23,11 +23,11 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.RefResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
@@ -60,8 +60,8 @@ public class JdkProxySerializer extends Serializer {
       Proxy.newProxyInstance(
           Serializer.class.getClassLoader(), new Class[] {StubInterface.class}, STUB_HANDLER);
 
-  public JdkProxySerializer(Fory fory, Class cls) {
-    super(fory, cls);
+  public JdkProxySerializer(TypeResolver typeResolver, Class cls) {
+    super(typeResolver, cls);
     if (cls != ReplaceStub.class) {
       // Skip proxy class validation in GraalVM native image runtime to avoid issues with proxy
       // detection
@@ -72,7 +72,8 @@ public class JdkProxySerializer extends Serializer {
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Object value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     fory.writeRef(buffer, value.getClass().getInterfaces());
     fory.writeRef(buffer, Proxy.getInvocationHandler(value));
   }
@@ -90,7 +91,8 @@ public class JdkProxySerializer extends Serializer {
   }
 
   @Override
-  public Object read(MemoryBuffer buffer) {
+  public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     final RefResolver resolver = fory.getRefResolver();
     final int refId = resolver.lastPreservedRefId();
     final Class<?>[] interfaces = (Class<?>[]) fory.readRef(buffer);

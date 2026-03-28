@@ -21,9 +21,9 @@ package org.apache.fory.serializer;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import org.apache.fory.Fory;
 import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 
 /** Serializers for buffer related classes. */
 public class BufferSerializers {
@@ -35,12 +35,13 @@ public class BufferSerializers {
   public static final class ByteBufferSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<ByteBuffer> {
 
-    public ByteBufferSerializer(Fory fory, Class<ByteBuffer> cls) {
-      super(fory, cls);
+    public ByteBufferSerializer(TypeResolver typeResolver, Class<ByteBuffer> cls) {
+      super(typeResolver.getConfig(), cls);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, ByteBuffer value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, ByteBuffer value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       fory.writeBufferObject(buffer, new BufferObject.ByteBufferBufferObject(value));
     }
 
@@ -53,7 +54,8 @@ public class BufferSerializers {
     }
 
     @Override
-    public ByteBuffer read(MemoryBuffer buffer) {
+    public ByteBuffer read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       MemoryBuffer newBuffer = fory.readBufferObject(buffer);
       int readerIndex = newBuffer.readerIndex();
       int size = newBuffer.remaining();

@@ -26,6 +26,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 
 /** Util for JIT Serialization. */
 @SuppressWarnings("UnstableApiUsage")
@@ -69,18 +70,18 @@ public final class CodegenSerializer {
     private Serializer<T> serializer;
     private Serializer<T> interpreterSerializer;
 
-    public LazyInitBeanSerializer(Fory fory, Class<T> cls) {
-      super(fory, cls);
+    public LazyInitBeanSerializer(TypeResolver typeResolver, Class<T> cls) {
+      super(typeResolver, cls);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, T value) {
-      getOrCreateGeneratedSerializer().write(buffer, value);
+    public void write(org.apache.fory.context.WriteContext writeContext, T value) {
+      getOrCreateGeneratedSerializer().write(writeContext, value);
     }
 
     @Override
-    public T read(MemoryBuffer buffer) {
-      return getOrCreateGeneratedSerializer().read(buffer);
+    public T read(org.apache.fory.context.ReadContext readContext) {
+      return getOrCreateGeneratedSerializer().read(readContext);
     }
 
     @SuppressWarnings({"rawtypes"})
@@ -99,7 +100,7 @@ public final class CodegenSerializer {
             // jit not finished, avoid recursive call current serializer.
             Class<? extends Serializer> sc = fory.getTypeResolver().getSerializerClass(type, false);
             fory.getTypeResolver().getTypeInfo(type).setSerializer(this);
-            return interpreterSerializer = Serializers.newSerializer(fory, type, sc);
+            return interpreterSerializer = Serializers.newSerializer(fory.getFory(), type, sc);
           } else {
             Class<? extends Serializer> sc = fory.getTypeResolver().getSerializerClass(type);
             fory.getTypeResolver().getTypeInfo(type).setSerializer(this);
@@ -108,7 +109,7 @@ public final class CodegenSerializer {
                 "Expect jit serializer but got %s for class %s",
                 sc,
                 type);
-            serializer = Serializers.newSerializer(fory, type, sc);
+            serializer = Serializers.newSerializer(fory.getFory(), type, sc);
             fory.getTypeResolver().setSerializer(type, serializer);
             return serializer;
           }

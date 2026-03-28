@@ -22,6 +22,7 @@ package org.apache.fory.serializer;
 import java.io.Externalizable;
 import java.io.IOException;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.io.MemoryBufferObjectInput;
 import org.apache.fory.io.MemoryBufferObjectOutput;
 import org.apache.fory.memory.MemoryBuffer;
@@ -33,14 +34,15 @@ public class ExternalizableSerializer<T extends Externalizable>
   private final MemoryBufferObjectInput objectInput;
   private final MemoryBufferObjectOutput objectOutput;
 
-  public ExternalizableSerializer(Fory fory, Class<T> cls) {
-    super(fory, cls);
-    objectInput = new MemoryBufferObjectInput(fory, null);
-    objectOutput = new MemoryBufferObjectOutput(fory, null);
+  public ExternalizableSerializer(TypeResolver typeResolver, Class<T> cls) {
+    super(typeResolver, cls);
+    objectInput = new MemoryBufferObjectInput(fory.getFory(), null);
+    objectOutput = new MemoryBufferObjectOutput(fory.getFory(), null);
   }
 
   @Override
-  public void write(MemoryBuffer buffer, T value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, T value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     if (!isJava) {
       throw new UnsupportedOperationException("Externalizable can only be used in java");
     }
@@ -53,7 +55,8 @@ public class ExternalizableSerializer<T extends Externalizable>
   }
 
   @Override
-  public T read(MemoryBuffer buffer) {
+  public T read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     T t = objectCreator.newInstance();
     refResolver.reference(t);
     objectInput.setBuffer(buffer);

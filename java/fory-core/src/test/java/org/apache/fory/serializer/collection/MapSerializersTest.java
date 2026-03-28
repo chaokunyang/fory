@@ -403,7 +403,8 @@ public class MapSerializersTest extends ForyTestBase {
             .requireClassRegistration(false)
             .build();
     fory.registerSerializer(
-        ChildTreeMap.class, new MapSerializers.SortedMapSerializer<>(fory, ChildTreeMap.class));
+        ChildTreeMap.class,
+        new MapSerializers.SortedMapSerializer<>(fory.getTypeResolver(), ChildTreeMap.class));
     ChildTreeMap map = new ChildTreeMap();
     map.put("b", "B");
     map.put("a", "A");
@@ -424,7 +425,8 @@ public class MapSerializersTest extends ForyTestBase {
             .build();
     fory.registerSerializer(
         ChildTreeMapWithComparator.class,
-        new MapSerializers.SortedMapSerializer<>(fory, ChildTreeMapWithComparator.class));
+        new MapSerializers.SortedMapSerializer<>(
+            fory.getTypeResolver(), ChildTreeMapWithComparator.class));
     ChildTreeMapWithComparator map = new ChildTreeMapWithComparator();
     map.put("b", "B");
     map.put("a", "A");
@@ -897,7 +899,8 @@ public class MapSerializersTest extends ForyTestBase {
   public void testNestedValueByPrivateMapSerializer() {
     Fory fory = builder().withRefTracking(false).build();
     // test private map serializer
-    fory.registerSerializer(PrivateMap.class, new MapSerializer(fory, PrivateMap.class) {});
+    fory.registerSerializer(
+        PrivateMap.class, new MapSerializer(fory.getTypeResolver(), PrivateMap.class) {});
     PrivateMap<String, Integer> map = new PrivateMap<>();
     map.put("k", 1);
     serDeCheck(fory, new LazyMapCollectionFieldStruct(ofArrayList(map), map));

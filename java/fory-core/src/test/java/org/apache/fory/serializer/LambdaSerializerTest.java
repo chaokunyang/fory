@@ -125,7 +125,7 @@ public class LambdaSerializerTest extends ForyTestBase {
   public void testLambdaStubSerializerConstruction(boolean codegen) {
     Fory fory =
         builder().withCodegen(codegen).withCompatibleMode(CompatibleMode.COMPATIBLE).build();
-    new LambdaSerializer(fory, LambdaSerializer.STUB_LAMBDA_CLASS);
+    new LambdaSerializer(fory.getTypeResolver(), LambdaSerializer.STUB_LAMBDA_CLASS);
     fory.ensureSerializersCompiled();
   }
 

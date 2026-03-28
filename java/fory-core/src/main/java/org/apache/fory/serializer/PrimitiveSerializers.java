@@ -22,8 +22,11 @@ package org.apache.fory.serializer;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
 
 import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.config.LongEncoding;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
@@ -36,101 +39,113 @@ import org.apache.fory.util.Preconditions;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class PrimitiveSerializers {
   public static final class BooleanSerializer extends CrossLanguageCompatibleSerializer<Boolean> {
-    public BooleanSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false, true);
+    public BooleanSerializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Boolean value) {
+    public void write(WriteContext writeContext, Boolean value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeBoolean(value);
     }
 
     @Override
-    public Boolean read(MemoryBuffer buffer) {
+    public Boolean read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return buffer.readBoolean();
     }
   }
 
   public static final class ByteSerializer extends CrossLanguageCompatibleSerializer<Byte> {
-    public ByteSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false, true);
+    public ByteSerializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Byte value) {
+    public void write(WriteContext writeContext, Byte value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeByte(value);
     }
 
     @Override
-    public Byte read(MemoryBuffer buffer) {
+    public Byte read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return buffer.readByte();
     }
   }
 
   public static final class Uint8Serializer extends CrossLanguageCompatibleSerializer<Integer> {
-    public Uint8Serializer(Fory fory) {
-      super(fory, Integer.class);
+    public Uint8Serializer(Config config) {
+      super(config, Integer.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Integer value) {
+    public void write(WriteContext writeContext, Integer value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value >= 0 && value <= 255);
       buffer.writeByte(value.byteValue());
     }
 
     @Override
-    public Integer read(MemoryBuffer buffer) {
+    public Integer read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int b = buffer.readByte();
       return b >>> 24;
     }
   }
 
   public static final class Uint16Serializer extends CrossLanguageCompatibleSerializer<Integer> {
-    public Uint16Serializer(Fory fory) {
-      super(fory, Integer.class);
+    public Uint16Serializer(Config config) {
+      super(config, Integer.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Integer value) {
+    public void write(WriteContext writeContext, Integer value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value >= 0 && value <= 65535);
       buffer.writeByte(value.byteValue());
     }
 
     @Override
-    public Integer read(MemoryBuffer buffer) {
+    public Integer read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int b = buffer.readByte();
       return b >>> 16;
     }
   }
 
   public static final class CharSerializer extends ImmutableSerializer<Character> {
-    public CharSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false);
+    public CharSerializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Character value) {
+    public void write(WriteContext writeContext, Character value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeChar(value);
     }
 
     @Override
-    public Character read(MemoryBuffer buffer) {
+    public Character read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return buffer.readChar();
     }
   }
 
   public static final class ShortSerializer extends CrossLanguageCompatibleSerializer<Short> {
-    public ShortSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false, true);
+    public ShortSerializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Short value) {
+    public void write(WriteContext writeContext, Short value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt16(value);
     }
 
     @Override
-    public Short read(MemoryBuffer buffer) {
+    public Short read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return buffer.readInt16();
     }
   }
@@ -138,14 +153,15 @@ public class PrimitiveSerializers {
   public static final class IntSerializer extends CrossLanguageCompatibleSerializer<Integer> {
     private final boolean compressNumber;
 
-    public IntSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false, true);
+    public IntSerializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false, true);
       // Cross-language encoding always uses varint; Java mode follows compressInt config.
-      compressNumber = !isJava || fory.compressInt();
+      compressNumber = !isJava || config.compressInt();
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Integer value) {
+    public void write(WriteContext writeContext, Integer value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       if (compressNumber) {
         buffer.writeVarInt32(value);
       } else {
@@ -154,7 +170,8 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public Integer read(MemoryBuffer buffer) {
+    public Integer read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       if (compressNumber) {
         return buffer.readVarInt32();
       } else {
@@ -164,18 +181,20 @@ public class PrimitiveSerializers {
   }
 
   public static final class VarUint32Serializer extends Serializer<Integer> {
-    public VarUint32Serializer(Fory fory) {
-      super(fory, Integer.class);
+    public VarUint32Serializer(Config config) {
+      super(config, Integer.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Integer value) {
+    public void write(WriteContext writeContext, Integer value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value >= 0);
       buffer.writeVarUint32(value);
     }
 
     @Override
-    public Integer read(MemoryBuffer buffer) {
+    public Integer read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return buffer.readVarUint32();
     }
   }
@@ -183,18 +202,20 @@ public class PrimitiveSerializers {
   public static final class LongSerializer extends CrossLanguageCompatibleSerializer<Long> {
     private final LongEncoding longEncoding;
 
-    public LongSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false, true);
-      longEncoding = isJava ? fory.longEncoding() : LongEncoding.VARINT;
+    public LongSerializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false, true);
+      longEncoding = isJava ? config.longEncoding() : LongEncoding.VARINT;
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Long value) {
+    public void write(WriteContext writeContext, Long value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       writeInt64(buffer, value, longEncoding);
     }
 
     @Override
-    public Long read(MemoryBuffer buffer) {
+    public Long read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return readInt64(buffer, longEncoding);
     }
 
@@ -252,66 +273,74 @@ public class PrimitiveSerializers {
   }
 
   public static final class VarUint64Serializer extends Serializer<Long> {
-    public VarUint64Serializer(Fory fory) {
-      super(fory, Long.class);
+    public VarUint64Serializer(Config config) {
+      super(config, Long.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Long value) {
+    public void write(WriteContext writeContext, Long value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value >= 0);
       buffer.writeVarUint64(value);
     }
 
     @Override
-    public Long read(MemoryBuffer buffer) {
+    public Long read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return buffer.readVarUint64();
     }
   }
 
   public static final class FloatSerializer extends CrossLanguageCompatibleSerializer<Float> {
-    public FloatSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false, true);
+    public FloatSerializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Float value) {
+    public void write(WriteContext writeContext, Float value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeFloat32(value);
     }
 
     @Override
-    public Float read(MemoryBuffer buffer) {
+    public Float read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return buffer.readFloat32();
     }
   }
 
   public static final class DoubleSerializer extends CrossLanguageCompatibleSerializer<Double> {
-    public DoubleSerializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false, true);
+    public DoubleSerializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Double value) {
+    public void write(WriteContext writeContext, Double value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeFloat64(value);
     }
 
     @Override
-    public Double read(MemoryBuffer buffer) {
+    public Double read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return buffer.readFloat64();
     }
   }
 
   public static final class Float16Serializer extends CrossLanguageCompatibleSerializer<Float16> {
-    public Float16Serializer(Fory fory, Class<?> cls) {
-      super(fory, (Class) cls, false, true);
+    public Float16Serializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Float16 value) {
+    public void write(WriteContext writeContext, Float16 value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt16(value.toBits());
     }
 
     @Override
-    public Float16 read(MemoryBuffer buffer) {
+    public Float16 read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return Float16.fromBits(buffer.readInt16());
     }
   }
@@ -319,22 +348,25 @@ public class PrimitiveSerializers {
   public static void registerDefaultSerializers(Fory fory) {
     // primitive types will be boxed.
     TypeResolver resolver = fory.getTypeResolver();
-    resolver.registerInternalSerializer(boolean.class, new BooleanSerializer(fory, boolean.class));
-    resolver.registerInternalSerializer(byte.class, new ByteSerializer(fory, byte.class));
-    resolver.registerInternalSerializer(short.class, new ShortSerializer(fory, short.class));
-    resolver.registerInternalSerializer(char.class, new CharSerializer(fory, char.class));
-    resolver.registerInternalSerializer(int.class, new IntSerializer(fory, int.class));
-    resolver.registerInternalSerializer(long.class, new LongSerializer(fory, long.class));
-    resolver.registerInternalSerializer(float.class, new FloatSerializer(fory, float.class));
-    resolver.registerInternalSerializer(double.class, new DoubleSerializer(fory, double.class));
-    resolver.registerInternalSerializer(Boolean.class, new BooleanSerializer(fory, Boolean.class));
-    resolver.registerInternalSerializer(Byte.class, new ByteSerializer(fory, Byte.class));
-    resolver.registerInternalSerializer(Short.class, new ShortSerializer(fory, Short.class));
-    resolver.registerInternalSerializer(Character.class, new CharSerializer(fory, Character.class));
-    resolver.registerInternalSerializer(Integer.class, new IntSerializer(fory, Integer.class));
-    resolver.registerInternalSerializer(Long.class, new LongSerializer(fory, Long.class));
-    resolver.registerInternalSerializer(Float.class, new FloatSerializer(fory, Float.class));
-    resolver.registerInternalSerializer(Double.class, new DoubleSerializer(fory, Double.class));
-    resolver.registerInternalSerializer(Float16.class, new Float16Serializer(fory, Float16.class));
+    Config config = fory.getConfig();
+    resolver.registerInternalSerializer(boolean.class, new BooleanSerializer(config, boolean.class));
+    resolver.registerInternalSerializer(byte.class, new ByteSerializer(config, byte.class));
+    resolver.registerInternalSerializer(short.class, new ShortSerializer(config, short.class));
+    resolver.registerInternalSerializer(char.class, new CharSerializer(config, char.class));
+    resolver.registerInternalSerializer(int.class, new IntSerializer(config, int.class));
+    resolver.registerInternalSerializer(long.class, new LongSerializer(config, long.class));
+    resolver.registerInternalSerializer(float.class, new FloatSerializer(config, float.class));
+    resolver.registerInternalSerializer(double.class, new DoubleSerializer(config, double.class));
+    resolver.registerInternalSerializer(Boolean.class, new BooleanSerializer(config, Boolean.class));
+    resolver.registerInternalSerializer(Byte.class, new ByteSerializer(config, Byte.class));
+    resolver.registerInternalSerializer(Short.class, new ShortSerializer(config, Short.class));
+    resolver.registerInternalSerializer(
+        Character.class, new CharSerializer(config, Character.class));
+    resolver.registerInternalSerializer(Integer.class, new IntSerializer(config, Integer.class));
+    resolver.registerInternalSerializer(Long.class, new LongSerializer(config, Long.class));
+    resolver.registerInternalSerializer(Float.class, new FloatSerializer(config, Float.class));
+    resolver.registerInternalSerializer(Double.class, new DoubleSerializer(config, Double.class));
+    resolver.registerInternalSerializer(
+        Float16.class, new Float16Serializer(config, Float16.class));
   }
 }

@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.RandomAccess;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.memory.MemoryBuffer;
 
@@ -32,8 +33,8 @@ import org.apache.fory.memory.MemoryBuffer;
 @SuppressWarnings("rawtypes")
 public final class ForyArrayAsListSerializer
     extends CollectionSerializer<ForyArrayAsListSerializer.ArrayAsList> {
-  public ForyArrayAsListSerializer(Fory fory) {
-    super(fory, ArrayAsList.class, true);
+  public ForyArrayAsListSerializer(TypeResolver typeResolver) {
+    super(typeResolver, ArrayAsList.class, true);
   }
 
   public Collection newCollection(MemoryBuffer buffer) {

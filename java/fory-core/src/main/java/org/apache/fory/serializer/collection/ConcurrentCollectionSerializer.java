@@ -21,6 +21,7 @@ package org.apache.fory.serializer.collection;
 
 import java.util.Collection;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.collection.CollectionSnapshot;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.memory.MemoryBuffer;
@@ -56,12 +57,12 @@ public class ConcurrentCollectionSerializer<T extends Collection> extends Collec
   /**
    * Constructs a new ConcurrentCollectionSerializer for the specified concurrent collection type.
    *
-   * @param fory the Fory instance for serialization context
+   * @param typeResolver the resolver used for nested type handling
    * @param type the class type of the concurrent collection to serialize
    * @param supportCodegen whether code generation is supported for this serializer
    */
-  public ConcurrentCollectionSerializer(Fory fory, Class<T> type, boolean supportCodegen) {
-    super(fory, type, supportCodegen);
+  public ConcurrentCollectionSerializer(TypeResolver typeResolver, Class<T> type, boolean supportCodegen) {
+    super(typeResolver, type, supportCodegen);
   }
 
   /**

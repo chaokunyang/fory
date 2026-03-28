@@ -67,11 +67,11 @@ public final class UnknownClassSerializers {
     private final TypeDef typeDef;
     private final LongMap<ClassFieldsInfo> fieldsInfoMap;
 
-    public UnknownStructSerializer(Fory fory, TypeDef typeDef) {
-      super(fory, UnknownClass.UnknownStruct.class);
+    public UnknownStructSerializer(TypeResolver typeResolver, TypeDef typeDef) {
+      super(typeResolver, UnknownClass.UnknownStruct.class);
       this.typeDef = typeDef;
       fieldsInfoMap = new LongMap<>(1);
-      Preconditions.checkArgument(fory.getConfig().isMetaShareEnabled());
+      Preconditions.checkArgument(typeResolver.getConfig().isMetaShareEnabled());
       if (Utils.DEBUG_OUTPUT_ENABLED && typeDef != null) {
         LOG.info("========== UnknownClassSerializer TypeDef for {} ==========", type.getName());
         LOG.info("TypeDef fieldsInfo count: {}", typeDef.getFieldCount());
@@ -136,7 +136,8 @@ public final class UnknownClassSerializers {
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Object v) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Object v) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       UnknownClass.UnknownStruct value = (UnknownClass.UnknownStruct) v;
       int typeId = resolveTypeId(value.typeDef);
       int userTypeId = value.typeDef.isNamed() ? -1 : value.typeDef.getUserTypeId();
@@ -172,7 +173,7 @@ public final class UnknownClassSerializers {
       writeTypeDef(buffer, value);
       TypeDef typeDef = value.typeDef;
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(typeDef);
-      Fory fory = this.fory;
+      Fory fory = this.fory.getFory();
       RefResolver refResolver = fory.getRefResolver();
       TypeResolver typeResolver = fory.getTypeResolver();
       if (fory.checkClassVersion()) {
@@ -205,10 +206,10 @@ public final class UnknownClassSerializers {
         DescriptorGrouper grouper =
             fory.getTypeResolver()
                 .createDescriptorGrouper(typeDef, UnknownClass.UnknownEmptyStruct.class);
-        FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, grouper);
+        FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory.getFory(), grouper);
         int classVersionHash = 0;
         if (fory.checkClassVersion()) {
-          classVersionHash = ObjectSerializer.computeStructHash(fory, grouper);
+          classVersionHash = ObjectSerializer.computeStructHash(fory.getFory(), grouper);
         }
         fieldsInfo = new ClassFieldsInfo(fieldGroups, classVersionHash);
         fieldsInfoMap.put(typeDef.getId(), fieldsInfo);
@@ -217,9 +218,10 @@ public final class UnknownClassSerializers {
     }
 
     @Override
-    public Object read(MemoryBuffer buffer) {
+    public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       UnknownClass.UnknownStruct obj = new UnknownClass.UnknownStruct(typeDef);
-      Fory fory = this.fory;
+      Fory fory = this.fory.getFory();
       RefResolver refResolver = fory.getRefResolver();
       TypeResolver typeResolver = fory.getTypeResolver();
       refResolver.reference(obj);
@@ -253,20 +255,22 @@ public final class UnknownClassSerializers {
     private final UnknownEnum[] enumConstants;
     private final MetaStringResolver metaStringResolver;
 
-    public UnknownEnumSerializer(Fory fory) {
-      super(fory, UnknownEnum.class);
-      metaStringResolver = fory.getMetaStringResolver();
+    public UnknownEnumSerializer(TypeResolver typeResolver) {
+      super(typeResolver.getConfig(), UnknownEnum.class);
+      metaStringResolver = this.fory.getFory().getMetaStringResolver();
       enumConstants = UnknownEnum.class.getEnumConstants();
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Object value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       UnknownEnum enumValue = (UnknownEnum) value;
       buffer.writeVarUint32Small7(enumValue.ordinal());
     }
 
     @Override
-    public Object read(MemoryBuffer buffer) {
+    public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       if (fory.getConfig().serializeEnumByName()) {
         metaStringResolver.readMetaStringBytes(buffer);
         return UnknownEnum.UNKNOWN;
@@ -282,10 +286,10 @@ public final class UnknownClassSerializers {
 
   public static Serializer getSerializer(Fory fory, String className, Class<?> cls) {
     if (cls.isArray()) {
-      return new ArraySerializers.UnknownArraySerializer(fory, className, cls);
+      return new ArraySerializers.UnknownArraySerializer(fory.getTypeResolver(), className, cls);
     } else {
       if (cls.isEnum()) {
-        return new UnknownEnumSerializer(fory);
+        return new UnknownEnumSerializer(fory.getTypeResolver());
       } else {
         if (fory.getConfig().isMetaShareEnabled()) {
           throw new IllegalStateException(
@@ -293,7 +297,7 @@ public final class UnknownClassSerializers {
                   "Serializer of class %s should be set in ClassResolver#getMetaSharedTypeInfo",
                   className));
         } else {
-          return new ObjectSerializer(fory, cls);
+          return new ObjectSerializer(fory.getTypeResolver(), cls);
         }
       }
     }

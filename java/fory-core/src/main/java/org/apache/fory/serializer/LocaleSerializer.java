@@ -22,7 +22,7 @@ package org.apache.fory.serializer;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.memory.MemoryBuffer;
 
@@ -65,17 +65,19 @@ public final class LocaleSerializer extends ImmutableSerializer<Locale> {
     map.put(Tuple3.of(locale.getCountry(), locale.getLanguage(), locale.getVariant()), locale);
   }
 
-  public LocaleSerializer(Fory fory) {
-    super(fory, Locale.class);
+  public LocaleSerializer(Config config) {
+    super(config, Locale.class);
   }
 
-  public void write(MemoryBuffer buffer, Locale l) {
+  public void write(org.apache.fory.context.WriteContext writeContext, Locale l) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     fory.writeString(buffer, l.getLanguage());
     fory.writeString(buffer, l.getCountry());
     fory.writeString(buffer, l.getVariant());
   }
 
-  public Locale read(MemoryBuffer buffer) {
+  public Locale read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     String language = fory.readString(buffer);
     String country = fory.readString(buffer);
     String variant = fory.readString(buffer);

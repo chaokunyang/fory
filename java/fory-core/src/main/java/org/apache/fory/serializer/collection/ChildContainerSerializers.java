@@ -36,6 +36,7 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.memory.MemoryBuffer;
@@ -136,23 +137,23 @@ public class ChildContainerSerializers {
     protected SerializationFieldInfo[] fieldInfos;
     protected final Serializer[] slotsSerializers;
 
-    public ChildCollectionSerializer(Fory fory, Class<T> cls) {
-      super(fory, cls);
-      slotsSerializers = buildSlotsSerializers(fory, superClasses, cls);
+    public ChildCollectionSerializer(TypeResolver typeResolver, Class<T> cls) {
+      super(typeResolver, cls);
+      slotsSerializers = buildSlotsSerializers(fory.getFory(), superClasses, cls);
     }
 
     @Override
     public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
       for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(buffer, value);
+        slotsSerializer.write(org.apache.fory.context.WriteContext.current(), value);
       }
       return value;
     }
 
     public Collection newCollection(MemoryBuffer buffer) {
       Collection collection = super.newCollection(buffer);
-      readAndSetFields(fory, buffer, collection, slotsSerializers);
+      readAndSetFields(fory.getFory(), buffer, collection, slotsSerializers);
       return collection;
     }
 
@@ -161,17 +162,18 @@ public class ChildContainerSerializers {
       Collection newCollection = super.newCollection(originCollection);
       if (fieldInfos == null) {
         List<Field> fields = ReflectionUtils.getFieldsWithoutSuperClasses(type, superClasses);
-        fieldInfos = FieldGroups.buildFieldsInfo(fory, fields).allFields;
+        fieldInfos = FieldGroups.buildFieldsInfo(fory.getFory(), fields).allFields;
       }
-      AbstractObjectSerializer.copyFields(fory, fieldInfos, originCollection, newCollection);
+      AbstractObjectSerializer.copyFields(
+          fory.getFory(), fieldInfos, originCollection, newCollection);
       return newCollection;
     }
   }
 
   public static final class ChildArrayListSerializer<T extends ArrayList>
       extends ChildCollectionSerializer<T> {
-    public ChildArrayListSerializer(Fory fory, Class<T> cls) {
-      super(fory, cls);
+    public ChildArrayListSerializer(TypeResolver typeResolver, Class<T> cls) {
+      super(typeResolver, cls);
     }
 
     @Override
@@ -197,16 +199,16 @@ public class ChildContainerSerializers {
     private final Serializer[] slotsSerializers;
     private SerializationFieldInfo[] fieldInfos;
 
-    public ChildMapSerializer(Fory fory, Class<T> cls) {
-      super(fory, cls);
-      slotsSerializers = buildSlotsSerializers(fory, superClasses, cls);
+    public ChildMapSerializer(TypeResolver typeResolver, Class<T> cls) {
+      super(typeResolver, cls);
+      slotsSerializers = buildSlotsSerializers(fory.getFory(), superClasses, cls);
     }
 
     @Override
     public Map onMapWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
       for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(buffer, value);
+        slotsSerializer.write(org.apache.fory.context.WriteContext.current(), value);
       }
       return value;
     }
@@ -214,7 +216,7 @@ public class ChildContainerSerializers {
     @Override
     public Map newMap(MemoryBuffer buffer) {
       Map map = super.newMap(buffer);
-      readAndSetFields(fory, buffer, map, slotsSerializers);
+      readAndSetFields(fory.getFory(), buffer, map, slotsSerializers);
       return map;
     }
 
@@ -223,9 +225,9 @@ public class ChildContainerSerializers {
       Map newMap = super.newMap(originMap);
       if (fieldInfos == null || fieldInfos.length == 0) {
         List<Field> fields = ReflectionUtils.getFieldsWithoutSuperClasses(type, superClasses);
-        fieldInfos = FieldGroups.buildFieldsInfo(fory, fields).allFields;
+        fieldInfos = FieldGroups.buildFieldsInfo(fory.getFory(), fields).allFields;
       }
-      AbstractObjectSerializer.copyFields(fory, fieldInfos, originMap, newMap);
+      AbstractObjectSerializer.copyFields(fory.getFory(), fieldInfos, originMap, newMap);
       return newMap;
     }
   }
@@ -242,9 +244,11 @@ public class ChildContainerSerializers {
         // Use layer index within class hierarchy (not global counter)
         // This ensures unique marker classes for each layer
         Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, cls, layerIndex);
-        slotsSerializer = new MetaSharedLayerSerializer(fory, cls, layerTypeDef, layerMarkerClass);
+        slotsSerializer =
+            new MetaSharedLayerSerializer(
+                fory.getTypeResolver(), cls, layerTypeDef, layerMarkerClass);
       } else {
-        slotsSerializer = new ObjectSerializer<>(fory, cls, false);
+        slotsSerializer = new ObjectSerializer<>(fory.getTypeResolver(), cls, false);
       }
       serializers.add(slotsSerializer);
       cls = (Class<T>) cls.getSuperclass();

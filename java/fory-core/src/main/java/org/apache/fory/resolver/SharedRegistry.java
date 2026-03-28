@@ -155,36 +155,6 @@ public final class SharedRegistry {
     return typeDefDescriptorGrouperCache.computeIfAbsent(key, ignored -> factory.get());
   }
 
-  public void clearClassLoader(ClassLoader loader) {
-    if (loader == null) {
-      return;
-    }
-    clearSharedRegistrationIfClassLoader(loader);
-    typeDefMap.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
-    currentLayerTypeDef.removeIf((cls, typeDef) -> cls.getClassLoader() == loader);
-    typeDefById
-        .entrySet()
-        .removeIf(
-            entry -> {
-              Class<?> cls = entry.getValue().getClassSpec().type;
-              return cls != null && cls.getClassLoader() == loader;
-            });
-    descriptorsCache.entrySet().removeIf(entry -> entry.getKey().f0.getClassLoader() == loader);
-    fieldDescriptorsCache
-        .entrySet()
-        .removeIf(entry -> entry.getKey().type.getClassLoader() == loader);
-    typeDefDescriptorsCache
-        .entrySet()
-        .removeIf(entry -> entry.getKey().referencesClassLoader(loader));
-    fieldDescriptorGrouperCache
-        .entrySet()
-        .removeIf(entry -> entry.getKey().fieldDescriptorsKey.type.getClassLoader() == loader);
-    typeDefDescriptorGrouperCache
-        .entrySet()
-        .removeIf(entry -> entry.getKey().typeDefDescriptorsKey.referencesClassLoader(loader));
-    codeGeneratorMap.entrySet().removeIf(entry -> entry.getKey().contains(loader));
-  }
-
   private synchronized void clearSharedRegistrationIfClassLoader(ClassLoader loader) {
     IdentityHashMap<Class<?>, Integer> sharedRegisteredClassIdMap = registeredClassIdMap;
     BiMap<String, Class<?>> sharedRegisteredClasses = registeredClasses;

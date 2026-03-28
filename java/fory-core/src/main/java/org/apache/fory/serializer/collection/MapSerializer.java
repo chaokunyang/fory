@@ -20,22 +20,23 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Map;
-import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 
 /** Base serializer for all java maps. */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class MapSerializer<T extends Map> extends MapLikeSerializer<T> {
-  public MapSerializer(Fory fory, Class<T> cls) {
-    super(fory, cls);
+  public MapSerializer(TypeResolver typeResolver, Class<T> cls) {
+    super(typeResolver, cls);
   }
 
-  public MapSerializer(Fory fory, Class<T> cls, boolean supportCodegenHook) {
-    super(fory, cls, supportCodegenHook);
+  public MapSerializer(TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook) {
+    super(typeResolver, cls, supportCodegenHook);
   }
 
-  public MapSerializer(Fory fory, Class<T> cls, boolean supportCodegenHook, boolean immutable) {
-    super(fory, cls, supportCodegenHook, immutable);
+  public MapSerializer(
+      TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook, boolean immutable) {
+    super(typeResolver, cls, supportCodegenHook, immutable);
   }
 
   @Override

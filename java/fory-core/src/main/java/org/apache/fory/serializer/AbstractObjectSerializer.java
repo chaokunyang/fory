@@ -62,14 +62,15 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private SerializationFieldInfo[] fieldInfos;
   private RecordInfo copyRecordInfo;
 
-  public AbstractObjectSerializer(Fory fory, Class<T> type) {
-    this(fory, type, ObjectCreators.getObjectCreator(type));
+  public AbstractObjectSerializer(TypeResolver typeResolver, Class<T> type) {
+    this(typeResolver, type, ObjectCreators.getObjectCreator(type));
   }
 
-  public AbstractObjectSerializer(Fory fory, Class<T> type, ObjectCreator<T> objectCreator) {
-    super(fory, type);
-    this.refResolver = fory.getRefResolver();
-    this.typeResolver = fory.getTypeResolver();
+  public AbstractObjectSerializer(
+      TypeResolver typeResolver, Class<T> type, ObjectCreator<T> objectCreator) {
+    super(typeResolver, type);
+    this.refResolver = typeResolver.getRefResolver();
+    this.typeResolver = typeResolver;
     this.isRecord = RecordUtils.isRecord(type);
     this.objectCreator = objectCreator;
   }
@@ -96,7 +97,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       Serializer<Object> serializer = fieldInfo.typeInfo.getSerializer();
       if (refMode == RefMode.TRACKING) {
         if (!refResolver.writeRefOrNull(buffer, fieldValue)) {
-          serializer.write(buffer, fieldValue);
+          serializer.write(org.apache.fory.context.WriteContext.current(), fieldValue);
         }
       } else if (refMode == RefMode.NULL_ONLY) {
         if (fieldValue == null) {
@@ -104,9 +105,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
           return;
         }
         buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-        serializer.write(buffer, fieldValue);
+        serializer.write(org.apache.fory.context.WriteContext.current(), fieldValue);
       } else {
-        serializer.write(buffer, fieldValue);
+        serializer.write(org.apache.fory.context.WriteContext.current(), fieldValue);
       }
       return;
     }
@@ -154,7 +155,10 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       int nextReadRefId = refResolver.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         Object value =
-            typeResolver.readTypeInfo(buffer, fieldInfo.type).getSerializer().read(buffer);
+            typeResolver
+                .readTypeInfo(buffer, fieldInfo.type)
+                .getSerializer()
+                .read(org.apache.fory.context.ReadContext.current());
         refResolver.setReadObject(nextReadRefId, value);
         return value;
       }
@@ -162,7 +166,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     }
     if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
       TypeInfo typeInfo = typeResolver.readTypeInfo(buffer, fieldInfo.type);
-      return typeInfo.getSerializer().read(buffer, RefMode.NONE);
+      return typeInfo
+          .getSerializer()
+          .read(org.apache.fory.context.ReadContext.current(), RefMode.NONE);
     }
     return null;
   }
@@ -1005,7 +1011,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     if (fieldInfos == null) {
       fieldInfos = buildFieldsInfo();
     }
-    copyFields(fory, fieldInfos, originObj, newObj);
+    copyFields(fory.getFory(), fieldInfos, originObj, newObj);
   }
 
   public static void copyFields(
@@ -1187,8 +1193,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       }
     }
     DescriptorGrouper descriptorGrouper =
-        FieldGroups.buildDescriptorGrouper(fory, descriptors, false, null);
-    FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, descriptorGrouper);
+        FieldGroups.buildDescriptorGrouper(fory.getFory(), descriptors, false, null);
+    FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory.getFory(), descriptorGrouper);
     fieldInfos = fieldGroups.allFields;
     if (isRecord) {
       List<String> fieldNames =

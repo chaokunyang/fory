@@ -181,7 +181,8 @@ public class FieldGroups {
             && !fory.isCompatible()
             && typeInfo.getSerializer() instanceof ReplaceResolveSerializer) {
           // overwrite replace resolve serializer for final field
-          typeInfo.setSerializer(new FinalFieldReplaceResolveSerializer(fory, typeInfo.getCls()));
+          typeInfo.setSerializer(
+              new FinalFieldReplaceResolveSerializer(resolver, typeInfo.getCls()));
         }
       } else {
         typeInfo = null;

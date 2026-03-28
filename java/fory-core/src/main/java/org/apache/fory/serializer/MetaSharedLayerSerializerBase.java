@@ -22,6 +22,7 @@ package org.apache.fory.serializer;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 
 /**
  * Base class for meta-shared layer serializers. This provides the common interface for both
@@ -32,8 +33,8 @@ import org.apache.fory.memory.MemoryBuffer;
  */
 public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSerializer<T> {
 
-  public MetaSharedLayerSerializerBase(Fory fory, Class<T> type) {
-    super(fory, type);
+  public MetaSharedLayerSerializerBase(TypeResolver typeResolver, Class<T> type) {
+    super(typeResolver, type);
   }
 
   /**

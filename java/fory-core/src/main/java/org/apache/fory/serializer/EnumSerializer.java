@@ -20,12 +20,12 @@
 package org.apache.fory.serializer;
 
 import java.util.Arrays;
-import org.apache.fory.Fory;
 import org.apache.fory.collection.ForyObjectMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.resolver.MetaStringRef;
 import org.apache.fory.resolver.MetaStringResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 
 @SuppressWarnings("rawtypes")
@@ -35,9 +35,9 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   private final ForyObjectMap<MetaStringRef, Enum> metaStringtoEnumRepresentation;
   private final MetaStringRef[] metaStringStateArrByEnumOrdinal;
 
-  public EnumSerializer(Fory fory, Class<Enum> cls) {
-    super(fory, cls, false);
-    metaStringResolver = fory.getMetaStringResolver();
+  public EnumSerializer(TypeResolver typeResolver, Class<Enum> cls) {
+    super(typeResolver, cls, false);
+    metaStringResolver = this.fory.getFory().getMetaStringResolver();
     if (cls.isEnum()) {
       enumConstants = cls.getEnumConstants();
     } else {
@@ -72,7 +72,8 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Enum value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, Enum value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     if (isJava && fory.getConfig().serializeEnumByName()) {
       MetaStringRef metaStringState = metaStringStateArrByEnumOrdinal[value.ordinal()];
       metaStringResolver.writeMetaStringBytes(buffer, metaStringState);
@@ -82,7 +83,8 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   }
 
   @Override
-  public Enum read(MemoryBuffer buffer) {
+  public Enum read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     if (isJava && fory.getConfig().serializeEnumByName()) {
       MetaStringRef metaStringState = metaStringResolver.readMetaStringBytes(buffer);
       Enum e = metaStringtoEnumRepresentation.get(metaStringState);

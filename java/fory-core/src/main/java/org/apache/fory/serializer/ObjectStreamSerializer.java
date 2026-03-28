@@ -43,6 +43,7 @@ import java.util.TreeMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.collection.LongMap;
@@ -162,8 +163,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
   }
 
-  public ObjectStreamSerializer(Fory fory, Class<?> type) {
-    super(fory, type, createObjectCreatorForGraalVM(type));
+  public ObjectStreamSerializer(TypeResolver typeResolver, Class<?> type) {
+    super(typeResolver, type, createObjectCreatorForGraalVM(type));
     if (!Serializable.class.isAssignableFrom(type)) {
       throw new IllegalArgumentException(
           String.format("Class %s should implement %s.", type, Serializable.class));
@@ -185,7 +186,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       end = end.getSuperclass();
     }
     while (type != end) {
-      slotsInfoList.add(new SlotsInfo(fory, type));
+      slotsInfoList.add(new SlotsInfo(fory.getFory(), type));
       type = type.getSuperclass();
     }
     Collections.reverse(slotsInfoList);
@@ -207,7 +208,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Object value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     buffer.writeInt16((short) slotsInfos.length);
     try {
       ClassResolver classResolver = (ClassResolver) typeResolver;
@@ -255,7 +257,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   }
 
   @Override
-  public Object read(MemoryBuffer buffer) {
+  public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     Object obj = objectCreator.newInstance();
     fory.getRefResolver().reference(obj);
     int numClasses = buffer.readInt16();
@@ -304,7 +307,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
         // Read data for the matched layer - getReadSerializer reads TypeDef from buffer
         // This must be called exactly once per layer to read the TypeDef
-        matchedSlot.getReadSerializer(fory, buffer);
+        matchedSlot.getReadSerializer(fory.getFory(), buffer);
 
         StreamTypeInfo streamTypeInfo = matchedSlot.getStreamTypeInfo();
         Method readObjectMethod = streamTypeInfo.readObjectMethod;
@@ -412,7 +415,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       } else {
         // Not cached - read full TypeDef and create TypeInfo
         TypeDef typeDef =
-            fory.getTypeResolver().cacheTypeDef(TypeDef.readTypeDef(fory, buffer, typeDefId));
+            fory.getTypeResolver()
+                .cacheTypeDef(TypeDef.readTypeDef(fory.getFory(), buffer, typeDefId));
         typeInfo = new TypeInfo(senderClass, typeDef);
         typeDefIdToTypeInfo.put(typeDefId, typeInfo);
       }
@@ -423,9 +427,11 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     MetaSharedLayerSerializerBase skipSerializer =
         (MetaSharedLayerSerializerBase) typeInfo.getSerializer();
     if (skipSerializer == null) {
-      Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, senderClass, 0);
+      Class<?> layerMarkerClass =
+          LayerMarkerClassGenerator.getOrCreate(fory.getFory(), senderClass, 0);
       MetaSharedLayerSerializer<?> newSerializer =
-          new MetaSharedLayerSerializer(fory, senderClass, typeInfo.getTypeDef(), layerMarkerClass);
+          new MetaSharedLayerSerializer(
+              fory.getTypeResolver(), senderClass, typeInfo.getTypeDef(), layerMarkerClass);
       typeInfo.setSerializer(newSerializer);
       skipSerializer = newSerializer;
     }
@@ -436,7 +442,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       throws UnsupportedEncodingException {
     throw new UnsupportedEncodingException(
         String.format(
-            "Use %s instead by `fory.registerSerializer(%s, new JavaSerializer(fory, %s))` or "
+            "Use %s instead by `fory.registerSerializer(%s, new JavaSerializer(fory.getTypeResolver(), %s))` or "
                 + "implement a custom %s.",
             JavaSerializer.class, cls, cls, Serializer.class));
   }
@@ -445,7 +451,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     throw new RuntimeException(
         String.format(
             "Serialize object of type %s failed, "
-                + "Try to use %s instead by `fory.registerSerializer(%s, new JavaSerializer(fory, %s))` or "
+                + "Try to use %s instead by `fory.registerSerializer(%s, new JavaSerializer(fory.getTypeResolver(), %s))` or "
                 + "implement a custom %s.",
             type, JavaSerializer.class, type, type, Serializer.class),
         e);
@@ -648,7 +654,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
       // Create interpreter-mode serializer first
       this.slotsSerializer =
-          new MetaSharedLayerSerializer(fory, type, layerTypeDef, layerMarkerClass);
+          new MetaSharedLayerSerializer(
+              fory.getTypeResolver(), type, layerTypeDef, layerMarkerClass);
 
       // Register JIT callback to replace with JIT serializer when ready
       if (fory.getConfig().isCodeGenEnabled()) {
@@ -775,7 +782,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
             // Create a new serializer based on the TypeDef from stream
             Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, cls, 0);
             MetaSharedLayerSerializer<?> newSerializer =
-                new MetaSharedLayerSerializer(fory, cls, typeInfo.getTypeDef(), layerMarkerClass);
+                new MetaSharedLayerSerializer(
+                    fory.getTypeResolver(), cls, typeInfo.getTypeDef(), layerMarkerClass);
             typeInfo.setSerializer(newSerializer);
             result = newSerializer;
           }
@@ -845,7 +853,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     protected ForyObjectOutputStream(SlotInfo slotsInfo) throws IOException {
       super();
       this.slotsInfo = slotsInfo;
-      this.fory = slotsInfo.getSlotsSerializer().fory;
+      this.fory = slotsInfo.getSlotsSerializer().fory.getFory();
       this.compressInt = fory.compressInt();
     }
 
@@ -930,7 +938,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         putValue(name, val);
       }
 
-      @Deprecated
       @Override
       public void write(ObjectOutput out) throws IOException {
         Class cls = slotsInfo.getSlotsSerializer().getType();
@@ -1158,7 +1165,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private TreeMap<Integer, ObjectInputValidation> callbacks;
 
     protected ForyObjectInputStream(SlotInfo slotsInfo) throws IOException {
-      this.fory = slotsInfo.getSlotsSerializer().fory;
+      this.fory = slotsInfo.getSlotsSerializer().fory.getFory();
       this.compressInt = fory.compressInt();
       this.slotsInfo = slotsInfo;
     }

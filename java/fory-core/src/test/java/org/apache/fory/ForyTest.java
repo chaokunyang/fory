@@ -59,6 +59,8 @@ import org.apache.fory.builder.Generated;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
@@ -67,6 +69,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
 import org.apache.fory.serializer.EnumSerializerTest;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -531,17 +534,19 @@ public class ForyTest extends ForyTestBase {
   }
 
   static class UUIDSerializer extends Serializer<UUID> {
-    public UUIDSerializer(Fory fory) {
-      super(fory, UUID.class);
+    public UUIDSerializer(TypeResolver typeResolver) {
+      super(typeResolver, UUID.class);
     }
 
     @Override
-    public UUID read(MemoryBuffer buffer) {
+    public UUID read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return new UUID(buffer.readInt64(), buffer.readInt64());
     }
 
     @Override
-    public void write(MemoryBuffer buffer, UUID value) {
+    public void write(WriteContext writeContext, UUID value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt64(value.getMostSignificantBits());
       buffer.writeInt64(value.getLeastSignificantBits());
     }
@@ -554,18 +559,19 @@ public class ForyTest extends ForyTestBase {
   }
 
   static class NestedWriteBeanSerializer extends Serializer<NestedWriteBean> {
-    NestedWriteBeanSerializer(Fory fory) {
-      super(fory, NestedWriteBean.class);
+    NestedWriteBeanSerializer(TypeResolver typeResolver) {
+      super(typeResolver, NestedWriteBean.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, NestedWriteBean value) {
+    public void write(WriteContext writeContext, NestedWriteBean value) {
       // Trigger nested serialization to validate the API hint message.
-      fory.serialize(value);
+      fory.getFory().serialize(value);
     }
 
     @Override
-    public NestedWriteBean read(MemoryBuffer buffer) {
+    public NestedWriteBean read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return new NestedWriteBean(buffer.readInt32());
     }
   }
@@ -577,19 +583,21 @@ public class ForyTest extends ForyTestBase {
   }
 
   static class NestedReadBeanSerializer extends Serializer<NestedReadBean> {
-    NestedReadBeanSerializer(Fory fory) {
-      super(fory, NestedReadBean.class);
+    NestedReadBeanSerializer(TypeResolver typeResolver) {
+      super(typeResolver, NestedReadBean.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, NestedReadBean value) {
+    public void write(WriteContext writeContext, NestedReadBean value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(value.value);
     }
 
     @Override
-    public NestedReadBean read(MemoryBuffer buffer) {
+    public NestedReadBean read(ReadContext readContext) {
       // Trigger nested deserialization to validate the API hint message.
-      fory.deserialize(new byte[] {1});
+      fory.getFory().deserialize(new byte[] {1});
+      MemoryBuffer buffer = readContext.getBuffer();
       return new NestedReadBean(buffer.readInt32());
     }
   }
@@ -597,7 +605,7 @@ public class ForyTest extends ForyTestBase {
   @Test
   public void testRegisterPrivateSerializer() {
     Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
-    fory.registerSerializer(UUID.class, new UUIDSerializer(fory));
+    fory.registerSerializer(UUID.class, new UUIDSerializer(fory.getTypeResolver()));
     DomainObject obj = new DomainObject();
     obj.id = UUID.randomUUID();
     serDeCheckSerializer(fory, obj, "Codec");
@@ -606,7 +614,8 @@ public class ForyTest extends ForyTestBase {
   @Test
   public void testNestedSerializeHintUsesWriteApi() {
     Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
-    fory.registerSerializer(NestedWriteBean.class, new NestedWriteBeanSerializer(fory));
+    fory.registerSerializer(
+        NestedWriteBean.class, new NestedWriteBeanSerializer(fory.getTypeResolver()));
     SerializationException ex =
         Assert.expectThrows(
             SerializationException.class, () -> fory.serialize(new NestedWriteBean(1)));
@@ -617,7 +626,8 @@ public class ForyTest extends ForyTestBase {
   @Test
   public void testNestedDeserializeHintUsesReadApi() {
     Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
-    fory.registerSerializer(NestedReadBean.class, new NestedReadBeanSerializer(fory));
+    fory.registerSerializer(
+        NestedReadBean.class, new NestedReadBeanSerializer(fory.getTypeResolver()));
     byte[] bytes = fory.serialize(new NestedReadBean(1));
     DeserializationException ex =
         Assert.expectThrows(DeserializationException.class, () -> fory.deserialize(bytes));

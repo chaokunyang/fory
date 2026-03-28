@@ -81,14 +81,15 @@ public class SynchronizedSerializers {
     private final Function factory;
     private final long offset;
 
-    public SynchronizedCollectionSerializer(Fory fory, Class cls, Function factory, long offset) {
-      super(fory, cls, false);
+    public SynchronizedCollectionSerializer(TypeResolver typeResolver, Class cls, Function factory, long offset) {
+      super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Collection object) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Collection object) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       // the ordinal could be replaced by s.th. else (e.g. a explicitly managed "id")
       Object unwrapped = Platform.getObject(object, offset);
       synchronized (object) {
@@ -97,7 +98,8 @@ public class SynchronizedSerializers {
     }
 
     @Override
-    public Collection read(MemoryBuffer buffer) {
+    public Collection read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       final Object sourceCollection = fory.readRef(buffer);
       return (Collection) factory.apply(sourceCollection);
     }
@@ -113,14 +115,15 @@ public class SynchronizedSerializers {
     private final Function factory;
     private final long offset;
 
-    public SynchronizedMapSerializer(Fory fory, Class cls, Function factory, long offset) {
-      super(fory, cls, false);
+    public SynchronizedMapSerializer(TypeResolver typeResolver, Class cls, Function factory, long offset) {
+      super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Map object) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Map object) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       // the ordinal could be replaced by s.th. else (e.g. a explicitly managed "id")
       Object unwrapped = Platform.getObject(object, offset);
       synchronized (object) {
@@ -135,7 +138,8 @@ public class SynchronizedSerializers {
     }
 
     @Override
-    public Map read(MemoryBuffer buffer) {
+    public Map read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       final Object sourceCollection = fory.readRef(buffer);
       return (Map) factory.apply(sourceCollection);
     }
@@ -151,12 +155,13 @@ public class SynchronizedSerializers {
   }
 
   private static Serializer<?> createSerializer(Fory fory, Tuple2<Class<?>, Function> factory) {
+    TypeResolver typeResolver = fory.getTypeResolver();
     if (Collection.class.isAssignableFrom(factory.f0)) {
       return new SynchronizedCollectionSerializer(
-          fory, factory.f0, factory.f1, Offset.SOURCE_COLLECTION_FIELD_OFFSET);
+          typeResolver, factory.f0, factory.f1, Offset.SOURCE_COLLECTION_FIELD_OFFSET);
     } else {
       return new SynchronizedMapSerializer(
-          fory, factory.f0, factory.f1, Offset.SOURCE_MAP_FIELD_OFFSET);
+          typeResolver, factory.f0, factory.f1, Offset.SOURCE_MAP_FIELD_OFFSET);
     }
   }
 

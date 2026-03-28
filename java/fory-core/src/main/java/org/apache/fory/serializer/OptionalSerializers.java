@@ -23,7 +23,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
-import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 
@@ -34,12 +34,13 @@ import org.apache.fory.resolver.TypeResolver;
 public final class OptionalSerializers {
   public static final class OptionalSerializer extends Serializer<Optional> {
 
-    public OptionalSerializer(Fory fory) {
-      super(fory, Optional.class);
+    public OptionalSerializer(Config config) {
+      super(config, Optional.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Optional value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Optional value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       Object nullable = value.isPresent() ? value.get() : null;
       fory.writeRef(buffer, nullable);
     }
@@ -53,18 +54,20 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public Optional read(MemoryBuffer buffer) {
+    public Optional read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       return Optional.ofNullable(fory.readRef(buffer));
     }
   }
 
   public static final class OptionalIntSerializer extends ImmutableSerializer<OptionalInt> {
-    public OptionalIntSerializer(Fory fory) {
-      super(fory, OptionalInt.class);
+    public OptionalIntSerializer(Config config) {
+      super(config, OptionalInt.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, OptionalInt value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, OptionalInt value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       boolean present = value.isPresent();
       buffer.writeBoolean(present);
       if (present) {
@@ -73,7 +76,8 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public OptionalInt read(MemoryBuffer buffer) {
+    public OptionalInt read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       if (buffer.readBoolean()) {
         return OptionalInt.of(buffer.readInt32());
       } else {
@@ -83,12 +87,13 @@ public final class OptionalSerializers {
   }
 
   public static final class OptionalLongSerializer extends ImmutableSerializer<OptionalLong> {
-    public OptionalLongSerializer(Fory fory) {
-      super(fory, OptionalLong.class);
+    public OptionalLongSerializer(Config config) {
+      super(config, OptionalLong.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, OptionalLong value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, OptionalLong value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       boolean present = value.isPresent();
       buffer.writeBoolean(present);
       if (present) {
@@ -97,7 +102,8 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public OptionalLong read(MemoryBuffer buffer) {
+    public OptionalLong read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       if (buffer.readBoolean()) {
         return OptionalLong.of(buffer.readInt64());
       } else {
@@ -107,12 +113,13 @@ public final class OptionalSerializers {
   }
 
   public static final class OptionalDoubleSerializer extends ImmutableSerializer<OptionalDouble> {
-    public OptionalDoubleSerializer(Fory fory) {
-      super(fory, OptionalDouble.class);
+    public OptionalDoubleSerializer(Config config) {
+      super(config, OptionalDouble.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, OptionalDouble value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, OptionalDouble value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       boolean present = value.isPresent();
       buffer.writeBoolean(present);
       if (present) {
@@ -121,7 +128,8 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public OptionalDouble read(MemoryBuffer buffer) {
+    public OptionalDouble read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       if (buffer.readBoolean()) {
         return OptionalDouble.of(buffer.readFloat64());
       } else {
@@ -130,11 +138,11 @@ public final class OptionalSerializers {
     }
   }
 
-  public static void registerDefaultSerializers(Fory fory) {
-    TypeResolver resolver = fory.getTypeResolver();
-    resolver.registerInternalSerializer(Optional.class, new OptionalSerializer(fory));
-    resolver.registerInternalSerializer(OptionalInt.class, new OptionalIntSerializer(fory));
-    resolver.registerInternalSerializer(OptionalLong.class, new OptionalLongSerializer(fory));
-    resolver.registerInternalSerializer(OptionalDouble.class, new OptionalDoubleSerializer(fory));
+  public static void registerDefaultSerializers(TypeResolver resolver) {
+    Config config = resolver.getConfig();
+    resolver.registerInternalSerializer(Optional.class, new OptionalSerializer(config));
+    resolver.registerInternalSerializer(OptionalInt.class, new OptionalIntSerializer(config));
+    resolver.registerInternalSerializer(OptionalLong.class, new OptionalLongSerializer(config));
+    resolver.registerInternalSerializer(OptionalDouble.class, new OptionalDoubleSerializer(config));
   }
 }

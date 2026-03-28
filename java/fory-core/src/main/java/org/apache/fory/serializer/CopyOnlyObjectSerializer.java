@@ -20,6 +20,7 @@
 package org.apache.fory.serializer;
 
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
 
@@ -30,17 +31,19 @@ import org.apache.fory.memory.MemoryBuffer;
  * reuses {@link AbstractObjectSerializer}'s field-copy implementation.
  */
 public final class CopyOnlyObjectSerializer<T> extends AbstractObjectSerializer<T> {
-  public CopyOnlyObjectSerializer(Fory fory, Class<T> type) {
-    super(fory, type);
+  public CopyOnlyObjectSerializer(TypeResolver typeResolver, Class<T> type) {
+    super(typeResolver, type);
   }
 
   @Override
-  public void write(MemoryBuffer buffer, T value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, T value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     throw insecureException();
   }
 
   @Override
-  public T read(MemoryBuffer buffer) {
+  public T read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     throw insecureException();
   }
 

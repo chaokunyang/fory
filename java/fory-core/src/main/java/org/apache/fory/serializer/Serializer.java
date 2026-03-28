@@ -21,9 +21,14 @@ package org.apache.fory.serializer;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.RefResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.TypeUtils;
 
 /**
@@ -35,8 +40,12 @@ import org.apache.fory.type.TypeUtils;
 @NotThreadSafe
 @SuppressWarnings("unchecked")
 public abstract class Serializer<T> {
-  protected final Fory fory;
-  protected final RefResolver refResolver;
+  protected final Config config;
+  /**
+   * Config-scoped runtime facade for serializer implementations. This is not a retained
+   * {@link Fory} instance.
+   */
+  protected final SerializerRuntime fory;
   protected final Class<T> type;
   protected final boolean isJava;
   protected final boolean needToWriteRef;
@@ -49,25 +58,68 @@ public abstract class Serializer<T> {
 
   protected final boolean immutable;
 
-  public Serializer(Fory fory, Class<T> type) {
+  public Serializer(Config config, Class<T> type) {
     this(
-        fory,
+        config,
+        new SerializerRuntime(config),
         type,
-        fory.trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
+        config.trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
         TypeUtils.isPrimitive(type) || TypeUtils.isBoxed(type));
   }
 
-  public Serializer(Fory fory, Class<T> type, boolean immutable) {
-    this(fory, type, fory.trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)), immutable);
+  public Serializer(TypeResolver typeResolver, Class<T> type) {
+    this(
+        typeResolver.getConfig(),
+        new SerializerRuntime(typeResolver),
+        type,
+        typeResolver.getConfig().trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
+        TypeUtils.isPrimitive(type) || TypeUtils.isBoxed(type));
   }
 
-  public Serializer(Fory fory, Class<T> type, boolean needToWriteRef, boolean immutable) {
-    this.fory = fory;
-    this.refResolver = fory.getRefResolver();
+  public Serializer(Config config, Class<T> type, boolean immutable) {
+    this(
+        config,
+        new SerializerRuntime(config),
+        type,
+        config.trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
+        immutable);
+  }
+
+  public Serializer(TypeResolver typeResolver, Class<T> type, boolean immutable) {
+    this(
+        typeResolver.getConfig(),
+        new SerializerRuntime(typeResolver),
+        type,
+        typeResolver.getConfig().trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
+        immutable);
+  }
+
+  public Serializer(Config config, Class<T> type, boolean needToWriteRef, boolean immutable) {
+    this(config, new SerializerRuntime(config), type, needToWriteRef, immutable);
+  }
+
+  public Serializer(
+      TypeResolver typeResolver, Class<T> type, boolean needToWriteRef, boolean immutable) {
+    this(
+        typeResolver.getConfig(),
+        new SerializerRuntime(typeResolver),
+        type,
+        needToWriteRef,
+        immutable);
+  }
+
+  private Serializer(
+      Config config,
+      SerializerRuntime runtime,
+      Class<T> type,
+      boolean needToWriteRef,
+      boolean immutable) {
+    this.config = config;
+    this.fory = runtime;
     this.type = type;
-    this.isJava = !fory.isCrossLanguage();
+    this.isJava = !config.isXlang();
     this.needToWriteRef = needToWriteRef;
-    this.needToCopyRef = fory.copyTrackingRef() && !immutable;
+    this.needToCopyRef = config.copyRef() && !immutable;
     this.immutable = immutable;
   }
 
@@ -76,7 +128,9 @@ public abstract class Serializer<T> {
    * the passed value can be null. Note that this method don't write type info, this method is
    * mostly be used in cases the context has already knows the value type when deserialization.
    */
-  public void write(MemoryBuffer buffer, RefMode refMode, T value) {
+  public void write(WriteContext writeContext, RefMode refMode, T value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+    RefResolver refResolver = writeContext.getRefResolver();
     // noinspection Duplicates
     if (refMode == RefMode.TRACKING) {
       if (refResolver.writeRefOrNull(buffer, value)) {
@@ -90,26 +144,28 @@ public abstract class Serializer<T> {
         buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
       }
     }
-    write(buffer, value);
+    write(writeContext, value);
   }
 
   /**
    * Write value to buffer, this method do not write ref/null flags and the passed value must not be
    * null.
    */
-  public abstract void write(MemoryBuffer buffer, T value);
+  public abstract void write(WriteContext writeContext, T value);
 
   /**
    * Read value from buffer, this method may read ref/null flags based passed {@code refMode}, and
    * the read value can be null. Note that this method don't read type info, this method is mostly
    * be used in cases the context has already knows the value type for deserialization.
    */
-  public T read(MemoryBuffer buffer, RefMode refMode) {
+  public T read(ReadContext readContext, RefMode refMode) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    RefResolver refResolver = readContext.getRefResolver();
     if (refMode == RefMode.TRACKING) {
       T obj;
       int nextReadRefId = refResolver.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-        obj = read(buffer);
+        obj = read(readContext);
         refResolver.setReadObject(nextReadRefId, obj);
         return obj;
       } else {
@@ -121,7 +177,7 @@ public abstract class Serializer<T> {
         // support circular reference, so we still need this `-1`
         refResolver.preserveRefId(-1);
       }
-      return read(buffer);
+      return read(readContext);
     }
     return null;
   }
@@ -129,7 +185,7 @@ public abstract class Serializer<T> {
   /**
    * Read value from buffer, this method wont read ref/null flags and the read value won't be null.
    */
-  public abstract T read(MemoryBuffer buffer);
+  public abstract T read(ReadContext readContext);
 
   public T copy(T value) {
     if (isImmutable()) {
@@ -153,5 +209,13 @@ public abstract class Serializer<T> {
 
   public boolean isImmutable() {
     return immutable;
+  }
+
+  public boolean threadSafe() {
+    return false;
+  }
+
+  protected final CopyContext copyContext() {
+    return CopyContext.current();
   }
 }

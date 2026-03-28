@@ -22,6 +22,7 @@ package org.apache.fory.serializer;
 import java.net.MalformedURLException;
 import java.net.URL;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 
@@ -29,15 +30,17 @@ import org.apache.fory.memory.Platform;
 // TODO(chaokunyang) ensure security to avoid dnslog detection.
 public final class URLSerializer extends AbstractObjectSerializer<URL> {
 
-  public URLSerializer(Fory fory, Class<URL> type) {
-    super(fory, type);
+  public URLSerializer(TypeResolver typeResolver, Class<URL> type) {
+    super(typeResolver, type);
   }
 
-  public void write(MemoryBuffer buffer, URL object) {
+  public void write(org.apache.fory.context.WriteContext writeContext, URL object) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     fory.writeString(buffer, object.toExternalForm());
   }
 
-  public URL read(MemoryBuffer buffer) {
+  public URL read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     try {
       return new URL(fory.readString(buffer));
     } catch (MalformedURLException e) {

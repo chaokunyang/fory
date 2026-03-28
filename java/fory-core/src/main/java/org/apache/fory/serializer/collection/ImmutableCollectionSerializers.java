@@ -104,8 +104,8 @@ public class ImmutableCollectionSerializers {
   }
 
   public static class ImmutableListSerializer extends CollectionSerializer {
-    public ImmutableListSerializer(Fory fory, Class cls) {
-      super(fory, cls, true);
+    public ImmutableListSerializer(TypeResolver typeResolver, Class cls) {
+      super(typeResolver, cls, true);
     }
 
     @Override
@@ -153,8 +153,8 @@ public class ImmutableCollectionSerializers {
   }
 
   public static class ImmutableSetSerializer extends CollectionSerializer {
-    public ImmutableSetSerializer(Fory fory, Class cls) {
-      super(fory, cls, true);
+    public ImmutableSetSerializer(TypeResolver typeResolver, Class cls) {
+      super(typeResolver, cls, true);
     }
 
     @Override
@@ -202,8 +202,8 @@ public class ImmutableCollectionSerializers {
   }
 
   public static class ImmutableMapSerializer extends MapSerializer {
-    public ImmutableMapSerializer(Fory fory, Class cls) {
-      super(fory, cls, true);
+    public ImmutableMapSerializer(TypeResolver typeResolver, Class cls) {
+      super(typeResolver, cls, true);
     }
 
     @Override
@@ -261,12 +261,12 @@ public class ImmutableCollectionSerializers {
 
   public static void registerSerializers(Fory fory) {
     TypeResolver resolver = fory.getTypeResolver();
-    resolver.registerInternalSerializer(List12, new ImmutableListSerializer(fory, List12));
-    resolver.registerInternalSerializer(ListN, new ImmutableListSerializer(fory, ListN));
-    resolver.registerInternalSerializer(SubList, new ImmutableListSerializer(fory, SubList));
-    resolver.registerInternalSerializer(Set12, new ImmutableSetSerializer(fory, Set12));
-    resolver.registerInternalSerializer(SetN, new ImmutableSetSerializer(fory, SetN));
-    resolver.registerInternalSerializer(Map1, new ImmutableMapSerializer(fory, Map1));
-    resolver.registerInternalSerializer(MapN, new ImmutableMapSerializer(fory, MapN));
+    resolver.registerInternalSerializer(List12, new ImmutableListSerializer(resolver, List12));
+    resolver.registerInternalSerializer(ListN, new ImmutableListSerializer(resolver, ListN));
+    resolver.registerInternalSerializer(SubList, new ImmutableListSerializer(resolver, SubList));
+    resolver.registerInternalSerializer(Set12, new ImmutableSetSerializer(resolver, Set12));
+    resolver.registerInternalSerializer(SetN, new ImmutableSetSerializer(resolver, SetN));
+    resolver.registerInternalSerializer(Map1, new ImmutableMapSerializer(resolver, Map1));
+    resolver.registerInternalSerializer(MapN, new ImmutableMapSerializer(resolver, MapN));
   }
 }

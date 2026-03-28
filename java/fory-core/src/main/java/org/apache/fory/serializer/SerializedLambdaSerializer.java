@@ -22,9 +22,9 @@ package org.apache.fory.serializer;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.Method;
-import org.apache.fory.Fory;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.unsafe._JDKAccess;
 
@@ -49,13 +49,14 @@ public class SerializedLambdaSerializer extends Serializer {
     }
   }
 
-  public SerializedLambdaSerializer(Fory fory, Class<?> cls) {
-    super(fory, cls);
+  public SerializedLambdaSerializer(TypeResolver typeResolver, Class<?> cls) {
+    super(typeResolver, cls);
     Preconditions.checkArgument(cls == SERIALIZED_LAMBDA);
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Object value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     SerializedLambda serializedLambda = (SerializedLambda) value;
     fory.writeStringRef(buffer, serializedLambda.getCapturingClass());
     fory.writeStringRef(buffer, serializedLambda.getFunctionalInterfaceClass());
@@ -95,7 +96,8 @@ public class SerializedLambdaSerializer extends Serializer {
   }
 
   @Override
-  public Object read(MemoryBuffer buffer) {
+  public Object read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     return readResolve(readUnresolved(buffer));
   }
 

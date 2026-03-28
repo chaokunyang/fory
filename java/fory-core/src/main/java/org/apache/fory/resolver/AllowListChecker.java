@@ -26,11 +26,10 @@ import java.util.WeakHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.concurrent.ThreadSafe;
-import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.Serializer;
 
 /** White/black list based class checker. */
@@ -246,17 +245,17 @@ public class AllowListChecker implements TypeChecker {
   @SuppressWarnings({"rawtypes", "unchecked"})
   private static class DisallowSerializer extends Serializer {
 
-    public DisallowSerializer(Fory fory, Class type) {
-      super(fory, type);
+    public DisallowSerializer(Config config, Class type) {
+      super(config, type);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Object value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
       throw new InsecureException(String.format("Class %s not allowed for serialization.", type));
     }
 
     @Override
-    public Object read(MemoryBuffer buffer) {
+    public Object read(org.apache.fory.context.ReadContext readContext) {
       throw new InsecureException(String.format("Class %s not allowed for serialization.", type));
     }
   }

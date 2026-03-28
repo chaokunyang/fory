@@ -19,9 +19,9 @@
 
 package org.apache.fory.serializer;
 
-import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 
 /**
  * Serializer for class which: - has jdk `writeReplace`/`readResolve` method defined, - is a final
@@ -31,23 +31,23 @@ import org.apache.fory.memory.MemoryBuffer;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class FinalFieldReplaceResolveSerializer extends ReplaceResolveSerializer {
 
-  public FinalFieldReplaceResolveSerializer(Fory fory, Class type) {
+  public FinalFieldReplaceResolveSerializer(TypeResolver typeResolver, Class type) {
     // the serializer does not write class info
     // and does not set itself for the provided class
     // see checks in ReplaceResolveSerializer constructor
-    super(fory, type, true, false);
+    super(typeResolver, type, true, false);
   }
 
   @Override
   protected void writeObject(
       MemoryBuffer buffer, Object value, MethodInfoCache jdkMethodInfoCache) {
-    jdkMethodInfoCache.objectSerializer.write(buffer, value);
+    jdkMethodInfoCache.objectSerializer.write(org.apache.fory.context.WriteContext.current(), value);
   }
 
   @Override
   protected Object readObject(MemoryBuffer buffer) {
     MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(type);
-    Object o = jdkMethodInfoCache.objectSerializer.read(buffer);
+    Object o = jdkMethodInfoCache.objectSerializer.read(org.apache.fory.context.ReadContext.current());
     ReplaceResolveInfo replaceResolveInfo = jdkMethodInfoCache.info;
     if (replaceResolveInfo.readResolveMethod == null) {
       return o;

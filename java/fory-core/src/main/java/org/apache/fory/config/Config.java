@@ -162,7 +162,7 @@ public class Config implements Serializable {
    * Fory#registerSerializer(Class, Serializer)}, ex:
    *
    * <pre>
-   *   fory.registerSerializer(Date.class, new DateSerializer(fory, true));
+   *   fory.registerSerializer(Date.class, new DateSerializer(fory.getConfig(), true));
    * </pre>
    *
    * <p>Note that enabling ref tracking should happen before serializer codegen of any types which

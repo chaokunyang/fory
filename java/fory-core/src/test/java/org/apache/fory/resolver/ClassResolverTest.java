@@ -51,6 +51,8 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -537,39 +539,41 @@ public class ClassResolverTest extends ForyTestBase {
             .build();
     ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
     {
-      classResolver.setSerializer(Foo.class, new ObjectSerializer<>(fory, Foo.class));
+      classResolver.setSerializer(Foo.class, new ObjectSerializer<>(fory.getTypeResolver(), Foo.class));
       TypeInfo typeInfo = classResolver.getTypeInfo(Foo.class);
       assertSame(typeInfo.getSerializer().getClass(), ObjectSerializer.class);
       // Create another ObjectSerializer to test setSerializer updates the existing classInfo
-      classResolver.setSerializer(Foo.class, new ObjectSerializer<>(fory, Foo.class, true));
+      classResolver.setSerializer(
+          Foo.class, new ObjectSerializer<>(fory.getTypeResolver(), Foo.class, true));
       Assert.assertSame(classResolver.getTypeInfo(Foo.class), typeInfo);
       assertSame(typeInfo.getSerializer().getClass(), ObjectSerializer.class);
     }
     {
       classResolver.registerInternal(Bar.class);
       TypeInfo typeInfo = classResolver.getTypeInfo(Bar.class);
-      classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory, Bar.class));
+      classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory.getTypeResolver(), Bar.class));
       Assert.assertSame(classResolver.getTypeInfo(Bar.class), typeInfo);
       assertSame(typeInfo.getSerializer().getClass(), ObjectSerializer.class);
       // Create another ObjectSerializer to test setSerializer updates the existing classInfo
-      classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory, Bar.class, true));
+      classResolver.setSerializer(
+          Bar.class, new ObjectSerializer<>(fory.getTypeResolver(), Bar.class, true));
       Assert.assertSame(classResolver.getTypeInfo(Bar.class), typeInfo);
       assertSame(typeInfo.getSerializer().getClass(), ObjectSerializer.class);
     }
   }
 
   private static class ErrorSerializer extends Serializer<Foo> {
-    public ErrorSerializer(Fory fory) {
-      super(fory, Foo.class);
-      fory.getTypeResolver().setSerializer(Foo.class, this);
+    public ErrorSerializer(TypeResolver typeResolver) {
+      super(typeResolver, Foo.class);
+      typeResolver.setSerializer(Foo.class, this);
       throw new RuntimeException();
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Foo value) {}
+    public void write(WriteContext writeContext, Foo value) {}
 
     @Override
-    public Foo read(MemoryBuffer buffer) {
+    public Foo read(ReadContext readContext) {
       return null;
     }
   }
@@ -586,7 +590,9 @@ public class ClassResolverTest extends ForyTestBase {
     Assert.assertThrows(() -> Serializers.newSerializer(fory, Foo.class, ErrorSerializer.class));
     Assert.assertNull(classResolver.getSerializer(Foo.class, false));
     Assert.assertThrows(
-        () -> classResolver.createSerializerSafe(Foo.class, () -> new ErrorSerializer(fory)));
+        () ->
+            classResolver.createSerializerSafe(
+                Foo.class, () -> new ErrorSerializer(fory.getTypeResolver())));
     Assert.assertNull(classResolver.getSerializer(Foo.class, false));
   }
 
@@ -610,17 +616,19 @@ public class ClassResolverTest extends ForyTestBase {
   // without static for test
   class FooCustomSerializer extends Serializer<Foo> {
 
-    public FooCustomSerializer(Fory fory, Class<Foo> type) {
-      super(fory, type);
+    public FooCustomSerializer(TypeResolver typeResolver, Class<Foo> type) {
+      super(typeResolver, type);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Foo value) {
+    public void write(WriteContext writeContext, Foo value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(value.f1);
     }
 
     @Override
-    public Foo read(MemoryBuffer buffer) {
+    public Foo read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       final Foo foo = new Foo();
       foo.f1 = buffer.readInt32();
       return foo;
@@ -664,17 +672,19 @@ public class ClassResolverTest extends ForyTestBase {
 
   static class InterfaceCustomSerializer extends Serializer<ITest> {
 
-    public InterfaceCustomSerializer(Fory fory, Class<ITest> type) {
-      super(fory, type);
+    public InterfaceCustomSerializer(TypeResolver typeResolver, Class<ITest> type) {
+      super(typeResolver, type);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, ITest value) {
+    public void write(WriteContext writeContext, ITest value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(value.getF1());
     }
 
     @Override
-    public ITest read(MemoryBuffer buffer) {
+    public ITest read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       final ITest iTest = new ImplTest();
       iTest.setF1(buffer.readInt32());
       return iTest;
@@ -684,7 +694,8 @@ public class ClassResolverTest extends ForyTestBase {
   @Test
   public void testInterfaceCustomSerializer() {
     Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
-    fory.registerSerializer(ITest.class, new InterfaceCustomSerializer(fory, ITest.class));
+    fory.registerSerializer(
+        ITest.class, new InterfaceCustomSerializer(fory.getTypeResolver(), ITest.class));
     final ITest iTest = new ImplTest();
     iTest.setF1(100);
 
@@ -700,7 +711,8 @@ public class ClassResolverTest extends ForyTestBase {
         InterfaceCustomSerializer.class);
 
     fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
-    fory.registerSerializer(ITest.class, new InterfaceCustomSerializer(fory, ITest.class));
+    fory.registerSerializer(
+        ITest.class, new InterfaceCustomSerializer(fory.getTypeResolver(), ITest.class));
     Assert.assertEquals(
         fory.getTypeResolver().getSerializer(ImplTest.class).getClass(),
         InterfaceCustomSerializer.class);
@@ -728,17 +740,19 @@ public class ClassResolverTest extends ForyTestBase {
 
   static class AbstractCustomSerializer extends Serializer<AbsTest> {
 
-    public AbstractCustomSerializer(Fory fory, Class<AbsTest> type) {
-      super(fory, type);
+    public AbstractCustomSerializer(TypeResolver typeResolver, Class<AbsTest> type) {
+      super(typeResolver, type);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, AbsTest value) {
+    public void write(WriteContext writeContext, AbsTest value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(value.getF1());
     }
 
     @Override
-    public AbsTest read(MemoryBuffer buffer) {
+    public AbsTest read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       // TODO maybe new SubAbsTest or Sub2AbsTest
       final AbsTest absTest = new SubAbsTest();
       absTest.setF1(buffer.readInt32());
@@ -749,7 +763,8 @@ public class ClassResolverTest extends ForyTestBase {
   @Test
   public void testAbstractCustomSerializer() {
     Fory fory = Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
-    fory.registerSerializer(AbsTest.class, new AbstractCustomSerializer(fory, AbsTest.class));
+    fory.registerSerializer(
+        AbsTest.class, new AbstractCustomSerializer(fory.getTypeResolver(), AbsTest.class));
     final AbsTest absTest = new SubAbsTest();
     absTest.setF1(100);
 

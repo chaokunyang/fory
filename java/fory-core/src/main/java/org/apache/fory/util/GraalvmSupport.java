@@ -29,6 +29,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
@@ -142,8 +145,8 @@ public class GraalvmSupport {
     private final Class serializerClass;
     private Serializer serializer;
 
-    public GraalvmSerializerHolder(Fory fory, Class<?> type, Class<?> serializerClass) {
-      super(fory, type);
+    public GraalvmSerializerHolder(Config config, Class<?> type, Class<?> serializerClass) {
+      super(config, type);
       this.serializerClass = Objects.requireNonNull(serializerClass);
     }
 
@@ -152,23 +155,23 @@ public class GraalvmSupport {
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Object value) {
+    public void write(WriteContext writeContext, Object value) {
       // for debug only, graalvm native image won't go to here
-      getSerializer().write(buffer, value);
+      getSerializer().write(writeContext, value);
     }
 
     @Override
-    public Object read(MemoryBuffer buffer) {
+    public Object read(ReadContext readContext) {
       // for debug only, graalvm native image won't go to here
-      return getSerializer().read(buffer);
+      return getSerializer().read(readContext);
     }
 
     private Serializer getSerializer() {
       if (serializer == null) {
         try {
-          Constructor ctr = serializerClass.getDeclaredConstructor(Fory.class, Class.class);
+          Constructor ctr = serializerClass.getDeclaredConstructor(Config.class, Class.class);
           ctr.setAccessible(true);
-          serializer = (Serializer) ctr.newInstance(fory, type);
+          serializer = (Serializer) ctr.newInstance(config, type);
         } catch (Exception e) {
           throw new RuntimeException(e);
         }

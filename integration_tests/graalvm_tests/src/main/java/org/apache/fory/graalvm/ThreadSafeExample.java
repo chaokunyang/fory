@@ -25,7 +25,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.apache.fory.Fory;
-import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.collection.Collections;
 import org.apache.fory.util.Preconditions;
@@ -35,18 +34,12 @@ public class ThreadSafeExample {
 
   static {
     fory =
-        new ThreadLocalFory(
-            classLoader -> {
-              Fory f =
-                  Fory.builder()
-                      .withName(ThreadSafeExample.class.getName())
-                      .requireClassRegistration(true)
-                      .build();
-              // register and generate serializer code.
-              f.register(Foo.class);
-              f.ensureSerializersCompiled();
-              return f;
-            });
+        Fory.builder()
+            .withName(ThreadSafeExample.class.getName())
+            .requireClassRegistration(true)
+            .buildThreadSafeFory();
+    fory.register(Foo.class);
+    fory.ensureSerializersCompiled();
     System.out.println("Init fory at build time");
   }
 

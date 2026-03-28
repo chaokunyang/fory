@@ -45,6 +45,9 @@ import java.util.regex.Pattern;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.config.Config;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
@@ -72,14 +75,19 @@ public class Serializers {
     }
   }
 
-  private static final MethodType SIG1 = MethodType.methodType(void.class, Fory.class, Class.class);
-  private static final MethodType SIG2 = MethodType.methodType(void.class, Fory.class);
-  private static final MethodType SIG3 = MethodType.methodType(void.class, Class.class);
-  private static final MethodType SIG4 = MethodType.methodType(void.class);
+  private static final MethodType SIG1 =
+      MethodType.methodType(void.class, TypeResolver.class, Class.class);
+  private static final MethodType SIG2 = MethodType.methodType(void.class, TypeResolver.class);
+  private static final MethodType SIG3 =
+      MethodType.methodType(void.class, Config.class, Class.class);
+  private static final MethodType SIG4 = MethodType.methodType(void.class, Config.class);
+  private static final MethodType SIG5 = MethodType.methodType(void.class, Class.class);
+  private static final MethodType SIG6 = MethodType.methodType(void.class);
 
   /**
-   * Serializer subclass must have a constructor which take parameters of type {@link Fory} and
-   * {@link Class}, or {@link Fory} or {@link Class} or no-arg constructor.
+   * Serializer subclass must have a constructor which take parameters of type {@link TypeResolver}
+   * and {@link Class}, or {@link TypeResolver}, or {@link Config} and {@link Class}, or {@link
+   * Config}, or {@link Class}, or no-arg constructor.
    */
   public static <T> Serializer<T> newSerializer(
       Fory fory, Class type, Class<? extends Serializer> serializerClass) {
@@ -88,26 +96,30 @@ public class Serializers {
     Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
     try {
       if (serializerClass == ObjectSerializer.class) {
-        return new ObjectSerializer(fory, type);
+        return new ObjectSerializer(typeResolver, type);
       }
       if (serializerClass == MetaSharedSerializer.class) {
         TypeDef typeDef = typeResolver.getTypeDef(type, true);
-        return new MetaSharedSerializer(fory, type, typeDef);
+        return new MetaSharedSerializer(typeResolver, type, typeDef);
       }
       Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
       if (ctrInfo != null) {
         if (GraalvmSupport.isGraalBuildtime()) {
           if (Generated.class.isAssignableFrom(serializerClass)) {
-            return new GraalvmSerializerHolder(fory, type, serializerClass);
+            return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
           }
         }
         MethodType sig = ctrInfo.f0;
         MethodHandle handle = ctrInfo.f1;
         if (sig.equals(SIG1)) {
-          return (Serializer<T>) handle.invoke(fory, type);
+          return (Serializer<T>) handle.invoke(typeResolver, type);
         } else if (sig.equals(SIG2)) {
-          return (Serializer<T>) handle.invoke(fory);
+          return (Serializer<T>) handle.invoke(typeResolver);
         } else if (sig.equals(SIG3)) {
+          return (Serializer<T>) handle.invoke(fory.getConfig(), type);
+        } else if (sig.equals(SIG4)) {
+          return (Serializer<T>) handle.invoke(fory.getConfig());
+        } else if (sig.equals(SIG5)) {
           return (Serializer<T>) handle.invoke(type);
         } else {
           return (Serializer<T>) handle.invoke();
@@ -135,15 +147,17 @@ public class Serializers {
   private static <T> Serializer<T> createSerializer(
       Fory fory, Class<?> type, Class<? extends Serializer> serializerClass) throws Throwable {
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(serializerClass);
+    TypeResolver typeResolver = fory.getTypeResolver();
+    Config config = fory.getConfig();
     try {
       MethodHandle ctr = lookup.findConstructor(serializerClass, SIG1);
       CTR_MAP.put(serializerClass, Tuple2.of(SIG1, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory, type, serializerClass);
+          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
         }
       }
-      return (Serializer<T>) ctr.invoke(fory, type);
+      return (Serializer<T>) ctr.invoke(typeResolver, type);
     } catch (NoSuchMethodException e) {
       ExceptionUtils.ignore(e);
     }
@@ -152,10 +166,10 @@ public class Serializers {
       CTR_MAP.put(serializerClass, Tuple2.of(SIG2, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory, type, serializerClass);
+          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
         }
       }
-      return (Serializer<T>) ctr.invoke(fory);
+      return (Serializer<T>) ctr.invoke(typeResolver);
     } catch (NoSuchMethodException e) {
       ExceptionUtils.ignore(e);
     }
@@ -164,39 +178,69 @@ public class Serializers {
       CTR_MAP.put(serializerClass, Tuple2.of(SIG3, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory, type, serializerClass);
+          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+        }
+      }
+      return (Serializer<T>) ctr.invoke(config, type);
+    } catch (NoSuchMethodException e) {
+      ExceptionUtils.ignore(e);
+    }
+    try {
+      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG4);
+      CTR_MAP.put(serializerClass, Tuple2.of(SIG4, ctr));
+      if (GraalvmSupport.isGraalBuildtime()) {
+        if (Generated.class.isAssignableFrom(serializerClass)) {
+          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+        }
+      }
+      return (Serializer<T>) ctr.invoke(config);
+    } catch (NoSuchMethodException e) {
+      ExceptionUtils.ignore(e);
+    }
+    try {
+      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG5);
+      CTR_MAP.put(serializerClass, Tuple2.of(SIG5, ctr));
+      if (GraalvmSupport.isGraalBuildtime()) {
+        if (Generated.class.isAssignableFrom(serializerClass)) {
+          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
         }
       }
       return (Serializer<T>) ctr.invoke(type);
     } catch (NoSuchMethodException e) {
-      MethodHandle ctr = ReflectionUtils.getCtrHandle(serializerClass);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG4, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory, type, serializerClass);
-        }
-      }
-      return (Serializer<T>) ctr.invoke();
+      ExceptionUtils.ignore(e);
     }
+    MethodHandle ctr = ReflectionUtils.getCtrHandle(serializerClass);
+    CTR_MAP.put(serializerClass, Tuple2.of(SIG6, ctr));
+    if (GraalvmSupport.isGraalBuildtime()) {
+      if (Generated.class.isAssignableFrom(serializerClass)) {
+        return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+      }
+    }
+    return (Serializer<T>) ctr.invoke();
   }
 
-  public static <T> void write(MemoryBuffer buffer, Serializer<T> serializer, T obj) {
-    serializer.write(buffer, obj);
+  public static <T> void write(WriteContext writeContext, Serializer<T> serializer, T obj) {
+    serializer.write(writeContext, obj);
   }
 
-  public static <T> T read(MemoryBuffer buffer, Serializer<T> serializer) {
-    return serializer.read(buffer);
+  public static <T> T read(ReadContext readContext, Serializer<T> serializer) {
+    return serializer.read(readContext);
   }
 
   public abstract static class CrossLanguageCompatibleSerializer<T> extends Serializer<T> {
 
-    public CrossLanguageCompatibleSerializer(Fory fory, Class<T> cls) {
-      super(fory, cls);
+    public CrossLanguageCompatibleSerializer(Config config, Class<T> cls) {
+      super(config, cls);
     }
 
     public CrossLanguageCompatibleSerializer(
-        Fory fory, Class<T> cls, boolean needToWriteRef, boolean immutable) {
-      super(fory, cls, needToWriteRef, immutable);
+        Config config, Class<T> cls, boolean needToWriteRef, boolean immutable) {
+      super(config, cls, needToWriteRef, immutable);
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -217,15 +261,14 @@ public class Serializers {
 
   public abstract static class AbstractStringBuilderSerializer<T extends CharSequence>
       extends Serializer<T> {
-    protected final StringSerializer stringSerializer;
-
-    public AbstractStringBuilderSerializer(Fory fory, Class<T> type) {
-      super(fory, type);
-      stringSerializer = fory.getStringSerializer();
+    public AbstractStringBuilderSerializer(Config config, Class<T> type) {
+      super(config, type);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, T value) {
+    public void write(WriteContext writeContext, T value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      StringSerializer stringSerializer = writeContext.getStringSerializer();
       if (isJava) {
         if (GET_CODER != null) {
           int coder = GET_CODER.applyAsInt(value);
@@ -257,8 +300,8 @@ public class Serializers {
   public static final class StringBuilderSerializer
       extends AbstractStringBuilderSerializer<StringBuilder> {
 
-    public StringBuilderSerializer(Fory fory) {
-      super(fory, StringBuilder.class);
+    public StringBuilderSerializer(Config config) {
+      super(config, StringBuilder.class);
     }
 
     @Override
@@ -267,20 +310,17 @@ public class Serializers {
     }
 
     @Override
-    public StringBuilder read(MemoryBuffer buffer) {
-      if (isJava) {
-        return new StringBuilder(stringSerializer.readString(buffer));
-      } else {
-        return new StringBuilder(stringSerializer.readString(buffer));
-      }
+    public StringBuilder read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      return new StringBuilder(readContext.getStringSerializer().readString(buffer));
     }
   }
 
   public static final class StringBufferSerializer
       extends AbstractStringBuilderSerializer<StringBuffer> {
 
-    public StringBufferSerializer(Fory fory) {
-      super(fory, StringBuffer.class);
+    public StringBufferSerializer(Config config) {
+      super(config, StringBuffer.class);
     }
 
     @Override
@@ -289,22 +329,20 @@ public class Serializers {
     }
 
     @Override
-    public StringBuffer read(MemoryBuffer buffer) {
-      if (isJava) {
-        return new StringBuffer(stringSerializer.readString(buffer));
-      } else {
-        return new StringBuffer(stringSerializer.readString(buffer));
-      }
+    public StringBuffer read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      return new StringBuffer(readContext.getStringSerializer().readString(buffer));
     }
   }
 
   public static final class BigDecimalSerializer extends ImmutableSerializer<BigDecimal> {
-    public BigDecimalSerializer(Fory fory) {
-      super(fory, BigDecimal.class);
+    public BigDecimalSerializer(Config config) {
+      super(config, BigDecimal.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, BigDecimal value) {
+    public void write(WriteContext writeContext, BigDecimal value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       final byte[] bytes = value.unscaledValue().toByteArray();
       buffer.writeVarUint32Small7(value.scale());
       buffer.writeVarUint32Small7(value.precision());
@@ -313,7 +351,8 @@ public class Serializers {
     }
 
     @Override
-    public BigDecimal read(MemoryBuffer buffer) {
+    public BigDecimal read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int scale = buffer.readVarUint32Small7();
       int precision = buffer.readVarUint32Small7();
       int len = buffer.readVarUint32Small7();
@@ -324,19 +363,21 @@ public class Serializers {
   }
 
   public static final class BigIntegerSerializer extends ImmutableSerializer<BigInteger> {
-    public BigIntegerSerializer(Fory fory) {
-      super(fory, BigInteger.class);
+    public BigIntegerSerializer(Config config) {
+      super(config, BigInteger.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, BigInteger value) {
+    public void write(WriteContext writeContext, BigInteger value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       final byte[] bytes = value.toByteArray();
       buffer.writeVarUint32Small7(bytes.length);
       buffer.writeBytes(bytes);
     }
 
     @Override
-    public BigInteger read(MemoryBuffer buffer) {
+    public BigInteger read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int len = buffer.readVarUint32Small7();
       byte[] bytes = buffer.readBytes(len);
       return new BigInteger(bytes);
@@ -345,12 +386,13 @@ public class Serializers {
 
   public static final class AtomicBooleanSerializer extends Serializer<AtomicBoolean> {
 
-    public AtomicBooleanSerializer(Fory fory) {
-      super(fory, AtomicBoolean.class);
+    public AtomicBooleanSerializer(Config config) {
+      super(config, AtomicBoolean.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, AtomicBoolean value) {
+    public void write(WriteContext writeContext, AtomicBoolean value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeBoolean(value.get());
     }
 
@@ -360,19 +402,26 @@ public class Serializers {
     }
 
     @Override
-    public AtomicBoolean read(MemoryBuffer buffer) {
+    public AtomicBoolean read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return new AtomicBoolean(buffer.readBoolean());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
   public static final class AtomicIntegerSerializer extends Serializer<AtomicInteger> {
 
-    public AtomicIntegerSerializer(Fory fory) {
-      super(fory, AtomicInteger.class);
+    public AtomicIntegerSerializer(Config config) {
+      super(config, AtomicInteger.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, AtomicInteger value) {
+    public void write(WriteContext writeContext, AtomicInteger value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(value.get());
     }
 
@@ -382,19 +431,26 @@ public class Serializers {
     }
 
     @Override
-    public AtomicInteger read(MemoryBuffer buffer) {
+    public AtomicInteger read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return new AtomicInteger(buffer.readInt32());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
   public static final class AtomicLongSerializer extends Serializer<AtomicLong> {
 
-    public AtomicLongSerializer(Fory fory) {
-      super(fory, AtomicLong.class);
+    public AtomicLongSerializer(Config config) {
+      super(config, AtomicLong.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, AtomicLong value) {
+    public void write(WriteContext writeContext, AtomicLong value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt64(value.get());
     }
 
@@ -404,96 +460,112 @@ public class Serializers {
     }
 
     @Override
-    public AtomicLong read(MemoryBuffer buffer) {
+    public AtomicLong read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return new AtomicLong(buffer.readInt64());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
   public static final class AtomicReferenceSerializer extends Serializer<AtomicReference> {
 
-    public AtomicReferenceSerializer(Fory fory) {
-      super(fory, AtomicReference.class);
+    public AtomicReferenceSerializer(Config config) {
+      super(config, AtomicReference.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, AtomicReference value) {
-      fory.writeRef(buffer, value.get());
+    public void write(WriteContext writeContext, AtomicReference value) {
+      writeContext.writeRef(value.get());
     }
 
     @Override
     public AtomicReference copy(AtomicReference origin) {
-      return new AtomicReference(fory.copyObject(origin.get()));
+      return new AtomicReference(copyContext().copyObject(origin.get()));
     }
 
     @Override
-    public AtomicReference read(MemoryBuffer buffer) {
-      return new AtomicReference(fory.readRef(buffer));
+    public AtomicReference read(ReadContext readContext) {
+      return new AtomicReference(readContext.readRef());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
   public static final class CurrencySerializer extends ImmutableSerializer<Currency> {
-    public CurrencySerializer(Fory fory) {
-      super(fory, Currency.class);
+    public CurrencySerializer(Config config) {
+      super(config, Currency.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Currency object) {
-      fory.writeString(buffer, object.getCurrencyCode());
+    public void write(WriteContext writeContext, Currency object) {
+      writeContext.writeString(object.getCurrencyCode());
     }
 
     @Override
-    public Currency read(MemoryBuffer buffer) {
-      String currencyCode = fory.readString(buffer);
+    public Currency read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      String currencyCode = readContext.readString(buffer);
       return Currency.getInstance(currencyCode);
     }
   }
 
   /** Serializer for {@link Charset}. */
   public static final class CharsetSerializer<T extends Charset> extends ImmutableSerializer<T> {
-    public CharsetSerializer(Fory fory, Class<T> type) {
-      super(fory, type);
+    public CharsetSerializer(Config config, Class<T> type) {
+      super(config, type);
     }
 
-    public void write(MemoryBuffer buffer, T object) {
-      fory.writeString(buffer, object.name());
+    public void write(WriteContext writeContext, T object) {
+      writeContext.writeString(object.name());
     }
 
-    public T read(MemoryBuffer buffer) {
-      return (T) Charset.forName(fory.readString(buffer));
+    public T read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      return (T) Charset.forName(readContext.readString(buffer));
     }
   }
 
   public static final class URISerializer extends ImmutableSerializer<java.net.URI> {
 
-    public URISerializer(Fory fory) {
-      super(fory, URI.class);
+    public URISerializer(Config config) {
+      super(config, URI.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, final URI uri) {
-      fory.writeString(buffer, uri.toString());
+    public void write(WriteContext writeContext, final URI uri) {
+      writeContext.writeString(uri.toString());
     }
 
     @Override
-    public URI read(MemoryBuffer buffer) {
-      return URI.create(fory.readString(buffer));
+    public URI read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      return URI.create(readContext.readString(buffer));
     }
   }
 
   public static final class RegexSerializer extends ImmutableSerializer<Pattern> {
-    public RegexSerializer(Fory fory) {
-      super(fory, Pattern.class);
+    public RegexSerializer(Config config) {
+      super(config, Pattern.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Pattern pattern) {
-      fory.writeString(buffer, pattern.pattern());
+    public void write(WriteContext writeContext, Pattern pattern) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      writeContext.writeString(pattern.pattern());
       buffer.writeInt32(pattern.flags());
     }
 
     @Override
-    public Pattern read(MemoryBuffer buffer) {
-      String regex = fory.readString(buffer);
+    public Pattern read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      String regex = readContext.readString(buffer);
       int flags = buffer.readInt32();
       return Pattern.compile(regex, flags);
     }
@@ -501,35 +573,39 @@ public class Serializers {
 
   public static final class UUIDSerializer extends ImmutableSerializer<UUID> {
 
-    public UUIDSerializer(Fory fory) {
-      super(fory, UUID.class);
+    public UUIDSerializer(Config config) {
+      super(config, UUID.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, final UUID uuid) {
+    public void write(WriteContext writeContext, final UUID uuid) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt64(uuid.getMostSignificantBits());
       buffer.writeInt64(uuid.getLeastSignificantBits());
     }
 
     @Override
-    public UUID read(MemoryBuffer buffer) {
+    public UUID read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return new UUID(buffer.readInt64(), buffer.readInt64());
     }
   }
 
   public static final class ClassSerializer extends ImmutableSerializer<Class> {
-    public ClassSerializer(Fory fory) {
-      super(fory, Class.class);
+    public ClassSerializer(Config config) {
+      super(config, Class.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Class value) {
-      ((ClassResolver) fory.getTypeResolver()).writeClassInternal(buffer, value);
+    public void write(WriteContext writeContext, Class value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      ((ClassResolver) writeContext.getTypeResolver()).writeClassInternal(buffer, value);
     }
 
     @Override
-    public Class read(MemoryBuffer buffer) {
-      return ((ClassResolver) fory.getTypeResolver()).readClassInternal(buffer);
+    public Class read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      return ((ClassResolver) readContext.getTypeResolver()).readClassInternal(buffer);
     }
   }
 
@@ -542,34 +618,36 @@ public class Serializers {
   // Use a separate serializer to avoid codegen for empty object.
   public static final class EmptyObjectSerializer extends ImmutableSerializer<Object> {
 
-    public EmptyObjectSerializer(Fory fory) {
-      super(fory, Object.class);
+    public EmptyObjectSerializer(Config config) {
+      super(config, Object.class);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Object value) {}
+    public void write(WriteContext writeContext, Object value) {}
 
     @Override
-    public Object read(MemoryBuffer buffer) {
+    public Object read(ReadContext readContext) {
       return new Object();
     }
   }
 
   public static void registerDefaultSerializers(Fory fory) {
+    Config config = fory.getConfig();
     TypeResolver resolver = fory.getTypeResolver();
-    resolver.registerInternalSerializer(Class.class, new ClassSerializer(fory));
-    resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(fory));
-    resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(fory));
-    resolver.registerInternalSerializer(BigInteger.class, new BigIntegerSerializer(fory));
-    resolver.registerInternalSerializer(BigDecimal.class, new BigDecimalSerializer(fory));
-    resolver.registerInternalSerializer(AtomicBoolean.class, new AtomicBooleanSerializer(fory));
-    resolver.registerInternalSerializer(AtomicInteger.class, new AtomicIntegerSerializer(fory));
-    resolver.registerInternalSerializer(AtomicLong.class, new AtomicLongSerializer(fory));
-    resolver.registerInternalSerializer(AtomicReference.class, new AtomicReferenceSerializer(fory));
-    resolver.registerInternalSerializer(Currency.class, new CurrencySerializer(fory));
-    resolver.registerInternalSerializer(URI.class, new URISerializer(fory));
-    resolver.registerInternalSerializer(Pattern.class, new RegexSerializer(fory));
-    resolver.registerInternalSerializer(UUID.class, new UUIDSerializer(fory));
-    resolver.registerInternalSerializer(Object.class, new EmptyObjectSerializer(fory));
+    resolver.registerInternalSerializer(Class.class, new ClassSerializer(config));
+    resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(config));
+    resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(config));
+    resolver.registerInternalSerializer(BigInteger.class, new BigIntegerSerializer(config));
+    resolver.registerInternalSerializer(BigDecimal.class, new BigDecimalSerializer(config));
+    resolver.registerInternalSerializer(AtomicBoolean.class, new AtomicBooleanSerializer(config));
+    resolver.registerInternalSerializer(AtomicInteger.class, new AtomicIntegerSerializer(config));
+    resolver.registerInternalSerializer(AtomicLong.class, new AtomicLongSerializer(config));
+    resolver.registerInternalSerializer(
+        AtomicReference.class, new AtomicReferenceSerializer(config));
+    resolver.registerInternalSerializer(Currency.class, new CurrencySerializer(config));
+    resolver.registerInternalSerializer(URI.class, new URISerializer(config));
+    resolver.registerInternalSerializer(Pattern.class, new RegexSerializer(config));
+    resolver.registerInternalSerializer(UUID.class, new UUIDSerializer(config));
+    resolver.registerInternalSerializer(Object.class, new EmptyObjectSerializer(config));
   }
 }

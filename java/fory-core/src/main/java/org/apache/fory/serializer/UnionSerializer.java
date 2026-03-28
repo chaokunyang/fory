@@ -80,8 +80,8 @@ public class UnionSerializer extends Serializer<Union> {
   private boolean finalCaseSerializersResolved;
   private final TypeResolver resolver;
 
-  public UnionSerializer(Fory fory, Class<? extends Union> cls) {
-    super(fory, (Class<Union>) cls);
+  public UnionSerializer(TypeResolver typeResolver, Class<? extends Union> cls) {
+    super(typeResolver, (Class<Union>) cls);
     int typeIndex = getTypeIndex(cls);
     if (typeIndex >= 0) {
       this.factory = FACTORIES[typeIndex];
@@ -90,7 +90,7 @@ public class UnionSerializer extends Serializer<Union> {
     }
     finalCaseTypeInfo = new LongMap<>(1);
     this.caseValueTypes = resolveCaseValueTypes(cls);
-    resolver = fory.getTypeResolver();
+    resolver = typeResolver;
   }
 
   private static int getTypeIndex(Class<? extends Union> cls) {
@@ -134,7 +134,8 @@ public class UnionSerializer extends Serializer<Union> {
   }
 
   @Override
-  public void write(MemoryBuffer buffer, Union union) {
+  public void write(org.apache.fory.context.WriteContext writeContext, Union union) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     int index = union.getIndex();
     buffer.writeVarUint32(index);
 
@@ -152,18 +153,20 @@ public class UnionSerializer extends Serializer<Union> {
   }
 
   @Override
-  public Union read(MemoryBuffer buffer) {
+  public Union read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     int index = buffer.readVarUint32();
     Object caseValue;
+    RefResolver refResolver = fory.getRefResolver();
     int nextReadRefId = refResolver.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       // ref value or not-null value
       TypeInfo declared = getFinalCaseTypeInfo(index);
       TypeInfo readTypeInfo = resolver.readTypeInfo(buffer, declared);
       if (declared != null) {
-        caseValue = Serializers.read(buffer, declared.getSerializer());
+        caseValue = Serializers.read(org.apache.fory.context.ReadContext.current(), declared.getSerializer());
       } else {
-        caseValue = Serializers.read(buffer, readTypeInfo.getSerializer());
+        caseValue = Serializers.read(org.apache.fory.context.ReadContext.current(), readTypeInfo.getSerializer());
       }
       refResolver.setReadObject(nextReadRefId, caseValue);
     } else {
@@ -274,7 +277,7 @@ public class UnionSerializer extends Serializer<Union> {
         break;
     }
     if (serializer != null) {
-      Serializers.write(buffer, serializer, value);
+      Serializers.write(org.apache.fory.context.WriteContext.current(), serializer, value);
       return;
     }
     throw new IllegalStateException("Missing serializer for union type id " + typeId);

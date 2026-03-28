@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.builder.MetaSharedCodecBuilder;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
@@ -75,8 +76,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private final boolean hasDefaultValues;
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
 
-  public MetaSharedSerializer(Fory fory, Class<T> type, TypeDef typeDef) {
-    super(fory, type);
+  public MetaSharedSerializer(TypeResolver typeResolver, Class<T> type, TypeDef typeDef) {
+    super(typeResolver, type);
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
@@ -101,11 +102,11 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
             d.getTypeName(),
             d.isTrackingRef(),
             d.isNullable(),
-            Types.getDescriptorTypeId(fory, d));
+            Types.getDescriptorTypeId(fory.getFory(), d));
       }
     }
     // d.getField() may be null if not exists in this class when meta share enabled.
-    FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, descriptorGrouper);
+    FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory.getFory(), descriptorGrouper);
     buildInFields = fieldGroups.buildInFields;
     containerFields = fieldGroups.containerFields;
     otherFields = fieldGroups.userTypeFields;
@@ -127,7 +128,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       hasDefaultValues = defaultValueSupport.hasDefaultValues(type);
       defaultValueFields =
           defaultValueSupport.buildDefaultValueFields(
-              fory, type, descriptorGrouper.getSortedDescriptors());
+              fory.getFory(), type, descriptorGrouper.getSortedDescriptors());
     }
     if (!hasDefaultValues) {
       DefaultValueUtils.DefaultValueSupport kotlinDefaultValueSupport =
@@ -136,7 +137,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         hasDefaultValues = kotlinDefaultValueSupport.hasDefaultValues(type);
         defaultValueFields =
             kotlinDefaultValueSupport.buildDefaultValueFields(
-                fory, type, descriptorGrouper.getSortedDescriptors());
+                fory.getFory(), type, descriptorGrouper.getSortedDescriptors());
       }
     }
     this.hasDefaultValues = hasDefaultValues;
@@ -144,14 +145,15 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   @Override
-  public void write(MemoryBuffer buffer, T value) {
+  public void write(org.apache.fory.context.WriteContext writeContext, T value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     if (serializer == null) {
       // xlang mode will register class and create serializer in advance, it won't go to here.
       serializer =
           ((ClassResolver) typeResolver)
-              .createSerializerSafe(type, () -> new ObjectSerializer<>(fory, type));
+              .createSerializerSafe(type, () -> new ObjectSerializer<>(typeResolver, type));
     }
-    serializer.write(buffer, value);
+    serializer.write(org.apache.fory.context.WriteContext.current(), value);
   }
 
   private T newInstance() {
@@ -165,7 +167,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   @Override
-  public T read(MemoryBuffer buffer) {
+  public T read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     if (isRecord) {
       Object[] fieldValues =
           new Object[buildInFields.length + otherFields.length + containerFields.length];
@@ -176,7 +179,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       return t;
     }
     T targetObject = newInstance();
-    Fory fory = this.fory;
+    Fory fory = this.fory.getFory();
     RefResolver refResolver = this.refResolver;
     if (refResolver instanceof MapRefResolver) {
       MapRefResolver mapRefResolver = (MapRefResolver) refResolver;
@@ -232,6 +235,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private void compatibleRead(MemoryBuffer buffer, SerializationFieldInfo fieldInfo, Object obj) {
+    Fory fory = this.fory.getFory();
     Object fieldValue =
         AbstractObjectSerializer.readBuildInFieldValue(
             fory, typeResolver, refResolver, fieldInfo, buffer);
@@ -240,7 +244,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
 
   private void readFields(MemoryBuffer buffer, Object[] fields) {
     int counter = 0;
-    Fory fory = this.fory;
+    Fory fory = this.fory.getFory();
     RefResolver refResolver = this.refResolver;
     // read order: primitive,boxed,final,other,collection,map
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {

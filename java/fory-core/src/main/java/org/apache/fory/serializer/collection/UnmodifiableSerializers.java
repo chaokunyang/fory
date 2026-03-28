@@ -82,21 +82,23 @@ public class UnmodifiableSerializers {
     private final Function factory;
     private final long offset;
 
-    public UnmodifiableCollectionSerializer(Fory fory, Class cls, Function factory, long offset) {
-      super(fory, cls, false);
+    public UnmodifiableCollectionSerializer(TypeResolver typeResolver, Class cls, Function factory, long offset) {
+      super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Collection value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Collection value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value.getClass() == type);
       Object fieldValue = Platform.getObject(value, offset);
       fory.writeRef(buffer, fieldValue);
     }
 
     @Override
-    public Collection read(MemoryBuffer buffer) {
+    public Collection read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       final Object sourceCollection = fory.readRef(buffer);
       return (Collection) factory.apply(sourceCollection);
     }
@@ -112,14 +114,15 @@ public class UnmodifiableSerializers {
     private final Function factory;
     private final long offset;
 
-    public UnmodifiableMapSerializer(Fory fory, Class cls, Function factory, long offset) {
-      super(fory, cls, false);
+    public UnmodifiableMapSerializer(TypeResolver typeResolver, Class cls, Function factory, long offset) {
+      super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Map value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Map value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value.getClass() == type);
       Object fieldValue = Platform.getObject(value, offset);
       fory.writeRef(buffer, fieldValue);
@@ -132,7 +135,8 @@ public class UnmodifiableSerializers {
     }
 
     @Override
-    public Map read(MemoryBuffer buffer) {
+    public Map read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       final Object sourceCollection = fory.readRef(buffer);
       return (Map) factory.apply(sourceCollection);
     }
@@ -148,12 +152,13 @@ public class UnmodifiableSerializers {
   }
 
   private static Serializer<?> createSerializer(Fory fory, Tuple2<Class<?>, Function> factory) {
+    TypeResolver typeResolver = fory.getTypeResolver();
     if (Collection.class.isAssignableFrom(factory.f0)) {
       return new UnmodifiableCollectionSerializer(
-          fory, factory.f0, factory.f1, Offset.SOURCE_COLLECTION_FIELD_OFFSET);
+          typeResolver, factory.f0, factory.f1, Offset.SOURCE_COLLECTION_FIELD_OFFSET);
     } else {
       return new UnmodifiableMapSerializer(
-          fory, factory.f0, factory.f1, Offset.SOURCE_MAP_FIELD_OFFSET);
+          typeResolver, factory.f0, factory.f1, Offset.SOURCE_MAP_FIELD_OFFSET);
     }
   }
 

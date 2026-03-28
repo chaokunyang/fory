@@ -19,7 +19,7 @@
 
 package org.apache.fory.serializer.collection;
 
-import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
 import org.apache.fory.collection.Float32List;
@@ -44,12 +44,13 @@ public class PrimitiveListSerializers {
 
   public static final class BoolListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<BoolList> {
-    public BoolListSerializer(Fory fory) {
-      super(fory, BoolList.class, false, true);
+    public BoolListSerializer(Config config) {
+      super(config, BoolList.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, BoolList value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, BoolList value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUint32Small7(value.size());
       boolean[] array = value.getArray();
       for (int i = 0; i < value.size(); i++) {
@@ -58,7 +59,8 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public BoolList read(MemoryBuffer buffer) {
+    public BoolList read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       int size = buffer.readVarUint32Small7();
       BoolList list = new BoolList(size);
       for (int i = 0; i < size; i++) {
@@ -70,18 +72,20 @@ public class PrimitiveListSerializers {
 
   public static final class Int8ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Int8List> {
-    public Int8ListSerializer(Fory fory) {
-      super(fory, Int8List.class, false, true);
+    public Int8ListSerializer(Config config) {
+      super(config, Int8List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Int8List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Int8List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUint32Small7(value.size());
       buffer.writeBytes(value.copyArray());
     }
 
     @Override
-    public Int8List read(MemoryBuffer buffer) {
+    public Int8List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       int size = buffer.readVarUint32Small7();
       byte[] array = new byte[size];
       buffer.readBytes(array);
@@ -91,12 +95,13 @@ public class PrimitiveListSerializers {
 
   public static final class Int16ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Int16List> {
-    public Int16ListSerializer(Fory fory) {
-      super(fory, Int16List.class, false, true);
+    public Int16ListSerializer(Config config) {
+      super(config, Int16List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Int16List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Int16List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       int size = value.size();
       int byteSize = size * 2;
       buffer.writeVarUint32Small7(byteSize);
@@ -111,7 +116,8 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Int16List read(MemoryBuffer buffer) {
+    public Int16List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       int byteSize = buffer.readVarUint32Small7();
       int size = byteSize / 2;
       short[] array = new short[size];
@@ -128,13 +134,14 @@ public class PrimitiveListSerializers {
 
   public static final class Int32ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Int32List> {
-    public Int32ListSerializer(Fory fory) {
-      super(fory, Int32List.class, false, true);
+    public Int32ListSerializer(Config config) {
+      super(config, Int32List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Int32List value) {
-      if (fory.getConfig().compressIntArray()) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Int32List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+      if (config.compressIntArray()) {
         writeInt32Compressed(buffer, value);
         return;
       }
@@ -152,8 +159,9 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Int32List read(MemoryBuffer buffer) {
-      if (fory.getConfig().compressIntArray()) {
+    public Int32List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
+      if (config.compressIntArray()) {
         return readInt32Compressed(buffer);
       }
       int byteSize = buffer.readVarUint32Small7();
@@ -191,17 +199,18 @@ public class PrimitiveListSerializers {
       extends Serializers.CrossLanguageCompatibleSerializer<Int64List> {
     private final boolean compressLongArray;
 
-    public Int64ListSerializer(Fory fory) {
-      super(fory, Int64List.class, false, true);
+    public Int64ListSerializer(Config config) {
+      super(config, Int64List.class, false, true);
       compressLongArray =
-          fory.getConfig().compressLongArray()
-              && fory.getConfig().longEncoding() != LongEncoding.FIXED;
+          config.compressLongArray()
+              && config.longEncoding() != LongEncoding.FIXED;
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Int64List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Int64List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       if (compressLongArray) {
-        writeInt64Compressed(buffer, value, fory.getConfig().longEncoding());
+        writeInt64Compressed(buffer, value, config.longEncoding());
         return;
       }
       int size = value.size();
@@ -218,9 +227,10 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Int64List read(MemoryBuffer buffer) {
+    public Int64List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       if (compressLongArray) {
-        return readInt64Compressed(buffer, fory.getConfig().longEncoding());
+        return readInt64Compressed(buffer, config.longEncoding());
       }
       int byteSize = buffer.readVarUint32Small7();
       int size = byteSize / 8;
@@ -269,18 +279,20 @@ public class PrimitiveListSerializers {
 
   public static final class Uint8ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Uint8List> {
-    public Uint8ListSerializer(Fory fory) {
-      super(fory, Uint8List.class, false, true);
+    public Uint8ListSerializer(Config config) {
+      super(config, Uint8List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Uint8List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Uint8List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUint32Small7(value.size());
       buffer.writeBytes(value.copyArray());
     }
 
     @Override
-    public Uint8List read(MemoryBuffer buffer) {
+    public Uint8List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       int size = buffer.readVarUint32Small7();
       byte[] array = new byte[size];
       buffer.readBytes(array);
@@ -290,12 +302,13 @@ public class PrimitiveListSerializers {
 
   public static final class Uint16ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Uint16List> {
-    public Uint16ListSerializer(Fory fory) {
-      super(fory, Uint16List.class, false, true);
+    public Uint16ListSerializer(Config config) {
+      super(config, Uint16List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Uint16List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Uint16List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       int size = value.size();
       int byteSize = size * 2;
       buffer.writeVarUint32Small7(byteSize);
@@ -310,7 +323,8 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Uint16List read(MemoryBuffer buffer) {
+    public Uint16List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       int byteSize = buffer.readVarUint32Small7();
       int size = byteSize / 2;
       short[] array = new short[size];
@@ -327,13 +341,14 @@ public class PrimitiveListSerializers {
 
   public static final class Uint32ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Uint32List> {
-    public Uint32ListSerializer(Fory fory) {
-      super(fory, Uint32List.class, false, true);
+    public Uint32ListSerializer(Config config) {
+      super(config, Uint32List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Uint32List value) {
-      if (fory.getConfig().compressIntArray()) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Uint32List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+      if (config.compressIntArray()) {
         writeUint32Compressed(buffer, value);
         return;
       }
@@ -351,8 +366,9 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Uint32List read(MemoryBuffer buffer) {
-      if (fory.getConfig().compressIntArray()) {
+    public Uint32List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
+      if (config.compressIntArray()) {
         return readUint32Compressed(buffer);
       }
       int byteSize = buffer.readVarUint32Small7();
@@ -390,17 +406,18 @@ public class PrimitiveListSerializers {
       extends Serializers.CrossLanguageCompatibleSerializer<Uint64List> {
     private final boolean compressLongArray;
 
-    public Uint64ListSerializer(Fory fory) {
-      super(fory, Uint64List.class, false, true);
+    public Uint64ListSerializer(Config config) {
+      super(config, Uint64List.class, false, true);
       compressLongArray =
-          fory.getConfig().compressLongArray()
-              && fory.getConfig().longEncoding() != LongEncoding.FIXED;
+          config.compressLongArray()
+              && config.longEncoding() != LongEncoding.FIXED;
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Uint64List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Uint64List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       if (compressLongArray) {
-        writeUint64Compressed(buffer, value, fory.getConfig().longEncoding());
+        writeUint64Compressed(buffer, value, config.longEncoding());
         return;
       }
       int size = value.size();
@@ -417,9 +434,10 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Uint64List read(MemoryBuffer buffer) {
+    public Uint64List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       if (compressLongArray) {
-        return readUint64Compressed(buffer, fory.getConfig().longEncoding());
+        return readUint64Compressed(buffer, config.longEncoding());
       }
       int byteSize = buffer.readVarUint32Small7();
       int size = byteSize / 8;
@@ -468,12 +486,13 @@ public class PrimitiveListSerializers {
 
   public static final class Float32ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Float32List> {
-    public Float32ListSerializer(Fory fory) {
-      super(fory, Float32List.class, false, true);
+    public Float32ListSerializer(Config config) {
+      super(config, Float32List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Float32List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Float32List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       int size = value.size();
       int byteSize = size * 4;
       buffer.writeVarUint32Small7(byteSize);
@@ -488,7 +507,8 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Float32List read(MemoryBuffer buffer) {
+    public Float32List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       int byteSize = buffer.readVarUint32Small7();
       int size = byteSize / 4;
       float[] array = new float[size];
@@ -505,12 +525,13 @@ public class PrimitiveListSerializers {
 
   public static final class Float64ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Float64List> {
-    public Float64ListSerializer(Fory fory) {
-      super(fory, Float64List.class, false, true);
+    public Float64ListSerializer(Config config) {
+      super(config, Float64List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Float64List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Float64List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       int size = value.size();
       int byteSize = size * 8;
       buffer.writeVarUint32Small7(byteSize);
@@ -525,7 +546,8 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Float64List read(MemoryBuffer buffer) {
+    public Float64List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       int byteSize = buffer.readVarUint32Small7();
       int size = byteSize / 8;
       double[] array = new double[size];
@@ -542,12 +564,13 @@ public class PrimitiveListSerializers {
 
   public static final class Float16ListSerializer
       extends Serializers.CrossLanguageCompatibleSerializer<Float16List> {
-    public Float16ListSerializer(Fory fory) {
-      super(fory, Float16List.class, false, true);
+    public Float16ListSerializer(Config config) {
+      super(config, Float16List.class, false, true);
     }
 
     @Override
-    public void write(MemoryBuffer buffer, Float16List value) {
+    public void write(org.apache.fory.context.WriteContext writeContext, Float16List value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
       int size = value.size();
       int byteSize = size * 2;
       buffer.writeVarUint32Small7(byteSize);
@@ -562,7 +585,8 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public Float16List read(MemoryBuffer buffer) {
+    public Float16List read(org.apache.fory.context.ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
       int byteSize = buffer.readVarUint32Small7();
       int size = byteSize / 2;
       short[] array = new short[size];
@@ -577,21 +601,21 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static void registerDefaultSerializers(Fory fory) {
+  public static void registerDefaultSerializers(TypeResolver resolver) {
     // Note: Classes are already registered in ClassResolver.initialize()
     // We only need to register serializers here
-    TypeResolver resolver = fory.getTypeResolver();
-    resolver.registerInternalSerializer(BoolList.class, new BoolListSerializer(fory));
-    resolver.registerInternalSerializer(Int8List.class, new Int8ListSerializer(fory));
-    resolver.registerInternalSerializer(Int16List.class, new Int16ListSerializer(fory));
-    resolver.registerInternalSerializer(Int32List.class, new Int32ListSerializer(fory));
-    resolver.registerInternalSerializer(Int64List.class, new Int64ListSerializer(fory));
-    resolver.registerInternalSerializer(Uint8List.class, new Uint8ListSerializer(fory));
-    resolver.registerInternalSerializer(Uint16List.class, new Uint16ListSerializer(fory));
-    resolver.registerInternalSerializer(Uint32List.class, new Uint32ListSerializer(fory));
-    resolver.registerInternalSerializer(Uint64List.class, new Uint64ListSerializer(fory));
-    resolver.registerInternalSerializer(Float32List.class, new Float32ListSerializer(fory));
-    resolver.registerInternalSerializer(Float64List.class, new Float64ListSerializer(fory));
-    resolver.registerInternalSerializer(Float16List.class, new Float16ListSerializer(fory));
+    Config config = resolver.getConfig();
+    resolver.registerInternalSerializer(BoolList.class, new BoolListSerializer(config));
+    resolver.registerInternalSerializer(Int8List.class, new Int8ListSerializer(config));
+    resolver.registerInternalSerializer(Int16List.class, new Int16ListSerializer(config));
+    resolver.registerInternalSerializer(Int32List.class, new Int32ListSerializer(config));
+    resolver.registerInternalSerializer(Int64List.class, new Int64ListSerializer(config));
+    resolver.registerInternalSerializer(Uint8List.class, new Uint8ListSerializer(config));
+    resolver.registerInternalSerializer(Uint16List.class, new Uint16ListSerializer(config));
+    resolver.registerInternalSerializer(Uint32List.class, new Uint32ListSerializer(config));
+    resolver.registerInternalSerializer(Uint64List.class, new Uint64ListSerializer(config));
+    resolver.registerInternalSerializer(Float32List.class, new Float32ListSerializer(config));
+    resolver.registerInternalSerializer(Float64List.class, new Float64ListSerializer(config));
+    resolver.registerInternalSerializer(Float16List.class, new Float16ListSerializer(config));
   }
 }

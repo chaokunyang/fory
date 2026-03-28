@@ -66,6 +66,11 @@ public class CodecUtils {
                 cls, fory, new MetaSharedCodecBuilder(TypeRef.of(cls), fory, typeDef)));
   }
 
+  public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedCodecClass(
+      TypeResolver typeResolver, Class<T> cls, TypeDef typeDef) {
+    return typeResolver.getJITContext().asyncVisitFory(f -> loadOrGenMetaSharedCodecClass(f, cls, typeDef));
+  }
+
   /**
    * Load or generate a JIT serializer class for single-layer meta-shared serialization.
    *

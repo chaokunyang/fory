@@ -482,13 +482,6 @@ public abstract class ForyTestBase {
     return fory2.deserialize(bytes, buffers);
   }
 
-  /** Update serialization depth by <code>diff</code>. */
-  protected void increaseForyDepth(Fory fory, int diff) {
-    long offset = ReflectionUtils.getFieldOffset(Fory.class, "depth");
-    int depth = Platform.getInt(fory, offset);
-    Platform.putInt(fory, offset, depth + diff);
-  }
-
   public static <T extends Throwable> void assertThrowsCause(
       Class<T> throwableClass, ThrowingRunnable runnable) {
     try {

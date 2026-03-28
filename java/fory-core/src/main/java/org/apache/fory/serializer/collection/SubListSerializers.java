@@ -22,7 +22,6 @@ package org.apache.fory.serializer.collection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import org.apache.fory.Fory;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -66,8 +65,7 @@ public class SubListSerializers {
     }
   }
 
-  public static void registerSerializers(Fory fory, boolean preserveView) {
-    TypeResolver classResolver = fory.getTypeResolver();
+  public static void registerSerializers(TypeResolver classResolver, boolean preserveView) {
     // java.util.ImmutableCollections$SubList is already registered in
     // ImmutableCollectionSerializers
     for (Class<?> cls :
@@ -92,7 +90,7 @@ public class SubListSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(MemoryBuffer buffer, List value) {
+    public Collection onCollectionWrite(WriteContext writeContext, MemoryBuffer buffer, List value) {
       throw new IllegalStateException();
     }
 
@@ -156,7 +154,7 @@ public class SubListSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       return new ArrayList(numElements);

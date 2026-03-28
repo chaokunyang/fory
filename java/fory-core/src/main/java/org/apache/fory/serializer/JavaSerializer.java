@@ -68,8 +68,8 @@ public class JavaSerializer extends AbstractObjectSerializer {
           Serializer.class.getName(),
           Externalizable.class.getName());
     }
-    objectInput = new MemoryBufferObjectInput(config, typeResolver, null);
-    objectOutput = new MemoryBufferObjectOutput(config, typeResolver, null);
+    objectInput = new MemoryBufferObjectInput(config, null);
+    objectOutput = new MemoryBufferObjectOutput(config, null);
   }
 
   @Override
@@ -77,6 +77,7 @@ public class JavaSerializer extends AbstractObjectSerializer {
     MemoryBuffer buffer = writeContext.getBuffer();
     try {
       objectOutput.setBuffer(buffer);
+      objectOutput.setWriteContext(writeContext);
       ObjectOutputStream objectOutputStream =
           (ObjectOutputStream) writeContext.getContextObject(objectOutput);
       if (objectOutputStream == null) {
@@ -95,6 +96,7 @@ public class JavaSerializer extends AbstractObjectSerializer {
     MemoryBuffer buffer = readContext.getBuffer();
     try {
       objectInput.setBuffer(buffer);
+      objectInput.setReadContext(readContext);
       ObjectInputStream objectInputStream =
           (ObjectInputStream) readContext.getContextObject(objectInput);
       if (objectInputStream == null) {

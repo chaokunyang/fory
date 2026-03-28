@@ -58,6 +58,7 @@ import org.apache.fory.serializer.BufferCallback;
 import org.apache.fory.serializer.BufferObject;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
+import org.apache.fory.type.Generics;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -126,7 +127,10 @@ public final class Fory implements BaseFory {
       refReader = new RefReader.NoRefReader();
     }
     jitContext = new JITContext(this);
-    typeResolver = config.isXlang() ? new XtypeResolver(this) : new ClassResolver(this);
+    typeResolver =
+        config.isXlang()
+            ? new XtypeResolver(config, classLoader, sharedRegistry, jitContext)
+            : new ClassResolver(config, classLoader, sharedRegistry, jitContext);
     typeResolver.initialize();
     MetaStringWriter metaStringWriter =
         config.forVirtualThread()
@@ -136,18 +140,17 @@ public final class Fory implements BaseFory {
     writeContext =
         new WriteContext(
             config,
-            typeResolver.getGenerics(),
+            new Generics(),
             typeResolver,
             refWriter,
             metaStringWriter);
     readContext =
         new ReadContext(
             config,
-            typeResolver.getGenerics(),
+            new Generics(),
             typeResolver,
             refReader,
             metaStringReader);
-    typeResolver.bindContexts(writeContext, readContext);
     copyContext = new CopyContext(typeResolver, config.copyRef());
     LOG.info("Created new fory {}", this);
   }
@@ -515,19 +518,19 @@ public final class Fory implements BaseFory {
 
   @SuppressWarnings("unchecked")
   private <T> T deserializeByType(MemoryBuffer buffer, Class<T> type) {
-    typeResolver.getGenerics().pushGenericType(typeResolver.buildGenericType(type));
+    readContext.getGenerics().pushGenericType(typeResolver.buildGenericType(type), readContext.getDepth());
     try {
       RefReader refReader = readContext.getRefReader();
       int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId < NOT_NULL_VALUE_FLAG) {
         return (T) refReader.getReadObject();
       }
-      TypeInfo typeInfo = typeResolver.readTypeInfo(buffer, type);
+      TypeInfo typeInfo = typeResolver.readTypeInfo(readContext, type);
       Object value = readContext.readNonRef(typeInfo);
       refReader.setReadObject(nextReadRefId, value);
       return (T) value;
     } finally {
-      typeResolver.getGenerics().popGenericType();
+      readContext.getGenerics().popGenericType(readContext.getDepth());
     }
   }
 

@@ -19,8 +19,9 @@
 
 package org.apache.fory.serializer;
 
-import org.apache.fory.Fory;
 import org.apache.fory.collection.ObjectIntMap;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 
@@ -46,7 +47,7 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    * @param obj the object to set field values on
    * @return the object with fields set
    */
-  public abstract T readAndSetFields(MemoryBuffer buffer, T obj);
+  public abstract T readAndSetFields(ReadContext readContext, MemoryBuffer buffer, T obj);
 
   /**
    * Set field values on target object from putFields data. This method maps field names from
@@ -79,7 +80,7 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    *
    * @param buffer the memory buffer to write to
    */
-  public abstract void writeLayerClassMeta(MemoryBuffer buffer);
+  public abstract void writeLayerClassMeta(WriteContext writeContext, MemoryBuffer buffer);
 
   /**
    * Write fields only, without layer class meta. The layer class meta should be written by the
@@ -88,7 +89,7 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    * @param buffer the memory buffer to write to
    * @param value the object to write fields from
    */
-  public abstract void writeFieldsOnly(MemoryBuffer buffer, T value);
+  public abstract void writeFieldsOnly(WriteContext writeContext, MemoryBuffer buffer, T value);
 
   /**
    * Write field values from array. Used by writeFields() when values come from PutField. The values
@@ -97,7 +98,8 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    * @param buffer the memory buffer to write to
    * @param vals the values array in field order
    */
-  public abstract void writeFieldValues(MemoryBuffer buffer, Object[] vals);
+  public abstract void writeFieldValues(
+      WriteContext writeContext, MemoryBuffer buffer, Object[] vals);
 
   /**
    * Read field values into array. Used by readFields() to populate GetField. Returns values in the
@@ -106,7 +108,7 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    * @param buffer the memory buffer to read from
    * @return array of field values in field order
    */
-  public abstract Object[] readFieldValues(MemoryBuffer buffer);
+  public abstract Object[] readFieldValues(ReadContext readContext, MemoryBuffer buffer);
 
   /**
    * Get the total number of fields in this layer.

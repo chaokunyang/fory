@@ -32,7 +32,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import org.apache.fory.Fory;
 import org.apache.fory.collection.LazyMap;
 import org.apache.fory.collection.MapSnapshot;
 import org.apache.fory.context.CopyContext;
@@ -62,11 +61,11 @@ public class MapSerializers {
     }
 
     @Override
-    public HashMap newMap(MemoryBuffer buffer) {
+    public HashMap newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashMap hashMap = new HashMap(numElements);
-      typeResolver.getReadContext().reference(hashMap);
+      readContext.reference(hashMap);
       return hashMap;
     }
 
@@ -82,11 +81,11 @@ public class MapSerializers {
     }
 
     @Override
-    public LinkedHashMap newMap(MemoryBuffer buffer) {
+    public LinkedHashMap newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       LinkedHashMap hashMap = new LinkedHashMap(numElements);
-      typeResolver.getReadContext().reference(hashMap);
+      readContext.reference(hashMap);
       return hashMap;
     }
 
@@ -102,11 +101,11 @@ public class MapSerializers {
     }
 
     @Override
-    public LazyMap newMap(MemoryBuffer buffer) {
+    public LazyMap newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       LazyMap map = new LazyMap(numElements);
-      typeResolver.getReadContext().reference(map);
+      readContext.reference(map);
       return map;
     }
 
@@ -139,23 +138,23 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(MemoryBuffer buffer, T value) {
+    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
       if (config.isXlang()) {
         return value;
       } else {
-        typeResolver.getWriteContext().writeRef(value.comparator());
+        writeContext.writeRef(value.comparator());
       }
       return value;
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public Map newMap(MemoryBuffer buffer) {
+    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
       assert !config.isXlang();
       setNumElements(buffer.readVarUint32Small7());
       T map;
-      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
+      Comparator comparator = (Comparator) readContext.readRef();
       if (type == TreeMap.class) {
         map = (T) new TreeMap(comparator);
       } else {
@@ -169,7 +168,7 @@ public class MapSerializers {
           throw new RuntimeException(e);
         }
       }
-      typeResolver.getReadContext().reference(map);
+      readContext.reference(map);
       return map;
     }
 
@@ -273,11 +272,11 @@ public class MapSerializers {
     }
 
     @Override
-    public ConcurrentHashMap newMap(MemoryBuffer buffer) {
+    public ConcurrentHashMap newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ConcurrentHashMap map = new ConcurrentHashMap(numElements);
-      typeResolver.getReadContext().reference(map);
+      readContext.reference(map);
       return map;
     }
 
@@ -295,22 +294,23 @@ public class MapSerializers {
     }
 
     @Override
-    public MapSnapshot onMapWrite(MemoryBuffer buffer, ConcurrentSkipListMap value) {
-      MapSnapshot snapshot = super.onMapWrite(buffer, value);
+    public MapSnapshot onMapWrite(
+        WriteContext writeContext, MemoryBuffer buffer, ConcurrentSkipListMap value) {
+      MapSnapshot snapshot = super.onMapWrite(writeContext, buffer, value);
       if (config.isXlang()) {
         return snapshot;
       }
-      typeResolver.getWriteContext().writeRef(value.comparator());
+      writeContext.writeRef(value.comparator());
       return snapshot;
     }
 
     @Override
-    public ConcurrentSkipListMap newMap(MemoryBuffer buffer) {
+    public ConcurrentSkipListMap newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
+      Comparator comparator = (Comparator) readContext.readRef();
       ConcurrentSkipListMap map = new ConcurrentSkipListMap(comparator);
-      typeResolver.getReadContext().reference(map);
+      readContext.reference(map);
       return map;
     }
 
@@ -341,17 +341,17 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(MemoryBuffer buffer, EnumMap value) {
+    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, EnumMap value) {
       buffer.writeVarUint32Small7(value.size());
       Class keyType = (Class) Platform.getObject(value, keyTypeFieldOffset);
-      ((ClassResolver) typeResolver).writeClassAndUpdateCache(buffer, keyType);
+      ((ClassResolver) typeResolver).writeClassAndUpdateCache(writeContext, buffer, keyType);
       return value;
     }
 
     @Override
-    public EnumMap newMap(MemoryBuffer buffer) {
+    public EnumMap newMap(ReadContext readContext, MemoryBuffer buffer) {
       setNumElements(buffer.readVarUint32Small7());
-      Class<?> keyType = typeResolver.readTypeInfo(buffer).getCls();
+      Class<?> keyType = typeResolver.readTypeInfo(readContext).getCls();
       return new EnumMap(keyType);
     }
 
@@ -412,7 +412,7 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(MemoryBuffer buffer, T value) {
+    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
       throw new IllegalStateException();
     }
 
@@ -458,7 +458,7 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(MemoryBuffer buffer, T value) {
+    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
       throw new IllegalStateException();
     }
 
@@ -496,7 +496,7 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(MemoryBuffer buffer, Object value) {
+    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, Object value) {
       Map v = (Map) value;
       buffer.writeVarUint32Small7(v.size());
       return v;
@@ -507,11 +507,11 @@ public class MapSerializers {
       throw new IllegalStateException("should not be called");
     }
 
-    public Map newMap(MemoryBuffer buffer) {
+    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashMap<Object, Object> map = new HashMap<>(numElements);
-      typeResolver.getReadContext().reference(map);
+      readContext.reference(map);
       return map;
     }
 
@@ -522,8 +522,7 @@ public class MapSerializers {
   }
 
   // TODO(chaokunyang) support ConcurrentSkipListMap.SubMap mo efficiently.
-  public static void registerDefaultSerializers(Fory fory) {
-    TypeResolver resolver = fory.getTypeResolver();
+  public static void registerDefaultSerializers(TypeResolver resolver) {
     resolver.registerInternalSerializer(HashMap.class, new HashMapSerializer(resolver));
     resolver.registerInternalSerializer(
         LinkedHashMap.class, new LinkedHashMapSerializer(resolver));

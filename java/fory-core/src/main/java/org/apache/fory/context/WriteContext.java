@@ -46,6 +46,7 @@ public final class WriteContext {
   private final TypeResolver typeResolver;
   private final RefWriter refWriter;
   private final MetaStringWriter metaStringWriter;
+  private final StringSerializer stringSerializer;
   private final boolean crossLanguage;
   private final boolean compressInt;
   private final LongEncoding longEncoding;
@@ -68,6 +69,7 @@ public final class WriteContext {
     this.typeResolver = typeResolver;
     this.refWriter = refWriter;
     this.metaStringWriter = metaStringWriter;
+    stringSerializer = new StringSerializer(config);
     crossLanguage = config.isXlang();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();
@@ -93,7 +95,6 @@ public final class WriteContext {
 
   public void reset() {
     refWriter.reset();
-    typeResolver.resetWrite();
     metaStringWriter.reset();
     if (!contextObjects.isEmpty()) {
       contextObjects.clear();
@@ -107,7 +108,7 @@ public final class WriteContext {
     bufferCallback = null;
     depth = 0;
     if (forVirtualThread) {
-      typeResolver.getStringSerializer().clearBuffer(config.bufferSizeLimitBytes());
+      stringSerializer.clearBuffer(config.bufferSizeLimitBytes());
     }
   }
 
@@ -148,14 +149,14 @@ public final class WriteContext {
   }
 
   public StringSerializer getStringSerializer() {
-    return typeResolver.getStringSerializer();
+    return stringSerializer;
   }
 
   public Object putContextObject(Object key, Object value) {
     return contextObjects.put(key, value);
   }
 
-  public boolean containsContextObject(Object key) {
+  public boolean hasContextObject(Object key) {
     return contextObjects.containsKey(key);
   }
 
@@ -220,7 +221,7 @@ public final class WriteContext {
         depth--;
         return;
       }
-      resolver.writeTypeInfo(buffer, typeInfo);
+      resolver.writeTypeInfo(this, typeInfo);
       writeData(typeInfo, obj);
     }
   }
@@ -236,7 +237,7 @@ public final class WriteContext {
         depth--;
         return;
       }
-      resolver.writeTypeInfo(buffer, typeInfo);
+      resolver.writeTypeInfo(this, typeInfo);
       writeData(typeInfo, obj);
     }
   }
@@ -255,7 +256,7 @@ public final class WriteContext {
     Serializer<Object> serializer = typeInfo.getSerializer();
     if (serializer.needToWriteRef()) {
       if (!refWriter.writeRefOrNull(buffer, obj)) {
-        resolver.writeTypeInfo(buffer, typeInfo);
+        resolver.writeTypeInfo(this, typeInfo);
         depth++;
         serializer.write(this, obj);
         depth--;
@@ -264,7 +265,7 @@ public final class WriteContext {
       buffer.writeByte(Fory.NULL_FLAG);
     } else {
       buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-      resolver.writeTypeInfo(buffer, typeInfo);
+      resolver.writeTypeInfo(this, typeInfo);
       depth++;
       serializer.write(this, obj);
       depth--;
@@ -305,7 +306,7 @@ public final class WriteContext {
       depth--;
       return;
     }
-    resolver.writeTypeInfo(buffer, typeInfo);
+    resolver.writeTypeInfo(this, typeInfo);
     writeData(typeInfo, obj);
   }
 
@@ -325,7 +326,7 @@ public final class WriteContext {
       depth--;
       return;
     }
-    resolver.writeTypeInfo(buffer, typeInfo);
+    resolver.writeTypeInfo(this, typeInfo);
     writeData(typeInfo, obj);
   }
 
@@ -337,7 +338,7 @@ public final class WriteContext {
       depth--;
       return;
     }
-    typeResolver.writeTypeInfo(buffer, typeInfo);
+    typeResolver.writeTypeInfo(this, typeInfo);
     writeData(typeInfo, obj);
   }
 
@@ -383,7 +384,7 @@ public final class WriteContext {
         break;
       case Types.STRING:
         if (typeInfo.getCls() == String.class) {
-          typeResolver.getStringSerializer().writeString(buffer, (String) obj);
+          stringSerializer.writeString(buffer, (String) obj);
           break;
         }
         depth++;
@@ -434,12 +435,11 @@ public final class WriteContext {
   }
 
   public void writeString(String str) {
-    typeResolver.getStringSerializer().writeString(buffer, str);
+    stringSerializer.writeString(buffer, str);
   }
 
   public void writeStringRef(String str) {
     MemoryBuffer buffer = this.buffer;
-    StringSerializer stringSerializer = typeResolver.getStringSerializer();
     if (stringSerializer.needToWriteRef()) {
       if (!refWriter.writeRefOrNull(buffer, str)) {
         stringSerializer.writeString(buffer, str);

@@ -292,7 +292,7 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
-  public void testSharedRegistrySharesThreadSafeSerializerAndEligibleTypeInfo() {
+  public void testSharedRegistrySharesOnlyPreRegisteredTypeInfo() {
     ForyBuilder builder =
         Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false);
     finishBuilder(builder);
@@ -303,12 +303,18 @@ public class ClassResolverTest extends ForyTestBase {
     ClassResolver resolver1 = (ClassResolver) fory1.getTypeResolver();
     ClassResolver resolver2 = (ClassResolver) fory2.getTypeResolver();
 
+    TypeInfo classInfo1 = resolver1.getTypeInfo(Class.class);
+    TypeInfo classInfo2 = resolver2.getTypeInfo(Class.class);
+    assertSame(classInfo1, classInfo2);
+    assertSame(sharedRegistry.getPreRegisteredTypeInfo(Class.class), classInfo1);
+    assertSame(classInfo1.getSerializer(), classInfo2.getSerializer());
+
     TypeInfo stringInfo1 = resolver1.getTypeInfo(String.class);
     TypeInfo stringInfo2 = resolver2.getTypeInfo(String.class);
     assertNotSame(stringInfo1, stringInfo2);
     assertNotSame(stringInfo1.getSerializer(), stringInfo2.getSerializer());
-    assertNull(sharedRegistry.getThreadSafeTypeInfo(String.class));
-    assertNull(sharedRegistry.getThreadSafeSerializer(String.class, StringSerializer.class));
+    assertNull(sharedRegistry.getPreRegisteredTypeInfo(String.class));
+    assertNull(sharedRegistry.getSerializer(String.class));
 
     resolver1.register(ThreadSafeRegisteredType.class, 2048L);
     resolver1.registerSerializer(
@@ -319,12 +325,11 @@ public class ClassResolverTest extends ForyTestBase {
 
     TypeInfo registeredInfo1 = resolver1.getTypeInfo(ThreadSafeRegisteredType.class);
     TypeInfo registeredInfo2 = resolver2.getTypeInfo(ThreadSafeRegisteredType.class);
-    assertSame(registeredInfo1, registeredInfo2);
+    assertNotSame(registeredInfo1, registeredInfo2);
     assertSame(registeredInfo1.getSerializer(), registeredInfo2.getSerializer());
-    assertSame(sharedRegistry.getThreadSafeTypeInfo(ThreadSafeRegisteredType.class), registeredInfo1);
+    assertNull(sharedRegistry.getPreRegisteredTypeInfo(ThreadSafeRegisteredType.class));
     assertSame(
-        sharedRegistry.getThreadSafeSerializer(
-            ThreadSafeRegisteredType.class, ThreadSafeRegisteredTypeSerializer.class),
+        sharedRegistry.getSerializer(ThreadSafeRegisteredType.class),
         registeredInfo1.getSerializer());
   }
 
@@ -352,16 +357,13 @@ public class ClassResolverTest extends ForyTestBase {
     assertEquals(CountingThreadSafeRegisteredTypeSerializer.constructorCalls.get(), 1);
 
     Serializer<?> sharedSerializer =
-        sharedRegistry.getThreadSafeSerializer(
-            CountingThreadSafeRegisteredType.class, CountingThreadSafeRegisteredTypeSerializer.class);
+        sharedRegistry.getSerializer(CountingThreadSafeRegisteredType.class);
     assertSame(sharedSerializer, resolver1.getTypeInfo(CountingThreadSafeRegisteredType.class).getSerializer());
     assertSame(sharedSerializer, resolver2.getTypeInfo(CountingThreadSafeRegisteredType.class).getSerializer());
-    assertSame(
-        sharedRegistry.getThreadSafeTypeInfo(CountingThreadSafeRegisteredType.class),
-        resolver1.getTypeInfo(CountingThreadSafeRegisteredType.class));
-    assertSame(
-        sharedRegistry.getThreadSafeTypeInfo(CountingThreadSafeRegisteredType.class),
+    assertNotSame(
+        resolver1.getTypeInfo(CountingThreadSafeRegisteredType.class),
         resolver2.getTypeInfo(CountingThreadSafeRegisteredType.class));
+    assertNull(sharedRegistry.getPreRegisteredTypeInfo(CountingThreadSafeRegisteredType.class));
   }
 
   @Test
@@ -529,9 +531,9 @@ public class ClassResolverTest extends ForyTestBase {
       MemoryBuffer buffer = MemoryUtils.buffer(32);
       fory.getWriteContext().prepare(buffer, null);
       try {
-        classResolver.writeClassInternal(buffer, getClass());
+        classResolver.writeClassInternal(fory.getWriteContext(), getClass());
         int writerIndex = buffer.writerIndex();
-        classResolver.writeClassInternal(buffer, getClass());
+        classResolver.writeClassInternal(fory.getWriteContext(), getClass());
         Assert.assertEquals(buffer.writerIndex(), writerIndex + 2);
       } finally {
         fory.getWriteContext().reset();
@@ -549,19 +551,18 @@ public class ClassResolverTest extends ForyTestBase {
       MemoryBuffer buffer = MemoryUtils.buffer(32);
       fory.getWriteContext().prepare(buffer, null);
       try {
-        classResolver.writeClassAndUpdateCache(buffer, getClass());
-        classResolver.writeClassAndUpdateCache(buffer, getClass());
+        classResolver.writeClassAndUpdateCache(fory.getWriteContext(), buffer, getClass());
+        classResolver.writeClassAndUpdateCache(fory.getWriteContext(), buffer, getClass());
       } finally {
         fory.getWriteContext().reset();
       }
       fory.getReadContext().prepare(buffer, null, false);
       try {
-        Assert.assertSame(classResolver.readTypeInfo(buffer).getCls(), getClass());
-        Assert.assertSame(classResolver.readTypeInfo(buffer).getCls(), getClass());
+        Assert.assertSame(classResolver.readTypeInfo(fory.getReadContext()).getCls(), getClass());
+        Assert.assertSame(classResolver.readTypeInfo(fory.getReadContext()).getCls(), getClass());
       } finally {
         fory.getReadContext().reset();
       }
-      classResolver.reset();
       buffer.writerIndex(0);
       buffer.readerIndex(0);
       List<org.apache.fory.test.bean.Foo> fooList =

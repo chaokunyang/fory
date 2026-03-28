@@ -284,23 +284,26 @@ public class ReplaceResolveSerializer extends Serializer {
             // written `REF_VALUE_FLAG`/`NOT_NULL_VALUE_FLAG` id outside this method call will be
             // ignored.
             writeContext.replaceRef(original, value);
-            writeObject(buffer, value, jdkMethodInfoCache);
+            writeObject(writeContext, buffer, value, jdkMethodInfoCache);
           }
         } else {
           buffer.writeByte(ORIGINAL);
-          writeObject(buffer, value, jdkMethodInfoCache);
+          writeObject(writeContext, buffer, value, jdkMethodInfoCache);
         }
       }
     } else {
       buffer.writeByte(ORIGINAL);
-      writeObject(buffer, value, jdkMethodInfoCache);
+      writeObject(writeContext, buffer, value, jdkMethodInfoCache);
     }
   }
 
   protected void writeObject(
-      MemoryBuffer buffer, Object value, MethodInfoCache jdkMethodInfoCache) {
-    classResolver.writeClassInternal(buffer, writeTypeInfo);
-    jdkMethodInfoCache.objectSerializer.write(typeResolver.getWriteContext(), value);
+      WriteContext writeContext,
+      MemoryBuffer buffer,
+      Object value,
+      MethodInfoCache jdkMethodInfoCache) {
+    classResolver.writeClassInternal(writeContext, writeTypeInfo);
+    jdkMethodInfoCache.objectSerializer.write(writeContext, value);
   }
 
   @Override
@@ -312,7 +315,7 @@ public class ReplaceResolveSerializer extends Serializer {
       int nextReadRefId = readContext.tryPreserveRefId();
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         // ref value or not-null value
-        Object o = readContext.readData(classResolver.readTypeInfo(buffer));
+        Object o = readContext.readData(classResolver.readTypeInfo(readContext));
         readContext.setReadObject(nextReadRefId, o);
         readContext.setReadObject(outerRefId, o);
         return o;
@@ -324,7 +327,7 @@ public class ReplaceResolveSerializer extends Serializer {
       int nextReadRefId = readContext.tryPreserveRefId();
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         // ref value or not-null value
-        Object o = readObject(buffer);
+        Object o = readObject(readContext, buffer);
         readContext.setReadObject(nextReadRefId, o);
         readContext.setReadObject(outerRefId, o);
         return o;
@@ -333,14 +336,14 @@ public class ReplaceResolveSerializer extends Serializer {
       }
     } else {
       Preconditions.checkArgument(flag == ORIGINAL);
-      return readObject(buffer);
+      return readObject(readContext, buffer);
     }
   }
 
-  protected Object readObject(MemoryBuffer buffer) {
-    Class cls = classResolver.readClassInternal(buffer);
+  protected Object readObject(ReadContext readContext, MemoryBuffer buffer) {
+    Class cls = classResolver.readClassInternal(readContext);
     MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(cls);
-    Object o = jdkMethodInfoCache.objectSerializer.read(typeResolver.getReadContext());
+    Object o = jdkMethodInfoCache.objectSerializer.read(readContext);
     ReplaceResolveInfo replaceResolveInfo = jdkMethodInfoCache.info;
     if (replaceResolveInfo.readResolveMethod == null) {
       return o;

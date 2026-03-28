@@ -51,7 +51,8 @@ public class SingletonCollectionSerializer extends CollectionLikeSerializer {
   }
 
   @Override
-  public Collection onCollectionWrite(MemoryBuffer buffer, Object value) {
+  public Collection onCollectionWrite(
+      WriteContext writeContext, MemoryBuffer buffer, Object value) {
     throw new IllegalStateException("unreachable");
   }
 

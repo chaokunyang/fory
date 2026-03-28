@@ -24,8 +24,8 @@ import java.io.ObjectOutput;
 import java.io.OutputStream;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.util.Preconditions;
 
@@ -33,14 +33,13 @@ import org.apache.fory.util.Preconditions;
 public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutput {
   private final boolean compressInt;
   private final LongEncoding longEncoding;
-  private final TypeResolver typeResolver;
+  private WriteContext writeContext;
   private MemoryBuffer buffer;
 
-  public MemoryBufferObjectOutput(Config config, TypeResolver typeResolver, MemoryBuffer buffer) {
+  public MemoryBufferObjectOutput(Config config, MemoryBuffer buffer) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
     this.buffer = buffer;
-    this.typeResolver = typeResolver;
   }
 
   public MemoryBuffer getBuffer() {
@@ -51,9 +50,13 @@ public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutp
     this.buffer = buffer;
   }
 
+  public void setWriteContext(WriteContext writeContext) {
+    this.writeContext = writeContext;
+  }
+
   @Override
   public void writeObject(Object obj) throws IOException {
-    typeResolver.getWriteContext().writeRef(obj);
+    writeContext.writeRef(obj);
   }
 
   @Override
@@ -127,13 +130,13 @@ public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutp
   @Override
   public void writeChars(String s) throws IOException {
     Preconditions.checkNotNull(s);
-    typeResolver.getStringSerializer().writeString(buffer, s);
+    writeContext.getStringSerializer().writeString(buffer, s);
   }
 
   @Override
   public void writeUTF(String s) throws IOException {
     Preconditions.checkNotNull(s);
-    typeResolver.getStringSerializer().writeString(buffer, s);
+    writeContext.getStringSerializer().writeString(buffer, s);
   }
 
   @Override

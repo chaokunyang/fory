@@ -20,9 +20,9 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Collection;
-import org.apache.fory.Fory;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.collection.CollectionSnapshot;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.memory.MemoryBuffer;
 
@@ -78,7 +78,8 @@ public class ConcurrentCollectionSerializer<T extends Collection> extends Collec
    * @return a snapshot of the collection for safe iteration during serialization
    */
   @Override
-  public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, T value) {
+  public CollectionSnapshot onCollectionWrite(
+      WriteContext writeContext, MemoryBuffer buffer, T value) {
     CollectionSnapshot snapshot = snapshots.popOrNull();
     if (snapshot == null) {
       snapshot = new CollectionSnapshot();

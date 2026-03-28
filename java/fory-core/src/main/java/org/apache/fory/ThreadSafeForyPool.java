@@ -217,10 +217,6 @@ public class ThreadSafeForyPool extends AbstractThreadSafeFory {
     return execute(fory -> fory.copy(obj));
   }
 
-  public SharedRegistry getSharedRegistry() {
-    return sharedRegistry;
-  }
-
   public int getMaxPoolSize() {
     return maxPoolSize;
   }

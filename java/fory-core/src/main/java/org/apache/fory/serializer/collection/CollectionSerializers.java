@@ -48,7 +48,6 @@ import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.LinkedBlockingQueue;
-import org.apache.fory.Fory;
 import org.apache.fory.collection.CollectionSnapshot;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
@@ -80,11 +79,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public ArrayList newCollection(MemoryBuffer buffer) {
+    public ArrayList newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ArrayList arrayList = new ArrayList(numElements);
-      typeResolver.getReadContext().reference(arrayList);
+      readContext.reference(arrayList);
       return arrayList;
     }
   }
@@ -137,11 +136,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public ArrayList newCollection(MemoryBuffer buffer) {
+    public ArrayList newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ArrayList arrayList = new ArrayList(numElements);
-      typeResolver.getReadContext().reference(arrayList);
+      readContext.reference(arrayList);
       return arrayList;
     }
   }
@@ -152,11 +151,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public HashSet newCollection(MemoryBuffer buffer) {
+    public HashSet newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashSet hashSet = new HashSet(numElements);
-      typeResolver.getReadContext().reference(hashSet);
+      readContext.reference(hashSet);
       return hashSet;
     }
   }
@@ -167,11 +166,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public LinkedHashSet newCollection(MemoryBuffer buffer) {
+    public LinkedHashSet newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       LinkedHashSet hashSet = new LinkedHashSet(numElements);
-      typeResolver.getReadContext().reference(hashSet);
+      readContext.reference(hashSet);
       return hashSet;
     }
   }
@@ -199,24 +198,24 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
+    public Collection onCollectionWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
       if (config.isXlang()) {
         return value;
       } else {
-        typeResolver.getWriteContext().writeRef(value.comparator());
+        writeContext.writeRef(value.comparator());
       }
       return value;
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public T newCollection(MemoryBuffer buffer) {
+    public T newCollection(ReadContext readContext, MemoryBuffer buffer) {
       assert !config.isXlang();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       T collection;
-      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
+      Comparator comparator = (Comparator) readContext.readRef();
       if (type == TreeSet.class) {
         collection = (T) new TreeSet(comparator);
       } else {
@@ -230,7 +229,7 @@ public class CollectionSerializers {
           throw new RuntimeException(e);
         }
       }
-      typeResolver.getReadContext().reference(collection);
+      readContext.reference(collection);
       return collection;
     }
 
@@ -292,7 +291,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
@@ -324,7 +323,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
@@ -461,25 +460,26 @@ public class CollectionSerializers {
     }
 
     @Override
-    public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, ConcurrentSkipListSet value) {
-      CollectionSnapshot snapshot = super.onCollectionWrite(buffer, value);
+    public CollectionSnapshot onCollectionWrite(
+        WriteContext writeContext, MemoryBuffer buffer, ConcurrentSkipListSet value) {
+      CollectionSnapshot snapshot = super.onCollectionWrite(writeContext, buffer, value);
       if (config.isXlang()) {
         return snapshot;
       }
-      typeResolver.getWriteContext().writeRef(value.comparator());
+      writeContext.writeRef(value.comparator());
       return snapshot;
     }
 
     @Override
-    public ConcurrentSkipListSet newCollection(MemoryBuffer buffer) {
+    public ConcurrentSkipListSet newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       assert !config.isXlang();
-      int refId = typeResolver.getReadContext().lastPreservedRefId();
+      int refId = readContext.lastPreservedRefId();
       // It's possible that comparator/elements has circular ref to set.
-      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
+      Comparator comparator = (Comparator) readContext.readRef();
       ConcurrentSkipListSet skipListSet = new ConcurrentSkipListSet(comparator);
-      typeResolver.getReadContext().setReadObject(refId, skipListSet);
+      readContext.setReadObject(refId, skipListSet);
       return skipListSet;
     }
   }
@@ -508,16 +508,15 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
-      final TypeInfo mapTypeInfo = typeResolver.readTypeInfo(buffer);
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
+      final TypeInfo mapTypeInfo = typeResolver.readTypeInfo(readContext);
       final MapLikeSerializer mapSerializer = (MapLikeSerializer) mapTypeInfo.getSerializer();
-      ReadContext readContext = typeResolver.getReadContext();
       // It's possible that elements or nested fields has circular ref to set.
       int refId = readContext.lastPreservedRefId();
       Set set;
       if (buffer.readBoolean()) {
         readContext.preserveRefId();
-        set = Collections.newSetFromMap(mapSerializer.newMap(buffer));
+        set = Collections.newSetFromMap(mapSerializer.newMap(readContext, buffer));
         setNumElements(mapSerializer.getAndClearNumElements());
       } else {
         Map map = (Map) mapSerializer.read(readContext);
@@ -547,18 +546,19 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(MemoryBuffer buffer, Set<?> value) {
+    public Collection onCollectionWrite(
+        WriteContext writeContext, MemoryBuffer buffer, Set<?> value) {
       final Map<?, Boolean> map = (Map<?, Boolean>) Platform.getObject(value, MAP_FIELD_OFFSET);
       final TypeInfo typeInfo = typeResolver.getTypeInfo(map.getClass());
       MapLikeSerializer mapSerializer = (MapLikeSerializer) typeInfo.getSerializer();
-      typeResolver.writeTypeInfo(buffer, typeInfo);
+      typeResolver.writeTypeInfo(writeContext, typeInfo);
       if (mapSerializer.supportCodegenHook) {
         buffer.writeBoolean(true);
-        mapSerializer.onMapWrite(buffer, map);
+        mapSerializer.onMapWrite(writeContext, buffer, map);
         return value;
       } else {
         buffer.writeBoolean(false);
-        mapSerializer.write(typeResolver.getWriteContext(), map);
+        mapSerializer.write(writeContext, map);
         return EMPTY_COLLECTION_STUB;
       }
     }
@@ -597,7 +597,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       throw new IllegalStateException(
           "Should not be invoked since we set supportCodegenHook to false");
     }
@@ -610,11 +610,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Vector newCollection(MemoryBuffer buffer) {
+    public Vector newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       Vector<Object> vector = new Vector<>(numElements);
-      typeResolver.getReadContext().reference(vector);
+      readContext.reference(vector);
       return vector;
     }
   }
@@ -626,11 +626,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public ArrayDeque newCollection(MemoryBuffer buffer) {
+    public ArrayDeque newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ArrayDeque deque = new ArrayDeque(numElements);
-      typeResolver.getReadContext().reference(deque);
+      readContext.reference(deque);
       return deque;
     }
   }
@@ -644,7 +644,7 @@ public class CollectionSerializers {
 
     @Override
     public void write(WriteContext writeContext, EnumSet object) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       Class<?> elemClass;
       if (object.isEmpty()) {
         EnumSet tmp = EnumSet.complementOf(object);
@@ -658,7 +658,7 @@ public class CollectionSerializers {
       if (!elemClass.isEnum()) {
         elemClass = elemClass.getEnclosingClass();
       }
-      ((ClassResolver) typeResolver).writeClassAndUpdateCache(buffer, elemClass);
+      ((ClassResolver) typeResolver).writeClassAndUpdateCache(writeContext, buffer, elemClass);
       Serializer serializer = typeResolver.getSerializer(elemClass);
       buffer.writeVarUint32Small7(object.size());
       for (Object element : object) {
@@ -669,7 +669,7 @@ public class CollectionSerializers {
     @Override
     public EnumSet read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      Class elemClass = typeResolver.readTypeInfo(buffer).getCls();
+      Class elemClass = typeResolver.readTypeInfo(readContext).getCls();
       EnumSet object = EnumSet.noneOf(elemClass);
       Serializer elemSerializer = typeResolver.getSerializer(elemClass);
       int length = buffer.readVarUint32Small7();
@@ -692,7 +692,7 @@ public class CollectionSerializers {
 
     @Override
     public void write(WriteContext writeContext, BitSet set) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       long[] values = set.toLongArray();
       buffer.writePrimitiveArrayWithSize(
           values, Platform.LONG_ARRAY_OFFSET, Math.multiplyExact(values.length, 8));
@@ -705,7 +705,7 @@ public class CollectionSerializers {
 
     @Override
     public BitSet read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       long[] values = buffer.readLongs(buffer.readVarUint32Small7());
       return BitSet.valueOf(values);
     }
@@ -716,12 +716,13 @@ public class CollectionSerializers {
       super(typeResolver, cls, true);
     }
 
-    public Collection onCollectionWrite(MemoryBuffer buffer, PriorityQueue value) {
+    public Collection onCollectionWrite(
+        WriteContext writeContext, MemoryBuffer buffer, PriorityQueue value) {
       buffer.writeVarUint32Small7(value.size());
       if (config.isXlang()) {
         return value;
       } else {
-        typeResolver.getWriteContext().writeRef(value.comparator());
+        writeContext.writeRef(value.comparator());
       }
       return value;
     }
@@ -734,13 +735,13 @@ public class CollectionSerializers {
     }
 
     @Override
-    public PriorityQueue newCollection(MemoryBuffer buffer) {
+    public PriorityQueue newCollection(ReadContext readContext, MemoryBuffer buffer) {
       assert !config.isXlang();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
+      Comparator comparator = (Comparator) readContext.readRef();
       PriorityQueue queue = new PriorityQueue(comparator);
-      typeResolver.getReadContext().reference(queue);
+      readContext.reference(queue);
       return queue;
     }
   }
@@ -778,21 +779,22 @@ public class CollectionSerializers {
     }
 
     @Override
-    public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, ArrayBlockingQueue value) {
+    public CollectionSnapshot onCollectionWrite(
+        WriteContext writeContext, MemoryBuffer buffer, ArrayBlockingQueue value) {
       // Read capacity before creating snapshot to ensure consistency
       int capacity = getCapacity(value);
-      CollectionSnapshot snapshot = super.onCollectionWrite(buffer, value);
+      CollectionSnapshot snapshot = super.onCollectionWrite(writeContext, buffer, value);
       buffer.writeVarUint32Small7(capacity);
       return snapshot;
     }
 
     @Override
-    public ArrayBlockingQueue newCollection(MemoryBuffer buffer) {
+    public ArrayBlockingQueue newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       int capacity = buffer.readVarUint32Small7();
       ArrayBlockingQueue queue = new ArrayBlockingQueue<>(capacity);
-      typeResolver.getReadContext().reference(queue);
+      readContext.reference(queue);
       return queue;
     }
 
@@ -834,21 +836,22 @@ public class CollectionSerializers {
     }
 
     @Override
-    public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, LinkedBlockingQueue value) {
+    public CollectionSnapshot onCollectionWrite(
+        WriteContext writeContext, MemoryBuffer buffer, LinkedBlockingQueue value) {
       // Read capacity before creating snapshot to ensure consistency
       int capacity = getCapacity(value);
-      CollectionSnapshot snapshot = super.onCollectionWrite(buffer, value);
+      CollectionSnapshot snapshot = super.onCollectionWrite(writeContext, buffer, value);
       buffer.writeVarUint32Small7(capacity);
       return snapshot;
     }
 
     @Override
-    public LinkedBlockingQueue newCollection(MemoryBuffer buffer) {
+    public LinkedBlockingQueue newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       int capacity = buffer.readVarUint32Small7();
       LinkedBlockingQueue queue = new LinkedBlockingQueue<>(capacity);
-      typeResolver.getReadContext().reference(queue);
+      readContext.reference(queue);
       return queue;
     }
 
@@ -887,7 +890,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
+    public Collection onCollectionWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
       throw new IllegalStateException();
     }
 
@@ -929,7 +932,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
+    public Collection onCollectionWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
       throw new IllegalStateException();
     }
 
@@ -962,7 +965,8 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(MemoryBuffer buffer, Object value) {
+    public Collection onCollectionWrite(
+        WriteContext writeContext, MemoryBuffer buffer, Object value) {
       Collection v = (Collection) value;
       buffer.writeVarUint32Small7(v.size());
       return v;
@@ -980,11 +984,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public List newCollection(MemoryBuffer buffer) {
+    public List newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ArrayList list = new ArrayList(numElements);
-      typeResolver.getReadContext().reference(list);
+      readContext.reference(list);
       return list;
     }
   }
@@ -995,11 +999,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Set newCollection(MemoryBuffer buffer) {
+    public Set newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashSet set = new HashSet(numElements);
-      typeResolver.getReadContext().reference(set);
+      readContext.reference(set);
       return set;
     }
   }
@@ -1008,8 +1012,7 @@ public class CollectionSerializers {
   //  by jit codegen those constructor for compiling in jdk8.
   // TODO Support ArraySubListSerializer, SubListSerializer
 
-  public static void registerDefaultSerializers(Fory fory) {
-    TypeResolver resolver = fory.getTypeResolver();
+  public static void registerDefaultSerializers(TypeResolver resolver) {
     resolver.registerInternalSerializer(ArrayList.class, new ArrayListSerializer(resolver));
     Class arrayAsListClass = Arrays.asList(1, 2).getClass();
     resolver.registerInternalSerializer(

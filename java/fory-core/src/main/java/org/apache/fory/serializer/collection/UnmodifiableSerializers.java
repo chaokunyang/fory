@@ -33,7 +33,6 @@ import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
-import org.apache.fory.Fory;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
@@ -136,17 +135,17 @@ public class UnmodifiableSerializers {
     }
   }
 
-  static Serializer createSerializer(Fory fory, Class<?> cls) {
+  static Serializer createSerializer(TypeResolver typeResolver, Class<?> cls) {
     for (Tuple2<Class<?>, Function> factory : unmodifiableFactories()) {
       if (factory.f0 == cls) {
-        return createSerializer(fory, factory);
+        return createSerializer(typeResolver, factory);
       }
     }
     throw new IllegalArgumentException("Unsupported type " + cls);
   }
 
-  private static Serializer<?> createSerializer(Fory fory, Tuple2<Class<?>, Function> factory) {
-    TypeResolver typeResolver = fory.getTypeResolver();
+  private static Serializer<?> createSerializer(
+      TypeResolver typeResolver, Tuple2<Class<?>, Function> factory) {
     if (Collection.class.isAssignableFrom(factory.f0)) {
       return new UnmodifiableCollectionSerializer(
           typeResolver, factory.f0, factory.f1, Offset.SOURCE_COLLECTION_FIELD_OFFSET);
@@ -207,11 +206,10 @@ public class UnmodifiableSerializers {
    * @see Collections#unmodifiableMap(Map)
    * @see Collections#unmodifiableSortedMap(SortedMap)
    */
-  public static void registerSerializers(Fory fory) {
+  public static void registerSerializers(TypeResolver resolver) {
     try {
-      TypeResolver resolver = fory.getTypeResolver();
       for (Tuple2<Class<?>, Function> factory : unmodifiableFactories()) {
-        resolver.registerInternalSerializer(factory.f0, createSerializer(fory, factory));
+        resolver.registerInternalSerializer(factory.f0, createSerializer(resolver, factory));
       }
     } catch (Throwable e) {
       ExceptionUtils.ignore(e);

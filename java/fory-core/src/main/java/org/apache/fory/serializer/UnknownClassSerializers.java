@@ -94,8 +94,9 @@ public final class UnknownClassSerializers {
      * rewinds that placeholder typeId and writes the original class's typeId, then writes the
      * shared TypeDef inline using the stream meta protocol.
      */
-    private void writeTypeDef(MemoryBuffer buffer, UnknownClass.UnknownStruct value) {
-      MetaContext metaContext = typeResolver.getWriteContext().getMetaContext();
+    private void writeTypeDef(
+        WriteContext writeContext, MemoryBuffer buffer, UnknownClass.UnknownStruct value) {
+      MetaContext metaContext = writeContext.getMetaContext();
       IdentityObjectIntMap classMap = metaContext.classMap;
       int newId = classMap.size;
       // class not exist, use class def id for identity.
@@ -174,7 +175,7 @@ public final class UnknownClassSerializers {
           buffer.writeBytes(payload);
         }
       }
-      writeTypeDef(buffer, value);
+      writeTypeDef(writeContext, buffer, value);
       TypeDef typeDef = value.typeDef;
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(typeDef);
       if (config.checkClassVersion()) {
@@ -184,18 +185,24 @@ public final class UnknownClassSerializers {
       for (SerializationFieldInfo fieldInfo : fieldsInfo.buildInFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
         AbstractObjectSerializer.writeBuildInFieldValue(
-            typeResolver, writeContext.getRefWriter(), fieldInfo, buffer, fieldValue);
+            writeContext, typeResolver, writeContext.getRefWriter(), fieldInfo, buffer, fieldValue);
       }
-      Generics generics = typeResolver.getGenerics();
+      Generics generics = writeContext.getGenerics();
       for (SerializationFieldInfo fieldInfo : fieldsInfo.containerFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
         AbstractObjectSerializer.writeContainerFieldValue(
-            typeResolver, writeContext.getRefWriter(), generics, fieldInfo, buffer, fieldValue);
+            writeContext,
+            typeResolver,
+            writeContext.getRefWriter(),
+            generics,
+            fieldInfo,
+            buffer,
+            fieldValue);
       }
       for (SerializationFieldInfo fieldInfo : fieldsInfo.otherFields) {
         Object fieldValue = value.get(fieldInfo.qualifiedFieldName);
         AbstractObjectSerializer.writeField(
-            typeResolver, writeContext.getRefWriter(), fieldInfo, buffer, fieldValue);
+            writeContext, typeResolver, writeContext.getRefWriter(), fieldInfo, buffer, fieldValue);
       }
     }
 
@@ -227,20 +234,25 @@ public final class UnknownClassSerializers {
       for (SerializationFieldInfo fieldInfo : allFieldsInfo.buildInFields) {
         Object fieldValue =
             AbstractObjectSerializer.readBuildInFieldValue(
-                typeResolver, readContext.getRefReader(), fieldInfo, buffer);
+                readContext, typeResolver, readContext.getRefReader(), fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
-      Generics generics = typeResolver.getGenerics();
+      Generics generics = readContext.getGenerics();
       for (SerializationFieldInfo fieldInfo : allFieldsInfo.containerFields) {
         Object fieldValue =
             AbstractObjectSerializer.readContainerFieldValue(
-                typeResolver, readContext.getRefReader(), generics, fieldInfo, buffer);
+                readContext,
+                typeResolver,
+                readContext.getRefReader(),
+                generics,
+                fieldInfo,
+                buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       for (SerializationFieldInfo fieldInfo : allFieldsInfo.otherFields) {
         Object fieldValue =
             AbstractObjectSerializer.readField(
-                typeResolver, readContext.getRefReader(), fieldInfo, buffer);
+                readContext, typeResolver, readContext.getRefReader(), fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       obj.setEntries(entries);

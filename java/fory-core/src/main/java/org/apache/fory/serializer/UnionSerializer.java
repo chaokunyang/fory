@@ -163,7 +163,7 @@ public class UnionSerializer extends Serializer<Union> {
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       // ref value or not-null value
       TypeInfo declared = getFinalCaseTypeInfo(index);
-      TypeInfo readTypeInfo = resolver.readTypeInfo(buffer, declared);
+      TypeInfo readTypeInfo = resolver.readTypeInfo(readContext, declared);
       if (declared != null) {
         caseValue = Serializers.read(readContext, declared.getSerializer());
       } else {
@@ -218,7 +218,7 @@ public class UnionSerializer extends Serializer<Union> {
     if (!Types.isUserDefinedType(internalTypeId)) {
       buffer.writeUint8(typeId);
     } else {
-      resolver.writeTypeInfo(buffer, typeInfo);
+      resolver.writeTypeInfo(writeContext, typeInfo);
     }
     writeValue(writeContext, value, typeId, serializer);
   }

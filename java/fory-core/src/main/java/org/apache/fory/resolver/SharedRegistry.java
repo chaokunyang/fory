@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.ConcurrentIdentityMap;
@@ -46,8 +47,13 @@ import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
  * Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances.
  *
  * <p>A {@code SharedRegistry} is scoped to one effective config hash. Do not share it across
- * incompatible configs. Thread-safe serializer and type-info caches therefore key directly by
- * class identity.
+ * incompatible configs.
+ *
+ * <p>Only thread-safe serializers and immutable pre-registered {@link TypeInfo} instances live in
+ * this registry. User-registered or meta-shared {@link TypeInfo} must stay local to each {@link
+ * TypeResolver}. A shared pre-registered {@link TypeInfo} is canonical and must never be mutated
+ * in a local resolver. If a resolver needs a different serializer, it must install a new local
+ * {@link TypeInfo} instead.
  */
 @Internal
 public final class SharedRegistry {
@@ -73,10 +79,9 @@ public final class SharedRegistry {
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<EncodedMetaString, MetaStringRef> metaStringRefsByEncoded =
       new ConcurrentHashMap<>();
-  final ConcurrentIdentityMap<Class<?>, Serializer<?>> threadSafeSerializers =
+  private final ConcurrentIdentityMap<Class<?>, Serializer<?>> serializers =
       new ConcurrentIdentityMap<>();
-  // Invariant: every shareable thread-safe TypeInfo must point to this canonical instance.
-  final ConcurrentIdentityMap<Class<?>, TypeInfo> threadSafeTypeInfos =
+  private final ConcurrentIdentityMap<Class<?>, TypeInfo> preRegisteredTypeInfos =
       new ConcurrentIdentityMap<>();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
@@ -129,80 +134,75 @@ public final class SharedRegistry {
                 getOrCreateEncodedMetaString(string, encoder, encoding, encoderTypeKey)));
   }
 
-  @SuppressWarnings("unchecked")
-  public <T> Serializer<T> getThreadSafeSerializer(
-      Class<T> type, Class<? extends Serializer> serializerClass) {
-    Serializer<?> serializer = threadSafeSerializers.get(type);
-    if (serializer == null || !matchesSerializerClass(serializer, serializerClass)) {
-      return null;
-    }
-    return (Serializer<T>) serializer;
-  }
-
   @FunctionalInterface
-  public interface SerializerCreator<T extends Serializer<?>> {
-    T create();
+  public interface SerializerBuilder<T extends Serializer<?>> {
+    T build();
   }
 
   @SuppressWarnings("unchecked")
-  public <T extends Serializer<?>> T getOrCreateThreadSafeSerializer(
-      Class<?> type, Class<? extends Serializer> serializerClass, SerializerCreator<T> factory) {
-    Serializer<?> existing = threadSafeSerializers.get(type);
+  public <T> Serializer<T> getSerializer(Class<T> type) {
+    return (Serializer<T>) serializers.get(type);
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T extends Serializer<?>> T getOrCreateSerializer(
+      Class<?> type, Class<? extends Serializer> serializerClass, SerializerBuilder<T> builder) {
+    Serializer<?> existing = serializers.get(type);
     if (existing != null && matchesSerializerClass(existing, serializerClass)) {
       return (T) existing;
     }
-    T serializer = factory.create();
+    T serializer = builder.build();
     if (serializer == null || !serializer.threadSafe()) {
       return serializer;
     }
-    Serializer<?> winner = threadSafeSerializers.putIfAbsent(type, serializer);
+    Serializer<?> winner = serializers.putIfAbsent(type, serializer);
     if (winner == null) {
       return serializer;
     }
     if (matchesSerializerClass(winner, serializer)) {
       return (T) winner;
     }
-    threadSafeSerializers.put(type, serializer);
+    serializers.put(type, serializer);
     return serializer;
   }
 
   @SuppressWarnings("unchecked")
-  public <T extends Serializer<?>> T cacheThreadSafeSerializer(Class<?> type, T serializer) {
-    Serializer<?> existing = threadSafeSerializers.putIfAbsent(type, serializer);
+  public <T extends Serializer<?>> T shareSerializer(Class<?> type, T serializer) {
+    if (serializer == null || !serializer.threadSafe()) {
+      return serializer;
+    }
+    Serializer<?> existing = serializers.putIfAbsent(type, serializer);
     if (existing == null) {
       return serializer;
     }
     if (matchesSerializerClass(existing, serializer)) {
       return (T) existing;
     }
-    threadSafeSerializers.put(type, serializer);
+    serializers.put(type, serializer);
     return serializer;
   }
 
-  public <T extends Serializer<?>> T replaceThreadSafeSerializer(Class<?> type, T serializer) {
-    threadSafeSerializers.put(type, serializer);
+  public <T extends Serializer<?>> T setSerializer(Class<?> type, T serializer) {
+    if (serializer == null || !serializer.threadSafe()) {
+      return serializer;
+    }
+    serializers.put(type, serializer);
     return serializer;
   }
 
-  public TypeInfo getThreadSafeTypeInfo(Class<?> type) {
-    return threadSafeTypeInfos.get(type);
+  public TypeInfo getPreRegisteredTypeInfo(Class<?> type) {
+    return preRegisteredTypeInfos.get(type);
   }
 
-  public TypeInfo cacheThreadSafeTypeInfo(Class<?> type, TypeInfo typeInfo) {
-    TypeInfo existing = threadSafeTypeInfos.putIfAbsent(type, typeInfo);
-    if (existing == null) {
+  public TypeInfo getOrCreatePreRegisteredTypeInfo(
+      Class<?> type, Supplier<TypeInfo> builder) {
+    TypeInfo typeInfo = preRegisteredTypeInfos.get(type);
+    if (typeInfo != null) {
       return typeInfo;
     }
-    if (matchesTypeInfo(existing, typeInfo)) {
-      return existing;
-    }
-    threadSafeTypeInfos.put(type, typeInfo);
-    return typeInfo;
-  }
-
-  public TypeInfo replaceThreadSafeTypeInfo(Class<?> type, TypeInfo typeInfo) {
-    threadSafeTypeInfos.put(type, typeInfo);
-    return typeInfo;
+    TypeInfo created = builder.get();
+    TypeInfo existing = preRegisteredTypeInfos.putIfAbsent(type, created);
+    return existing == null ? created : existing;
   }
 
   TypeDef getOrCreateTypeDef(TypeDef typeDef) {
@@ -300,19 +300,6 @@ public final class SharedRegistry {
       return true;
     }
     return false;
-  }
-
-  private static boolean matchesTypeInfo(TypeInfo left, TypeInfo right) {
-    Serializer<?> leftSerializer = left.getSerializer();
-    Serializer<?> rightSerializer = right.getSerializer();
-    if (leftSerializer == null || rightSerializer == null) {
-      return leftSerializer == rightSerializer
-          && left.getTypeId() == right.getTypeId()
-          && left.getUserTypeId() == right.getUserTypeId();
-    }
-    return left.getTypeId() == right.getTypeId()
-        && left.getUserTypeId() == right.getUserTypeId()
-        && matchesSerializerClass(leftSerializer, rightSerializer);
   }
 
   private static boolean matchesSerializerClass(

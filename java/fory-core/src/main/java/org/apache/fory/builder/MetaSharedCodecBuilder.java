@@ -166,7 +166,6 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
             ""
                 + "super(${typeResolver}, ${cls});\n"
                 + "this.${generatedTypeResolver} = (${generatedTypeResolverType}) ${typeResolver};\n"
-                + "this.${stringSerializer} = ${typeResolver}.getStringSerializer();\n"
                 + "${serializer} = ${builderClass}.setCodegenSerializer(${typeResolver}, ${cls}, this);\n",
             "typeResolver",
             CONSTRUCTOR_TYPE_RESOLVER_NAME,
@@ -174,8 +173,6 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
             TYPE_RESOLVER_NAME,
             "generatedTypeResolverType",
             ctx.type(concreteTypeResolverType),
-            "stringSerializer",
-            STRING_SERIALIZER_NAME,
             "cls",
             POJO_CLASS_TYPE_NAME,
             "builderClass",

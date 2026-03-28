@@ -145,9 +145,9 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     }
     // write order: primitive,boxed,final,other,collection,map
     RefWriter refWriter = writeContext.getRefWriter();
-    writeBuildInFields(buffer, value, refWriter);
-    writeContainerFields(buffer, value, refWriter);
-    writeOtherFields(buffer, value);
+    writeBuildInFields(writeContext, buffer, value, refWriter);
+    writeContainerFields(writeContext, buffer, value, refWriter);
+    writeOtherFields(writeContext, buffer, value);
   }
 
   private void printWriteFieldDebugInfo(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
@@ -166,29 +166,33 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         buffer.readerIndex());
   }
 
-  private void writeOtherFields(MemoryBuffer buffer, T value) {
-    RefWriter refWriter = typeResolver.getWriteContext().getRefWriter();
+  private void writeOtherFields(WriteContext writeContext, MemoryBuffer buffer, T value) {
+    RefWriter refWriter = writeContext.getRefWriter();
     for (SerializationFieldInfo fieldInfo : otherFields) {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printWriteFieldDebugInfo(fieldInfo, buffer);
       }
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
-      AbstractObjectSerializer.writeField(typeResolver, refWriter, fieldInfo, buffer, fieldValue);
+      AbstractObjectSerializer.writeField(
+          writeContext, typeResolver, refWriter, fieldInfo, buffer, fieldValue);
     }
   }
 
-  private void writeBuildInFields(MemoryBuffer buffer, T value, RefWriter refWriter) {
+  private void writeBuildInFields(
+      WriteContext writeContext, MemoryBuffer buffer, T value, RefWriter refWriter) {
     for (SerializationFieldInfo fieldInfo : this.buildInFields) {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printWriteFieldDebugInfo(fieldInfo, buffer);
       }
-      AbstractObjectSerializer.writeBuildInField(typeResolver, refWriter, fieldInfo, buffer, value);
+      AbstractObjectSerializer.writeBuildInField(
+          writeContext, typeResolver, refWriter, fieldInfo, buffer, value);
     }
   }
 
-  private void writeContainerFields(MemoryBuffer buffer, T value, RefWriter refWriter) {
-    Generics generics = typeResolver.getGenerics();
+  private void writeContainerFields(
+      WriteContext writeContext, MemoryBuffer buffer, T value, RefWriter refWriter) {
+    Generics generics = writeContext.getGenerics();
     for (SerializationFieldInfo fieldInfo : containerFields) {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printWriteFieldDebugInfo(fieldInfo, buffer);
@@ -196,7 +200,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       Object fieldValue = fieldAccessor.getObject(value);
       writeContainerFieldValue(
-          typeResolver, refWriter, generics, fieldInfo, buffer, fieldValue);
+          writeContext, typeResolver, refWriter, generics, fieldInfo, buffer, fieldValue);
     }
   }
 
@@ -204,7 +208,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   public T read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
     if (isRecord) {
-      Object[] fields = readFields(buffer);
+      Object[] fields = readFields(readContext, buffer);
       fields = RecordUtils.remapping(recordInfo, fields);
       T obj = objectCreator.newInstanceWithArguments(fields);
       Arrays.fill(recordInfo.getRecordComponents(), null);
@@ -212,11 +216,11 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     }
     T obj = newBean();
     readContext.reference(obj);
-    return readAndSetFields(buffer, obj);
+    return readAndSetFields(readContext, buffer, obj);
   }
 
-  public Object[] readFields(MemoryBuffer buffer) {
-    RefReader refReader = typeResolver.getReadContext().getRefReader();
+  public Object[] readFields(ReadContext readContext, MemoryBuffer buffer) {
+    RefReader refReader = readContext.getRefReader();
     if (typeResolver.checkClassVersion()) {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);
@@ -230,29 +234,29 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
       fieldValues[counter++] =
-          readBuildInFieldValue(typeResolver, refReader, fieldInfo, buffer);
+          readBuildInFieldValue(readContext, typeResolver, refReader, fieldInfo, buffer);
     }
-    Generics generics = typeResolver.getGenerics();
+    Generics generics = readContext.getGenerics();
     for (SerializationFieldInfo fieldInfo : containerFields) {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          readContainerFieldValue(typeResolver, refReader, generics, fieldInfo, buffer);
+          readContainerFieldValue(readContext, typeResolver, refReader, generics, fieldInfo, buffer);
       fieldValues[counter++] = fieldValue;
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
-      Object fieldValue = readField(typeResolver, refReader, fieldInfo, buffer);
+      Object fieldValue = readField(readContext, typeResolver, refReader, fieldInfo, buffer);
       fieldValues[counter++] = fieldValue;
     }
     return fieldValues;
   }
 
-  public T readAndSetFields(MemoryBuffer buffer, T obj) {
-    RefReader refReader = typeResolver.getReadContext().getRefReader();
+  public T readAndSetFields(ReadContext readContext, MemoryBuffer buffer, T obj) {
+    RefReader refReader = readContext.getRefReader();
     if (typeResolver.checkClassVersion()) {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);
@@ -263,15 +267,15 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
       // a numeric type can have only three kinds: primitive, not_null_boxed, nullable_boxed
-      readBuildInFieldValue(typeResolver, refReader, fieldInfo, buffer, obj);
+      readBuildInFieldValue(readContext, typeResolver, refReader, fieldInfo, buffer, obj);
     }
-    Generics generics = typeResolver.getGenerics();
+    Generics generics = readContext.getGenerics();
     for (SerializationFieldInfo fieldInfo : containerFields) {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          readContainerFieldValue(typeResolver, refReader, generics, fieldInfo, buffer);
+          readContainerFieldValue(readContext, typeResolver, refReader, generics, fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       fieldAccessor.putObject(obj, fieldValue);
     }
@@ -279,7 +283,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
-      Object fieldValue = readField(typeResolver, refReader, fieldInfo, buffer);
+      Object fieldValue = readField(readContext, typeResolver, refReader, fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       fieldAccessor.putObject(obj, fieldValue);
     }

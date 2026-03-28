@@ -23,6 +23,7 @@ import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
@@ -141,8 +142,8 @@ public interface Generated {
     }
 
     @Override
-    public Object readAndSetFields(MemoryBuffer buffer, Object obj) {
-      return serializer.readAndSetFields(buffer, obj);
+    public Object readAndSetFields(ReadContext readContext, MemoryBuffer buffer, Object obj) {
+      return serializer.readAndSetFields(readContext, buffer, obj);
     }
 
     @Override
@@ -160,23 +161,24 @@ public interface Generated {
     }
 
     @Override
-    public void writeLayerClassMeta(MemoryBuffer buffer) {
-      serializer.writeLayerClassMeta(buffer);
+    public void writeLayerClassMeta(WriteContext writeContext, MemoryBuffer buffer) {
+      serializer.writeLayerClassMeta(writeContext, buffer);
     }
 
     @Override
-    public void writeFieldsOnly(MemoryBuffer buffer, Object value) {
-      serializer.writeFieldsOnly(buffer, value);
+    public void writeFieldsOnly(WriteContext writeContext, MemoryBuffer buffer, Object value) {
+      serializer.writeFieldsOnly(writeContext, buffer, value);
     }
 
     @Override
-    public void writeFieldValues(MemoryBuffer buffer, Object[] vals) {
-      serializer.writeFieldValues(buffer, vals);
+    public void writeFieldValues(
+        WriteContext writeContext, MemoryBuffer buffer, Object[] vals) {
+      serializer.writeFieldValues(writeContext, buffer, vals);
     }
 
     @Override
-    public Object[] readFieldValues(MemoryBuffer buffer) {
-      return serializer.readFieldValues(buffer);
+    public Object[] readFieldValues(ReadContext readContext, MemoryBuffer buffer) {
+      return serializer.readFieldValues(readContext, buffer);
     }
 
     @Override

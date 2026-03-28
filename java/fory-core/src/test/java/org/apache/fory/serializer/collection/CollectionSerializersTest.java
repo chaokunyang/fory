@@ -66,6 +66,7 @@ import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.Language;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.reflect.TypeRef;
@@ -157,11 +158,16 @@ public class CollectionSerializersTest extends ForyTestBase {
             .build();
     List<String> data = new ArrayList<>(ImmutableList.of("a", "b", "c"));
     byte[] bytes1 = fory.serialize(data);
-    fory.getTypeResolver().getGenerics().pushGenericType(GenericType.build(new TypeRef<List<String>>() {}));
+    fory
+        .getWriteContext()
+        .getGenerics()
+        .pushGenericType(
+            GenericType.build(new TypeRef<List<String>>() {}),
+            fory.getWriteContext().getDepth());
     byte[] bytes2 = fory.serialize(data);
     Assert.assertTrue(bytes1.length > bytes2.length);
     assertEquals(fory.deserialize(bytes2), data);
-    fory.getTypeResolver().getGenerics().popGenericType();
+    fory.getWriteContext().getGenerics().popGenericType(fory.getWriteContext().getDepth());
     assertThrowsCause(RuntimeException.class, () -> fory.deserialize(bytes2));
   }
 
@@ -191,10 +197,15 @@ public class CollectionSerializersTest extends ForyTestBase {
     TreeSet<String> data = new TreeSet<>(ImmutableSet.of("a", "b", "c"));
     serDeCheckSerializer(fory, data, "SortedSet");
     byte[] bytes1 = fory.serialize(data);
-    fory.getTypeResolver().getGenerics().pushGenericType(GenericType.build(new TypeRef<List<String>>() {}));
+    fory
+        .getWriteContext()
+        .getGenerics()
+        .pushGenericType(
+            GenericType.build(new TypeRef<List<String>>() {}),
+            fory.getWriteContext().getDepth());
     byte[] bytes2 = fory.serialize(data);
     Assert.assertTrue(bytes1.length > bytes2.length);
-    fory.getTypeResolver().getGenerics().popGenericType();
+    fory.getWriteContext().getGenerics().popGenericType(fory.getWriteContext().getDepth());
     assertThrowsCause(RuntimeException.class, () -> fory.deserialize(bytes2));
   }
 
@@ -1000,7 +1011,7 @@ public class CollectionSerializersTest extends ForyTestBase {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32();
       setNumElements(numElements);
       return new ArrayList<>(numElements);

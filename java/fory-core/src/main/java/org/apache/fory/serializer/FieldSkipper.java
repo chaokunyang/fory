@@ -45,6 +45,7 @@ public class FieldSkipper {
    * @param buffer the buffer to skip from
    */
   static void skipField(
+      ReadContext readContext,
       TypeResolver typeResolver,
       RefReader refReader,
       SerializationFieldInfo fieldInfo,
@@ -54,7 +55,7 @@ public class FieldSkipper {
 
     // For non-basic types, fall back to binding.readField
     if (!DispatchId.isBasicType(dispatchId)) {
-      AbstractObjectSerializer.readField(typeResolver, refReader, fieldInfo, buffer);
+      AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
       return;
     }
 
@@ -117,7 +118,7 @@ public class FieldSkipper {
         buffer.readTaggedUint64();
         break;
       case DispatchId.STRING:
-        typeResolver.getReadContext().readString();
+        readContext.readString();
         break;
       default:
         throw new IllegalStateException("Unexpected basic dispatchId: " + dispatchId);

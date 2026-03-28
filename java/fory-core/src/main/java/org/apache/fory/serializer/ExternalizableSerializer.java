@@ -37,8 +37,8 @@ public class ExternalizableSerializer<T extends Externalizable>
 
   public ExternalizableSerializer(TypeResolver typeResolver, Class<T> cls) {
     super(typeResolver, cls);
-    objectInput = new MemoryBufferObjectInput(config, typeResolver, null);
-    objectOutput = new MemoryBufferObjectOutput(config, typeResolver, null);
+    objectInput = new MemoryBufferObjectInput(config, null);
+    objectOutput = new MemoryBufferObjectOutput(config, null);
   }
 
   @Override
@@ -48,6 +48,7 @@ public class ExternalizableSerializer<T extends Externalizable>
       throw new UnsupportedOperationException("Externalizable can only be used in java");
     }
     objectOutput.setBuffer(buffer);
+    objectOutput.setWriteContext(writeContext);
     try {
       value.writeExternal(objectOutput);
     } catch (IOException e) {
@@ -61,6 +62,7 @@ public class ExternalizableSerializer<T extends Externalizable>
     T t = objectCreator.newInstance();
     readContext.reference(t);
     objectInput.setBuffer(buffer);
+    objectInput.setReadContext(readContext);
     try {
       t.readExternal(objectInput);
     } catch (IOException | ClassNotFoundException e) {

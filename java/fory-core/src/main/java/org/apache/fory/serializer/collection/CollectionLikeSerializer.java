@@ -81,8 +81,17 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     this.typeResolver = typeResolver;
   }
 
-  private GenericType getElementGenericType() {
-    GenericType genericType = typeResolver.getGenerics().nextGenericType();
+  private GenericType getElementGenericType(ReadContext readContext, int depth) {
+    GenericType genericType = readContext.getGenerics().nextGenericType(depth);
+    GenericType elemGenericType = null;
+    if (genericType != null) {
+      elemGenericType = genericType.getTypeParameter0();
+    }
+    return elemGenericType;
+  }
+
+  private GenericType getElementGenericType(WriteContext writeContext, int depth) {
+    GenericType genericType = writeContext.getGenerics().nextGenericType(depth);
     GenericType elemGenericType = null;
     if (genericType != null) {
       elemGenericType = genericType.getTypeParameter0();
@@ -113,7 +122,8 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    *   <li>onCollectionWriteFinish
    * </ol>
    */
-  public abstract Collection onCollectionWrite(MemoryBuffer buffer, T value);
+  public abstract Collection onCollectionWrite(
+      WriteContext writeContext, MemoryBuffer buffer, T value);
 
   public void onCollectionWriteFinish(Collection map) {}
 
@@ -123,8 +133,9 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    *
    * @return a bitmap, higher 24 bits are reserved.
    */
-  protected final int writeElementsHeader(MemoryBuffer buffer, Collection value) {
-    GenericType elemGenericType = getElementGenericType();
+  protected final int writeElementsHeader(
+      WriteContext writeContext, MemoryBuffer buffer, Collection value) {
+    GenericType elemGenericType = getElementGenericType(writeContext, writeContext.getDepth());
     if (elemGenericType != null) {
       boolean trackingRef = elemGenericType.trackingRef(typeResolver);
       if (elemGenericType.isMonomorphic()) {
@@ -136,17 +147,19 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         }
       } else {
         if (trackingRef) {
-          return writeTypeHeader(buffer, value, elemGenericType.getCls(), elementTypeInfoHolder);
+          return writeTypeHeader(
+              writeContext, buffer, value, elemGenericType.getCls(), elementTypeInfoHolder);
         } else {
           return writeTypeNullabilityHeader(
-              buffer, value, elemGenericType.getCls(), elementTypeInfoHolder);
+              writeContext, buffer, value, elemGenericType.getCls(), elementTypeInfoHolder);
         }
       }
     } else {
       if (config.trackingRef()) {
-        return writeTypeHeader(buffer, value, elementTypeInfoHolder);
+        return writeTypeHeader(writeContext, buffer, value, elementTypeInfoHolder);
       } else {
-        return writeTypeNullabilityHeader(buffer, value, null, elementTypeInfoHolder);
+        return writeTypeNullabilityHeader(
+            writeContext, buffer, value, null, elementTypeInfoHolder);
       }
     }
   }
@@ -170,7 +183,11 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    */
   @CodegenInvoke
   public int writeTypeHeader(
-      MemoryBuffer buffer, Collection value, Class<?> declareElementType, TypeInfoHolder cache) {
+      WriteContext writeContext,
+      MemoryBuffer buffer,
+      Collection value,
+      Class<?> declareElementType,
+      TypeInfoHolder cache) {
     int bitmap = CollectionFlags.TRACKING_REF;
     boolean hasDifferentClass = false;
     Class<?> elemClass = null;
@@ -201,7 +218,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         buffer.writeByte(bitmap);
         // Update classinfo, the caller will use it.
         TypeResolver typeResolver = this.typeResolver;
-        typeResolver.writeTypeInfo(buffer, typeResolver.getTypeInfo(elemClass, cache));
+        typeResolver.writeTypeInfo(writeContext, typeResolver.getTypeInfo(elemClass, cache));
       }
     }
     return bitmap;
@@ -209,7 +226,8 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   /** Maybe track elements ref, or write elements nullability. */
   @CodegenInvoke
-  public int writeTypeHeader(MemoryBuffer buffer, Collection value, TypeInfoHolder cache) {
+  public int writeTypeHeader(
+      WriteContext writeContext, MemoryBuffer buffer, Collection value, TypeInfoHolder cache) {
     int bitmap = 0;
     boolean hasDifferentClass = false;
     Class<?> elemClass = null;
@@ -244,7 +262,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         bitmap |= CollectionFlags.TRACKING_REF;
       }
       buffer.writeByte(bitmap);
-      typeResolver.writeTypeInfo(buffer, typeInfo);
+      typeResolver.writeTypeInfo(writeContext, typeInfo);
     }
     return bitmap;
   }
@@ -255,7 +273,11 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    */
   @CodegenInvoke
   public int writeTypeNullabilityHeader(
-      MemoryBuffer buffer, Collection value, Class<?> declareElementType, TypeInfoHolder cache) {
+      WriteContext writeContext,
+      MemoryBuffer buffer,
+      Collection value,
+      Class<?> declareElementType,
+      TypeInfoHolder cache) {
     int bitmap = 0;
     boolean containsNull = false;
     boolean hasDifferentClass = false;
@@ -291,7 +313,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         buffer.writeByte(bitmap);
         TypeResolver typeResolver = this.typeResolver;
         TypeInfo typeInfo = typeResolver.getTypeInfo(elemClass, cache);
-        typeResolver.writeTypeInfo(buffer, typeInfo);
+        typeResolver.writeTypeInfo(writeContext, typeInfo);
       }
     }
     return bitmap;
@@ -300,48 +322,50 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   @Override
   public void write(WriteContext writeContext, T value) {
     MemoryBuffer buffer = writeContext.getBuffer();
-    Collection collection = onCollectionWrite(buffer, value);
+    Collection collection = onCollectionWrite(writeContext, buffer, value);
     int len = collection.size();
     if (len != 0) {
-      writeElements(buffer, collection);
+      writeElements(writeContext, buffer, collection);
     }
     onCollectionWriteFinish(collection);
   }
 
-  protected final void writeElements(MemoryBuffer buffer, Collection value) {
-    int flags = writeElementsHeader(buffer, value);
-    GenericType elemGenericType = getElementGenericType();
+  protected final void writeElements(WriteContext writeContext, MemoryBuffer buffer, Collection value) {
+    int flags = writeElementsHeader(writeContext, buffer, value);
+    GenericType elemGenericType = getElementGenericType(writeContext, writeContext.getDepth());
     if (elemGenericType != null) {
-      javaWriteWithGenerics(buffer, value, elemGenericType, flags);
+      javaWriteWithGenerics(writeContext, buffer, value, elemGenericType, flags);
     } else {
-      generalJavaWrite(buffer, value, null, flags);
+      generalJavaWrite(writeContext, buffer, value, null, flags);
     }
   }
 
   private void javaWriteWithGenerics(
+      WriteContext writeContext,
       MemoryBuffer buffer,
       Collection collection,
       GenericType elemGenericType,
       int flags) {
     boolean hasGenericParameters = elemGenericType.hasGenericParameters();
-    org.apache.fory.type.Generics generics = typeResolver.getGenerics();
+    org.apache.fory.type.Generics generics = writeContext.getGenerics();
     if (hasGenericParameters) {
-      generics.pushGenericType(elemGenericType);
+      generics.pushGenericType(elemGenericType, writeContext.getDepth());
     }
     // Note: ObjectSerializer should mark `FinalElemType` in `Collection<FinalElemType>`
     // as non-final to write class def when meta share is enabled.
     if (elemGenericType.isMonomorphic()) {
       Serializer serializer = elemGenericType.getSerializer(typeResolver);
-      writeSameTypeElements(buffer, serializer, flags, collection);
+      writeSameTypeElements(writeContext, buffer, serializer, flags, collection);
     } else {
-      generalJavaWrite(buffer, collection, elemGenericType, flags);
+      generalJavaWrite(writeContext, buffer, collection, elemGenericType, flags);
     }
     if (hasGenericParameters) {
-      generics.popGenericType();
+      generics.popGenericType(writeContext.getDepth());
     }
   }
 
   private void generalJavaWrite(
+      WriteContext writeContext,
       MemoryBuffer buffer,
       Collection collection,
       GenericType elemGenericType,
@@ -354,15 +378,14 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       } else {
         serializer = elementTypeInfoHolder.getSerializer();
       }
-      writeSameTypeElements(buffer, serializer, flags, collection);
+      writeSameTypeElements(writeContext, buffer, serializer, flags, collection);
     } else {
-      writeDifferentTypeElements(buffer, flags, collection);
+      writeDifferentTypeElements(writeContext, buffer, flags, collection);
     }
   }
 
   private <T extends Collection> void writeSameTypeElements(
-      MemoryBuffer buffer, Serializer serializer, int flags, T collection) {
-    WriteContext writeContext = typeResolver.getWriteContext();
+      WriteContext writeContext, MemoryBuffer buffer, Serializer serializer, int flags, T collection) {
     writeContext.increaseDepth();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (Object elem : collection) {
@@ -390,8 +413,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   }
 
   private <T extends Collection> void writeDifferentTypeElements(
-      MemoryBuffer buffer, int flags, T collection) {
-    WriteContext writeContext = typeResolver.getWriteContext();
+      WriteContext writeContext, MemoryBuffer buffer, int flags, T collection) {
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (Object elem : collection) {
         writeContext.writeRef(elem);
@@ -417,10 +439,10 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   @Override
   public T read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
-    Collection collection = newCollection(buffer);
+    Collection collection = newCollection(readContext, buffer);
     int numElements = getAndClearNumElements();
     if (numElements != 0) {
-      readElements(buffer, collection, numElements);
+      readElements(readContext, buffer, collection, numElements);
     }
     return onCollectionRead(collection);
   }
@@ -444,14 +466,14 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    * <p>without default constructor, created list will have elementData as null, adding elements
    * will raise NPE.
    */
-  public Collection newCollection(MemoryBuffer buffer) {
+  public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
     numElements = buffer.readVarUint32Small7();
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
     }
     try {
       T instance = (T) constructor.invoke();
-      typeResolver.getReadContext().reference(instance);
+      readContext.reference(instance);
       return (Collection) instance;
     } catch (Throwable e) {
       // reduce code size of critical path.
@@ -530,39 +552,41 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   public abstract T onCollectionRead(Collection collection);
 
   protected void readElements(
-      MemoryBuffer buffer, Collection collection, int numElements) {
+      ReadContext readContext, MemoryBuffer buffer, Collection collection, int numElements) {
     int flags = buffer.readByte();
-    GenericType elemGenericType = getElementGenericType();
+    GenericType elemGenericType = getElementGenericType(readContext, readContext.getDepth());
     if (elemGenericType != null) {
-      javaReadWithGenerics(buffer, collection, numElements, elemGenericType, flags);
+      javaReadWithGenerics(readContext, buffer, collection, numElements, elemGenericType, flags);
     } else {
-      generalJavaRead(buffer, collection, numElements, flags, null);
+      generalJavaRead(readContext, buffer, collection, numElements, flags, null);
     }
   }
 
   private void javaReadWithGenerics(
+      ReadContext readContext,
       MemoryBuffer buffer,
       Collection collection,
       int numElements,
       GenericType elemGenericType,
       int flags) {
     boolean hasGenericParameters = elemGenericType.hasGenericParameters();
-    org.apache.fory.type.Generics generics = typeResolver.getGenerics();
+    org.apache.fory.type.Generics generics = readContext.getGenerics();
     if (hasGenericParameters) {
-      generics.pushGenericType(elemGenericType);
+      generics.pushGenericType(elemGenericType, readContext.getDepth());
     }
     if (elemGenericType.isMonomorphic()) {
       Serializer serializer = elemGenericType.getSerializer(typeResolver);
-      readSameTypeElements(buffer, serializer, flags, collection, numElements);
+      readSameTypeElements(readContext, buffer, serializer, flags, collection, numElements);
     } else {
-      generalJavaRead(buffer, collection, numElements, flags, elemGenericType);
+      generalJavaRead(readContext, buffer, collection, numElements, flags, elemGenericType);
     }
     if (hasGenericParameters) {
-      generics.popGenericType();
+      generics.popGenericType(readContext.getDepth());
     }
   }
 
   private void generalJavaRead(
+      ReadContext readContext,
       MemoryBuffer buffer,
       Collection collection,
       int numElements,
@@ -572,24 +596,24 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       Serializer serializer;
       TypeResolver typeResolver = this.typeResolver;
       if ((flags & CollectionFlags.IS_DECL_ELEMENT_TYPE) != CollectionFlags.IS_DECL_ELEMENT_TYPE) {
-        serializer = typeResolver.readTypeInfo(buffer, elementTypeInfoHolder).getSerializer();
+        serializer = typeResolver.readTypeInfo(readContext, elementTypeInfoHolder).getSerializer();
       } else {
         serializer = elemGenericType.getSerializer(typeResolver);
       }
-      readSameTypeElements(buffer, serializer, flags, collection, numElements);
+      readSameTypeElements(readContext, buffer, serializer, flags, collection, numElements);
     } else {
-      readDifferentTypeElements(buffer, flags, collection, numElements);
+      readDifferentTypeElements(readContext, buffer, flags, collection, numElements);
     }
   }
 
   /** Read elements whose type are same. */
   private <T extends Collection> void readSameTypeElements(
+      ReadContext readContext,
       MemoryBuffer buffer,
       Serializer serializer,
       int flags,
       T collection,
       int numElements) {
-    ReadContext readContext = typeResolver.getReadContext();
     readContext.increaseDepth();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (int i = 0; i < numElements; i++) {
@@ -615,8 +639,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   /** Read elements whose type are different. */
   private <T extends Collection> void readDifferentTypeElements(
-      MemoryBuffer buffer, int flags, T collection, int numElements) {
-    ReadContext readContext = typeResolver.getReadContext();
+      ReadContext readContext, MemoryBuffer buffer, int flags, T collection, int numElements) {
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       Preconditions.checkState(config.trackingRef(), "Reference tracking is not enabled");
       for (int i = 0; i < numElements; i++) {

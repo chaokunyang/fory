@@ -73,7 +73,8 @@ public class SynchronizedSerializersTest extends ForyTestBase {
     for (Object value : values) {
       buffer.writerIndex(0);
       buffer.readerIndex(0);
-      Serializer serializer = SynchronizedSerializers.createSerializer(fory, value.getClass());
+      Serializer serializer =
+          SynchronizedSerializers.createSerializer(fory.getTypeResolver(), value.getClass());
       writeSerializer(fory, serializer, buffer, value);
       Object newObj = readSerializer(fory, serializer, buffer);
       assertEquals(newObj.getClass(), value.getClass());

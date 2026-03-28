@@ -44,11 +44,13 @@ public final class ReadContext {
   private final TypeResolver typeResolver;
   private final RefReader refReader;
   private final MetaStringReader metaStringReader;
+  private final StringSerializer stringSerializer;
   private final boolean crossLanguage;
   private final boolean compressInt;
   private final LongEncoding longEncoding;
   private final int maxDepth;
   private final boolean scopedMetaShareEnabled;
+  private final boolean forVirtualThread;
   private final IdentityHashMap<Object, Object> contextObjects = new IdentityHashMap<>();
   private MemoryBuffer buffer;
   private Iterator<MemoryBuffer> outOfBandBuffers;
@@ -67,10 +69,12 @@ public final class ReadContext {
     this.typeResolver = typeResolver;
     this.refReader = refReader;
     this.metaStringReader = metaStringReader;
+    stringSerializer = new StringSerializer(config);
     crossLanguage = config.isXlang();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();
     maxDepth = config.maxDepth();
+    forVirtualThread = config.forVirtualThread();
     scopedMetaShareEnabled = config.isScopedMetaShareEnabled();
     if (scopedMetaShareEnabled) {
       metaContext = new MetaContext();
@@ -90,7 +94,6 @@ public final class ReadContext {
 
   public void reset() {
     refReader.reset();
-    typeResolver.resetRead();
     metaStringReader.reset();
     if (!contextObjects.isEmpty()) {
       contextObjects.clear();
@@ -99,6 +102,9 @@ public final class ReadContext {
       metaContext.readTypeInfos.size = 0;
     } else {
       metaContext = null;
+    }
+    if (forVirtualThread) {
+      stringSerializer.clearBuffer(config.bufferSizeLimitBytes());
     }
     buffer = null;
     outOfBandBuffers = null;
@@ -167,14 +173,14 @@ public final class ReadContext {
   }
 
   public StringSerializer getStringSerializer() {
-    return typeResolver.getStringSerializer();
+    return stringSerializer;
   }
 
   public Object putContextObject(Object key, Object value) {
     return contextObjects.put(key, value);
   }
 
-  public boolean containsContextObject(Object key) {
+  public boolean hasContextObject(Object key) {
     return contextObjects.containsKey(key);
   }
 
@@ -245,12 +251,11 @@ public final class ReadContext {
 
   public String readString() {
     MemoryBuffer buffer = this.buffer;
-    return typeResolver.getStringSerializer().readString(buffer);
+    return stringSerializer.readString(buffer);
   }
 
   public String readStringRef() {
     MemoryBuffer buffer = this.buffer;
-    StringSerializer stringSerializer = typeResolver.getStringSerializer();
     if (stringSerializer.needToWriteRef()) {
       int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
@@ -277,7 +282,7 @@ public final class ReadContext {
     MemoryBuffer buffer = this.buffer;
     int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-      TypeInfo typeInfo = typeResolver.readTypeInfo(buffer);
+      TypeInfo typeInfo = typeResolver.readTypeInfo(this);
       Object o = readNonRef(typeInfo);
       refReader.setReadObject(nextReadRefId, o);
       return o;
@@ -298,7 +303,7 @@ public final class ReadContext {
   public Object readRef(TypeInfoHolder classInfoHolder) {
     int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-      TypeInfo typeInfo = typeResolver.readTypeInfo(buffer, classInfoHolder);
+      TypeInfo typeInfo = typeResolver.readTypeInfo(this, classInfoHolder);
       Object o = readNonRef(typeInfo);
       refReader.setReadObject(nextReadRefId, o);
       return o;
@@ -325,12 +330,12 @@ public final class ReadContext {
 
   /** Deserialize not-null and non-reference object from the current buffer. */
   public Object readNonRef() {
-    TypeInfo typeInfo = typeResolver.readTypeInfo(buffer);
+    TypeInfo typeInfo = typeResolver.readTypeInfo(this);
     return readNonRef(typeInfo);
   }
 
   public Object readNonRef(TypeInfoHolder classInfoHolder) {
-    TypeInfo typeInfo = typeResolver.readTypeInfo(buffer, classInfoHolder);
+    TypeInfo typeInfo = typeResolver.readTypeInfo(this, classInfoHolder);
     return readNonRef(typeInfo);
   }
 
@@ -410,7 +415,7 @@ public final class ReadContext {
         return buffer.readFloat64();
       case Types.STRING:
         if (typeInfo.getCls() == String.class) {
-          return typeResolver.getStringSerializer().readString(buffer);
+          return stringSerializer.readString(buffer);
         }
         increaseDepth();
         Object stringLike = typeInfo.getSerializer().read(this);

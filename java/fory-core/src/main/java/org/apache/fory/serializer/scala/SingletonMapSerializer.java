@@ -51,7 +51,7 @@ public class SingletonMapSerializer extends MapLikeSerializer {
   }
 
   @Override
-  public Map onMapWrite(MemoryBuffer buffer, Object value) {
+  public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, Object value) {
     throw new IllegalStateException("unreachable");
   }
 

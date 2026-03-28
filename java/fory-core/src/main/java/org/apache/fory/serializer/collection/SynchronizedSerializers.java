@@ -144,17 +144,17 @@ public class SynchronizedSerializers {
     }
   }
 
-  static Serializer createSerializer(Fory fory, Class<?> cls) {
+  static Serializer createSerializer(TypeResolver typeResolver, Class<?> cls) {
     for (Tuple2<Class<?>, Function> factory : synchronizedFactories()) {
       if (factory.f0 == cls) {
-        return createSerializer(fory, factory);
+        return createSerializer(typeResolver, factory);
       }
     }
     throw new IllegalArgumentException("Unsupported type " + cls);
   }
 
-  private static Serializer<?> createSerializer(Fory fory, Tuple2<Class<?>, Function> factory) {
-    TypeResolver typeResolver = fory.getTypeResolver();
+  private static Serializer<?> createSerializer(
+      TypeResolver typeResolver, Tuple2<Class<?>, Function> factory) {
     if (Collection.class.isAssignableFrom(factory.f0)) {
       return new SynchronizedCollectionSerializer(
           typeResolver, factory.f0, factory.f1, Offset.SOURCE_COLLECTION_FIELD_OFFSET);
@@ -214,11 +214,10 @@ public class SynchronizedSerializers {
    * @see Collections#synchronizedMap(Map)
    * @see Collections#synchronizedSortedMap(SortedMap)
    */
-  public static void registerSerializers(Fory fory) {
+  public static void registerSerializers(TypeResolver resolver) {
     try {
-      TypeResolver resolver = fory.getTypeResolver();
       for (Tuple2<Class<?>, Function> factory : synchronizedFactories()) {
-        resolver.registerInternalSerializer(factory.f0, createSerializer(fory, factory));
+        resolver.registerInternalSerializer(factory.f0, createSerializer(resolver, factory));
       }
     } catch (Throwable e) {
       ExceptionUtils.ignore(e);

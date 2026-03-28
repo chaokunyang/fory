@@ -20,9 +20,9 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Map;
-import org.apache.fory.Fory;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.collection.MapSnapshot;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.memory.MemoryBuffer;
 
@@ -77,7 +77,7 @@ public class ConcurrentMapSerializer<T extends Map> extends MapSerializer<T> {
    * @return a snapshot of the map for safe iteration during serialization
    */
   @Override
-  public MapSnapshot onMapWrite(MemoryBuffer buffer, T value) {
+  public MapSnapshot onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
     MapSnapshot snapshot = snapshots.popOrNull();
     if (snapshot == null) {
       snapshot = new MapSnapshot();

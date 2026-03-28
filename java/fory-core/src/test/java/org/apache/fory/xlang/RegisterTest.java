@@ -153,7 +153,7 @@ public class RegisterTest extends ForyTestBase {
   }
 
   @Test
-  public void testSharedRegistrySharesThreadSafeRegisteredTypeInfo() {
+  public void testSharedRegistrySharesPreRegisteredTypeInfoOnly() {
     SharedRegistry sharedRegistry = new SharedRegistry();
     ForyBuilder builder1 =
         Fory.builder().withLanguage(Language.XLANG).withCompatibleMode(CompatibleMode.COMPATIBLE);
@@ -165,6 +165,12 @@ public class RegisterTest extends ForyTestBase {
     finishBuilder(builder2);
     Fory fory2 =
         new Fory(builder2, RegisterTest.class.getClassLoader(), sharedRegistry);
+
+    TypeInfo classInfo1 = fory1.getTypeResolver().getTypeInfo(Class.class);
+    TypeInfo classInfo2 = fory2.getTypeResolver().getTypeInfo(Class.class);
+    Assert.assertSame(classInfo1, classInfo2);
+    Assert.assertSame(sharedRegistry.getPreRegisteredTypeInfo(Class.class), classInfo1);
+
     fory1.register(MyExt.class, 103);
     fory1.registerSerializer(MyExt.class, ThreadSafeMyExtSerializer.class);
     fory2.register(MyExt.class, 103);
@@ -172,11 +178,11 @@ public class RegisterTest extends ForyTestBase {
 
     TypeInfo typeInfo1 = fory1.getTypeResolver().getTypeInfo(MyExt.class);
     TypeInfo typeInfo2 = fory2.getTypeResolver().getTypeInfo(MyExt.class);
-    Assert.assertSame(typeInfo1, typeInfo2);
+    Assert.assertNotSame(typeInfo1, typeInfo2);
     Assert.assertSame(typeInfo1.getSerializer(), typeInfo2.getSerializer());
-    Assert.assertSame(sharedRegistry.getThreadSafeTypeInfo(MyExt.class), typeInfo1);
+    Assert.assertNull(sharedRegistry.getPreRegisteredTypeInfo(MyExt.class));
     Assert.assertSame(
-        sharedRegistry.getThreadSafeSerializer(MyExt.class, ThreadSafeMyExtSerializer.class),
+        sharedRegistry.getSerializer(MyExt.class),
         typeInfo1.getSerializer());
   }
 

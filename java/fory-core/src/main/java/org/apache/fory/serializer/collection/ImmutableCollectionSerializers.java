@@ -29,8 +29,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.fory.Fory;
 import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
@@ -110,7 +110,7 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       if (Platform.JAVA_VERSION > 8) {
@@ -160,7 +160,7 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       if (Platform.JAVA_VERSION > 8) {
@@ -210,7 +210,7 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Map newMap(MemoryBuffer buffer) {
+    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       if (Platform.JAVA_VERSION > 8) {
@@ -262,8 +262,7 @@ public class ImmutableCollectionSerializers {
     }
   }
 
-  public static void registerSerializers(Fory fory) {
-    TypeResolver resolver = fory.getTypeResolver();
+  public static void registerSerializers(TypeResolver resolver) {
     resolver.registerInternalSerializer(List12, new ImmutableListSerializer(resolver, List12));
     resolver.registerInternalSerializer(ListN, new ImmutableListSerializer(resolver, ListN));
     resolver.registerInternalSerializer(SubList, new ImmutableListSerializer(resolver, SubList));

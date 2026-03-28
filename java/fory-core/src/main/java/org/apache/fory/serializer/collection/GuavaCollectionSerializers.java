@@ -34,7 +34,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
-import org.apache.fory.Fory;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -63,7 +62,7 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
@@ -116,7 +115,7 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       return new CollectionContainer(numElements);
@@ -149,7 +148,7 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
@@ -182,17 +181,17 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
+    public Collection onCollectionWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
-      typeResolver.getWriteContext().writeRef(value.comparator());
+      writeContext.writeRef(value.comparator());
       return value;
     }
 
     @Override
-    public Collection newCollection(MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
+      Comparator comparator = (Comparator) readContext.readRef();
       return new SortedCollectionContainer(comparator, numElements);
     }
 
@@ -222,7 +221,7 @@ public class GuavaCollectionSerializers {
     protected abstract ImmutableMap.Builder makeBuilder(int size);
 
     @Override
-    public Map newMap(MemoryBuffer buffer) {
+    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       return new MapContainer(numElements);
@@ -252,7 +251,7 @@ public class GuavaCollectionSerializers {
     public T read(ReadContext readContext) {
       int size = readContext.getBuffer().readVarUint32Small7();
       Map map = new HashMap();
-      readElements(readContext.getBuffer(), size, map);
+      readElements(readContext, readContext.getBuffer(), size, map);
       return xnewInstance(map);
     }
 
@@ -334,17 +333,17 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public Map onMapWrite(MemoryBuffer buffer, T value) {
+    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
-      typeResolver.getWriteContext().writeRef(value.comparator());
+      writeContext.writeRef(value.comparator());
       return value;
     }
 
     @Override
-    public Map newMap(MemoryBuffer buffer) {
+    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      Comparator comparator = (Comparator) typeResolver.getReadContext().readRef();
+      Comparator comparator = (Comparator) readContext.readRef();
       return new SortedMapContainer<>(comparator, numElements);
     }
 
@@ -389,14 +388,13 @@ public class GuavaCollectionSerializers {
   // guava/UnmodifiableNavigableSetSerializer - serializer for guava-libraries'
   // UnmodifiableNavigableSet
 
-  public static void registerDefaultSerializers(Fory fory) {
+  public static void registerDefaultSerializers(TypeResolver resolver) {
     // Note: Guava common types are not public API, don't register by `ImmutableXXX.of()`,
     // since different guava version may return different type objects, which make class
     // registration
     // inconsistent if peers load different version of guava.
     // For example: guava 20 return ImmutableBiMap for ImmutableMap.of(), but guava 27 return
     // ImmutableMap.
-    TypeResolver resolver = fory.getTypeResolver();
     Class cls =
         loadClass(pkg + ".RegularImmutableBiMap", ImmutableBiMap.of("k1", 1, "k2", 4).getClass());
     resolver.registerInternalSerializer(cls, new ImmutableBiMapSerializer(resolver, cls));

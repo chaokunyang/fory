@@ -103,15 +103,15 @@ public class Serializers {
    */
   public static <T> Serializer<T> newSerializer(
       TypeResolver typeResolver, Class type, Class<? extends Serializer> serializerClass) {
-    TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
-    Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
-    try {
-      return typeResolver.getOrCreateSharedSerializer(
+      TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
+      Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
+      try {
+      return typeResolver.getSharedRegistry().getOrCreateSerializer(
           type,
           serializerClass,
-          new SharedRegistry.SerializerCreator<Serializer<T>>() {
+          new SharedRegistry.SerializerBuilder<Serializer<T>>() {
             @Override
-            public Serializer<T> create() {
+            public Serializer<T> build() {
               return buildSerializer(typeResolver, type, serializerClass);
             }
           });
@@ -636,14 +636,12 @@ public class Serializers {
 
     @Override
     public void write(WriteContext writeContext, Class value) {
-      ((ClassResolver) writeContext.getTypeResolver())
-          .writeClassInternal(writeContext.getBuffer(), value);
+      ((ClassResolver) writeContext.getTypeResolver()).writeClassInternal(writeContext, value);
     }
 
     @Override
     public Class read(ReadContext readContext) {
-      return ((ClassResolver) readContext.getTypeResolver())
-          .readClassInternal(readContext.getBuffer());
+      return ((ClassResolver) readContext.getTypeResolver()).readClassInternal(readContext);
     }
 
     @Override
@@ -679,9 +677,8 @@ public class Serializers {
     }
   }
 
-  public static void registerDefaultSerializers(Fory fory) {
-    Config config = fory.getConfig();
-    TypeResolver resolver = fory.getTypeResolver();
+  public static void registerDefaultSerializers(TypeResolver resolver) {
+    Config config = resolver.getConfig();
     resolver.registerInternalSerializer(Class.class, new ClassSerializer(config));
     resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(config));
     resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(config));

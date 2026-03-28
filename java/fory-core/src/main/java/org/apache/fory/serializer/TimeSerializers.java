@@ -40,6 +40,9 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.TimeZone;
 import org.apache.fory.config.Config;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.DateTimeUtils;
@@ -78,15 +81,13 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, T value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt64(value.getTime());
+    public void write(WriteContext writeContext, T value) {
+      writeContext.getBuffer().writeInt64(value.getTime());
     }
 
     @Override
-    public T read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return newInstance(buffer.readInt64());
+    public T read(ReadContext readContext) {
+      return newInstance(readContext.getBuffer().readInt64());
     }
 
     protected abstract T newInstance(long time);
@@ -107,7 +108,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public Date copy(Date value) {
+    public Date copy(CopyContext copyContext, Date value) {
       return newInstance(value.getTime());
     }
   }
@@ -127,7 +128,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public java.sql.Date copy(java.sql.Date value) {
+    public java.sql.Date copy(CopyContext copyContext, java.sql.Date value) {
       return newInstance(value.getTime());
     }
   }
@@ -148,7 +149,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public Time copy(Time value) {
+    public Time copy(CopyContext copyContext, Time value) {
       return newInstance(value.getTime());
     }
   }
@@ -165,35 +166,34 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Timestamp value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (isJava) {
-        long time = value.getTime() - (value.getNanos() / 1_000_000);
-        buffer.writeInt64(time);
-        buffer.writeInt32(value.getNanos());
-      } else {
+    public void write(WriteContext writeContext, Timestamp value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (config.isXlang()) {
         Instant instant = value.toInstant();
         buffer.writeInt64(instant.getEpochSecond());
         buffer.writeInt32(instant.getNano());
+      } else {
+        long time = value.getTime() - (value.getNanos() / 1_000_000);
+        buffer.writeInt64(time);
+        buffer.writeInt32(value.getNanos());
       }
     }
 
     @Override
-    public Timestamp read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (isJava) {
-        Timestamp t = new Timestamp(buffer.readInt64());
-        t.setNanos(buffer.readInt32());
-        return t;
-      } else {
+    public Timestamp read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (config.isXlang()) {
         long seconds = buffer.readInt64();
         int nanos = buffer.readInt32();
         return Timestamp.from(Instant.ofEpochSecond(seconds, nanos));
       }
+      Timestamp t = new Timestamp(buffer.readInt64());
+      t.setNanos(buffer.readInt32());
+      return t;
     }
 
     @Override
-    public Timestamp copy(Timestamp value) {
+    public Timestamp copy(CopyContext copyContext, Timestamp value) {
       return new Timestamp(value.getTime());
     }
   }
@@ -208,13 +208,13 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, LocalDate value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (isJava) {
-        writeLocalDate(buffer, value);
-      } else {
+    public void write(WriteContext writeContext, LocalDate value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (config.isXlang()) {
         // TODO use java encoding to support larger range.
         buffer.writeInt32(DateTimeUtils.localDateToDays(value));
+      } else {
+        writeLocalDate(buffer, value);
       }
     }
 
@@ -225,13 +225,12 @@ public class TimeSerializers {
     }
 
     @Override
-    public LocalDate read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (isJava) {
-        return readLocalDate(buffer);
-      } else {
+    public LocalDate read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (config.isXlang()) {
         return DateTimeUtils.daysToLocalDate(buffer.readInt32());
       }
+      return readLocalDate(buffer);
     }
 
     public static LocalDate readLocalDate(MemoryBuffer buffer) {
@@ -252,15 +251,15 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Instant value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, Instant value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt64(value.getEpochSecond());
       buffer.writeInt32(value.getNano());
     }
 
     @Override
-    public Instant read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+    public Instant read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       long seconds = buffer.readInt64();
       int nanos = buffer.readInt32();
       return Instant.ofEpochSecond(seconds, nanos);
@@ -277,14 +276,14 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Duration value) {
+    public void write(WriteContext writeContext, Duration value) {
     MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarInt64(value.getSeconds());
       buffer.writeInt32(value.getNano());
     }
 
     @Override
-    public Duration read(org.apache.fory.context.ReadContext readContext) {
+    public Duration read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       long seconds = buffer.readVarInt64();
       int nanos = buffer.readInt32();
@@ -302,14 +301,14 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, LocalDateTime value) {
+    public void write(WriteContext writeContext, LocalDateTime value) {
     MemoryBuffer buffer = writeContext.getBuffer();
       LocalDateSerializer.writeLocalDate(buffer, value.toLocalDate());
       LocalTimeSerializer.writeLocalTime(buffer, value.toLocalTime());
     }
 
     @Override
-    public LocalDateTime read(org.apache.fory.context.ReadContext readContext) {
+    public LocalDateTime read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       LocalDate date = LocalDateSerializer.readLocalDate(buffer);
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
@@ -327,7 +326,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, LocalTime time) {
+    public void write(WriteContext writeContext, LocalTime time) {
     MemoryBuffer buffer = writeContext.getBuffer();
       writeLocalTime(buffer, time);
     }
@@ -355,7 +354,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public LocalTime read(org.apache.fory.context.ReadContext readContext) {
+    public LocalTime read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       return readLocalTime(buffer);
     }
@@ -393,18 +392,16 @@ public class TimeSerializers {
       super(config, TimeZone.class, needToWriteRef);
     }
 
-    public void write(org.apache.fory.context.WriteContext writeContext, TimeZone object) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      fory.writeString(buffer, object.getID());
+    public void write(WriteContext writeContext, TimeZone object) {
+      writeContext.writeString(object.getID());
     }
 
-    public TimeZone read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return TimeZone.getTimeZone(fory.readString(buffer));
+    public TimeZone read(ReadContext readContext) {
+      return TimeZone.getTimeZone(readContext.readString());
     }
 
     @Override
-    public TimeZone copy(TimeZone value) {
+    public TimeZone copy(CopyContext copyContext, TimeZone value) {
       return TimeZone.getTimeZone(value.getID());
     }
   }
@@ -423,9 +420,9 @@ public class TimeSerializers {
       timeZoneSerializer = new TimeZoneSerializer(config, TimeZone.class);
     }
 
-    public void write(org.apache.fory.context.WriteContext writeContext, Calendar object) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      timeZoneSerializer.write(org.apache.fory.context.WriteContext.current(), object.getTimeZone()); // can't be null
+    public void write(WriteContext writeContext, Calendar object) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      timeZoneSerializer.write(writeContext, object.getTimeZone());
       buffer.writeInt64(object.getTimeInMillis());
       buffer.writeBoolean(object.isLenient());
       buffer.writeByte(object.getFirstDayOfWeek());
@@ -437,9 +434,9 @@ public class TimeSerializers {
       }
     }
 
-    public Calendar read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      Calendar result = Calendar.getInstance(timeZoneSerializer.read(org.apache.fory.context.ReadContext.current()));
+    public Calendar read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      Calendar result = Calendar.getInstance(timeZoneSerializer.read(readContext));
       result.setTimeInMillis(buffer.readInt64());
       result.setLenient(buffer.readBoolean());
       result.setFirstDayOfWeek(buffer.readByte());
@@ -454,7 +451,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public Calendar copy(Calendar value) {
+    public Calendar copy(CopyContext copyContext, Calendar value) {
       Calendar copy = Calendar.getInstance(value.getTimeZone());
       copy.setTimeInMillis(value.getTimeInMillis());
       copy.setLenient(value.isLenient());
@@ -478,15 +475,13 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, ZoneId obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      fory.writeString(buffer, obj.getId());
+    public void write(WriteContext writeContext, ZoneId obj) {
+      writeContext.writeString(obj.getId());
     }
 
     @Override
-    public ZoneId read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return ZoneId.of(fory.readString(buffer));
+    public ZoneId read(ReadContext readContext) {
+      return ZoneId.of(readContext.readString());
     }
   }
 
@@ -512,8 +507,8 @@ public class TimeSerializers {
       super(config, ZoneOffset.class, needToWriteRef);
     }
 
-    public void write(org.apache.fory.context.WriteContext writeContext, ZoneOffset obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, ZoneOffset obj) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       writeZoneOffset(buffer, obj);
     }
 
@@ -526,8 +521,8 @@ public class TimeSerializers {
       }
     }
 
-    public ZoneOffset read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+    public ZoneOffset read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       return readZoneOffset(buffer);
     }
 
@@ -550,18 +545,18 @@ public class TimeSerializers {
       super(config, ZonedDateTime.class, needToWriteRef);
     }
 
-    public void write(org.apache.fory.context.WriteContext writeContext, ZonedDateTime obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, ZonedDateTime obj) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       LocalDateSerializer.writeLocalDate(buffer, obj.toLocalDate());
       LocalTimeSerializer.writeLocalTime(buffer, obj.toLocalTime());
-      fory.writeString(buffer, obj.getZone().getId());
+      writeContext.writeString(obj.getZone().getId());
     }
 
-    public ZonedDateTime read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+    public ZonedDateTime read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       LocalDate date = LocalDateSerializer.readLocalDate(buffer);
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
-      ZoneId zone = ZoneId.of(fory.readString(buffer));
+      ZoneId zone = ZoneId.of(readContext.readString());
       return ZonedDateTime.of(date, time, zone);
     }
   }
@@ -576,13 +571,13 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Year obj) {
+    public void write(WriteContext writeContext, Year obj) {
     MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(obj.getValue());
     }
 
     @Override
-    public Year read(org.apache.fory.context.ReadContext readContext) {
+    public Year read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       return Year.of(buffer.readInt32());
     }
@@ -598,14 +593,14 @@ public class TimeSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, YearMonth obj) {
+    public void write(WriteContext writeContext, YearMonth obj) {
     MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(obj.getYear());
       buffer.writeByte(obj.getMonthValue());
     }
 
     @Override
-    public YearMonth read(org.apache.fory.context.ReadContext readContext) {
+    public YearMonth read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       int year = buffer.readInt32();
       byte month = buffer.readByte();
@@ -622,13 +617,13 @@ public class TimeSerializers {
       super(config, MonthDay.class, needToWriteRef);
     }
 
-    public void write(org.apache.fory.context.WriteContext writeContext, MonthDay obj) {
+    public void write(WriteContext writeContext, MonthDay obj) {
     MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeByte(obj.getMonthValue());
       buffer.writeByte(obj.getDayOfMonth());
     }
 
-    public MonthDay read(org.apache.fory.context.ReadContext readContext) {
+    public MonthDay read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       byte month = buffer.readByte();
       byte day = buffer.readByte();
@@ -645,14 +640,14 @@ public class TimeSerializers {
       super(config, Period.class, needToWriteRef);
     }
 
-    public void write(org.apache.fory.context.WriteContext writeContext, Period obj) {
+    public void write(WriteContext writeContext, Period obj) {
     MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(obj.getYears());
       buffer.writeInt32(obj.getMonths());
       buffer.writeInt32(obj.getDays());
     }
 
-    public Period read(org.apache.fory.context.ReadContext readContext) {
+    public Period read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       int years = buffer.readInt32();
       int months = buffer.readInt32();
@@ -670,13 +665,13 @@ public class TimeSerializers {
       super(config, OffsetTime.class, needToWriteRef);
     }
 
-    public void write(org.apache.fory.context.WriteContext writeContext, OffsetTime obj) {
+    public void write(WriteContext writeContext, OffsetTime obj) {
     MemoryBuffer buffer = writeContext.getBuffer();
       LocalTimeSerializer.writeLocalTime(buffer, obj.toLocalTime());
       ZoneOffsetSerializer.writeZoneOffset(buffer, obj.getOffset());
     }
 
-    public OffsetTime read(org.apache.fory.context.ReadContext readContext) {
+    public OffsetTime read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
       ZoneOffset offset = ZoneOffsetSerializer.readZoneOffset(buffer);
@@ -693,14 +688,14 @@ public class TimeSerializers {
       super(config, OffsetDateTime.class, needToWriteRef);
     }
 
-    public void write(org.apache.fory.context.WriteContext writeContext, OffsetDateTime obj) {
+    public void write(WriteContext writeContext, OffsetDateTime obj) {
     MemoryBuffer buffer = writeContext.getBuffer();
       LocalDateSerializer.writeLocalDate(buffer, obj.toLocalDate());
       LocalTimeSerializer.writeLocalTime(buffer, obj.toLocalTime());
       ZoneOffsetSerializer.writeZoneOffset(buffer, obj.getOffset());
     }
 
-    public OffsetDateTime read(org.apache.fory.context.ReadContext readContext) {
+    public OffsetDateTime read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       LocalDate date = LocalDateSerializer.readLocalDate(buffer);
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);

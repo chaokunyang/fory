@@ -119,7 +119,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     }
     classVersionHash =
         fory.checkClassVersion()
-            ? new Literal(ObjectSerializer.computeStructHash(fory, grouper), PRIMITIVE_INT_TYPE)
+            ? new Literal(
+                ObjectSerializer.computeStructHash(typeResolver, grouper), PRIMITIVE_INT_TYPE)
             : null;
     objectCodecOptimizer = new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
     if (isRecord) {
@@ -472,7 +473,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     if (!isRecord) {
       bean = newBean();
       Expression referenceObject =
-          new Invoke(refResolverRef, "reference", PRIMITIVE_VOID_TYPE, bean);
+          new Invoke(readContextRef(), "reference", PRIMITIVE_VOID_TYPE, bean);
       expressions.add(bean);
       expressions.add(referenceObject);
     } else {

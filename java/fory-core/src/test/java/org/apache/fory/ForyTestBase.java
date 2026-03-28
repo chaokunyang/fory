@@ -38,17 +38,18 @@ import java.util.stream.Collectors;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.io.ClassLoaderObjectInputStream;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.serializer.BufferObject;
 import org.apache.fory.serializer.Serializer;
-import org.testng.Assert;
 import org.testng.Assert.ThrowingRunnable;
+import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 
 /** Fory unit test base class. */
@@ -368,6 +369,15 @@ public abstract class ForyTestBase {
     return context.run(buffer, null, false, () -> action.apply(context));
   }
 
+  public static <T> T withCopyContext(Fory fory, Function<CopyContext, T> action) {
+    CopyContext context = (CopyContext) ReflectionUtils.getObjectFieldValue(fory, "copyContext");
+    try {
+      return action.apply(context);
+    } finally {
+      context.reset();
+    }
+  }
+
   public static <T> void writeSerializer(
       Fory fory, Serializer<T> serializer, MemoryBuffer buffer, T value) {
     withWriteContext(fory, buffer, context -> serializer.write(context, value));
@@ -423,9 +433,9 @@ public abstract class ForyTestBase {
 
   public static Object serDeMetaShared(Fory fory, Object obj) {
     MetaContext context = new MetaContext();
-    fory.getSerializationContext().setMetaContext(context);
+    fory.setMetaContext(context);
     byte[] bytes = fory.serialize(obj);
-    fory.getSerializationContext().setMetaContext(context);
+    fory.setMetaContext(context);
     return fory.deserialize(bytes);
   }
 

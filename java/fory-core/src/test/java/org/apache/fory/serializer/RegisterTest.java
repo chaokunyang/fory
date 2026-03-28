@@ -26,7 +26,6 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -191,23 +190,13 @@ public class RegisterTest extends ForyTestBase {
 
     @Override
     public void write(WriteContext writeContext, MyExt value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      if (isJava) {
-        fory.writeString(buffer, value.id);
-      } else {
-        fory.writeString(buffer, value.id);
-      }
+      writeContext.writeString(value.id);
     }
 
     @Override
     public MyExt read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       MyExt result = new MyExt();
-      if (isJava) {
-        result.id = fory.readString(buffer);
-      } else {
-        result.id = fory.readString(buffer);
-      }
+      result.id = readContext.readString();
       return result;
     }
   }
@@ -219,15 +208,13 @@ public class RegisterTest extends ForyTestBase {
 
     @Override
     public void write(WriteContext writeContext, MyExt value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      fory.writeString(buffer, value.id);
+      writeContext.writeString(value.id);
     }
 
     @Override
     public MyExt read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       MyExt result = new MyExt();
-      result.id = fory.readString(buffer);
+      result.id = readContext.readString();
       return result;
     }
   }

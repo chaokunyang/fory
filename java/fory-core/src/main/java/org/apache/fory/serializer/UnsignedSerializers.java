@@ -20,7 +20,8 @@
 package org.apache.fory.serializer;
 
 import org.apache.fory.config.Config;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.unsigned.Uint16;
 import org.apache.fory.type.unsigned.Uint32;
@@ -38,15 +39,13 @@ public class UnsignedSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Uint8 value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeByte(value.byteValue());
+    public void write(WriteContext writeContext, Uint8 value) {
+      writeContext.getBuffer().writeByte(value.byteValue());
     }
 
     @Override
-    public Uint8 read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return new Uint8(buffer.readByte());
+    public Uint8 read(ReadContext readContext) {
+      return new Uint8(readContext.getBuffer().readByte());
     }
   }
 
@@ -57,15 +56,13 @@ public class UnsignedSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Uint16 value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt16(value.shortValue());
+    public void write(WriteContext writeContext, Uint16 value) {
+      writeContext.getBuffer().writeInt16(value.shortValue());
     }
 
     @Override
-    public Uint16 read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return new Uint16(buffer.readInt16());
+    public Uint16 read(ReadContext readContext) {
+      return new Uint16(readContext.getBuffer().readInt16());
     }
   }
 
@@ -76,15 +73,13 @@ public class UnsignedSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Uint32 value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt32(value.intValue());
+    public void write(WriteContext writeContext, Uint32 value) {
+      writeContext.getBuffer().writeInt32(value.intValue());
     }
 
     @Override
-    public Uint32 read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return new Uint32(buffer.readInt32());
+    public Uint32 read(ReadContext readContext) {
+      return new Uint32(readContext.getBuffer().readInt32());
     }
   }
 
@@ -95,15 +90,13 @@ public class UnsignedSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Uint64 value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt64(value.longValue());
+    public void write(WriteContext writeContext, Uint64 value) {
+      writeContext.getBuffer().writeInt64(value.longValue());
     }
 
     @Override
-    public Uint64 read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return new Uint64(buffer.readInt64());
+    public Uint64 read(ReadContext readContext) {
+      return new Uint64(readContext.getBuffer().readInt64());
     }
   }
 

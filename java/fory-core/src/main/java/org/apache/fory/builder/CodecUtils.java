@@ -108,7 +108,7 @@ public class CodecUtils {
       beanClassClassLoader = fory.getClass().getClassLoader();
     }
     TypeResolver typeResolver = fory.getTypeResolver();
-    codeGenerator = getCodeGenerator(fory, beanClassClassLoader, typeResolver);
+    codeGenerator = getCodeGenerator(beanClassClassLoader, typeResolver);
     ClassLoader classLoader =
         codeGenerator.compile(
             Collections.singletonList(compileUnit), compileState -> compileState.lock.lock());
@@ -121,7 +121,7 @@ public class CodecUtils {
   }
 
   private static CodeGenerator getCodeGenerator(
-      Fory fory, ClassLoader beanClassClassLoader, TypeResolver typeResolver) {
+      ClassLoader beanClassClassLoader, TypeResolver typeResolver) {
     CodeGenerator codeGenerator;
     try {
       // generated code imported fory classes.
@@ -133,7 +133,7 @@ public class CodecUtils {
               new ClassLoader[] {beanClassClassLoader},
               loaders -> CodeGenerator.getSharedCodeGenerator(loaders[0]));
     } catch (ClassNotFoundException e) {
-      ClassLoader[] loaders = {beanClassClassLoader, fory.getClass().getClassLoader()};
+      ClassLoader[] loaders = {beanClassClassLoader, Fory.class.getClassLoader()};
       codeGenerator =
           typeResolver.getOrCreateCodeGenerator(
               loaders,

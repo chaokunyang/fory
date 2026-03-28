@@ -17,26 +17,30 @@
  * under the License.
  */
 
-package org.apache.fory.resolver;
+package org.apache.fory.context;
 
-import static org.testng.Assert.*;
+import org.apache.fory.memory.MemoryBuffer;
 
-import org.apache.fory.config.Config;
-import org.apache.fory.config.ForyBuilder;
-import org.testng.annotations.Test;
+public interface RefReader {
+  byte readRefOrNull(MemoryBuffer buffer);
 
-public class SerializationContextTest {
+  int preserveRefId();
 
-  @Test
-  public void testSerializationContext() {
-    ForyBuilder builder = new ForyBuilder().withDeserializeUnknownClass(false);
-    builder.build(); // trigger finish
-    SerializationContext context = new SerializationContext(new Config(builder));
-    assertFalse(context.containsKey("A"));
-    context.add("A", 1);
-    assertTrue(context.containsKey("A"));
-    assertEquals(context.get("A"), 1);
-    context.reset();
-    assertFalse(context.containsKey("A"));
-  }
+  int preserveRefId(int refId);
+
+  int tryPreserveRefId(MemoryBuffer buffer);
+
+  int lastPreservedRefId();
+
+  boolean hasPreservedRefId();
+
+  void reference(Object object);
+
+  Object getReadObject(int id);
+
+  Object getReadObject();
+
+  void setReadObject(int id, Object object);
+
+  void reset();
 }

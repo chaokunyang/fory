@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Collection;
+import org.apache.fory.context.CopyContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
@@ -53,14 +54,14 @@ public class CollectionSerializer<T extends Collection> extends CollectionLikeSe
   }
 
   @Override
-  public T copy(T originCollection) {
+  public T copy(CopyContext copyContext, T originCollection) {
     if (isImmutable()) {
       return originCollection;
     }
     Preconditions.checkArgument(supportCodegenHook);
-    Collection newCollection = newCollection(originCollection);
-    fory.reference(originCollection, newCollection);
-    copyElements(originCollection, newCollection);
+    Collection newCollection = newCollection(copyContext, originCollection);
+    copyContext.reference(originCollection, newCollection);
+    copyElements(copyContext, originCollection, newCollection);
     return (T) newCollection;
   }
 }

@@ -35,19 +35,21 @@ import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.util.StringUtils;
 import org.testng.annotations.Test;
 
-public class MetaStringResolverTest {
+public class MetaStringIOTest {
 
   @Test
   public void testWriteMetaString() {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    MetaStringWriter writer = new MetaStringWriter(sharedRegistry);
+    MetaStringReader reader = new MetaStringReader(sharedRegistry);
     MemoryBuffer buffer = MemoryUtils.buffer(32);
     String str = StringUtils.random(128, 0);
-    MetaStringResolver stringResolver = new MetaStringResolver();
+    MetaStringRef metaStringRef = writer.getOrCreateGenericMetaStringBytes(str);
     for (int i = 0; i < 128; i++) {
-      stringResolver.writeMetaStringBytes(
-          buffer, stringResolver.getOrCreateGenericMetaStringBytes(str));
+      writer.writeMetaStringBytes(buffer, metaStringRef);
     }
     for (int i = 0; i < 128; i++) {
-      String metaString = stringResolver.readMetaString(buffer);
+      String metaString = reader.readMetaString(buffer);
       assertEquals(metaString.hashCode(), str.hashCode());
       assertEquals(metaString.getBytes(), str.getBytes());
     }
@@ -62,52 +64,47 @@ public class MetaStringResolverTest {
         }) {
       for (int i = 0; i < 32; i++) {
         String str = StringUtils.random(i, 0);
-        MetaStringResolver resolver = new MetaStringResolver();
-        resolver.writeMetaStringBytes(buffer, resolver.getOrCreateGenericMetaStringBytes(str));
-        String metaString2 = resolver.readMetaString(buffer);
-        assertEquals(metaString2.hashCode(), str.hashCode());
-        assertEquals(metaString2.getBytes(), str.getBytes());
+        MetaStringWriter writer = new MetaStringWriter(new SharedRegistry());
+        MetaStringReader reader = new MetaStringReader(new SharedRegistry());
+        writer.writeMetaStringBytes(buffer, writer.getOrCreateGenericMetaStringBytes(str));
+        String metaString = reader.readMetaString(buffer);
+        assertEquals(metaString.hashCode(), str.hashCode());
+        assertEquals(metaString.getBytes(), str.getBytes());
+        buffer.readerIndex(0);
+        buffer.writerIndex(0);
       }
     }
   }
 
   @Test
-  public void testSharedRegistrySharesEncodedBytesButKeepsDynamicIdsLocal() {
+  public void testSharedRegistrySharesMetaStringRefsAcrossWriters() {
     SharedRegistry sharedRegistry = new SharedRegistry();
-    MetaStringResolver resolver1 = new MetaStringResolver(sharedRegistry);
-    MetaStringResolver resolver2 = new MetaStringResolver(sharedRegistry);
+    MetaStringWriter writer1 = new MetaStringWriter(sharedRegistry);
+    MetaStringWriter writer2 = new MetaStringWriter(sharedRegistry);
 
-    MetaStringRef bytes1 = resolver1.getOrCreateGenericMetaStringBytes("thread_safe_fory");
-    MetaStringRef bytes2 = resolver2.getOrCreateGenericMetaStringBytes("thread_safe_fory");
+    MetaStringRef bytes1 = writer1.getOrCreateGenericMetaStringBytes("thread_safe_fory");
+    MetaStringRef bytes2 = writer2.getOrCreateGenericMetaStringBytes("thread_safe_fory");
 
-    assertNotSame(bytes1, bytes2);
+    assertSame(bytes1, bytes2);
     assertSame(bytes1.encoded, bytes2.encoded);
     assertSame(bytes1.encoded.bytes, bytes2.encoded.bytes);
-    assertEquals(bytes1.dynamicWriteStringId, MetaStringRef.DEFAULT_DYNAMIC_WRITE_STRING_ID);
-    assertEquals(bytes2.dynamicWriteStringId, MetaStringRef.DEFAULT_DYNAMIC_WRITE_STRING_ID);
-
-    MemoryBuffer buffer = MemoryUtils.buffer(32);
-    resolver1.writeMetaStringBytes(buffer, bytes1);
-
-    assertTrue(bytes1.dynamicWriteStringId >= 0);
-    assertEquals(bytes2.dynamicWriteStringId, MetaStringRef.DEFAULT_DYNAMIC_WRITE_STRING_ID);
   }
 
   @Test
   public void testSharedRegistryDoesNotMergeDifferentEncoderTypeKeys() {
     SharedRegistry sharedRegistry = new SharedRegistry();
-    MetaStringResolver resolver1 = new MetaStringResolver(sharedRegistry);
-    MetaStringResolver resolver2 = new MetaStringResolver(sharedRegistry);
+    MetaStringWriter writer1 = new MetaStringWriter(sharedRegistry);
+    MetaStringWriter writer2 = new MetaStringWriter(sharedRegistry);
     MetaStringEncoder encoder = new MetaStringEncoder('$', '_');
 
     MetaStringRef typeNameBytes =
-        resolver1.getOrCreateMetaStringBytes(
+        writer1.getOrCreateMetaStringBytes(
             "ExampleValue",
             encoder,
             MetaString.Encoding.LOWER_UPPER_DIGIT_SPECIAL,
             Encoders.TYPE_NAME_ENCODER_TYPE_KEY);
     MetaStringRef fieldNameBytes =
-        resolver2.getOrCreateMetaStringBytes(
+        writer2.getOrCreateMetaStringBytes(
             "ExampleValue",
             encoder,
             MetaString.Encoding.LOWER_UPPER_DIGIT_SPECIAL,
@@ -121,25 +118,25 @@ public class MetaStringResolverTest {
   @Test
   public void testSharedRegistryCreatesMetaStringOnlyOnCacheMiss() {
     SharedRegistry sharedRegistry = new SharedRegistry();
-    MetaStringResolver resolver1 = new MetaStringResolver(sharedRegistry);
-    MetaStringResolver resolver2 = new MetaStringResolver(sharedRegistry);
+    MetaStringWriter writer1 = new MetaStringWriter(sharedRegistry);
+    MetaStringWriter writer2 = new MetaStringWriter(sharedRegistry);
     CountingMetaStringEncoder encoder = new CountingMetaStringEncoder('.', '_');
 
     MetaStringRef bytes1 =
-        resolver1.getOrCreateMetaStringBytes(
+        writer1.getOrCreateMetaStringBytes(
             "thread_safe_fory",
             encoder,
             MetaString.Encoding.LOWER_SPECIAL,
             Encoders.GENERIC_ENCODER_TYPE_KEY);
     MetaStringRef bytes2 =
-        resolver2.getOrCreateMetaStringBytes(
+        writer2.getOrCreateMetaStringBytes(
             "thread_safe_fory",
             encoder,
             MetaString.Encoding.LOWER_SPECIAL,
             Encoders.GENERIC_ENCODER_TYPE_KEY);
 
     assertEquals(encoder.encodeBinaryCalls.get(), 1);
-    assertNotSame(bytes1, bytes2);
+    assertSame(bytes1, bytes2);
     assertSame(bytes1.encoded, bytes2.encoded);
     assertSame(bytes1.encoded.bytes, bytes2.encoded.bytes);
   }

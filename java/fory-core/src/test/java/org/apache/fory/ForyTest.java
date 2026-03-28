@@ -24,6 +24,9 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -59,8 +62,6 @@ import org.apache.fory.builder.Generated;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
@@ -68,7 +69,8 @@ import org.apache.fory.exception.SerializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.memory.Platform;
-import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
 import org.apache.fory.serializer.EnumSerializerTest;
@@ -540,8 +542,7 @@ public class ForyTest extends ForyTestBase {
 
     @Override
     public UUID read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return new UUID(buffer.readInt64(), buffer.readInt64());
+      return new UUID(readContext.getBuffer().readInt64(), readContext.getBuffer().readInt64());
     }
 
     @Override
@@ -552,56 +553,6 @@ public class ForyTest extends ForyTestBase {
     }
   }
 
-  @Data
-  @AllArgsConstructor
-  static class NestedWriteBean {
-    int value;
-  }
-
-  static class NestedWriteBeanSerializer extends Serializer<NestedWriteBean> {
-    NestedWriteBeanSerializer(TypeResolver typeResolver) {
-      super(typeResolver, NestedWriteBean.class);
-    }
-
-    @Override
-    public void write(WriteContext writeContext, NestedWriteBean value) {
-      // Trigger nested serialization to validate the API hint message.
-      fory.getFory().serialize(value);
-    }
-
-    @Override
-    public NestedWriteBean read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return new NestedWriteBean(buffer.readInt32());
-    }
-  }
-
-  @Data
-  @AllArgsConstructor
-  static class NestedReadBean {
-    int value;
-  }
-
-  static class NestedReadBeanSerializer extends Serializer<NestedReadBean> {
-    NestedReadBeanSerializer(TypeResolver typeResolver) {
-      super(typeResolver, NestedReadBean.class);
-    }
-
-    @Override
-    public void write(WriteContext writeContext, NestedReadBean value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt32(value.value);
-    }
-
-    @Override
-    public NestedReadBean read(ReadContext readContext) {
-      // Trigger nested deserialization to validate the API hint message.
-      fory.getFory().deserialize(new byte[] {1});
-      MemoryBuffer buffer = readContext.getBuffer();
-      return new NestedReadBean(buffer.readInt32());
-    }
-  }
-
   @Test
   public void testRegisterPrivateSerializer() {
     Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
@@ -609,31 +560,6 @@ public class ForyTest extends ForyTestBase {
     DomainObject obj = new DomainObject();
     obj.id = UUID.randomUUID();
     serDeCheckSerializer(fory, obj, "Codec");
-  }
-
-  @Test
-  public void testNestedSerializeHintUsesWriteApi() {
-    Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
-    fory.registerSerializer(
-        NestedWriteBean.class, new NestedWriteBeanSerializer(fory.getTypeResolver()));
-    SerializationException ex =
-        Assert.expectThrows(
-            SerializationException.class, () -> fory.serialize(new NestedWriteBean(1)));
-    assertTrue(ex.getMessage().contains("Fory#writeXXX"));
-    assertTrue(!ex.getMessage().contains("Fory#xwriteXXX"));
-  }
-
-  @Test
-  public void testNestedDeserializeHintUsesReadApi() {
-    Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
-    fory.registerSerializer(
-        NestedReadBean.class, new NestedReadBeanSerializer(fory.getTypeResolver()));
-    byte[] bytes = fory.serialize(new NestedReadBean(1));
-    DeserializationException ex =
-        Assert.expectThrows(DeserializationException.class, () -> fory.deserialize(bytes));
-    String message = ex.getMessage();
-    assertTrue(message != null);
-    assertTrue(!message.contains("Fory#xreadXXX"));
   }
 
   @Test
@@ -696,9 +622,9 @@ public class ForyTest extends ForyTestBase {
             .withMetaShare(true)
             .build();
     MetaContext metaContext = new MetaContext();
-    fory.getSerializationContext().setMetaContext(metaContext);
+    fory.setMetaContext(metaContext);
     byte[] bytes = fory.serialize(null);
-    fory.getSerializationContext().setMetaContext(metaContext);
+    fory.setMetaContext(metaContext);
     Object obj = fory.deserialize(bytes);
     assertNull(obj);
   }
@@ -711,17 +637,22 @@ public class ForyTest extends ForyTestBase {
 
     final byte[] smallPayload = new byte[0];
     final byte[] serializedSmall = fory.serialize(smallPayload);
-    assertEquals(fory.getBuffer().size(), minBufferBytes);
+    assertEquals(getDefaultWriteBuffer(fory).size(), minBufferBytes);
 
     fory.deserialize(serializedSmall);
-    assertEquals(fory.getBuffer().size(), minBufferBytes);
+    assertEquals(getDefaultWriteBuffer(fory).size(), minBufferBytes);
 
     final byte[] largePayload = new byte[limitInBytes * 2];
     final byte[] serializedLarge = fory.serialize(largePayload);
-    assertEquals(fory.getBuffer().size(), limitInBytes);
+    assertEquals(getDefaultWriteBuffer(fory).size(), limitInBytes);
 
     fory.deserialize(serializedLarge);
-    assertEquals(fory.getBuffer().size(), limitInBytes);
+    assertEquals(getDefaultWriteBuffer(fory).size(), limitInBytes);
+  }
+
+  private static MemoryBuffer getDefaultWriteBuffer(Fory fory) {
+    Object writeContext = ReflectionUtils.getObjectFieldValue(fory, "writeContext");
+    return (MemoryBuffer) ReflectionUtils.getObjectFieldValue(writeContext, "defaultBuffer");
   }
 
   @EqualsAndHashCode

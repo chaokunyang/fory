@@ -31,7 +31,7 @@ Custom serializers should not retain `Fory`.
 
 ## Basic Serializer
 
-Use `WriteContext` and `ReadContext` for runtime state. Get the buffer into a local variable first
+Use `WriteContext` and `ReadContext` for runtime state. Only get the buffer into a local variable
 when you perform multiple reads or writes.
 
 ```java
@@ -48,8 +48,7 @@ public final class FooSerializer extends Serializer<Foo> {
 
   @Override
   public void write(WriteContext writeContext, Foo value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    buffer.writeInt64(value.f1);
+    writeContext.getBuffer().writeInt64(value.f1);
     writeContext.writeString(value.f2);
   }
 
@@ -213,7 +212,7 @@ fory.registerSerializer(
 ## Thread Safety
 
 Override `threadSafe()` only when all retained fields are immutable and the serializer does not
-retain `TypeResolver`, `RefResolver`, `Fory`, or other runtime state.
+retain `TypeResolver`, `Fory`, or other runtime state.
 
 In practice:
 

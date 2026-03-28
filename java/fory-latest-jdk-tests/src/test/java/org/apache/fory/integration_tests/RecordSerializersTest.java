@@ -29,7 +29,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
-import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.test.bean.Struct;
 import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
@@ -89,9 +89,9 @@ public class RecordSerializersTest {
             .build();
     Foo foo = new Foo(10, "abc", new ArrayList<>(Arrays.asList("a", "b")), 'x');
     MetaContext context = new MetaContext();
-    fory.getSerializationContext().setMetaContext(context);
+    fory.setMetaContext(context);
     byte[] bytes = fory.serialize(foo);
-    fory.getSerializationContext().setMetaContext(context);
+    fory.setMetaContext(context);
     Assert.assertEquals(fory.deserialize(bytes), foo);
   }
 
@@ -176,13 +176,13 @@ public class RecordSerializersTest {
             .build();
     MetaContext metaContext1 = new MetaContext();
     MetaContext metaContext2 = new MetaContext();
-    fory1.getSerializationContext().setMetaContext(metaContext1);
+    fory1.setMetaContext(metaContext1);
     byte[] bytes1 = fory1.serialize(record1);
-    fory2.getSerializationContext().setMetaContext(metaContext2);
+    fory2.setMetaContext(metaContext2);
     Object o21 = fory2.deserialize(bytes1);
-    fory2.getSerializationContext().setMetaContext(metaContext2);
+    fory2.setMetaContext(metaContext2);
     byte[] bytes2 = fory2.serialize(o21);
-    fory1.getSerializationContext().setMetaContext(metaContext1);
+    fory1.setMetaContext(metaContext1);
     Object o12 = fory1.deserialize(bytes2);
     System.out.println(o12);
   }
@@ -218,9 +218,9 @@ public class RecordSerializersTest {
       Object o1 = Records.createPrivateRecord(11);
       Object o2 = Records.createPublicRecord(11, o1);
       MetaContext context = new MetaContext();
-      fory.getSerializationContext().setMetaContext(context);
+      fory.setMetaContext(context);
       byte[] bytes = fory.serialize(o2);
-      fory.getSerializationContext().setMetaContext(context);
+      fory.setMetaContext(context);
       Assert.assertEquals(fory.deserialize(bytes), o2);
     }
   }

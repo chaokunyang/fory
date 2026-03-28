@@ -35,9 +35,11 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
@@ -82,31 +84,27 @@ public class UnmodifiableSerializers {
     private final Function factory;
     private final long offset;
 
-    public UnmodifiableCollectionSerializer(TypeResolver typeResolver, Class cls, Function factory, long offset) {
+    public UnmodifiableCollectionSerializer(
+        TypeResolver typeResolver, Class cls, Function factory, long offset) {
       super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Collection value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, Collection value) {
       Preconditions.checkArgument(value.getClass() == type);
-      Object fieldValue = Platform.getObject(value, offset);
-      fory.writeRef(buffer, fieldValue);
+      writeContext.writeRef(Platform.getObject(value, offset));
     }
 
     @Override
-    public Collection read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      final Object sourceCollection = fory.readRef(buffer);
-      return (Collection) factory.apply(sourceCollection);
+    public Collection read(ReadContext readContext) {
+      return (Collection) factory.apply(readContext.readRef());
     }
 
     @Override
-    public Collection copy(Collection object) {
-      final Object collection = Platform.getObject(object, offset);
-      return (Collection) factory.apply(fory.copyObject(collection));
+    public Collection copy(CopyContext copyContext, Collection object) {
+      return (Collection) factory.apply(copyContext.copyObject(Platform.getObject(object, offset)));
     }
   }
 
@@ -114,31 +112,27 @@ public class UnmodifiableSerializers {
     private final Function factory;
     private final long offset;
 
-    public UnmodifiableMapSerializer(TypeResolver typeResolver, Class cls, Function factory, long offset) {
+    public UnmodifiableMapSerializer(
+        TypeResolver typeResolver, Class cls, Function factory, long offset) {
       super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Map value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, Map value) {
       Preconditions.checkArgument(value.getClass() == type);
-      Object fieldValue = Platform.getObject(value, offset);
-      fory.writeRef(buffer, fieldValue);
+      writeContext.writeRef(Platform.getObject(value, offset));
     }
 
     @Override
-    public Map copy(Map originMap) {
-      final Object unwrappedMap = Platform.getObject(originMap, offset);
-      return (Map) factory.apply(fory.copyObject(unwrappedMap));
+    public Map copy(CopyContext copyContext, Map originMap) {
+      return (Map) factory.apply(copyContext.copyObject(Platform.getObject(originMap, offset)));
     }
 
     @Override
-    public Map read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      final Object sourceCollection = fory.readRef(buffer);
-      return (Map) factory.apply(sourceCollection);
+    public Map read(ReadContext readContext) {
+      return (Map) factory.apply(readContext.readRef());
     }
   }
 

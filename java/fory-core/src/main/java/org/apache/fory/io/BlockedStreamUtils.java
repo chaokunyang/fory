@@ -85,17 +85,15 @@ public class BlockedStreamUtils {
   private static Object readFromChannel(
       Fory fory, ReadableByteChannel channel, Function<MemoryBuffer, Object> action) {
     try {
-      MemoryBuffer buf = fory.getBuffer();
-      buf.readerIndex(0);
       ByteBuffer byteBuffer = ByteBuffer.allocate(4);
       byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
       readByteBuffer(channel, byteBuffer, 4);
       int size = byteBuffer.getInt();
-      buf.ensure(size);
-      readByteBuffer(channel, buf.sliceAsByteBuffer(), size);
+      MemoryBuffer buf = MemoryBuffer.newHeapBuffer(size);
+      readByteBuffer(channel, buf.sliceAsByteBuffer(0, size), size);
       return action.apply(buf);
-    } finally {
-      fory.resetBuffer();
+    } catch (Throwable t) {
+      throw ExceptionUtils.handleReadFailed(fory, t);
     }
   }
 
@@ -120,7 +118,7 @@ public class BlockedStreamUtils {
 
   private static void serializeToStream(
       Fory fory, OutputStream outputStream, Consumer<MemoryBuffer> function) {
-    MemoryBuffer buf = fory.getBuffer();
+    MemoryBuffer buf = MemoryBuffer.newHeapBuffer(32);
     buf.writerIndex(0);
     try {
       buf.writeInt32(-1);
@@ -135,21 +133,17 @@ public class BlockedStreamUtils {
       outputStream.flush();
     } catch (IOException e) {
       throw new RuntimeException(e);
-    } finally {
-      fory.resetBuffer();
     }
   }
 
   private static Object deserializeFromStream(
       Fory fory, InputStream inputStream, Function<MemoryBuffer, Object> function) {
-    MemoryBuffer buf = fory.getBuffer();
+    MemoryBuffer buf = MemoryBuffer.newHeapBuffer(32);
     try {
       readToBufferFromStream(inputStream, buf);
       return function.apply(buf);
     } catch (Throwable t) {
       throw ExceptionUtils.handleReadFailed(fory, t);
-    } finally {
-      fory.resetBuffer();
     }
   }
 

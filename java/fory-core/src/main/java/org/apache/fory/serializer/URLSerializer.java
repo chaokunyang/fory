@@ -21,10 +21,10 @@ package org.apache.fory.serializer;
 
 import java.net.MalformedURLException;
 import java.net.URL;
-import org.apache.fory.Fory;
-import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.resolver.TypeResolver;
 
 /** Serializer for {@link URL}. */
 // TODO(chaokunyang) ensure security to avoid dnslog detection.
@@ -34,15 +34,13 @@ public final class URLSerializer extends AbstractObjectSerializer<URL> {
     super(typeResolver, type);
   }
 
-  public void write(org.apache.fory.context.WriteContext writeContext, URL object) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    fory.writeString(buffer, object.toExternalForm());
+  public void write(WriteContext writeContext, URL object) {
+    writeContext.writeString(object.toExternalForm());
   }
 
-  public URL read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+  public URL read(ReadContext readContext) {
     try {
-      return new URL(fory.readString(buffer));
+      return new URL(readContext.readString());
     } catch (MalformedURLException e) {
       Platform.throwException(e);
       throw new IllegalStateException("unreachable");

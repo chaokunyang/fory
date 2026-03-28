@@ -17,37 +17,41 @@
  * under the License.
  */
 
-package org.apache.fory.serializer;
+package org.apache.fory.context;
 
 import org.apache.fory.Fory;
-import org.apache.fory.ForyCopyable;
-import org.apache.fory.config.Config;
-import org.apache.fory.context.CopyContext;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
+import org.apache.fory.memory.MemoryBuffer;
 
-/** Fory custom copy serializer. see {@link ForyCopyable} */
-public class ForyCopyableSerializer<T> extends Serializer<T> {
-
-  private final Serializer<T> serializer;
-
-  public ForyCopyableSerializer(Config config, Class<T> type, Serializer<T> serializer) {
-    super(config, type);
-    this.serializer = serializer;
+public final class NoRefWriter implements RefWriter {
+  @Override
+  public boolean writeRefOrNull(MemoryBuffer buffer, Object obj) {
+    if (obj == null) {
+      buffer.writeByte(Fory.NULL_FLAG);
+      return true;
+    }
+    buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+    return false;
   }
 
   @Override
-  public void write(WriteContext writeContext, T value) {
-    serializer.write(writeContext, value);
+  public boolean writeRefValueFlag(MemoryBuffer buffer, Object obj) {
+    assert obj != null;
+    buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+    return true;
   }
 
   @Override
-  public T copy(CopyContext copyContext, T obj) {
-    return ((ForyCopyable<T>) obj).copy(copyContext);
+  public boolean writeNullFlag(MemoryBuffer buffer, Object obj) {
+    if (obj == null) {
+      buffer.writeByte(Fory.NULL_FLAG);
+      return true;
+    }
+    return false;
   }
 
   @Override
-  public T read(ReadContext readContext) {
-    return serializer.read(readContext);
-  }
+  public void replaceRef(Object original, Object newObject) {}
+
+  @Override
+  public void reset() {}
 }

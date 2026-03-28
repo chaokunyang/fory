@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.fory.Fory;
+import org.apache.fory.context.CopyContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
@@ -120,7 +121,8 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Collection copy(Collection originCollection) {
+    public Collection copy(
+        CopyContext copyContext, Collection originCollection) {
       if (Platform.JAVA_VERSION <= 8) {
         throw new UnsupportedOperationException(
             String.format(
@@ -128,7 +130,7 @@ public class ImmutableCollectionSerializers {
                 originCollection.getClass()));
       }
       Object[] elements = new Object[originCollection.size()];
-      copyElements(originCollection, elements);
+      copyElements(copyContext, originCollection, elements);
       try {
         return (List) listFactory.invoke(elements);
       } catch (Throwable e) {
@@ -169,7 +171,8 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Collection copy(Collection originCollection) {
+    public Collection copy(
+        CopyContext copyContext, Collection originCollection) {
       if (Platform.JAVA_VERSION <= 8) {
         throw new UnsupportedOperationException(
             String.format(
@@ -177,7 +180,7 @@ public class ImmutableCollectionSerializers {
                 originCollection.getClass()));
       }
       Object[] elements = new Object[originCollection.size()];
-      copyElements(originCollection, elements);
+      copyElements(copyContext, originCollection, elements);
       try {
         return (Set) setFactory.invoke(elements);
       } catch (Throwable e) {
@@ -218,7 +221,7 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Map copy(Map originMap) {
+    public Map copy(CopyContext copyContext, Map originMap) {
       if (Platform.JAVA_VERSION <= 8) {
         throw new UnsupportedOperationException(
             String.format(
@@ -227,7 +230,7 @@ public class ImmutableCollectionSerializers {
       }
       int size = originMap.size();
       Object[] elements = new Object[size * 2];
-      copyEntry(originMap, elements);
+      copyEntry(copyContext, originMap, elements);
       try {
         if (size == 1) {
           return (Map) map1Factory.invoke(elements[0], elements[1]);

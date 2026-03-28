@@ -61,6 +61,10 @@ public final class SharedRegistry {
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
       new ConcurrentHashMap<>();
+  final ConcurrentHashMap<MetaStringKey, MetaStringRef> metaStringRefsByKey =
+      new ConcurrentHashMap<>();
+  final ConcurrentHashMap<EncodedMetaString, MetaStringRef> metaStringRefsByEncoded =
+      new ConcurrentHashMap<>();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
@@ -93,6 +97,23 @@ public final class SharedRegistry {
     }
     MetaStringKey key = new MetaStringKey(string, encoderTypeKey, encoding);
     return metaStringMap.computeIfAbsent(key, ignored -> encoder.encodeBinary(string, encoding));
+  }
+
+  MetaStringRef getOrCreateMetaStringRef(EncodedMetaString encodedMetaString) {
+    return metaStringRefsByEncoded.computeIfAbsent(encodedMetaString, MetaStringRef::new);
+  }
+
+  MetaStringRef getOrCreateMetaStringRef(
+      String string,
+      MetaStringEncoder encoder,
+      MetaString.Encoding encoding,
+      String encoderTypeKey) {
+    MetaStringKey key = new MetaStringKey(string, encoderTypeKey, encoding);
+    return metaStringRefsByKey.computeIfAbsent(
+        key,
+        ignored ->
+            new MetaStringRef(
+                getOrCreateEncodedMetaString(string, encoder, encoding, encoderTypeKey)));
   }
 
   TypeDef getOrCreateTypeDef(TypeDef typeDef) {

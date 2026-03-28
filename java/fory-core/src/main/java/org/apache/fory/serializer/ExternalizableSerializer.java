@@ -21,12 +21,13 @@ package org.apache.fory.serializer;
 
 import java.io.Externalizable;
 import java.io.IOException;
-import org.apache.fory.Fory;
-import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.io.MemoryBufferObjectInput;
 import org.apache.fory.io.MemoryBufferObjectOutput;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.resolver.TypeResolver;
 
 /** Serializer for class implements {@link Externalizable}. */
 public class ExternalizableSerializer<T extends Externalizable>
@@ -36,14 +37,14 @@ public class ExternalizableSerializer<T extends Externalizable>
 
   public ExternalizableSerializer(TypeResolver typeResolver, Class<T> cls) {
     super(typeResolver, cls);
-    objectInput = new MemoryBufferObjectInput(fory.getFory(), null);
-    objectOutput = new MemoryBufferObjectOutput(fory.getFory(), null);
+    objectInput = new MemoryBufferObjectInput(config, typeResolver.getStringSerializer(), null);
+    objectOutput = new MemoryBufferObjectOutput(config, typeResolver.getStringSerializer(), null);
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, T value) {
+  public void write(WriteContext writeContext, T value) {
     MemoryBuffer buffer = writeContext.getBuffer();
-    if (!isJava) {
+    if (config.isXlang()) {
       throw new UnsupportedOperationException("Externalizable can only be used in java");
     }
     objectOutput.setBuffer(buffer);
@@ -55,10 +56,10 @@ public class ExternalizableSerializer<T extends Externalizable>
   }
 
   @Override
-  public T read(org.apache.fory.context.ReadContext readContext) {
+  public T read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
     T t = objectCreator.newInstance();
-    refResolver.reference(t);
+    readContext.reference(t);
     objectInput.setBuffer(buffer);
     try {
       t.readExternal(objectInput);

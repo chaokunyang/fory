@@ -988,7 +988,7 @@ public class CollectionSerializersTest extends ForyTestBase {
     Class<? extends ImmutableSortedSet> setClass = set.getClass();
     JDKCompatibleCollectionSerializer javaSerializer =
         new JDKCompatibleCollectionSerializer(fory.getTypeResolver(), setClass);
-    Object copy = javaSerializer.copy(set);
+    Object copy = withCopyContext(fory, context -> javaSerializer.copy(context, set));
     assertEquals(set, copy);
     Assert.assertNotSame(set, copy);
   }

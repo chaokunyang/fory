@@ -37,7 +37,7 @@ import org.apache.fory.config.Language;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
@@ -126,10 +126,10 @@ public class JITContextTest extends ForyTestBase {
     BeanA beanA = BeanA.createBeanA(2);
     MetaContext context = new MetaContext();
     if (!scopedMetaShare) {
-      fory.getSerializationContext().setMetaContext(context);
+      fory.setMetaContext(context);
     }
     byte[] bytes1 = fory.serialize(beanB);
-    if (!scopedMetaShare) fory.getSerializationContext().setMetaContext(context);
+    if (!scopedMetaShare) fory.setMetaContext(context);
     byte[] bytes2 = fory.serialize(beanA);
     while (!(getSerializer(fory, BeanB.class) instanceof Generated)) {
       LOG.info("Waiting {} serializer to be jit.", BeanB.class);
@@ -141,9 +141,9 @@ public class JITContextTest extends ForyTestBase {
     }
     Assert.assertTrue(getSerializer(fory, BeanB.class) instanceof Generated);
     Assert.assertTrue(getSerializer(fory, BeanA.class) instanceof Generated);
-    if (!scopedMetaShare) fory.getSerializationContext().setMetaContext(context);
+    if (!scopedMetaShare) fory.setMetaContext(context);
     assertEquals(fory.deserialize(bytes1), beanB);
-    if (!scopedMetaShare) fory.getSerializationContext().setMetaContext(context);
+    if (!scopedMetaShare) fory.setMetaContext(context);
     assertEquals(fory.deserialize(bytes2), beanA);
   }
 

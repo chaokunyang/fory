@@ -27,6 +27,9 @@ import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import static org.apache.fory.type.Types.INVALID_USER_TYPE_ID;
 import static org.apache.fory.type.Types.isUserTypeRegisteredById;
 
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.Serializable;
@@ -71,6 +74,7 @@ import org.apache.fory.ForyCopyable;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.JITContext;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
@@ -222,17 +226,31 @@ public class ClassResolver extends TypeResolver {
   // Every deserialization for unregistered class will query it, performance is important.
   private final ObjectMap<TypeNameBytes, TypeInfo> compositeNameBytes2TypeInfo =
       new ObjectMap<>(16, foryMapLoadFactor);
-  // typeDefMap is inherited from TypeResolver
-  private Class<?> currentReadClass;
   private final ShimDispatcher shimDispatcher;
 
   public ClassResolver(Fory fory) {
-    super(fory);
+    super(
+        fory.getConfig(),
+        fory.getClassLoader(),
+        fory.getGenerics(),
+        fory.getStringSerializer(),
+        fory.getSharedRegistry(),
+        fory.getJITContext());
     this.fory = fory;
     typeInfoCache = NIL_TYPE_INFO;
     extRegistry.classIdGenerator = NONEXISTENT_META_SHARED_ID + 1;
     shimDispatcher = new ShimDispatcher(fory);
     _addGraalvmClassRegistry(fory.getConfig().getConfigHash(), this);
+  }
+
+  @Override
+  protected Class<? extends Serializer> loadCodegenSerializerClass(Class<?> cls) {
+    return loadCodegenSerializer(fory, cls);
+  }
+
+  @Override
+  protected Class<? extends Serializer> loadMetaSharedCodecClass(Class<?> cls, TypeDef typeDef) {
+    return CodecUtils.loadOrGenMetaSharedCodecClass(fory, cls, typeDef);
   }
 
   @Override
@@ -481,8 +499,8 @@ public class ClassResolver extends TypeResolver {
       fullname = namespace + "." + name;
     }
     checkRegistration(cls, -1, fullname, false);
-    MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
-    MetaStringRef nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
+    MetaStringRef nsBytes = getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringRef nameBytes = getOrCreateTypeNameMetaStringBytes(name);
     TypeInfo existingInfo = classInfoMap.get(cls);
     int typeId =
         buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
@@ -529,8 +547,8 @@ public class ClassResolver extends TypeResolver {
       fullname = namespace + "." + name;
     }
     checkRegistration(cls, -1, fullname, false);
-    MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
-    MetaStringRef nameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(name);
+    MetaStringRef nsBytes = getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringRef nameBytes = getOrCreateTypeNameMetaStringBytes(name);
     int typeId = Types.NAMED_UNION;
     TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, false, serializer, typeId, -1);
     typeInfo.setSerializer(this, serializer);
@@ -1205,7 +1223,7 @@ public class ClassResolver extends TypeResolver {
         }
       }
       if (UnknownClass.isUnknowClass(cls)) {
-        return UnknownClassSerializers.getSerializer(fory, "Unknown", cls).getClass();
+        return UnknownClassSerializers.getSerializer(this, "Unknown", cls).getClass();
       }
       if (cls.isArray()) {
         return ArraySerializers.ObjectArraySerializer.class;
@@ -1669,7 +1687,7 @@ public class ClassResolver extends TypeResolver {
     if (needToWriteTypeDef(serializer)) {
       typeDef =
           cacheTypeDef(
-              typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls)));
+              typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(this, cls)));
     } else {
       // Some type will use other serializers such MapSerializer and so on.
       typeDef =
@@ -1713,8 +1731,8 @@ public class ClassResolver extends TypeResolver {
     } else {
       // let the lowermost bit of next byte be set, so the deserialization can know
       // whether need to read class by name in advance
-      metaStringResolver.writeMetaStringBytesWithFlag(buffer, typeInfo.namespaceBytes);
-      metaStringResolver.writeMetaStringBytes(buffer, typeInfo.typeNameBytes);
+      WriteContext.current().getMetaStringWriter().writeMetaStringBytesWithFlag(buffer, typeInfo.namespaceBytes);
+      WriteContext.current().getMetaStringWriter().writeMetaStringBytes(buffer, typeInfo.typeNameBytes);
     }
   }
 
@@ -1745,8 +1763,10 @@ public class ClassResolver extends TypeResolver {
     if ((header & 0b1) != 0) {
       // let the lowermost bit of next byte be set, so the deserialization can know
       // whether need to read class by name in advance
-      MetaStringRef packageBytes = metaStringResolver.readMetaStringBytesWithFlag(buffer, header);
-      MetaStringRef simpleClassNameBytes = metaStringResolver.readMetaStringBytes(buffer);
+      MetaStringRef packageBytes =
+          ReadContext.current().getMetaStringReader().readMetaStringBytesWithFlag(buffer, header);
+      MetaStringRef simpleClassNameBytes =
+          ReadContext.current().getMetaStringReader().readMetaStringBytes(buffer);
       return loadBytesToTypeInfo(packageBytes, simpleClassNameBytes).cls;
     }
     int typeId = header >>> 1;
@@ -1823,7 +1843,7 @@ public class ClassResolver extends TypeResolver {
             cls, packageBytes, simpleClassNameBytes, false, null, typeId, INVALID_USER_TYPE_ID);
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       typeInfo.serializer =
-          UnknownClassSerializers.getSerializer(fory, classSpec.entireClassName, cls);
+          UnknownClassSerializers.getSerializer(this, classSpec.entireClassName, cls);
     } else {
       // don't create serializer here, if the class is an interface,
       // there won't be serializer since interface has no instance.
@@ -1838,8 +1858,8 @@ public class ClassResolver extends TypeResolver {
   public Class<?> loadClassForMeta(String className, boolean isEnum, int arrayDims) {
     String pkg = ReflectionUtils.getPackage(className);
     String typeName = ReflectionUtils.getClassNameWithoutPackage(className);
-    MetaStringRef pkgBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(pkg);
-    MetaStringRef typeBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
+    MetaStringRef pkgBytes = getOrCreatePackageMetaStringBytes(pkg);
+    MetaStringRef typeBytes = getOrCreateTypeNameMetaStringBytes(typeName);
     TypeInfo cachedInfo =
         compositeNameBytes2TypeInfo.get(
             new TypeNameBytes(pkgBytes.encoded.hash, typeBytes.encoded.hash));
@@ -1847,10 +1867,6 @@ public class ClassResolver extends TypeResolver {
       return cachedInfo.cls;
     }
     return loadClass(className, isEnum, arrayDims, fory.getConfig().deserializeUnknownClass());
-  }
-
-  public Class<?> getCurrentReadClass() {
-    return currentReadClass;
   }
 
   public void reset() {

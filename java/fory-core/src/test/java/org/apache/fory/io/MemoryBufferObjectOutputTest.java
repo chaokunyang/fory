@@ -26,6 +26,7 @@ import java.io.IOException;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;
 
 public class MemoryBufferObjectOutputTest {
@@ -34,7 +35,9 @@ public class MemoryBufferObjectOutputTest {
   public void testForyObjectOutput() throws IOException {
     Fory fory = Fory.builder().build();
     MemoryBuffer buffer = MemoryUtils.buffer(32);
-    try (MemoryBufferObjectOutput output = new MemoryBufferObjectOutput(fory, buffer)) {
+    try (MemoryBufferObjectOutput output =
+        new MemoryBufferObjectOutput(
+            fory.getConfig(), new StringSerializer(fory.getConfig()), buffer)) {
       output.writeByte(1);
       output.writeInt(2);
       output.writeLong(3);
@@ -44,7 +47,8 @@ public class MemoryBufferObjectOutputTest {
       output.writeChars("abc");
       output.writeUTF("abc");
     }
-    try (MemoryBufferObjectInput input = new MemoryBufferObjectInput(fory, buffer)) {
+    try (MemoryBufferObjectInput input =
+        new MemoryBufferObjectInput(fory.getConfig(), new StringSerializer(fory.getConfig()), buffer)) {
       assertEquals(input.readByte(), 1);
       assertEquals(input.readInt(), 2);
       assertEquals(input.readLong(), 3);

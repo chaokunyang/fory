@@ -28,6 +28,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
 import org.apache.fory.test.bean.Foo;
@@ -68,16 +69,16 @@ public class MetaContextTest extends ForyTestBase {
 
   private void checkMetaShared(Fory fory, Object o) {
     MetaContext context = new MetaContext();
-    fory.getSerializationContext().setMetaContext(context);
+    fory.setMetaContext(context);
     byte[] bytes = fory.serialize(o);
-    fory.getSerializationContext().setMetaContext(context);
+    fory.setMetaContext(context);
     Assert.assertEquals(fory.deserialize(bytes), o);
-    fory.getSerializationContext().setMetaContext(context);
+    fory.setMetaContext(context);
     byte[] bytes1 = fory.serialize(o);
     Assert.assertTrue(bytes1.length < bytes.length);
-    fory.getSerializationContext().setMetaContext(context);
+    fory.setMetaContext(context);
     Assert.assertEquals(fory.deserialize(bytes1), o);
-    fory.getSerializationContext().setMetaContext(new MetaContext());
+    fory.setMetaContext(new MetaContext());
     Assert.assertEquals(fory.serialize(o), bytes);
     assertThrowsCause(AssertionError.class, () -> fory.serialize(o));
   }

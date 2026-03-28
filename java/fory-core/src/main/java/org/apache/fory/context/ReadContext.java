@@ -19,6 +19,7 @@
 
 package org.apache.fory.context;
 
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.function.Supplier;
 import org.apache.fory.Fory;
@@ -27,9 +28,7 @@ import org.apache.fory.config.LongEncoding;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.resolver.MetaStringResolver;
-import org.apache.fory.resolver.RefResolver;
-import org.apache.fory.resolver.SerializationContext;
+import org.apache.fory.resolver.MetaStringReader;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
@@ -46,16 +45,18 @@ public final class ReadContext {
   private final Config config;
   private final Generics generics;
   private final TypeResolver typeResolver;
-  private final RefResolver refResolver;
-  private final MetaStringResolver metaStringResolver;
-  private final SerializationContext serializationContext;
+  private final RefReader refReader;
+  private final MetaStringReader metaStringReader;
   private final StringSerializer stringSerializer;
   private final boolean crossLanguage;
   private final boolean compressInt;
   private final LongEncoding longEncoding;
   private final int maxDepth;
+  private final boolean scopedMetaShareEnabled;
+  private final IdentityHashMap<Object, Object> objects = new IdentityHashMap<>();
   private MemoryBuffer buffer;
   private Iterator<MemoryBuffer> outOfBandBuffers;
+  private MetaContext metaContext;
   private boolean peerOutOfBandEnabled;
   private int depth;
   private boolean active;
@@ -64,21 +65,23 @@ public final class ReadContext {
       Config config,
       Generics generics,
       TypeResolver typeResolver,
-      RefResolver refResolver,
-      MetaStringResolver metaStringResolver,
-      SerializationContext serializationContext,
+      RefReader refReader,
+      MetaStringReader metaStringReader,
       StringSerializer stringSerializer) {
     this.config = config;
     this.generics = generics;
     this.typeResolver = typeResolver;
-    this.refResolver = refResolver;
-    this.metaStringResolver = metaStringResolver;
-    this.serializationContext = serializationContext;
+    this.refReader = refReader;
+    this.metaStringReader = metaStringReader;
     this.stringSerializer = stringSerializer;
     crossLanguage = config.isXlang();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();
     maxDepth = config.maxDepth();
+    scopedMetaShareEnabled = config.isScopedMetaShareEnabled();
+    if (scopedMetaShareEnabled) {
+      metaContext = new MetaContext();
+    }
   }
 
   public void prepare(
@@ -135,10 +138,17 @@ public final class ReadContext {
   }
 
   public void reset() {
-    refResolver.resetRead();
+    refReader.reset();
     typeResolver.resetRead();
-    metaStringResolver.resetRead();
-    serializationContext.resetRead();
+    metaStringReader.reset();
+    if (!objects.isEmpty()) {
+      objects.clear();
+    }
+    if (scopedMetaShareEnabled) {
+      metaContext.readTypeInfos.size = 0;
+    } else {
+      metaContext = null;
+    }
     buffer = null;
     outOfBandBuffers = null;
     peerOutOfBandEnabled = false;
@@ -158,12 +168,77 @@ public final class ReadContext {
     return typeResolver;
   }
 
-  public RefResolver getRefResolver() {
-    return refResolver;
+  public RefReader getRefReader() {
+    return refReader;
+  }
+
+  public byte readRefOrNull() {
+    return refReader.readRefOrNull(buffer);
+  }
+
+  public int preserveRefId() {
+    return refReader.preserveRefId();
+  }
+
+  public int preserveRefId(int refId) {
+    return refReader.preserveRefId(refId);
+  }
+
+  public int tryPreserveRefId() {
+    return refReader.tryPreserveRefId(buffer);
+  }
+
+  public int lastPreservedRefId() {
+    return refReader.lastPreservedRefId();
+  }
+
+  public boolean hasPreservedRefId() {
+    return refReader.hasPreservedRefId();
+  }
+
+  public void reference(Object object) {
+    refReader.reference(object);
+  }
+
+  public Object getReadObject(int id) {
+    return refReader.getReadObject(id);
+  }
+
+  public Object getReadObject() {
+    return refReader.getReadObject();
+  }
+
+  public void setReadObject(int id, Object object) {
+    refReader.setReadObject(id, object);
+  }
+
+  public MetaStringReader getMetaStringReader() {
+    return metaStringReader;
   }
 
   public StringSerializer getStringSerializer() {
     return stringSerializer;
+  }
+
+  public Object add(Object key, Object value) {
+    return objects.put(key, value);
+  }
+
+  public boolean containsKey(Object key) {
+    return objects.containsKey(key);
+  }
+
+  public Object get(Object key) {
+    return objects.get(key);
+  }
+
+  public MetaContext getMetaContext() {
+    return metaContext;
+  }
+
+  public void setMetaContext(MetaContext metaContext) {
+    Preconditions.checkArgument(!scopedMetaShareEnabled);
+    this.metaContext = metaContext;
   }
 
   public boolean isPeerOutOfBandEnabled() {
@@ -197,7 +272,8 @@ public final class ReadContext {
     }
   }
 
-  public MemoryBuffer readBufferObject(MemoryBuffer buffer) {
+  public MemoryBuffer readBufferObject() {
+    MemoryBuffer buffer = this.buffer;
     boolean inBand = buffer.readBoolean();
     if (inBand) {
       int size;
@@ -217,19 +293,21 @@ public final class ReadContext {
     return outOfBandBuffers.next();
   }
 
-  public String readString(MemoryBuffer buffer) {
+  public String readString() {
+    MemoryBuffer buffer = this.buffer;
     return stringSerializer.readString(buffer);
   }
 
-  public String readStringRef(MemoryBuffer buffer) {
+  public String readStringRef() {
+    MemoryBuffer buffer = this.buffer;
     if (stringSerializer.needToWriteRef()) {
-      int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+      int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         String obj = stringSerializer.read(this);
-        refResolver.setReadObject(nextReadRefId, obj);
+        refReader.setReadObject(nextReadRefId, obj);
         return obj;
       }
-      return (String) refResolver.getReadObject();
+      return (String) refReader.getReadObject();
     }
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.NULL_FLAG) {
@@ -238,53 +316,54 @@ public final class ReadContext {
     return stringSerializer.read(this);
   }
 
-  public long readInt64(MemoryBuffer buffer) {
+  public long readInt64() {
+    MemoryBuffer buffer = this.buffer;
     return LongSerializer.readInt64(buffer, longEncoding);
   }
 
   /** Deserialize nullable referencable object from the current buffer. */
   public Object readRef() {
     MemoryBuffer buffer = this.buffer;
-    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+    int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       TypeInfo typeInfo = typeResolver.readTypeInfo(buffer);
       Object o = readNonRef(typeInfo);
-      refResolver.setReadObject(nextReadRefId, o);
+      refReader.setReadObject(nextReadRefId, o);
       return o;
     }
-    return refResolver.getReadObject();
+    return refReader.getReadObject();
   }
 
   public Object readRef(TypeInfo typeInfo) {
-    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+    int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       Object o = readNonRef(typeInfo);
-      refResolver.setReadObject(nextReadRefId, o);
+      refReader.setReadObject(nextReadRefId, o);
       return o;
     }
-    return refResolver.getReadObject();
+    return refReader.getReadObject();
   }
 
   public Object readRef(TypeInfoHolder classInfoHolder) {
-    int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+    int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       TypeInfo typeInfo = typeResolver.readTypeInfo(buffer, classInfoHolder);
       Object o = readNonRef(typeInfo);
-      refResolver.setReadObject(nextReadRefId, o);
+      refReader.setReadObject(nextReadRefId, o);
       return o;
     }
-    return refResolver.getReadObject();
+    return refReader.getReadObject();
   }
 
   public <T> T readRef(Serializer<T> serializer) {
     if (serializer.needToWriteRef()) {
-      int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+      int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         Object o = readNonRef(serializer);
-        refResolver.setReadObject(nextReadRefId, o);
+        refReader.setReadObject(nextReadRefId, o);
         return (T) o;
       }
-      return (T) refResolver.getReadObject();
+      return (T) refReader.getReadObject();
     }
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.NULL_FLAG) {

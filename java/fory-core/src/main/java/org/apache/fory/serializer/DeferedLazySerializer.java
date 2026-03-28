@@ -21,29 +21,31 @@ package org.apache.fory.serializer;
 
 import java.util.function.Supplier;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class DeferedLazySerializer extends Serializer {
   private final Supplier<Tuple2<Boolean, Serializer>> serializerSupplier;
+  private final TypeResolver typeResolver;
   private Serializer serializer;
 
   public DeferedLazySerializer(
       TypeResolver typeResolver, Class type, Supplier<Tuple2<Boolean, Serializer>> serializerSupplier) {
     super(typeResolver, type);
+    this.typeResolver = typeResolver;
     this.serializerSupplier = serializerSupplier;
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+  public void write(WriteContext writeContext, Object value) {
     getSerializer().write(writeContext, value);
   }
 
   @Override
-  public Object read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+  public Object read(ReadContext readContext) {
     return getSerializer().read(readContext);
   }
 
@@ -52,7 +54,7 @@ public class DeferedLazySerializer extends Serializer {
       Tuple2<Boolean, Serializer> tuple2 = serializerSupplier.get();
       if (tuple2.f0) {
         serializer = tuple2.f1;
-        fory.getTypeResolver().setSerializer(type, serializer);
+        typeResolver.setSerializer(type, serializer);
       } else {
         return tuple2.f1;
       }
@@ -71,8 +73,8 @@ public class DeferedLazySerializer extends Serializer {
   }
 
   @Override
-  public Object copy(Object value) {
-    return getSerializer().copy(value);
+  public Object copy(CopyContext copyContext, Object value) {
+    return getSerializer().copy(copyContext, value);
   }
 
   public static class DeferredLazyObjectSerializer extends DeferedLazySerializer {

@@ -21,6 +21,10 @@ package org.apache.fory.serializer;
 
 import static org.apache.fory.util.function.Functions.makeGetterFunction;
 
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import java.lang.invoke.MethodHandle;
@@ -46,8 +50,6 @@ import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
@@ -91,9 +93,19 @@ public class Serializers {
    */
   public static <T> Serializer<T> newSerializer(
       Fory fory, Class type, Class<? extends Serializer> serializerClass) {
-    TypeResolver typeResolver = fory.getTypeResolver();
+    return newSerializer(fory.getTypeResolver(), type, serializerClass);
+  }
+
+  /**
+   * Serializer subclass must have a constructor which take parameters of type {@link TypeResolver}
+   * and {@link Class}, or {@link TypeResolver}, or {@link Config} and {@link Class}, or {@link
+   * Config}, or {@link Class}, or no-arg constructor.
+   */
+  public static <T> Serializer<T> newSerializer(
+      TypeResolver typeResolver, Class type, Class<? extends Serializer> serializerClass) {
     TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
     Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
+    Config config = typeResolver.getConfig();
     try {
       if (serializerClass == ObjectSerializer.class) {
         return new ObjectSerializer(typeResolver, type);
@@ -106,7 +118,7 @@ public class Serializers {
       if (ctrInfo != null) {
         if (GraalvmSupport.isGraalBuildtime()) {
           if (Generated.class.isAssignableFrom(serializerClass)) {
-            return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+            return new GraalvmSerializerHolder(config, type, serializerClass);
           }
         }
         MethodType sig = ctrInfo.f0;
@@ -116,16 +128,16 @@ public class Serializers {
         } else if (sig.equals(SIG2)) {
           return (Serializer<T>) handle.invoke(typeResolver);
         } else if (sig.equals(SIG3)) {
-          return (Serializer<T>) handle.invoke(fory.getConfig(), type);
+          return (Serializer<T>) handle.invoke(config, type);
         } else if (sig.equals(SIG4)) {
-          return (Serializer<T>) handle.invoke(fory.getConfig());
+          return (Serializer<T>) handle.invoke(config);
         } else if (sig.equals(SIG5)) {
           return (Serializer<T>) handle.invoke(type);
         } else {
           return (Serializer<T>) handle.invoke();
         }
       } else {
-        return createSerializer(fory, type, serializerClass);
+        return createSerializer(typeResolver, type, serializerClass);
       }
     } catch (InvocationTargetException e) {
       typeResolver.resetSerializer(type, serializer);
@@ -145,16 +157,16 @@ public class Serializers {
   }
 
   private static <T> Serializer<T> createSerializer(
-      Fory fory, Class<?> type, Class<? extends Serializer> serializerClass) throws Throwable {
+      TypeResolver typeResolver, Class<?> type, Class<? extends Serializer> serializerClass)
+      throws Throwable {
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(serializerClass);
-    TypeResolver typeResolver = fory.getTypeResolver();
-    Config config = fory.getConfig();
+    Config config = typeResolver.getConfig();
     try {
       MethodHandle ctr = lookup.findConstructor(serializerClass, SIG1);
       CTR_MAP.put(serializerClass, Tuple2.of(SIG1, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+          return new GraalvmSerializerHolder(config, type, serializerClass);
         }
       }
       return (Serializer<T>) ctr.invoke(typeResolver, type);
@@ -166,7 +178,7 @@ public class Serializers {
       CTR_MAP.put(serializerClass, Tuple2.of(SIG2, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+          return new GraalvmSerializerHolder(config, type, serializerClass);
         }
       }
       return (Serializer<T>) ctr.invoke(typeResolver);
@@ -178,7 +190,7 @@ public class Serializers {
       CTR_MAP.put(serializerClass, Tuple2.of(SIG3, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+          return new GraalvmSerializerHolder(config, type, serializerClass);
         }
       }
       return (Serializer<T>) ctr.invoke(config, type);
@@ -190,7 +202,7 @@ public class Serializers {
       CTR_MAP.put(serializerClass, Tuple2.of(SIG4, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+          return new GraalvmSerializerHolder(config, type, serializerClass);
         }
       }
       return (Serializer<T>) ctr.invoke(config);
@@ -202,7 +214,7 @@ public class Serializers {
       CTR_MAP.put(serializerClass, Tuple2.of(SIG5, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+          return new GraalvmSerializerHolder(config, type, serializerClass);
         }
       }
       return (Serializer<T>) ctr.invoke(type);
@@ -213,7 +225,7 @@ public class Serializers {
     CTR_MAP.put(serializerClass, Tuple2.of(SIG6, ctr));
     if (GraalvmSupport.isGraalBuildtime()) {
       if (Generated.class.isAssignableFrom(serializerClass)) {
-        return new GraalvmSerializerHolder(fory.getConfig(), type, serializerClass);
+        return new GraalvmSerializerHolder(config, type, serializerClass);
       }
     }
     return (Serializer<T>) ctr.invoke();
@@ -269,30 +281,30 @@ public class Serializers {
     public void write(WriteContext writeContext, T value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       StringSerializer stringSerializer = writeContext.getStringSerializer();
-      if (isJava) {
-        if (GET_CODER != null) {
-          int coder = GET_CODER.applyAsInt(value);
-          byte[] v = (byte[]) GET_VALUE.apply(value);
-          int bytesLen = value.length();
-          if (coder != 0) {
-            if (coder != 1) {
-              throw new UnsupportedOperationException("Unsupported coder " + coder);
-            }
-            bytesLen <<= 1;
-          }
-          long header = ((long) bytesLen << 2) | coder;
-          buffer.writeVarUint64(header);
-          buffer.writeBytes(v, 0, bytesLen);
-        } else {
-          char[] v = (char[]) GET_VALUE.apply(value);
-          if (StringUtils.isLatin(v)) {
-            stringSerializer.writeCharsLatin1(buffer, v, value.length());
-          } else {
-            stringSerializer.writeCharsUTF16(buffer, v, value.length());
-          }
-        }
-      } else {
+      if (config.isXlang()) {
         stringSerializer.writeString(buffer, value.toString());
+        return;
+      }
+      if (GET_CODER != null) {
+        int coder = GET_CODER.applyAsInt(value);
+        byte[] v = (byte[]) GET_VALUE.apply(value);
+        int bytesLen = value.length();
+        if (coder != 0) {
+          if (coder != 1) {
+            throw new UnsupportedOperationException("Unsupported coder " + coder);
+          }
+          bytesLen <<= 1;
+        }
+        long header = ((long) bytesLen << 2) | coder;
+        buffer.writeVarUint64(header);
+        buffer.writeBytes(v, 0, bytesLen);
+      } else {
+        char[] v = (char[]) GET_VALUE.apply(value);
+        if (StringUtils.isLatin(v)) {
+          stringSerializer.writeCharsLatin1(buffer, v, value.length());
+        } else {
+          stringSerializer.writeCharsUTF16(buffer, v, value.length());
+        }
       }
     }
   }
@@ -305,14 +317,14 @@ public class Serializers {
     }
 
     @Override
-    public StringBuilder copy(StringBuilder origin) {
+    public StringBuilder copy(CopyContext copyContext, StringBuilder origin) {
       return new StringBuilder(origin);
     }
 
     @Override
     public StringBuilder read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return new StringBuilder(readContext.getStringSerializer().readString(buffer));
+      return new StringBuilder(
+          readContext.getStringSerializer().readString(readContext.getBuffer()));
     }
   }
 
@@ -324,14 +336,14 @@ public class Serializers {
     }
 
     @Override
-    public StringBuffer copy(StringBuffer origin) {
+    public StringBuffer copy(CopyContext copyContext, StringBuffer origin) {
       return new StringBuffer(origin);
     }
 
     @Override
     public StringBuffer read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return new StringBuffer(readContext.getStringSerializer().readString(buffer));
+      return new StringBuffer(
+          readContext.getStringSerializer().readString(readContext.getBuffer()));
     }
   }
 
@@ -392,19 +404,17 @@ public class Serializers {
 
     @Override
     public void write(WriteContext writeContext, AtomicBoolean value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeBoolean(value.get());
+      writeContext.getBuffer().writeBoolean(value.get());
     }
 
     @Override
-    public AtomicBoolean copy(AtomicBoolean origin) {
+    public AtomicBoolean copy(CopyContext copyContext, AtomicBoolean origin) {
       return new AtomicBoolean(origin.get());
     }
 
     @Override
     public AtomicBoolean read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return new AtomicBoolean(buffer.readBoolean());
+      return new AtomicBoolean(readContext.getBuffer().readBoolean());
     }
 
     @Override
@@ -421,19 +431,17 @@ public class Serializers {
 
     @Override
     public void write(WriteContext writeContext, AtomicInteger value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt32(value.get());
+      writeContext.getBuffer().writeInt32(value.get());
     }
 
     @Override
-    public AtomicInteger copy(AtomicInteger origin) {
+    public AtomicInteger copy(CopyContext copyContext, AtomicInteger origin) {
       return new AtomicInteger(origin.get());
     }
 
     @Override
     public AtomicInteger read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return new AtomicInteger(buffer.readInt32());
+      return new AtomicInteger(readContext.getBuffer().readInt32());
     }
 
     @Override
@@ -450,19 +458,17 @@ public class Serializers {
 
     @Override
     public void write(WriteContext writeContext, AtomicLong value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt64(value.get());
+      writeContext.getBuffer().writeInt64(value.get());
     }
 
     @Override
-    public AtomicLong copy(AtomicLong origin) {
+    public AtomicLong copy(CopyContext copyContext, AtomicLong origin) {
       return new AtomicLong(origin.get());
     }
 
     @Override
     public AtomicLong read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return new AtomicLong(buffer.readInt64());
+      return new AtomicLong(readContext.getBuffer().readInt64());
     }
 
     @Override
@@ -483,8 +489,9 @@ public class Serializers {
     }
 
     @Override
-    public AtomicReference copy(AtomicReference origin) {
-      return new AtomicReference(copyContext().copyObject(origin.get()));
+    public AtomicReference copy(
+        CopyContext copyContext, AtomicReference origin) {
+      return new AtomicReference(copyContext.copyObject(origin.get()));
     }
 
     @Override
@@ -510,9 +517,7 @@ public class Serializers {
 
     @Override
     public Currency read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      String currencyCode = readContext.readString(buffer);
-      return Currency.getInstance(currencyCode);
+      return Currency.getInstance(readContext.readString());
     }
   }
 
@@ -527,8 +532,7 @@ public class Serializers {
     }
 
     public T read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return (T) Charset.forName(readContext.readString(buffer));
+      return (T) Charset.forName(readContext.readString());
     }
   }
 
@@ -545,8 +549,7 @@ public class Serializers {
 
     @Override
     public URI read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return URI.create(readContext.readString(buffer));
+      return URI.create(readContext.readString());
     }
   }
 
@@ -565,7 +568,7 @@ public class Serializers {
     @Override
     public Pattern read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      String regex = readContext.readString(buffer);
+      String regex = readContext.readString();
       int flags = buffer.readInt32();
       return Pattern.compile(regex, flags);
     }
@@ -598,14 +601,14 @@ public class Serializers {
 
     @Override
     public void write(WriteContext writeContext, Class value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      ((ClassResolver) writeContext.getTypeResolver()).writeClassInternal(buffer, value);
+      ((ClassResolver) writeContext.getTypeResolver())
+          .writeClassInternal(writeContext.getBuffer(), value);
     }
 
     @Override
     public Class read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return ((ClassResolver) readContext.getTypeResolver()).readClassInternal(buffer);
+      return ((ClassResolver) readContext.getTypeResolver())
+          .readClassInternal(readContext.getBuffer());
     }
   }
 

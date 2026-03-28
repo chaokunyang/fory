@@ -29,7 +29,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import org.apache.fory.Fory;
-import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.io.ClassLoaderObjectInputStream;
 import org.apache.fory.io.MemoryBufferObjectInput;
 import org.apache.fory.io.MemoryBufferObjectOutput;
@@ -39,6 +40,7 @@ import org.apache.fory.memory.BigEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 
 /**
  * Serializes objects using Java's built in serialization to be compatible with java serialization.
@@ -66,20 +68,19 @@ public class JavaSerializer extends AbstractObjectSerializer {
           Serializer.class.getName(),
           Externalizable.class.getName());
     }
-    objectInput = new MemoryBufferObjectInput(fory.getFory(), null);
-    objectOutput = new MemoryBufferObjectOutput(fory.getFory(), null);
+    objectInput = new MemoryBufferObjectInput(config, typeResolver.getStringSerializer(), null);
+    objectOutput = new MemoryBufferObjectOutput(config, typeResolver.getStringSerializer(), null);
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+  public void write(WriteContext writeContext, Object value) {
     MemoryBuffer buffer = writeContext.getBuffer();
     try {
       objectOutput.setBuffer(buffer);
-      ObjectOutputStream objectOutputStream =
-          (ObjectOutputStream) fory.getSerializationContext().get(objectOutput);
+      ObjectOutputStream objectOutputStream = (ObjectOutputStream) writeContext.get(objectOutput);
       if (objectOutputStream == null) {
         objectOutputStream = new ObjectOutputStream(objectOutput);
-        fory.getSerializationContext().add(objectOutput, objectOutputStream);
+        writeContext.add(objectOutput, objectOutputStream);
       }
       objectOutputStream.writeObject(value);
       objectOutputStream.flush();
@@ -89,15 +90,15 @@ public class JavaSerializer extends AbstractObjectSerializer {
   }
 
   @Override
-  public Object read(org.apache.fory.context.ReadContext readContext) {
+  public Object read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
     try {
       objectInput.setBuffer(buffer);
-      ObjectInputStream objectInputStream =
-          (ObjectInputStream) fory.getSerializationContext().get(objectInput);
+      ObjectInputStream objectInputStream = (ObjectInputStream) readContext.get(objectInput);
       if (objectInputStream == null) {
-        objectInputStream = new ClassLoaderObjectInputStream(fory.getClassLoader(), objectInput);
-        fory.getSerializationContext().add(objectInput, objectInputStream);
+        objectInputStream =
+            new ClassLoaderObjectInputStream(typeResolver.getClassLoader(), objectInput);
+        readContext.add(objectInput, objectInputStream);
       }
       return objectInputStream.readObject();
     } catch (IOException | ClassNotFoundException e) {

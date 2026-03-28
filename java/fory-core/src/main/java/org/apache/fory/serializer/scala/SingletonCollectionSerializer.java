@@ -21,10 +21,11 @@ package org.apache.fory.serializer.scala;
 
 import java.lang.reflect.Field;
 import java.util.Collection;
-import org.apache.fory.Fory;
-import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionLikeSerializer;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
@@ -55,12 +56,11 @@ public class SingletonCollectionSerializer extends CollectionLikeSerializer {
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
-    MemoryBuffer buffer = writeContext.getBuffer();}
+  public void write(WriteContext writeContext, Object value) {
+  }
 
   @Override
-  public Object read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+  public Object read(ReadContext readContext) {
     long offset = this.offset;
     if (offset == -1) {
       Preconditions.checkArgument(!GraalvmSupport.isGraalBuildtime());

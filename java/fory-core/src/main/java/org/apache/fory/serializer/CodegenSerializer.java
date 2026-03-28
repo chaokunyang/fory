@@ -21,6 +21,9 @@ package org.apache.fory.serializer;
 
 import static org.apache.fory.util.Preconditions.checkArgument;
 
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import java.lang.reflect.Modifier;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.CodecUtils;
@@ -29,7 +32,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 
 /** Util for JIT Serialization. */
-@SuppressWarnings("UnstableApiUsage")
 public final class CodegenSerializer {
 
   public static boolean supportCodegenForJavaSerialization(Class<?> cls) {
@@ -59,6 +61,11 @@ public final class CodegenSerializer {
     }
   }
 
+  public static <T> Class<Serializer<T>> loadCodegenSerializer(
+      TypeResolver typeResolver, Class<T> cls) {
+    return typeResolver.getJITContext().asyncVisitFory(f -> loadCodegenSerializer(f, cls));
+  }
+
   /**
    * A bean serializer which initializes lazily on first call read/write method.
    *
@@ -75,19 +82,19 @@ public final class CodegenSerializer {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, T value) {
+    public void write(WriteContext writeContext, T value) {
       getOrCreateGeneratedSerializer().write(writeContext, value);
     }
 
     @Override
-    public T read(org.apache.fory.context.ReadContext readContext) {
+    public T read(ReadContext readContext) {
       return getOrCreateGeneratedSerializer().read(readContext);
     }
 
     @SuppressWarnings({"rawtypes"})
     private Serializer<T> getOrCreateGeneratedSerializer() {
       if (serializer == null) {
-        Serializer<T> jitSerializer = fory.getTypeResolver().getSerializer(type);
+        Serializer<T> jitSerializer = typeResolver.getSerializer(type);
         // Just be defensive for `getSerializer`/other call in Codec Builder to make
         // LazyInitBeanSerializer as serializer for `type`.
         if (jitSerializer instanceof LazyInitBeanSerializer) {
@@ -95,22 +102,23 @@ public final class CodegenSerializer {
           if (interpreterSerializer != null) {
             return interpreterSerializer;
           }
-          fory.getTypeResolver().getTypeInfo(type).setSerializer(null);
-          if (fory.getConfig().isAsyncCompilationEnabled()) {
+          typeResolver.getTypeInfo(type).setSerializer(null);
+          if (config.isAsyncCompilationEnabled()) {
             // jit not finished, avoid recursive call current serializer.
-            Class<? extends Serializer> sc = fory.getTypeResolver().getSerializerClass(type, false);
-            fory.getTypeResolver().getTypeInfo(type).setSerializer(this);
-            return interpreterSerializer = Serializers.newSerializer(fory.getFory(), type, sc);
+            Class<? extends Serializer> sc = typeResolver.getSerializerClass(type, false);
+            typeResolver.getTypeInfo(type).setSerializer(this);
+            return interpreterSerializer =
+                Serializers.newSerializer(typeResolver, type, sc);
           } else {
-            Class<? extends Serializer> sc = fory.getTypeResolver().getSerializerClass(type);
-            fory.getTypeResolver().getTypeInfo(type).setSerializer(this);
+            Class<? extends Serializer> sc = typeResolver.getSerializerClass(type);
+            typeResolver.getTypeInfo(type).setSerializer(this);
             checkArgument(
                 Generated.GeneratedSerializer.class.isAssignableFrom(sc),
                 "Expect jit serializer but got %s for class %s",
                 sc,
                 type);
-            serializer = Serializers.newSerializer(fory.getFory(), type, sc);
-            fory.getTypeResolver().setSerializer(type, serializer);
+            serializer = Serializers.newSerializer(typeResolver, type, sc);
+            typeResolver.setSerializer(type, serializer);
             return serializer;
           }
         } else {

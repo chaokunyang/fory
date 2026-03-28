@@ -21,6 +21,10 @@ package org.apache.fory.serializer.collection;
 
 import static org.apache.fory.collection.Collections.ofHashSet;
 
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import java.lang.reflect.Field;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -35,15 +39,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.fory.Fory;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.FieldGroups;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -51,6 +53,7 @@ import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -139,33 +142,32 @@ public class ChildContainerSerializers {
 
     public ChildCollectionSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls);
-      slotsSerializers = buildSlotsSerializers(fory.getFory(), superClasses, cls);
+      slotsSerializers = buildSlotsSerializers(typeResolver, superClasses, cls);
     }
 
     @Override
     public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
       for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(org.apache.fory.context.WriteContext.current(), value);
+        slotsSerializer.write(WriteContext.current(), value);
       }
       return value;
     }
 
     public Collection newCollection(MemoryBuffer buffer) {
       Collection collection = super.newCollection(buffer);
-      readAndSetFields(fory.getFory(), buffer, collection, slotsSerializers);
+      readAndSetFields(typeResolver, buffer, collection, slotsSerializers);
       return collection;
     }
 
     @Override
-    public Collection newCollection(Collection originCollection) {
-      Collection newCollection = super.newCollection(originCollection);
+    public Collection newCollection(CopyContext copyContext, Collection originCollection) {
+      Collection newCollection = super.newCollection(copyContext, originCollection);
       if (fieldInfos == null) {
         List<Field> fields = ReflectionUtils.getFieldsWithoutSuperClasses(type, superClasses);
-        fieldInfos = FieldGroups.buildFieldsInfo(fory.getFory(), fields).allFields;
+        fieldInfos = FieldGroups.buildFieldsInfo(typeResolver, fields).allFields;
       }
-      AbstractObjectSerializer.copyFields(
-          fory.getFory(), fieldInfos, originCollection, newCollection);
+      AbstractObjectSerializer.copyFields(copyContext, fieldInfos, originCollection, newCollection);
       return newCollection;
     }
   }
@@ -201,14 +203,14 @@ public class ChildContainerSerializers {
 
     public ChildMapSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls);
-      slotsSerializers = buildSlotsSerializers(fory.getFory(), superClasses, cls);
+      slotsSerializers = buildSlotsSerializers(typeResolver, superClasses, cls);
     }
 
     @Override
     public Map onMapWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
       for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(org.apache.fory.context.WriteContext.current(), value);
+        slotsSerializer.write(WriteContext.current(), value);
       }
       return value;
     }
@@ -216,39 +218,37 @@ public class ChildContainerSerializers {
     @Override
     public Map newMap(MemoryBuffer buffer) {
       Map map = super.newMap(buffer);
-      readAndSetFields(fory.getFory(), buffer, map, slotsSerializers);
+      readAndSetFields(typeResolver, buffer, map, slotsSerializers);
       return map;
     }
 
     @Override
-    public Map newMap(Map originMap) {
-      Map newMap = super.newMap(originMap);
+    public Map newMap(CopyContext copyContext, Map originMap) {
+      Map newMap = super.newMap(copyContext, originMap);
       if (fieldInfos == null || fieldInfos.length == 0) {
         List<Field> fields = ReflectionUtils.getFieldsWithoutSuperClasses(type, superClasses);
-        fieldInfos = FieldGroups.buildFieldsInfo(fory.getFory(), fields).allFields;
+        fieldInfos = FieldGroups.buildFieldsInfo(typeResolver, fields).allFields;
       }
-      AbstractObjectSerializer.copyFields(fory.getFory(), fieldInfos, originMap, newMap);
+      AbstractObjectSerializer.copyFields(copyContext, fieldInfos, originMap, newMap);
       return newMap;
     }
   }
 
   private static <T> Serializer[] buildSlotsSerializers(
-      Fory fory, Set<Class<?>> superClasses, Class<T> cls) {
+      TypeResolver typeResolver, Set<Class<?>> superClasses, Class<T> cls) {
     Preconditions.checkArgument(!superClasses.contains(cls));
     List<Serializer> serializers = new ArrayList<>();
     int layerIndex = 0;
     while (!superClasses.contains(cls)) {
       Serializer slotsSerializer;
-      if (fory.getConfig().getCompatibleMode() == CompatibleMode.COMPATIBLE) {
-        TypeDef layerTypeDef = fory.getTypeResolver().getTypeDef(cls, false);
+      if (typeResolver.getConfig().getCompatibleMode() == CompatibleMode.COMPATIBLE) {
+        TypeDef layerTypeDef = typeResolver.getTypeDef(cls, false);
         // Use layer index within class hierarchy (not global counter)
         // This ensures unique marker classes for each layer
-        Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(fory, cls, layerIndex);
-        slotsSerializer =
-            new MetaSharedLayerSerializer(
-                fory.getTypeResolver(), cls, layerTypeDef, layerMarkerClass);
+        Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(cls, layerIndex);
+        slotsSerializer = new MetaSharedLayerSerializer(typeResolver, cls, layerTypeDef, layerMarkerClass);
       } else {
-        slotsSerializer = new ObjectSerializer<>(fory.getTypeResolver(), cls, false);
+        slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false);
       }
       serializers.add(slotsSerializer);
       cls = (Class<T>) cls.getSuperclass();
@@ -259,14 +259,14 @@ public class ChildContainerSerializers {
   }
 
   private static void readAndSetFields(
-      Fory fory, MemoryBuffer buffer, Object collection, Serializer[] slotsSerializers) {
+      TypeResolver typeResolver, MemoryBuffer buffer, Object collection, Serializer[] slotsSerializers) {
     for (Serializer slotsSerializer : slotsSerializers) {
       if (slotsSerializer instanceof MetaSharedLayerSerializer) {
         MetaSharedLayerSerializer metaSerializer = (MetaSharedLayerSerializer) slotsSerializer;
         // Read layer class meta first if meta share is enabled
         // This corresponds to writeLayerClassMeta() in MetaSharedLayerSerializer.write()
-        if (fory.getConfig().isMetaShareEnabled()) {
-          readAndSkipLayerClassMeta(fory, buffer);
+        if (typeResolver.getConfig().isMetaShareEnabled()) {
+          readAndSkipLayerClassMeta(buffer);
         }
         metaSerializer.readAndSetFields(buffer, collection);
       } else {
@@ -281,8 +281,8 @@ public class ChildContainerSerializers {
    * ChildContainerSerializers, we use the same serializer on both write and read sides, so we just
    * need to skip the meta without actually parsing it.
    */
-  private static void readAndSkipLayerClassMeta(Fory fory, MemoryBuffer buffer) {
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
+  private static void readAndSkipLayerClassMeta(MemoryBuffer buffer) {
+    MetaContext metaContext = ReadContext.current().getMetaContext();
     if (metaContext == null) {
       return;
     }

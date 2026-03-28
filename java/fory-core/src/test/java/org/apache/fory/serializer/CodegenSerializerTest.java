@@ -106,7 +106,7 @@ public class CodegenSerializerTest extends ForyTestBase {
         fory,
         buffer,
         context -> {
-          fory.getRefResolver().writeRefOrNull(buffer, cyclic);
+          context.writeRefOrNull(cyclic);
           beanSerializer.write(context, cyclic);
         });
     Cyclic cyclic1 =
@@ -114,8 +114,8 @@ public class CodegenSerializerTest extends ForyTestBase {
             fory,
             buffer,
             context -> {
-              fory.getRefResolver().readRefOrNull(buffer);
-              fory.getRefResolver().preserveRefId();
+              context.readRefOrNull();
+              context.preserveRefId();
               return beanSerializer.read(context);
             });
     fory.reset();

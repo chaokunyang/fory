@@ -22,27 +22,27 @@ package org.apache.fory.io;
 import java.io.IOException;
 import java.io.ObjectOutput;
 import java.io.OutputStream;
-import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
-/** ObjectOutput based on {@link Fory} and {@link MemoryBuffer}. */
+/** ObjectOutput based on {@link MemoryBuffer}. */
 public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutput {
-  private final Fory fory;
   private final boolean compressInt;
   private final LongEncoding longEncoding;
   private final StringSerializer stringSerializer;
   private MemoryBuffer buffer;
 
-  public MemoryBufferObjectOutput(Fory fory, MemoryBuffer buffer) {
-    this.fory = fory;
-    this.compressInt = fory.compressInt();
-    this.longEncoding = fory.longEncoding();
+  public MemoryBufferObjectOutput(
+      Config config, StringSerializer stringSerializer, MemoryBuffer buffer) {
+    this.compressInt = config.compressInt();
+    this.longEncoding = config.longEncoding();
     this.buffer = buffer;
-    this.stringSerializer = fory.getStringSerializer();
+    this.stringSerializer = stringSerializer;
   }
 
   public MemoryBuffer getBuffer() {
@@ -55,7 +55,7 @@ public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutp
 
   @Override
   public void writeObject(Object obj) throws IOException {
-    fory.writeRef(buffer, obj);
+    WriteContext.current().writeRef(obj);
   }
 
   @Override

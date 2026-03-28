@@ -68,7 +68,7 @@ public class ObjectSerializerTest extends ForyTestBase {
     }
     ObjectSerializer serializer = new ObjectSerializer(fory.getTypeResolver(), Foo.class);
     Foo foo = new Foo();
-    Object obj = serializer.copy(foo);
+    Object obj = withCopyContext(fory, context -> serializer.copy(context, foo));
     assertEquals(foo.foo("str"), ((Foo) obj).foo("str"));
     Assert.assertNotSame(foo, obj);
   }
@@ -117,7 +117,7 @@ public class ObjectSerializerTest extends ForyTestBase {
           }
         };
     ObjectSerializer serializer = new ObjectSerializer(fory.getTypeResolver(), foo.getClass());
-    Object obj = serializer.copy(foo);
+    Object obj = withCopyContext(fory, context -> serializer.copy(context, foo));
     assertEquals(foo.foo("str"), ((Foo) obj).foo("str"));
     assertNotSame(foo, obj);
   }
@@ -138,7 +138,7 @@ public class ObjectSerializerTest extends ForyTestBase {
         fory,
         buffer,
         context -> {
-          fory.getRefResolver().writeRefOrNull(buffer, cyclic);
+          context.writeRefOrNull(cyclic);
           serializer.write(context, cyclic);
         });
     Cyclic cyclic1 =
@@ -146,9 +146,9 @@ public class ObjectSerializerTest extends ForyTestBase {
             fory,
             buffer,
             context -> {
-              byte tag = fory.getRefResolver().readRefOrNull(buffer);
+              byte tag = context.readRefOrNull();
               Preconditions.checkArgument(tag == Fory.REF_VALUE_FLAG);
-              fory.getRefResolver().preserveRefId();
+              context.preserveRefId();
               return serializer.read(context);
             });
     fory.reset();
@@ -159,7 +159,7 @@ public class ObjectSerializerTest extends ForyTestBase {
   public void testCopyCircularReference(Fory fory) {
     Cyclic cyclic = Cyclic.create(true);
     ObjectSerializer<Cyclic> serializer = new ObjectSerializer<>(fory.getTypeResolver(), Cyclic.class);
-    Cyclic cyclic1 = serializer.copy(cyclic);
+    Cyclic cyclic1 = withCopyContext(fory, context -> serializer.copy(context, cyclic));
     assertEquals(cyclic1, cyclic);
     assertNotSame(cyclic1, cyclic);
   }
@@ -188,6 +188,6 @@ public class ObjectSerializerTest extends ForyTestBase {
     A a = new A();
     writeSerializer(fory, serializer, buffer, a);
     assertEquals(a, readSerializer(fory, serializer, buffer));
-    assertEquals(a, serializer.copy(a));
+    assertEquals(a, withCopyContext(fory, context -> serializer.copy(context, a)));
   }
 }

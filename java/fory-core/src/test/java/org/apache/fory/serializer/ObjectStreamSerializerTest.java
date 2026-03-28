@@ -51,7 +51,7 @@ import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.util.Preconditions;
@@ -246,7 +246,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
           fory,
           buffer,
           context -> {
-            fory.getRefResolver().writeRefOrNull(buffer, map);
+            context.writeRefOrNull(map);
             serializer.write(context, map);
           });
       Object newMap =
@@ -254,13 +254,13 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
               fory,
               buffer,
               context -> {
-                fory.getRefResolver().tryPreserveRefId(buffer);
+                context.tryPreserveRefId();
                 return serializer.read(context);
               });
       assertEquals(buffer.writerIndex(), buffer.readerIndex());
       assertEquals(newMap, map);
-      // ConcurrentHashMap internal structure may use jdk serialization, which will update
-      // SerializationContext.
+      // ConcurrentHashMap internal structure may use jdk serialization, which updates
+      // the active read/write contexts.
       fory.reset();
     }
     {
@@ -288,7 +288,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
       ObjectStreamSerializer serializer =
           new ObjectStreamSerializer(fory.getTypeResolver(), ConcurrentHashMap.class);
       ConcurrentHashMap<String, Integer> concurrentMap = new ConcurrentHashMap<>(mapData);
-      Object copy = serializer.copy(concurrentMap);
+      Object copy = withCopyContext(fory, context -> serializer.copy(context, concurrentMap));
       assertEquals(copy, concurrentMap);
     }
     {
@@ -352,7 +352,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
           fory,
           buffer,
           context -> {
-            fory.getRefResolver().writeRefOrNull(buffer, map);
+            context.writeRefOrNull(map);
             serializer.write(context, map);
           });
       @SuppressWarnings("unchecked")
@@ -362,7 +362,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
                   fory,
                   buffer,
                   context -> {
-                    fory.getRefResolver().tryPreserveRefId(buffer);
+                    context.tryPreserveRefId();
                     return serializer.read(context);
                   });
       assertEquals(buffer.writerIndex(), buffer.readerIndex());
@@ -384,7 +384,8 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
       map.put("k3", map);
       @SuppressWarnings("unchecked")
       ConcurrentHashMap<String, Object> newMap =
-          (ConcurrentHashMap<String, Object>) serializer.copy(map);
+          (ConcurrentHashMap<String, Object>)
+              withCopyContext(fory, context -> serializer.copy(context, map));
       assertSame(newMap.get("k3"), newMap);
       assertEquals(newMap.get("k2"), map.get("k2"));
     }
@@ -429,9 +430,9 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     // ObjectStreamSerializer serializer = new ObjectStreamSerializer(fory, HTMLDocument.class);
     // MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
     // HTMLDocument document = new HTMLDocument();
-    // fory.getRefResolver().writeRefOrNull(buffer, document);
+    // context.writeRefOrNull(document);
     // serializer.write(buffer, document);
-    // fory.getRefResolver().tryPreserveRefId(buffer);
+    // context.tryPreserveRefId();
     // HTMLDocument newDocument = (HTMLDocument) serializer.read(buffer);
     fory.registerSerializer(
         ValidationTestClass2.class,
@@ -1083,12 +1084,12 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
         MixedSerializationClass.class,
         new ObjectStreamSerializer(readerFory2.getTypeResolver(), MixedSerializationClass.class));
 
-    writerFory.getSerializationContext().setMetaContext(new MetaContext());
+    writerFory.setMetaContext(new MetaContext());
     byte[] bytes = writerFory.serialize(new MixedSerializationClass("shared", 7));
 
-    readerFory1.getSerializationContext().setMetaContext(new MetaContext());
+    readerFory1.setMetaContext(new MetaContext());
     readerFory1.deserialize(bytes);
-    readerFory2.getSerializationContext().setMetaContext(new MetaContext());
+    readerFory2.setMetaContext(new MetaContext());
     readerFory2.deserialize(bytes);
 
     TypeInfo typeInfo1 =

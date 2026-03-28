@@ -19,15 +19,14 @@
 
 package org.apache.fory.context;
 
+import java.util.IdentityHashMap;
 import java.util.function.Supplier;
 import org.apache.fory.Fory;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.resolver.MetaStringResolver;
-import org.apache.fory.resolver.RefResolver;
-import org.apache.fory.resolver.SerializationContext;
+import org.apache.fory.resolver.MetaStringWriter;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
@@ -48,17 +47,19 @@ public final class WriteContext {
   private final Config config;
   private final Generics generics;
   private final TypeResolver typeResolver;
-  private final RefResolver refResolver;
-  private final MetaStringResolver metaStringResolver;
-  private final SerializationContext serializationContext;
+  private final RefWriter refWriter;
+  private final MetaStringWriter metaStringWriter;
   private final StringSerializer stringSerializer;
   private final boolean crossLanguage;
   private final boolean compressInt;
   private final LongEncoding longEncoding;
   private final boolean forVirtualThread;
+  private final boolean scopedMetaShareEnabled;
+  private final IdentityHashMap<Object, Object> objects = new IdentityHashMap<>();
   private MemoryBuffer defaultBuffer;
   private MemoryBuffer buffer;
   private BufferCallback bufferCallback;
+  private MetaContext metaContext;
   private int depth;
   private boolean active;
 
@@ -66,21 +67,23 @@ public final class WriteContext {
       Config config,
       Generics generics,
       TypeResolver typeResolver,
-      RefResolver refResolver,
-      MetaStringResolver metaStringResolver,
-      SerializationContext serializationContext,
+      RefWriter refWriter,
+      MetaStringWriter metaStringWriter,
       StringSerializer stringSerializer) {
     this.config = config;
     this.generics = generics;
     this.typeResolver = typeResolver;
-    this.refResolver = refResolver;
-    this.metaStringResolver = metaStringResolver;
-    this.serializationContext = serializationContext;
+    this.refWriter = refWriter;
+    this.metaStringWriter = metaStringWriter;
     this.stringSerializer = stringSerializer;
     crossLanguage = config.isXlang();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();
     forVirtualThread = config.forVirtualThread();
+    scopedMetaShareEnabled = config.isScopedMetaShareEnabled();
+    if (scopedMetaShareEnabled) {
+      metaContext = new MetaContext();
+    }
   }
 
   public void prepare(MemoryBuffer buffer, BufferCallback callback) {
@@ -145,10 +148,17 @@ public final class WriteContext {
   }
 
   public void reset() {
-    refResolver.resetWrite();
+    refWriter.reset();
     typeResolver.resetWrite();
-    metaStringResolver.resetWrite();
-    serializationContext.resetWrite();
+    metaStringWriter.reset();
+    if (!objects.isEmpty()) {
+      objects.clear();
+    }
+    if (scopedMetaShareEnabled) {
+      metaContext.classMap.clear();
+    } else {
+      metaContext = null;
+    }
     buffer = null;
     bufferCallback = null;
     depth = 0;
@@ -170,12 +180,53 @@ public final class WriteContext {
     return typeResolver;
   }
 
-  public RefResolver getRefResolver() {
-    return refResolver;
+  public RefWriter getRefWriter() {
+    return refWriter;
+  }
+
+  public boolean writeRefOrNull(Object obj) {
+    return refWriter.writeRefOrNull(buffer, obj);
+  }
+
+  public boolean writeRefValueFlag(Object obj) {
+    return refWriter.writeRefValueFlag(buffer, obj);
+  }
+
+  public boolean writeNullFlag(Object obj) {
+    return refWriter.writeNullFlag(buffer, obj);
+  }
+
+  public void replaceRef(Object original, Object newObject) {
+    refWriter.replaceRef(original, newObject);
+  }
+
+  public MetaStringWriter getMetaStringWriter() {
+    return metaStringWriter;
   }
 
   public StringSerializer getStringSerializer() {
     return stringSerializer;
+  }
+
+  public Object add(Object key, Object value) {
+    return objects.put(key, value);
+  }
+
+  public boolean containsKey(Object key) {
+    return objects.containsKey(key);
+  }
+
+  public Object get(Object key) {
+    return objects.get(key);
+  }
+
+  public MetaContext getMetaContext() {
+    return metaContext;
+  }
+
+  public void setMetaContext(MetaContext metaContext) {
+    Preconditions.checkArgument(!scopedMetaShareEnabled);
+    this.metaContext = metaContext;
   }
 
   public boolean isCrossLanguage() {
@@ -217,7 +268,7 @@ public final class WriteContext {
   /** Serialize a nullable referencable object to the current buffer. */
   public void writeRef(Object obj) {
     MemoryBuffer buffer = this.buffer;
-    if (!refResolver.writeRefOrNull(buffer, obj)) {
+    if (!refWriter.writeRefOrNull(buffer, obj)) {
       TypeResolver resolver = typeResolver;
       TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass());
       if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
@@ -233,7 +284,7 @@ public final class WriteContext {
 
   public void writeRef(Object obj, TypeInfoHolder classInfoHolder) {
     MemoryBuffer buffer = this.buffer;
-    if (!refResolver.writeRefOrNull(buffer, obj)) {
+    if (!refWriter.writeRefOrNull(buffer, obj)) {
       TypeResolver resolver = typeResolver;
       TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass(), classInfoHolder);
       if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
@@ -250,7 +301,7 @@ public final class WriteContext {
   public void writeRef(Object obj, TypeInfo typeInfo) {
     MemoryBuffer buffer = this.buffer;
     if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
-      if (!refResolver.writeRefOrNull(buffer, obj)) {
+      if (!refWriter.writeRefOrNull(buffer, obj)) {
         depth++;
         typeInfo.getSerializer().write(this, obj);
         depth--;
@@ -260,7 +311,7 @@ public final class WriteContext {
     TypeResolver resolver = typeResolver;
     Serializer<Object> serializer = typeInfo.getSerializer();
     if (serializer.needToWriteRef()) {
-      if (!refResolver.writeRefOrNull(buffer, obj)) {
+      if (!refWriter.writeRefOrNull(buffer, obj)) {
         resolver.writeTypeInfo(buffer, typeInfo);
         depth++;
         serializer.write(this, obj);
@@ -280,7 +331,7 @@ public final class WriteContext {
   public <T> void writeRef(T obj, Serializer<T> serializer) {
     MemoryBuffer buffer = this.buffer;
     if (serializer.needToWriteRef()) {
-      if (!refResolver.writeRefOrNull(buffer, obj)) {
+      if (!refWriter.writeRefOrNull(buffer, obj)) {
         depth++;
         serializer.write(this, obj);
         depth--;
@@ -446,7 +497,7 @@ public final class WriteContext {
   public void writeStringRef(String str) {
     MemoryBuffer buffer = this.buffer;
     if (stringSerializer.needToWriteRef()) {
-      if (!refResolver.writeRefOrNull(buffer, str)) {
+      if (!refWriter.writeRefOrNull(buffer, str)) {
         stringSerializer.writeString(buffer, str);
       }
     } else if (str == null) {

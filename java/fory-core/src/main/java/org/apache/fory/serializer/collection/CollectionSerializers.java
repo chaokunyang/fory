@@ -50,6 +50,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.CollectionSnapshot;
+import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
@@ -57,7 +58,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
@@ -84,7 +84,7 @@ public class CollectionSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ArrayList arrayList = new ArrayList(numElements);
-      fory.getRefResolver().reference(arrayList);
+      ReadContext.current().reference(arrayList);
       return arrayList;
     }
   }
@@ -107,38 +107,33 @@ public class CollectionSerializers {
     }
 
     @Override
-    public List<?> copy(List<?> originCollection) {
+    public List<?> copy(CopyContext copyContext, List<?> originCollection) {
       Object[] elements = new Object[originCollection.size()];
       List<?> newCollection = Arrays.asList(elements);
-      fory.reference(originCollection, newCollection);
-      copyElements(originCollection, elements);
+      copyContext.reference(originCollection, newCollection);
+      copyElements(copyContext, originCollection, elements);
       return newCollection;
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, List<?> value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (isJava) {
-        try {
-          final Object[] array = (Object[]) Platform.getObject(value, arrayFieldOffset);
-          fory.writeRef(buffer, array);
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
+    public void write(WriteContext writeContext, List<?> value) {
+      if (config.isXlang()) {
+        super.write(writeContext, value);
       } else {
-        super.write(org.apache.fory.context.WriteContext.current(), value);
+        Object[] array = (Object[]) Platform.getObject(value, arrayFieldOffset);
+        writeContext.writeRef(array);
       }
     }
 
     @Override
-    public List<?> read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (isJava) {
-        final Object[] array = (Object[]) fory.readRef(buffer);
+    public List<?> read(ReadContext readContext) {
+      if (config.isXlang()) {
+        return super.read(readContext);
+      } else {
+        Object[] array = (Object[]) readContext.readRef();
         Preconditions.checkNotNull(array);
         return Arrays.asList(array);
       }
-      return super.read(org.apache.fory.context.ReadContext.current());
     }
 
     @Override
@@ -146,7 +141,7 @@ public class CollectionSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ArrayList arrayList = new ArrayList(numElements);
-      fory.getRefResolver().reference(arrayList);
+      ReadContext.current().reference(arrayList);
       return arrayList;
     }
   }
@@ -161,7 +156,7 @@ public class CollectionSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashSet hashSet = new HashSet(numElements);
-      fory.getRefResolver().reference(hashSet);
+      ReadContext.current().reference(hashSet);
       return hashSet;
     }
   }
@@ -176,7 +171,7 @@ public class CollectionSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       LinkedHashSet hashSet = new LinkedHashSet(numElements);
-      fory.getRefResolver().reference(hashSet);
+      ReadContext.current().reference(hashSet);
       return hashSet;
     }
   }
@@ -206,8 +201,10 @@ public class CollectionSerializers {
     @Override
     public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
-      if (!fory.isCrossLanguage()) {
-        fory.writeRef(buffer, value.comparator());
+      if (config.isXlang()) {
+        return value;
+      } else {
+        WriteContext.current().writeRef(value.comparator());
       }
       return value;
     }
@@ -215,11 +212,11 @@ public class CollectionSerializers {
     @SuppressWarnings("unchecked")
     @Override
     public T newCollection(MemoryBuffer buffer) {
-      assert !fory.isCrossLanguage();
+      assert !config.isXlang();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       T collection;
-      Comparator comparator = (Comparator) fory.readRef(buffer);
+      Comparator comparator = (Comparator) ReadContext.current().readRef();
       if (type == TreeSet.class) {
         collection = (T) new TreeSet(comparator);
       } else {
@@ -233,14 +230,15 @@ public class CollectionSerializers {
           throw new RuntimeException(e);
         }
       }
-      fory.getRefResolver().reference(collection);
+      ReadContext.current().reference(collection);
       return collection;
     }
 
     @Override
-    public Collection newCollection(Collection originCollection) {
+    public Collection newCollection(
+        CopyContext copyContext, Collection originCollection) {
       Collection collection;
-      Comparator comparator = fory.copyObject(((SortedSet) originCollection).comparator());
+      Comparator comparator = copyContext.copyObject(((SortedSet) originCollection).comparator());
       if (Objects.equals(type, TreeSet.class)) {
         collection = new TreeSet(comparator);
       } else {
@@ -270,19 +268,17 @@ public class CollectionSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, List<?> value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (!isJava) {
+    public void write(WriteContext writeContext, List<?> value) {
+      if (config.isXlang()) {
         // write length
-        buffer.writeVarUint32Small7(0);
+        writeContext.getBuffer().writeVarUint32Small7(0);
       }
     }
 
     @Override
-    public List<?> read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (!isJava) {
-        buffer.readVarUint32Small7();
+    public List<?> read(ReadContext readContext) {
+      if (config.isXlang()) {
+        readContext.getBuffer().readVarUint32Small7();
       }
       return Collections.EMPTY_LIST;
     }
@@ -309,11 +305,12 @@ public class CollectionSerializers {
     }
 
     @Override
-    public CopyOnWriteArrayList copy(CopyOnWriteArrayList originCollection) {
+    public CopyOnWriteArrayList copy(
+        CopyContext copyContext, CopyOnWriteArrayList originCollection) {
       CopyOnWriteArrayList newCollection = new CopyOnWriteArrayList();
-      fory.reference(originCollection, newCollection);
+      copyContext.reference(originCollection, newCollection);
       List copyList = new ArrayList(originCollection.size());
-      copyElements(originCollection, copyList);
+      copyElements(copyContext, originCollection, copyList);
       newCollection.addAll(copyList);
       return newCollection;
     }
@@ -340,11 +337,12 @@ public class CollectionSerializers {
     }
 
     @Override
-    public CopyOnWriteArraySet copy(CopyOnWriteArraySet originCollection) {
+    public CopyOnWriteArraySet copy(
+        CopyContext copyContext, CopyOnWriteArraySet originCollection) {
       CopyOnWriteArraySet newCollection = new CopyOnWriteArraySet();
-      fory.reference(originCollection, newCollection);
+      copyContext.reference(originCollection, newCollection);
       List copyList = new ArrayList(originCollection.size());
-      copyElements(originCollection, copyList);
+      copyElements(copyContext, originCollection, copyList);
       newCollection.addAll(copyList);
       return newCollection;
     }
@@ -357,20 +355,18 @@ public class CollectionSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Set<?> value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (!isJava) {
-        super.write(org.apache.fory.context.WriteContext.current(), value);
+    public void write(WriteContext writeContext, Set<?> value) {
+      if (config.isXlang()) {
+        super.write(writeContext, value);
       }
     }
 
     @Override
-    public Set<?> read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (isJava) {
-        return Collections.EMPTY_SET;
+    public Set<?> read(ReadContext readContext) {
+      if (config.isXlang()) {
+        throw new UnsupportedOperationException();
       }
-      throw new UnsupportedOperationException();
+      return Collections.EMPTY_SET;
     }
   }
 
@@ -381,20 +377,18 @@ public class CollectionSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, SortedSet<?> value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (!isJava) {
-        super.write(org.apache.fory.context.WriteContext.current(), value);
+    public void write(WriteContext writeContext, SortedSet<?> value) {
+      if (config.isXlang()) {
+        super.write(writeContext, value);
       }
     }
 
     @Override
-    public SortedSet<?> read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (isJava) {
-        return Collections.emptySortedSet();
+    public SortedSet<?> read(ReadContext readContext) {
+      if (config.isXlang()) {
+        throw new UnsupportedOperationException();
       }
-      throw new UnsupportedOperationException();
+      return Collections.emptySortedSet();
     }
   }
 
@@ -406,27 +400,26 @@ public class CollectionSerializers {
     }
 
     @Override
-    public List<?> copy(List<?> originCollection) {
-      return Collections.singletonList(fory.copyObject(originCollection.get(0)));
+    public List<?> copy(CopyContext copyContext, List<?> originCollection) {
+      return Collections.singletonList(copyContext.copyObject(originCollection.get(0)));
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, List<?> value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (isJava) {
-        fory.writeRef(buffer, value.get(0));
+    public void write(WriteContext writeContext, List<?> value) {
+      if (config.isXlang()) {
+        super.write(writeContext, value);
       } else {
-        super.write(org.apache.fory.context.WriteContext.current(), value);
+        writeContext.writeRef(value.get(0));
       }
     }
 
     @Override
-    public List<?> read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (isJava) {
-        return Collections.singletonList(fory.readRef(buffer));
+    public List<?> read(ReadContext readContext) {
+      if (config.isXlang()) {
+        throw new UnsupportedOperationException();
+      } else {
+        return Collections.singletonList(readContext.readRef());
       }
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -437,27 +430,26 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Set<?> copy(Set<?> originCollection) {
-      return Collections.singleton(fory.copyObject(originCollection.iterator().next()));
+    public Set<?> copy(CopyContext copyContext, Set<?> originCollection) {
+      return Collections.singleton(copyContext.copyObject(originCollection.iterator().next()));
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Set<?> value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (isJava) {
-        fory.writeRef(buffer, value.iterator().next());
+    public void write(WriteContext writeContext, Set<?> value) {
+      if (config.isXlang()) {
+        super.write(writeContext, value);
       } else {
-        super.write(org.apache.fory.context.WriteContext.current(), value);
+        writeContext.writeRef(value.iterator().next());
       }
     }
 
     @Override
-    public Set<?> read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (isJava) {
-        return Collections.singleton(fory.readRef(buffer));
+    public Set<?> read(ReadContext readContext) {
+      if (config.isXlang()) {
+        throw new UnsupportedOperationException();
+      } else {
+        return Collections.singleton(readContext.readRef());
       }
-      throw new UnsupportedOperationException();
     }
   }
 
@@ -471,9 +463,10 @@ public class CollectionSerializers {
     @Override
     public CollectionSnapshot onCollectionWrite(MemoryBuffer buffer, ConcurrentSkipListSet value) {
       CollectionSnapshot snapshot = super.onCollectionWrite(buffer, value);
-      if (!fory.isCrossLanguage()) {
-        fory.writeRef(buffer, value.comparator());
+      if (config.isXlang()) {
+        return snapshot;
       }
+      WriteContext.current().writeRef(value.comparator());
       return snapshot;
     }
 
@@ -481,13 +474,12 @@ public class CollectionSerializers {
     public ConcurrentSkipListSet newCollection(MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      assert !fory.isCrossLanguage();
-      RefResolver refResolver = fory.getRefResolver();
-      int refId = refResolver.lastPreservedRefId();
+      assert !config.isXlang();
+      int refId = ReadContext.current().lastPreservedRefId();
       // It's possible that comparator/elements has circular ref to set.
-      Comparator comparator = (Comparator) fory.readRef(buffer);
+      Comparator comparator = (Comparator) ReadContext.current().readRef();
       ConcurrentSkipListSet skipListSet = new ConcurrentSkipListSet(comparator);
-      refResolver.setReadObject(refId, skipListSet);
+      ReadContext.current().setReadObject(refId, skipListSet);
       return skipListSet;
     }
   }
@@ -520,18 +512,18 @@ public class CollectionSerializers {
 
     @Override
     public Collection newCollection(MemoryBuffer buffer) {
-      final TypeInfo mapTypeInfo = fory.getTypeResolver().readTypeInfo(buffer);
+      final TypeInfo mapTypeInfo = typeResolver.readTypeInfo(buffer);
       final MapLikeSerializer mapSerializer = (MapLikeSerializer) mapTypeInfo.getSerializer();
-      RefResolver refResolver = fory.getRefResolver();
+      ReadContext readContext = ReadContext.current();
       // It's possible that elements or nested fields has circular ref to set.
-      int refId = refResolver.lastPreservedRefId();
+      int refId = readContext.lastPreservedRefId();
       Set set;
       if (buffer.readBoolean()) {
-        refResolver.preserveRefId();
+        readContext.preserveRefId();
         set = Collections.newSetFromMap(mapSerializer.newMap(buffer));
         setNumElements(mapSerializer.getAndClearNumElements());
       } else {
-        Map map = (Map) mapSerializer.read(org.apache.fory.context.ReadContext.current());
+        Map map = (Map) mapSerializer.read(readContext);
         try {
           set = Platform.newInstance(type);
           m.invoke(set, map);
@@ -541,34 +533,35 @@ public class CollectionSerializers {
         }
         setNumElements(0);
       }
-      refResolver.setReadObject(refId, set);
+      readContext.setReadObject(refId, set);
       return set;
     }
 
     @Override
-    public Collection newCollection(Collection originCollection) {
-      assert !fory.isCrossLanguage();
+    public Collection newCollection(
+        CopyContext copyContext, Collection originCollection) {
+      assert !config.isXlang();
       Map<?, Boolean> map =
           (Map<?, Boolean>) Platform.getObject(originCollection, MAP_FIELD_OFFSET);
       MapLikeSerializer mapSerializer =
-          (MapLikeSerializer) fory.getTypeResolver().getSerializer(map.getClass());
-      Map newMap = mapSerializer.newMap(map);
+          (MapLikeSerializer) typeResolver.getSerializer(map.getClass());
+      Map newMap = mapSerializer.newMap(copyContext, map);
       return Collections.newSetFromMap(newMap);
     }
 
     @Override
     public Collection onCollectionWrite(MemoryBuffer buffer, Set<?> value) {
       final Map<?, Boolean> map = (Map<?, Boolean>) Platform.getObject(value, MAP_FIELD_OFFSET);
-      final TypeInfo typeInfo = fory.getTypeResolver().getTypeInfo(map.getClass());
+      final TypeInfo typeInfo = typeResolver.getTypeInfo(map.getClass());
       MapLikeSerializer mapSerializer = (MapLikeSerializer) typeInfo.getSerializer();
-      fory.getTypeResolver().writeTypeInfo(buffer, typeInfo);
+      typeResolver.writeTypeInfo(buffer, typeInfo);
       if (mapSerializer.supportCodegenHook) {
         buffer.writeBoolean(true);
         mapSerializer.onMapWrite(buffer, map);
         return value;
       } else {
         buffer.writeBoolean(false);
-        mapSerializer.write(org.apache.fory.context.WriteContext.current(), map);
+        mapSerializer.write(WriteContext.current(), map);
         return EMPTY_COLLECTION_STUB;
       }
     }
@@ -587,24 +580,23 @@ public class CollectionSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, ConcurrentHashMap.KeySetView value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      fory.writeRef(buffer, value.getMap(), mapTypeInfoHolder);
-      fory.writeRef(buffer, value.getMappedValue(), valueTypeInfoHolder);
+    public void write(WriteContext writeContext, ConcurrentHashMap.KeySetView value) {
+      writeContext.writeRef(value.getMap(), mapTypeInfoHolder);
+      writeContext.writeRef(value.getMappedValue(), valueTypeInfoHolder);
     }
 
     @Override
-    public ConcurrentHashMap.KeySetView read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      ConcurrentHashMap map = (ConcurrentHashMap) fory.readRef(buffer, mapTypeInfoHolder);
-      Object value = fory.readRef(buffer, valueTypeInfoHolder);
+    public ConcurrentHashMap.KeySetView read(ReadContext readContext) {
+      ConcurrentHashMap map = (ConcurrentHashMap) readContext.readRef(mapTypeInfoHolder);
+      Object value = readContext.readRef(valueTypeInfoHolder);
       return map.keySet(value);
     }
 
     @Override
-    public ConcurrentHashMap.KeySetView copy(ConcurrentHashMap.KeySetView value) {
-      ConcurrentHashMap newMap = fory.copyObject(value.getMap());
-      return newMap.keySet(fory.copyObject(value.getMappedValue()));
+    public ConcurrentHashMap.KeySetView copy(
+        CopyContext copyContext, ConcurrentHashMap.KeySetView value) {
+      ConcurrentHashMap newMap = copyContext.copyObject(value.getMap());
+      return newMap.keySet(copyContext.copyObject(value.getMappedValue()));
     }
 
     @Override
@@ -625,7 +617,7 @@ public class CollectionSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       Vector<Object> vector = new Vector<>(numElements);
-      fory.getRefResolver().reference(vector);
+      ReadContext.current().reference(vector);
       return vector;
     }
   }
@@ -641,7 +633,7 @@ public class CollectionSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ArrayDeque deque = new ArrayDeque(numElements);
-      fory.getRefResolver().reference(deque);
+      ReadContext.current().reference(deque);
       return deque;
     }
   }
@@ -654,7 +646,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, EnumSet object) {
+    public void write(WriteContext writeContext, EnumSet object) {
     MemoryBuffer buffer = writeContext.getBuffer();
       Class<?> elemClass;
       if (object.isEmpty()) {
@@ -669,8 +661,8 @@ public class CollectionSerializers {
       if (!elemClass.isEnum()) {
         elemClass = elemClass.getEnclosingClass();
       }
-      ((ClassResolver) fory.getTypeResolver()).writeClassAndUpdateCache(buffer, elemClass);
-      Serializer serializer = fory.getTypeResolver().getSerializer(elemClass);
+      ((ClassResolver) typeResolver).writeClassAndUpdateCache(buffer, elemClass);
+      Serializer serializer = typeResolver.getSerializer(elemClass);
       buffer.writeVarUint32Small7(object.size());
       for (Object element : object) {
         serializer.write(writeContext, element);
@@ -678,11 +670,11 @@ public class CollectionSerializers {
     }
 
     @Override
-    public EnumSet read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      Class elemClass = fory.getTypeResolver().readTypeInfo(buffer).getCls();
+    public EnumSet read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      Class elemClass = typeResolver.readTypeInfo(buffer).getCls();
       EnumSet object = EnumSet.noneOf(elemClass);
-      Serializer elemSerializer = fory.getTypeResolver().getSerializer(elemClass);
+      Serializer elemSerializer = typeResolver.getSerializer(elemClass);
       int length = buffer.readVarUint32Small7();
       for (int i = 0; i < length; i++) {
         object.add(elemSerializer.read(readContext));
@@ -691,7 +683,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public EnumSet copy(EnumSet originCollection) {
+    public EnumSet copy(CopyContext copyContext, EnumSet originCollection) {
       return EnumSet.copyOf(originCollection);
     }
   }
@@ -702,7 +694,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, BitSet set) {
+    public void write(WriteContext writeContext, BitSet set) {
     MemoryBuffer buffer = writeContext.getBuffer();
       long[] values = set.toLongArray();
       buffer.writePrimitiveArrayWithSize(
@@ -710,12 +702,12 @@ public class CollectionSerializers {
     }
 
     @Override
-    public BitSet copy(BitSet originCollection) {
+    public BitSet copy(CopyContext copyContext, BitSet originCollection) {
       return BitSet.valueOf(originCollection.toLongArray());
     }
 
     @Override
-    public BitSet read(org.apache.fory.context.ReadContext readContext) {
+    public BitSet read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       long[] values = buffer.readLongs(buffer.readVarUint32Small7());
       return BitSet.valueOf(values);
@@ -729,26 +721,29 @@ public class CollectionSerializers {
 
     public Collection onCollectionWrite(MemoryBuffer buffer, PriorityQueue value) {
       buffer.writeVarUint32Small7(value.size());
-      if (!fory.isCrossLanguage()) {
-        fory.writeRef(buffer, value.comparator());
+      if (config.isXlang()) {
+        return value;
+      } else {
+        WriteContext.current().writeRef(value.comparator());
       }
       return value;
     }
 
     @Override
-    public Collection newCollection(Collection collection) {
+    public Collection newCollection(
+        CopyContext copyContext, Collection collection) {
       return new PriorityQueue(
-          collection.size(), fory.copyObject(((PriorityQueue) collection).comparator()));
+          collection.size(), copyContext.copyObject(((PriorityQueue) collection).comparator()));
     }
 
     @Override
     public PriorityQueue newCollection(MemoryBuffer buffer) {
-      assert !fory.isCrossLanguage();
+      assert !config.isXlang();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      Comparator comparator = (Comparator) fory.readRef(buffer);
+      Comparator comparator = (Comparator) ReadContext.current().readRef();
       PriorityQueue queue = new PriorityQueue(comparator);
-      fory.getRefResolver().reference(queue);
+      ReadContext.current().reference(queue);
       return queue;
     }
   }
@@ -800,7 +795,7 @@ public class CollectionSerializers {
       setNumElements(numElements);
       int capacity = buffer.readVarUint32Small7();
       ArrayBlockingQueue queue = new ArrayBlockingQueue<>(capacity);
-      fory.getRefResolver().reference(queue);
+      ReadContext.current().reference(queue);
       return queue;
     }
 
@@ -857,7 +852,7 @@ public class CollectionSerializers {
       setNumElements(numElements);
       int capacity = buffer.readVarUint32Small7();
       LinkedBlockingQueue queue = new LinkedBlockingQueue<>(capacity);
-      fory.getRefResolver().reference(queue);
+      ReadContext.current().reference(queue);
       return queue;
     }
 
@@ -880,17 +875,19 @@ public class CollectionSerializers {
     public DefaultJavaCollectionSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls, false);
       Preconditions.checkArgument(
-          !fory.isCrossLanguage(),
+          !config.isXlang(),
           "Fory cross-language default collection serializer should use "
               + CollectionSerializer.class);
-      fory.getTypeResolver().setSerializer(cls, this);
+      typeResolver.setSerializer(cls, this);
       Class<? extends Serializer> serializerClass =
-          ((ClassResolver) fory.getTypeResolver())
+          ((ClassResolver) typeResolver)
               .getObjectSerializerClass(
-                  cls, sc -> dataSerializer = Serializers.newSerializer(fory.getFory(), cls, sc));
-      dataSerializer = Serializers.newSerializer(fory.getFory(), cls, serializerClass);
+                  cls,
+                  sc ->
+                      dataSerializer = Serializers.newSerializer(typeResolver, cls, sc));
+      dataSerializer = Serializers.newSerializer(typeResolver, cls, serializerClass);
       // No need to set object serializer to this, it will be set in class resolver later.
-      // fory.getTypeResolver().setSerializer(cls, this);
+      // typeResolver.setSerializer(cls, this);
     }
 
     @Override
@@ -904,20 +901,18 @@ public class CollectionSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, T value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      dataSerializer.write(WriteContext.current(), value);
+    public void write(WriteContext writeContext, T value) {
+      dataSerializer.write(writeContext, value);
     }
 
     @Override
-    public T copy(T originCollection) {
-      return fory.copyObject(originCollection, dataSerializer);
+    public T copy(CopyContext copyContext, T originCollection) {
+      return copyContext.copyObject(originCollection, dataSerializer);
     }
 
     @Override
-    public T read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return dataSerializer.read(ReadContext.current());
+    public T read(ReadContext readContext) {
+      return dataSerializer.read(readContext);
     }
   }
 
@@ -933,8 +928,8 @@ public class CollectionSerializers {
       Class<? extends Serializer> serializerType =
           ClassResolver.useReplaceResolveSerializer(cls)
               ? ReplaceResolveSerializer.class
-              : fory.getDefaultJDKStreamSerializerType();
-      serializer = Serializers.newSerializer(fory.getFory(), cls, serializerType);
+              : config.getDefaultJDKStreamSerializerType();
+      serializer = Serializers.newSerializer(typeResolver, cls, serializerType);
     }
 
     @Override
@@ -944,9 +939,8 @@ public class CollectionSerializers {
 
     @SuppressWarnings("unchecked")
     @Override
-    public T read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return (T) serializer.read(ReadContext.current());
+    public T read(ReadContext readContext) {
+      return (T) serializer.read(readContext);
     }
 
     @Override
@@ -955,14 +949,13 @@ public class CollectionSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, T value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      serializer.write(WriteContext.current(), value);
+    public void write(WriteContext writeContext, T value) {
+      serializer.write(writeContext, value);
     }
 
     @Override
-    public T copy(T value) {
-      return fory.copyObject(value, (Serializer<T>) serializer);
+    public T copy(CopyContext copyContext, T value) {
+      return copyContext.copyObject(value, (Serializer<T>) serializer);
     }
   }
 
@@ -995,7 +988,7 @@ public class CollectionSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ArrayList list = new ArrayList(numElements);
-      fory.getRefResolver().reference(list);
+      ReadContext.current().reference(list);
       return list;
     }
   }
@@ -1010,7 +1003,7 @@ public class CollectionSerializers {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashSet set = new HashSet(numElements);
-      fory.getRefResolver().reference(set);
+      ReadContext.current().reference(set);
       return set;
     }
   }

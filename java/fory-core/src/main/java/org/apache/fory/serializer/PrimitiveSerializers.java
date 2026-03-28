@@ -21,12 +21,13 @@ package org.apache.fory.serializer;
 
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
 
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import org.apache.fory.Fory;
 import org.apache.fory.config.Config;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.config.LongEncoding;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
@@ -45,14 +46,12 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Boolean value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeBoolean(value);
+      writeContext.getBuffer().writeBoolean(value);
     }
 
     @Override
     public Boolean read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return buffer.readBoolean();
+      return readContext.getBuffer().readBoolean();
     }
   }
 
@@ -63,14 +62,12 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Byte value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeByte(value);
+      writeContext.getBuffer().writeByte(value);
     }
 
     @Override
     public Byte read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return buffer.readByte();
+      return readContext.getBuffer().readByte();
     }
   }
 
@@ -81,15 +78,13 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Integer value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value >= 0 && value <= 255);
-      buffer.writeByte(value.byteValue());
+      writeContext.getBuffer().writeByte(value.byteValue());
     }
 
     @Override
     public Integer read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      int b = buffer.readByte();
+      int b = readContext.getBuffer().readByte();
       return b >>> 24;
     }
   }
@@ -101,15 +96,13 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Integer value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value >= 0 && value <= 65535);
-      buffer.writeByte(value.byteValue());
+      writeContext.getBuffer().writeByte(value.byteValue());
     }
 
     @Override
     public Integer read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      int b = buffer.readByte();
+      int b = readContext.getBuffer().readByte();
       return b >>> 16;
     }
   }
@@ -121,14 +114,12 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Character value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeChar(value);
+      writeContext.getBuffer().writeChar(value);
     }
 
     @Override
     public Character read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return buffer.readChar();
+      return readContext.getBuffer().readChar();
     }
   }
 
@@ -139,14 +130,12 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Short value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt16(value);
+      writeContext.getBuffer().writeInt16(value);
     }
 
     @Override
     public Short read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return buffer.readInt16();
+      return readContext.getBuffer().readInt16();
     }
   }
 
@@ -156,27 +145,24 @@ public class PrimitiveSerializers {
     public IntSerializer(Config config, Class<?> cls) {
       super(config, (Class) cls, false, true);
       // Cross-language encoding always uses varint; Java mode follows compressInt config.
-      compressNumber = !isJava || config.compressInt();
+      compressNumber = config.isXlang() || config.compressInt();
     }
 
     @Override
     public void write(WriteContext writeContext, Integer value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
       if (compressNumber) {
-        buffer.writeVarInt32(value);
+        writeContext.getBuffer().writeVarInt32(value);
       } else {
-        buffer.writeInt32(value);
+        writeContext.getBuffer().writeInt32(value);
       }
     }
 
     @Override
     public Integer read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       if (compressNumber) {
-        return buffer.readVarInt32();
-      } else {
-        return buffer.readInt32();
+        return readContext.getBuffer().readVarInt32();
       }
+      return readContext.getBuffer().readInt32();
     }
   }
 
@@ -187,15 +173,13 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Integer value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value >= 0);
-      buffer.writeVarUint32(value);
+      writeContext.getBuffer().writeVarUint32(value);
     }
 
     @Override
     public Integer read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return buffer.readVarUint32();
+      return readContext.getBuffer().readVarUint32();
     }
   }
 
@@ -204,19 +188,17 @@ public class PrimitiveSerializers {
 
     public LongSerializer(Config config, Class<?> cls) {
       super(config, (Class) cls, false, true);
-      longEncoding = isJava ? config.longEncoding() : LongEncoding.VARINT;
+      longEncoding = config.isXlang() ? LongEncoding.VARINT : config.longEncoding();
     }
 
     @Override
     public void write(WriteContext writeContext, Long value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      writeInt64(buffer, value, longEncoding);
+      writeInt64(writeContext.getBuffer(), value, longEncoding);
     }
 
     @Override
     public Long read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return readInt64(buffer, longEncoding);
+      return readInt64(readContext.getBuffer(), longEncoding);
     }
 
     public static Expression writeInt64(
@@ -279,15 +261,13 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Long value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
       Preconditions.checkArgument(value >= 0);
-      buffer.writeVarUint64(value);
+      writeContext.getBuffer().writeVarUint64(value);
     }
 
     @Override
     public Long read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return buffer.readVarUint64();
+      return readContext.getBuffer().readVarUint64();
     }
   }
 
@@ -298,14 +278,12 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Float value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeFloat32(value);
+      writeContext.getBuffer().writeFloat32(value);
     }
 
     @Override
     public Float read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return buffer.readFloat32();
+      return readContext.getBuffer().readFloat32();
     }
   }
 
@@ -316,14 +294,12 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Double value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeFloat64(value);
+      writeContext.getBuffer().writeFloat64(value);
     }
 
     @Override
     public Double read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return buffer.readFloat64();
+      return readContext.getBuffer().readFloat64();
     }
   }
 
@@ -334,14 +310,12 @@ public class PrimitiveSerializers {
 
     @Override
     public void write(WriteContext writeContext, Float16 value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt16(value.toBits());
+      writeContext.getBuffer().writeInt16(value.toBits());
     }
 
     @Override
     public Float16 read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      return Float16.fromBits(buffer.readInt16());
+      return Float16.fromBits(readContext.getBuffer().readInt16());
     }
   }
 

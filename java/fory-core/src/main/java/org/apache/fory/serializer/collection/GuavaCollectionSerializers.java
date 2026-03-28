@@ -21,8 +21,8 @@ package org.apache.fory.serializer.collection;
 
 import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
@@ -35,6 +35,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
@@ -47,7 +50,7 @@ public class GuavaCollectionSerializers {
       extends CollectionSerializer<T> {
     public GuavaCollectionSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls, true);
-      fory.getTypeResolver().setSerializer(cls, this);
+      typeResolver.setSerializer(cls, this);
     }
 
     protected abstract T xnewInstance(Collection collection);
@@ -57,7 +60,6 @@ public class GuavaCollectionSerializers {
       extends GuavaCollectionSerializer<T> {
     public ImmutableListSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls);
-      fory.getTypeResolver().setSerializer(cls, this);
     }
 
     @Override
@@ -79,9 +81,9 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public T copy(T originCollection) {
+    public T copy(CopyContext copyContext, T originCollection) {
       Object[] elements = new Object[originCollection.size()];
-      copyElements(originCollection, elements);
+      copyElements(copyContext, originCollection, elements);
       return (T) ImmutableList.copyOf(elements);
     }
   }
@@ -127,9 +129,9 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public T copy(T originCollection) {
+    public T copy(CopyContext copyContext, T originCollection) {
       Object[] elements = new Object[originCollection.size()];
-      copyElements(originCollection, elements);
+      copyElements(copyContext, originCollection, elements);
       return (T) function.apply(elements);
     }
 
@@ -165,9 +167,9 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public T copy(T originCollection) {
+    public T copy(CopyContext copyContext, T originCollection) {
       Object[] elements = new Object[originCollection.size()];
-      copyElements(originCollection, elements);
+      copyElements(copyContext, originCollection, elements);
       return (T) ImmutableSet.copyOf(elements);
     }
   }
@@ -176,13 +178,13 @@ public class GuavaCollectionSerializers {
       extends CollectionSerializer<T> {
     public ImmutableSortedSetSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls, false);
-      fory.getTypeResolver().setSerializer(cls, this);
+      typeResolver.setSerializer(cls, this);
     }
 
     @Override
     public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
-      fory.writeRef(buffer, value.comparator());
+      WriteContext.current().writeRef(value.comparator());
       return value;
     }
 
@@ -190,7 +192,7 @@ public class GuavaCollectionSerializers {
     public Collection newCollection(MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      Comparator comparator = (Comparator) fory.readRef(buffer);
+      Comparator comparator = (Comparator) ReadContext.current().readRef();
       return new SortedCollectionContainer(comparator, numElements);
     }
 
@@ -202,10 +204,10 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public T copy(T originCollection) {
-      Comparator comparator = fory.copyObject(originCollection.comparator());
+    public T copy(CopyContext copyContext, T originCollection) {
+      Comparator comparator = copyContext.copyObject(originCollection.comparator());
       Object[] elements = new Object[originCollection.size()];
-      copyElements(originCollection, elements);
+      copyElements(copyContext, originCollection, elements);
       return (T) new ImmutableSortedSet.Builder<>(comparator).add(elements).build();
     }
   }
@@ -214,7 +216,7 @@ public class GuavaCollectionSerializers {
 
     public GuavaMapSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls, true);
-      fory.getTypeResolver().setSerializer(cls, this);
+      typeResolver.setSerializer(cls, this);
     }
 
     protected abstract ImmutableMap.Builder makeBuilder(int size);
@@ -227,9 +229,9 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public T copy(T originMap) {
+    public T copy(CopyContext copyContext, T originMap) {
       Builder builder = makeBuilder(originMap.size());
-      copyEntry(originMap, builder);
+      copyEntry(copyContext, originMap, builder);
       return (T) builder.build();
     }
 
@@ -247,11 +249,10 @@ public class GuavaCollectionSerializers {
     }
 
     @Override
-    public T read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      int size = buffer.readVarUint32Small7();
+    public T read(ReadContext readContext) {
+      int size = readContext.getBuffer().readVarUint32Small7();
       Map map = new HashMap();
-      readElements(buffer, size, map);
+      readElements(readContext.getBuffer(), size, map);
       return xnewInstance(map);
     }
 
@@ -291,7 +292,6 @@ public class GuavaCollectionSerializers {
     public ImmutableMapSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls);
       builderCtr = builderCtrCache.get(ImmutableMap.Builder.class);
-      fory.getTypeResolver().setSerializer(cls, this);
     }
 
     @Override
@@ -312,7 +312,6 @@ public class GuavaCollectionSerializers {
     public ImmutableBiMapSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls);
       builderCtr = builderCtrCache.get(ImmutableBiMap.Builder.class);
-      fory.getTypeResolver().setSerializer(cls, this);
     }
 
     @Override
@@ -331,13 +330,13 @@ public class GuavaCollectionSerializers {
 
     public ImmutableSortedMapSerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver, cls);
-      fory.getTypeResolver().setSerializer(cls, this);
+      typeResolver.setSerializer(cls, this);
     }
 
     @Override
     public Map onMapWrite(MemoryBuffer buffer, T value) {
       buffer.writeVarUint32Small7(value.size());
-      fory.writeRef(buffer, value.comparator());
+      WriteContext.current().writeRef(value.comparator());
       return value;
     }
 
@@ -345,15 +344,15 @@ public class GuavaCollectionSerializers {
     public Map newMap(MemoryBuffer buffer) {
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
-      Comparator comparator = (Comparator) fory.readRef(buffer);
+      Comparator comparator = (Comparator) ReadContext.current().readRef();
       return new SortedMapContainer<>(comparator, numElements);
     }
 
     @Override
-    public T copy(T originMap) {
-      Comparator comparator = fory.copyObject(originMap.comparator());
+    public T copy(CopyContext copyContext, T originMap) {
+      Comparator comparator = copyContext.copyObject(originMap.comparator());
       ImmutableSortedMap.Builder builder = new ImmutableSortedMap.Builder(comparator);
-      copyEntry(originMap, builder);
+      copyEntry(copyContext, originMap, builder);
       return (T) builder.build();
     }
 

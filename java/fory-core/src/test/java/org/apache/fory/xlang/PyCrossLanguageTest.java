@@ -21,6 +21,9 @@ package org.apache.fory.xlang;
 
 import static org.testng.Assert.assertEquals;
 
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.hash.Hashing;
@@ -60,8 +63,6 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -500,12 +501,12 @@ public class PyCrossLanguageTest extends ForyTestBase {
     ObjectSerializer objSerializer = (ObjectSerializer) serializer;
     Method method =
         ObjectSerializer.class.getDeclaredMethod(
-            "computeStructHash", Fory.class, DescriptorGrouper.class);
+            "computeStructHash", TypeResolver.class, DescriptorGrouper.class);
     method.setAccessible(true);
     TypeResolver resolver = fory.getTypeResolver();
     DescriptorGrouper grouper =
         resolver.getFieldDescriptorGrouper(ComplexObject1.class, false, false);
-    Integer hash = (Integer) method.invoke(objSerializer, fory, grouper);
+    Integer hash = (Integer) method.invoke(objSerializer, resolver, grouper);
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(4);
     buffer.writeInt32(hash);
     roundBytes("test_struct_hash", buffer.getBytes(0, 4));
@@ -635,21 +636,19 @@ public class PyCrossLanguageTest extends ForyTestBase {
 
     @Override
     public void write(WriteContext writeContext, ComplexObject1 value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      fory.writeRef(buffer, value.f1);
-      fory.writeRef(buffer, value.f2);
-      fory.writeRef(buffer, value.f3);
+      writeContext.writeRef(value.f1);
+      writeContext.writeRef(value.f2);
+      writeContext.writeRef(value.f3);
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public ComplexObject1 read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       ComplexObject1 obj = new ComplexObject1();
-      fory.getRefResolver().reference(obj);
-      obj.f1 = fory.readRef(buffer);
-      obj.f2 = (String) fory.readRef(buffer);
-      obj.f3 = (List<String>) fory.readRef(buffer);
+      readContext.reference(obj);
+      obj.f1 = readContext.readRef();
+      obj.f2 = (String) readContext.readRef();
+      obj.f3 = (List<String>) readContext.readRef();
       return obj;
     }
   }

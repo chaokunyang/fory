@@ -23,7 +23,7 @@ import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import org.apache.fory.Fory;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -67,14 +67,15 @@ public interface Generated {
           String serializerFieldName = (String) serializerFieldInfos[i];
           Class<?> beanFieldType = (Class<?>) serializerFieldInfos[i + 1];
           Field field = Objects.requireNonNull(fieldsMap.get(serializerFieldName));
-          fory.getJITContext()
+          typeResolver
+              .getJITContext()
               .registerJITNotifyCallback(
                   beanFieldType,
                   new JITContext.NotifyCallback() {
                     @Override
                     public void onNotifyResult(Object result) {
                       Serializer<?> fieldSerializer =
-                          fory.getTypeResolver().getSerializer(beanFieldType);
+                          typeResolver.getSerializer(beanFieldType);
                       Preconditions.checkState(beanFieldType == fieldSerializer.getType());
                       Preconditions.checkState(result == fieldSerializer.getClass());
                       ReflectionUtils.setObjectFieldValue(
@@ -84,7 +85,7 @@ public interface Generated {
                     @Override
                     public void onNotifyMissed() {
                       Serializer<?> fieldSerializer =
-                          fory.getTypeResolver().getSerializer(beanFieldType);
+                          typeResolver.getSerializer(beanFieldType);
                       ReflectionUtils.setObjectFieldValue(
                           subclassSerializer, field, fieldSerializer);
                     }
@@ -113,7 +114,7 @@ public interface Generated {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    public void write(WriteContext writeContext, Object value) {
       serializer.write(writeContext, value);
     }
   }
@@ -135,7 +136,7 @@ public interface Generated {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    public void write(WriteContext writeContext, Object value) {
       serializer.write(writeContext, value);
     }
 

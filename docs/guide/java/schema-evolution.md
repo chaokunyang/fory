@@ -77,12 +77,12 @@ Fory supports sharing type metadata (class name, field name, final field type in
 
 // Not thread-safe fory.
 MetaContext context = xxx;
-fory.getSerializationContext().setMetaContext(context);
+fory.setMetaContext(context);
 byte[] bytes = fory.serialize(o);
 
 // Not thread-safe fory.
 MetaContext context = xxx;
-fory.getSerializationContext().setMetaContext(context);
+fory.setMetaContext(context);
 fory.deserialize(bytes);
 ```
 
@@ -92,7 +92,7 @@ fory.deserialize(bytes);
 // Thread-safe fory
 byte[] serialized = fory.execute(
   f -> {
-    f.getSerializationContext().setMetaContext(context);
+    f.setMetaContext(context);
     return f.serialize(beanA);
   }
 );
@@ -100,7 +100,7 @@ byte[] serialized = fory.execute(
 // Thread-safe fory
 Object newObj = fory.execute(
   f -> {
-    f.getSerializationContext().setMetaContext(context);
+    f.setMetaContext(context);
     return f.deserialize(serialized);
   }
 );

@@ -23,6 +23,9 @@ import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_ASCII_MASK;
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_LATIN_MASK;
 
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -142,15 +145,13 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, String value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    writeString(buffer, value);
+  public void write(WriteContext writeContext, String value) {
+    writeString(writeContext.getBuffer(), value);
   }
 
   @Override
-  public String read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    return readString(buffer);
+  public String read(ReadContext readContext) {
+    return readString(readContext.getBuffer());
   }
 
   public Expression writeStringExpr(Expression strSerializer, Expression buffer, Expression str) {

@@ -17,25 +17,20 @@
  * under the License.
  */
 
-package org.apache.fory.resolver;
+package org.apache.fory.context;
 
-import static org.testng.Assert.*;
+import org.apache.fory.collection.IdentityObjectIntMap;
+import org.apache.fory.collection.ObjectArray;
+import org.apache.fory.resolver.TypeInfo;
 
-import org.apache.fory.memory.MemoryBuffer;
-import org.testng.annotations.Test;
+/**
+ * Context for sharing class meta across multiple serialization. Class name, field name and field
+ * type will be shared between different serialization.
+ */
+public class MetaContext {
+  /** Classes which has sent definitions to peer. */
+  public final IdentityObjectIntMap<Class<?>> classMap = new IdentityObjectIntMap<>(1, 0.5f);
 
-public class NoRefResolverTest {
-
-  @Test
-  public void testWriteRefOrNull() {
-    NoRefResolver referenceResolver = new NoRefResolver();
-    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
-    assertTrue(referenceResolver.writeRefOrNull(buffer, null));
-    assertFalse(referenceResolver.writeRefOrNull(buffer, new Object()));
-    Object o = new Object();
-    assertFalse(referenceResolver.writeRefOrNull(buffer, o));
-    assertFalse(referenceResolver.writeRefOrNull(buffer, o));
-    assertFalse(referenceResolver.writeNullFlag(buffer, o));
-    assertTrue(referenceResolver.writeNullFlag(buffer, null));
-  }
+  /** TypeInfos read from peer for reference lookup during deserialization. */
+  public final ObjectArray<TypeInfo> readTypeInfos = new ObjectArray<>();
 }

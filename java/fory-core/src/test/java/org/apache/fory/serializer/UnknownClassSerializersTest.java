@@ -40,7 +40,7 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.test.bean.Struct;
 import org.codehaus.commons.compiler.util.reflect.ByteArrayClassLoader;
 import org.testng.Assert;
@@ -270,7 +270,7 @@ public class UnknownClassSerializersTest extends ForyTestBase {
         }) {
       Object pojo = Struct.createPOJO(structClass);
       MetaContext context1 = new MetaContext();
-      fory.getSerializationContext().setMetaContext(context1);
+      fory.setMetaContext(context1);
       byte[] bytes = fory.serialize(pojo);
       Fory fory2 =
           foryBuilder()
@@ -280,10 +280,10 @@ public class UnknownClassSerializersTest extends ForyTestBase {
               .withClassLoader(classLoader)
               .build();
       MetaContext context2 = new MetaContext();
-      fory2.getSerializationContext().setMetaContext(context2);
+      fory2.setMetaContext(context2);
       Object o2 = fory2.deserialize(bytes);
       assertEquals(o2.getClass(), UnknownClass.UnknownStruct.class);
-      fory2.getSerializationContext().setMetaContext(context2);
+      fory2.setMetaContext(context2);
       byte[] bytes2 = fory2.serialize(o2);
       Fory fory3 =
           foryBuilder()
@@ -293,7 +293,7 @@ public class UnknownClassSerializersTest extends ForyTestBase {
               .withClassLoader(pojo.getClass().getClassLoader())
               .build();
       MetaContext context3 = new MetaContext();
-      fory3.getSerializationContext().setMetaContext(context3);
+      fory3.setMetaContext(context3);
       Object o3 = fory3.deserialize(bytes2);
       assertEquals(o3.getClass(), structClass);
       assertEquals(o3, pojo);
@@ -337,16 +337,16 @@ public class UnknownClassSerializersTest extends ForyTestBase {
               .build();
       for (int i = 0; i < 2; i++) {
         Object pojo = Struct.createPOJO(structClass);
-        fory.getSerializationContext().setMetaContext(context1);
+        fory.setMetaContext(context1);
         byte[] bytes = fory.serialize(pojo);
 
-        fory2.getSerializationContext().setMetaContext(context2);
+        fory2.setMetaContext(context2);
         Object o2 = fory2.deserialize(bytes);
         assertEquals(o2.getClass(), UnknownClass.UnknownStruct.class);
-        fory2.getSerializationContext().setMetaContext(context2);
+        fory2.setMetaContext(context2);
         byte[] bytes2 = fory2.serialize(o2);
 
-        fory3.getSerializationContext().setMetaContext(context3);
+        fory3.setMetaContext(context3);
         Object o3 = fory3.deserialize(bytes2);
         assertEquals(o3.getClass(), structClass);
         assertEquals(o3, pojo);

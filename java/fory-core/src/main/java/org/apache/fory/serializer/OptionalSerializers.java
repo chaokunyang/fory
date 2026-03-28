@@ -24,7 +24,9 @@ import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import org.apache.fory.config.Config;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 
 /**
@@ -39,24 +41,22 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Optional value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, Optional value) {
       Object nullable = value.isPresent() ? value.get() : null;
-      fory.writeRef(buffer, nullable);
+      writeContext.writeRef(nullable);
     }
 
     @Override
-    public Optional copy(Optional originOptional) {
+    public Optional copy(CopyContext copyContext, Optional originOptional) {
       if (originOptional.isPresent()) {
-        return Optional.ofNullable(fory.copyObject(originOptional.get()));
+        return Optional.ofNullable(copyContext.copyObject(originOptional.get()));
       }
       return originOptional;
     }
 
     @Override
-    public Optional read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      return Optional.ofNullable(fory.readRef(buffer));
+    public Optional read(ReadContext readContext) {
+      return Optional.ofNullable(readContext.readRef());
     }
   }
 
@@ -66,20 +66,18 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, OptionalInt value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, OptionalInt value) {
       boolean present = value.isPresent();
-      buffer.writeBoolean(present);
+      writeContext.getBuffer().writeBoolean(present);
       if (present) {
-        buffer.writeInt32(value.getAsInt());
+        writeContext.getBuffer().writeInt32(value.getAsInt());
       }
     }
 
     @Override
-    public OptionalInt read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (buffer.readBoolean()) {
-        return OptionalInt.of(buffer.readInt32());
+    public OptionalInt read(ReadContext readContext) {
+      if (readContext.getBuffer().readBoolean()) {
+        return OptionalInt.of(readContext.getBuffer().readInt32());
       } else {
         return OptionalInt.empty();
       }
@@ -92,20 +90,18 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, OptionalLong value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, OptionalLong value) {
       boolean present = value.isPresent();
-      buffer.writeBoolean(present);
+      writeContext.getBuffer().writeBoolean(present);
       if (present) {
-        buffer.writeInt64(value.getAsLong());
+        writeContext.getBuffer().writeInt64(value.getAsLong());
       }
     }
 
     @Override
-    public OptionalLong read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (buffer.readBoolean()) {
-        return OptionalLong.of(buffer.readInt64());
+    public OptionalLong read(ReadContext readContext) {
+      if (readContext.getBuffer().readBoolean()) {
+        return OptionalLong.of(readContext.getBuffer().readInt64());
       } else {
         return OptionalLong.empty();
       }
@@ -118,20 +114,18 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, OptionalDouble value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, OptionalDouble value) {
       boolean present = value.isPresent();
-      buffer.writeBoolean(present);
+      writeContext.getBuffer().writeBoolean(present);
       if (present) {
-        buffer.writeFloat64(value.getAsDouble());
+        writeContext.getBuffer().writeFloat64(value.getAsDouble());
       }
     }
 
     @Override
-    public OptionalDouble read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (buffer.readBoolean()) {
-        return OptionalDouble.of(buffer.readFloat64());
+    public OptionalDouble read(ReadContext readContext) {
+      if (readContext.getBuffer().readBoolean()) {
+        return OptionalDouble.of(readContext.getBuffer().readFloat64());
       } else {
         return OptionalDouble.empty();
       }

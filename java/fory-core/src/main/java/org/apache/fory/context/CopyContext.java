@@ -20,7 +20,6 @@
 package org.apache.fory.context;
 
 import java.util.Arrays;
-import java.util.function.Supplier;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -30,8 +29,6 @@ import org.apache.fory.collection.IdentityMap;
 
 @SuppressWarnings("unchecked")
 public final class CopyContext {
-  private static final ThreadLocal<CopyContext> CURRENT = new ThreadLocal<>();
-
   private final TypeResolver typeResolver;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
@@ -41,28 +38,6 @@ public final class CopyContext {
     this.typeResolver = typeResolver;
     this.copyRefTracking = copyRefTracking;
     originToCopyMap = new IdentityMap<>(2);
-  }
-
-  public static CopyContext current() {
-    CopyContext context = CURRENT.get();
-    if (context == null) {
-      throw new IllegalStateException("CopyContext is only available during copy operations");
-    }
-    return context;
-  }
-
-  public <T> T run(Supplier<T> action) {
-    CopyContext previous = CURRENT.get();
-    CURRENT.set(this);
-    try {
-      return action.get();
-    } finally {
-      if (previous == null) {
-        CURRENT.remove();
-      } else {
-        CURRENT.set(previous);
-      }
-    }
   }
 
   public void reset() {
@@ -182,11 +157,11 @@ public final class CopyContext {
         if (existing != null) {
           return existing;
         }
-        T copied = serializer.copy(obj);
+        T copied = serializer.copy(this, obj);
         originToCopyMap.put(obj, copied);
         return copied;
       }
-      return serializer.copy(obj);
+      return serializer.copy(this, obj);
     } finally {
       depth--;
     }

@@ -36,6 +36,7 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.config.LongEncoding;
+import org.apache.fory.context.MetaContext;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.test.bean.ArraysData;
 import org.apache.fory.type.Descriptor;
@@ -100,8 +101,8 @@ public class ArraySerializersTest extends ForyTestBase {
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     if (fory1.getConfig().isMetaShareEnabled()) {
-      fory1.getSerializationContext().setMetaContext(new org.apache.fory.resolver.MetaContext());
-      fory2.getSerializationContext().setMetaContext(new org.apache.fory.resolver.MetaContext());
+      fory1.setMetaContext(new MetaContext());
+      fory2.setMetaContext(new MetaContext());
     }
     registerTypes(fory1, fory2);
     serDeCheck(fory1, fory2, new Object[] {false, true});
@@ -166,8 +167,8 @@ public class ArraySerializersTest extends ForyTestBase {
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     if (fory1.getConfig().isMetaShareEnabled()) {
-      fory1.getSerializationContext().setMetaContext(new org.apache.fory.resolver.MetaContext());
-      fory2.getSerializationContext().setMetaContext(new org.apache.fory.resolver.MetaContext());
+      fory1.setMetaContext(new MetaContext());
+      fory2.setMetaContext(new MetaContext());
     }
     registerTypes(fory1, fory2);
     serDeCheck(fory1, fory2, new Object[][] {{false, true}, {false, true}});

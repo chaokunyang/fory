@@ -52,6 +52,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
 import org.apache.fory.collection.Float32List;
@@ -76,6 +77,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
+import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.DeferedLazySerializer;
 import org.apache.fory.serializer.DeferedLazySerializer.DeferredLazyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
@@ -129,7 +131,6 @@ public class XtypeResolver extends TypeResolver {
   private final Config config;
   private final Fory fory;
   private final TypeInfoHolder classInfoCache = new TypeInfoHolder(NIL_TYPE_INFO);
-  private final MetaStringResolver metaStringResolver;
 
   // Every deserialization for unregistered class will query it, performance is important.
   private final ObjectMap<TypeNameBytes, TypeInfo> compositeClassNameBytes2TypeInfo =
@@ -143,12 +144,27 @@ public class XtypeResolver extends TypeResolver {
   private final Generics generics;
 
   public XtypeResolver(Fory fory) {
-    super(fory);
+    super(
+        fory.getConfig(),
+        fory.getClassLoader(),
+        fory.getGenerics(),
+        fory.getStringSerializer(),
+        fory.getSharedRegistry(),
+        fory.getJITContext());
     this.config = fory.getConfig();
     this.fory = fory;
     shareMeta = fory.getConfig().isMetaShareEnabled();
     this.generics = fory.getGenerics();
-    this.metaStringResolver = fory.getMetaStringResolver();
+  }
+
+  @Override
+  protected Class<? extends Serializer> loadCodegenSerializerClass(Class<?> cls) {
+    return CodegenSerializer.loadCodegenSerializer(fory, cls);
+  }
+
+  @Override
+  protected Class<? extends Serializer> loadMetaSharedCodecClass(Class<?> cls, TypeDef typeDef) {
+    return CodecUtils.loadOrGenMetaSharedCodecClass(fory, cls, typeDef);
   }
 
   @Override
@@ -418,8 +434,8 @@ public class XtypeResolver extends TypeResolver {
       String typeName,
       int typeId,
       int userTypeId) {
-    MetaStringRef nsBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(namespace);
-    MetaStringRef classNameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(typeName);
+    MetaStringRef nsBytes = getOrCreatePackageMetaStringBytes(namespace);
+    MetaStringRef classNameBytes = getOrCreateTypeNameMetaStringBytes(typeName);
     return new TypeInfo(type, nsBytes, classNameBytes, false, serializer, typeId, userTypeId);
   }
 
@@ -493,7 +509,7 @@ public class XtypeResolver extends TypeResolver {
     if (type.isArray()) {
       Class<?> componentType = type.getComponentType();
       if (componentType.isPrimitive()) {
-        int elemTypeId = Types.getTypeId(fory, componentType);
+        int elemTypeId = Types.getTypeId(this, componentType);
         return Types.getPrimitiveArrayTypeId(elemTypeId);
       }
       return Types.LIST;
@@ -733,7 +749,7 @@ public class XtypeResolver extends TypeResolver {
       }
       typeId = Types.MAP;
     } else if (UnknownClass.class.isAssignableFrom(cls)) {
-      serializer = UnknownClassSerializers.getSerializer(fory, "Unknown", cls);
+      serializer = UnknownClassSerializers.getSerializer(this, "Unknown", cls);
       if (cls.isEnum()) {
         typeId = Types.ENUM;
       } else {
@@ -1068,7 +1084,7 @@ public class XtypeResolver extends TypeResolver {
   protected TypeDef buildTypeDef(TypeInfo typeInfo) {
     TypeDef typeDef =
         cacheTypeDef(
-            typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls)));
+            typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(this, cls)));
     typeInfo.typeDef = typeDef;
     return typeDef;
   }
@@ -1215,7 +1231,7 @@ public class XtypeResolver extends TypeResolver {
               NOT_SUPPORT_XLANG,
               INVALID_USER_TYPE_ID);
       if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(type))) {
-        typeInfo.serializer = UnknownClassSerializers.getSerializer(fory, qualifiedName, type);
+        typeInfo.serializer = UnknownClassSerializers.getSerializer(this, qualifiedName, type);
       }
     }
     compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
@@ -1244,7 +1260,7 @@ public class XtypeResolver extends TypeResolver {
   private byte getInternalTypeId(Descriptor descriptor) {
     Class<?> cls = descriptor.getRawType();
     if (cls.isArray() && cls.getComponentType().isPrimitive()) {
-      return (byte) Types.getDescriptorTypeId(fory, descriptor);
+      return (byte) Types.getDescriptorTypeId(this, descriptor);
     }
     return getInternalTypeId(cls);
   }

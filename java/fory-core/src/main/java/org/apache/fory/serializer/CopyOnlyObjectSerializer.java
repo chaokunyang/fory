@@ -20,9 +20,10 @@
 package org.apache.fory.serializer;
 
 import org.apache.fory.Fory;
-import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.InsecureException;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.TypeResolver;
 
 /**
  * Serializer used only for copy after registration has been frozen.
@@ -36,14 +37,12 @@ public final class CopyOnlyObjectSerializer<T> extends AbstractObjectSerializer<
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, T value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+  public void write(WriteContext writeContext, T value) {
     throw insecureException();
   }
 
   @Override
-  public T read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+  public T read(ReadContext readContext) {
     throw insecureException();
   }
 

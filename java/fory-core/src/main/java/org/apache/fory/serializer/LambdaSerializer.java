@@ -24,7 +24,9 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.Method;
 import org.apache.fory.collection.ClassValueCache;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.SerializableFunction;
@@ -74,24 +76,21 @@ public class LambdaSerializer extends Serializer {
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    serializedLambdaSerializer.write(org.apache.fory.context.WriteContext.current(), extractSerializedLambda(value, "serialize"));
+  public void write(WriteContext writeContext, Object value) {
+    serializedLambdaSerializer.write(writeContext, extractSerializedLambda(value, "serialize"));
   }
 
   @Override
-  public Object copy(Object value) {
+  public Object copy(CopyContext copyContext, Object value) {
     SerializedLambda serializedLambda = extractSerializedLambda(value, "copy");
     return SerializedLambdaSerializer.readResolve(
-        serializedLambdaSerializer.copy(serializedLambda));
+        serializedLambdaSerializer.copy(copyContext, serializedLambda));
   }
 
   @Override
-  public Object read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+  public Object read(ReadContext readContext) {
     try {
-      return SerializedLambdaSerializer.readResolve(
-          serializedLambdaSerializer.readUnresolved(buffer));
+      return SerializedLambdaSerializer.readResolve(serializedLambdaSerializer.readUnresolved(readContext));
     } catch (Throwable e) {
       throw new RuntimeException("Can't deserialize lambda", e);
     }

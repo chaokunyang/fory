@@ -25,6 +25,9 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Primitives;
 import java.lang.reflect.Method;
@@ -51,8 +54,6 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -339,10 +340,10 @@ public class ClassResolverTest extends ForyTestBase {
     TypeDef canonicalTypeDef = resolver1.getTypeDef(BeanB.class, true);
     MemoryBuffer buffer1 = MemoryBuffer.newHeapBuffer(256);
     canonicalTypeDef.writeTypeDef(buffer1);
-    TypeDef typeDef1 = TypeDef.readTypeDef(fory1, buffer1);
+    TypeDef typeDef1 = TypeDef.readTypeDef(fory1.getTypeResolver(), buffer1);
     MemoryBuffer buffer2 = MemoryBuffer.newHeapBuffer(256);
     canonicalTypeDef.writeTypeDef(buffer2);
-    TypeDef typeDef2 = TypeDef.readTypeDef(fory2, buffer2);
+    TypeDef typeDef2 = TypeDef.readTypeDef(fory2.getTypeResolver(), buffer2);
 
     assertNotSame(typeDef1, typeDef2);
     assertEquals(typeDef1.getId(), typeDef2.getId());
@@ -484,9 +485,14 @@ public class ClassResolverTest extends ForyTestBase {
   public void testWriteClassNamesInSamePackage() {
     Fory fory = Fory.builder().requireClassRegistration(false).build();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
-    fory.writeRef(buffer, C1.class);
-    fory.writeRef(buffer, C2.class);
-    fory.writeRef(buffer, C3.class);
+    withWriteContext(
+        fory,
+        buffer,
+        context -> {
+          context.writeRef(C1.class);
+          context.writeRef(C2.class);
+          context.writeRef(C3.class);
+        });
     int len1 = C1.class.getName().getBytes(StandardCharsets.UTF_8).length;
     LOG.info("SomeClass1 {}", len1);
     LOG.info("buffer.writerIndex {}", buffer.writerIndex());
@@ -622,15 +628,13 @@ public class ClassResolverTest extends ForyTestBase {
 
     @Override
     public void write(WriteContext writeContext, Foo value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt32(value.f1);
+      writeContext.getBuffer().writeInt32(value.f1);
     }
 
     @Override
     public Foo read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       final Foo foo = new Foo();
-      foo.f1 = buffer.readInt32();
+      foo.f1 = readContext.getBuffer().readInt32();
       return foo;
     }
   }
@@ -678,15 +682,13 @@ public class ClassResolverTest extends ForyTestBase {
 
     @Override
     public void write(WriteContext writeContext, ITest value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt32(value.getF1());
+      writeContext.getBuffer().writeInt32(value.getF1());
     }
 
     @Override
     public ITest read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       final ITest iTest = new ImplTest();
-      iTest.setF1(buffer.readInt32());
+      iTest.setF1(readContext.getBuffer().readInt32());
       return iTest;
     }
   }
@@ -746,16 +748,14 @@ public class ClassResolverTest extends ForyTestBase {
 
     @Override
     public void write(WriteContext writeContext, AbsTest value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeInt32(value.getF1());
+      writeContext.getBuffer().writeInt32(value.getF1());
     }
 
     @Override
     public AbsTest read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       // TODO maybe new SubAbsTest or Sub2AbsTest
       final AbsTest absTest = new SubAbsTest();
-      absTest.setF1(buffer.readInt32());
+      absTest.setF1(readContext.getBuffer().readInt32());
       return absTest;
     }
   }

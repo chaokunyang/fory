@@ -20,6 +20,8 @@
 package org.apache.fory.serializer;
 
 import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 
@@ -41,13 +43,13 @@ public class FinalFieldReplaceResolveSerializer extends ReplaceResolveSerializer
   @Override
   protected void writeObject(
       MemoryBuffer buffer, Object value, MethodInfoCache jdkMethodInfoCache) {
-    jdkMethodInfoCache.objectSerializer.write(org.apache.fory.context.WriteContext.current(), value);
+    jdkMethodInfoCache.objectSerializer.write(WriteContext.current(), value);
   }
 
   @Override
   protected Object readObject(MemoryBuffer buffer) {
     MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(type);
-    Object o = jdkMethodInfoCache.objectSerializer.read(org.apache.fory.context.ReadContext.current());
+    Object o = jdkMethodInfoCache.objectSerializer.read(ReadContext.current());
     ReplaceResolveInfo replaceResolveInfo = jdkMethodInfoCache.info;
     if (replaceResolveInfo.readResolveMethod == null) {
       return o;

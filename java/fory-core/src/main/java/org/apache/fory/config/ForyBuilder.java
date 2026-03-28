@@ -442,7 +442,7 @@ public final class ForyBuilder {
     return this;
   }
 
-  /** Set loadFactor of MapRefResolver writtenObjects. Default value is 0.51 */
+  /** Set loadFactor of the reference writer identity map. Default value is 0.51 */
   public ForyBuilder withMapRefLoadFactor(float loadFactor) {
     Preconditions.checkArgument(
         loadFactor > 0 && loadFactor < 1, "loadFactor must > 0 and < 1 but got %s", loadFactor);

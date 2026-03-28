@@ -93,7 +93,6 @@ public class TypeInfo {
     this.cls = cls;
     this.serializer = serializer;
     needToWriteTypeDef = serializer != null && classResolver.needToWriteTypeDef(serializer);
-    MetaStringResolver metaStringResolver = classResolver.getMetaStringResolver();
     // When typeId indicates a named type, we need to create classname bytes for serialization.
     // - NAMED_STRUCT: unregistered struct classes
     // - NAMED_COMPATIBLE_STRUCT: unregistered classes in compatible mode
@@ -107,8 +106,8 @@ public class TypeInfo {
             || typeId == ClassResolver.REPLACE_STUB_ID;
     if (cls != null && isNamedType) {
       Tuple2<String, String> tuple2 = Encoders.encodePkgAndClass(cls);
-      this.namespaceBytes = metaStringResolver.getOrCreatePackageMetaStringBytes(tuple2.f0);
-      this.typeNameBytes = metaStringResolver.getOrCreateTypeNameMetaStringBytes(tuple2.f1);
+      this.namespaceBytes = classResolver.getOrCreatePackageMetaStringBytes(tuple2.f0);
+      this.typeNameBytes = classResolver.getOrCreateTypeNameMetaStringBytes(tuple2.f1);
     } else {
       this.namespaceBytes = null;
       this.typeNameBytes = null;

@@ -68,15 +68,13 @@ public class RegisterTest extends ForyTestBase {
 
     @Override
     public void write(WriteContext writeContext, MyExt value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeVarInt32(value.id);
+      writeContext.getBuffer().writeVarInt32(value.id);
     }
 
     @Override
     public MyExt read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       MyExt obj = new MyExt();
-      obj.id = buffer.readVarInt32();
+      obj.id = readContext.getBuffer().readVarInt32();
       return obj;
     }
   }

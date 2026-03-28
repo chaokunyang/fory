@@ -21,6 +21,9 @@ package org.apache.fory.serializer;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
@@ -40,13 +43,12 @@ public class BufferSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, ByteBuffer value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      fory.writeBufferObject(buffer, new BufferObject.ByteBufferBufferObject(value));
+    public void write(WriteContext writeContext, ByteBuffer value) {
+      writeContext.writeBufferObject(new BufferObject.ByteBufferBufferObject(value));
     }
 
     @Override
-    public ByteBuffer copy(ByteBuffer value) {
+    public ByteBuffer copy(CopyContext copyContext, ByteBuffer value) {
       ByteBuffer dst = ByteBuffer.allocate(value.remaining());
       dst.put(value.duplicate());
       ByteBufferUtil.rewind(dst);
@@ -54,9 +56,8 @@ public class BufferSerializers {
     }
 
     @Override
-    public ByteBuffer read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      MemoryBuffer newBuffer = fory.readBufferObject(buffer);
+    public ByteBuffer read(ReadContext readContext) {
+      MemoryBuffer newBuffer = readContext.readBufferObject();
       int readerIndex = newBuffer.readerIndex();
       int size = newBuffer.remaining();
       ByteBuffer originalBuffer = newBuffer.sliceAsByteBuffer(readerIndex, size - 1);

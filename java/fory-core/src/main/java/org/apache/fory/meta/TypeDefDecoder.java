@@ -91,7 +91,7 @@ class TypeDefDecoder {
       // Compute and print diff with local TypeDef
       Class<?> cls = classSpec.type;
       if (cls != null && cls != UnknownClass.UnknownStruct.class) {
-        TypeDef localDef = TypeDef.buildTypeDef(resolver.getFory(), cls);
+        TypeDef localDef = TypeDef.buildTypeDef(resolver, cls);
         String diff = typeDef.computeDiff(localDef);
         if (diff != null) {
           LOG.info("[Java TypeDef DIFF] " + classSpec.entireClassName + ":\n" + diff);

@@ -36,6 +36,9 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -88,26 +91,24 @@ public class SynchronizedSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Collection object) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, Collection object) {
       // the ordinal could be replaced by s.th. else (e.g. a explicitly managed "id")
       Object unwrapped = Platform.getObject(object, offset);
       synchronized (object) {
-        fory.writeRef(buffer, unwrapped);
+        writeContext.writeRef(unwrapped);
       }
     }
 
     @Override
-    public Collection read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      final Object sourceCollection = fory.readRef(buffer);
+    public Collection read(ReadContext readContext) {
+      final Object sourceCollection = readContext.readRef();
       return (Collection) factory.apply(sourceCollection);
     }
 
     @Override
-    public Collection copy(Collection object) {
+    public Collection copy(CopyContext copyContext, Collection object) {
       final Object collection = Platform.getObject(object, offset);
-      return (Collection) factory.apply(fory.copyObject(collection));
+      return (Collection) factory.apply(copyContext.copyObject(collection));
     }
   }
 
@@ -122,25 +123,23 @@ public class SynchronizedSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Map object) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, Map object) {
       // the ordinal could be replaced by s.th. else (e.g. a explicitly managed "id")
       Object unwrapped = Platform.getObject(object, offset);
       synchronized (object) {
-        fory.writeRef(buffer, unwrapped);
+        writeContext.writeRef(unwrapped);
       }
     }
 
     @Override
-    public Map copy(Map originMap) {
+    public Map copy(CopyContext copyContext, Map originMap) {
       final Object unwrappedMap = Platform.getObject(originMap, offset);
-      return (Map) factory.apply(fory.copyObject(unwrappedMap));
+      return (Map) factory.apply(copyContext.copyObject(unwrappedMap));
     }
 
     @Override
-    public Map read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      final Object sourceCollection = fory.readRef(buffer);
+    public Map read(ReadContext readContext) {
+      final Object sourceCollection = readContext.readRef();
       return (Map) factory.apply(sourceCollection);
     }
   }

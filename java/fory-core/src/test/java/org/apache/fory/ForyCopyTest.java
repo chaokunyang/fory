@@ -22,6 +22,10 @@ package org.apache.fory;
 import static org.apache.fory.serializer.collection.MapSerializersTest.createMapFieldsObject;
 import static org.testng.Assert.assertEquals;
 
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+
 import com.google.common.collect.ImmutableList;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -79,8 +83,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.apache.fory.collection.LazyMap;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
@@ -347,7 +349,8 @@ public class ForyCopyTest extends ForyTestBase {
     }
 
     @Override
-    public ExplodingCopyBean copy(ExplodingCopyBean value) {
+    public ExplodingCopyBean copy(
+        CopyContext copyContext, ExplodingCopyBean value) {
       throw new IllegalStateException("copy failed");
     }
   }

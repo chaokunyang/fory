@@ -24,10 +24,12 @@ import java.util.Arrays;
 import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.LongEncoding;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
@@ -45,6 +47,7 @@ public class ArraySerializers {
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static final class ObjectArraySerializer<T> extends Serializer<T[]> {
     private final Class<T> innerType;
+    private final TypeResolver typeResolver;
     private final Serializer componentTypeSerializer;
     private final TypeInfoHolder classInfoHolder;
     private final int[] stubDims;
@@ -52,6 +55,7 @@ public class ArraySerializers {
 
     public ObjectArraySerializer(TypeResolver typeResolver, Class<T[]> cls) {
       super(typeResolver, cls);
+      this.typeResolver = typeResolver;
       TypeResolver resolver = typeResolver;
       if (resolver instanceof ClassResolver) {
         resolver.setSerializer(cls, this);
@@ -71,7 +75,7 @@ public class ArraySerializers {
       Class<?> componentType = cls.getComponentType();
       componentGenericType = typeResolver.buildGenericType(componentType);
       if (typeResolver.isMonomorphic(componentType)) {
-        if (fory.isCrossLanguage()) {
+        if (config.isXlang()) {
           this.componentTypeSerializer = null;
         } else {
           this.componentTypeSerializer = typeResolver.getSerializer(componentType);
@@ -85,114 +89,110 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, T[] arr) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (!isJava) {
+    public void write(WriteContext writeContext, T[] arr) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (config.isXlang()) {
         int len = arr.length;
         buffer.writeVarUint32Small7(len);
         // TODO(chaokunyang) use generics by creating component serializers to multi-dimension
         // array.
         for (T t : arr) {
-          fory.writeRef(buffer, t);
+          writeContext.writeRef(t);
         }
         return;
       }
       int len = arr.length;
-      RefResolver refResolver = fory.getRefResolver();
       Serializer componentSerializer = this.componentTypeSerializer;
       int header = componentSerializer != null ? 0b1 : 0b0;
       buffer.writeVarUint32Small7(len << 1 | header);
       if (componentSerializer != null) {
         for (T t : arr) {
-          if (!refResolver.writeRefOrNull(buffer, t)) {
-            componentSerializer.write(org.apache.fory.context.WriteContext.current(), t);
+          if (!writeContext.writeRefOrNull(t)) {
+            componentSerializer.write(writeContext, t);
           }
         }
       } else {
-        Fory fory = this.fory.getFory();
-        ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
+        ClassResolver classResolver = (ClassResolver) typeResolver;
         TypeInfo typeInfo = null;
         Class<?> elemClass = null;
         for (T t : arr) {
-          if (!refResolver.writeRefOrNull(buffer, t)) {
+          if (!writeContext.writeRefOrNull(t)) {
             Class<?> clz = t.getClass();
             if (clz != elemClass) {
               elemClass = clz;
               typeInfo = classResolver.getTypeInfo(clz);
             }
-            fory.writeNonRef(buffer, t, typeInfo);
+            writeContext.writeNonRef(t, typeInfo);
           }
         }
       }
     }
 
     @Override
-    public T[] copy(T[] originArray) {
+    public T[] copy(CopyContext copyContext, T[] originArray) {
       int length = originArray.length;
       Object[] newArray = newArray(length);
-      fory.reference(originArray, newArray);
+      copyContext.reference(originArray, newArray);
       Serializer componentSerializer = this.componentTypeSerializer;
       if (componentSerializer != null) {
         if (componentSerializer.isImmutable()) {
           System.arraycopy(originArray, 0, newArray, 0, length);
         } else {
           for (int i = 0; i < length; i++) {
-            newArray[i] = componentSerializer.copy(originArray[i]);
+            newArray[i] = componentSerializer.copy(copyContext, originArray[i]);
           }
         }
       } else {
         for (int i = 0; i < length; i++) {
-          newArray[i] = fory.copyObject(originArray[i]);
+          newArray[i] = copyContext.copyObject(originArray[i]);
         }
       }
       return (T[]) newArray;
     }
 
     @Override
-    public T[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (!isJava) {
+    public T[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (config.isXlang()) {
         int numElements = buffer.readVarUint32Small7();
         Object[] value = newArray(numElements);
-        fory.getGenerics().pushGenericType(componentGenericType);
+        readContext.getGenerics().pushGenericType(componentGenericType);
         for (int i = 0; i < numElements; i++) {
-          Object x = fory.readRef(buffer);
+          Object x = readContext.readRef();
           value[i] = x;
         }
-        fory.getGenerics().popGenericType();
+        readContext.getGenerics().popGenericType();
         return (T[]) value;
       }
       int numElements = buffer.readVarUint32Small7();
       boolean isFinal = (numElements & 0b1) != 0;
       numElements >>>= 1;
       Object[] value = newArray(numElements);
-      RefResolver refResolver = fory.getRefResolver();
-      refResolver.reference(value);
+      readContext.reference(value);
       if (isFinal) {
         final Serializer componentTypeSerializer = this.componentTypeSerializer;
         for (int i = 0; i < numElements; i++) {
           Object elem;
-          int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+          int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-            elem = componentTypeSerializer.read(org.apache.fory.context.ReadContext.current());
-            refResolver.setReadObject(nextReadRefId, elem);
+            elem = componentTypeSerializer.read(readContext);
+            readContext.setReadObject(nextReadRefId, elem);
           } else {
-            elem = refResolver.getReadObject();
+            elem = readContext.getReadObject();
           }
           value[i] = elem;
         }
       } else {
-        Fory fory = this.fory.getFory();
         TypeInfoHolder classInfoHolder = this.classInfoHolder;
         for (int i = 0; i < numElements; i++) {
-          int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+          int nextReadRefId = readContext.tryPreserveRefId();
           Object o;
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             // ref value or not-null value
-            o = fory.readNonRef(buffer, classInfoHolder);
-            refResolver.setReadObject(nextReadRefId, o);
+            o = readContext.readNonRef(classInfoHolder);
+            readContext.setReadObject(nextReadRefId, o);
           } else {
-            o = refResolver.getReadObject();
+            o = readContext.getReadObject();
           }
           value[i] = o;
         }
@@ -252,9 +252,11 @@ public class ArraySerializers {
   // virtual method call cost.
   public abstract static class PrimitiveArraySerializer<T>
       extends Serializers.CrossLanguageCompatibleSerializer<T> {
+    protected final TypeResolver typeResolver;
 
     public PrimitiveArraySerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver.getConfig(), cls);
+      this.typeResolver = typeResolver;
     }
   }
 
@@ -265,28 +267,27 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, boolean[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (fory.getBufferCallback() == null) {
+    public void write(WriteContext writeContext, boolean[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 1);
         buffer.writePrimitiveArrayWithSize(value, Platform.BOOLEAN_ARRAY_OFFSET, size);
       } else {
-        fory.writeBufferObject(
-            buffer,
+        writeContext.writeBufferObject(
             new PrimitiveArrayBufferObject(value, Platform.BOOLEAN_ARRAY_OFFSET, 1, value.length));
       }
     }
 
     @Override
-    public boolean[] copy(boolean[] originArray) {
+    public boolean[] copy(CopyContext copyContext, boolean[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public boolean[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (fory.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = fory.readBufferObject(buffer);
+    public boolean[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (readContext.isPeerOutOfBandEnabled()) {
+        MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
         int numElements = size;
         boolean[] values = new boolean[numElements];
@@ -309,28 +310,27 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, byte[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (fory.getBufferCallback() == null) {
+    public void write(WriteContext writeContext, byte[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 1);
         buffer.writePrimitiveArrayWithSize(value, Platform.BYTE_ARRAY_OFFSET, size);
       } else {
-        fory.writeBufferObject(
-            buffer,
+        writeContext.writeBufferObject(
             new PrimitiveArrayBufferObject(value, Platform.BYTE_ARRAY_OFFSET, 1, value.length));
       }
     }
 
     @Override
-    public byte[] copy(byte[] originArray) {
+    public byte[] copy(CopyContext copyContext, byte[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public byte[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (fory.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = fory.readBufferObject(buffer);
+    public byte[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (readContext.isPeerOutOfBandEnabled()) {
+        MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
         byte[] values = new byte[size];
         buf.copyToUnsafe(0, values, Platform.BYTE_ARRAY_OFFSET, size);
@@ -351,12 +351,12 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, char[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (!isJava) {
+    public void write(WriteContext writeContext, char[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (config.isXlang()) {
         throw new UnsupportedOperationException();
       }
-      if (fory.getBufferCallback() == null) {
+      if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 2);
         if (Platform.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, Platform.CHAR_ARRAY_OFFSET, size);
@@ -364,8 +364,7 @@ public class ArraySerializers {
           writeCharBySwapEndian(buffer, value);
         }
       } else {
-        fory.writeBufferObject(
-            buffer,
+        writeContext.writeBufferObject(
             new PrimitiveArrayBufferObject(value, Platform.CHAR_ARRAY_OFFSET, 2, value.length));
       }
     }
@@ -382,18 +381,18 @@ public class ArraySerializers {
     }
 
     @Override
-    public char[] copy(char[] originArray) {
+    public char[] copy(CopyContext copyContext, char[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public char[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (!isJava) {
+    public char[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (config.isXlang()) {
         throw new UnsupportedOperationException();
       }
-      if (fory.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = fory.readBufferObject(buffer);
+      if (readContext.isPeerOutOfBandEnabled()) {
+        MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
         int numElements = size / 2;
         char[] values = new char[numElements];
@@ -434,9 +433,9 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, short[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (fory.getBufferCallback() == null) {
+    public void write(WriteContext writeContext, short[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 2);
         if (Platform.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, Platform.SHORT_ARRAY_OFFSET, size);
@@ -444,8 +443,7 @@ public class ArraySerializers {
           writeInt16BySwapEndian(buffer, value);
         }
       } else {
-        fory.writeBufferObject(
-            buffer,
+        writeContext.writeBufferObject(
             new PrimitiveArrayBufferObject(value, Platform.SHORT_ARRAY_OFFSET, 2, value.length));
       }
     }
@@ -462,15 +460,15 @@ public class ArraySerializers {
     }
 
     @Override
-    public short[] copy(short[] originArray) {
+    public short[] copy(CopyContext copyContext, short[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public short[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (fory.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = fory.readBufferObject(buffer);
+    public short[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (readContext.isPeerOutOfBandEnabled()) {
+        MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
         int numElements = size / 2;
         short[] values = new short[numElements];
@@ -511,10 +509,10 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, int[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (fory.getBufferCallback() == null) {
-        if (fory.getConfig().compressIntArray()) {
+    public void write(WriteContext writeContext, int[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (writeContext.getBufferCallback() == null) {
+        if (config.compressIntArray()) {
           writeInt32Compressed(buffer, value);
           return;
         }
@@ -525,8 +523,7 @@ public class ArraySerializers {
           writeInt32BySwapEndian(buffer, value);
         }
       } else {
-        fory.writeBufferObject(
-            buffer,
+        writeContext.writeBufferObject(
             new PrimitiveArrayBufferObject(value, Platform.INT_ARRAY_OFFSET, 4, value.length));
       }
     }
@@ -543,15 +540,15 @@ public class ArraySerializers {
     }
 
     @Override
-    public int[] copy(int[] originArray) {
+    public int[] copy(CopyContext copyContext, int[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public int[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (fory.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = fory.readBufferObject(buffer);
+    public int[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (readContext.isPeerOutOfBandEnabled()) {
+        MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
         int numElements = size / 4;
         int[] values = new int[numElements];
@@ -564,7 +561,7 @@ public class ArraySerializers {
         }
         return values;
       }
-      if (fory.getConfig().compressIntArray()) {
+      if (config.compressIntArray()) {
         return readInt32Compressed(buffer);
       }
       int size = buffer.readVarUint32Small7();
@@ -619,11 +616,11 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, long[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (fory.getBufferCallback() == null) {
+    public void write(WriteContext writeContext, long[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (writeContext.getBufferCallback() == null) {
         if (compressLongArray) {
-          writeInt64Compressed(buffer, value, fory.getConfig().longEncoding());
+          writeInt64Compressed(buffer, value, config.longEncoding());
           return;
         }
         int size = Math.multiplyExact(value.length, 8);
@@ -633,8 +630,7 @@ public class ArraySerializers {
           writeInt64BySwapEndian(buffer, value);
         }
       } else {
-        fory.writeBufferObject(
-            buffer,
+        writeContext.writeBufferObject(
             new PrimitiveArrayBufferObject(value, Platform.LONG_ARRAY_OFFSET, 8, value.length));
       }
     }
@@ -651,15 +647,15 @@ public class ArraySerializers {
     }
 
     @Override
-    public long[] copy(long[] originArray) {
+    public long[] copy(CopyContext copyContext, long[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public long[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (fory.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = fory.readBufferObject(buffer);
+    public long[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (readContext.isPeerOutOfBandEnabled()) {
+        MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
         int numElements = size / 8;
         long[] values = new long[numElements];
@@ -673,7 +669,7 @@ public class ArraySerializers {
         return values;
       }
       if (compressLongArray) {
-        return readInt64Compressed(buffer, fory.getConfig().longEncoding());
+        return readInt64Compressed(buffer, config.longEncoding());
       }
       int size = buffer.readVarUint32Small7();
       int numElements = size / 8;
@@ -738,9 +734,9 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, float[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (fory.getBufferCallback() == null) {
+    public void write(WriteContext writeContext, float[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 4);
         if (Platform.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, Platform.FLOAT_ARRAY_OFFSET, size);
@@ -748,8 +744,7 @@ public class ArraySerializers {
           writeFloat32BySwapEndian(buffer, value);
         }
       } else {
-        fory.writeBufferObject(
-            buffer,
+        writeContext.writeBufferObject(
             new PrimitiveArrayBufferObject(value, Platform.FLOAT_ARRAY_OFFSET, 4, value.length));
       }
     }
@@ -766,15 +761,15 @@ public class ArraySerializers {
     }
 
     @Override
-    public float[] copy(float[] originArray) {
+    public float[] copy(CopyContext copyContext, float[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public float[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (fory.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = fory.readBufferObject(buffer);
+    public float[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (readContext.isPeerOutOfBandEnabled()) {
+        MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
         int numElements = size / 4;
         float[] values = new float[numElements];
@@ -815,9 +810,9 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, double[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (fory.getBufferCallback() == null) {
+    public void write(WriteContext writeContext, double[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 8);
         if (Platform.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, Platform.DOUBLE_ARRAY_OFFSET, size);
@@ -825,8 +820,7 @@ public class ArraySerializers {
           writeFloat64BySwapEndian(buffer, value);
         }
       } else {
-        fory.writeBufferObject(
-            buffer,
+        writeContext.writeBufferObject(
             new PrimitiveArrayBufferObject(value, Platform.DOUBLE_ARRAY_OFFSET, 8, value.length));
       }
     }
@@ -843,15 +837,15 @@ public class ArraySerializers {
     }
 
     @Override
-    public double[] copy(double[] originArray) {
+    public double[] copy(CopyContext copyContext, double[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public double[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (fory.isPeerOutOfBandEnabled()) {
-        MemoryBuffer buf = fory.readBufferObject(buffer);
+    public double[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (readContext.isPeerOutOfBandEnabled()) {
+        MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
         int numElements = size / 8;
         double[] values = new double[numElements];
@@ -891,7 +885,7 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Float16[] value) {
+    public void write(WriteContext writeContext, Float16[] value) {
     MemoryBuffer buffer = writeContext.getBuffer();
       int length = value.length;
       for (int i = 0; i < length; i++) {
@@ -922,12 +916,12 @@ public class ArraySerializers {
     }
 
     @Override
-    public Float16[] copy(Float16[] originArray) {
+    public Float16[] copy(CopyContext copyContext, Float16[] originArray) {
       return Arrays.copyOf(originArray, originArray.length);
     }
 
     @Override
-    public Float16[] read(org.apache.fory.context.ReadContext readContext) {
+    public Float16[] read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       int size = buffer.readVarUint32Small7();
       int numElements = size / 2;
@@ -961,9 +955,9 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, String[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-      if (!isJava) {
+    public void write(WriteContext writeContext, String[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      if (config.isXlang()) {
         int len = value.length;
         buffer.writeVarUint32Small7(len);
         for (String elem : value) {
@@ -989,7 +983,7 @@ public class ArraySerializers {
       StringSerializer stringSerializer = this.stringSerializer;
       if ((flags & CollectionFlags.HAS_NULL) != CollectionFlags.HAS_NULL) {
         for (String elem : value) {
-          stringSerializer.write(org.apache.fory.context.WriteContext.current(), elem);
+          stringSerializer.write(WriteContext.current(), elem);
         }
       } else {
         for (String elem : value) {
@@ -997,23 +991,23 @@ public class ArraySerializers {
             buffer.writeByte(Fory.NULL_FLAG);
           } else {
             buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-            stringSerializer.write(org.apache.fory.context.WriteContext.current(), elem);
+            stringSerializer.write(WriteContext.current(), elem);
           }
         }
       }
     }
 
     @Override
-    public String[] copy(String[] originArray) {
+    public String[] copy(CopyContext copyContext, String[] originArray) {
       String[] newArray = new String[originArray.length];
       System.arraycopy(originArray, 0, newArray, 0, originArray.length);
       return newArray;
     }
 
     @Override
-    public String[] read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      if (!isJava) {
+    public String[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      if (config.isXlang()) {
         int numElements = buffer.readVarUint32Small7();
         String[] value = new String[numElements];
         for (int i = 0; i < numElements; i++) {
@@ -1110,13 +1104,13 @@ public class ArraySerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    public void write(WriteContext writeContext, Object value) {
     MemoryBuffer buffer = writeContext.getBuffer();
       throw new UnsupportedOperationException();
     }
 
     @Override
-    public Object[] read(org.apache.fory.context.ReadContext readContext) {
+    public Object[] read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       switch (dims) {
         case 1:
@@ -1137,25 +1131,25 @@ public class ArraySerializers {
       int numElements = buffer.readVarUint32Small7();
       boolean isFinal = (numElements & 0b1) != 0;
       numElements >>>= 1;
-      RefResolver refResolver = fory.getRefResolver();
+      ReadContext readContext = ReadContext.current();
       Object[] value = new Object[numElements];
-      refResolver.reference(value);
+      readContext.reference(value);
 
       if (isFinal) {
         for (int i = 0; i < numElements; i++) {
           Object elem;
-          int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+          int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             elem = readInnerElement(buffer);
-            refResolver.setReadObject(nextReadRefId, elem);
+            readContext.setReadObject(nextReadRefId, elem);
           } else {
-            elem = refResolver.getReadObject();
+            elem = readContext.getReadObject();
           }
           value[i] = elem;
         }
       } else {
         for (int i = 0; i < numElements; i++) {
-          value[i] = fory.readRef(buffer);
+          value[i] = readContext.readRef();
         }
       }
       return value;
@@ -1165,24 +1159,24 @@ public class ArraySerializers {
       int numElements = buffer.readVarUint32Small7();
       boolean isFinal = (numElements & 0b1) != 0;
       numElements >>>= 1;
-      RefResolver refResolver = fory.getRefResolver();
+      ReadContext readContext = ReadContext.current();
       Object[][] value = new Object[numElements][];
-      refResolver.reference(value);
+      readContext.reference(value);
       if (isFinal) {
         for (int i = 0; i < numElements; i++) {
           Object[] elem;
-          int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+          int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             elem = read1DArray(buffer);
-            refResolver.setReadObject(nextReadRefId, elem);
+            readContext.setReadObject(nextReadRefId, elem);
           } else {
-            elem = (Object[]) refResolver.getReadObject();
+            elem = (Object[]) readContext.getReadObject();
           }
           value[i] = elem;
         }
       } else {
         for (int i = 0; i < numElements; i++) {
-          value[i] = (Object[]) fory.readRef(buffer);
+          value[i] = (Object[]) readContext.readRef();
         }
       }
       return value;
@@ -1192,24 +1186,24 @@ public class ArraySerializers {
       int numElements = buffer.readVarUint32Small7();
       boolean isFinal = (numElements & 0b1) != 0;
       numElements >>>= 1;
-      RefResolver refResolver = fory.getRefResolver();
+      ReadContext readContext = ReadContext.current();
       Object[][][] value = new Object[numElements][][];
-      refResolver.reference(value);
+      readContext.reference(value);
       if (isFinal) {
         for (int i = 0; i < numElements; i++) {
           Object[][] elem;
-          int nextReadRefId = refResolver.tryPreserveRefId(buffer);
+          int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             elem = read2DArray(buffer);
-            refResolver.setReadObject(nextReadRefId, elem);
+            readContext.setReadObject(nextReadRefId, elem);
           } else {
-            elem = (Object[][]) refResolver.getReadObject();
+            elem = (Object[][]) readContext.getReadObject();
           }
           value[i] = elem;
         }
       } else {
         for (int i = 0; i < numElements; i++) {
-          value[i] = (Object[][]) fory.readRef(buffer);
+          value[i] = (Object[][]) readContext.readRef();
         }
       }
       return value;
@@ -1244,7 +1238,7 @@ public class ArraySerializers {
         throw new IllegalStateException(
             String.format("Class %s should serialize elements as non-morphic", className));
       }
-      return componentSerializer.read(org.apache.fory.context.ReadContext.current());
+      return componentSerializer.read(ReadContext.current());
     }
   }
 }

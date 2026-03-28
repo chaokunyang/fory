@@ -17,19 +17,18 @@
  * under the License.
  */
 
-package org.apache.fory.resolver;
+package org.apache.fory.context;
 
-import org.apache.fory.collection.IdentityObjectIntMap;
-import org.apache.fory.collection.ObjectArray;
+import org.apache.fory.memory.MemoryBuffer;
 
-/**
- * Context for sharing class meta across multiple serialization. Class name, field name and field
- * type will be shared between different serialization.
- */
-public class MetaContext {
-  /** Classes which has sent definitions to peer. */
-  public final IdentityObjectIntMap<Class<?>> classMap = new IdentityObjectIntMap<>(1, 0.5f);
+public interface RefWriter {
+  boolean writeRefOrNull(MemoryBuffer buffer, Object obj);
 
-  /** TypeInfos read from peer for reference lookup during deserialization. */
-  public final ObjectArray<TypeInfo> readTypeInfos = new ObjectArray<>();
+  boolean writeRefValueFlag(MemoryBuffer buffer, Object obj);
+
+  boolean writeNullFlag(MemoryBuffer buffer, Object obj);
+
+  void replaceRef(Object original, Object newObject);
+
+  void reset();
 }

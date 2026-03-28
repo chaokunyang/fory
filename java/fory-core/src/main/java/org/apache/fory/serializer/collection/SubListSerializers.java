@@ -23,6 +23,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import org.apache.fory.Fory;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -85,7 +88,7 @@ public class SubListSerializers {
 
     public SubListViewSerializer(TypeResolver typeResolver, Class cls) {
       super(typeResolver, Stub.class.isAssignableFrom(cls) ? (Class<List>) ArrayListSubListClass : cls);
-      assert !fory.isCrossLanguage();
+      assert !config.isXlang();
     }
 
     @Override
@@ -99,16 +102,14 @@ public class SubListSerializers {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, List value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+    public void write(WriteContext writeContext, List value) {
       checkSerialization(value);
-      (getObjectSerializer()).write(writeContext, value);
+      getObjectSerializer().write(writeContext, value);
     }
 
     @Override
-    public List read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-      List value = (List) (getObjectSerializer()).read(readContext);
+    public List read(ReadContext readContext) {
+      List value = (List) getObjectSerializer().read(readContext);
       checkSerialization(value);
       return value;
     }
@@ -122,7 +123,7 @@ public class SubListSerializers {
     }
 
     @Override
-    public List copy(List value) {
+    public List copy(CopyContext copyContext, List value) {
       throw new UnsupportedOperationException(
           "parent list didn't copy modCount, but sublist does copy it");
     }
@@ -151,7 +152,7 @@ public class SubListSerializers {
 
     public SubListSerializer(TypeResolver typeResolver, Class<List> type) {
       super(typeResolver, type, true);
-      fory.getTypeResolver().setSerializer(type, this);
+      typeResolver.setSerializer(type, this);
     }
 
     @Override

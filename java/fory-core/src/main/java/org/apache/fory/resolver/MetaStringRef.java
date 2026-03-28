@@ -25,9 +25,7 @@ import org.apache.fory.meta.MetaStringDecoder;
 
 @Internal
 public final class MetaStringRef {
-  static final short DEFAULT_DYNAMIC_WRITE_STRING_ID = -1;
   final EncodedMetaString encoded;
-  short dynamicWriteStringId = DEFAULT_DYNAMIC_WRITE_STRING_ID;
 
   MetaStringRef(EncodedMetaString encoded) {
     this.encoded = encoded;
@@ -60,11 +58,6 @@ public final class MetaStringRef {
 
   @Override
   public String toString() {
-    return "MetaStringRef{"
-        + "encoded="
-        + encoded
-        + ", dynamicWriteStringId="
-        + dynamicWriteStringId
-        + '}';
+    return "MetaStringRef{" + "encoded=" + encoded + '}';
   }
 }

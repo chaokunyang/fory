@@ -20,56 +20,58 @@
 package org.apache.fory.serializer;
 
 import java.util.function.Supplier;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class LazySerializer extends Serializer {
+  private final TypeResolver typeResolver;
   private final Supplier<Serializer> serializerSupplier;
   private Serializer serializer;
 
   public LazySerializer(TypeResolver typeResolver, Class type, Supplier<Serializer> serializerSupplier) {
     super(typeResolver, type);
+    this.typeResolver = typeResolver;
     this.serializerSupplier = serializerSupplier;
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+  public void write(WriteContext writeContext, Object value) {
     if (serializer == null) {
       serializer = serializerSupplier.get();
-      fory.getTypeResolver().setSerializer(value.getClass(), serializer);
-      if (!isJava) {
-        fory.getTypeResolver().getTypeInfo(value.getClass()).setSerializer(serializer);
+      typeResolver.setSerializer(value.getClass(), serializer);
+      if (config.isXlang()) {
+        typeResolver.getTypeInfo(value.getClass()).setSerializer(serializer);
       }
     }
-    serializer.write(org.apache.fory.context.WriteContext.current(), value);
+    serializer.write(writeContext, value);
   }
 
   @Override
-  public Object read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+  public Object read(ReadContext readContext) {
     boolean unInit = serializer == null;
     if (unInit) {
       serializer = serializerSupplier.get();
     }
-    Object value = serializer.read(org.apache.fory.context.ReadContext.current());
+    Object value = serializer.read(readContext);
     if (unInit) {
-      fory.getTypeResolver().setSerializer(value.getClass(), serializer);
-      if (!isJava) {
-        fory.getTypeResolver().getTypeInfo(value.getClass()).setSerializer(serializer);
+      typeResolver.setSerializer(value.getClass(), serializer);
+      if (config.isXlang()) {
+        typeResolver.getTypeInfo(value.getClass()).setSerializer(serializer);
       }
     }
     return value;
   }
 
   @Override
-  public Object copy(Object value) {
+  public Object copy(CopyContext copyContext, Object value) {
     if (serializer == null) {
       serializer = serializerSupplier.get();
-      fory.getTypeResolver().setSerializer(value.getClass(), serializer);
+      typeResolver.setSerializer(value.getClass(), serializer);
     }
-    return serializer.copy(value);
+    return serializer.copy(copyContext, value);
   }
 
   public static class LazyObjectSerializer extends LazySerializer {

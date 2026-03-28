@@ -22,27 +22,26 @@ package org.apache.fory.io;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInput;
-import org.apache.fory.Fory;
+import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
-/** ObjectInput based on {@link Fory} and {@link MemoryBuffer}. */
+/** ObjectInput based on {@link MemoryBuffer}. */
 public class MemoryBufferObjectInput extends InputStream implements ObjectInput {
-  private final Fory fory;
   private final boolean compressInt;
   private final LongEncoding longEncoding;
   private MemoryBuffer buffer;
   private final StringSerializer stringSerializer;
 
-  public MemoryBufferObjectInput(Fory fory, MemoryBuffer buffer) {
-    this.fory = fory;
-    this.compressInt = fory.compressInt();
-    this.longEncoding = fory.longEncoding();
+  public MemoryBufferObjectInput(Config config, StringSerializer stringSerializer, MemoryBuffer buffer) {
+    this.compressInt = config.compressInt();
+    this.longEncoding = config.longEncoding();
     this.buffer = buffer;
-    this.stringSerializer = fory.getStringSerializer();
+    this.stringSerializer = stringSerializer;
   }
 
   public MemoryBuffer getBuffer() {
@@ -55,7 +54,7 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
 
   @Override
   public Object readObject() throws ClassNotFoundException, IOException {
-    return fory.readRef(buffer);
+    return ReadContext.current().readRef();
   }
 
   @Override

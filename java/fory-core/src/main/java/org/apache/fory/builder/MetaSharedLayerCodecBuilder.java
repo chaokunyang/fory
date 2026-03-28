@@ -21,10 +21,11 @@ package org.apache.fory.builder;
 
 import static org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer.SERIALIZER_FIELD_NAME;
 
+import org.apache.fory.context.ReadContext;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
-import org.apache.fory.context.ReadContext;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
@@ -98,17 +99,21 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     ctx.extendsClasses(ctx.type(parentSerializerClass));
     ctx.reserveName(POJO_CLASS_TYPE_NAME);
     ctx.reserveName(SERIALIZER_FIELD_NAME);
-    ctx.addField(ctx.type(Fory.class), FORY_NAME);
     String constructorCode =
         StringUtils.format(
             ""
                 + "super(${typeResolver}, ${cls});\n"
-                + "this.${fory} = ${typeResolver}.getFory();\n"
-                + "${serializer} = ${builderClass}.setCodegenSerializer(this.${fory}, ${cls}, this);\n",
+                + "this.${generatedTypeResolver} = (${generatedTypeResolverType}) ${typeResolver};\n"
+                + "this.${stringSerializer} = ${typeResolver}.getStringSerializer();\n"
+                + "${serializer} = ${builderClass}.setCodegenSerializer(${typeResolver}, ${cls}, this);\n",
             "typeResolver",
             CONSTRUCTOR_TYPE_RESOLVER_NAME,
-            "fory",
-            FORY_NAME,
+            "generatedTypeResolver",
+            TYPE_RESOLVER_NAME,
+            "generatedTypeResolverType",
+            ctx.type(concreteTypeResolverType),
+            "stringSerializer",
+            STRING_SERIALIZER_NAME,
             "cls",
             POJO_CLASS_TYPE_NAME,
             "builderClass",
@@ -119,6 +124,7 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     Expression decodeExpr = buildDecodeExpression();
     String decodeCode = decodeExpr.genCode(ctx).code();
     decodeCode = ctx.optimizeMethodCode(decodeCode);
+    decodeCode = decodeCode == null ? "" : decodeCode;
     decodeCode =
         StringUtils.format(
             "${bufferType} ${buffer} = ${readContext}.getBuffer();\n${code}",
@@ -150,23 +156,27 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   // Invoked by JIT.
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static MetaSharedLayerSerializerBase setCodegenSerializer(
-      Fory fory, Class<?> cls, GeneratedMetaSharedLayerSerializer s) {
+      TypeResolver typeResolver, Class<?> cls, GeneratedMetaSharedLayerSerializer s) {
     if (GraalvmSupport.isGraalRuntime()) {
-      return (MetaSharedLayerSerializerBase) typeResolver(fory, r -> r.getSerializer(s.getType()));
+      return (MetaSharedLayerSerializerBase)
+          typeResolver
+              .getJITContext()
+              .asyncVisitFory(f -> f.getTypeResolver().getSerializer(s.getType()));
     }
     // This method hold jit lock, so create jit serializer async to avoid block serialization.
     // Use MetaSharedLayerSerializer as fallback since it's compatible with
     // MetaSharedLayerSerializerBase
     Class serializerClass =
-        fory.getJITContext()
+        typeResolver.getJITContext()
             .registerSerializerJITCallback(
                 () -> MetaSharedLayerSerializer.class,
-                () -> CodegenSerializer.loadCodegenSerializer(fory, s.getType()),
+                () -> CodegenSerializer.loadCodegenSerializer(typeResolver, s.getType()),
                 c ->
                     s.serializer =
                         (MetaSharedLayerSerializerBase)
-                            Serializers.newSerializer(fory, s.getType(), c));
-    return (MetaSharedLayerSerializerBase) Serializers.newSerializer(fory, cls, serializerClass);
+                            Serializers.newSerializer(typeResolver, s.getType(), c));
+    return (MetaSharedLayerSerializerBase)
+        Serializers.newSerializer(typeResolver, cls, serializerClass);
   }
 
   @Override

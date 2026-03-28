@@ -20,7 +20,8 @@
 package org.apache.fory.serializer;
 
 import org.apache.fory.config.Config;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 
 @SuppressWarnings("rawtypes")
 public class NoneSerializer extends Serializer {
@@ -29,12 +30,11 @@ public class NoneSerializer extends Serializer {
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
-    MemoryBuffer buffer = writeContext.getBuffer();}
+  public void write(WriteContext writeContext, Object value) {
+  }
 
   @Override
-  public Object read(org.apache.fory.context.ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+  public Object read(ReadContext readContext) {
     return null;
   }
 }

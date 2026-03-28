@@ -17,44 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.resolver;
+package org.apache.fory.context;
 
-import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 
-/** A no-op resolver which ignore reference, only handle null/non-null. */
-public final class NoRefResolver implements RefResolver {
-
-  @Override
-  public boolean writeRefOrNull(MemoryBuffer buffer, Object obj) {
-    if (obj == null) {
-      buffer.writeByte(Fory.NULL_FLAG);
-      return true;
-    } else {
-      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-      return false;
-    }
-  }
-
-  @Override
-  public boolean writeRefValueFlag(MemoryBuffer buffer, Object obj) {
-    assert obj != null;
-    buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-    return true;
-  }
-
-  @Override
-  public boolean writeNullFlag(MemoryBuffer buffer, Object obj) {
-    if (obj == null) {
-      buffer.writeByte(Fory.NULL_FLAG);
-      return true;
-    }
-    return false;
-  }
-
-  @Override
-  public void replaceRef(Object original, Object newObject) {}
-
+public final class NoRefReader implements RefReader {
   @Override
   public byte readRefOrNull(MemoryBuffer buffer) {
     return buffer.readByte();
@@ -72,14 +39,17 @@ public final class NoRefResolver implements RefResolver {
 
   @Override
   public int tryPreserveRefId(MemoryBuffer buffer) {
-    // `NOT_NULL_VALUE_FLAG` can be used as stub reference id because we use
-    // `refId >= NOT_NULL_VALUE_FLAG` to read data.
     return buffer.readByte();
   }
 
   @Override
   public int lastPreservedRefId() {
     return -1;
+  }
+
+  @Override
+  public boolean hasPreservedRefId() {
+    return false;
   }
 
   @Override
@@ -100,10 +70,4 @@ public final class NoRefResolver implements RefResolver {
 
   @Override
   public void reset() {}
-
-  @Override
-  public void resetWrite() {}
-
-  @Override
-  public void resetRead() {}
 }

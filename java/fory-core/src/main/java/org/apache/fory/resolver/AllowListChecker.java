@@ -27,6 +27,8 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.fory.config.Config;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
@@ -208,22 +210,22 @@ public class AllowListChecker implements TypeChecker {
       disallowListPrefix.add(prefix);
       for (ClassResolver classResolver : listeners.keySet()) {
         try {
-          classResolver.getFory().getJITContext().lock();
+          classResolver.getJITContext().lock();
           // clear serializer may throw NullPointerException for field serialization.
           classResolver.setSerializers(prefix, DisallowSerializer.class);
         } finally {
-          classResolver.getFory().getJITContext().unlock();
+          classResolver.getJITContext().unlock();
         }
       }
     } else {
       disallowList.add(classNameOrPrefix);
       for (ClassResolver classResolver : listeners.keySet()) {
         try {
-          classResolver.getFory().getJITContext().lock();
+          classResolver.getJITContext().lock();
           // clear serializer may throw NullPointerException for field serialization.
           classResolver.setSerializer(classNameOrPrefix, DisallowSerializer.class);
         } finally {
-          classResolver.getFory().getJITContext().unlock();
+          classResolver.getJITContext().unlock();
         }
       }
     }
@@ -250,12 +252,12 @@ public class AllowListChecker implements TypeChecker {
     }
 
     @Override
-    public void write(org.apache.fory.context.WriteContext writeContext, Object value) {
+    public void write(WriteContext writeContext, Object value) {
       throw new InsecureException(String.format("Class %s not allowed for serialization.", type));
     }
 
     @Override
-    public Object read(org.apache.fory.context.ReadContext readContext) {
+    public Object read(ReadContext readContext) {
       throw new InsecureException(String.format("Class %s not allowed for serialization.", type));
     }
   }

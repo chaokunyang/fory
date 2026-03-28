@@ -35,6 +35,8 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MapRefReader;
 import org.apache.fory.context.MapRefWriter;
 import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaStringReader;
+import org.apache.fory.context.MetaStringWriter;
 import org.apache.fory.context.NoRefReader;
 import org.apache.fory.context.NoRefWriter;
 import org.apache.fory.context.ReadContext;
@@ -53,8 +55,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.MetaCompressor;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.resolver.MetaStringReader;
-import org.apache.fory.resolver.MetaStringWriter;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -155,7 +155,10 @@ public final class Fory implements BaseFory {
     stringSerializer = new StringSerializer(config);
     typeResolver = crossLanguage ? new XtypeResolver(this) : new ClassResolver(this);
     typeResolver.initialize();
-    MetaStringWriter metaStringWriter = new MetaStringWriter(sharedRegistry);
+    MetaStringWriter metaStringWriter =
+        config.forVirtualThread()
+            ? new MetaStringWriter.MapStateMetaStringWriter(sharedRegistry)
+            : new MetaStringWriter.FieldStateMetaStringWriter(sharedRegistry);
     MetaStringReader metaStringReader = new MetaStringReader(sharedRegistry);
     writeContext =
         new WriteContext(

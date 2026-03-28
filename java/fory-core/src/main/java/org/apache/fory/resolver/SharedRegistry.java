@@ -99,11 +99,11 @@ public final class SharedRegistry {
     return metaStringMap.computeIfAbsent(key, ignored -> encoder.encodeBinary(string, encoding));
   }
 
-  MetaStringRef getOrCreateMetaStringRef(EncodedMetaString encodedMetaString) {
+  public MetaStringRef getOrCreateMetaStringRef(EncodedMetaString encodedMetaString) {
     return metaStringRefsByEncoded.computeIfAbsent(encodedMetaString, MetaStringRef::new);
   }
 
-  MetaStringRef getOrCreateMetaStringRef(
+  public MetaStringRef getOrCreateMetaStringRef(
       String string,
       MetaStringEncoder encoder,
       MetaString.Encoding encoding,

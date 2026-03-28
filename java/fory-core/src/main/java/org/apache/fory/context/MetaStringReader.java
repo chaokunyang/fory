@@ -17,10 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.resolver;
+package org.apache.fory.context;
 
 import java.util.Arrays;
 import java.util.Objects;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.LongLongByteMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectMap;
@@ -29,11 +30,14 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.MetaStringDecoder;
+import org.apache.fory.resolver.MetaStringRef;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.util.MurmurHash3;
 
 /** Read-side state for meta-string references. */
+@Internal
 public final class MetaStringReader {
-  private static final int INITIAL_CAPACITY = 4;
+  private static final int INITIAL_CAPACITY = 2;
   private static final float LOAD_FACTOR = 0.5f;
   private static final int SMALL_STRING_THRESHOLD = 16;
 
@@ -56,7 +60,7 @@ public final class MetaStringReader {
 
   public String readMetaString(MemoryBuffer buffer) {
     MetaStringRef metaStringRef = readMetaStringBytes(buffer);
-    EncodedMetaString encodedMetaString = metaStringRef.encoded;
+    EncodedMetaString encodedMetaString = metaStringRef.getEncoded();
     String str = metaString2StringMap.get(encodedMetaString);
     if (str == null) {
       str = metaStringRef.decode(Encoders.GENERIC_DECODER);
@@ -106,7 +110,7 @@ public final class MetaStringReader {
     return dynamicReadStringIds[len - 1];
   }
 
-  MetaStringRef readMetaStringBytes(MemoryBuffer buffer, MetaStringRef cache) {
+  public MetaStringRef readMetaStringBytes(MemoryBuffer buffer, MetaStringRef cache) {
     int header = buffer.readVarUint32Small7();
     int len = header >>> 1;
     if ((header & 0b1) == 0) {
@@ -122,7 +126,7 @@ public final class MetaStringReader {
 
   private MetaStringRef readBigMetaStringBytes(MemoryBuffer buffer, MetaStringRef cache, int len) {
     long hashCode = buffer.readInt64();
-    if (cache.encoded.hash == hashCode) {
+    if (cache.getEncoded().hash == hashCode) {
       buffer.increaseReaderIndex(len);
       return cache;
     }
@@ -134,7 +138,7 @@ public final class MetaStringReader {
     if (encodedMetaString == null) {
       EncodedMetaString newMetaString = new EncodedMetaString(buffer.readBytes(len), hashCode);
       MetaStringRef metaStringRef = sharedRegistry.getOrCreateMetaStringRef(newMetaString);
-      hash2MetaStringMap.put(hashCode, metaStringRef.encoded);
+      hash2MetaStringMap.put(hashCode, metaStringRef.getEncoded());
       return metaStringRef;
     }
     buffer.increaseReaderIndex(len);
@@ -175,7 +179,7 @@ public final class MetaStringReader {
       v1 = buffer.readInt64();
       v2 = buffer.readBytesAsInt64(len - 8);
     }
-    EncodedMetaString cachedMetaString = cache.encoded;
+    EncodedMetaString cachedMetaString = cache.getEncoded();
     if (cachedMetaString.first8Bytes == v1 && cachedMetaString.second8Bytes == v2) {
       return cache;
     }
@@ -195,7 +199,7 @@ public final class MetaStringReader {
     hashCode = (hashCode & 0xffffffffffffff00L) | encoding;
     EncodedMetaString encodedMetaString = new EncodedMetaString(Arrays.copyOf(data, len), hashCode);
     MetaStringRef metaStringRef = sharedRegistry.getOrCreateMetaStringRef(encodedMetaString);
-    longLongMetaStringMap.put(v1, v2, encoding, metaStringRef.encoded);
+    longLongMetaStringMap.put(v1, v2, encoding, metaStringRef.getEncoded());
     return metaStringRef;
   }
 
@@ -203,15 +207,19 @@ public final class MetaStringReader {
     short currentDynamicReadId = dynamicReadStringId++;
     MetaStringRef[] readStringIds = dynamicReadStringIds;
     if (readStringIds.length <= currentDynamicReadId) {
-      readStringIds = growRead(currentDynamicReadId);
+      readStringIds = dynamicReadStringIds = growRead(readStringIds, currentDynamicReadId);
     }
     readStringIds[currentDynamicReadId] = metaStringRef;
   }
 
-  private MetaStringRef[] growRead(int id) {
-    MetaStringRef[] tmp = new MetaStringRef[id * 2];
-    System.arraycopy(dynamicReadStringIds, 0, tmp, 0, dynamicReadStringIds.length);
-    return dynamicReadStringIds = tmp;
+  private MetaStringRef[] growRead(MetaStringRef[] current, int id) {
+    int newLength = current.length;
+    while (newLength <= id) {
+      newLength <<= 1;
+    }
+    MetaStringRef[] expanded = new MetaStringRef[newLength];
+    System.arraycopy(current, 0, expanded, 0, current.length);
+    return expanded;
   }
 
   public void reset() {

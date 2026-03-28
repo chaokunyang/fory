@@ -25,10 +25,17 @@ import org.apache.fory.meta.MetaStringDecoder;
 
 @Internal
 public final class MetaStringRef {
+  public static final short DEFAULT_DYNAMIC_WRITE_STRING_ID = -1;
+
   final EncodedMetaString encoded;
+  public short dynamicWriteStringId = DEFAULT_DYNAMIC_WRITE_STRING_ID;
 
   MetaStringRef(EncodedMetaString encoded) {
     this.encoded = encoded;
+  }
+
+  public EncodedMetaString getEncoded() {
+    return encoded;
   }
 
   public String decode(char specialChar1, char specialChar2) {

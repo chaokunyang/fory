@@ -23,18 +23,13 @@ import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 
 public class ScopedCompatibleExample {
-  private static Fory fory;
-
-  static {
-    fory = createFory();
-  }
-
   private static Fory createFory() {
     Fory fory =
         Fory.builder()
             .withName(ScopedCompatibleExample.class.getName())
             .requireClassRegistration(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
             .build();
     // register and generate serializer code.
     fory.register(Foo.class);
@@ -44,6 +39,7 @@ public class ScopedCompatibleExample {
 
   public static void main(String[] args) {
     System.out.println("ScopedCompatibleExample started");
+    Fory fory = createFory();
     Example.test(fory);
     System.out.println("ScopedCompatibleExample succeed 1/2");
     fory = createFory();

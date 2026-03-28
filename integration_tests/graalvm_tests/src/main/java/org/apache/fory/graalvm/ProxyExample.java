@@ -36,17 +36,12 @@ public class ProxyExample {
     }
   }
 
-  static Fory fory;
-
-  static {
-    fory = createFory();
-  }
-
   private static Fory createFory() {
     Fory fory =
         Fory.builder()
             .withName(ProxyExample.class.getName())
             .requireClassRegistration(true)
+            .withCodegen(false)
             .build();
     // register and generate serializer code.
     fory.register(TestInvocationHandler.class);
@@ -55,6 +50,7 @@ public class ProxyExample {
   }
 
   public static void main(String[] args) {
+    Fory fory = createFory();
     Function function =
         (Function)
             Proxy.newProxyInstance(

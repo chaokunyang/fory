@@ -141,69 +141,56 @@ public class AbstractClassExample {
     }
   }
 
-  private static final Fory FORY;
-
-  static {
-    FORY =
+  private static Fory createFory() {
+    Fory fory =
         Fory.builder()
             .withName(AbstractClassExample.class.getName())
             .registerGuavaTypes(false)
+            .withCodegen(false)
             .build();
-    // Register enum type - abstract enums need to be registered
-    // The fix for issue #2695 ensures that registering an abstract enum
-    // also registers its inner classes (the anonymous enum value classes)
-    FORY.register(AbstractEnum.class);
-    // Register concrete types
-    FORY.register(ConcreteA.class);
-    FORY.register(ConcreteB.class);
-    FORY.register(Container.class);
-    // Register array types - the abstract component type should be handled correctly
-    FORY.register(AbstractBase[].class);
-    FORY.register(AbstractEnum[].class);
-    // Ensure serializers are compiled - this is where the fix for issue #2695 matters
-    FORY.ensureSerializersCompiled();
+    fory.register(AbstractEnum.class);
+    fory.register(ConcreteA.class);
+    fory.register(ConcreteB.class);
+    fory.register(Container.class);
+    fory.register(AbstractBase[].class);
+    fory.register(AbstractEnum[].class);
+    fory.ensureSerializersCompiled();
+    return fory;
   }
 
   public static void main(String[] args) {
-    FORY.reset();
-
-    // Test abstract enum serialization
-    testAbstractEnum();
-
-    // Test abstract enum array serialization
-    testAbstractEnumArray();
-
-    // Test abstract object array serialization
-    testAbstractObjectArray();
-
-    // Test container with abstract types
-    testContainer();
+    Fory fory = createFory();
+    fory.reset();
+    testAbstractEnum(fory);
+    testAbstractEnumArray(fory);
+    testAbstractObjectArray(fory);
+    testContainer(fory);
 
     System.out.println("AbstractClassExample succeed");
   }
 
-  private static void testAbstractEnum() {
-    byte[] bytes1 = FORY.serialize(AbstractEnum.VALUE1);
-    AbstractEnum result1 = FORY.deserialize(bytes1, AbstractEnum.class);
+  private static void testAbstractEnum(Fory fory) {
+    byte[] bytes1 = fory.serialize(AbstractEnum.VALUE1);
+    AbstractEnum result1 = fory.deserialize(bytes1, AbstractEnum.class);
     Preconditions.checkArgument(result1 == AbstractEnum.VALUE1, "VALUE1 should match");
     Preconditions.checkArgument(result1.getValue() == 1, "VALUE1.getValue() should be 1");
 
-    byte[] bytes2 = FORY.serialize(AbstractEnum.VALUE2);
-    AbstractEnum result2 = FORY.deserialize(bytes2, AbstractEnum.class);
+    byte[] bytes2 = fory.serialize(AbstractEnum.VALUE2);
+    AbstractEnum result2 = fory.deserialize(bytes2, AbstractEnum.class);
     Preconditions.checkArgument(result2 == AbstractEnum.VALUE2, "VALUE2 should match");
     Preconditions.checkArgument(result2.getValue() == 2, "VALUE2.getValue() should be 2");
   }
 
-  private static void testAbstractEnumArray() {
+  private static void testAbstractEnumArray(Fory fory) {
     AbstractEnum[] array = new AbstractEnum[] {AbstractEnum.VALUE1, AbstractEnum.VALUE2};
-    byte[] bytes = FORY.serialize(array);
-    AbstractEnum[] result = FORY.deserialize(bytes, AbstractEnum[].class);
+    byte[] bytes = fory.serialize(array);
+    AbstractEnum[] result = fory.deserialize(bytes, AbstractEnum[].class);
     Preconditions.checkArgument(Arrays.equals(array, result), "Enum arrays should match");
     Preconditions.checkArgument(result[0].getValue() == 1, "result[0].getValue() should be 1");
     Preconditions.checkArgument(result[1].getValue() == 2, "result[1].getValue() should be 2");
   }
 
-  private static void testAbstractObjectArray() {
+  private static void testAbstractObjectArray(Fory fory) {
     ConcreteA a = new ConcreteA();
     a.id = 1;
     a.name = "test";
@@ -213,8 +200,8 @@ public class AbstractClassExample {
     b.value = 100L;
 
     AbstractBase[] array = new AbstractBase[] {a, b};
-    byte[] bytes = FORY.serialize(array);
-    AbstractBase[] result = FORY.deserialize(bytes, AbstractBase[].class);
+    byte[] bytes = fory.serialize(array);
+    AbstractBase[] result = fory.deserialize(bytes, AbstractBase[].class);
 
     Preconditions.checkArgument(result.length == 2, "Array length should be 2");
     Preconditions.checkArgument(result[0] instanceof ConcreteA, "result[0] should be ConcreteA");
@@ -227,7 +214,7 @@ public class AbstractClassExample {
         "B".equals(result[1].getType()), "result[1].getType() should be 'B'");
   }
 
-  private static void testContainer() {
+  private static void testContainer(Fory fory) {
     ConcreteA a = new ConcreteA();
     a.id = 10;
     a.name = "containerTest";
@@ -241,8 +228,8 @@ public class AbstractClassExample {
     container.enumArray = new AbstractEnum[] {AbstractEnum.VALUE2, AbstractEnum.VALUE1};
     container.baseArray = new AbstractBase[] {a, b};
 
-    byte[] bytes = FORY.serialize(container);
-    Container result = FORY.deserialize(bytes, Container.class);
+    byte[] bytes = fory.serialize(container);
+    Container result = fory.deserialize(bytes, Container.class);
 
     Preconditions.checkArgument(container.equals(result), "Container should match");
     Preconditions.checkArgument(

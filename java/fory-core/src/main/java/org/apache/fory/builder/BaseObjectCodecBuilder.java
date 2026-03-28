@@ -621,7 +621,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   protected Expression writeRefOrNull(Expression buffer, Expression object) {
-    return inlineInvoke(writeContextRef(), "writeRefOrNull", PRIMITIVE_BOOLEAN_TYPE, object);
+    return inlineInvokeWriteContext("writeRefOrNull", PRIMITIVE_BOOLEAN_TYPE, object);
   }
 
   protected Expression serializeForNotNull(
@@ -1813,8 +1813,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   protected Expression tryPreserveRefId(Expression buffer) {
-    return new Invoke(
-        readContextRef(), "tryPreserveRefId", "refId", PRIMITIVE_INT_TYPE, false);
+    return invokeReadContext("tryPreserveRefId", "refId", PRIMITIVE_INT_TYPE);
   }
 
   /**
@@ -1877,9 +1876,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression needDeserialize =
         ExpressionUtils.egt(refId, new Literal(Fory.NOT_NULL_VALUE_FLAG, PRIMITIVE_BYTE_TYPE));
     Expression deserializedValue = deserializeForNotNull.get();
-    Expression setReadObject =
-        new Invoke(readContextRef(), "setReadObject", refId, deserializedValue);
-    Expression readValue = inlineInvoke(readContextRef(), "getReadObject", OBJECT_TYPE, false);
+    Expression setReadObject = invokeReadContext("setReadObject", refId, deserializedValue);
+    Expression readValue = inlineInvokeReadContext("getReadObject", OBJECT_TYPE);
     // use false to ignore null
     return new If(
         needDeserialize,
@@ -2014,7 +2012,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression value = deserializeForNotNull(buffer, typeRef, serializer, invokeHint);
     if (needWriteRef(TypeRef.of(typeRef.getRawType()))) {
       Expression preserveStubRefId =
-          new Invoke(readContextRef(), "preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
+          invokeReadContext("preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
       return new ListExpression(preserveStubRefId, value);
     }
     return value;
@@ -2046,7 +2044,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           // We need to preserve a -1 id so that when the deserializer calls reference(),
           // it will pop this -1 and skip the setReadObject call.
           Expression preserveStubRefId =
-              new Invoke(readContextRef(), "preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
+              invokeReadContext("preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
           return new ListExpression(preserveStubRefId, value, callback.apply(value));
         }
         return new ListExpression(value, callback.apply(value));
@@ -2065,7 +2063,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
       if (serializerCallsReference) {
         Expression preserveStubRefId =
-            new Invoke(readContextRef(), "preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
+            invokeReadContext("preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
         return new ListExpression(preserveStubRefId, readNullableExpr);
       }
       return readNullableExpr;
@@ -2202,9 +2200,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
     read = uninline(read);
     return new ListExpression(
-        new Invoke(readContextRef(), "increaseDepth"),
+        invokeReadContext("increaseDepth"),
         read,
-        new Invoke(readContextRef(), "decreaseDepth"),
+        invokeReadContext("decreaseDepth"),
         read);
   }
 
@@ -2774,11 +2772,44 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   protected Expression writeStringSerializerRef() {
-    return new Invoke(writeContextRef(), "getStringSerializer", STRING_SERIALIZER_TYPE_TOKEN);
+    return invokeWriteContext("getStringSerializer", STRING_SERIALIZER_TYPE_TOKEN);
   }
 
   protected Expression readStringSerializerRef() {
-    return new Invoke(readContextRef(), "getStringSerializer", STRING_SERIALIZER_TYPE_TOKEN);
+    return invokeReadContext("getStringSerializer", STRING_SERIALIZER_TYPE_TOKEN);
+  }
+
+  protected Invoke invokeWriteContext(String methodName, Expression... arguments) {
+    return invokeWriteContext(methodName, PRIMITIVE_VOID_TYPE, arguments);
+  }
+
+  protected Invoke invokeWriteContext(
+      String methodName, TypeRef<?> returnType, Expression... arguments) {
+    return new Invoke(writeContextRef(), methodName, "", returnType, false, false, arguments);
+  }
+
+  protected Invoke inlineInvokeWriteContext(
+      String methodName, TypeRef<?> returnType, Expression... arguments) {
+    return Invoke.inlineInvoke(writeContextRef(), methodName, returnType, false, arguments);
+  }
+
+  protected Invoke invokeReadContext(String methodName, Expression... arguments) {
+    return invokeReadContext(methodName, "", PRIMITIVE_VOID_TYPE, arguments);
+  }
+
+  protected Invoke invokeReadContext(
+      String methodName, TypeRef<?> returnType, Expression... arguments) {
+    return invokeReadContext(methodName, "", returnType, arguments);
+  }
+
+  protected Invoke invokeReadContext(
+      String methodName, String returnNamePrefix, TypeRef<?> returnType, Expression... arguments) {
+    return new Invoke(readContextRef(), methodName, returnNamePrefix, returnType, false, false, arguments);
+  }
+
+  protected Invoke inlineInvokeReadContext(
+      String methodName, TypeRef<?> returnType, Expression... arguments) {
+    return Invoke.inlineInvoke(readContextRef(), methodName, returnType, false, arguments);
   }
 
   protected Set<Expression> writeCutPoints(Expression... expressions) {

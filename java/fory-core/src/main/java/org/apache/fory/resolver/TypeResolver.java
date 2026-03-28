@@ -46,16 +46,12 @@ import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyObject;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer;
 import org.apache.fory.builder.Generated.GeneratedObjectSerializer;
 import org.apache.fory.builder.JITContext;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
-import org.apache.fory.context.MetaContext;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.IdentityObjectIntMap;
@@ -63,6 +59,9 @@ import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Config;
+import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.SerializerUnregisteredException;
 import org.apache.fory.logging.Logger;
@@ -898,6 +897,11 @@ public abstract class TypeResolver {
       }
       putInternalTypeInfo(typeInfo.typeId, typeInfo);
     }
+    cacheTypeInfo(typeInfo);
+  }
+
+  protected final void cacheTypeInfo(TypeInfo typeInfo) {
+    typeInfoCache = typeInfo;
   }
 
   protected final void putInternalTypeInfo(int typeId, TypeInfo typeInfo) {
@@ -1644,17 +1648,16 @@ public abstract class TypeResolver {
   }
 
   // CHECKSTYLE.OFF:MethodName
-  public static void _addGraalvmClassRegistry(int foryConfigHash, ClassResolver classResolver) {
+  public static void _addGraalvmClassRegistry(Config config, ClassResolver classResolver) {
     // CHECKSTYLE.ON:MethodName
     if (GraalvmSupport.isGraalBuildtime()) {
-      GraalvmSupport.GraalvmClassRegistry registry =
-          GraalvmSupport.getClassRegistry(foryConfigHash);
+      GraalvmSupport.GraalvmClassRegistry registry = GraalvmSupport.getClassRegistry(config);
       registry.resolvers.add(classResolver);
     }
   }
 
   final GraalvmSupport.GraalvmClassRegistry getGraalvmClassRegistry() {
-    return GraalvmSupport.getClassRegistry(config.getConfigHash());
+    return GraalvmSupport.getClassRegistry(config);
   }
 
   final Class<? extends Serializer> getGraalvmSerializerClass(Serializer serializer) {
@@ -1666,28 +1669,18 @@ public abstract class TypeResolver {
 
   final Class<? extends Serializer> getSerializerClassFromGraalvmRegistry(Class<?> cls) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    List<TypeResolver> resolvers = registry.resolvers;
-    if (resolvers.isEmpty()) {
-      return null;
-    }
-    for (TypeResolver resolver : resolvers) {
-      if (resolver != this) {
-        TypeInfo typeInfo = getTypeInfo(cls, false);
-        if (typeInfo != null && typeInfo.serializer != null) {
-          return typeInfo.serializer.getClass();
-        }
-      }
-    }
     Class<? extends Serializer> serializerClass = registry.serializerClassMap.get(cls);
-    // noinspection Duplicates
     if (serializerClass != null) {
       return serializerClass;
     }
-    if (GraalvmSupport.isGraalRuntime()) {
-      if (Functions.isLambda(cls) || ReflectionUtils.isJdkProxy(cls)) {
-        return null;
+    List<TypeResolver> resolvers = registry.resolvers;
+    for (TypeResolver resolver : resolvers) {
+      if (resolver != this) {
+        TypeInfo typeInfo = resolver.getTypeInfo(cls, false);
+        if (typeInfo != null && typeInfo.serializer != null) {
+          return resolver.getGraalvmSerializerClass(typeInfo.serializer);
+        }
       }
-      throw new RuntimeException(String.format("Class %s is not registered", cls));
     }
     return null;
   }
@@ -1695,25 +1688,12 @@ public abstract class TypeResolver {
   private Class<? extends Serializer> getMetaSharedDeserializerClassFromGraalvmRegistry(
       Class<?> cls, TypeDef typeDef) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    List<TypeResolver> resolvers = registry.resolvers;
-    if (resolvers.isEmpty()) {
-      return null;
-    }
     Class<? extends Serializer> deserializerClass =
         registry.deserializerClassMap.get(typeDef.getId());
-    // noinspection Duplicates
     if (deserializerClass != null) {
       return deserializerClass;
     }
-    if (GraalvmSupport.isGraalRuntime()) {
-      if (Functions.isLambda(cls) || ReflectionUtils.isJdkProxy(cls)) {
-        return null;
-      }
-      throw new RuntimeException(
-          String.format(
-              "Class %s is not registered, registered classes: %s",
-              cls, registry.deserializerClassMap));
-    }
+    List<TypeResolver> resolvers = registry.resolvers;
     return null;
   }
 

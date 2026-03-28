@@ -1236,7 +1236,15 @@ public interface Expression {
         TypeRef<?> type,
         boolean returnNullable,
         Expression... arguments) {
-      this(staticObject, functionName, returnNamePrefix, type, returnNullable, false, arguments);
+      this(
+          staticObject,
+          functionName,
+          returnNamePrefix,
+          type,
+          returnNullable,
+          false,
+          ReflectionUtils.hasException(staticObject, functionName),
+          arguments);
     }
 
     /**
@@ -1257,6 +1265,7 @@ public interface Expression {
         TypeRef<?> type,
         boolean returnNullable,
         boolean inline,
+        boolean needTryCatch,
         Expression... arguments) {
       super(
           functionName,
@@ -1265,7 +1274,7 @@ public interface Expression {
           returnNamePrefix,
           returnNullable,
           inline,
-          ReflectionUtils.hasException(staticObject, functionName));
+          needTryCatch);
       this.staticObject = staticObject;
       if (inline && needTryCatch) {
         throw new UnsupportedOperationException(
@@ -1273,6 +1282,25 @@ public interface Expression {
                 "Method %s in %s has exception signature and can't be inlined",
                 functionName, staticObject));
       }
+    }
+
+    public StaticInvoke(
+        Class<?> staticObject,
+        String functionName,
+        String returnNamePrefix,
+        TypeRef<?> type,
+        boolean returnNullable,
+        boolean inline,
+        Expression... arguments) {
+      this(
+          staticObject,
+          functionName,
+          returnNamePrefix,
+          type,
+          returnNullable,
+          inline,
+          ReflectionUtils.hasException(staticObject, functionName),
+          arguments);
     }
 
     @Override

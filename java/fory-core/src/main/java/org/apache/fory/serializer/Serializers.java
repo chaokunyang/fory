@@ -57,6 +57,15 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
+import org.apache.fory.serializer.collection.ChildContainerSerializers;
+import org.apache.fory.serializer.collection.CollectionSerializer;
+import org.apache.fory.serializer.collection.CollectionSerializers;
+import org.apache.fory.serializer.collection.MapSerializer;
+import org.apache.fory.serializer.collection.MapSerializers;
+import org.apache.fory.serializer.scala.SingletonCollectionSerializer;
+import org.apache.fory.serializer.scala.SingletonMapSerializer;
+import org.apache.fory.serializer.scala.SingletonObjectSerializer;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
@@ -132,12 +141,9 @@ public class Serializers {
       TypeResolver typeResolver, Class type, Class<? extends Serializer> serializerClass) {
     try {
       Config config = typeResolver.getConfig();
-      if (serializerClass == ObjectSerializer.class) {
-        return new ObjectSerializer(typeResolver, type);
-      }
-      if (serializerClass == MetaSharedSerializer.class) {
-        TypeDef typeDef = typeResolver.getTypeDef(type, true);
-        return new MetaSharedSerializer(typeResolver, type, typeDef);
+      Serializer<T> serializer = buildBuiltinSerializer(typeResolver, config, type, serializerClass);
+      if (serializer != null) {
+        return serializer;
       }
       Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
       if (ctrInfo != null) {
@@ -166,6 +172,99 @@ public class Serializers {
       Platform.throwException(t);
       throw new IllegalStateException("unreachable");
     }
+  }
+
+  private static <T> Serializer<T> buildBuiltinSerializer(
+      TypeResolver typeResolver,
+      Config config,
+      Class type,
+      Class<? extends Serializer> serializerClass) {
+    if (serializerClass == ObjectSerializer.class) {
+      return new ObjectSerializer(typeResolver, type);
+    }
+    if (serializerClass == ArraySerializers.ObjectArraySerializer.class) {
+      return new ArraySerializers.ObjectArraySerializer(typeResolver, type);
+    }
+    if (serializerClass == ObjectStreamSerializer.class) {
+      return new ObjectStreamSerializer(typeResolver, type);
+    }
+    if (serializerClass == MetaSharedSerializer.class) {
+      TypeDef typeDef = typeResolver.getTypeDef(type, true);
+      return new MetaSharedSerializer(typeResolver, type, typeDef);
+    }
+    if (serializerClass == EnumSerializer.class) {
+      return (Serializer<T>) new EnumSerializer(config, type);
+    }
+    if (serializerClass == LambdaSerializer.class) {
+      return new LambdaSerializer(typeResolver, type);
+    }
+    if (serializerClass == JdkProxySerializer.class) {
+      return new JdkProxySerializer(typeResolver, type);
+    }
+    if (serializerClass == ReplaceResolveSerializer.class) {
+      return new ReplaceResolveSerializer(typeResolver, type);
+    }
+    if (serializerClass == ExternalizableSerializer.class) {
+      return new ExternalizableSerializer(typeResolver, type);
+    }
+    if (serializerClass == LazyInitBeanSerializer.class) {
+      return new LazyInitBeanSerializer(typeResolver, type);
+    }
+    if (serializerClass == TimeSerializers.CalendarSerializer.class) {
+      return (Serializer<T>) new TimeSerializers.CalendarSerializer(config, type);
+    }
+    if (serializerClass == TimeSerializers.ZoneIdSerializer.class) {
+      return (Serializer<T>) new TimeSerializers.ZoneIdSerializer(config, type);
+    }
+    if (serializerClass == TimeSerializers.TimeZoneSerializer.class) {
+      return (Serializer<T>) new TimeSerializers.TimeZoneSerializer(config, type);
+    }
+    if (serializerClass == BufferSerializers.ByteBufferSerializer.class) {
+      return (Serializer<T>) new BufferSerializers.ByteBufferSerializer(typeResolver, type);
+    }
+    if (serializerClass == CharsetSerializer.class) {
+      return new CharsetSerializer(config, type);
+    }
+    if (serializerClass == CollectionSerializers.EnumSetSerializer.class) {
+      return (Serializer<T>) new CollectionSerializers.EnumSetSerializer(typeResolver, type);
+    }
+    if (serializerClass == CollectionSerializer.class) {
+      return new CollectionSerializer(typeResolver, type);
+    }
+    if (serializerClass == CollectionSerializers.DefaultJavaCollectionSerializer.class) {
+      return new CollectionSerializers.DefaultJavaCollectionSerializer(typeResolver, type);
+    }
+    if (serializerClass == CollectionSerializers.JDKCompatibleCollectionSerializer.class) {
+      return new CollectionSerializers.JDKCompatibleCollectionSerializer(typeResolver, type);
+    }
+    if (serializerClass == MapSerializer.class) {
+      return new MapSerializer(typeResolver, type);
+    }
+    if (serializerClass == MapSerializers.DefaultJavaMapSerializer.class) {
+      return new MapSerializers.DefaultJavaMapSerializer(typeResolver, type);
+    }
+    if (serializerClass == MapSerializers.JDKCompatibleMapSerializer.class) {
+      return new MapSerializers.JDKCompatibleMapSerializer(typeResolver, type);
+    }
+    if (serializerClass == ChildContainerSerializers.ChildCollectionSerializer.class) {
+      return new ChildContainerSerializers.ChildCollectionSerializer(typeResolver, type);
+    }
+    if (serializerClass == ChildContainerSerializers.ChildArrayListSerializer.class) {
+      return new ChildContainerSerializers.ChildArrayListSerializer(typeResolver, type);
+    }
+    if (serializerClass == ChildContainerSerializers.ChildMapSerializer.class) {
+      return new ChildContainerSerializers.ChildMapSerializer(typeResolver, type);
+    }
+    if (serializerClass == SingletonCollectionSerializer.class) {
+      return new SingletonCollectionSerializer(typeResolver, type);
+    }
+    if (serializerClass == SingletonMapSerializer.class) {
+      return new SingletonMapSerializer(typeResolver, type);
+    }
+    if (serializerClass == SingletonObjectSerializer.class) {
+      return new SingletonObjectSerializer(typeResolver, type);
+    }
+    return null;
   }
 
   private static <T> Serializer<T> createSerializer(

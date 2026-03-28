@@ -27,18 +27,17 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.Preconditions;
 
 public class EnsureSerializerExample {
-  static Fory fory;
-
-  static {
-    fory =
+  private static Fory createFory() {
+    Fory fory =
         Fory.builder()
             .withName(EnsureSerializerExample.class.getName())
             .requireClassRegistration(true)
+            .withCodegen(false)
             .build();
-    // register and generate serializer code.
     fory.registerSerializer(Custom.class, new CustomSerializer(fory.getConfig()));
     fory.register(EnsureSerializerExample.class);
     fory.ensureSerializersCompiled();
+    return fory;
   }
 
   public Custom custom = new Custom();
@@ -50,7 +49,7 @@ public class EnsureSerializerExample {
   }
 
   public static void main(String[] args) {
-    test(fory);
+    test(createFory());
     System.out.println("EnsureSerializerExample succeed");
   }
 

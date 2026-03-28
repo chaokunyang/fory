@@ -315,7 +315,7 @@ public class Config implements Serializable {
       return false;
     }
     Config config = (Config) o;
-    return name == config.name
+    return Objects.equals(name, config.name)
         && trackingRef == config.trackingRef
         && mapRefLoadFactor == config.mapRefLoadFactor
         && stringRefIgnored == config.stringRefIgnored

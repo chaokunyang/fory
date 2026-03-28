@@ -49,8 +49,9 @@ public class GraalvmSupport {
   private static final String GRAAL_IMAGE_BUILDTIME = "buildtime";
   private static final String GRAAL_IMAGE_RUNTIME = "runtime";
 
-  private static final Map<Integer, GraalvmClassRegistry> GRAALVM_REGISTRY =
+  private static final Map<Config, GraalvmClassRegistry> GRAALVM_REGISTRY =
       new ConcurrentHashMap<>();
+  private static final GraalvmClassRegistry GLOBAL_REGISTRY = new GraalvmClassRegistry();
 
   static {
     String imageCode = System.getProperty(GRAAL_IMAGE_CODE_KEY);
@@ -81,6 +82,7 @@ public class GraalvmSupport {
   /** Returns all proxy interfaces registered for GraalVM native image compilation. */
   public static Set<Class<?>> getProxyInterfaces() {
     Set<Class<?>> allInterfaces = ConcurrentHashMap.newKeySet();
+    allInterfaces.addAll(GLOBAL_REGISTRY.proxyInterfaces);
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
       allInterfaces.addAll(registry.proxyInterfaces);
     }
@@ -89,6 +91,8 @@ public class GraalvmSupport {
 
   /** Clears all GraalVM native image registrations. Primarily for testing purposes. */
   public static void clearRegistrations() {
+    GLOBAL_REGISTRY.registeredClasses.clear();
+    GLOBAL_REGISTRY.proxyInterfaces.clear();
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
       registry.registeredClasses.clear();
       registry.proxyInterfaces.clear();
@@ -99,14 +103,14 @@ public class GraalvmSupport {
    * Register a class in the GraalVM registry for native image compilation.
    *
    * @param cls the class to register
-   * @param configHash the configuration hash for the Fory instance
+   * @param config the configuration for the Fory instance
    */
-  public static void registerClass(Class<?> cls, int configHash) {
+  public static void registerClass(Class<?> cls, Config config) {
     if (!IN_GRAALVM_NATIVE_IMAGE) {
       return;
     }
     GraalvmClassRegistry registry =
-        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
+        GRAALVM_REGISTRY.computeIfAbsent(config, k -> new GraalvmClassRegistry());
     registry.registeredClasses.add(cls);
   }
 
@@ -114,9 +118,9 @@ public class GraalvmSupport {
    * Register a proxy interface in the GraalVM registry for native image compilation.
    *
    * @param proxyInterface the proxy interface to register
-   * @param configHash the configuration hash for the Fory instance
+   * @param config the configuration for the Fory instance
    */
-  public static void registerProxyInterface(Class<?> proxyInterface, int configHash) {
+  public static void registerProxyInterface(Class<?> proxyInterface, Config config) {
     if (!IN_GRAALVM_NATIVE_IMAGE) {
       return;
     }
@@ -128,7 +132,7 @@ public class GraalvmSupport {
           "Proxy type must be an interface: " + proxyInterface.getName());
     }
     GraalvmClassRegistry registry =
-        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
+        GRAALVM_REGISTRY.computeIfAbsent(config, k -> new GraalvmClassRegistry());
     registry.proxyInterfaces.add(proxyInterface);
   }
 
@@ -138,7 +142,17 @@ public class GraalvmSupport {
    * @param proxyInterface the proxy interface to register
    */
   public static void registerProxySupport(Class<?> proxyInterface) {
-    registerProxyInterface(proxyInterface, 0);
+    if (!IN_GRAALVM_NATIVE_IMAGE) {
+      return;
+    }
+    if (proxyInterface == null) {
+      throw new NullPointerException("Proxy interface must not be null");
+    }
+    if (!proxyInterface.isInterface()) {
+      throw new IllegalArgumentException(
+          "Proxy type must be an interface: " + proxyInterface.getName());
+    }
+    GLOBAL_REGISTRY.proxyInterfaces.add(proxyInterface);
   }
 
   public static class GraalvmSerializerHolder extends Serializer {
@@ -248,14 +262,14 @@ public class GraalvmSupport {
   }
 
   /**
-   * Get the GraalVM class registry for a specific configuration hash. Package-private method for
+   * Get the GraalVM class registry for a specific configuration. Package-private method for
    * use by TypeResolver and ClassResolver.
    */
-  public static GraalvmClassRegistry getClassRegistry(int configHash) {
+  public static GraalvmClassRegistry getClassRegistry(Config config) {
     if (!IN_GRAALVM_NATIVE_IMAGE) {
       return new GraalvmClassRegistry();
     }
-    return GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
+    return GRAALVM_REGISTRY.computeIfAbsent(config, k -> new GraalvmClassRegistry());
   }
 
   /** GraalVM class registry. */

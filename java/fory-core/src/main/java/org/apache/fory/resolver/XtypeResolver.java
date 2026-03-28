@@ -46,13 +46,13 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.Set;
-import java.util.regex.Pattern;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.CodecUtils;
@@ -178,17 +178,13 @@ public class XtypeResolver extends TypeResolver {
         Serializers.CurrencySerializer.class,
         () -> new Serializers.CurrencySerializer(config));
     registerInternalSharedSerializer(
-        URI.class,
-        Serializers.URISerializer.class,
-        () -> new Serializers.URISerializer(config));
+        URI.class, Serializers.URISerializer.class, () -> new Serializers.URISerializer(config));
     registerInternalSharedSerializer(
         Pattern.class,
         Serializers.RegexSerializer.class,
         () -> new Serializers.RegexSerializer(config));
     registerInternalSharedSerializer(
-        UUID.class,
-        Serializers.UUIDSerializer.class,
-        () -> new Serializers.UUIDSerializer(config));
+        UUID.class, Serializers.UUIDSerializer.class, () -> new Serializers.UUIDSerializer(config));
     registerInternalSharedSerializer(
         Object.class,
         Serializers.EmptyObjectSerializer.class,
@@ -212,9 +208,11 @@ public class XtypeResolver extends TypeResolver {
     classInfoMap.put(cls, typeInfo);
     if (typeInfo.userTypeId != INVALID_USER_TYPE_ID) {
       putUserTypeInfo(typeInfo.userTypeId, typeInfo);
+      cacheTypeInfo(typeInfo);
       return;
     }
     if (Types.isUserDefinedType((byte) typeInfo.typeId)) {
+      cacheTypeInfo(typeInfo);
       return;
     }
     TypeInfo currentTypeInfo = getInternalTypeInfoByTypeId(typeInfo.typeId);
@@ -223,6 +221,7 @@ public class XtypeResolver extends TypeResolver {
     if (currentTypeInfo == null || currentTypeInfo.getCls() == cls) {
       putInternalTypeInfo(typeInfo.typeId, typeInfo);
     }
+    cacheTypeInfo(typeInfo);
   }
 
   @Override
@@ -242,7 +241,7 @@ public class XtypeResolver extends TypeResolver {
     TypeInfo typeInfo = classInfoMap.get(type);
     if (type.isArray()) {
       buildTypeInfo(type);
-      GraalvmSupport.registerClass(type, config.getConfigHash());
+      GraalvmSupport.registerClass(type, config);
       return;
     }
     Serializer<?> serializer = null;
@@ -343,8 +342,10 @@ public class XtypeResolver extends TypeResolver {
       int typeId,
       int userTypeId) {
     TypeInfo currentTypeInfo = classInfoMap.get(type);
-    Serializer<?> currentSerializer = currentTypeInfo == null ? null : currentTypeInfo.getSerializer();
-    TypeInfo typeInfo = newTypeInfo(type, currentSerializer, namespace, typeName, typeId, userTypeId);
+    Serializer<?> currentSerializer =
+        currentTypeInfo == null ? null : currentTypeInfo.getSerializer();
+    TypeInfo typeInfo =
+        newTypeInfo(type, currentSerializer, namespace, typeName, typeId, userTypeId);
     String qualifiedName = qualifiedName(namespace, typeName);
     if (serializer == null && typeInfo.getSerializer() == null) {
       if (type.isEnum()) {
@@ -378,7 +379,7 @@ public class XtypeResolver extends TypeResolver {
     }
     qualifiedType2TypeInfo.put(qualifiedName, typeInfo);
     extRegistry.registeredClasses.put(qualifiedName, type);
-    GraalvmSupport.registerClass(type, config.getConfigHash());
+    GraalvmSupport.registerClass(type, config);
     updateTypeInfo(type, typeInfo);
   }
 
@@ -541,12 +542,14 @@ public class XtypeResolver extends TypeResolver {
       return;
     }
     int typeId = determineTypeIdForClass(type);
+    TypeInfo currentTypeInfo = getCachedTypeInfo(type);
+    boolean shareTypeInfo = currentTypeInfo == null || currentTypeInfo.getSerializer() == null;
     TypeInfo sharedTypeInfo = sharedRegistry.getPreRegisteredTypeInfo(type, typeId);
-    if (sharedTypeInfo != null) {
+    if (shareTypeInfo && sharedTypeInfo != null) {
       updateTypeInfo(type, sharedTypeInfo);
       return;
     }
-    TypeInfo typeInfo = getCachedTypeInfo(type);
+    TypeInfo typeInfo = currentTypeInfo;
     if (typeInfo != null) {
       typeInfo =
           new TypeInfo(
@@ -559,7 +562,8 @@ public class XtypeResolver extends TypeResolver {
               typeInfo.getUserTypeId());
       typeInfo.setSerializer(this, sharedRegistry.shareSerializer(type, serializer));
       Serializer<?> sharedSerializer = typeInfo.getSerializer();
-      if (sharedSerializer != null
+      if (shareTypeInfo
+          && sharedSerializer != null
           && sharedSerializer.threadSafe()
           && !needToWriteTypeDef(sharedSerializer)) {
         TypeInfo localTypeInfo = typeInfo;
@@ -573,7 +577,8 @@ public class XtypeResolver extends TypeResolver {
     typeInfo = newTypeInfo(type, null, typeId);
     typeInfo.setSerializer(this, sharedRegistry.shareSerializer(type, serializer));
     Serializer<?> sharedSerializer = typeInfo.getSerializer();
-    if (sharedSerializer != null
+    if (shareTypeInfo
+        && sharedSerializer != null
         && sharedSerializer.threadSafe()
         && !needToWriteTypeDef(sharedSerializer)) {
       TypeInfo localTypeInfo = typeInfo;
@@ -907,8 +912,7 @@ public class XtypeResolver extends TypeResolver {
         Types.BOOL,
         boolean.class,
         new PrimitiveSerializers.BooleanSerializer(config, boolean.class));
-    registerType(
-        Types.BOOL, AtomicBoolean.class, new Serializers.AtomicBooleanSerializer(config));
+    registerType(Types.BOOL, AtomicBoolean.class, new Serializers.AtomicBooleanSerializer(config));
 
     // Byte types
     registerType(
@@ -934,25 +938,18 @@ public class XtypeResolver extends TypeResolver {
 
     // Integer types
     registerType(
-        Types.UINT32,
-        Integer.class,
-        new PrimitiveSerializers.IntSerializer(config, Integer.class));
+        Types.UINT32, Integer.class, new PrimitiveSerializers.IntSerializer(config, Integer.class));
     registerType(
         Types.UINT32, int.class, new PrimitiveSerializers.IntSerializer(config, int.class));
     registerType(
         Types.UINT32, AtomicInteger.class, new Serializers.AtomicIntegerSerializer(config));
     registerType(
-        Types.INT32,
-        Integer.class,
-        new PrimitiveSerializers.IntSerializer(config, Integer.class));
-    registerType(
-        Types.INT32, int.class, new PrimitiveSerializers.IntSerializer(config, int.class));
-    registerType(
-        Types.INT32, AtomicInteger.class, new Serializers.AtomicIntegerSerializer(config));
+        Types.INT32, Integer.class, new PrimitiveSerializers.IntSerializer(config, Integer.class));
+    registerType(Types.INT32, int.class, new PrimitiveSerializers.IntSerializer(config, int.class));
+    registerType(Types.INT32, AtomicInteger.class, new Serializers.AtomicIntegerSerializer(config));
     registerType(
         Types.VAR_UINT32, Integer.class, new PrimitiveSerializers.VarUint32Serializer(config));
-    registerType(
-        Types.VAR_UINT32, int.class, new PrimitiveSerializers.VarUint32Serializer(config));
+    registerType(Types.VAR_UINT32, int.class, new PrimitiveSerializers.VarUint32Serializer(config));
     registerType(
         Types.VARINT32,
         Integer.class,
@@ -995,8 +992,10 @@ public class XtypeResolver extends TypeResolver {
         new PrimitiveSerializers.LongSerializer(config, long.class));
     registerType(
         Types.TAGGED_INT64, AtomicLong.class, new Serializers.AtomicLongSerializer(config));
-    registerType(Types.VAR_UINT64, Long.class, new PrimitiveSerializers.VarUint64Serializer(config));
-    registerType(Types.VAR_UINT64, long.class, new PrimitiveSerializers.VarUint64Serializer(config));
+    registerType(
+        Types.VAR_UINT64, Long.class, new PrimitiveSerializers.VarUint64Serializer(config));
+    registerType(
+        Types.VAR_UINT64, long.class, new PrimitiveSerializers.VarUint64Serializer(config));
     registerType(
         Types.VARINT64, Long.class, new PrimitiveSerializers.LongSerializer(config, Long.class));
     registerType(
@@ -1022,11 +1021,11 @@ public class XtypeResolver extends TypeResolver {
         new PrimitiveSerializers.DoubleSerializer(config, double.class));
 
     // String types
-    registerType(Types.STRING, String.class, new org.apache.fory.serializer.StringSerializer(config));
+    registerType(
+        Types.STRING, String.class, new org.apache.fory.serializer.StringSerializer(config));
     registerType(
         Types.STRING, StringBuilder.class, new Serializers.StringBuilderSerializer(config));
-    registerType(
-        Types.STRING, StringBuffer.class, new Serializers.StringBufferSerializer(config));
+    registerType(Types.STRING, StringBuffer.class, new Serializers.StringBufferSerializer(config));
 
     // Time types
     registerType(Types.DURATION, Duration.class, new TimeSerializers.DurationSerializer(config));
@@ -1034,12 +1033,9 @@ public class XtypeResolver extends TypeResolver {
     registerType(Types.TIMESTAMP, Date.class, new TimeSerializers.DateSerializer(config));
     registerType(
         Types.TIMESTAMP, java.sql.Date.class, new TimeSerializers.SqlDateSerializer(config));
+    registerType(Types.TIMESTAMP, Timestamp.class, new TimeSerializers.TimestampSerializer(config));
     registerType(
-        Types.TIMESTAMP, Timestamp.class, new TimeSerializers.TimestampSerializer(config));
-    registerType(
-        Types.TIMESTAMP,
-        LocalDateTime.class,
-        new TimeSerializers.LocalDateTimeSerializer(config));
+        Types.TIMESTAMP, LocalDateTime.class, new TimeSerializers.LocalDateTimeSerializer(config));
     registerType(Types.DATE, LocalDate.class, new TimeSerializers.LocalDateSerializer(config));
 
     // Decimal types
@@ -1168,8 +1164,7 @@ public class XtypeResolver extends TypeResolver {
           && !needToWriteTypeDef(sharedSerializer)) {
         TypeInfo localTypeInfo = typeInfo;
         typeInfo =
-            sharedRegistry.getOrCreatePreRegisteredTypeInfo(
-                type, xtypeId, () -> localTypeInfo);
+            sharedRegistry.getOrCreatePreRegisteredTypeInfo(type, xtypeId, () -> localTypeInfo);
       }
     }
     classInfoMap.put(type, typeInfo);
@@ -1466,9 +1461,12 @@ public class XtypeResolver extends TypeResolver {
    */
   @Override
   public void ensureSerializersCompiled() {
+    if (GraalvmSupport.isGraalRuntime()) {
+      return;
+    }
     classInfoMap.forEach(
         (cls, classInfo) -> {
-          GraalvmSupport.registerClass(cls, config.getConfigHash());
+          GraalvmSupport.registerClass(cls, config);
           if (classInfo.serializer != null) {
             // Trigger serializer initialization and resolution for deferred serializers
             if (classInfo.serializer

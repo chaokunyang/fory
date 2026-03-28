@@ -55,14 +55,6 @@ public class JdkProxySerializer extends Serializer {
   private static final InvocationHandler STUB_HANDLER = new StubInvocationHandler();
   private final TypeResolver typeResolver;
 
-  private interface StubInterface {
-    int apply();
-  }
-
-  public static Object SUBT_PROXY =
-      Proxy.newProxyInstance(
-          Serializer.class.getClassLoader(), new Class[] {StubInterface.class}, STUB_HANDLER);
-
   public JdkProxySerializer(TypeResolver typeResolver, Class cls) {
     super(typeResolver.getConfig(), cls);
     this.typeResolver = typeResolver;

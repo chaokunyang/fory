@@ -26,24 +26,26 @@ import java.util.Set;
 import org.apache.fory.Fory;
 
 public class ObjectStreamExample extends AbstractMap<Integer, Integer> {
-  private static final Fory FORY =
-      Fory.builder()
-          .withName(ObjectStreamExample.class.getName())
-          .registerGuavaTypes(false)
-          .build();
-
-  static {
-    FORY.register(ObjectStreamExample.class);
-    FORY.ensureSerializersCompiled();
+  private static Fory createFory() {
+    Fory fory =
+        Fory.builder()
+            .withName(ObjectStreamExample.class.getName())
+            .registerGuavaTypes(false)
+            .withCodegen(false)
+            .build();
+    fory.register(ObjectStreamExample.class);
+    fory.ensureSerializersCompiled();
+    return fory;
   }
 
   final int[] ints = new int[10];
 
   public static void main(String[] args) {
-    FORY.reset();
-    byte[] bytes = FORY.serialize(new ObjectStreamExample());
-    FORY.reset();
-    ObjectStreamExample o = (ObjectStreamExample) FORY.deserialize(bytes);
+    Fory fory = createFory();
+    fory.reset();
+    byte[] bytes = fory.serialize(new ObjectStreamExample());
+    fory.reset();
+    ObjectStreamExample o = (ObjectStreamExample) fory.deserialize(bytes);
     System.out.println(Arrays.toString(o.ints));
   }
 

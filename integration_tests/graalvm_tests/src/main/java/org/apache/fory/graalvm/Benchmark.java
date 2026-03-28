@@ -69,21 +69,17 @@ public class Benchmark {
     }
   }
 
-  private static final Fory fory1;
-  private static final Fory fory2;
-
-  static {
-    fory1 = Fory.builder().withNumberCompressed(false).build();
-    fory1.register(Foo.class);
-    fory1.register(Struct.class);
-    fory1.ensureSerializersCompiled();
-    fory2 = Fory.builder().withNumberCompressed(true).build();
-    fory2.register(Foo.class);
-    fory2.register(Struct.class);
-    fory2.ensureSerializersCompiled();
+  private static Fory createFory(boolean compressNumber) {
+    Fory fory = Fory.builder().withNumberCompressed(compressNumber).withCodegen(false).build();
+    fory.register(Foo.class);
+    fory.register(Struct.class);
+    fory.ensureSerializersCompiled();
+    return fory;
   }
 
   public static void main(String[] args) {
+    Fory fory1 = createFory(false);
+    Fory fory2 = createFory(true);
     List<String> list = new ArrayList<>();
     for (int i = 0; i < 20; i++) {
       list.add("string" + i);
@@ -92,19 +88,18 @@ public class Benchmark {
     for (int i = 0; i < 20; i++) {
       map.put("key" + i, (long) i);
     }
-    benchmark(true, Struct.create());
-    benchmark(false, Struct.create());
-    benchmark(true, new Foo(100, "abc", list, map));
-    benchmark(false, new Foo(100, "abc", list, map));
+    benchmark(fory2, true, Struct.create());
+    benchmark(fory1, false, Struct.create());
+    benchmark(fory2, true, new Foo(100, "abc", list, map));
+    benchmark(fory1, false, new Foo(100, "abc", list, map));
   }
 
-  public static void benchmark(boolean compressNumber, Object obj) {
+  public static void benchmark(Fory fory, boolean compressNumber, Object obj) {
     String foryRepeat = System.getenv("BENCHMARK_REPEAT");
     if (foryRepeat == null) {
       return;
     }
     int n = Integer.parseInt(foryRepeat);
-    Fory fory = compressNumber ? fory2 : fory1;
     System.out.println("=========================");
     System.out.println("Benchmark repeat number: " + foryRepeat);
     System.out.println("Object type: " + obj.getClass());

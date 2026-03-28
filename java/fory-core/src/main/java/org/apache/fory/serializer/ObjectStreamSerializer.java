@@ -664,7 +664,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       this.slotsSerializer = new MetaSharedLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
 
       // Register JIT callback to replace with JIT serializer when ready
-      if (config.isCodeGenEnabled()) {
+      if (config.isCodeGenEnabled() && !GraalvmSupport.isGraalRuntime()) {
         SlotsInfo thisInfo = this;
         typeResolver.getJITContext()
             .registerSerializerJITCallback(

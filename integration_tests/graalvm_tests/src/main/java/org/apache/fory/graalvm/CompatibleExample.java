@@ -23,18 +23,13 @@ import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 
 public class CompatibleExample {
-  static Fory fory;
-
-  static {
-    fory = createFory();
-  }
-
   private static Fory createFory() {
     Fory fory =
         Fory.builder()
             .requireClassRegistration(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
             .withScopedMetaShare(false)
+            .withCodegen(false)
             .build();
     // register and generate serializer code.
     fory.register(Foo.class);
@@ -44,9 +39,9 @@ public class CompatibleExample {
 
   public static void main(String[] args) {
     System.out.println("CompatibleExample started");
+    Fory fory = createFory();
     Example.test(fory);
     System.out.println("CompatibleExample succeed 1/2");
-    // Test new created Fory at runtime
     fory = createFory();
     Example.test(fory);
     System.out.println("CompatibleExample succeed");

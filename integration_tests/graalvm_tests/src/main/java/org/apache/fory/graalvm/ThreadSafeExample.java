@@ -30,27 +30,26 @@ import org.apache.fory.collection.Collections;
 import org.apache.fory.util.Preconditions;
 
 public class ThreadSafeExample {
-  static ThreadSafeFory fory;
-
-  static {
-    fory =
+  private static ThreadSafeFory createFory() {
+    ThreadSafeFory fory =
         Fory.builder()
             .withName(ThreadSafeExample.class.getName())
             .requireClassRegistration(true)
+            .withCodegen(false)
             .buildThreadSafeFory();
     fory.register(Foo.class);
     fory.ensureSerializersCompiled();
-    System.out.println("Init fory at build time");
+    return fory;
   }
 
   public static void main(String[] args) throws Throwable {
-    test(fory);
+    test(createFory());
     System.out.println("ThreadSafeExample succeed");
   }
 
   static void test(ThreadSafeFory fory) throws Throwable {
     ThreadSafeExample threadSafeExample = new ThreadSafeExample();
-    threadSafeExample.test();
+    threadSafeExample.runChecks(fory);
     System.out.println("single thread works");
     ExecutorService service = Executors.newFixedThreadPool(10);
     System.out.println("Start to submit tasks");
@@ -58,7 +57,7 @@ public class ThreadSafeExample {
       service.submit(
           () -> {
             try {
-              threadSafeExample.test();
+              threadSafeExample.runChecks(fory);
             } catch (Throwable t) {
               threadSafeExample.throwable = t;
             }
@@ -76,7 +75,7 @@ public class ThreadSafeExample {
 
   private volatile Throwable throwable;
 
-  private void test() {
+  private void runChecks(ThreadSafeFory fory) {
     Preconditions.checkArgument("abc".equals(fory.deserialize(fory.serialize("abc"))));
     Preconditions.checkArgument(
         List.of(1, 2, 3).equals(fory.deserialize(fory.serialize(List.of(1, 2, 3)))));

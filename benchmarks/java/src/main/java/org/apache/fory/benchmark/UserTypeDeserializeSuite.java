@@ -72,7 +72,7 @@ public class UserTypeDeserializeSuite {
   @Benchmark
   public Object forymetashared_deserialize_compatible(ForyState.ForyMetaSharedState state) {
     state.buffer.readerIndex(0);
-    state.fory.getSerializationContext().setMetaContext(state.readerMetaContext);
+    state.fory.setMetaContext(state.readerMetaContext);
     return state.fory.deserialize(state.buffer);
   }
 

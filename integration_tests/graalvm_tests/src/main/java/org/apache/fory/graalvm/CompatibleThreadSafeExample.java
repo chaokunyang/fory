@@ -24,22 +24,21 @@ import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.config.CompatibleMode;
 
 public class CompatibleThreadSafeExample {
-  static ThreadSafeFory fory;
-
-  static {
-    fory =
+  private static ThreadSafeFory createFory() {
+    ThreadSafeFory fory =
         Fory.builder()
             .withName(CompatibleThreadSafeExample.class.getName())
             .requireClassRegistration(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(false)
             .buildThreadSafeFory();
     fory.register(Foo.class);
     fory.ensureSerializersCompiled();
-    System.out.println("Init fory at build time");
+    return fory;
   }
 
   public static void main(String[] args) throws Throwable {
-    ThreadSafeExample.test(fory);
+    ThreadSafeExample.test(createFory());
     System.out.println("CompatibleThreadSafeExample succeed");
   }
 }

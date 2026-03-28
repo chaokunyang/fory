@@ -29,7 +29,6 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
-import org.apache.fory.util.function.SerializableFunction;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
@@ -39,17 +38,11 @@ import org.apache.fory.util.unsafe._JDKAccess;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class LambdaSerializer extends Serializer {
-  public static final Class<?> STUB_LAMBDA_CLASS = stubLambdaClass();
   private static final ClassValueCache<MethodHandle> writeReplaceMethodCache =
       ClassValueCache.newClassKeySoftCache(32);
 
   private final MethodHandle writeReplaceHandle;
   private final SerializedLambdaSerializer serializedLambdaSerializer;
-
-  private static Class<?> stubLambdaClass() {
-    SerializableFunction<Integer, Integer> function = x -> x * 2;
-    return function.getClass();
-  }
 
   public LambdaSerializer(TypeResolver typeResolver, Class<?> cls) {
     super(typeResolver.getConfig(), cls);

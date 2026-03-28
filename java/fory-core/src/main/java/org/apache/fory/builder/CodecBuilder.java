@@ -454,13 +454,7 @@ public abstract class CodecBuilder {
                 inlineInvoke(
                     classExpr, "getDeclaredField", fieldTypeRef, Literal.ofString(fieldName));
           } else {
-            fieldExpr =
-                new StaticInvoke(
-                    ReflectionUtils.class,
-                    "getField",
-                    fieldTypeRef,
-                    classExpr,
-                    Literal.ofString(fieldName));
+            fieldExpr = reflectionUtilsInvoke("getField", fieldTypeRef, classExpr, Literal.ofString(fieldName));
           }
           if (!setAccessible) {
             return fieldExpr;
@@ -544,13 +538,7 @@ public abstract class CodecBuilder {
           true,
           Class.class,
           name,
-          () ->
-              new StaticInvoke(
-                      ReflectionUtils.class,
-                      "loadClass",
-                      CLASS_TYPE,
-                      Literal.ofString(cls.getName()))
-                  .inline());
+          () -> inlineReflectionUtilsInvoke("loadClass", CLASS_TYPE, Literal.ofString(cls.getName())));
     }
     throw new UnsupportedOperationException();
   }
@@ -576,11 +564,21 @@ public abstract class CodecBuilder {
     return getOrCreateField(
         true,
         Class.class,
-        fieldName,
-        () ->
-            new StaticInvoke(
-                    ReflectionUtils.class, "loadClass", CLASS_TYPE, Literal.ofString(cls.getName()))
-                .inline());
+      fieldName,
+      () ->
+          inlineReflectionUtilsInvoke("loadClass", CLASS_TYPE, Literal.ofString(cls.getName())));
+  }
+
+  private StaticInvoke reflectionUtilsInvoke(
+      String methodName, TypeRef<?> returnType, Expression... arguments) {
+    return new StaticInvoke(
+        ReflectionUtils.class, methodName, "", returnType, false, false, false, arguments);
+  }
+
+  private StaticInvoke inlineReflectionUtilsInvoke(
+      String methodName, TypeRef<?> returnType, Expression... arguments) {
+    return new StaticInvoke(
+        ReflectionUtils.class, methodName, "", returnType, false, true, false, arguments);
   }
 
   /** Build unsafePut operation. */

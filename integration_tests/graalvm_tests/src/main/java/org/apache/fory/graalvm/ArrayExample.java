@@ -25,11 +25,11 @@ import org.apache.fory.Fory;
 import org.apache.fory.util.Preconditions;
 
 public class ArrayExample {
-  private static final Fory FORY = Fory.builder().registerGuavaTypes(false).build();
-
-  static {
-    FORY.register(ArrayExample.class);
-    FORY.ensureSerializersCompiled();
+  private static Fory createFory() {
+    Fory fory = Fory.builder().registerGuavaTypes(false).withCodegen(false).build();
+    fory.register(ArrayExample.class);
+    fory.ensureSerializersCompiled();
+    return fory;
   }
 
   byte[] bytes;
@@ -39,7 +39,8 @@ public class ArrayExample {
   Object[] objects;
 
   public static void main(String[] args) {
-    FORY.reset();
+    Fory fory = createFory();
+    fory.reset();
     ArrayExample arrayExample = new ArrayExample();
     arrayExample.bytes = "01234567890".getBytes(StandardCharsets.UTF_8);
     arrayExample.shorts = new short[] {0xF01, 0xF02, 0xF03, 0xF04, 0xF05, 0xF06, 0xF07, 0xF08};
@@ -47,8 +48,8 @@ public class ArrayExample {
     arrayExample.longs = new long[] {0x0FFF_0000_FFFF_0001L, 0x0FFF_0000_FFFF_0002L};
     arrayExample.objects = new Object[] {"A", "B"};
 
-    byte[] bytes = FORY.serialize(arrayExample);
-    ArrayExample deserialized = FORY.deserialize(bytes, ArrayExample.class);
+    byte[] bytes = fory.serialize(arrayExample);
+    ArrayExample deserialized = fory.deserialize(bytes, ArrayExample.class);
     Preconditions.checkArgument(Arrays.equals(arrayExample.bytes, deserialized.bytes));
     Preconditions.checkArgument(Arrays.equals(arrayExample.shorts, deserialized.shorts));
     Preconditions.checkArgument(Arrays.equals(arrayExample.ints, deserialized.ints));

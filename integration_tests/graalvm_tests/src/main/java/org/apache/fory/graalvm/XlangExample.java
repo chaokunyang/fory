@@ -25,13 +25,16 @@ import org.apache.fory.Fory;
 import org.apache.fory.util.Preconditions;
 
 public class XlangExample {
-  static Fory fory;
-
-  static {
-    fory = Fory.builder().withName(XlangExample.class.getName()).withXlang(true).build();
-    // register and generate serializer code.
+  private static Fory createFory() {
+    Fory fory =
+        Fory.builder()
+            .withName(XlangExample.class.getName())
+            .withXlang(true)
+            .withCodegen(false)
+            .build();
     fory.register(Foo.class);
     fory.ensureSerializersCompiled();
+    return fory;
   }
 
   static void test(Fory fory) {
@@ -50,7 +53,7 @@ public class XlangExample {
   }
 
   public static void main(String[] args) {
-    test(fory);
+    test(createFory());
     System.out.println("XlangExample succeed");
   }
 }

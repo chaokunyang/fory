@@ -82,6 +82,11 @@ public class ForyGraalVMFeature implements Feature {
   private void registerClass(Class<?> clazz) {
     RuntimeReflection.register(clazz);
     RuntimeReflection.registerClassLookup(clazz.getName());
+    RuntimeReflection.registerAllDeclaredFields(clazz);
+    for (Field field : clazz.getDeclaredFields()) {
+      RuntimeReflection.register(field);
+      RuntimeReflection.registerFieldLookup(clazz, field.getName());
+    }
 
     if (RecordUtils.isRecord(clazz)) {
       registerRecordClass(clazz);
@@ -92,10 +97,6 @@ public class ForyGraalVMFeature implements Feature {
 
   private void registerRecordClass(Class<?> clazz) {
     RuntimeReflection.registerForReflectiveInstantiation(clazz);
-    for (Field field : clazz.getDeclaredFields()) {
-      RuntimeReflection.register(field);
-      RuntimeReflection.registerFieldLookup(clazz, field.getName());
-    }
     for (Method method : clazz.getDeclaredMethods()) {
       RuntimeReflection.register(method);
       RuntimeReflection.registerMethodLookup(clazz, method.getName(), method.getParameterTypes());

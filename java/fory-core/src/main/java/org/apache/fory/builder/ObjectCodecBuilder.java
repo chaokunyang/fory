@@ -473,8 +473,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     Expression bean;
     if (!isRecord) {
       bean = newBean();
-      Expression referenceObject =
-          new Invoke(readContextRef(), "reference", PRIMITIVE_VOID_TYPE, bean);
+      Expression referenceObject = invokeReadContext("reference", bean);
       expressions.add(bean);
       expressions.add(referenceObject);
     } else {

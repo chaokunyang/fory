@@ -536,7 +536,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   /**
    * Get and reset numElements of deserializing collection. Should be called after {@link
-   * #newCollection(MemoryBuffer buffer)}. Nested read may overwrite this element, reset is
+   * #newCollection(ReadContext, MemoryBuffer)}. Nested read may overwrite this element, reset is
    * necessary to avoid use wrong value by mistake.
    */
   public int getAndClearNumElements() {

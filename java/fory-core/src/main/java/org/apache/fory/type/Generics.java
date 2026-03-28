@@ -42,9 +42,9 @@ public class Generics {
 
   /**
    * Sets the type that is currently being serialized. Must be balanced by {@link
-   * #popGenericType()}. Between those calls, the {@link GenericType generic type} are returned by
-   * {@link #nextGenericType}. Fory serialization depth should be increased after this call and
-   * before {@link #nextGenericType}.
+   * #popGenericType(int)}. Between those calls, the {@link GenericType generic type} are returned
+   * by {@link #nextGenericType(int)}. Fory serialization depth should be increased after this call
+   * and before {@link #nextGenericType(int)}.
    *
    * @see WriteContext#writeRef(Object, TypeInfo)
    */
@@ -70,9 +70,9 @@ public class Generics {
 
   /**
    * Removes the generic types being tracked since the corresponding {@link
-   * #pushGenericType(GenericType)}. This is safe to call even if {@link
-   * #pushGenericType(GenericType)} was not called. Fory serialization depth should be decreased
-   * before this call and after {@link #nextGenericType}.
+   * #pushGenericType(GenericType, int)}. This is safe to call even if {@link
+   * #pushGenericType(GenericType, int)} was not called. Fory serialization depth should be
+   * decreased before this call and after {@link #nextGenericType(int)}.
    *
    * @see WriteContext#writeRef(Object, TypeInfo)
    */

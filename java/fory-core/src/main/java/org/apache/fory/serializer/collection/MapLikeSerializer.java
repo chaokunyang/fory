@@ -1017,8 +1017,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   /**
    * Get and reset numElements of deserializing collection. Should be called after {@link
-   * #newMap(MemoryBuffer buffer)}. Nested read may overwrite this element, reset is necessary to
-   * avoid use wrong value by mistake.
+   * #newMap(ReadContext, MemoryBuffer)}. Nested read may overwrite this element, reset is
+   * necessary to avoid use wrong value by mistake.
    */
   public int getAndClearNumElements() {
     int size = numElements;

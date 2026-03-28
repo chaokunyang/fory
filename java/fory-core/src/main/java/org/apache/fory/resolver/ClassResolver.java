@@ -1771,7 +1771,7 @@ public class ClassResolver extends TypeResolver {
   /**
    * Write classname for java serialization. Note that the object of provided class can be
    * non-serializable, and class with writeReplace/readResolve defined won't be skipped. For
-   * serializable object, {@link #writeTypeInfo(MemoryBuffer, TypeInfo)} should be invoked.
+   * serializable object, {@link #writeTypeInfo(WriteContext, TypeInfo)} should be invoked.
    */
   public void writeClassInternal(WriteContext writeContext, Class<?> cls) {
     TypeInfo typeInfo = classInfoMap.get(cls);
@@ -1825,7 +1825,7 @@ public class ClassResolver extends TypeResolver {
 
   /**
    * Read serialized java classname. Note that the object of the class can be non-serializable. For
-   * serializable object, {@link #readTypeInfo(MemoryBuffer)} or {@link #readTypeInfo(MemoryBuffer,
+   * serializable object, {@link #readTypeInfo(ReadContext)} or {@link #readTypeInfo(ReadContext,
    * TypeInfoHolder)} should be invoked.
    */
   public Class<?> readClassInternal(ReadContext readContext) {

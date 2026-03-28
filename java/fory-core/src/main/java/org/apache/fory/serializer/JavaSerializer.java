@@ -77,10 +77,11 @@ public class JavaSerializer extends AbstractObjectSerializer {
     MemoryBuffer buffer = writeContext.getBuffer();
     try {
       objectOutput.setBuffer(buffer);
-      ObjectOutputStream objectOutputStream = (ObjectOutputStream) writeContext.get(objectOutput);
+      ObjectOutputStream objectOutputStream =
+          (ObjectOutputStream) writeContext.getContextObject(objectOutput);
       if (objectOutputStream == null) {
         objectOutputStream = new ObjectOutputStream(objectOutput);
-        writeContext.add(objectOutput, objectOutputStream);
+        writeContext.putContextObject(objectOutput, objectOutputStream);
       }
       objectOutputStream.writeObject(value);
       objectOutputStream.flush();
@@ -94,11 +95,12 @@ public class JavaSerializer extends AbstractObjectSerializer {
     MemoryBuffer buffer = readContext.getBuffer();
     try {
       objectInput.setBuffer(buffer);
-      ObjectInputStream objectInputStream = (ObjectInputStream) readContext.get(objectInput);
+      ObjectInputStream objectInputStream =
+          (ObjectInputStream) readContext.getContextObject(objectInput);
       if (objectInputStream == null) {
         objectInputStream =
             new ClassLoaderObjectInputStream(typeResolver.getClassLoader(), objectInput);
-        readContext.add(objectInput, objectInputStream);
+        readContext.putContextObject(objectInput, objectInputStream);
       }
       return objectInputStream.readObject();
     } catch (IOException | ClassNotFoundException e) {

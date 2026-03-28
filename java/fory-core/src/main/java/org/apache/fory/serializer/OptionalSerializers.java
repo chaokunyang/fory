@@ -82,6 +82,11 @@ public final class OptionalSerializers {
         return OptionalInt.empty();
       }
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class OptionalLongSerializer extends ImmutableSerializer<OptionalLong> {
@@ -106,6 +111,11 @@ public final class OptionalSerializers {
         return OptionalLong.empty();
       }
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class OptionalDoubleSerializer extends ImmutableSerializer<OptionalDouble> {
@@ -129,6 +139,11 @@ public final class OptionalSerializers {
       } else {
         return OptionalDouble.empty();
       }
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 

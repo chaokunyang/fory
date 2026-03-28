@@ -54,7 +54,7 @@ public class SerializedLambdaSerializer extends Serializer {
   }
 
   public SerializedLambdaSerializer(TypeResolver typeResolver, Class<?> cls) {
-    super(typeResolver, cls);
+    super(typeResolver.getConfig(), cls);
     this.typeResolver = typeResolver;
     Preconditions.checkArgument(cls == SERIALIZED_LAMBDA);
   }

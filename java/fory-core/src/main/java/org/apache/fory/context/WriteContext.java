@@ -51,7 +51,7 @@ public final class WriteContext {
   private final LongEncoding longEncoding;
   private final boolean forVirtualThread;
   private final boolean scopedMetaShareEnabled;
-  private final IdentityHashMap<Object, Object> objects = new IdentityHashMap<>();
+  private final IdentityHashMap<Object, Object> contextObjects = new IdentityHashMap<>();
   private MemoryBuffer buffer;
   private BufferCallback bufferCallback;
   private MetaContext metaContext;
@@ -95,8 +95,8 @@ public final class WriteContext {
     refWriter.reset();
     typeResolver.resetWrite();
     metaStringWriter.reset();
-    if (!objects.isEmpty()) {
-      objects.clear();
+    if (!contextObjects.isEmpty()) {
+      contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
       metaContext.classMap.clear();
@@ -151,16 +151,16 @@ public final class WriteContext {
     return typeResolver.getStringSerializer();
   }
 
-  public Object add(Object key, Object value) {
-    return objects.put(key, value);
+  public Object putContextObject(Object key, Object value) {
+    return contextObjects.put(key, value);
   }
 
-  public boolean containsKey(Object key) {
-    return objects.containsKey(key);
+  public boolean containsContextObject(Object key) {
+    return contextObjects.containsKey(key);
   }
 
-  public Object get(Object key) {
-    return objects.get(key);
+  public Object getContextObject(Object key) {
+    return contextObjects.get(key);
   }
 
   public MetaContext getMetaContext() {
@@ -192,15 +192,15 @@ public final class WriteContext {
     this.depth = depth;
   }
 
-  public void incDepth(int diff) {
+  public void increaseDepth(int diff) {
     depth += diff;
   }
 
-  public void incDepth() {
+  public void increaseDepth() {
     depth += 1;
   }
 
-  public void decDepth() {
+  public void decreaseDepth() {
     depth -= 1;
   }
 

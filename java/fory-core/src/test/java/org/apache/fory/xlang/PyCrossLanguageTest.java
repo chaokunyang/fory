@@ -631,7 +631,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
   private static class ComplexObject1Serializer extends Serializer<ComplexObject1> {
 
     public ComplexObject1Serializer(TypeResolver typeResolver, Class<ComplexObject1> cls) {
-      super(typeResolver, cls);
+      super(typeResolver.getConfig(), cls);
     }
 
     @Override

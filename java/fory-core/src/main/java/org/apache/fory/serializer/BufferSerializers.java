@@ -35,8 +35,7 @@ public class BufferSerializers {
    * doesn't implement {@link java.io.Serializable}, it's ok to only serialize data. Also Note that
    * a direct buffer may be returned if the serialized buffer is a heap buffer.
    */
-  public static final class ByteBufferSerializer
-      extends Serializers.CrossLanguageCompatibleSerializer<ByteBuffer> {
+  public static final class ByteBufferSerializer extends Serializer<ByteBuffer> {
 
     public ByteBufferSerializer(TypeResolver typeResolver, Class<ByteBuffer> cls) {
       super(typeResolver.getConfig(), cls);
@@ -65,6 +64,11 @@ public class BufferSerializers {
       originalBuffer.order(
           isBigEndian == (byte) 1 ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN);
       return originalBuffer;
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 

@@ -335,7 +335,7 @@ public class ForyCopyTest extends ForyTestBase {
 
   private static final class ExplodingCopyBeanSerializer extends Serializer<ExplodingCopyBean> {
     private ExplodingCopyBeanSerializer(TypeResolver typeResolver) {
-      super(typeResolver, ExplodingCopyBean.class);
+      super(typeResolver.getConfig(), ExplodingCopyBean.class);
     }
 
     @Override

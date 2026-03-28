@@ -34,7 +34,7 @@ public class LazySerializer extends Serializer {
   private Serializer serializer;
 
   public LazySerializer(TypeResolver typeResolver, Class type, Supplier<Serializer> serializerSupplier) {
-    super(typeResolver, type);
+    super(typeResolver.getConfig(), type);
     this.config = typeResolver.getConfig();
     this.typeResolver = typeResolver;
     this.serializerSupplier = serializerSupplier;

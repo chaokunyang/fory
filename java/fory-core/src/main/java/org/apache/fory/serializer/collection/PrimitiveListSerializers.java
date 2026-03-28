@@ -38,18 +38,21 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.Serializer;
 
 /** Serializers for primitive list types. */
-@SuppressWarnings({"rawtypes", "unchecked"})
 public class PrimitiveListSerializers {
-  public abstract static class PrimitiveListSerializer<T>
-      extends Serializers.CrossLanguageCompatibleSerializer<T> {
+  public abstract static class PrimitiveListSerializer<T> extends Serializer<T> {
     protected final Config config;
 
     public PrimitiveListSerializer(Config config, Class<T> type) {
       super(config, type, false, true);
       this.config = config;
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 

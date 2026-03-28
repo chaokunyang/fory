@@ -56,7 +56,7 @@ public class ArraySerializers {
     private final GenericType componentGenericType;
 
     public ObjectArraySerializer(TypeResolver typeResolver, Class<T[]> cls) {
-      super(typeResolver, cls);
+      super(typeResolver.getConfig(), cls);
       this.config = typeResolver.getConfig();
       this.typeResolver = typeResolver;
       TypeResolver resolver = typeResolver;
@@ -253,8 +253,7 @@ public class ArraySerializers {
 
   // Implement all read/write methods in subclasses to avoid
   // virtual method call cost.
-  public abstract static class PrimitiveArraySerializer<T>
-      extends Serializers.CrossLanguageCompatibleSerializer<T> {
+  public abstract static class PrimitiveArraySerializer<T> extends Serializer<T> {
     protected final Config config;
     protected final TypeResolver typeResolver;
 
@@ -262,6 +261,11 @@ public class ArraySerializers {
       super(typeResolver.getConfig(), cls);
       this.config = typeResolver.getConfig();
       this.typeResolver = typeResolver;
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -954,7 +958,7 @@ public class ArraySerializers {
     private final ForyArrayAsListSerializer.ArrayAsList list;
 
     public StringArraySerializer(TypeResolver typeResolver) {
-      super(typeResolver, String[].class);
+      super(typeResolver.getConfig(), String[].class);
       this.config = typeResolver.getConfig();
       stringSerializer = typeResolver.getStringSerializer();
       collectionSerializer = new ForyArrayAsListSerializer(typeResolver);
@@ -1106,7 +1110,7 @@ public class ArraySerializers {
 
     public AbstractUnknownArraySerializer(
         TypeResolver typeResolver, String className, Class<?> stubClass) {
-      super(typeResolver, stubClass);
+      super(typeResolver.getConfig(), stubClass);
       this.typeResolver = typeResolver;
       this.className = className;
       this.dims = TypeUtils.getArrayDimensions(stubClass);

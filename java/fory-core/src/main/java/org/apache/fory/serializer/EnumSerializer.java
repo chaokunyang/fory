@@ -38,7 +38,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   private final MetaStringRef[] metaStringStateArrByEnumOrdinal;
 
   public EnumSerializer(TypeResolver typeResolver, Class<Enum> cls) {
-    super(typeResolver, cls, false);
+    super(typeResolver.getConfig(), cls, false);
     this.config = typeResolver.getConfig();
     if (cls.isEnum()) {
       enumConstants = cls.getEnumConstants();
@@ -128,5 +128,10 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
         throw new IllegalArgumentException(
             String.format("Enum string %s not in %s", value, Arrays.toString(enumConstants)));
     }
+  }
+
+  @Override
+  public boolean threadSafe() {
+    return true;
   }
 }

@@ -41,6 +41,7 @@ import org.apache.fory.util.function.SerializableSupplier;
  * org.apache.fory.codegen.Expression} to invoke the new generated method.
  */
 public class ExpressionOptimizer {
+  private static final String JAVA_IDENTIFIER_PATTERN = "[A-Za-z_$][A-Za-z\\d_$]*";
 
   public static Expression invokeGenerated(
       CodegenContext ctx,
@@ -105,7 +106,7 @@ public class ExpressionOptimizer {
       }
       Preconditions.checkArgument(
           expression.type() != PRIMITIVE_VOID_TYPE, "Cut on block is not supported currently.");
-      String param = ctx.newName(getRawType(expression.type()));
+      String param = getParamName(ctx, expression);
       cutExprMap.put(expression, new Reference(param, expression.type()));
     }
     // iterate groupExpressions dag to update cutoff point to `Reference`.
@@ -130,7 +131,9 @@ public class ExpressionOptimizer {
     CodegenContext codegenContext =
         new CodegenContext(ctx.getPackage(), ctx.getValNames(), ctx.getImports());
     for (Reference reference : cutExprMap.values()) {
-      Preconditions.checkArgument(codegenContext.containName(reference.name()));
+      if (!codegenContext.containName(reference.name())) {
+        codegenContext.reserveName(reference.name());
+      }
     }
     String methodName = ctx.newName(methodPrefix);
     String code = groupExpressions.genCode(codegenContext).code();
@@ -164,5 +167,15 @@ public class ExpressionOptimizer {
           false,
           actualParams.toArray(new Expression[0]));
     }
+  }
+
+  private static String getParamName(CodegenContext ctx, Expression expression) {
+    if (expression instanceof Reference) {
+      String name = ((Reference) expression).name();
+      if (name.matches(JAVA_IDENTIFIER_PATTERN)) {
+        return name;
+      }
+    }
+    return ctx.newName(getRawType(expression.type()));
   }
 }

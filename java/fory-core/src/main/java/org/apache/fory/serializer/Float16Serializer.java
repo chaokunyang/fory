@@ -39,4 +39,9 @@ public final class Float16Serializer extends ImmutableSerializer<Float16> {
   public Float16 read(ReadContext readContext) {
     return Float16.fromBits(readContext.getBuffer().readInt16());
   }
+
+  @Override
+  public boolean threadSafe() {
+    return true;
+  }
 }

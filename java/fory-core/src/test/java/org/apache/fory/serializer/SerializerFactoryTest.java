@@ -57,7 +57,7 @@ public class SerializerFactoryTest {
     private ByteBufferInput input;
 
     public KryoSerializer(TypeResolver typeResolver, Class cls) {
-      super(typeResolver, cls);
+      super(typeResolver.getConfig(), cls);
       kryo = new Kryo();
       kryo.setRegistrationRequired(false);
       output = new Output(64, Integer.MAX_VALUE);

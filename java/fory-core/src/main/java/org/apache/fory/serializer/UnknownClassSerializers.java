@@ -36,7 +36,6 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
-import org.apache.fory.serializer.Serializers.CrossLanguageCompatibleSerializer;
 import org.apache.fory.serializer.UnknownClass.UnknownEnum;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
@@ -71,7 +70,7 @@ public final class UnknownClassSerializers {
     private final LongMap<ClassFieldsInfo> fieldsInfoMap;
 
     public UnknownStructSerializer(TypeResolver typeResolver, TypeDef typeDef) {
-      super(typeResolver, UnknownClass.UnknownStruct.class);
+      super(typeResolver.getConfig(), UnknownClass.UnknownStruct.class);
       this.config = typeResolver.getConfig();
       this.typeResolver = typeResolver;
       this.typeDef = typeDef;
@@ -249,7 +248,7 @@ public final class UnknownClassSerializers {
     }
   }
 
-  public static final class UnknownEnumSerializer extends CrossLanguageCompatibleSerializer {
+  public static final class UnknownEnumSerializer extends ImmutableSerializer<UnknownEnum> {
     private final Config config;
     private final UnknownEnum[] enumConstants;
 
@@ -260,14 +259,13 @@ public final class UnknownClassSerializers {
     }
 
     @Override
-    public void write(WriteContext writeContext, Object value) {
+    public void write(WriteContext writeContext, UnknownEnum value) {
       MemoryBuffer buffer = writeContext.getBuffer();
-      UnknownEnum enumValue = (UnknownEnum) value;
-      buffer.writeVarUint32Small7(enumValue.ordinal());
+      buffer.writeVarUint32Small7(value.ordinal());
     }
 
     @Override
-    public Object read(ReadContext readContext) {
+    public UnknownEnum read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (config.serializeEnumByName()) {
         readContext.getMetaStringReader().readMetaStringBytes(buffer);
@@ -279,6 +277,11 @@ public final class UnknownClassSerializers {
         return UnknownEnum.UNKNOWN;
       }
       return enumConstants[ordinal];
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 

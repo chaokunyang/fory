@@ -23,7 +23,7 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.ImmutableSerializer;
 
 /** Utility class for registering Uint wrapper type serializers. */
 public class UnsignedSerializers {
@@ -38,7 +38,7 @@ public class UnsignedSerializers {
   }
 
   /** Serializer for Uint8 wrapper type. */
-  public static class Uint8Serializer extends Serializers.CrossLanguageCompatibleSerializer<Uint8> {
+  public static class Uint8Serializer extends ImmutableSerializer<Uint8> {
     public Uint8Serializer(Config config) {
       super(config, Uint8.class);
     }
@@ -52,11 +52,15 @@ public class UnsignedSerializers {
     public Uint8 read(ReadContext readContext) {
       return Uint8.valueOf(readContext.getBuffer().readByte());
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   /** Serializer for Uint16 wrapper type. */
-  public static class Uint16Serializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Uint16> {
+  public static class Uint16Serializer extends ImmutableSerializer<Uint16> {
     public Uint16Serializer(Config config) {
       super(config, Uint16.class);
     }
@@ -70,11 +74,15 @@ public class UnsignedSerializers {
     public Uint16 read(ReadContext readContext) {
       return Uint16.valueOf(readContext.getBuffer().readInt16());
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   /** Serializer for Uint32 wrapper type. */
-  public static class Uint32Serializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Uint32> {
+  public static class Uint32Serializer extends ImmutableSerializer<Uint32> {
     public Uint32Serializer(Config config) {
       super(config, Uint32.class);
     }
@@ -88,11 +96,15 @@ public class UnsignedSerializers {
     public Uint32 read(ReadContext readContext) {
       return Uint32.valueOf(readContext.getBuffer().readInt32());
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   /** Serializer for Uint64 wrapper type. */
-  public static class Uint64Serializer
-      extends Serializers.CrossLanguageCompatibleSerializer<Uint64> {
+  public static class Uint64Serializer extends ImmutableSerializer<Uint64> {
     public Uint64Serializer(Config config) {
       super(config, Uint64.class);
     }
@@ -105,6 +117,11 @@ public class UnsignedSerializers {
     @Override
     public Uint64 read(ReadContext readContext) {
       return Uint64.valueOf(readContext.getBuffer().readInt64());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 }

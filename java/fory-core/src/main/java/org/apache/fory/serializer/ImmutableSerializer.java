@@ -20,7 +20,6 @@
 package org.apache.fory.serializer;
 
 import org.apache.fory.config.Config;
-import org.apache.fory.resolver.TypeResolver;
 
 /**
  * Serializer for immutable objects.
@@ -33,30 +32,12 @@ public abstract class ImmutableSerializer<T> extends Serializer<T> {
     super(config, type, true);
   }
 
-  public ImmutableSerializer(TypeResolver typeResolver, Class<T> type) {
-    super(typeResolver, type, true);
-  }
-
   public ImmutableSerializer(Config config, Class<T> type, boolean needToWriteRef) {
     super(config, type, needToWriteRef, true);
-  }
-
-  public ImmutableSerializer(TypeResolver typeResolver, Class<T> type, boolean needToWriteRef) {
-    super(typeResolver, type, needToWriteRef, true);
   }
 
   public ImmutableSerializer(
       Config config, Class<T> type, boolean needToWriteRef, boolean immutable) {
     super(config, type, needToWriteRef, immutable);
-  }
-
-  public ImmutableSerializer(
-      TypeResolver typeResolver, Class<T> type, boolean needToWriteRef, boolean immutable) {
-    super(typeResolver, type, needToWriteRef, immutable);
-  }
-
-  @Override
-  public boolean threadSafe() {
-    return true;
   }
 }

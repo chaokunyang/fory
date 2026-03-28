@@ -485,12 +485,9 @@ public class CollectionSerializers {
   }
 
   public static final class SetFromMapSerializer extends CollectionSerializer<Set<?>> {
-
     private static final long MAP_FIELD_OFFSET;
     private static final List EMPTY_COLLECTION_STUB = new ArrayList<>();
-
     private static final MethodHandle m;
-
     private static final MethodHandle s;
 
     static {
@@ -690,7 +687,7 @@ public class CollectionSerializers {
 
   public static class BitSetSerializer extends Serializer<BitSet> {
     public BitSetSerializer(TypeResolver typeResolver, Class<BitSet> type) {
-      super(typeResolver, type);
+      super(typeResolver.getConfig(), type);
     }
 
     @Override
@@ -815,7 +812,6 @@ public class CollectionSerializers {
    */
   public static class LinkedBlockingQueueSerializer
       extends ConcurrentCollectionSerializer<LinkedBlockingQueue> {
-
     // Use reflection to get the capacity field directly.
     // This avoids race conditions when reading remainingCapacity() and size() separately.
     private static final long CAPACITY_OFFSET;

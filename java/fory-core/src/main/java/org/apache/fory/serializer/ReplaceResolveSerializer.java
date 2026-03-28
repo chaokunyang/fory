@@ -225,7 +225,7 @@ public class ReplaceResolveSerializer extends Serializer {
 
   public ReplaceResolveSerializer(
       TypeResolver typeResolver, Class type, boolean isFinalField, boolean setSerializer) {
-    super(typeResolver, type);
+    super(typeResolver.getConfig(), type);
     this.typeResolver = typeResolver;
     classResolver = (ClassResolver) typeResolver;
     if (setSerializer) {

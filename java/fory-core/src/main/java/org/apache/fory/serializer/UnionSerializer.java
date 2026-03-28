@@ -83,7 +83,7 @@ public class UnionSerializer extends Serializer<Union> {
   private final TypeResolver resolver;
 
   public UnionSerializer(TypeResolver typeResolver, Class<? extends Union> cls) {
-    super(typeResolver, (Class<Union>) cls);
+    super(typeResolver.getConfig(), (Class<Union>) cls);
     int typeIndex = getTypeIndex(cls);
     if (typeIndex >= 0) {
       this.factory = FACTORIES[typeIndex];

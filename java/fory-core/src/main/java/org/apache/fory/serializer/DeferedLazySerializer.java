@@ -34,7 +34,7 @@ public class DeferedLazySerializer extends Serializer {
 
   public DeferedLazySerializer(
       TypeResolver typeResolver, Class type, Supplier<Tuple2<Boolean, Serializer>> serializerSupplier) {
-    super(typeResolver, type);
+    super(typeResolver.getConfig(), type);
     this.typeResolver = typeResolver;
     this.serializerSupplier = serializerSupplier;
   }

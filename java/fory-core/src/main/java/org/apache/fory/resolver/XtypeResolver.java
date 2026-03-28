@@ -172,29 +172,45 @@ public class XtypeResolver extends TypeResolver {
   @Override
   public void initialize() {
     registerDefaultTypes();
-    registerInternalSerializer(
-        Class.class, Serializers.newSerializer(this, Class.class, Serializers.ClassSerializer.class));
-    registerInternalSerializer(
+    registerInternalSharedSerializer(
+        Class.class,
+        Serializers.ClassSerializer.class,
+        () -> new Serializers.ClassSerializer(config));
+    registerInternalSharedSerializer(
         AtomicReference.class,
-        Serializers.newSerializer(
-            this, AtomicReference.class, Serializers.AtomicReferenceSerializer.class));
-    registerInternalSerializer(
+        Serializers.AtomicReferenceSerializer.class,
+        () -> new Serializers.AtomicReferenceSerializer(config));
+    registerInternalSharedSerializer(
         Currency.class,
-        Serializers.newSerializer(this, Currency.class, Serializers.CurrencySerializer.class));
-    registerInternalSerializer(
-        URI.class, Serializers.newSerializer(this, URI.class, Serializers.URISerializer.class));
-    registerInternalSerializer(
+        Serializers.CurrencySerializer.class,
+        () -> new Serializers.CurrencySerializer(config));
+    registerInternalSharedSerializer(
+        URI.class,
+        Serializers.URISerializer.class,
+        () -> new Serializers.URISerializer(config));
+    registerInternalSharedSerializer(
         Pattern.class,
-        Serializers.newSerializer(this, Pattern.class, Serializers.RegexSerializer.class));
-    registerInternalSerializer(
-        UUID.class, Serializers.newSerializer(this, UUID.class, Serializers.UUIDSerializer.class));
-    registerInternalSerializer(
+        Serializers.RegexSerializer.class,
+        () -> new Serializers.RegexSerializer(config));
+    registerInternalSharedSerializer(
+        UUID.class,
+        Serializers.UUIDSerializer.class,
+        () -> new Serializers.UUIDSerializer(config));
+    registerInternalSharedSerializer(
         Object.class,
-        Serializers.newSerializer(this, Object.class, Serializers.EmptyObjectSerializer.class));
+        Serializers.EmptyObjectSerializer.class,
+        () -> new Serializers.EmptyObjectSerializer(config));
     if (shareMeta) {
       Serializer serializer = new UnknownStructSerializer(this, null);
       register(UnknownStruct.class, serializer, "", "unknown_struct", Types.COMPATIBLE_STRUCT, -1);
     }
+  }
+
+  private <T extends Serializer<?>> void registerInternalSharedSerializer(
+      Class<?> type,
+      Class<? extends Serializer> serializerClass,
+      SharedRegistry.SerializerCreator<T> creator) {
+    registerInternalSerializer(type, getOrCreateSharedSerializer(type, serializerClass, creator));
   }
 
   @Override
@@ -1196,9 +1212,9 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   protected TypeInfo getListTypeInfo() {
-    getReadContext().incReadDepth();
+    getReadContext().increaseDepth();
     GenericType genericType = generics.nextGenericType();
-    getReadContext().decDepth();
+    getReadContext().decreaseDepth();
     if (genericType != null) {
       return getOrBuildTypeInfo(genericType.getCls());
     }
@@ -1207,9 +1223,9 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   protected TypeInfo getTimestampTypeInfo() {
-    getReadContext().incReadDepth();
+    getReadContext().increaseDepth();
     GenericType genericType = generics.nextGenericType();
-    getReadContext().decDepth();
+    getReadContext().decreaseDepth();
     if (genericType != null) {
       return getOrBuildTypeInfo(genericType.getCls());
     }

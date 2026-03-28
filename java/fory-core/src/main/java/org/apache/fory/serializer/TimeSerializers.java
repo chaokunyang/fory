@@ -245,6 +245,11 @@ public class TimeSerializers {
       int dayOfMonth = buffer.readByte();
       return LocalDate.of(year, month, dayOfMonth);
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class InstantSerializer extends ImmutableTimeSerializer<Instant> {
@@ -269,6 +274,11 @@ public class TimeSerializers {
       long seconds = buffer.readInt64();
       int nanos = buffer.readInt32();
       return Instant.ofEpochSecond(seconds, nanos);
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -295,6 +305,11 @@ public class TimeSerializers {
       int nanos = buffer.readInt32();
       return Duration.ofSeconds(seconds, nanos);
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static class LocalDateTimeSerializer extends ImmutableTimeSerializer<LocalDateTime> {
@@ -319,6 +334,11 @@ public class TimeSerializers {
       LocalDate date = LocalDateSerializer.readLocalDate(buffer);
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
       return LocalDateTime.of(date, time);
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -386,6 +406,11 @@ public class TimeSerializers {
         }
       }
       return LocalTime.of(hour, minute, second, nano);
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -489,6 +514,11 @@ public class TimeSerializers {
     public ZoneId read(ReadContext readContext) {
       return ZoneId.of(readContext.readString());
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static class ZoneOffsetSerializer extends ImmutableTimeSerializer<ZoneOffset> {
@@ -539,6 +569,11 @@ public class TimeSerializers {
       }
       return COMPRESSED_ZONE_OFFSETS[offsetByte + 72];
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static class ZonedDateTimeSerializer extends ImmutableTimeSerializer<ZonedDateTime> {
@@ -565,6 +600,11 @@ public class TimeSerializers {
       ZoneId zone = ZoneId.of(readContext.readString());
       return ZonedDateTime.of(date, time, zone);
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static class YearSerializer extends ImmutableTimeSerializer<Year> {
@@ -586,6 +626,11 @@ public class TimeSerializers {
     public Year read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
       return Year.of(buffer.readInt32());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -612,6 +657,11 @@ public class TimeSerializers {
       byte month = buffer.readByte();
       return YearMonth.of(year, month);
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static class MonthDaySerializer extends ImmutableTimeSerializer<MonthDay> {
@@ -634,6 +684,11 @@ public class TimeSerializers {
       byte month = buffer.readByte();
       byte day = buffer.readByte();
       return MonthDay.of(month, day);
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -660,6 +715,11 @@ public class TimeSerializers {
       int days = buffer.readInt32();
       return Period.of(years, months, days);
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static class OffsetTimeSerializer extends ImmutableTimeSerializer<OffsetTime> {
@@ -682,6 +742,11 @@ public class TimeSerializers {
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
       ZoneOffset offset = ZoneOffsetSerializer.readZoneOffset(buffer);
       return OffsetTime.of(time, offset);
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -707,6 +772,11 @@ public class TimeSerializers {
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
       ZoneOffset offset = ZoneOffsetSerializer.readZoneOffset(buffer);
       return OffsetDateTime.of(date, time, offset);
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 

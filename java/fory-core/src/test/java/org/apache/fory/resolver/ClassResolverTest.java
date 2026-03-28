@@ -661,7 +661,7 @@ public class ClassResolverTest extends ForyTestBase {
 
   private static class ErrorSerializer extends Serializer<Foo> {
     public ErrorSerializer(TypeResolver typeResolver) {
-      super(typeResolver, Foo.class);
+      super(typeResolver.getConfig(), Foo.class);
       typeResolver.setSerializer(Foo.class, this);
       throw new RuntimeException();
     }
@@ -714,7 +714,7 @@ public class ClassResolverTest extends ForyTestBase {
   class FooCustomSerializer extends Serializer<Foo> {
 
     public FooCustomSerializer(TypeResolver typeResolver, Class<Foo> type) {
-      super(typeResolver, type);
+      super(typeResolver.getConfig(), type);
     }
 
     @Override
@@ -768,7 +768,7 @@ public class ClassResolverTest extends ForyTestBase {
   static class InterfaceCustomSerializer extends Serializer<ITest> {
 
     public InterfaceCustomSerializer(TypeResolver typeResolver, Class<ITest> type) {
-      super(typeResolver, type);
+      super(typeResolver.getConfig(), type);
     }
 
     @Override
@@ -834,7 +834,7 @@ public class ClassResolverTest extends ForyTestBase {
   static class AbstractCustomSerializer extends Serializer<AbsTest> {
 
     public AbstractCustomSerializer(TypeResolver typeResolver, Class<AbsTest> type) {
-      super(typeResolver, type);
+      super(typeResolver.getConfig(), type);
     }
 
     @Override

@@ -64,7 +64,7 @@ public class JdkProxySerializer extends Serializer {
           Serializer.class.getClassLoader(), new Class[] {StubInterface.class}, STUB_HANDLER);
 
   public JdkProxySerializer(TypeResolver typeResolver, Class cls) {
-    super(typeResolver, cls);
+    super(typeResolver.getConfig(), cls);
     this.typeResolver = typeResolver;
     if (cls != ReplaceStub.class) {
       // Skip proxy class validation in GraalVM native image runtime to avoid issues with proxy

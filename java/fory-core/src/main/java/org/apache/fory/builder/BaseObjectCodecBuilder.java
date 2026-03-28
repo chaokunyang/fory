@@ -2191,9 +2191,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
     read = uninline(read);
     return new ListExpression(
-        new Invoke(readContextRef(), "incReadDepth"),
+        new Invoke(readContextRef(), "increaseDepth"),
         read,
-        new Invoke(readContextRef(), "decDepth"),
+        new Invoke(readContextRef(), "decreaseDepth"),
         read);
   }
 

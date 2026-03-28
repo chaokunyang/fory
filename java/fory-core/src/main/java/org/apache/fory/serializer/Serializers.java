@@ -30,7 +30,6 @@ import com.google.common.cache.CacheBuilder;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -55,6 +54,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.ExceptionUtils;
@@ -105,136 +105,146 @@ public class Serializers {
       TypeResolver typeResolver, Class type, Class<? extends Serializer> serializerClass) {
     TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
     Serializer serializer = typeInfo == null ? null : typeInfo.getSerializer();
-    Config config = typeResolver.getConfig();
     try {
       return typeResolver.getOrCreateSharedSerializer(
           type,
           serializerClass,
-          new TypeResolver.SerializerCreator<Serializer<T>>() {
+          new SharedRegistry.SerializerCreator<Serializer<T>>() {
             @Override
-            public Serializer<T> create() throws Throwable {
-              if (serializerClass == ObjectSerializer.class) {
-                return new ObjectSerializer(typeResolver, type);
-              }
-              if (serializerClass == MetaSharedSerializer.class) {
-                TypeDef typeDef = typeResolver.getTypeDef(type, true);
-                return new MetaSharedSerializer(typeResolver, type, typeDef);
-              }
-              Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
-              if (ctrInfo != null) {
-                if (GraalvmSupport.isGraalBuildtime()
-                    && Generated.class.isAssignableFrom(serializerClass)) {
-                  return new GraalvmSerializerHolder(config, type, serializerClass);
-                }
-                MethodType sig = ctrInfo.f0;
-                MethodHandle handle = ctrInfo.f1;
-                if (sig.equals(SIG1)) {
-                  return (Serializer<T>) handle.invoke(typeResolver, type);
-                } else if (sig.equals(SIG2)) {
-                  return (Serializer<T>) handle.invoke(typeResolver);
-                } else if (sig.equals(SIG3)) {
-                  return (Serializer<T>) handle.invoke(config, type);
-                } else if (sig.equals(SIG4)) {
-                  return (Serializer<T>) handle.invoke(config);
-                } else if (sig.equals(SIG5)) {
-                  return (Serializer<T>) handle.invoke(type);
-                } else {
-                  return (Serializer<T>) handle.invoke();
-                }
-              }
-              return createSerializer(typeResolver, type, serializerClass);
+            public Serializer<T> create() {
+              return buildSerializer(typeResolver, type, serializerClass);
             }
           });
-    } catch (InvocationTargetException e) {
-      typeResolver.resetSerializer(type, serializer);
-      if (e.getCause() != null) {
-        Platform.throwException(e.getCause());
-      } else {
-        Platform.throwException(e);
-      }
     } catch (Throwable t) {
       // Some serializer may set itself in constructor as serializer, but the
       // constructor failed later. For example, some final type field doesn't
       // support serialization.
       typeResolver.resetSerializer(type, serializer);
+      if (t instanceof java.lang.reflect.InvocationTargetException && t.getCause() != null) {
+        Platform.throwException(t.getCause());
+      }
       Platform.throwException(t);
     }
     throw new IllegalStateException("unreachable");
   }
 
+  private static <T> Serializer<T> buildSerializer(
+      TypeResolver typeResolver, Class type, Class<? extends Serializer> serializerClass) {
+    try {
+      Config config = typeResolver.getConfig();
+      if (serializerClass == ObjectSerializer.class) {
+        return new ObjectSerializer(typeResolver, type);
+      }
+      if (serializerClass == MetaSharedSerializer.class) {
+        TypeDef typeDef = typeResolver.getTypeDef(type, true);
+        return new MetaSharedSerializer(typeResolver, type, typeDef);
+      }
+      Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
+      if (ctrInfo != null) {
+        if (GraalvmSupport.isGraalBuildtime()
+            && Generated.class.isAssignableFrom(serializerClass)) {
+          return new GraalvmSerializerHolder(config, type, serializerClass);
+        }
+        MethodType sig = ctrInfo.f0;
+        MethodHandle handle = ctrInfo.f1;
+        if (sig.equals(SIG1)) {
+          return (Serializer<T>) handle.invoke(typeResolver, type);
+        } else if (sig.equals(SIG2)) {
+          return (Serializer<T>) handle.invoke(typeResolver);
+        } else if (sig.equals(SIG3)) {
+          return (Serializer<T>) handle.invoke(config, type);
+        } else if (sig.equals(SIG4)) {
+          return (Serializer<T>) handle.invoke(config);
+        } else if (sig.equals(SIG5)) {
+          return (Serializer<T>) handle.invoke(type);
+        } else {
+          return (Serializer<T>) handle.invoke();
+        }
+      }
+      return createSerializer(typeResolver, type, serializerClass);
+    } catch (Throwable t) {
+      Platform.throwException(t);
+      throw new IllegalStateException("unreachable");
+    }
+  }
+
   private static <T> Serializer<T> createSerializer(
-      TypeResolver typeResolver, Class<?> type, Class<? extends Serializer> serializerClass)
-      throws Throwable {
-    MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(serializerClass);
-    Config config = typeResolver.getConfig();
+      TypeResolver typeResolver, Class<?> type, Class<? extends Serializer> serializerClass) {
     try {
-      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG1);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG1, ctr));
+      MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(serializerClass);
+      Config config = typeResolver.getConfig();
+      try {
+        MethodHandle ctr = lookup.findConstructor(serializerClass, SIG1);
+        CTR_MAP.put(serializerClass, Tuple2.of(SIG1, ctr));
+        if (GraalvmSupport.isGraalBuildtime()) {
+          if (Generated.class.isAssignableFrom(serializerClass)) {
+            return new GraalvmSerializerHolder(config, type, serializerClass);
+          }
+        }
+        return (Serializer<T>) ctr.invoke(typeResolver, type);
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.ignore(e);
+      }
+      try {
+        MethodHandle ctr = lookup.findConstructor(serializerClass, SIG2);
+        CTR_MAP.put(serializerClass, Tuple2.of(SIG2, ctr));
+        if (GraalvmSupport.isGraalBuildtime()) {
+          if (Generated.class.isAssignableFrom(serializerClass)) {
+            return new GraalvmSerializerHolder(config, type, serializerClass);
+          }
+        }
+        return (Serializer<T>) ctr.invoke(typeResolver);
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.ignore(e);
+      }
+      try {
+        MethodHandle ctr = lookup.findConstructor(serializerClass, SIG3);
+        CTR_MAP.put(serializerClass, Tuple2.of(SIG3, ctr));
+        if (GraalvmSupport.isGraalBuildtime()) {
+          if (Generated.class.isAssignableFrom(serializerClass)) {
+            return new GraalvmSerializerHolder(config, type, serializerClass);
+          }
+        }
+        return (Serializer<T>) ctr.invoke(config, type);
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.ignore(e);
+      }
+      try {
+        MethodHandle ctr = lookup.findConstructor(serializerClass, SIG4);
+        CTR_MAP.put(serializerClass, Tuple2.of(SIG4, ctr));
+        if (GraalvmSupport.isGraalBuildtime()) {
+          if (Generated.class.isAssignableFrom(serializerClass)) {
+            return new GraalvmSerializerHolder(config, type, serializerClass);
+          }
+        }
+        return (Serializer<T>) ctr.invoke(config);
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.ignore(e);
+      }
+      try {
+        MethodHandle ctr = lookup.findConstructor(serializerClass, SIG5);
+        CTR_MAP.put(serializerClass, Tuple2.of(SIG5, ctr));
+        if (GraalvmSupport.isGraalBuildtime()) {
+          if (Generated.class.isAssignableFrom(serializerClass)) {
+            return new GraalvmSerializerHolder(config, type, serializerClass);
+          }
+        }
+        return (Serializer<T>) ctr.invoke(type);
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.ignore(e);
+      }
+      MethodHandle ctr = ReflectionUtils.getCtrHandle(serializerClass);
+      CTR_MAP.put(serializerClass, Tuple2.of(SIG6, ctr));
       if (GraalvmSupport.isGraalBuildtime()) {
         if (Generated.class.isAssignableFrom(serializerClass)) {
           return new GraalvmSerializerHolder(config, type, serializerClass);
         }
       }
-      return (Serializer<T>) ctr.invoke(typeResolver, type);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
+      return (Serializer<T>) ctr.invoke();
+    } catch (Throwable t) {
+      Platform.throwException(t);
+      throw new IllegalStateException("unreachable");
     }
-    try {
-      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG2);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG2, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(config, type, serializerClass);
-        }
-      }
-      return (Serializer<T>) ctr.invoke(typeResolver);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
-    }
-    try {
-      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG3);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG3, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(config, type, serializerClass);
-        }
-      }
-      return (Serializer<T>) ctr.invoke(config, type);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
-    }
-    try {
-      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG4);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG4, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(config, type, serializerClass);
-        }
-      }
-      return (Serializer<T>) ctr.invoke(config);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
-    }
-    try {
-      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG5);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG5, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(config, type, serializerClass);
-        }
-      }
-      return (Serializer<T>) ctr.invoke(type);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
-    }
-    MethodHandle ctr = ReflectionUtils.getCtrHandle(serializerClass);
-    CTR_MAP.put(serializerClass, Tuple2.of(SIG6, ctr));
-    if (GraalvmSupport.isGraalBuildtime()) {
-      if (Generated.class.isAssignableFrom(serializerClass)) {
-        return new GraalvmSerializerHolder(config, type, serializerClass);
-      }
-    }
-    return (Serializer<T>) ctr.invoke();
   }
 
   public static <T> void write(WriteContext writeContext, Serializer<T> serializer, T obj) {
@@ -243,23 +253,6 @@ public class Serializers {
 
   public static <T> T read(ReadContext readContext, Serializer<T> serializer) {
     return serializer.read(readContext);
-  }
-
-  public abstract static class CrossLanguageCompatibleSerializer<T> extends Serializer<T> {
-
-    public CrossLanguageCompatibleSerializer(Config config, Class<T> cls) {
-      super(config, cls);
-    }
-
-    public CrossLanguageCompatibleSerializer(
-        Config config, Class<T> cls, boolean needToWriteRef, boolean immutable) {
-      super(config, cls, needToWriteRef, immutable);
-    }
-
-    @Override
-    public boolean threadSafe() {
-      return true;
-    }
   }
 
   private static final ToIntFunction GET_CODER;
@@ -379,6 +372,11 @@ public class Serializers {
       final BigInteger bigInteger = new BigInteger(bytes);
       return new BigDecimal(bigInteger, scale, new MathContext(precision));
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class BigIntegerSerializer extends ImmutableSerializer<BigInteger> {
@@ -400,6 +398,11 @@ public class Serializers {
       int len = buffer.readVarUint32Small7();
       byte[] bytes = buffer.readBytes(len);
       return new BigInteger(bytes);
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -526,6 +529,11 @@ public class Serializers {
     public Currency read(ReadContext readContext) {
       return Currency.getInstance(readContext.readString());
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   /** Serializer for {@link Charset}. */
@@ -540,6 +548,11 @@ public class Serializers {
 
     public T read(ReadContext readContext) {
       return (T) Charset.forName(readContext.readString());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -557,6 +570,11 @@ public class Serializers {
     @Override
     public URI read(ReadContext readContext) {
       return URI.create(readContext.readString());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -579,6 +597,11 @@ public class Serializers {
       int flags = buffer.readInt32();
       return Pattern.compile(regex, flags);
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class UUIDSerializer extends ImmutableSerializer<UUID> {
@@ -599,6 +622,11 @@ public class Serializers {
       MemoryBuffer buffer = readContext.getBuffer();
       return new UUID(buffer.readInt64(), buffer.readInt64());
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class ClassSerializer extends ImmutableSerializer<Class> {
@@ -616,6 +644,11 @@ public class Serializers {
     public Class read(ReadContext readContext) {
       return ((ClassResolver) readContext.getTypeResolver())
           .readClassInternal(readContext.getBuffer());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -638,6 +671,11 @@ public class Serializers {
     @Override
     public Object read(ReadContext readContext) {
       return new Object();
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 

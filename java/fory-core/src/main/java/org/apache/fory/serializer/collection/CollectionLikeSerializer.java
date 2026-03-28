@@ -65,7 +65,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   public CollectionLikeSerializer(
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook) {
-    super(typeResolver, cls);
+    super(typeResolver.getConfig(), cls);
     this.config = typeResolver.getConfig();
     this.supportCodegenHook = supportCodegenHook;
     elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
@@ -74,7 +74,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   public CollectionLikeSerializer(
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook, boolean immutable) {
-    super(typeResolver, cls, immutable);
+    super(typeResolver.getConfig(), cls, immutable);
     this.config = typeResolver.getConfig();
     this.supportCodegenHook = supportCodegenHook;
     elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
@@ -363,7 +363,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   private <T extends Collection> void writeSameTypeElements(
       MemoryBuffer buffer, Serializer serializer, int flags, T collection) {
     WriteContext writeContext = typeResolver.getWriteContext();
-    writeContext.incDepth();
+    writeContext.increaseDepth();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (Object elem : collection) {
         if (!writeContext.writeRefOrNull(elem)) {
@@ -386,7 +386,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         }
       }
     }
-    writeContext.decDepth();
+    writeContext.decreaseDepth();
   }
 
   private <T extends Collection> void writeDifferentTypeElements(
@@ -590,7 +590,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       T collection,
       int numElements) {
     ReadContext readContext = typeResolver.getReadContext();
-    readContext.incReadDepth();
+    readContext.increaseDepth();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (int i = 0; i < numElements; i++) {
         collection.add(serializer.read(readContext, RefMode.TRACKING));
@@ -610,7 +610,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         }
       }
     }
-    readContext.decDepth();
+    readContext.decreaseDepth();
   }
 
   /** Read elements whose type are different. */

@@ -216,35 +216,12 @@ public abstract class TypeResolver {
     return sharedRegistry.cacheThreadSafeSerializer(cls, serializer);
   }
 
-  @FunctionalInterface
-  public interface SerializerCreator<T extends Serializer<?>> {
-    T create() throws Throwable;
-  }
-
-  private static final class SerializerCreationFailure extends RuntimeException {
-    private SerializerCreationFailure(Throwable cause) {
-      super(cause);
-    }
-  }
-
   @Internal
   public final <T extends Serializer<?>> T getOrCreateSharedSerializer(
-      Class<?> cls, Class<? extends Serializer> serializerClass, SerializerCreator<T> creator)
-      throws Throwable {
-    try {
-      return sharedRegistry.getOrCreateThreadSafeSerializer(
-          cls,
-          serializerClass,
-          () -> {
-            try {
-              return creator.create();
-            } catch (Throwable t) {
-              throw new SerializerCreationFailure(t);
-            }
-          });
-    } catch (SerializerCreationFailure e) {
-      throw e.getCause();
-    }
+      Class<?> cls,
+      Class<? extends Serializer> serializerClass,
+      SharedRegistry.SerializerCreator<T> creator) {
+    return sharedRegistry.getOrCreateThreadSafeSerializer(cls, serializerClass, creator);
   }
 
   @Internal

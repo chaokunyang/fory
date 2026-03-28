@@ -32,16 +32,15 @@ import org.apache.fory.config.LongEncoding;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.Serializers.CrossLanguageCompatibleSerializer;
 import org.apache.fory.type.Float16;
 import org.apache.fory.util.Preconditions;
 
 /** Serializers for java primitive types. */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class PrimitiveSerializers {
-  public static final class BooleanSerializer extends CrossLanguageCompatibleSerializer<Boolean> {
+  public static final class BooleanSerializer extends ImmutableSerializer<Boolean> {
     public BooleanSerializer(Config config, Class<?> cls) {
-      super(config, (Class) cls, false, true);
+      super(config, (Class) cls, false);
     }
 
     @Override
@@ -53,11 +52,16 @@ public class PrimitiveSerializers {
     public Boolean read(ReadContext readContext) {
       return readContext.getBuffer().readBoolean();
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
-  public static final class ByteSerializer extends CrossLanguageCompatibleSerializer<Byte> {
+  public static final class ByteSerializer extends ImmutableSerializer<Byte> {
     public ByteSerializer(Config config, Class<?> cls) {
-      super(config, (Class) cls, false, true);
+      super(config, (Class) cls, false);
     }
 
     @Override
@@ -69,9 +73,14 @@ public class PrimitiveSerializers {
     public Byte read(ReadContext readContext) {
       return readContext.getBuffer().readByte();
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
-  public static final class Uint8Serializer extends CrossLanguageCompatibleSerializer<Integer> {
+  public static final class Uint8Serializer extends ImmutableSerializer<Integer> {
     public Uint8Serializer(Config config) {
       super(config, Integer.class);
     }
@@ -87,9 +96,14 @@ public class PrimitiveSerializers {
       int b = readContext.getBuffer().readByte();
       return b >>> 24;
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
-  public static final class Uint16Serializer extends CrossLanguageCompatibleSerializer<Integer> {
+  public static final class Uint16Serializer extends ImmutableSerializer<Integer> {
     public Uint16Serializer(Config config) {
       super(config, Integer.class);
     }
@@ -104,6 +118,11 @@ public class PrimitiveSerializers {
     public Integer read(ReadContext readContext) {
       int b = readContext.getBuffer().readByte();
       return b >>> 16;
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 
@@ -121,11 +140,16 @@ public class PrimitiveSerializers {
     public Character read(ReadContext readContext) {
       return readContext.getBuffer().readChar();
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
-  public static final class ShortSerializer extends CrossLanguageCompatibleSerializer<Short> {
+  public static final class ShortSerializer extends ImmutableSerializer<Short> {
     public ShortSerializer(Config config, Class<?> cls) {
-      super(config, (Class) cls, false, true);
+      super(config, (Class) cls, false);
     }
 
     @Override
@@ -137,13 +161,18 @@ public class PrimitiveSerializers {
     public Short read(ReadContext readContext) {
       return readContext.getBuffer().readInt16();
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
-  public static final class IntSerializer extends CrossLanguageCompatibleSerializer<Integer> {
+  public static final class IntSerializer extends ImmutableSerializer<Integer> {
     private final boolean compressNumber;
 
     public IntSerializer(Config config, Class<?> cls) {
-      super(config, (Class) cls, false, true);
+      super(config, (Class) cls, false);
       // Cross-language encoding always uses varint; Java mode follows compressInt config.
       compressNumber = config.isXlang() || config.compressInt();
     }
@@ -164,6 +193,11 @@ public class PrimitiveSerializers {
       }
       return readContext.getBuffer().readInt32();
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class VarUint32Serializer extends Serializer<Integer> {
@@ -183,11 +217,11 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class LongSerializer extends CrossLanguageCompatibleSerializer<Long> {
+  public static final class LongSerializer extends ImmutableSerializer<Long> {
     private final LongEncoding longEncoding;
 
     public LongSerializer(Config config, Class<?> cls) {
-      super(config, (Class) cls, false, true);
+      super(config, (Class) cls, false);
       longEncoding = config.isXlang() ? LongEncoding.VARINT : config.longEncoding();
     }
 
@@ -252,6 +286,11 @@ public class PrimitiveSerializers {
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);
       }
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class VarUint64Serializer extends Serializer<Long> {
@@ -271,9 +310,9 @@ public class PrimitiveSerializers {
     }
   }
 
-  public static final class FloatSerializer extends CrossLanguageCompatibleSerializer<Float> {
+  public static final class FloatSerializer extends ImmutableSerializer<Float> {
     public FloatSerializer(Config config, Class<?> cls) {
-      super(config, (Class) cls, false, true);
+      super(config, (Class) cls, false);
     }
 
     @Override
@@ -285,11 +324,16 @@ public class PrimitiveSerializers {
     public Float read(ReadContext readContext) {
       return readContext.getBuffer().readFloat32();
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
-  public static final class DoubleSerializer extends CrossLanguageCompatibleSerializer<Double> {
+  public static final class DoubleSerializer extends ImmutableSerializer<Double> {
     public DoubleSerializer(Config config, Class<?> cls) {
-      super(config, (Class) cls, false, true);
+      super(config, (Class) cls, false);
     }
 
     @Override
@@ -301,11 +345,16 @@ public class PrimitiveSerializers {
     public Double read(ReadContext readContext) {
       return readContext.getBuffer().readFloat64();
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
-  public static final class Float16Serializer extends CrossLanguageCompatibleSerializer<Float16> {
+  public static final class Float16Serializer extends ImmutableSerializer<Float16> {
     public Float16Serializer(Config config, Class<?> cls) {
-      super(config, (Class) cls, false, true);
+      super(config, (Class) cls, false);
     }
 
     @Override
@@ -316,6 +365,11 @@ public class PrimitiveSerializers {
     @Override
     public Float16 read(ReadContext readContext) {
       return Float16.fromBits(readContext.getBuffer().readInt16());
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 

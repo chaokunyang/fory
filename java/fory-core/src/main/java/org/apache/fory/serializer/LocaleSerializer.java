@@ -103,4 +103,9 @@ public final class LocaleSerializer extends ImmutableSerializer<Locale> {
         && locale.getCountry().equals(country)
         && locale.getVariant().equals(variant));
   }
+
+  @Override
+  public boolean threadSafe() {
+    return true;
+  }
 }

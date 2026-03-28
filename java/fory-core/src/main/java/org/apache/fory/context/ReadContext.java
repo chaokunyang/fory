@@ -49,7 +49,7 @@ public final class ReadContext {
   private final LongEncoding longEncoding;
   private final int maxDepth;
   private final boolean scopedMetaShareEnabled;
-  private final IdentityHashMap<Object, Object> objects = new IdentityHashMap<>();
+  private final IdentityHashMap<Object, Object> contextObjects = new IdentityHashMap<>();
   private MemoryBuffer buffer;
   private Iterator<MemoryBuffer> outOfBandBuffers;
   private MetaContext metaContext;
@@ -92,8 +92,8 @@ public final class ReadContext {
     refReader.reset();
     typeResolver.resetRead();
     metaStringReader.reset();
-    if (!objects.isEmpty()) {
-      objects.clear();
+    if (!contextObjects.isEmpty()) {
+      contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
       metaContext.readTypeInfos.size = 0;
@@ -170,16 +170,16 @@ public final class ReadContext {
     return typeResolver.getStringSerializer();
   }
 
-  public Object add(Object key, Object value) {
-    return objects.put(key, value);
+  public Object putContextObject(Object key, Object value) {
+    return contextObjects.put(key, value);
   }
 
-  public boolean containsKey(Object key) {
-    return objects.containsKey(key);
+  public boolean containsContextObject(Object key) {
+    return contextObjects.containsKey(key);
   }
 
-  public Object get(Object key) {
-    return objects.get(key);
+  public Object getContextObject(Object key) {
+    return contextObjects.get(key);
   }
 
   public MetaContext getMetaContext() {
@@ -203,15 +203,15 @@ public final class ReadContext {
     this.depth = depth;
   }
 
-  public void incDepth(int diff) {
+  public void increaseDepth(int diff) {
     depth += diff;
   }
 
-  public void decDepth() {
+  public void decreaseDepth() {
     depth -= 1;
   }
 
-  public void incReadDepth() {
+  public void increaseDepth() {
     if ((depth += 1) > maxDepth) {
       throw new InsecureException(
           String.format(
@@ -339,9 +339,9 @@ public final class ReadContext {
   }
 
   public Object readNonRef(Serializer<?> serializer) {
-    incReadDepth();
+    increaseDepth();
     Object o = serializer.read(this);
-    depth--;
+    decreaseDepth();
     return o;
   }
 
@@ -372,10 +372,10 @@ public final class ReadContext {
 
   /** Class should be read already. */
   public Object readData(TypeInfo typeInfo) {
-    incReadDepth();
+    increaseDepth();
     Serializer<?> serializer = typeInfo.getSerializer();
     Object read = serializer.read(this);
-    depth--;
+    decreaseDepth();
     return read;
   }
 
@@ -412,14 +412,14 @@ public final class ReadContext {
         if (typeInfo.getCls() == String.class) {
           return typeResolver.getStringSerializer().readString(buffer);
         }
-        incReadDepth();
+        increaseDepth();
         Object stringLike = typeInfo.getSerializer().read(this);
-        depth--;
+        decreaseDepth();
         return stringLike;
       default:
-        incReadDepth();
+        increaseDepth();
         Object read = typeInfo.getSerializer().read(this);
-        depth--;
+        decreaseDepth();
         return read;
     }
   }

@@ -39,7 +39,7 @@ public class SingletonObjectSerializer extends Serializer {
   private long offset = -1;
 
   public SingletonObjectSerializer(TypeResolver typeResolver, Class type) {
-    super(typeResolver, type);
+    super(typeResolver.getConfig(), type);
     try {
       Class.forName(type.getName(), true, type.getClassLoader());
     } catch (final ClassNotFoundException e) {

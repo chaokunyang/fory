@@ -70,7 +70,7 @@ public class RegisterTest extends ForyTestBase {
   private static class MyExtSerializer extends Serializer<MyExt> {
 
     public MyExtSerializer(TypeResolver typeResolver, Class<MyExt> cls) {
-      super(typeResolver, cls);
+      super(typeResolver.getConfig(), cls);
     }
 
     @Override

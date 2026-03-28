@@ -108,7 +108,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   public MapLikeSerializer(
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook, boolean immutable) {
-    super(typeResolver, cls, immutable);
+    super(typeResolver.getConfig(), cls, immutable);
     this.config = typeResolver.getConfig();
     this.typeResolver = typeResolver;
     trackRef = typeResolver.getConfig().trackingRef();
@@ -296,7 +296,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     WriteContext writeContext = typeResolver.getWriteContext();
     if (keyType.hasGenericParameters()) {
       generics.pushGenericType(keyType);
-      writeContext.incDepth();
+      writeContext.increaseDepth();
     }
     if (trackingRef && serializer.needToWriteRef()) {
       buffer.writeByte(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF);
@@ -306,7 +306,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       serializer.write(writeContext, key);
     }
     if (keyType.hasGenericParameters()) {
-      writeContext.decDepth();
+      writeContext.decreaseDepth();
       generics.popGenericType();
     }
   }
@@ -329,7 +329,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     WriteContext writeContext = typeResolver.getWriteContext();
     if (valueType.hasGenericParameters()) {
       generics.pushGenericType(valueType);
-      writeContext.incDepth();
+      writeContext.increaseDepth();
     }
     if (trackingRef && serializer.needToWriteRef()) {
       buffer.writeByte(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF);
@@ -339,7 +339,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       serializer.write(writeContext, value);
     }
     if (valueType.hasGenericParameters()) {
-      writeContext.decDepth();
+      writeContext.decreaseDepth();
       generics.popGenericType();
     }
   }
@@ -501,16 +501,16 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       }
       generics.pushGenericType(keyGenericType);
       if (!keyWriteRef || !writeContext.writeRefOrNull(key)) {
-        writeContext.incDepth();
+        writeContext.increaseDepth();
         keySerializer.write(writeContext, key);
-        writeContext.decDepth();
+        writeContext.decreaseDepth();
       }
       generics.popGenericType();
       generics.pushGenericType(valueGenericType);
       if (!valueWriteRef || !writeContext.writeRefOrNull(value)) {
-        writeContext.incDepth();
+        writeContext.increaseDepth();
         valueSerializer.write(writeContext, value);
-        writeContext.decDepth();
+        writeContext.decreaseDepth();
       }
       generics.popGenericType();
       ++chunkSize;
@@ -697,13 +697,13 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
               if (keySerializer == null) {
                 key = readNonEmptyValueFromNullChunk(buffer, trackKeyRef, true);
               } else {
-              readContext.incReadDepth();
+              readContext.increaseDepth();
               if (trackKeyRef) {
                 key = keySerializer.read(readContext, RefMode.TRACKING);
               } else {
                 key = keySerializer.read(readContext, RefMode.NONE);
               }
-              readContext.decDepth();
+              readContext.decreaseDepth();
             }
           } else {
             if (trackKeyRef) {
@@ -745,13 +745,13 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         if (valueSerializer == null) {
           value = readNonEmptyValueFromNullChunk(buffer, trackValueRef, false);
         } else {
-          readContext.incReadDepth();
+          readContext.increaseDepth();
           if (trackValueRef) {
             value = valueSerializer.read(readContext, RefMode.TRACKING);
           } else {
             value = valueSerializer.read(readContext, RefMode.NONE);
           }
-          readContext.decDepth();
+          readContext.decreaseDepth();
         }
       } else {
         if (trackValueRef) {
@@ -778,13 +778,13 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     generics.pushGenericType(type);
     Serializer<?> serializer = type.getSerializer(typeResolver);
     Object v;
-    readContext.incReadDepth();
+    readContext.increaseDepth();
     if (trackRef) {
       v = serializer.read(readContext, RefMode.TRACKING);
     } else {
       v = serializer.read(readContext, RefMode.NONE);
     }
-    readContext.decDepth();
+    readContext.decreaseDepth();
     generics.popGenericType();
     return v;
   }
@@ -805,10 +805,10 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         if (!valueHasNull) {
           return (size << 8) | chunkHeader;
         } else {
-          readContext.incReadDepth();
+          readContext.increaseDepth();
           Object key = keySerializer.read(readContext, RefMode.NONE);
           map.put(key, null);
-          readContext.decDepth();
+          readContext.decreaseDepth();
         }
       } else {
         readNullKeyChunk(buffer, map, chunkHeader, valueSerializer, valueHasNull);
@@ -847,7 +847,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       valueSerializer =
           typeResolver.readTypeInfo(buffer, state.valueTypeInfoReadCache).getSerializer();
     }
-    readContext.incReadDepth();
+    readContext.increaseDepth();
     for (int i = 0; i < chunkSize; i++) {
       Object key =
           trackKeyRef
@@ -860,7 +860,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       map.put(key, value);
       size--;
     }
-    readContext.decDepth();
+    readContext.decreaseDepth();
     return size > 0 ? (size << 8) | buffer.readUnsignedByte() : 0;
   }
 
@@ -904,20 +904,20 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     }
     for (int i = 0; i < chunkSize; i++) {
       generics.pushGenericType(keyGenericType);
-      readContext.incReadDepth();
+      readContext.increaseDepth();
       Object key =
           trackKeyRef
               ? keySerializer.read(readContext, RefMode.TRACKING)
               : keySerializer.read(readContext, RefMode.NONE);
-      readContext.decDepth();
+      readContext.decreaseDepth();
       generics.popGenericType();
       generics.pushGenericType(valueGenericType);
-      readContext.incReadDepth();
+      readContext.increaseDepth();
       Object value =
           trackValueRef
               ? valueSerializer.read(readContext, RefMode.TRACKING)
               : valueSerializer.read(readContext, RefMode.NONE);
-      readContext.decDepth();
+      readContext.decreaseDepth();
       generics.popGenericType();
       map.put(key, value);
       size--;

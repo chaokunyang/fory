@@ -52,7 +52,7 @@ public class LambdaSerializer extends Serializer {
   }
 
   public LambdaSerializer(TypeResolver typeResolver, Class<?> cls) {
-    super(typeResolver, cls);
+    super(typeResolver.getConfig(), cls);
     serializedLambdaSerializer =
         (SerializedLambdaSerializer)
             typeResolver.getSerializer(SerializedLambdaSerializer.SERIALIZED_LAMBDA);

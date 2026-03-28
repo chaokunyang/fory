@@ -55,7 +55,7 @@ public final class CopyContext {
     return typeResolver;
   }
 
-  public void incDepth(int diff) {
+  public void increaseDepth(int diff) {
     depth += diff;
   }
 

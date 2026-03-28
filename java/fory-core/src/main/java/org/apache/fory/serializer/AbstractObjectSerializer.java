@@ -73,7 +73,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
 
   public AbstractObjectSerializer(
       TypeResolver typeResolver, Class<T> type, ObjectCreator<T> objectCreator) {
-    super(typeResolver, type);
+    super(typeResolver.getConfig(), type);
     this.config = typeResolver.getConfig();
     this.typeResolver = typeResolver;
     this.isRecord = RecordUtils.isRecord(type);

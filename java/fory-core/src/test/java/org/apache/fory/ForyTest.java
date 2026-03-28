@@ -537,7 +537,7 @@ public class ForyTest extends ForyTestBase {
 
   static class UUIDSerializer extends Serializer<UUID> {
     public UUIDSerializer(TypeResolver typeResolver) {
-      super(typeResolver, UUID.class);
+      super(typeResolver.getConfig(), UUID.class);
     }
 
     @Override

@@ -53,7 +53,7 @@ public class ResolverValidateSerializerTest {
 
     public static final class InvalidListSerializer extends Serializer<InvalidList> {
       public InvalidListSerializer(TypeResolver typeResolver) {
-        super(typeResolver, InvalidList.class);
+        super(typeResolver.getConfig(), InvalidList.class);
       }
 
       @Override
@@ -109,7 +109,7 @@ public class ResolverValidateSerializerTest {
 
     public static final class InvalidMapSerializer extends Serializer<InvalidMap> {
       public InvalidMapSerializer(TypeResolver typeResolver) {
-        super(typeResolver, InvalidMap.class);
+        super(typeResolver.getConfig(), InvalidMap.class);
       }
 
       @Override

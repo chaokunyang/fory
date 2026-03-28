@@ -27,7 +27,6 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.RefMode;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.TypeUtils;
 
 /**
@@ -58,14 +57,6 @@ public abstract class Serializer<T> {
         TypeUtils.isPrimitive(type) || TypeUtils.isBoxed(type));
   }
 
-  public Serializer(TypeResolver typeResolver, Class<T> type) {
-    this(
-        typeResolver.getConfig(),
-        type,
-        typeResolver.getConfig().trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
-        TypeUtils.isPrimitive(type) || TypeUtils.isBoxed(type));
-  }
-
   public Serializer(Config config, Class<T> type, boolean immutable) {
     this(
         config,
@@ -74,24 +65,11 @@ public abstract class Serializer<T> {
         immutable);
   }
 
-  public Serializer(TypeResolver typeResolver, Class<T> type, boolean immutable) {
-    this(
-        typeResolver.getConfig(),
-        type,
-        typeResolver.getConfig().trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
-        immutable);
-  }
-
   public Serializer(Config config, Class<T> type, boolean needToWriteRef, boolean immutable) {
     this.type = type;
     this.needToWriteRef = needToWriteRef;
     this.needToCopyRef = config.copyRef() && !immutable;
     this.immutable = immutable;
-  }
-
-  public Serializer(
-      TypeResolver typeResolver, Class<T> type, boolean needToWriteRef, boolean immutable) {
-    this(typeResolver.getConfig(), type, needToWriteRef, immutable);
   }
 
   /**

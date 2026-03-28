@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.ConcurrentIdentityMap;
@@ -140,14 +139,19 @@ public final class SharedRegistry {
     return (Serializer<T>) serializer;
   }
 
+  @FunctionalInterface
+  public interface SerializerCreator<T extends Serializer<?>> {
+    T create();
+  }
+
   @SuppressWarnings("unchecked")
   public <T extends Serializer<?>> T getOrCreateThreadSafeSerializer(
-      Class<?> type, Class<? extends Serializer> serializerClass, Supplier<T> factory) {
+      Class<?> type, Class<? extends Serializer> serializerClass, SerializerCreator<T> factory) {
     Serializer<?> existing = threadSafeSerializers.get(type);
     if (existing != null && matchesSerializerClass(existing, serializerClass)) {
       return (T) existing;
     }
-    T serializer = factory.get();
+    T serializer = factory.create();
     if (serializer == null || !serializer.threadSafe()) {
       return serializer;
     }

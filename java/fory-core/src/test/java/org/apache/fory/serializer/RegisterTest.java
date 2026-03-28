@@ -185,7 +185,7 @@ public class RegisterTest extends ForyTestBase {
 
   public static class MyExtSerializer extends Serializer<MyExt> {
     public MyExtSerializer(TypeResolver typeResolver) {
-      super(typeResolver, MyExt.class);
+      super(typeResolver.getConfig(), MyExt.class);
     }
 
     @Override
@@ -203,7 +203,7 @@ public class RegisterTest extends ForyTestBase {
 
   public static class AlternativeMyExtSerializer extends Serializer<MyExt> {
     public AlternativeMyExtSerializer(TypeResolver typeResolver) {
-      super(typeResolver, MyExt.class);
+      super(typeResolver.getConfig(), MyExt.class);
     }
 
     @Override

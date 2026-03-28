@@ -2221,7 +2221,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           String name = ctx.newName(StringUtils.uncapitalize(rawType.getSimpleName()) + "Class");
           Expression clsExpr = staticClassFieldExpr(rawType, name);
           classInfo =
-              inlineInvoke(typeResolverRef, "readTypeInfo", classInfoTypeRef, buffer, clsExpr);
+              inlineInvoke(
+                  typeResolverRef, "readTypeInfo", classInfoTypeRef, readContextRef, clsExpr);
         } else {
           classInfo = readTypeInfo(getRawType(typeRef), buffer);
         }

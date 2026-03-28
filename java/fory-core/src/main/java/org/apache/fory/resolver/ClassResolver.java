@@ -621,15 +621,9 @@ public class ClassResolver extends TypeResolver {
     Preconditions.checkArgument(typeId >= 0 && typeId < INTERNAL_NATIVE_ID_LIMIT);
     checkRegistration(cls, typeId, cls.getName(), true);
     extRegistry.registeredClassIdMap.put(cls, typeId);
-    TypeInfo sharedTypeInfo = sharedRegistry.getPreRegisteredTypeInfo(cls);
+    TypeInfo sharedTypeInfo = sharedRegistry.getPreRegisteredTypeInfo(cls, typeId);
     TypeInfo typeInfo;
     if (sharedTypeInfo != null) {
-      Preconditions.checkArgument(
-          sharedTypeInfo.getTypeId() == typeId,
-          "Pre-registered type id mismatch for %s, expected %s but found %s",
-          cls,
-          typeId,
-          sharedTypeInfo.getTypeId());
       typeInfo = sharedTypeInfo;
     } else {
       typeInfo = classInfoMap.get(cls);
@@ -1069,7 +1063,9 @@ public class ClassResolver extends TypeResolver {
         && sharedSerializer.threadSafe()
         && !needToWriteTypeDef(sharedSerializer)) {
       TypeInfo localTypeInfo = typeInfo;
-      typeInfo = sharedRegistry.getOrCreatePreRegisteredTypeInfo(type, () -> localTypeInfo);
+      typeInfo =
+          sharedRegistry.getOrCreatePreRegisteredTypeInfo(
+              type, typeInfo.getTypeId(), () -> localTypeInfo);
     }
     updateTypeInfo(type, typeInfo);
     recordRegisteredTypeInfo(type, typeInfo);
@@ -1180,7 +1176,7 @@ public class ClassResolver extends TypeResolver {
       int userTypeId = internal ? INVALID_USER_TYPE_ID : id;
       if (currentTypeInfo == null) {
         typeInfo = new TypeInfo(this, type, null, typeId, internal ? INVALID_USER_TYPE_ID : id);
-      } else if (currentTypeInfo == sharedRegistry.getPreRegisteredTypeInfo(type)
+      } else if (currentTypeInfo == sharedRegistry.getPreRegisteredTypeInfo(type, typeId)
           || currentTypeInfo.getTypeId() != typeId
           || currentTypeInfo.getUserTypeId() != userTypeId) {
         typeInfo =
@@ -1199,7 +1195,7 @@ public class ClassResolver extends TypeResolver {
       int typeId = buildUnregisteredTypeId(type, serializer);
       if (currentTypeInfo == null) {
         typeInfo = new TypeInfo(this, type, null, typeId, INVALID_USER_TYPE_ID);
-      } else if (currentTypeInfo == sharedRegistry.getPreRegisteredTypeInfo(type)
+      } else if (currentTypeInfo == sharedRegistry.getPreRegisteredTypeInfo(type, typeId)
           || currentTypeInfo.getTypeId() != typeId
           || currentTypeInfo.getUserTypeId() != INVALID_USER_TYPE_ID) {
         typeInfo =

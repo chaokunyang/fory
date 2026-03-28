@@ -1112,7 +1112,7 @@ public abstract class TypeResolver {
       TypeInfo typeInfo = getTypeInfo(cls, false);
       if (typeInfo != null) {
         TypeInfo localTypeInfo = typeInfo;
-        if (typeInfo == sharedRegistry.getPreRegisteredTypeInfo(cls)) {
+        if (typeInfo == sharedRegistry.getPreRegisteredTypeInfo(cls, typeInfo.getTypeId())) {
           localTypeInfo =
               new TypeInfo(
                   typeInfo.cls,

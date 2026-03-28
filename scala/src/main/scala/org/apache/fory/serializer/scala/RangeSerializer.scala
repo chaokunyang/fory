@@ -19,39 +19,41 @@
 
 package org.apache.fory.serializer.scala
 
-import org.apache.fory.Fory
+import org.apache.fory.context.ReadContext
+import org.apache.fory.context.WriteContext
+import org.apache.fory.config.Config
 import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.reflect.FieldAccessor
+import org.apache.fory.serializer.ImmutableSerializer
 import org.apache.fory.serializer.Serializer
-import org.apache.fory.serializer.collection.CollectionLikeSerializer
 import org.apache.fory.util.unsafe._JDKAccess
 
 import java.lang.invoke.{MethodHandle, MethodHandles}
-import java.util
 import scala.collection.immutable.NumericRange
 
-class RangeSerializer[T <: Range](fory: Fory, cls: Class[T])
-  extends CollectionLikeSerializer[T](fory, cls, false) {
+class RangeSerializer[T <: Range](config: Config, cls: Class[T])
+  extends ImmutableSerializer[T](config, cls) {
+  private val rangeClass = cls
 
-  override def write(buffer: MemoryBuffer, value: T): Unit = {
+  override def write(writeContext: WriteContext, value: T): Unit = {
+    val buffer = writeContext.getBuffer
     buffer.writeVarInt32(value.start)
     buffer.writeVarInt32(value.end)
     buffer.writeVarInt32(value.step)
   }
-  override def read(buffer: MemoryBuffer): T = {
+  override def read(readContext: ReadContext): T = {
+    val buffer = readContext.getBuffer
     val start = buffer.readVarInt32()
     val end = buffer.readVarInt32()
     val step = buffer.readVarInt32()
-    if (this.cls == classOf[Range.Exclusive]) {
+    if (rangeClass == classOf[Range.Exclusive]) {
       Range.apply(start, end, step).asInstanceOf[T]
     } else {
       Range.inclusive(start, end, step).asInstanceOf[T]
     }
   }
 
-  override def onCollectionWrite(memoryBuffer: MemoryBuffer, t:  T): util.Collection[_] = ???
-
-  override def onCollectionRead(collection: util.Collection[_]):  T = ???
+  override def threadSafe(): Boolean = true
 }
 
 
@@ -65,34 +67,34 @@ private object RangeUtils {
 }
 
 
-class NumericRangeSerializer[A, T <: NumericRange[A]](fory: Fory, cls: Class[T])
-  extends CollectionLikeSerializer[T](fory, cls, false) {
+class NumericRangeSerializer[A, T <: NumericRange[A]](config: Config, cls: Class[T])
+  extends ImmutableSerializer[T](config, cls) {
   private val ctr = RangeUtils.lookupCache.get(cls)
-  private val getter = FieldAccessor.createAccessor(cls.getDeclaredFields.find(f => f.getType == classOf[Integral[?]]).get)
+  private val getter =
+    FieldAccessor.createAccessor(
+      cls.getDeclaredFields.find(f => f.getType == classOf[Integral[?]]).get)
 
-  override def write(buffer: MemoryBuffer, value: T): Unit = {
+  override def write(writeContext: WriteContext, value: T): Unit = {
     val cls = value.start.getClass
-    val resolver = fory.getTypeResolver
+    val resolver = writeContext.getTypeResolver
     val classInfo = resolver.getTypeInfo(cls)
-    resolver.writeTypeInfo(buffer, classInfo)
+    resolver.writeTypeInfo(writeContext, classInfo)
     val serializer = classInfo.getSerializer.asInstanceOf[Serializer[A]]
-    serializer.write(buffer, value.start)
-    serializer.write(buffer, value.end)
-    serializer.write(buffer, value.step)
-    fory.writeRef(buffer, getter.get(value))
+    serializer.write(writeContext, value.start)
+    serializer.write(writeContext, value.end)
+    serializer.write(writeContext, value.step)
+    writeContext.writeRef(getter.get(value))
   }
 
-  override def read(buffer: MemoryBuffer) = {
-    val resolver = fory.getTypeResolver
-    val classInfo = resolver.readTypeInfo(buffer)
+  override def read(readContext: ReadContext) = {
+    val resolver = readContext.getTypeResolver
+    val classInfo = resolver.readTypeInfo(readContext)
     val serializer = classInfo.getSerializer.asInstanceOf[Serializer[A]]
-    val start = serializer.read(buffer)
-    val end = serializer.read(buffer)
-    val step = serializer.read(buffer)
-    ctr.invoke(start, end, step, fory.readRef(buffer))
+    val start = serializer.read(readContext)
+    val end = serializer.read(readContext)
+    val step = serializer.read(readContext)
+    ctr.invoke(start, end, step, readContext.readRef()).asInstanceOf[T]
   }
 
-  override def onCollectionRead(collection: util.Collection[_]) = ???
-
-  override def onCollectionWrite(memoryBuffer: MemoryBuffer, t: T) = ???
+  override def threadSafe(): Boolean = true
 }

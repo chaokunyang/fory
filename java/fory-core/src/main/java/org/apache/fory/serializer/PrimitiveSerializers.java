@@ -215,6 +215,11 @@ public class PrimitiveSerializers {
     public Integer read(ReadContext readContext) {
       return readContext.getBuffer().readVarUint32();
     }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
+    }
   }
 
   public static final class LongSerializer extends ImmutableSerializer<Long> {
@@ -307,6 +312,11 @@ public class PrimitiveSerializers {
     @Override
     public Long read(ReadContext readContext) {
       return readContext.getBuffer().readVarUint64();
+    }
+
+    @Override
+    public boolean threadSafe() {
+      return true;
     }
   }
 

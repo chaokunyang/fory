@@ -576,7 +576,7 @@ public final class ForyBuilder {
    * exception explicitly for better debugging.
    */
   private static Fory newFory(ForyBuilder builder, ClassLoader classLoader) {
-    return newFory(builder, classLoader, new SharedRegistry());
+    return newFory(builder, classLoader, builder.sharedRegistry);
   }
 
   private static Fory newFory(

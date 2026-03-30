@@ -37,6 +37,7 @@ import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
 
 /**
@@ -56,16 +57,11 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   private final Object callbackLock = new Object();
 
   public ThreadPoolFory(Function<ForyBuilder, Fory> foryFactory, int poolSize) {
-    this(factory(foryFactory), poolSize);
-  }
-
-  @Deprecated
-  public ThreadPoolFory(Supplier<Fory> foryFactory, int poolSize) {
     if (poolSize <= 0) {
       throw new IllegalArgumentException(
           String.format("thread safe fory pool size error, please check it, size:[%s]", poolSize));
     }
-    Supplier<Fory> factory = Objects.requireNonNull(foryFactory);
+    Supplier<Fory> factory = factory(foryFactory);
     this.poolSize = poolSize;
     slots = new AtomicReferenceArray<>(poolSize);
     pooledFory = new Fory[poolSize];
@@ -83,7 +79,9 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
       classLoader = Fory.class.getClassLoader();
     }
     ClassLoader fixedClassLoader = classLoader;
-    return () -> foryFactory.apply(Fory.builder().withClassLoader(fixedClassLoader));
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    return () -> foryFactory.apply(Fory.builder().withClassLoader(fixedClassLoader)
+        .withSharedRegistry(sharedRegistry));
   }
 
   private PooledEntry acquire() {

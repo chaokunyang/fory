@@ -35,6 +35,7 @@ import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
 
 /**
@@ -74,7 +75,10 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
       classLoader = Fory.class.getClassLoader();
     }
     ClassLoader fixedClassLoader = classLoader;
-    return () -> foryFactory.apply(Fory.builder().withClassLoader(fixedClassLoader));
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    return () ->
+        foryFactory.apply(
+            Fory.builder().withClassLoader(fixedClassLoader).withSharedRegistry(sharedRegistry));
   }
 
   private Fory newFory() {

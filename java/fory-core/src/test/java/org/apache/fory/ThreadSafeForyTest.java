@@ -26,6 +26,7 @@ import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +37,7 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
@@ -84,6 +86,78 @@ public class ThreadSafeForyTest extends ForyTestBase {
       assertSame(threadPool.execute(Fory::getClassLoader), custom);
     } finally {
       Thread.currentThread().setContextClassLoader(original);
+    }
+  }
+
+  @Test
+  public void testThreadSafeRuntimesShareRegistryAcrossRawForyInstances() throws Exception {
+    ThreadLocalFory threadLocal =
+        Fory.builder().requireClassRegistration(false).buildThreadLocalFory();
+    AtomicReference<SharedRegistry> threadLocalRegistry1 = new AtomicReference<>();
+    AtomicReference<SharedRegistry> threadLocalRegistry2 = new AtomicReference<>();
+    Thread thread1 = new Thread(() -> threadLocalRegistry1.set(threadLocal.execute(Fory::getSharedRegistry)));
+    Thread thread2 = new Thread(() -> threadLocalRegistry2.set(threadLocal.execute(Fory::getSharedRegistry)));
+    thread1.start();
+    thread1.join();
+    thread2.start();
+    thread2.join();
+    assertSame(threadLocalRegistry1.get(), threadLocalRegistry2.get());
+
+    ThreadPoolFory threadPool =
+        (ThreadPoolFory) Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2);
+    CountDownLatch acquired = new CountDownLatch(2);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicReference<SharedRegistry> threadPoolRegistry1 = new AtomicReference<>();
+    AtomicReference<SharedRegistry> threadPoolRegistry2 = new AtomicReference<>();
+    AtomicReference<Throwable> error = new AtomicReference<>();
+    Thread poolThread1 =
+        new Thread(
+            () -> {
+              try {
+                threadPool.execute(
+                    fory -> {
+                      threadPoolRegistry1.set(fory.getSharedRegistry());
+                      acquired.countDown();
+                      awaitUnchecked(release);
+                      return null;
+                    });
+              } catch (Throwable t) {
+                error.compareAndSet(null, t);
+              }
+            });
+    Thread poolThread2 =
+        new Thread(
+            () -> {
+              try {
+                threadPool.execute(
+                    fory -> {
+                      threadPoolRegistry2.set(fory.getSharedRegistry());
+                      acquired.countDown();
+                      awaitUnchecked(release);
+                      return null;
+                    });
+              } catch (Throwable t) {
+                error.compareAndSet(null, t);
+              }
+            });
+    poolThread1.start();
+    poolThread2.start();
+    assertTrue(acquired.await(30, TimeUnit.SECONDS));
+    release.countDown();
+    poolThread1.join();
+    poolThread2.join();
+    if (error.get() != null) {
+      throw new AssertionError(error.get());
+    }
+    assertSame(threadPoolRegistry1.get(), threadPoolRegistry2.get());
+  }
+
+  private static void awaitUnchecked(CountDownLatch latch) {
+    try {
+      latch.await();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError(e);
     }
   }
 

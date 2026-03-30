@@ -30,6 +30,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
@@ -49,10 +50,11 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private final Map<Fory, Object> allFory;
   private final Object callbackLock = new Object();
 
-  public ThreadLocalFory(Function<ClassLoader, Fory> foryFactory) {
+  public ThreadLocalFory(Function<ForyBuilder, Fory> foryFactory) {
     this(fixedFactory(foryFactory));
   }
 
+  @Deprecated
   public ThreadLocalFory(Supplier<Fory> foryFactory) {
     this.foryFactory = Objects.requireNonNull(foryFactory);
     factoryCallback = f -> {};
@@ -65,14 +67,14 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
     foryThreadLocal.get();
   }
 
-  private static Supplier<Fory> fixedFactory(Function<ClassLoader, Fory> foryFactory) {
+  private static Supplier<Fory> fixedFactory(Function<ForyBuilder, Fory> foryFactory) {
     Objects.requireNonNull(foryFactory);
     ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
     if (classLoader == null) {
       classLoader = Fory.class.getClassLoader();
     }
     ClassLoader fixedClassLoader = classLoader;
-    return () -> foryFactory.apply(fixedClassLoader);
+    return () -> foryFactory.apply(Fory.builder().withClassLoader(fixedClassLoader));
   }
 
   private Fory newFory() {

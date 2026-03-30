@@ -51,6 +51,43 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
+  public void testFunctionFactoryConstructorsUseFixedContextClassLoader() {
+    ClassLoader original = Thread.currentThread().getContextClassLoader();
+    ClassLoader custom = new ClassLoader(original) {};
+    try {
+      Thread.currentThread().setContextClassLoader(custom);
+      ThreadLocalFory threadLocal =
+          new ThreadLocalFory(
+              builder -> builder.requireClassRegistration(false).build());
+      ThreadPoolFory threadPool =
+          new ThreadPoolFory(
+              builder -> builder.requireClassRegistration(false).build(),
+              2);
+      assertSame(threadLocal.execute(Fory::getClassLoader), custom);
+      assertSame(threadPool.execute(Fory::getClassLoader), custom);
+    } finally {
+      Thread.currentThread().setContextClassLoader(original);
+    }
+  }
+
+  @Test
+  public void testBuilderFactoriesUseFixedContextClassLoader() {
+    ClassLoader original = Thread.currentThread().getContextClassLoader();
+    ClassLoader custom = new ClassLoader(original) {};
+    try {
+      Thread.currentThread().setContextClassLoader(custom);
+      ThreadSafeFory threadLocal =
+          Fory.builder().requireClassRegistration(false).buildThreadLocalFory();
+      ThreadSafeFory threadPool =
+          Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2);
+      assertSame(threadLocal.execute(Fory::getClassLoader), custom);
+      assertSame(threadPool.execute(Fory::getClassLoader), custom);
+    } finally {
+      Thread.currentThread().setContextClassLoader(original);
+    }
+  }
+
+  @Test
   public void testThreadSafeSerialize() throws InterruptedException {
     BeanA beanA = BeanA.createBeanA(2);
     ThreadSafeFory fory =

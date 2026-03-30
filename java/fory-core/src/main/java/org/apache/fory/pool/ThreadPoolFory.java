@@ -32,6 +32,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import org.apache.fory.AbstractThreadSafeFory;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
@@ -54,10 +55,11 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   private final AtomicInteger waitingBorrowers = new AtomicInteger();
   private final Object callbackLock = new Object();
 
-  public ThreadPoolFory(Function<ClassLoader, Fory> foryFactory, int poolSize) {
-    this(fixedFactory(foryFactory), poolSize);
+  public ThreadPoolFory(Function<ForyBuilder, Fory> foryFactory, int poolSize) {
+    this(factory(foryFactory), poolSize);
   }
 
+  @Deprecated
   public ThreadPoolFory(Supplier<Fory> foryFactory, int poolSize) {
     if (poolSize <= 0) {
       throw new IllegalArgumentException(
@@ -74,14 +76,14 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
     }
   }
 
-  private static Supplier<Fory> fixedFactory(Function<ClassLoader, Fory> foryFactory) {
+  private static Supplier<Fory> factory(Function<ForyBuilder, Fory> foryFactory) {
     Objects.requireNonNull(foryFactory);
     ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
     if (classLoader == null) {
       classLoader = Fory.class.getClassLoader();
     }
     ClassLoader fixedClassLoader = classLoader;
-    return () -> foryFactory.apply(fixedClassLoader);
+    return () -> foryFactory.apply(Fory.builder().withClassLoader(fixedClassLoader));
   }
 
   private PooledEntry acquire() {

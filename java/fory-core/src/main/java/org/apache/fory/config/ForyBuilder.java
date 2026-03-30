@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
@@ -647,20 +647,26 @@ public final class ForyBuilder {
     return new ThreadPoolFory(newThreadSafeForyFactory(loader, false, null), poolSize);
   }
 
-  private Supplier<Fory> newThreadSafeForyFactory(
+  private Function<ForyBuilder, Fory> newThreadSafeForyFactory(
       ClassLoader loader, boolean virtualThread, SharedRegistry sharedRegistry) {
     List<Consumer<ForyBuilder>> actions = new ArrayList<>(this.actions);
-    return () -> {
-      ForyBuilder builder = new ForyBuilder();
+    return builder -> {
       builder.replayActions(actions);
-      builder.classLoader = loader;
-      builder.sharedRegistry = sharedRegistry;
-      builder.forVirtualThread = virtualThread;
-      builder.finish();
-      if (sharedRegistry != null) {
-        return newFory(builder, loader, sharedRegistry);
+      if (loader != null) {
+        builder.classLoader = loader;
       }
-      return newFory(builder, loader);
+      if (sharedRegistry != null) {
+        builder.sharedRegistry = sharedRegistry;
+      }
+      if (virtualThread) {
+        builder.forVirtualThread = true;
+      }
+      builder.finish();
+      ClassLoader factoryLoader = builder.classLoader;
+      if (sharedRegistry != null) {
+        return newFory(builder, factoryLoader, sharedRegistry);
+      }
+      return newFory(builder, factoryLoader);
     };
   }
 }

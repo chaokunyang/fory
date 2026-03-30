@@ -123,9 +123,10 @@ public class Example {
 
 Fory provides a pooled thread-safe runtime for multi-threaded serialization:
 
-### ThreadSafeForyPool
+### `buildThreadSafeFory()`
 
-`buildThreadSafeFory()` returns a `ThreadSafeForyPool` with a default idle-pool size:
+This is the default choice for multi-threaded and virtual-thread workloads. It returns a pooled
+`ThreadSafeFory` runtime:
 
 ```java
 ThreadSafeFory fory = Fory.builder()
@@ -138,7 +139,9 @@ System.out.println(fory.deserialize(bytes));
 
 ### Virtual Threads
 
-For JDK 21+ virtual-thread workloads, use `buildVirtualThreadSafeFory(...)`:
+For JDK 21+ virtual-thread workloads, `buildThreadSafeFory()` is the default API. If you want to
+make that intent explicit in code, `buildVirtualThreadSafeFory(...)` is an alias for the same
+pooled runtime style:
 
 ```java
 ThreadSafeFory fory = Fory.builder()
@@ -146,7 +149,7 @@ ThreadSafeFory fory = Fory.builder()
   .withRefTracking(false)
   .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
   .withAsyncCompilation(true)
-  .buildVirtualThreadSafeFory();
+  .buildThreadSafeFory();
 ```
 
 See more details in [Virtual Threads](virtual-threads.md).

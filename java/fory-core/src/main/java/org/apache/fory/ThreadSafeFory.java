@@ -23,12 +23,15 @@ import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.resolver.TypeChecker;
+import org.apache.fory.serializer.SerializerFactory;
 
 /**
- * Thread safe serializer interface. {@link Fory} is not thread-safe, the implementation of this
- * interface will be thread-safe.
+ * Thread-safe serializer interface. {@link Fory} is not thread-safe; implementations of this
+ * interface are.
+ *
+ * <p>The runtime class loader is fixed when the thread-safe serializer is built. If you need a
+ * different class loader, build a different {@link ThreadSafeFory} instance.
  */
 public interface ThreadSafeFory extends BaseFory {
 

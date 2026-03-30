@@ -256,43 +256,6 @@ public final class SharedRegistry {
     return typeDefDescriptorGrouperCache.computeIfAbsent(key, ignored -> factory.get());
   }
 
-  private synchronized void clearSharedRegistrationIfClassLoader(ClassLoader loader) {
-    IdentityHashMap<Class<?>, Integer> sharedRegisteredClassIdMap = registeredClassIdMap;
-    BiMap<String, Class<?>> sharedRegisteredClasses = registeredClasses;
-    if (sharedRegisteredClassIdMap == null || sharedRegisteredClasses == null) {
-      return;
-    }
-    if (containsClassLoader(sharedRegisteredClassIdMap, loader)
-        || containsClassLoader(sharedRegisteredClasses.values(), loader)) {
-      registeredClassIdMap = null;
-      registeredClasses = null;
-    }
-  }
-
-  private static boolean containsClassLoader(Iterable<Class<?>> classes, ClassLoader loader) {
-    for (Class<?> cls : classes) {
-      if (cls.getClassLoader() == loader) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private static boolean containsClassLoader(
-      IdentityHashMap<Class<?>, ?> classMap, ClassLoader loader) {
-    final boolean[] found = new boolean[1];
-    classMap.forEach(
-        (cls, value) -> {
-          if (cls.getClassLoader() == loader) {
-            found[0] = true;
-          }
-        });
-    if (found[0]) {
-      return true;
-    }
-    return false;
-  }
-
   @SuppressWarnings("unchecked")
   private static Class<? extends Serializer> serializerClass(Serializer<?> serializer) {
     if (serializer instanceof GraalvmSerializerHolder) {

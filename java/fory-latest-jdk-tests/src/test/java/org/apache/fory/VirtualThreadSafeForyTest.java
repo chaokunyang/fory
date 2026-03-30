@@ -21,8 +21,10 @@ package org.apache.fory;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
@@ -30,6 +32,39 @@ import org.apache.fory.config.UnknownEnumValueStrategy;
 import org.testng.annotations.Test;
 
 public class VirtualThreadSafeForyTest {
+
+  static class CustomClassLoader extends ClassLoader {
+    CustomClassLoader(ClassLoader parent) {
+      super(parent);
+    }
+  }
+
+  @Test
+  public void testBuildThreadSafeForyUsesFixedBuilderClassLoader() throws InterruptedException {
+    ClassLoader classLoader = new CustomClassLoader(ClassLoader.getSystemClassLoader());
+    ThreadSafeFory fory =
+        Fory.builder()
+            .withClassLoader(classLoader)
+            .requireClassRegistration(false)
+            .buildThreadSafeFory();
+    AtomicReference<Throwable> error = new AtomicReference<>();
+    Thread thread =
+        Thread.startVirtualThread(
+            () -> {
+              try {
+                assertTrue(Thread.currentThread().isVirtual());
+                assertSame(fory.execute(Fory::getClassLoader), classLoader);
+                byte[] bytes = fory.serialize("abc");
+                assertEquals(fory.deserialize(bytes), "abc");
+              } catch (Throwable t) {
+                error.set(t);
+              }
+            });
+    thread.join();
+    if (error.get() != null) {
+      throw new AssertionError(error.get());
+    }
+  }
 
   @Test
   public void testBuildVirtualThreadSafeForyReplaysBuilderConfigToPooledFory() {

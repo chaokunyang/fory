@@ -51,13 +51,9 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   private final Map<Fory, Object> allFory;
   private final Object callbackLock = new Object();
 
-  public ThreadLocalFory(Function<ForyBuilder, Fory> foryFactory) {
-    this(fixedFactory(foryFactory));
-  }
-
-  @Deprecated
-  public ThreadLocalFory(Supplier<Fory> foryFactory) {
-    this.foryFactory = Objects.requireNonNull(foryFactory);
+  public ThreadLocalFory(Function<ForyBuilder, Fory> factory) {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    foryFactory = () -> factory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
     factoryCallback = f -> {};
     allFory = Collections.synchronizedMap(new WeakHashMap<>());
     foryThreadLocal = ThreadLocal.withInitial(this::newFory);
@@ -66,19 +62,6 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
     // in a process load some classes which is not cheap.
     // 2. Make fory generate code at graalvm build time.
     foryThreadLocal.get();
-  }
-
-  private static Supplier<Fory> fixedFactory(Function<ForyBuilder, Fory> foryFactory) {
-    Objects.requireNonNull(foryFactory);
-    ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-    if (classLoader == null) {
-      classLoader = Fory.class.getClassLoader();
-    }
-    ClassLoader fixedClassLoader = classLoader;
-    SharedRegistry sharedRegistry = new SharedRegistry();
-    return () ->
-        foryFactory.apply(
-            Fory.builder().withClassLoader(fixedClassLoader).withSharedRegistry(sharedRegistry));
   }
 
   private Fory newFory() {

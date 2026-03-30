@@ -613,9 +613,7 @@ public final class ForyBuilder {
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
-    SharedRegistry sharedRegistry = new SharedRegistry();
-    return new ThreadPoolFory(
-        newThreadSafeForyFactory(loader, true, sharedRegistry), DEFAULT_THREAD_SAFE_POOL_SIZE);
+    return new ThreadPoolFory(factory(loader), DEFAULT_THREAD_SAFE_POOL_SIZE);
   }
 
   /** Build thread safe fory backed by {@link ThreadLocalFory}. */
@@ -623,7 +621,7 @@ public final class ForyBuilder {
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
-    return new ThreadLocalFory(newThreadSafeForyFactory(loader, false, null));
+    return new ThreadLocalFory(factory(loader));
   }
 
   /**
@@ -644,29 +642,18 @@ public final class ForyBuilder {
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
-    return new ThreadPoolFory(newThreadSafeForyFactory(loader, false, null), poolSize);
+    return new ThreadPoolFory(factory(loader), poolSize);
   }
 
-  private Function<ForyBuilder, Fory> newThreadSafeForyFactory(
-      ClassLoader loader, boolean virtualThread, SharedRegistry sharedRegistry) {
+  private Function<ForyBuilder, Fory> factory(ClassLoader loader) {
     List<Consumer<ForyBuilder>> actions = new ArrayList<>(this.actions);
     return builder -> {
       builder.replayActions(actions);
-      if (loader != null) {
-        builder.classLoader = loader;
-      }
-      if (sharedRegistry != null) {
-        builder.sharedRegistry = sharedRegistry;
-      }
-      if (virtualThread) {
-        builder.forVirtualThread = true;
-      }
       builder.finish();
-      ClassLoader factoryLoader = builder.classLoader;
       if (sharedRegistry != null) {
-        return newFory(builder, factoryLoader, sharedRegistry);
+        return newFory(builder, loader, sharedRegistry);
       }
-      return newFory(builder, factoryLoader);
+      return newFory(builder, loader);
     };
   }
 }

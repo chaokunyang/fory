@@ -61,7 +61,8 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
       throw new IllegalArgumentException(
           String.format("thread safe fory pool size error, please check it, size:[%s]", poolSize));
     }
-    Supplier<Fory> factory = factory(foryFactory);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Supplier<Fory> factory = () -> foryFactory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
     this.poolSize = poolSize;
     slots = new AtomicReferenceArray<>(poolSize);
     pooledFory = new Fory[poolSize];
@@ -70,18 +71,6 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
       pooledFory[i] = fory;
       slots.set(i, new PooledEntry(fory, i));
     }
-  }
-
-  private static Supplier<Fory> factory(Function<ForyBuilder, Fory> foryFactory) {
-    Objects.requireNonNull(foryFactory);
-    ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-    if (classLoader == null) {
-      classLoader = Fory.class.getClassLoader();
-    }
-    ClassLoader fixedClassLoader = classLoader;
-    SharedRegistry sharedRegistry = new SharedRegistry();
-    return () -> foryFactory.apply(Fory.builder().withClassLoader(fixedClassLoader)
-        .withSharedRegistry(sharedRegistry));
   }
 
   private PooledEntry acquire() {

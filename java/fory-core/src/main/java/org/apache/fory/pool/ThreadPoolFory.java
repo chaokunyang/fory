@@ -21,7 +21,6 @@ package org.apache.fory.pool;
 
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
@@ -62,7 +61,8 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
           String.format("thread safe fory pool size error, please check it, size:[%s]", poolSize));
     }
     SharedRegistry sharedRegistry = new SharedRegistry();
-    Supplier<Fory> factory = () -> foryFactory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
+    Supplier<Fory> factory =
+        () -> foryFactory.apply(Fory.builder().withSharedRegistry(sharedRegistry));
     this.poolSize = poolSize;
     slots = new AtomicReferenceArray<>(poolSize);
     pooledFory = new Fory[poolSize];

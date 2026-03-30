@@ -76,8 +76,8 @@ Fory provides a `org.apache.fory.resolver.AllowListChecker` which is an allowed/
 
 ```java
 AllowListChecker checker = new AllowListChecker(AllowListChecker.CheckLevel.STRICT);
-ThreadSafeFory fory = new ThreadLocalFory(() -> {
-  Fory f = Fory.builder().requireClassRegistration(true).build();
+ThreadSafeFory fory = new ThreadLocalFory(builder -> {
+  Fory f = builder.requireClassRegistration(true).build();
   f.getTypeResolver().setTypeChecker(checker);
   checker.addListener((ClassResolver) f.getTypeResolver());
   return f;

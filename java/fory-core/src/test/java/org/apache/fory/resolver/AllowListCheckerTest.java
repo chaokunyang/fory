@@ -87,8 +87,7 @@ public class AllowListCheckerTest {
     ThreadSafeFory fory =
         new ThreadLocalFory(
             builder -> {
-              Fory f =
-                  builder.requireClassRegistration(false).build();
+              Fory f = builder.requireClassRegistration(false).build();
               f.getTypeResolver().setTypeChecker(checker);
               checker.addListener((ClassResolver) f.getTypeResolver());
               return f;

@@ -637,7 +637,8 @@ public final class ForyBuilder {
   public ThreadSafeFory buildThreadSafeForyPool(int poolSize) {
     if (poolSize <= 0) {
       throw new IllegalArgumentException(
-          String.format("thread safe fory pool's size error, please check it, size:[%s]", poolSize));
+          String.format(
+              "thread safe fory pool's size error, please check it, size:[%s]", poolSize));
     }
     finish();
     ClassLoader loader = this.classLoader;

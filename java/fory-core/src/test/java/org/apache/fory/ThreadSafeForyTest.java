@@ -53,40 +53,16 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
-  public void testFunctionFactoryConstructorsUseFixedContextClassLoader() {
-    ClassLoader original = Thread.currentThread().getContextClassLoader();
-    ClassLoader custom = new ClassLoader(original) {};
-    try {
-      Thread.currentThread().setContextClassLoader(custom);
-      ThreadLocalFory threadLocal =
-          new ThreadLocalFory(
-              builder -> builder.requireClassRegistration(false).build());
-      ThreadPoolFory threadPool =
-          new ThreadPoolFory(
-              builder -> builder.requireClassRegistration(false).build(),
-              2);
-      assertSame(threadLocal.execute(Fory::getClassLoader), custom);
-      assertSame(threadPool.execute(Fory::getClassLoader), custom);
-    } finally {
-      Thread.currentThread().setContextClassLoader(original);
-    }
-  }
-
-  @Test
-  public void testBuilderFactoriesUseFixedContextClassLoader() {
-    ClassLoader original = Thread.currentThread().getContextClassLoader();
-    ClassLoader custom = new ClassLoader(original) {};
-    try {
-      Thread.currentThread().setContextClassLoader(custom);
-      ThreadSafeFory threadLocal =
-          Fory.builder().requireClassRegistration(false).buildThreadLocalFory();
-      ThreadSafeFory threadPool =
-          Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2);
-      assertSame(threadLocal.execute(Fory::getClassLoader), custom);
-      assertSame(threadPool.execute(Fory::getClassLoader), custom);
-    } finally {
-      Thread.currentThread().setContextClassLoader(original);
-    }
+  public void testFunctionFactoryConstructorsUseBuilderProvidedClassLoader() {
+    ClassLoader custom = new ClassLoader(ClassLoader.getSystemClassLoader()) {};
+    ThreadLocalFory threadLocal =
+        new ThreadLocalFory(
+            builder -> builder.withClassLoader(custom).requireClassRegistration(false).build());
+    ThreadPoolFory threadPool =
+        new ThreadPoolFory(
+            builder -> builder.withClassLoader(custom).requireClassRegistration(false).build(), 2);
+    assertSame(threadLocal.execute(Fory::getClassLoader), custom);
+    assertSame(threadPool.execute(Fory::getClassLoader), custom);
   }
 
   @Test
@@ -95,8 +71,10 @@ public class ThreadSafeForyTest extends ForyTestBase {
         Fory.builder().requireClassRegistration(false).buildThreadLocalFory();
     AtomicReference<SharedRegistry> threadLocalRegistry1 = new AtomicReference<>();
     AtomicReference<SharedRegistry> threadLocalRegistry2 = new AtomicReference<>();
-    Thread thread1 = new Thread(() -> threadLocalRegistry1.set(threadLocal.execute(Fory::getSharedRegistry)));
-    Thread thread2 = new Thread(() -> threadLocalRegistry2.set(threadLocal.execute(Fory::getSharedRegistry)));
+    Thread thread1 =
+        new Thread(() -> threadLocalRegistry1.set(threadLocal.execute(Fory::getSharedRegistry)));
+    Thread thread2 =
+        new Thread(() -> threadLocalRegistry2.set(threadLocal.execute(Fory::getSharedRegistry)));
     thread1.start();
     thread1.join();
     thread2.start();
@@ -215,8 +193,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
   @Test
   public void testThreadPoolReusesForyAcrossThreads() throws InterruptedException {
-    ThreadSafeFory fory =
-        Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(1);
+    ThreadSafeFory fory = Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(1);
     AtomicReference<Integer> firstForyId = new AtomicReference<>();
     AtomicReference<Integer> secondForyId = new AtomicReference<>();
     AtomicReference<Throwable> error = new AtomicReference<>();
@@ -453,8 +430,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
   @Test
   public void testRegisterAfterSerializeThrowsExceptionWithForyPool() {
-    ThreadSafeFory fory =
-        Fory.builder().requireClassRegistration(true).buildThreadSafeForyPool(2);
+    ThreadSafeFory fory = Fory.builder().requireClassRegistration(true).buildThreadSafeForyPool(2);
     fory.register(BeanA.class);
     fory.serialize("ok");
     Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));

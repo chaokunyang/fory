@@ -115,8 +115,7 @@ public final class SharedRegistry {
     if (GraalvmSupport.isGraalBuildtime()) {
       return Collections.unmodifiableList(new ArrayList<>(factory.get()));
     }
-    TypeDefDescriptorsKey key =
-        new TypeDefDescriptorsKey(typeDef.getId(), type);
+    TypeDefDescriptorsKey key = new TypeDefDescriptorsKey(typeDef.getId(), type);
     return typeDefDescriptorsCache.computeIfAbsent(
         key, ignored -> Collections.unmodifiableList(new ArrayList<>(factory.get())));
   }

@@ -37,7 +37,6 @@ import org.apache.fory.serializer.MetaSharedLayerSerializerBase;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 
@@ -55,7 +54,6 @@ import org.apache.fory.util.StringUtils;
  */
 public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   private final TypeDef layerTypeDef;
-  private final Class<?> layerMarkerClass;
 
   public MetaSharedLayerCodecBuilder(
       TypeRef<?> beanType, Fory fory, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
@@ -64,7 +62,6 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
     this.layerTypeDef = layerTypeDef;
-    this.layerMarkerClass = layerMarkerClass;
     Collection<Descriptor> descriptors = layerTypeDef.getDescriptors(typeResolver, beanClass);
     DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(descriptors, false));
     objectCodecOptimizer = new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
@@ -101,13 +98,15 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
             ""
                 + "super(${fory}, ${cls});\n"
                 + "this.${fory} = ${fory};\n"
-                + "${serializer} = ${builderClass}.setCodegenSerializer(${fory}, ${cls}, this);\n",
+                + "${serializer} = ${builderClass}.setCodegenSerializer(${fory}, ${cls}, ${layerTypeDefBytes});\n",
             "fory",
             FORY_NAME,
             "cls",
             POJO_CLASS_TYPE_NAME,
             "builderClass",
             MetaSharedLayerCodecBuilder.class.getName(),
+            "layerTypeDefBytes",
+            toByteArrayLiteral(layerTypeDef.getEncoded()),
             "serializer",
             SERIALIZER_FIELD_NAME);
     ctx.clearExprState();
@@ -129,28 +128,25 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   // Invoked by JIT.
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static MetaSharedLayerSerializerBase setCodegenSerializer(
-      Fory fory, Class<?> cls, GeneratedMetaSharedLayerSerializer s) {
-    // In native-image mode, including build time, do not rely on the cached layer bootstrap
-    // context. We only populate that cache on the regular JVM path, so native-image execution
-    // must resolve through the type resolver instead.
-    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      return (MetaSharedLayerSerializerBase) typeResolver(fory, r -> r.getSerializer(s.getType()));
+      Fory fory, Class<?> cls, byte[] encodedLayerTypeDef) {
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(encodedLayerTypeDef);
+    TypeDef layerTypeDef = TypeDef.readTypeDef(fory, buffer, buffer.readInt64());
+    return new MetaSharedLayerSerializer(
+        fory, cls, layerTypeDef, LayerMarkerClassGenerator.getOrCreate(fory, cls, 0));
+  }
+
+  private static String toByteArrayLiteral(byte[] bytes) {
+    if (bytes.length == 0) {
+      return "new byte[0]";
     }
-    // Layer serializers don't have a generic no-arg/newSerializer construction path. The
-    // outer ObjectStreamSerializer JIT step already resolved the layer TypeDef and marker, so
-    // generated serializers look up that cached context here and bootstrap the interpreter
-    // delegate synchronously in their constructor.
-    CodecUtils.MetaSharedLayerCodecContext context =
-        CodecUtils.getMetaSharedLayerCodecContext(s.getClass());
-    Preconditions.checkNotNull(
-        context,
-        "Missing layer codec context for generated serializer "
-            + s.getClass()
-            + "; loadOrGenMetaSharedLayerCodecClass should cache it before serializer"
-            + " instantiation.");
-    s.serializer =
-        new MetaSharedLayerSerializer(fory, cls, context.layerTypeDef, context.layerMarkerClass);
-    return s.serializer;
+    StringBuilder builder = new StringBuilder("new byte[] {");
+    for (int i = 0; i < bytes.length; i++) {
+      if (i > 0) {
+        builder.append(", ");
+      }
+      builder.append(bytes[i]);
+    }
+    return builder.append("}").toString();
   }
 
   @Override

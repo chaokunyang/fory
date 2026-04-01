@@ -40,12 +40,6 @@ public class CodecUtils {
   // Cache key includes configHash to distinguish between xlang and non-xlang modes
   private static final ConcurrentHashMap<Tuple3<String, Class<?>, Integer>, Class>
       graalvmSerializers = new ConcurrentHashMap<>();
-  // Generated layer serializers need the original layer metadata to bootstrap their delegate
-  // synchronously in the constructor.
-  // This is a process-lifetime cache keyed by generated serializer class, which mirrors the
-  // existing codegen cache behavior and is populated only on the regular JVM path.
-  private static final ConcurrentHashMap<Class<?>, MetaSharedLayerCodecContext>
-      metaSharedLayerCodecContexts = new ConcurrentHashMap<>();
 
   // TODO(chaokunyang) how to uninstall org.apache.fory.codegen/builder classes for graalvm build
   // time
@@ -84,26 +78,16 @@ public class CodecUtils {
   public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedLayerCodecClass(
       Class<T> cls, Fory fory, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
     Preconditions.checkNotNull(fory);
-    Class<? extends Serializer<T>> serializerClass =
-        loadSerializer(
-            "loadOrGenMetaSharedLayerCodecClass",
-            cls,
-            fory,
-            () ->
-                loadOrGenCodecClass(
-                    cls,
-                    fory,
-                    new MetaSharedLayerCodecBuilder(
-                        TypeRef.of(cls), fory, layerTypeDef, layerMarkerClass)));
-    if (!GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      metaSharedLayerCodecContexts.putIfAbsent(
-          serializerClass, new MetaSharedLayerCodecContext(layerTypeDef, layerMarkerClass));
-    }
-    return serializerClass;
-  }
-
-  static MetaSharedLayerCodecContext getMetaSharedLayerCodecContext(Class<?> serializerClass) {
-    return metaSharedLayerCodecContexts.get(serializerClass);
+    return loadSerializer(
+        "loadOrGenMetaSharedLayerCodecClass",
+        cls,
+        fory,
+        () ->
+            loadOrGenCodecClass(
+                cls,
+                fory,
+                new MetaSharedLayerCodecBuilder(
+                    TypeRef.of(cls), fory, layerTypeDef, layerMarkerClass)));
   }
 
   @SuppressWarnings("unchecked")
@@ -185,16 +169,6 @@ public class CodecUtils {
       return serializerClass;
     } catch (Exception e) {
       throw new RuntimeException(e);
-    }
-  }
-
-  static final class MetaSharedLayerCodecContext {
-    final TypeDef layerTypeDef;
-    final Class<?> layerMarkerClass;
-
-    MetaSharedLayerCodecContext(TypeDef layerTypeDef, Class<?> layerMarkerClass) {
-      this.layerTypeDef = layerTypeDef;
-      this.layerMarkerClass = layerMarkerClass;
     }
   }
 }

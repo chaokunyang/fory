@@ -60,9 +60,9 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
-    this.layerTypeDef = layerTypeDef;
+    this.layerTypeDef = fory.getTypeResolver().cacheTypeDef(layerTypeDef);
     DescriptorGrouper grouper =
-        typeResolver(r -> r.createDescriptorGrouper(layerTypeDef, beanClass));
+        typeResolver(r -> r.createDescriptorGrouper(this.layerTypeDef, beanClass));
     objectCodecOptimizer = new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
   }
 
@@ -97,15 +97,15 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
             ""
                 + "super(${fory}, ${cls});\n"
                 + "this.${fory} = ${fory};\n"
-                + "${serializer} = ${builderClass}.setCodegenSerializer(${fory}, ${cls}, ${layerTypeDefBytes});\n",
+                + "${serializer} = ${builderClass}.setCodegenSerializer(${fory}, ${cls}, ${layerTypeDefId});\n",
             "fory",
             FORY_NAME,
             "cls",
             POJO_CLASS_TYPE_NAME,
             "builderClass",
             MetaSharedLayerCodecBuilder.class.getName(),
-            "layerTypeDefBytes",
-            toByteArrayLiteral(layerTypeDef.getEncoded()),
+            "layerTypeDefId",
+            layerTypeDef.getId() + "L",
             "serializer",
             SERIALIZER_FIELD_NAME);
     ctx.clearExprState();
@@ -127,25 +127,13 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   // Invoked by JIT.
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static MetaSharedLayerSerializerBase setCodegenSerializer(
-      Fory fory, Class<?> cls, byte[] encodedLayerTypeDef) {
-    MemoryBuffer buffer = MemoryBuffer.fromByteArray(encodedLayerTypeDef);
-    TypeDef layerTypeDef = TypeDef.readTypeDef(fory, buffer, buffer.readInt64());
+      Fory fory, Class<?> cls, long layerTypeDefId) {
+    TypeDef layerTypeDef =
+        Preconditions.checkNotNull(
+            fory.getTypeResolver().getTypeDefById(layerTypeDefId),
+            "Missing cached layer TypeDef for id " + layerTypeDefId + " and class " + cls);
     return new MetaSharedLayerSerializer(
         fory, cls, layerTypeDef, LayerMarkerClassGenerator.getOrCreate(fory, cls, 0));
-  }
-
-  private static String toByteArrayLiteral(byte[] bytes) {
-    if (bytes.length == 0) {
-      return "new byte[0]";
-    }
-    StringBuilder builder = new StringBuilder("new byte[] {");
-    for (int i = 0; i < bytes.length; i++) {
-      if (i > 0) {
-        builder.append(", ");
-      }
-      builder.append(bytes[i]);
-    }
-    return builder.append("}").toString();
   }
 
   @Override

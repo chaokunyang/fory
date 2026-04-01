@@ -1119,6 +1119,10 @@ public abstract class TypeResolver {
     return sharedRegistry.getOrCreateTypeDef(typeDef);
   }
 
+  public final TypeDef getTypeDefById(long typeDefId) {
+    return sharedRegistry.typeDefById.get(typeDefId);
+  }
+
   public final boolean isSerializable(Class<?> cls) {
     // Enums are always serializable, even if abstract (enums with abstract methods)
     if (cls.isEnum()) {

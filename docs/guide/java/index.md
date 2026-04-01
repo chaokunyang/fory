@@ -83,23 +83,16 @@ public class Example {
 ### Multi-Thread Usage
 
 ```java
-import java.util.List;
-import java.util.Arrays;
-
 import org.apache.fory.*;
 import org.apache.fory.config.*;
 
 public class Example {
   public static void main(String[] args) {
     SomeClass object = new SomeClass();
-    // Note that Fory instances should be reused between
-    // multiple serializations of different objects.
-    ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
-      Fory f = Fory.builder().withLanguage(Language.JAVA)
-        .withClassLoader(classLoader).build();
-      f.register(SomeClass.class, 1);
-      return f;
-    });
+    ThreadSafeFory fory = Fory.builder()
+      .withLanguage(Language.JAVA)
+      .buildThreadSafeFory();
+    fory.register(SomeClass.class, 1);
     byte[] bytes = fory.serialize(object);
     System.out.println(fory.deserialize(bytes));
   }
@@ -109,20 +102,17 @@ public class Example {
 ### Fory Instance Reuse Pattern
 
 ```java
-import java.util.List;
-import java.util.Arrays;
-
 import org.apache.fory.*;
 import org.apache.fory.config.*;
 
 public class Example {
-  // reuse fory.
-  private static final ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
-    Fory f = Fory.builder().withLanguage(Language.JAVA)
-      .withClassLoader(classLoader).build();
-    f.register(SomeClass.class, 1);
-    return f;
-  });
+  private static final ThreadSafeFory fory = Fory.builder()
+      .withLanguage(Language.JAVA)
+      .buildThreadSafeFory();
+
+  static {
+    fory.register(SomeClass.class, 1);
+  }
 
   public static void main(String[] args) {
     SomeClass object = new SomeClass();
@@ -134,26 +124,12 @@ public class Example {
 
 ## Thread Safety
 
-Fory provides multiple options for thread-safe serialization:
+Fory provides two thread-safe runtime styles:
 
-### ThreadLocalFory
+### `buildThreadSafeFory`
 
-Uses thread-local storage to maintain separate Fory instances per thread:
-
-```java
-ThreadSafeFory fory = new ThreadLocalFory(classLoader -> {
-  Fory f = Fory.builder().withLanguage(Language.JAVA)
-    .withClassLoader(classLoader).build();
-  f.register(SomeClass.class, 1);
-  return f;
-});
-byte[] bytes = fory.serialize(object);
-System.out.println(fory.deserialize(bytes));
-```
-
-### ThreadSafeForyPool
-
-For virtual threads or environments where thread-local storage is not appropriate, use `buildThreadSafeForyPool`:
+This is the default choice. It uses a fixed-size shared `ThreadPoolFory` sized to
+`4 * availableProcessors()` and is the preferred runtime for virtual-thread workloads:
 
 ```java
 ThreadSafeFory fory = Fory.builder()
@@ -161,10 +137,40 @@ ThreadSafeFory fory = Fory.builder()
   .withRefTracking(false)
   .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
   .withAsyncCompilation(true)
-  .buildThreadSafeForyPool(minPoolSize, maxPoolSize);
+  .buildThreadSafeFory();
 ```
 
-Note that calling `buildThreadSafeFory()` on `ForyBuilder` will create an instance of `ThreadLocalFory`. This may not be appropriate in environments where virtual threads are used, as each thread will create its own Fory instance, a relatively expensive operation. An alternative for virtual threads is to use `buildThreadSafeForyPool`.
+See more details in [Virtual Threads](virtual-threads.md).
+
+### ThreadLocalFory
+
+Use `buildThreadLocalFory()` only when you explicitly want one `Fory` instance per long-lived
+platform thread, or when you want to pin that choice regardless of JDK version:
+
+```java
+ThreadSafeFory fory = Fory.builder()
+  .withLanguage(Language.JAVA)
+  .buildThreadLocalFory();
+fory.register(SomeClass.class, 1);
+byte[] bytes = fory.serialize(object);
+System.out.println(fory.deserialize(bytes));
+```
+
+### `buildThreadSafeForyPool`
+
+Use `buildThreadSafeForyPool(poolSize)` when you want to set that fixed shared pool size
+explicitly. It eagerly creates `poolSize` `Fory` instances, keeps them in shared fixed slots, and
+then lets any caller borrow one through a thread-agnostic fast path. Calls only block when every
+pooled instance is already in use; the runtime does not key cached instances by thread identity:
+
+```java
+ThreadSafeFory fory = Fory.builder()
+  .withLanguage(Language.JAVA)
+  .withRefTracking(false)
+  .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+  .withAsyncCompilation(true)
+  .buildThreadSafeForyPool(poolSize);
+```
 
 ### Builder Methods
 
@@ -177,19 +183,25 @@ Fory fory = Fory.builder()
   .withAsyncCompilation(true)
   .build();
 
-// Thread-safe Fory (ThreadLocalFory)
+// Thread-safe Fory (thread-safe Fory backed by a pool of Fory instances)
 ThreadSafeFory fory = Fory.builder()
   .withLanguage(Language.JAVA)
   .withRefTracking(false)
   .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
   .withAsyncCompilation(true)
   .buildThreadSafeFory();
+
+// Explicit thread-local runtime
+ThreadSafeFory threadLocalFory = Fory.builder()
+  .withLanguage(Language.JAVA)
+  .buildThreadLocalFory();
 ```
 
 ## Next Steps
 
 - [Configuration](configuration.md) - Learn about ForyBuilder options
 - [Basic Serialization](basic-serialization.md) - Detailed serialization patterns
+- [Virtual Threads](virtual-threads.md) - Virtual-thread usage and pool sizing guidance
 - [Type Registration](type-registration.md) - Class registration and security
 - [Custom Serializers](custom-serializers.md) - Implement custom serializers
 - [Cross-Language Serialization](cross-language.md) - Serialize data for other languages

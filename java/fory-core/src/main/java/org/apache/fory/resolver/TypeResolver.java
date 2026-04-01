@@ -1116,11 +1116,22 @@ public abstract class TypeResolver {
   }
 
   public final TypeDef cacheTypeDef(TypeDef typeDef) {
-    return sharedRegistry.getOrCreateTypeDef(typeDef);
+    TypeDef cachedTypeDef = sharedRegistry.getOrCreateTypeDef(typeDef);
+    if (GraalvmSupport.isGraalBuildtime()) {
+      getGraalvmClassRegistry().typeDefMap.putIfAbsent(cachedTypeDef.getId(), cachedTypeDef);
+    }
+    return cachedTypeDef;
   }
 
   public final TypeDef getTypeDefById(long typeDefId) {
-    return sharedRegistry.typeDefById.get(typeDefId);
+    TypeDef typeDef = sharedRegistry.typeDefById.get(typeDefId);
+    if (typeDef == null && GraalvmSupport.isGraalRuntime()) {
+      typeDef = getGraalvmClassRegistry().typeDefMap.get(typeDefId);
+      if (typeDef != null) {
+        typeDef = sharedRegistry.getOrCreateTypeDef(typeDef);
+      }
+    }
+    return typeDef;
   }
 
   public final boolean isSerializable(Class<?> cls) {

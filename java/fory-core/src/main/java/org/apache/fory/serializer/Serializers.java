@@ -132,52 +132,70 @@ public class Serializers {
     throw new IllegalStateException("unreachable");
   }
 
+  /**
+   * Resolve and cache the constructor handle for a serializer class without instantiating it.
+   *
+   * <p>GraalVM native-image can execute with constructor handles frozen from image build time even
+   * when runtime constructor discovery for generated serializers is unavailable.
+   */
+  public static void preloadSerializerConstructor(Class<? extends Serializer> serializerClass) {
+    if (CTR_MAP.getIfPresent(serializerClass) != null) {
+      return;
+    }
+    try {
+      resolveSerializerConstructor(serializerClass);
+    } catch (Throwable t) {
+      Platform.throwException(t);
+    }
+  }
+
   private static <T> Serializer<T> createSerializer(
       Fory fory, Class<?> type, Class<? extends Serializer> serializerClass) throws Throwable {
+    Tuple2<MethodType, MethodHandle> ctrInfo = resolveSerializerConstructor(serializerClass);
+    if (GraalvmSupport.isGraalBuildtime() && Generated.class.isAssignableFrom(serializerClass)) {
+      return new GraalvmSerializerHolder(fory, type, serializerClass);
+    }
+    MethodType sig = ctrInfo.f0;
+    MethodHandle ctr = ctrInfo.f1;
+    if (sig.equals(SIG1)) {
+      return (Serializer<T>) ctr.invoke(fory, type);
+    } else if (sig.equals(SIG2)) {
+      return (Serializer<T>) ctr.invoke(fory);
+    } else if (sig.equals(SIG3)) {
+      return (Serializer<T>) ctr.invoke(type);
+    } else {
+      return (Serializer<T>) ctr.invoke();
+    }
+  }
+
+  private static Tuple2<MethodType, MethodHandle> resolveSerializerConstructor(
+      Class<? extends Serializer> serializerClass) throws Throwable {
+    Tuple2<MethodType, MethodHandle> ctrInfo = CTR_MAP.getIfPresent(serializerClass);
+    if (ctrInfo != null) {
+      return ctrInfo;
+    }
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(serializerClass);
     try {
       MethodHandle ctr = lookup.findConstructor(serializerClass, SIG1);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG1, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory, type, serializerClass);
-        }
-      }
-      return (Serializer<T>) ctr.invoke(fory, type);
+      ctrInfo = Tuple2.of(SIG1, ctr);
     } catch (NoSuchMethodException e) {
       ExceptionUtils.ignore(e);
-    }
-    try {
-      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG2);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG2, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory, type, serializerClass);
+      try {
+        MethodHandle ctr = lookup.findConstructor(serializerClass, SIG2);
+        ctrInfo = Tuple2.of(SIG2, ctr);
+      } catch (NoSuchMethodException e1) {
+        ExceptionUtils.ignore(e1);
+        try {
+          MethodHandle ctr = lookup.findConstructor(serializerClass, SIG3);
+          ctrInfo = Tuple2.of(SIG3, ctr);
+        } catch (NoSuchMethodException e2) {
+          MethodHandle ctr = ReflectionUtils.getCtrHandle(serializerClass);
+          ctrInfo = Tuple2.of(SIG4, ctr);
         }
       }
-      return (Serializer<T>) ctr.invoke(fory);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
     }
-    try {
-      MethodHandle ctr = lookup.findConstructor(serializerClass, SIG3);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG3, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory, type, serializerClass);
-        }
-      }
-      return (Serializer<T>) ctr.invoke(type);
-    } catch (NoSuchMethodException e) {
-      MethodHandle ctr = ReflectionUtils.getCtrHandle(serializerClass);
-      CTR_MAP.put(serializerClass, Tuple2.of(SIG4, ctr));
-      if (GraalvmSupport.isGraalBuildtime()) {
-        if (Generated.class.isAssignableFrom(serializerClass)) {
-          return new GraalvmSerializerHolder(fory, type, serializerClass);
-        }
-      }
-      return (Serializer<T>) ctr.invoke();
-    }
+    CTR_MAP.put(serializerClass, ctrInfo);
+    return ctrInfo;
   }
 
   public static <T> void write(MemoryBuffer buffer, Serializer<T> serializer, T obj) {

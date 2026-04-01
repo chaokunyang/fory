@@ -28,6 +28,7 @@ public class Main {
     Example.main(args);
     XlangExample.main(args);
     CompatibleExample.main(args);
+    CompatibleObjectStreamExample.main(args);
     ScopedCompatibleExample.main(args);
     RecordExample.main(args);
     CompatibleRecordExample.main(args);

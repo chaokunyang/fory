@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
+import org.apache.fory.builder.Generated;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.collection.Tuple3;
@@ -30,6 +31,7 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.Serializers;
 import org.apache.fory.util.ClassLoaderUtils;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
@@ -165,6 +167,10 @@ public class CodecUtils {
     }
     try {
       Class serializerClass = func.call();
+      if (GraalvmSupport.isGraalBuildtime()
+          && Generated.class.isAssignableFrom(serializerClass)) {
+        Serializers.preloadSerializerConstructor(serializerClass);
+      }
       if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         graalvmSerializers.putIfAbsent(Tuple3.of(name, cls, configHash), serializerClass);
       }

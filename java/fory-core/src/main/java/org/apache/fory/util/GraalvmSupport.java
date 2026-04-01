@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.meta.TypeDef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.record.RecordUtils;
@@ -258,6 +259,7 @@ public class GraalvmSupport {
     public final List<TypeResolver> resolvers;
     public final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
     public final Map<Long, Class<? extends Serializer>> deserializerClassMap;
+    public final Map<Long, TypeDef> typeDefMap;
     public final Set<Class<?>> registeredClasses;
     public final Set<Class<?>> proxyInterfaces;
 
@@ -265,6 +267,7 @@ public class GraalvmSupport {
       resolvers = Collections.synchronizedList(new ArrayList<>());
       serializerClassMap = new ConcurrentHashMap<>();
       deserializerClassMap = new ConcurrentHashMap<>();
+      typeDefMap = new ConcurrentHashMap<>();
       registeredClasses = ConcurrentHashMap.newKeySet();
       proxyInterfaces = ConcurrentHashMap.newKeySet();
     }

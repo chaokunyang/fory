@@ -72,11 +72,10 @@ public class CodecUtils {
    * @param cls the target class
    * @param fory the Fory instance
    * @param layerTypeDef the TypeDef for this layer only
-   * @param layerMarkerClass the marker class for this layer
    * @return the generated serializer class
    */
   public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedLayerCodecClass(
-      Class<T> cls, Fory fory, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
+      Class<T> cls, Fory fory, TypeDef layerTypeDef) {
     Preconditions.checkNotNull(fory);
     return loadSerializer(
         "loadOrGenMetaSharedLayerCodecClass",
@@ -84,10 +83,20 @@ public class CodecUtils {
         fory,
         () ->
             loadOrGenCodecClass(
-                cls,
-                fory,
-                new MetaSharedLayerCodecBuilder(
-                    TypeRef.of(cls), fory, layerTypeDef, layerMarkerClass)));
+                cls, fory, new MetaSharedLayerCodecBuilder(TypeRef.of(cls), fory, layerTypeDef)));
+  }
+
+  public static <T> Class<? extends Serializer<T>> getMetaSharedLayerCodecClass(
+      Class<T> cls, Fory fory) {
+    Preconditions.checkNotNull(fory);
+    return loadSerializer(
+        "loadOrGenMetaSharedLayerCodecClass",
+        cls,
+        fory,
+        () -> {
+          throw new IllegalStateException(
+              "Meta-shared layer serializer wasn't generated ahead of time for " + cls.getName());
+        });
   }
 
   @SuppressWarnings("unchecked")

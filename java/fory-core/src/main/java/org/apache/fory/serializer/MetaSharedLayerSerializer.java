@@ -20,12 +20,9 @@
 package org.apache.fory.serializer;
 
 import org.apache.fory.Fory;
-import org.apache.fory.collection.IdentityObjectIntMap;
-import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.resolver.MetaContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.DescriptorGrouper;
@@ -46,8 +43,6 @@ import org.apache.fory.type.Generics;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<T> {
-  private final TypeDef layerTypeDef;
-  private final Class<?> layerMarkerClass;
   private final SerializationFieldInfo[] buildInFields;
   private final SerializationFieldInfo[] otherFields;
   private final SerializationFieldInfo[] containerFields;
@@ -62,46 +57,31 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
    */
   public MetaSharedLayerSerializer(
       Fory fory, Class<T> type, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
-    super(fory, type);
-    this.layerTypeDef = layerTypeDef;
-    this.layerMarkerClass = layerMarkerClass;
-    TypeResolver typeResolver = fory.getTypeResolver();
+    this(fory, type, layerTypeDef, layerMarkerClass, buildFieldGroups(fory, layerTypeDef, type));
+  }
 
-    // Build field infos from layerTypeDef
-    DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(layerTypeDef, type);
-    FieldGroups fieldGroups = FieldGroups.buildFieldInfos(fory, descriptorGrouper);
+  private MetaSharedLayerSerializer(
+      Fory fory,
+      Class<T> type,
+      TypeDef layerTypeDef,
+      Class<?> layerMarkerClass,
+      FieldGroups fieldGroups) {
+    super(
+        fory,
+        type,
+        layerTypeDef,
+        layerMarkerClass,
+        buildPutFieldNames(fieldGroups.allFields),
+        buildPutFieldTypes(fieldGroups.allFields));
     this.buildInFields = fieldGroups.buildInFields;
     this.otherFields = fieldGroups.userTypeFields;
     this.containerFields = fieldGroups.containerFields;
   }
 
-  @Override
-  public void write(MemoryBuffer buffer, T value) {
-    // Write layer class meta using marker class as key (only if meta share is enabled)
-    if (fory.getConfig().isMetaShareEnabled()) {
-      writeLayerClassMeta(buffer);
-    }
-    // Write fields in order: final, container, other
-    writeFieldsOnly(buffer, value);
-  }
-
-  @Override
-  public void writeLayerClassMeta(MemoryBuffer buffer) {
-    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
-    if (metaContext == null) {
-      return;
-    }
-    IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
-    int newId = classMap.size;
-    int id = classMap.putOrGet(layerMarkerClass, newId);
-    if (id >= 0) {
-      // Reference to previously written type: (index << 1) | 1, LSB=1
-      buffer.writeVarUint32((id << 1) | 1);
-    } else {
-      // New type: index << 1, LSB=0, followed by TypeDef bytes inline
-      buffer.writeVarUint32(newId << 1);
-      buffer.writeBytes(layerTypeDef.getEncoded());
-    }
+  private static FieldGroups buildFieldGroups(Fory fory, TypeDef layerTypeDef, Class<?> type) {
+    TypeResolver typeResolver = fory.getTypeResolver();
+    DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(layerTypeDef, type);
+    return FieldGroups.buildFieldInfos(fory, descriptorGrouper);
   }
 
   @Override
@@ -139,93 +119,43 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
   }
 
   @Override
-  public void writeFieldValues(MemoryBuffer buffer, Object[] vals) {
-    // Write fields from array in order: buildIn, container, other
-    int index = 0;
-    // Write buildIn fields
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
+  protected void writeFieldValue(MemoryBuffer buffer, Object[] vals, int ordinal) {
+    SerializationFieldInfo fieldInfo = getFieldInfo(ordinal);
+    if (ordinal < buildInFields.length) {
       AbstractObjectSerializer.writeBuildInFieldValue(
-          fory, typeResolver, refResolver, fieldInfo, buffer, vals[index++]);
-    }
-    // Write container fields
-    Generics generics = fory.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
+          fory, typeResolver, refResolver, fieldInfo, buffer, vals[ordinal]);
+    } else if (ordinal < buildInFields.length + containerFields.length) {
       AbstractObjectSerializer.writeContainerFieldValue(
-          fory, typeResolver, refResolver, generics, fieldInfo, buffer, vals[index++]);
-    }
-    // Write other fields
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      AbstractObjectSerializer.writeField(
-          fory, typeResolver, refResolver, fieldInfo, buffer, vals[index++]);
-    }
-  }
-
-  @Override
-  public Object[] readFieldValues(MemoryBuffer buffer) {
-    Object[] vals = new Object[getNumFields()];
-    int index = 0;
-    // Read buildIn fields
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      vals[index++] =
-          AbstractObjectSerializer.readBuildInFieldValue(
-              fory, typeResolver, refResolver, fieldInfo, buffer);
-    }
-    // Read container fields
-    Generics generics = fory.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      vals[index++] =
-          AbstractObjectSerializer.readContainerFieldValue(
-              fory, typeResolver, refResolver, generics, fieldInfo, buffer);
-    }
-    // Read other fields
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      vals[index++] =
-          AbstractObjectSerializer.readField(fory, typeResolver, refResolver, fieldInfo, buffer);
-    }
-    return vals;
-  }
-
-  @Override
-  public void populateFieldInfo(ObjectIntMap fieldIndexMap, Class<?>[] fieldTypes) {
-    int index = 0;
-    // BuildIn fields first
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
-    }
-    // Container fields next
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
-    }
-    // Other fields last
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
-    }
-  }
-
-  private void populateSingleFieldInfo(
-      SerializationFieldInfo fieldInfo,
-      ObjectIntMap fieldIndexMap,
-      Class<?>[] fieldTypes,
-      int index) {
-    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-    if (fieldAccessor != null) {
-      fieldIndexMap.put(fieldAccessor.getField().getName(), index);
-      fieldTypes[index] = fieldAccessor.getField().getType();
+          fory, typeResolver, refResolver, fory.getGenerics(), fieldInfo, buffer, vals[ordinal]);
     } else {
-      // Field doesn't exist in actual class (e.g., from serialPersistentFields).
-      // Use descriptor info instead.
-      fieldIndexMap.put(fieldInfo.descriptor.getName(), index);
-      fieldTypes[index] = fieldInfo.descriptor.getRawType();
+      AbstractObjectSerializer.writeField(
+          fory, typeResolver, refResolver, fieldInfo, buffer, vals[ordinal]);
     }
   }
 
   @Override
-  public T read(MemoryBuffer buffer) {
-    // Note: Layer class meta is read by ObjectStreamSerializer before calling this method.
-    // This serializer is designed for use with ObjectStreamSerializer only.
-    T obj = newBean();
-    refResolver.reference(obj);
-    return readFieldsOnly(buffer, obj);
+  protected Object readFieldValue(MemoryBuffer buffer, int ordinal) {
+    SerializationFieldInfo fieldInfo = getFieldInfo(ordinal);
+    if (ordinal < buildInFields.length) {
+      return AbstractObjectSerializer.readBuildInFieldValue(
+          fory, typeResolver, refResolver, fieldInfo, buffer);
+    }
+    if (ordinal < buildInFields.length + containerFields.length) {
+      return AbstractObjectSerializer.readContainerFieldValue(
+          fory, typeResolver, refResolver, fory.getGenerics(), fieldInfo, buffer);
+    }
+    return AbstractObjectSerializer.readField(fory, typeResolver, refResolver, fieldInfo, buffer);
+  }
+
+  private SerializationFieldInfo getFieldInfo(int ordinal) {
+    if (ordinal < buildInFields.length) {
+      return buildInFields[ordinal];
+    }
+    ordinal -= buildInFields.length;
+    if (ordinal < containerFields.length) {
+      return containerFields[ordinal];
+    }
+    return otherFields[ordinal - containerFields.length];
   }
 
   /**
@@ -238,28 +168,15 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
    * @return the object with fields set
    */
   @Override
+  @SuppressWarnings("unchecked")
   public T readAndSetFields(MemoryBuffer buffer, T obj) {
     // Note: Layer class meta is read by ObjectStreamSerializer before calling this method
     // (when meta share is enabled). This method only reads field values.
-    return readFieldsOnly(buffer, obj);
-  }
-
-  /**
-   * Read fields only, without reading layer class meta. This is used when the caller has already
-   * read and processed the layer class meta (e.g., for schema evolution where different senders may
-   * have different TypeDefs for the same layer).
-   *
-   * @param buffer the memory buffer to read from
-   * @param obj the object to set field values on
-   * @return the object with fields set
-   */
-  @SuppressWarnings("unchecked")
-  public T readFieldsOnly(MemoryBuffer buffer, Object obj) {
     // Read fields in order: final, container, other
-    readFinalFields(buffer, (T) obj);
-    readContainerFields(buffer, (T) obj);
-    readUserTypeFields(buffer, (T) obj);
-    return (T) obj;
+    readFinalFields(buffer, obj);
+    readContainerFields(buffer, obj);
+    readUserTypeFields(buffer, obj);
+    return obj;
   }
 
   private void readFinalFields(MemoryBuffer buffer, T targetObject) {
@@ -295,82 +212,6 @@ public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(obj, fieldValue);
-      }
-    }
-  }
-
-  /** Returns the number of fields in this layer. */
-  public int getNumFields() {
-    return buildInFields.length + containerFields.length + otherFields.length;
-  }
-
-  /**
-   * Set field values on target object from putFields data. This method maps field names from
-   * ObjectStreamClass to actual class fields and sets matching values.
-   *
-   * @param obj the target object
-   * @param fieldIndexMap mapping from field name to index in vals array
-   * @param vals the values array from putFields
-   */
-  @Override
-  @SuppressWarnings("rawtypes")
-  public void setFieldValuesFromPutFields(Object obj, ObjectIntMap fieldIndexMap, Object[] vals) {
-    // Set final fields
-    setFieldValuesFromPutFields(obj, fieldIndexMap, vals, buildInFields);
-    setFieldValuesFromPutFields(obj, fieldIndexMap, vals, containerFields);
-    setFieldValuesFromPutFields(obj, fieldIndexMap, vals, otherFields);
-  }
-
-  private void setFieldValuesFromPutFields(
-      Object obj, ObjectIntMap fieldIndexMap, Object[] vals, SerializationFieldInfo[] fieldInfos) {
-    // Set other fields
-    for (SerializationFieldInfo fieldInfo : fieldInfos) {
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        String fieldName = fieldAccessor.getField().getName();
-        int index = fieldIndexMap.get(fieldName, -1);
-        if (index != -1 && index < vals.length) {
-          fieldAccessor.set(obj, vals[index]);
-        }
-      }
-    }
-  }
-
-  /**
-   * Get field values from object for putFields format. This method reads actual class field values
-   * and puts them into an array based on ObjectStreamClass field order.
-   *
-   * @param obj the source object
-   * @param fieldIndexMap mapping from field name to index in result array
-   * @param arraySize size of the result array
-   * @return array of field values in putFields order
-   */
-  @Override
-  public Object[] getFieldValuesForPutFields(
-      Object obj, ObjectIntMap fieldIndexMap, int arraySize) {
-    Object[] vals = new Object[arraySize];
-    // Get final fields
-    getFieldValuesForPutFields(obj, fieldIndexMap, vals, buildInFields);
-    // Get container fields
-    getFieldValuesForPutFields(obj, fieldIndexMap, vals, containerFields);
-    // Get other fields
-    getFieldValuesForPutFields(obj, fieldIndexMap, vals, otherFields);
-    return vals;
-  }
-
-  private void getFieldValuesForPutFields(
-      Object obj,
-      ObjectIntMap fieldIndexMap,
-      Object[] vals,
-      SerializationFieldInfo[] buildInFields) {
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        String fieldName = fieldAccessor.getField().getName();
-        int index = fieldIndexMap.get(fieldName, -1);
-        if (index != -1 && index < vals.length) {
-          vals[index] = fieldAccessor.get(obj);
-        }
       }
     }
   }

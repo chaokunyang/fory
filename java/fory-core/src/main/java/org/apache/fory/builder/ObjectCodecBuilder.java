@@ -511,6 +511,36 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     return expressions;
   }
 
+  protected Expression buildDecodeIntoBeanExpression() {
+    if (isRecord) {
+      throw new IllegalStateException("Decoding into an existing record bean is unsupported");
+    }
+    Reference buffer = new Reference(BUFFER_NAME, bufferTypeRef, false);
+    Reference inputObject = new Reference(ROOT_OBJECT_NAME, OBJECT_TYPE, false);
+    ListExpression expressions = new ListExpression();
+    Expression bean = tryCastIfPublic(inputObject, beanType, ctx.newName(beanClass));
+    expressions.add(bean);
+    if (fory.checkClassVersion()) {
+      expressions.add(checkClassVersion(buffer));
+    }
+    expressions.addAll(deserializePrimitives(bean, buffer, objectCodecOptimizer.primitiveGroups));
+    int numGroups = getNumGroups(objectCodecOptimizer);
+    deserializeReadGroup(
+        objectCodecOptimizer.boxedReadGroups, numGroups, expressions, bean, buffer);
+    deserializeReadGroup(
+        objectCodecOptimizer.buildInReadGroups, numGroups, expressions, bean, buffer);
+    for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors()) {
+      expressions.add(deserializeGroup(Collections.singletonList(d), bean, buffer, false));
+    }
+    for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getMapDescriptors()) {
+      expressions.add(deserializeGroup(Collections.singletonList(d), bean, buffer, false));
+    }
+    deserializeReadGroup(
+        objectCodecOptimizer.otherReadGroups, numGroups, expressions, bean, buffer);
+    expressions.add(new Expression.Return(bean));
+    return expressions;
+  }
+
   private void deserializeReadGroup(
       List<List<Descriptor>> readGroups,
       int numGroups,

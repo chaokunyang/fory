@@ -1331,6 +1331,9 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
         fory,
         new AsyncLayerJitContainer("container", values, attributes),
         "ObjectStreamSerializer");
+    Assert.assertTrue(hasGeneratedLayerSerializer(fory, AsyncLayerJitContainer.class));
+    Assert.assertTrue(hasGeneratedLayerSerializer(fory, AsyncTreeSetSubclass.class));
+    Assert.assertTrue(hasGeneratedLayerSerializer(fory, AsyncTreeMapSubclass.class));
   }
 
   // ==================== Circular Reference in Custom Serialization ====================
@@ -1505,6 +1508,9 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     if (!(serializer instanceof ObjectStreamSerializer)) {
       return false;
     }
+    @SuppressWarnings("unchecked")
+    LongMap<TypeInfo> typeInfoByTypeDefId =
+        (LongMap<TypeInfo>) ReflectionUtils.getObjectFieldValue(serializer, "typeDefIdToTypeInfo");
     Object[] slotsInfos = (Object[]) ReflectionUtils.getObjectFieldValue(serializer, "slotsInfos");
     if (slotsInfos.length == 0) {
       return false;
@@ -1512,6 +1518,11 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     for (Object slotsInfo : slotsInfos) {
       Object slotsSerializer = ReflectionUtils.getObjectFieldValue(slotsInfo, "slotsSerializer");
       if (!(slotsSerializer instanceof Generated)) {
+        return false;
+      }
+      long layerTypeDefId = ((MetaSharedLayerSerializerBase) slotsSerializer).getLayerTypeDefId();
+      TypeInfo typeInfo = typeInfoByTypeDefId.get(layerTypeDefId);
+      if (typeInfo == null || !(typeInfo.getSerializer() instanceof Generated)) {
         return false;
       }
     }

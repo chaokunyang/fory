@@ -20,20 +20,110 @@
 package org.apache.fory.serializer;
 
 import org.apache.fory.Fory;
+import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.meta.TypeDef;
+import org.apache.fory.resolver.MetaContext;
+import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
+import org.apache.fory.util.Preconditions;
 
 /**
- * Base class for meta-shared layer serializers. This provides the common interface for both
- * interpreter mode ({@link MetaSharedLayerSerializer}) and JIT-generated serializers.
+ * Base class for meta-shared layer serializers. It owns layer metadata shared by both interpreter
+ * mode ({@link MetaSharedLayerSerializer}) and generated serializers.
  *
  * @see MetaSharedLayerSerializer
  * @see org.apache.fory.builder.MetaSharedLayerCodecBuilder
  */
 public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSerializer<T> {
+  private final long layerTypeDefId;
+  private final TypeDef layerTypeDef;
+  private final Class<?> layerMarkerClass;
+  private final String[] fieldNames;
+  private final Class<?>[] fieldTypes;
+  private transient MetaSharedLayerSerializer<T> fallbackSerializer;
 
-  public MetaSharedLayerSerializerBase(Fory fory, Class<T> type) {
+  protected MetaSharedLayerSerializerBase(
+      Fory fory,
+      Class<T> type,
+      TypeDef layerTypeDef,
+      Class<?> layerMarkerClass,
+      String[] fieldNames,
+      Class<?>[] fieldTypes) {
     super(fory, type);
+    this.layerTypeDef = Preconditions.checkNotNull(fory.getTypeResolver().cacheTypeDef(layerTypeDef));
+    this.layerTypeDefId = this.layerTypeDef.getId();
+    this.layerMarkerClass = Preconditions.checkNotNull(layerMarkerClass);
+    this.fieldNames = Preconditions.checkNotNull(fieldNames);
+    this.fieldTypes = Preconditions.checkNotNull(fieldTypes);
+    Preconditions.checkArgument(
+        fieldNames.length == fieldTypes.length,
+        "Field names and field types must have the same length");
+  }
+
+  protected MetaSharedLayerSerializerBase(
+      Fory fory,
+      Class<T> type,
+      long layerTypeDefId,
+      Class<?> layerMarkerClass,
+      String[] fieldNames,
+      Class<?>[] fieldTypes) {
+    this(
+        fory,
+        type,
+        Preconditions.checkNotNull(
+            fory.getTypeResolver().getTypeDefById(layerTypeDefId),
+            "Missing cached layer TypeDef for id " + layerTypeDefId + " and class " + type),
+        layerMarkerClass,
+        fieldNames,
+        fieldTypes);
+  }
+
+  protected static String[] buildPutFieldNames(SerializationFieldInfo[] fieldInfos) {
+    String[] fieldNames = new String[fieldInfos.length];
+    for (int i = 0; i < fieldInfos.length; i++) {
+      SerializationFieldInfo fieldInfo = fieldInfos[i];
+      fieldNames[i] =
+          fieldInfo.fieldAccessor != null
+              ? fieldInfo.fieldAccessor.getField().getName()
+              : fieldInfo.descriptor.getName();
+    }
+    return fieldNames;
+  }
+
+  protected static Class<?>[] buildPutFieldTypes(SerializationFieldInfo[] fieldInfos) {
+    Class<?>[] fieldTypes = new Class<?>[fieldInfos.length];
+    for (int i = 0; i < fieldInfos.length; i++) {
+      SerializationFieldInfo fieldInfo = fieldInfos[i];
+      fieldTypes[i] =
+          fieldInfo.fieldAccessor != null
+              ? fieldInfo.fieldAccessor.getField().getType()
+              : fieldInfo.descriptor.getRawType();
+    }
+    return fieldTypes;
+  }
+
+  public final long getLayerTypeDefId() {
+    return layerTypeDefId;
+  }
+
+  public final TypeDef getLayerTypeDef() {
+    return layerTypeDef;
+  }
+
+  @Override
+  public final void write(MemoryBuffer buffer, T value) {
+    if (fory.getConfig().isMetaShareEnabled()) {
+      writeLayerClassMeta(buffer);
+    }
+    writeFieldsOnly(buffer, value);
+  }
+
+  @Override
+  public final T read(MemoryBuffer buffer) {
+    T obj = newBean();
+    refResolver.reference(obj);
+    return readAndSetFields(buffer, obj);
   }
 
   /**
@@ -48,37 +138,26 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
   public abstract T readAndSetFields(MemoryBuffer buffer, T obj);
 
   /**
-   * Set field values on target object from putFields data. This method maps field names from
-   * ObjectStreamClass to actual class fields and sets matching values.
-   *
-   * @param obj the target object
-   * @param fieldIndexMap mapping from field name to index in vals array
-   * @param vals the values array from putFields
-   */
-  @SuppressWarnings("rawtypes")
-  public abstract void setFieldValuesFromPutFields(
-      Object obj, ObjectIntMap fieldIndexMap, Object[] vals);
-
-  /**
-   * Get field values from object for putFields format. This method reads actual class field values
-   * and puts them into an array based on ObjectStreamClass field order.
-   *
-   * @param obj the source object
-   * @param fieldIndexMap mapping from field name to index in result array
-   * @param arraySize size of the result array
-   * @return array of field values in putFields order
-   */
-  @SuppressWarnings("rawtypes")
-  public abstract Object[] getFieldValuesForPutFields(
-      Object obj, ObjectIntMap fieldIndexMap, int arraySize);
-
-  /**
    * Write layer class meta to buffer. Called by ObjectStreamSerializer before writing fields. Only
    * writes meta if meta share is enabled.
    *
    * @param buffer the memory buffer to write to
    */
-  public abstract void writeLayerClassMeta(MemoryBuffer buffer);
+  public final void writeLayerClassMeta(MemoryBuffer buffer) {
+    MetaContext metaContext = fory.getSerializationContext().getMetaContext();
+    if (metaContext == null) {
+      return;
+    }
+    IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
+    int newId = classMap.size;
+    int id = classMap.putOrGet(layerMarkerClass, newId);
+    if (id >= 0) {
+      buffer.writeVarUint32((id << 1) | 1);
+    } else {
+      buffer.writeVarUint32(newId << 1);
+      buffer.writeBytes(layerTypeDef.getEncoded());
+    }
+  }
 
   /**
    * Write fields only, without layer class meta. The layer class meta should be written by the
@@ -89,6 +168,14 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    */
   public abstract void writeFieldsOnly(MemoryBuffer buffer, T value);
 
+  protected final void writeFieldsOnlyWithFallback(MemoryBuffer buffer, Object value) {
+    getOrCreateFallbackSerializer().writeFieldsOnly(buffer, (T) value);
+  }
+
+  protected final Object readAndSetFieldsWithFallback(MemoryBuffer buffer, Object obj) {
+    return getOrCreateFallbackSerializer().readAndSetFields(buffer, (T) obj);
+  }
+
   /**
    * Write field values from array. Used by writeFields() when values come from PutField. The values
    * array should be in the serializer's field order (buildIn, container, other).
@@ -96,7 +183,11 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    * @param buffer the memory buffer to write to
    * @param vals the values array in field order
    */
-  public abstract void writeFieldValues(MemoryBuffer buffer, Object[] vals);
+  public final void writeFieldValues(MemoryBuffer buffer, Object[] vals) {
+    for (int ordinal = 0; ordinal < fieldNames.length; ordinal++) {
+      writeFieldValue(buffer, vals, ordinal);
+    }
+  }
 
   /**
    * Read field values into array. Used by readFields() to populate GetField. Returns values in the
@@ -105,14 +196,22 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    * @param buffer the memory buffer to read from
    * @return array of field values in field order
    */
-  public abstract Object[] readFieldValues(MemoryBuffer buffer);
+  public final Object[] readFieldValues(MemoryBuffer buffer) {
+    Object[] vals = new Object[fieldNames.length];
+    for (int ordinal = 0; ordinal < fieldNames.length; ordinal++) {
+      vals[ordinal] = readFieldValue(buffer, ordinal);
+    }
+    return vals;
+  }
 
   /**
    * Get the total number of fields in this layer.
    *
    * @return number of fields
    */
-  public abstract int getNumFields();
+  public final int getNumFields() {
+    return fieldNames.length;
+  }
 
   /**
    * Populate field index map and field types array in the serializer's field order. This is used by
@@ -123,5 +222,32 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
    *     size)
    */
   @SuppressWarnings("rawtypes")
-  public abstract void populateFieldInfo(ObjectIntMap fieldIndexMap, Class<?>[] fieldTypes);
+  public final void populateFieldInfo(ObjectIntMap fieldIndexMap, Class<?>[] fieldTypes) {
+    Preconditions.checkArgument(
+        fieldTypes.length >= this.fieldTypes.length,
+        "fieldTypes length %s is smaller than serializer field count %s",
+        fieldTypes.length,
+        this.fieldTypes.length);
+    for (int i = 0; i < fieldNames.length; i++) {
+      fieldIndexMap.put(fieldNames[i], i);
+      fieldTypes[i] = this.fieldTypes[i];
+    }
+  }
+
+  protected void writeFieldValue(MemoryBuffer buffer, Object[] vals, int ordinal) {
+    getOrCreateFallbackSerializer().writeFieldValue(buffer, vals, ordinal);
+  }
+
+  protected Object readFieldValue(MemoryBuffer buffer, int ordinal) {
+    return getOrCreateFallbackSerializer().readFieldValue(buffer, ordinal);
+  }
+
+  private MetaSharedLayerSerializer<T> getOrCreateFallbackSerializer() {
+    MetaSharedLayerSerializer<T> serializer = fallbackSerializer;
+    if (serializer == null) {
+      serializer = new MetaSharedLayerSerializer<>(fory, type, layerTypeDef, layerMarkerClass);
+      fallbackSerializer = serializer;
+    }
+    return serializer;
+  }
 }

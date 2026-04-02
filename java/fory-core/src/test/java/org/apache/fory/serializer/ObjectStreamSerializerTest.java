@@ -1565,21 +1565,27 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   }
 
   private boolean hasGeneratedLayerSerializer(Fory fory, Class<?> type) {
-    ObjectStreamSerializer serializer = findObjectStreamSerializer(fory.getTypeResolver().getSerializer(type));
-    if (serializer == null) {
-      return false;
-    }
-    Object[] slotsInfos = (Object[]) ReflectionUtils.getObjectFieldValue(serializer, "slotsInfos");
-    if (slotsInfos.length == 0) {
-      return false;
-    }
-    for (Object slotsInfo : slotsInfos) {
-      Object slotsSerializer = ReflectionUtils.getObjectFieldValue(slotsInfo, "slotsSerializer");
-      if (!(slotsSerializer instanceof Generated)) {
+    try {
+      fory.getJITContext().lock();
+      ObjectStreamSerializer serializer =
+          findObjectStreamSerializer(fory.getTypeResolver().getSerializer(type));
+      if (serializer == null) {
         return false;
       }
+      Object[] slotsInfos = (Object[]) ReflectionUtils.getObjectFieldValue(serializer, "slotsInfos");
+      if (slotsInfos.length == 0) {
+        return false;
+      }
+      for (Object slotsInfo : slotsInfos) {
+        Object slotsSerializer = ReflectionUtils.getObjectFieldValue(slotsInfo, "slotsSerializer");
+        if (!(slotsSerializer instanceof Generated)) {
+          return false;
+        }
+      }
+      return true;
+    } finally {
+      fory.getJITContext().unlock();
     }
-    return true;
   }
 
   private ObjectStreamSerializer findObjectStreamSerializer(Serializer<?> serializer) {

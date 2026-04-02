@@ -192,10 +192,12 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     deserializeReadGroup(
         objectCodecOptimizer.buildInReadGroups, numGroups, expressions, bean, buffer);
     for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors()) {
-      expressions.add(deserializeGroup(java.util.Collections.singletonList(d), bean, buffer, false));
+      expressions.add(
+          deserializeGroup(java.util.Collections.singletonList(d), bean, buffer, false));
     }
     for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getMapDescriptors()) {
-      expressions.add(deserializeGroup(java.util.Collections.singletonList(d), bean, buffer, false));
+      expressions.add(
+          deserializeGroup(java.util.Collections.singletonList(d), bean, buffer, false));
     }
     deserializeReadGroup(
         objectCodecOptimizer.otherReadGroups, numGroups, expressions, bean, buffer);

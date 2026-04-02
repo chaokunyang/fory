@@ -1720,7 +1720,8 @@ public class ClassResolver extends TypeResolver {
 
   private TypeDef buildTypeDef(TypeInfo typeInfo, Class<? extends Serializer> serializerClass) {
     TypeDef typeDef;
-    Preconditions.checkArgument(serializerClass != UnknownClassSerializers.UnknownStructSerializer.class);
+    Preconditions.checkArgument(
+        serializerClass != UnknownClassSerializers.UnknownStructSerializer.class);
     if (needToWriteTypeDef(serializerClass)) {
       typeDef =
           cacheTypeDef(

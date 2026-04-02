@@ -37,10 +37,8 @@ import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Vector;
@@ -234,7 +232,8 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
         new MapSerializers.JDKCompatibleMapSerializer<>(fory, AsyncTreeMapSubclass.class));
 
     {
-      ObjectStreamSerializer serializer = new ObjectStreamSerializer(fory, AsyncTreeMapSubclass.class);
+      ObjectStreamSerializer serializer =
+          new ObjectStreamSerializer(fory, AsyncTreeMapSubclass.class);
       MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
       fory.getRefResolver().writeRefOrNull(buffer, map);
       serializer.write(buffer, map);
@@ -259,7 +258,8 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
         AsyncTreeMapSubclass.class,
         new MapSerializers.JDKCompatibleMapSerializer<>(fory, AsyncTreeMapSubclass.class));
     {
-      ObjectStreamSerializer serializer = new ObjectStreamSerializer(fory, AsyncTreeMapSubclass.class);
+      ObjectStreamSerializer serializer =
+          new ObjectStreamSerializer(fory, AsyncTreeMapSubclass.class);
       Object copy = serializer.copy(map);
       assertEquals(copy, map);
     }
@@ -269,11 +269,14 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test(dataProvider = "javaFory")
   public void testJDKCompatibleList(Fory fory) {
     fory.registerSerializer(
-        ArrayList.class, new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, ArrayList.class));
+        ArrayList.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, ArrayList.class));
     fory.registerSerializer(
-        LinkedList.class, new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, LinkedList.class));
+        LinkedList.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, LinkedList.class));
     fory.registerSerializer(
-        Vector.class, new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, Vector.class));
+        Vector.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, Vector.class));
     assertSame(
         fory.getTypeResolver().getSerializerClass(ArrayList.class),
         CollectionSerializers.JDKCompatibleCollectionSerializer.class);
@@ -293,11 +296,14 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test(dataProvider = "foryCopyConfig")
   public void testJDKCompatibleListCopy(Fory fory) {
     fory.registerSerializer(
-        ArrayList.class, new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, ArrayList.class));
+        ArrayList.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, ArrayList.class));
     fory.registerSerializer(
-        LinkedList.class, new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, LinkedList.class));
+        LinkedList.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, LinkedList.class));
     fory.registerSerializer(
-        Vector.class, new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, Vector.class));
+        Vector.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(fory, Vector.class));
     List<String> list = new ArrayList<>(ImmutableList.of("a", "b", "c", "d"));
     copyCheck(fory, list);
     copyCheck(fory, new LinkedList<>(list));
@@ -1375,7 +1381,8 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     IllegalArgumentException collectionClassError =
         Assert.expectThrows(
             IllegalArgumentException.class,
-            () -> fory.registerSerializer(AsyncTreeSetSubclass.class, ObjectStreamSerializer.class));
+            () ->
+                fory.registerSerializer(AsyncTreeSetSubclass.class, ObjectStreamSerializer.class));
     Assert.assertTrue(
         collectionClassError
             .getMessage()
@@ -1393,9 +1400,12 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     IllegalArgumentException mapClassError =
         Assert.expectThrows(
             IllegalArgumentException.class,
-            () -> fory.registerSerializer(AsyncTreeMapSubclass.class, ObjectStreamSerializer.class));
+            () ->
+                fory.registerSerializer(AsyncTreeMapSubclass.class, ObjectStreamSerializer.class));
     Assert.assertTrue(
-        mapClassError.getMessage().contains(MapSerializers.JDKCompatibleMapSerializer.class.getName()));
+        mapClassError
+            .getMessage()
+            .contains(MapSerializers.JDKCompatibleMapSerializer.class.getName()));
   }
 
   // ==================== Circular Reference in Custom Serialization ====================
@@ -1586,7 +1596,8 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
       if (serializer == null) {
         return false;
       }
-      Object[] slotsInfos = (Object[]) ReflectionUtils.getObjectFieldValue(serializer, "slotsInfos");
+      Object[] slotsInfos =
+          (Object[]) ReflectionUtils.getObjectFieldValue(serializer, "slotsInfos");
       if (slotsInfos.length == 0) {
         return false;
       }

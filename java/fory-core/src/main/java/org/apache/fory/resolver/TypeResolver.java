@@ -969,8 +969,7 @@ public abstract class TypeResolver {
         || serializer instanceof MetaSharedSerializer;
   }
 
-  protected static boolean isStructSerializerClass(
-      Class<? extends Serializer> serializerClass) {
+  protected static boolean isStructSerializerClass(Class<? extends Serializer> serializerClass) {
     return GeneratedObjectSerializer.class.isAssignableFrom(serializerClass)
         || GeneratedMetaSharedSerializer.class.isAssignableFrom(serializerClass)
         || LazyInitBeanSerializer.class.isAssignableFrom(serializerClass)

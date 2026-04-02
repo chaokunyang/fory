@@ -98,8 +98,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       TypeDef layerTypeDef,
       Class<?> layerMarkerClass) {
     MetaSharedLayerSerializerBase<?> serializer =
-        (MetaSharedLayerSerializerBase<?>)
-            Serializers.newSerializer(fory, cls, serializerClass);
+        (MetaSharedLayerSerializerBase<?>) Serializers.newSerializer(fory, cls, serializerClass);
     serializer.setLayerSerializerMeta(layerTypeDef, layerMarkerClass);
     return serializer;
   }
@@ -889,8 +888,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       if (GraalvmSupport.isGraalBuildtime()) {
         GraalvmSupport.registerSerializerClass(serializerClass);
       }
-      return newGeneratedSerializer(
-          fory, cls, serializerClass, layerTypeDef, layerMarkerClass);
+      return newGeneratedSerializer(fory, cls, serializerClass, layerTypeDef, layerMarkerClass);
     }
 
     private TypeInfo readLayerTypeInfo(Fory fory, MemoryBuffer buffer) {
@@ -927,7 +925,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     public String toString() {
       return "SlotsInfo{" + "cls=" + cls + '}';
     }
-
   }
 
   /**

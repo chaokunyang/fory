@@ -210,7 +210,8 @@ public class GraalvmSupport {
   }
 
   /** Returns the generated object-stream layer serializer class for the given TypeDef id. */
-  public static Class<? extends Serializer> getLayerSerializerClass(long typeDefId, int configHash) {
+  public static Class<? extends Serializer> getLayerSerializerClass(
+      long typeDefId, int configHash) {
     return getClassRegistry(configHash).layerSerializerClassMap.get(typeDefId);
   }
 
@@ -272,14 +273,12 @@ public class GraalvmSupport {
           "Proxy type must be an interface: " + proxyInterface.getName());
     }
     if (!deduplicatedInterfaces.add(proxyInterface)) {
-      throw new IllegalArgumentException(
-          "Duplicate proxy interface: " + proxyInterface.getName());
+      throw new IllegalArgumentException("Duplicate proxy interface: " + proxyInterface.getName());
     }
     proxyInterfaceList.add(proxyInterface);
   }
 
-  private static void registerDefaultSerializerClass(
-      Class<? extends Serializer> serializerClass) {
+  private static void registerDefaultSerializerClass(Class<? extends Serializer> serializerClass) {
     DEFAULT_SERIALIZER_CLASSES.add(serializerClass);
   }
 

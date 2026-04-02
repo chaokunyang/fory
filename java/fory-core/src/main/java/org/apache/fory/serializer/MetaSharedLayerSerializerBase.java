@@ -299,10 +299,7 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
 
   @SuppressWarnings("rawtypes")
   private void collectPutFieldValues(
-      Object obj,
-      ObjectIntMap fieldIndexMap,
-      Object[] vals,
-      SerializationFieldInfo[] fieldInfos) {
+      Object obj, ObjectIntMap fieldIndexMap, Object[] vals, SerializationFieldInfo[] fieldInfos) {
     for (SerializationFieldInfo fieldInfo : fieldInfos) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {

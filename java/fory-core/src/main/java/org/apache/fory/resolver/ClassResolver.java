@@ -491,7 +491,7 @@ public class ClassResolver extends TypeResolver {
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
-    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+    GraalvmSupport.registerClass(cls);
   }
 
   @Override
@@ -511,7 +511,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+    GraalvmSupport.registerClass(cls);
   }
 
   @Override
@@ -538,7 +538,7 @@ public class ClassResolver extends TypeResolver {
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
-    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+    GraalvmSupport.registerClass(cls);
   }
 
   /**
@@ -611,7 +611,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+    GraalvmSupport.registerClass(cls);
   }
 
   private void registerUserImpl(Class<?> cls, int userId) {
@@ -628,7 +628,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+    GraalvmSupport.registerClass(cls);
   }
 
   private int buildUserTypeId(Class<?> cls, Serializer<?> serializer) {
@@ -2007,7 +2007,7 @@ public class ClassResolver extends TypeResolver {
       }
       classInfoMap.forEach(
           (cls, classInfo) -> {
-            GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
+            GraalvmSupport.registerClass(cls);
             if (classInfo.serializer == null) {
               if (isSerializable(classInfo.cls)) {
                 createSerializer0(cls);

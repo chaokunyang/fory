@@ -69,6 +69,10 @@ public class GraalvmSupport {
 
   private static final Map<Integer, GraalvmClassRegistry> GRAALVM_REGISTRY =
       new ConcurrentHashMap<>();
+  private static final Set<Class<?>> REGISTERED_CLASSES = ConcurrentHashMap.newKeySet();
+  private static final Set<List<Class<?>>> PROXY_INTERFACE_LISTS = ConcurrentHashMap.newKeySet();
+  private static final Set<Class<? extends Serializer>> REGISTERED_SERIALIZER_CLASSES =
+      ConcurrentHashMap.newKeySet();
   private static final Set<Class<? extends Serializer>> DEFAULT_SERIALIZER_CLASSES =
       new LinkedHashSet<>();
 
@@ -122,39 +126,29 @@ public class GraalvmSupport {
 
   /** Returns all classes registered for GraalVM native image compilation. */
   public static Set<Class<?>> getRegisteredClasses() {
-    Set<Class<?>> allClasses = ConcurrentHashMap.newKeySet();
-    for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
-      allClasses.addAll(registry.registeredClasses);
-    }
-    return Collections.unmodifiableSet(allClasses);
+    return Collections.unmodifiableSet(REGISTERED_CLASSES);
   }
 
   /** Returns all proxy interfaces registered for GraalVM native image compilation. */
   public static Set<Class<?>> getProxyInterfaces() {
     Set<Class<?>> allInterfaces = ConcurrentHashMap.newKeySet();
-    for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
-      for (List<Class<?>> proxyInterfaceList : registry.proxyInterfaceLists) {
-        allInterfaces.addAll(proxyInterfaceList);
-      }
+    for (List<Class<?>> proxyInterfaceList : PROXY_INTERFACE_LISTS) {
+      allInterfaces.addAll(proxyInterfaceList);
     }
     return Collections.unmodifiableSet(allInterfaces);
   }
 
   /** Returns all proxy interface lists registered for GraalVM native image compilation. */
   public static Set<List<Class<?>>> getProxyInterfaceLists() {
-    Set<List<Class<?>>> allInterfaceLists = ConcurrentHashMap.newKeySet();
-    for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
-      allInterfaceLists.addAll(registry.proxyInterfaceLists);
-    }
-    return Collections.unmodifiableSet(allInterfaceLists);
+    return Collections.unmodifiableSet(PROXY_INTERFACE_LISTS);
   }
 
   /** Returns all serializer classes registered for GraalVM native image compilation. */
   public static Set<Class<? extends Serializer>> getRegisteredSerializerClasses() {
     Set<Class<? extends Serializer>> serializerClasses = ConcurrentHashMap.newKeySet();
     serializerClasses.addAll(DEFAULT_SERIALIZER_CLASSES);
+    serializerClasses.addAll(REGISTERED_SERIALIZER_CLASSES);
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
-      serializerClasses.addAll(registry.serializerClasses);
       serializerClasses.addAll(registry.serializerClassMap.values());
       serializerClasses.addAll(registry.deserializerClassMap.values());
     }
@@ -178,10 +172,10 @@ public class GraalvmSupport {
 
   /** Clears all GraalVM native image registrations. Primarily for testing purposes. */
   public static void clearRegistrations() {
+    REGISTERED_CLASSES.clear();
+    PROXY_INTERFACE_LISTS.clear();
+    REGISTERED_SERIALIZER_CLASSES.clear();
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
-      registry.registeredClasses.clear();
-      registry.proxyInterfaceLists.clear();
-      registry.serializerClasses.clear();
       registry.serializerClassMap.clear();
       registry.deserializerClassMap.clear();
       registry.layerSerializerClassMap.clear();
@@ -193,31 +187,24 @@ public class GraalvmSupport {
    * Register a class in the GraalVM registry for native image compilation.
    *
    * @param cls the class to register
-   * @param configHash the configuration hash for the Fory instance
    */
-  public static void registerClass(Class<?> cls, int configHash) {
+  public static void registerClass(Class<?> cls) {
     if (!IN_GRAALVM_NATIVE_IMAGE) {
       return;
     }
-    GraalvmClassRegistry registry =
-        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
-    registry.registeredClasses.add(cls);
+    REGISTERED_CLASSES.add(cls);
   }
 
   /**
    * Register a serializer class in the GraalVM registry for native image compilation.
    *
    * @param serializerClass the serializer class to register
-   * @param configHash the configuration hash for the Fory instance
    */
-  public static void registerSerializerClass(
-      Class<? extends Serializer> serializerClass, int configHash) {
+  public static void registerSerializerClass(Class<? extends Serializer> serializerClass) {
     if (!IN_GRAALVM_NATIVE_IMAGE) {
       return;
     }
-    GraalvmClassRegistry registry =
-        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
-    registry.serializerClasses.add(serializerClass);
+    REGISTERED_SERIALIZER_CLASSES.add(serializerClass);
   }
 
   /**
@@ -235,7 +222,7 @@ public class GraalvmSupport {
     GraalvmClassRegistry registry =
         GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
     registry.layerSerializerClassMap.put(typeDefId, serializerClass);
-    registry.serializerClasses.add(serializerClass);
+    REGISTERED_SERIALIZER_CLASSES.add(serializerClass);
   }
 
   /** Returns the generated object-stream layer serializer class for the given TypeDef id. */
@@ -247,14 +234,13 @@ public class GraalvmSupport {
    * Register a proxy interface in the GraalVM registry for native image compilation.
    *
    * @param proxyInterface the proxy interface to register
-   * @param configHash the configuration hash for the Fory instance
    */
-  public static void registerProxyInterface(Class<?> proxyInterface, int configHash) {
-    registerProxyInterfaces(configHash, proxyInterface);
+  public static void registerProxyInterface(Class<?> proxyInterface) {
+    registerProxyInterfaces(proxyInterface);
   }
 
   private static void registerProxyInterfaces(
-      int configHash, Class<?> proxyInterface, Class<?>... otherProxyInterfaces) {
+      Class<?> proxyInterface, Class<?>... otherProxyInterfaces) {
     if (!IN_GRAALVM_NATIVE_IMAGE) {
       return;
     }
@@ -265,9 +251,7 @@ public class GraalvmSupport {
     for (Class<?> otherProxyInterface : otherProxyInterfaces) {
       addProxyInterface(proxyInterfaceList, deduplicatedInterfaces, otherProxyInterface);
     }
-    GraalvmClassRegistry registry =
-        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
-    registry.proxyInterfaceLists.add(Collections.unmodifiableList(proxyInterfaceList));
+    PROXY_INTERFACE_LISTS.add(Collections.unmodifiableList(proxyInterfaceList));
   }
 
   /**
@@ -276,7 +260,7 @@ public class GraalvmSupport {
    * @param proxyInterface the proxy interface to register
    */
   public static void registerProxySupport(Class<?> proxyInterface) {
-    registerProxyInterface(proxyInterface, 0);
+    registerProxyInterface(proxyInterface);
   }
 
   /**
@@ -289,7 +273,7 @@ public class GraalvmSupport {
    */
   public static void registerProxySupport(
       Class<?> proxyInterface, Class<?>... otherProxyInterfaces) {
-    registerProxyInterfaces(0, proxyInterface, otherProxyInterfaces);
+    registerProxyInterfaces(proxyInterface, otherProxyInterfaces);
   }
 
   private static void addProxyInterface(
@@ -397,21 +381,15 @@ public class GraalvmSupport {
   /** GraalVM class registry. */
   public static class GraalvmClassRegistry {
     public final List<TypeResolver> resolvers;
-    public final Set<Class<? extends Serializer>> serializerClasses;
     public final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
     public final Map<Long, Class<? extends Serializer>> deserializerClassMap;
     public final Map<Long, Class<? extends Serializer>> layerSerializerClassMap;
-    public final Set<Class<?>> registeredClasses;
-    public final Set<List<Class<?>>> proxyInterfaceLists;
 
     private GraalvmClassRegistry() {
       resolvers = Collections.synchronizedList(new ArrayList<>());
-      serializerClasses = ConcurrentHashMap.newKeySet();
       serializerClassMap = new ConcurrentHashMap<>();
       deserializerClassMap = new ConcurrentHashMap<>();
       layerSerializerClassMap = new ConcurrentHashMap<>();
-      registeredClasses = ConcurrentHashMap.newKeySet();
-      proxyInterfaceLists = ConcurrentHashMap.newKeySet();
     }
   }
 }

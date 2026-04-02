@@ -681,20 +681,8 @@ public class XtypeResolver extends TypeResolver {
   }
 
   private TypeInfo buildTypeInfo(Class<?> cls) {
-    TypeInfo typeInfo = classInfoMap.get(cls);
+    TypeInfo typeInfo = ensureGraalvmRuntimeSerializer(classInfoMap.get(cls));
     if (typeInfo != null) {
-      if (typeInfo.serializer == null && GraalvmSupport.isGraalRuntime()) {
-        Class<?> serializerType = typeInfo.getCls();
-        if (serializerType != null
-            && !ReflectionUtils.isAbstract(serializerType)
-            && !serializerType.isInterface()) {
-          Class<? extends Serializer> serializerClass =
-              getSerializerClassFromGraalvmRegistry(serializerType);
-          if (serializerClass != null) {
-            typeInfo.serializer = Serializers.newSerializer(fory, serializerType, serializerClass);
-          }
-        }
-      }
       return typeInfo;
     }
     Serializer serializer;

@@ -298,9 +298,6 @@ public class ClassResolver extends TypeResolver {
     addDefaultSerializers();
     shimDispatcher.initialize();
     if (GraalvmSupport.isGraalBuildtime()) {
-      GraalvmSupport.registerDefaultSerializerClasses(fory.getConfig().getConfigHash());
-    }
-    if (GraalvmSupport.isGraalBuildtime()) {
       classInfoMap.forEach(
           (cls, classInfo) -> {
             if (classInfo.serializer != null) {
@@ -493,7 +490,7 @@ public class ClassResolver extends TypeResolver {
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
-    registerClassForGraalvm(cls);
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   @Override
@@ -513,7 +510,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    registerClassForGraalvm(cls);
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   @Override
@@ -540,7 +537,7 @@ public class ClassResolver extends TypeResolver {
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
-    registerClassForGraalvm(cls);
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   /**
@@ -613,7 +610,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    registerClassForGraalvm(cls);
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   private void registerUserImpl(Class<?> cls, int userId) {
@@ -630,7 +627,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    registerClassForGraalvm(cls);
+    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
   private int buildUserTypeId(Class<?> cls, Serializer<?> serializer) {
@@ -1028,10 +1025,6 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
-  private void registerClassForGraalvm(Class<?> cls) {
-    GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
-  }
-
   private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
     if (!ObjectStreamSerializer.class.isAssignableFrom(serializerClass)) {
       return;
@@ -1417,23 +1410,6 @@ public class ClassResolver extends TypeResolver {
       }
       return fory.getDefaultJDKStreamSerializerType();
     }
-  }
-
-  private TypeInfo ensureGraalvmRuntimeSerializer(TypeInfo typeInfo) {
-    if (typeInfo != null && typeInfo.serializer == null && GraalvmSupport.isGraalRuntime()) {
-      Class<?> serializerType = typeInfo.getCls();
-      if (serializerType != null
-          && !ReflectionUtils.isAbstract(serializerType)
-          && !serializerType.isInterface()) {
-        Class<? extends Serializer> serializerClass =
-            getSerializerClassFromGraalvmRegistry(serializerType);
-        if (serializerClass != null) {
-          typeInfo.setSerializer(
-              this, Serializers.newSerializer(fory, serializerType, serializerClass));
-        }
-      }
-    }
-    return typeInfo;
   }
 
   // Invoked by fory JIT.
@@ -1996,7 +1972,7 @@ public class ClassResolver extends TypeResolver {
       }
       classInfoMap.forEach(
           (cls, classInfo) -> {
-            registerClassForGraalvm(cls);
+            GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
             if (classInfo.serializer == null) {
               if (isSerializable(classInfo.cls)) {
                 createSerializer0(cls);

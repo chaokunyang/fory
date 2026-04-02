@@ -96,13 +96,13 @@ public class ForyGraalVMFeature implements Feature {
     registerMethods(clazz);
     registerConstructors(clazz);
     if (Serializable.class.isAssignableFrom(clazz)) {
-      RuntimeSerialization.registerIncludingAssociatedClasses(clazz);
+      registerSerializableHierarchy(clazz);
     }
 
     if (RecordUtils.isRecord(clazz)) {
       RuntimeReflection.registerAllRecordComponents(clazz);
     } else if (GraalvmSupport.needReflectionRegisterForCreation(clazz)) {
-      registerForReflectiveInstantiation(clazz);
+      RuntimeReflection.registerForReflectiveInstantiation(clazz);
     }
   }
 
@@ -110,6 +110,14 @@ public class ForyGraalVMFeature implements Feature {
     RuntimeReflection.register(clazz);
     RuntimeReflection.registerClassLookup(clazz.getName());
     registerConstructors(clazz);
+  }
+
+  private void registerSerializableHierarchy(Class<?> clazz) {
+    for (Class<?> current = clazz;
+        current != null && current != Object.class && Serializable.class.isAssignableFrom(current);
+        current = current.getSuperclass()) {
+      RuntimeSerialization.registerIncludingAssociatedClasses(current);
+    }
   }
 
   private void registerFields(Class<?> clazz) {
@@ -130,13 +138,6 @@ public class ForyGraalVMFeature implements Feature {
     for (Constructor<?> constructor : clazz.getDeclaredConstructors()) {
       RuntimeReflection.register(constructor);
       RuntimeReflection.registerConstructorLookup(clazz, constructor.getParameterTypes());
-    }
-  }
-
-  private void registerForReflectiveInstantiation(Class<?> clazz) {
-    RuntimeReflection.registerForReflectiveInstantiation(clazz);
-    for (Field field : clazz.getDeclaredFields()) {
-      RuntimeReflection.register(field);
     }
   }
 }

@@ -90,7 +90,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   // Instance-level cache: TypeDef ID -> TypeInfo (shared across all slots)
   private final LongMap<TypeInfo> typeDefIdToTypeInfo = new LongMap<>(4, 0.4f);
 
-  public static MetaSharedLayerSerializerBase<?> newGeneratedSerializer(
+  private static MetaSharedLayerSerializerBase<?> newGeneratedSerializer(
       Fory fory,
       Class<?> cls,
       Class<? extends Serializer> serializerClass,
@@ -667,38 +667,25 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           new MetaSharedLayerSerializer(fory, type, this.layerTypeDef, this.layerMarkerClass);
 
       // Register JIT callback to replace with JIT serializer when ready
-      if (fory.getConfig().isCodeGenEnabled()) {
+      if (fory.getConfig().isCodeGenEnabled()
+          && supportsGeneratedLayerSerializer(fory, type, this.layerTypeDef)) {
         if (GraalvmSupport.isGraalBuildtime()) {
-          MetaSharedLayerSerializerBase<?> generatedSerializer = createGeneratedLayerSerializer(fory);
+          MetaSharedLayerSerializerBase<?> generatedSerializer = createGeneratedLayerSerializer();
           this.slotsSerializer = generatedSerializer;
           updateCachedLayerSerializer(generatedSerializer);
         } else {
           SlotsInfo thisInfo = this;
-          Class<? extends Serializer> serializerClass =
+          MetaSharedLayerSerializerBase<?> serializer =
               fory.getJITContext()
                   .registerSerializerJITCallback(
-                      () -> MetaSharedLayerSerializer.class,
-                      () ->
-                          CodecUtils.loadOrGenMetaSharedLayerCodecClass(
-                              type, fory, thisInfo.layerTypeDef, thisInfo.layerMarkerClass),
-                      c -> {
-                        MetaSharedLayerSerializerBase<?> generatedSerializer =
-                            newGeneratedSerializer(
-                                fory,
-                                type,
-                                c,
-                                thisInfo.layerTypeDef,
-                                thisInfo.layerMarkerClass);
+                      () -> thisInfo.slotsSerializer,
+                      thisInfo::createGeneratedLayerSerializer,
+                      generatedSerializer -> {
                         thisInfo.slotsSerializer = generatedSerializer;
                         thisInfo.updateCachedLayerSerializer(generatedSerializer);
                       });
-          if (serializerClass != MetaSharedLayerSerializer.class) {
-            MetaSharedLayerSerializerBase<?> generatedSerializer =
-                newGeneratedSerializer(
-                    fory, type, serializerClass, this.layerTypeDef, this.layerMarkerClass);
-            this.slotsSerializer = generatedSerializer;
-            updateCachedLayerSerializer(generatedSerializer);
-          }
+          this.slotsSerializer = serializer;
+          updateCachedLayerSerializer(serializer);
         }
       }
 
@@ -758,9 +745,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     public MetaSharedLayerSerializerBase getSlotsSerializer() {
-      if (slotsSerializer == null) {
-        slotsSerializer = createLayerSerializer(fory);
-      }
       return slotsSerializer;
     }
 
@@ -800,7 +784,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       MetaSharedLayerSerializerBase result;
       if (!fory.getConfig().isMetaShareEnabled()) {
         // Meta share not enabled - use the default slots serializer
-        result = slotsSerializer;
+        result = getSlotsSerializer();
       } else {
         // Read TypeInfo from buffer (creates new or returns existing)
         TypeInfo typeInfo = readLayerTypeInfo(fory, buffer);
@@ -835,19 +819,22 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     private void updateCachedLayerSerializer(MetaSharedLayerSerializerBase<?> serializer) {
       TypeInfo typeInfo = typeDefIdToTypeInfo.get(layerTypeDef.getId());
-      if (typeInfo != null && typeInfo.getTypeDef() != null) {
+      if (typeInfo != null) {
         typeInfo.setSerializer(serializer);
       }
     }
 
-    private MetaSharedLayerSerializerBase<?> createLayerSerializer(Fory fory) {
-      if (fory.getConfig().isCodeGenEnabled()) {
-        return createGeneratedLayerSerializer(fory);
+    private boolean supportsGeneratedLayerSerializer(Fory fory, Class<?> type, TypeDef typeDef) {
+      for (Descriptor descriptor :
+          fory.getTypeResolver().createDescriptorGrouper(typeDef, type).getSortedDescriptors()) {
+        if (descriptor.getField() == null) {
+          return false;
+        }
       }
-      return new MetaSharedLayerSerializer(fory, cls, layerTypeDef, layerMarkerClass);
+      return true;
     }
 
-    private MetaSharedLayerSerializerBase<?> createGeneratedLayerSerializer(Fory fory) {
+    private MetaSharedLayerSerializerBase<?> createGeneratedLayerSerializer() {
       Class<? extends Serializer> serializerClass =
           CodecUtils.loadOrGenMetaSharedLayerCodecClass(cls, fory, layerTypeDef, layerMarkerClass);
       return newGeneratedSerializer(

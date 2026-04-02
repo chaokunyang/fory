@@ -1358,7 +1358,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
 
   @Test
   public void testCollectionAndMapRejectRawObjectStreamRegistration() {
-    Fory fory = getJavaFory();
+    Fory fory = builder().build();
 
     IllegalArgumentException collectionError =
         Assert.expectThrows(

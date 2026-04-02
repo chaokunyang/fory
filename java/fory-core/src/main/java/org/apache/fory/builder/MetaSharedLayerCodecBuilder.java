@@ -28,8 +28,10 @@ import org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.ListExpression;
+import org.apache.fory.codegen.Expression.Literal;
 import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.codegen.Expression.StaticInvoke;
+import org.apache.fory.codegen.ExpressionUtils;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
@@ -137,8 +139,31 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   }
 
   @Override
-  public Expression buildEncodeExpression() {
-    return super.buildEncodeExpression();
+  protected Expression getFieldValue(Expression bean, Descriptor descriptor) {
+    if (descriptor.getField() == null) {
+      return ExpressionUtils.defaultValue(descriptor.getRawType());
+    }
+    return super.getFieldValue(bean, descriptor);
+  }
+
+  @Override
+  protected Expression serializeForNullable(
+      Expression inputObject,
+      Expression buffer,
+      TypeRef<?> typeRef,
+      Expression serializer,
+      boolean generateNewMethod,
+      boolean nullable) {
+    if (inputObject instanceof Literal && ((Literal) inputObject).getValue() == null) {
+      if (typeResolver(r -> r.needToWriteRef(typeRef))) {
+        return writeRefOrNull(buffer, inputObject);
+      }
+      if (nullable) {
+        return new Expression.Invoke(buffer, "writeByte", Literal.ofByte(Fory.NULL_FLAG));
+      }
+    }
+    return super.serializeForNullable(
+        inputObject, buffer, typeRef, serializer, generateNewMethod, nullable);
   }
 
   @Override
@@ -153,11 +178,6 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
 
   // Note: Layer class meta is read by ObjectStreamSerializer before calling this serializer.
   // The generated read() method only reads field data, not the layer class meta.
-
-  @Override
-  protected Expression buildComponentsArray() {
-    return buildDefaultComponentsArray();
-  }
 
   private Expression buildReadAndSetFieldsExpression() {
     Reference buffer = new Reference(BUFFER_NAME, bufferTypeRef, false);

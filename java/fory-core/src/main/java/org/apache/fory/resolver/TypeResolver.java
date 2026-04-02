@@ -1548,6 +1548,30 @@ public abstract class TypeResolver {
 
   public void resetWrite() {}
 
+  protected final TypeInfo ensureGraalvmRuntimeSerializer(TypeInfo typeInfo) {
+    if (typeInfo != null && typeInfo.serializer == null && GraalvmSupport.isGraalRuntime()) {
+      Class<?> serializerType = typeInfo.getCls();
+      if (serializerType != null
+          && !ReflectionUtils.isAbstract(serializerType)
+          && !serializerType.isInterface()) {
+        Class<? extends Serializer> serializerClass =
+            getSerializerClassFromGraalvmRegistry(serializerType);
+        if (serializerClass != null) {
+          boolean added = extRegistry.getClassCtx.add(serializerType);
+          try {
+            typeInfo.setSerializer(
+                this, Serializers.newSerializer(fory, serializerType, serializerClass));
+          } finally {
+            if (added) {
+              extRegistry.getClassCtx.remove(serializerType);
+            }
+          }
+        }
+      }
+    }
+    return typeInfo;
+  }
+
   protected final void clearGraalvmTypeInfoSerializer(TypeInfo typeInfo) {
     if (typeInfo != null
         && typeInfo.serializer != null
@@ -1581,6 +1605,10 @@ public abstract class TypeResolver {
   }
 
   final Class<? extends Serializer> getGraalvmSerializerClass(Serializer serializer) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && serializer instanceof LazyInitBeanSerializer) {
+      return ((CodegenSerializer.LazyInitBeanSerializer<?>) serializer)
+          .getGeneratedSerializerClass();
+    }
     return serializer.getClass();
   }
 

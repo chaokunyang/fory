@@ -83,6 +83,10 @@ public final class CodegenSerializer {
       return getOrCreateGeneratedSerializer().read(buffer);
     }
 
+    public Class<? extends Serializer> getGeneratedSerializerClass() {
+      return getOrCreateGeneratedSerializer().getClass();
+    }
+
     @SuppressWarnings({"rawtypes"})
     private Serializer<T> getOrCreateGeneratedSerializer() {
       if (serializer == null) {

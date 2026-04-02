@@ -1051,17 +1051,6 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
-  private void clearSerializerGraalvmBuildtimeState(Serializer<?> serializer) {
-    if (serializer instanceof ObjectStreamSerializer) {
-      ((ObjectStreamSerializer) serializer).clearGraalvmBuildtimeState();
-    } else if (serializer instanceof CollectionSerializers.JDKCompatibleCollectionSerializer) {
-      ((CollectionSerializers.JDKCompatibleCollectionSerializer<?>) serializer)
-          .clearGraalvmBuildtimeState();
-    } else if (serializer instanceof MapSerializers.JDKCompatibleMapSerializer) {
-      ((MapSerializers.JDKCompatibleMapSerializer<?>) serializer).clearGraalvmBuildtimeState();
-    }
-  }
-
   public void setSerializerFactory(SerializerFactory serializerFactory) {
     this.extRegistry.serializerFactory = serializerFactory;
   }
@@ -2047,7 +2036,6 @@ public class ClassResolver extends TypeResolver {
               getGraalvmClassRegistry()
                   .serializerClassMap
                   .put(cls, getGraalvmSerializerClass(classInfo.serializer));
-              clearSerializerGraalvmBuildtimeState(classInfo.serializer);
             }
           });
       if (GraalvmSupport.isGraalBuildtime()) {

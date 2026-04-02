@@ -34,9 +34,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.MetaSharedLayerSerializer;
-import org.apache.fory.serializer.MetaSharedLayerSerializerBase;
-import org.apache.fory.serializer.Serializer;
-import org.apache.fory.serializer.Serializers;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.ExceptionUtils;
@@ -137,20 +134,6 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(GeneratedMetaSharedLayerSerializer.class);
-  }
-
-  @SuppressWarnings("unchecked")
-  public static MetaSharedLayerSerializerBase<?> newGeneratedSerializer(
-      Fory fory,
-      Class<?> cls,
-      Class<? extends Serializer> serializerClass,
-      TypeDef layerTypeDef,
-      Class<?> layerMarkerClass) {
-    MetaSharedLayerSerializerBase<?> serializer =
-        (MetaSharedLayerSerializerBase<?>)
-            Serializers.newSerializer(fory, cls, (Class<? extends Serializer>) serializerClass);
-    serializer.setLayerSerializerMeta(layerTypeDef, layerMarkerClass);
-    return serializer;
   }
 
   @Override

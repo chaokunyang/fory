@@ -45,7 +45,6 @@ import java.util.function.Consumer;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
-import org.apache.fory.builder.MetaSharedLayerCodecBuilder;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
@@ -91,6 +90,19 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   // Instance-level cache: TypeDef ID -> TypeInfo (shared across all slots)
   private final LongMap<TypeInfo> typeDefIdToTypeInfo = new LongMap<>(4, 0.4f);
 
+  public static MetaSharedLayerSerializerBase<?> newGeneratedSerializer(
+      Fory fory,
+      Class<?> cls,
+      Class<? extends Serializer> serializerClass,
+      TypeDef layerTypeDef,
+      Class<?> layerMarkerClass) {
+    MetaSharedLayerSerializerBase<?> serializer =
+        (MetaSharedLayerSerializerBase<?>)
+            Serializers.newSerializer(fory, cls, serializerClass);
+    serializer.setLayerSerializerMeta(layerTypeDef, layerMarkerClass);
+    return serializer;
+  }
+
   /**
    * Interface for slot information used in ObjectStreamSerializer. This allows both full SlotsInfo
    * and minimal MinimalSlotsInfo implementations.
@@ -135,8 +147,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     /** Get field types for putFields/writeFields support, in index order. */
     Class<?>[] getPutFieldTypes();
-
-    void clearGraalvmBuildtimeState();
   }
 
   /**
@@ -193,13 +203,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
     Collections.reverse(slotsInfoList);
     slotsInfos = slotsInfoList.toArray(new SlotInfo[0]);
-  }
-
-  public void clearGraalvmBuildtimeState() {
-    for (SlotInfo slotInfo : slotsInfos) {
-      slotInfo.clearGraalvmBuildtimeState();
-    }
-    typeDefIdToTypeInfo.clear();
   }
 
   /**
@@ -680,10 +683,10 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
                               type, fory, thisInfo.layerTypeDef, thisInfo.layerMarkerClass),
                       c -> {
                         MetaSharedLayerSerializerBase<?> generatedSerializer =
-                            MetaSharedLayerCodecBuilder.newGeneratedSerializer(
+                            newGeneratedSerializer(
                                 fory,
                                 type,
-                                (Class<? extends Serializer>) c,
+                                c,
                                 thisInfo.layerTypeDef,
                                 thisInfo.layerMarkerClass);
                         thisInfo.slotsSerializer = generatedSerializer;
@@ -691,7 +694,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
                       });
           if (serializerClass != MetaSharedLayerSerializer.class) {
             MetaSharedLayerSerializerBase<?> generatedSerializer =
-                MetaSharedLayerCodecBuilder.newGeneratedSerializer(
+                newGeneratedSerializer(
                     fory, type, serializerClass, this.layerTypeDef, this.layerMarkerClass);
             this.slotsSerializer = generatedSerializer;
             updateCachedLayerSerializer(generatedSerializer);
@@ -839,20 +842,15 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     private MetaSharedLayerSerializerBase<?> createLayerSerializer(Fory fory) {
       if (fory.getConfig().isCodeGenEnabled()) {
-        try {
-          return createGeneratedLayerSerializer(fory);
-        } catch (Throwable t) {
-          ExceptionUtils.ignore(t);
-        }
+        return createGeneratedLayerSerializer(fory);
       }
       return new MetaSharedLayerSerializer(fory, cls, layerTypeDef, layerMarkerClass);
     }
 
-    @SuppressWarnings("unchecked")
     private MetaSharedLayerSerializerBase<?> createGeneratedLayerSerializer(Fory fory) {
       Class<? extends Serializer> serializerClass =
           CodecUtils.loadOrGenMetaSharedLayerCodecClass(cls, fory, layerTypeDef, layerMarkerClass);
-      return MetaSharedLayerCodecBuilder.newGeneratedSerializer(
+      return newGeneratedSerializer(
           fory, cls, serializerClass, layerTypeDef, layerMarkerClass);
     }
 
@@ -891,11 +889,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       return "SlotsInfo{" + "cls=" + cls + '}';
     }
 
-    @Override
-    public void clearGraalvmBuildtimeState() {
-      slotsSerializer = null;
-      currentReadSerializer = null;
-    }
   }
 
   /**

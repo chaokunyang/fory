@@ -948,12 +948,6 @@ public class CollectionSerializers {
     public T copy(T value) {
       return fory.copyObject(value, (Serializer<T>) serializer);
     }
-
-    public void clearGraalvmBuildtimeState() {
-      if (serializer instanceof ObjectStreamSerializer) {
-        ((ObjectStreamSerializer) serializer).clearGraalvmBuildtimeState();
-      }
-    }
   }
 
   public abstract static class XlangCollectionDefaultSerializer extends CollectionLikeSerializer {

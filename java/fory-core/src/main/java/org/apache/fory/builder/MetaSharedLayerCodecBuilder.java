@@ -19,7 +19,7 @@
 
 package org.apache.fory.builder;
 
-import static org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer.SERIALIZER_FIELD_NAME;
+import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,18 +27,19 @@ import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
+import org.apache.fory.codegen.Expression.ListExpression;
+import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
-import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializerBase;
+import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 
@@ -95,27 +96,38 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     // don't addImport(beanClass), because user class may name collide.
     ctx.extendsClasses(ctx.type(parentSerializerClass));
     ctx.reserveName(POJO_CLASS_TYPE_NAME);
-    ctx.reserveName(SERIALIZER_FIELD_NAME);
     ctx.addField(ctx.type(Fory.class), FORY_NAME);
     String constructorCode =
         StringUtils.format(
-            ""
-                + "super(${fory}, ${cls});\n"
-                + "this.${fory} = ${fory};\n"
-                + "${serializer} = ${builderClass}.setCodegenSerializer(${fory}, ${cls}, this);\n",
+            "super(${fory}, ${cls});\nthis.${fory} = ${fory};\n",
             "fory",
             FORY_NAME,
             "cls",
-            POJO_CLASS_TYPE_NAME,
-            "builderClass",
-            MetaSharedLayerCodecBuilder.class.getName(),
-            "serializer",
-            SERIALIZER_FIELD_NAME);
+            POJO_CLASS_TYPE_NAME);
     ctx.clearExprState();
-    Expression decodeExpr = buildDecodeExpression();
+    Expression encodeExpr = buildEncodeExpression();
+    String encodeCode = encodeExpr.genCode(ctx).code();
+    encodeCode = ctx.optimizeMethodCode(encodeCode);
+    ctx.clearExprState();
+    Expression decodeExpr = buildReadAndSetFieldsExpression();
     String decodeCode = decodeExpr.genCode(ctx).code();
     decodeCode = ctx.optimizeMethodCode(decodeCode);
-    ctx.overrideMethod(readMethodName, decodeCode, Object.class, MemoryBuffer.class, BUFFER_NAME);
+    ctx.overrideMethod(
+        "writeFieldsOnly",
+        encodeCode,
+        void.class,
+        MemoryBuffer.class,
+        BUFFER_NAME,
+        Object.class,
+        ROOT_OBJECT_NAME);
+    ctx.overrideMethod(
+        "readAndSetFields",
+        decodeCode,
+        Object.class,
+        MemoryBuffer.class,
+        BUFFER_NAME,
+        Object.class,
+        ROOT_OBJECT_NAME);
     registerJITNotifyCallback();
     ctx.addConstructor(constructorCode, Fory.class, FORY_NAME, Class.class, POJO_CLASS_TYPE_NAME);
     return ctx.genCode();
@@ -127,31 +139,23 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     ctx.addImport(GeneratedMetaSharedLayerSerializer.class);
   }
 
-  // Invoked by JIT.
-  @SuppressWarnings({"unchecked", "rawtypes"})
-  public static MetaSharedLayerSerializerBase setCodegenSerializer(
-      Fory fory, Class<?> cls, GeneratedMetaSharedLayerSerializer s) {
-    if (GraalvmSupport.isGraalRuntime()) {
-      return (MetaSharedLayerSerializerBase) typeResolver(fory, r -> r.getSerializer(s.getType()));
-    }
-    // This method hold jit lock, so create jit serializer async to avoid block serialization.
-    // Use MetaSharedLayerSerializer as fallback since it's compatible with
-    // MetaSharedLayerSerializerBase
-    Class serializerClass =
-        fory.getJITContext()
-            .registerSerializerJITCallback(
-                () -> MetaSharedLayerSerializer.class,
-                () -> CodegenSerializer.loadCodegenSerializer(fory, s.getType()),
-                c ->
-                    s.serializer =
-                        (MetaSharedLayerSerializerBase)
-                            Serializers.newSerializer(fory, s.getType(), c));
-    return (MetaSharedLayerSerializerBase) Serializers.newSerializer(fory, cls, serializerClass);
+  @SuppressWarnings("unchecked")
+  public static MetaSharedLayerSerializerBase<?> newGeneratedSerializer(
+      Fory fory,
+      Class<?> cls,
+      Class<? extends Serializer> serializerClass,
+      TypeDef layerTypeDef,
+      Class<?> layerMarkerClass) {
+    MetaSharedLayerSerializerBase<?> serializer =
+        (MetaSharedLayerSerializerBase<?>)
+            Serializers.newSerializer(fory, cls, (Class<? extends Serializer>) serializerClass);
+    serializer.setLayerSerializerMeta(layerTypeDef, layerMarkerClass);
+    return serializer;
   }
 
   @Override
   public Expression buildEncodeExpression() {
-    throw new IllegalStateException("unreachable");
+    return super.buildEncodeExpression();
   }
 
   @Override
@@ -170,5 +174,29 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   @Override
   protected Expression buildComponentsArray() {
     return buildDefaultComponentsArray();
+  }
+
+  private Expression buildReadAndSetFieldsExpression() {
+    Reference buffer = new Reference(BUFFER_NAME, bufferTypeRef, false);
+    Reference inputObject = new Reference(ROOT_OBJECT_NAME, OBJECT_TYPE, false);
+    ListExpression expressions = new ListExpression();
+    Expression bean = tryCastIfPublic(inputObject, beanType, ctx.newName(beanClass));
+    expressions.add(bean);
+    expressions.addAll(deserializePrimitives(bean, buffer, objectCodecOptimizer.primitiveGroups));
+    int numGroups = getNumGroups(objectCodecOptimizer);
+    deserializeReadGroup(
+        objectCodecOptimizer.boxedReadGroups, numGroups, expressions, bean, buffer);
+    deserializeReadGroup(
+        objectCodecOptimizer.buildInReadGroups, numGroups, expressions, bean, buffer);
+    for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors()) {
+      expressions.add(deserializeGroup(java.util.Collections.singletonList(d), bean, buffer, false));
+    }
+    for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getMapDescriptors()) {
+      expressions.add(deserializeGroup(java.util.Collections.singletonList(d), bean, buffer, false));
+    }
+    deserializeReadGroup(
+        objectCodecOptimizer.otherReadGroups, numGroups, expressions, bean, buffer);
+    expressions.add(new Expression.Return(bean));
+    return expressions;
   }
 }

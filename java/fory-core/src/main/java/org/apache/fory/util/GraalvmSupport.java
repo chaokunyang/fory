@@ -25,12 +25,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.fory.Fory;
 import org.apache.fory.exception.ForyException;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.record.RecordUtils;
@@ -84,11 +81,24 @@ public class GraalvmSupport {
     return Collections.unmodifiableSet(allInterfaces);
   }
 
+  /** Returns all serializer classes registered for GraalVM native image compilation. */
+  public static Set<Class<? extends Serializer>> getRegisteredSerializerClasses() {
+    Set<Class<? extends Serializer>> serializerClasses = ConcurrentHashMap.newKeySet();
+    for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
+      serializerClasses.addAll(registry.serializerClassMap.values());
+      serializerClasses.addAll(registry.deserializerClassMap.values());
+    }
+    return Collections.unmodifiableSet(serializerClasses);
+  }
+
   /** Clears all GraalVM native image registrations. Primarily for testing purposes. */
   public static void clearRegistrations() {
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
       registry.registeredClasses.clear();
       registry.proxyInterfaces.clear();
+      registry.serializerClassMap.clear();
+      registry.deserializerClassMap.clear();
+      registry.resolvers.clear();
     }
   }
 
@@ -136,45 +146,6 @@ public class GraalvmSupport {
    */
   public static void registerProxySupport(Class<?> proxyInterface) {
     registerProxyInterface(proxyInterface, 0);
-  }
-
-  public static class GraalvmSerializerHolder extends Serializer {
-    private final Class serializerClass;
-    private Serializer serializer;
-
-    public GraalvmSerializerHolder(Fory fory, Class<?> type, Class<?> serializerClass) {
-      super(fory, type);
-      this.serializerClass = Objects.requireNonNull(serializerClass);
-    }
-
-    public Class<? extends Serializer> getSerializerClass() {
-      return serializerClass;
-    }
-
-    @Override
-    public void write(MemoryBuffer buffer, Object value) {
-      // for debug only, graalvm native image won't go to here
-      getSerializer().write(buffer, value);
-    }
-
-    @Override
-    public Object read(MemoryBuffer buffer) {
-      // for debug only, graalvm native image won't go to here
-      return getSerializer().read(buffer);
-    }
-
-    private Serializer getSerializer() {
-      if (serializer == null) {
-        try {
-          Constructor ctr = serializerClass.getDeclaredConstructor(Fory.class, Class.class);
-          ctr.setAccessible(true);
-          serializer = (Serializer) ctr.newInstance(fory, type);
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-      return serializer;
-    }
   }
 
   public static ForyException throwNoArgCtrException(Class<?> type) {

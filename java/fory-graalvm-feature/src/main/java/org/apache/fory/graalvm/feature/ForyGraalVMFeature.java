@@ -19,6 +19,7 @@
 
 package org.apache.fory.graalvm.feature;
 
+import java.io.Serializable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -28,6 +29,7 @@ import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.record.RecordUtils;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
+import org.graalvm.nativeimage.hosted.RuntimeSerialization;
 
 /**
  * GraalVM native image feature for Apache Fory serialization framework.
@@ -49,6 +51,7 @@ public class ForyGraalVMFeature implements Feature {
 
   private final Set<Class<?>> processedClasses = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedProxyInterfaces = ConcurrentHashMap.newKeySet();
+  private final Set<Class<?>> processedSerializerClasses = ConcurrentHashMap.newKeySet();
 
   @Override
   public String getDescription() {
@@ -62,6 +65,13 @@ public class ForyGraalVMFeature implements Feature {
     for (Class<?> clazz : GraalvmSupport.getRegisteredClasses()) {
       if (processedClasses.add(clazz)) {
         registerClass(clazz);
+        changed = true;
+      }
+    }
+
+    for (Class<?> serializerClass : GraalvmSupport.getRegisteredSerializerClasses()) {
+      if (processedSerializerClasses.add(serializerClass)) {
+        registerSerializerClass(serializerClass);
         changed = true;
       }
     }
@@ -82,24 +92,42 @@ public class ForyGraalVMFeature implements Feature {
   private void registerClass(Class<?> clazz) {
     RuntimeReflection.register(clazz);
     RuntimeReflection.registerClassLookup(clazz.getName());
+    registerFields(clazz);
+    registerMethods(clazz);
+    registerConstructors(clazz);
+    if (Serializable.class.isAssignableFrom(clazz)) {
+      RuntimeSerialization.registerIncludingAssociatedClasses(clazz);
+    }
 
     if (RecordUtils.isRecord(clazz)) {
-      registerRecordClass(clazz);
+      RuntimeReflection.registerAllRecordComponents(clazz);
+      RuntimeReflection.registerForReflectiveInstantiation(clazz);
     } else if (GraalvmSupport.needReflectionRegisterForCreation(clazz)) {
       registerForReflectiveInstantiation(clazz);
     }
   }
 
-  private void registerRecordClass(Class<?> clazz) {
-    RuntimeReflection.registerForReflectiveInstantiation(clazz);
+  private void registerSerializerClass(Class<?> clazz) {
+    RuntimeReflection.register(clazz);
+    RuntimeReflection.registerClassLookup(clazz.getName());
+    registerConstructors(clazz);
+  }
+
+  private void registerFields(Class<?> clazz) {
     for (Field field : clazz.getDeclaredFields()) {
       RuntimeReflection.register(field);
       RuntimeReflection.registerFieldLookup(clazz, field.getName());
     }
+  }
+
+  private void registerMethods(Class<?> clazz) {
     for (Method method : clazz.getDeclaredMethods()) {
       RuntimeReflection.register(method);
       RuntimeReflection.registerMethodLookup(clazz, method.getName(), method.getParameterTypes());
     }
+  }
+
+  private void registerConstructors(Class<?> clazz) {
     for (Constructor<?> constructor : clazz.getDeclaredConstructors()) {
       RuntimeReflection.register(constructor);
       RuntimeReflection.registerConstructorLookup(clazz, constructor.getParameterTypes());

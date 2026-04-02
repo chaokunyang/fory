@@ -89,7 +89,6 @@ import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.GraalvmSupport;
-import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
 
@@ -313,12 +312,6 @@ public abstract class TypeResolver {
   public final boolean needToWriteTypeDef(Serializer serializer) {
     if (fory.getConfig().getCompatibleMode() != CompatibleMode.COMPATIBLE) {
       return false;
-    }
-    if (GraalvmSupport.isGraalBuildtime() && serializer instanceof GraalvmSerializerHolder) {
-      Class<? extends Serializer> serializerClass =
-          ((GraalvmSerializerHolder) serializer).getSerializerClass();
-      return GeneratedObjectSerializer.class.isAssignableFrom(serializerClass)
-          || GeneratedMetaSharedSerializer.class.isAssignableFrom(serializerClass);
     }
     return (serializer instanceof GeneratedObjectSerializer
         // May already switched to MetaSharedSerializer when update class info cache.
@@ -1570,9 +1563,6 @@ public abstract class TypeResolver {
   }
 
   final Class<? extends Serializer> getGraalvmSerializerClass(Serializer serializer) {
-    if (serializer instanceof GraalvmSerializerHolder) {
-      return ((GraalvmSerializerHolder) serializer).getSerializerClass();
-    }
     return serializer.getClass();
   }
 

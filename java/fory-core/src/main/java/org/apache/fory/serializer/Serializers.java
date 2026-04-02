@@ -26,7 +26,6 @@ import com.google.common.cache.CacheBuilder;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -107,9 +106,6 @@ public class Serializers {
           return (Serializer<T>) handle.invoke();
         }
       } else {
-        if (GraalvmSupport.isGraalRuntime()) {
-          return createSerializerByReflection(fory, type, serializerClass);
-        }
         return createSerializer(fory, type, serializerClass);
       }
     } catch (InvocationTargetException e) {
@@ -155,37 +151,6 @@ public class Serializers {
       CTR_MAP.put(serializerClass, Tuple2.of(SIG4, ctr));
       return (Serializer<T>) ctr.invoke();
     }
-  }
-
-  private static <T> Serializer<T> createSerializerByReflection(
-      Fory fory, Class<?> type, Class<? extends Serializer> serializerClass) throws Throwable {
-    try {
-      Constructor<? extends Serializer> constructor =
-          serializerClass.getDeclaredConstructor(Fory.class, Class.class);
-      constructor.setAccessible(true);
-      return (Serializer<T>) constructor.newInstance(fory, type);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
-    }
-    try {
-      Constructor<? extends Serializer> constructor =
-          serializerClass.getDeclaredConstructor(Fory.class);
-      constructor.setAccessible(true);
-      return (Serializer<T>) constructor.newInstance(fory);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
-    }
-    try {
-      Constructor<? extends Serializer> constructor =
-          serializerClass.getDeclaredConstructor(Class.class);
-      constructor.setAccessible(true);
-      return (Serializer<T>) constructor.newInstance(type);
-    } catch (NoSuchMethodException e) {
-      ExceptionUtils.ignore(e);
-    }
-    Constructor<? extends Serializer> constructor = serializerClass.getDeclaredConstructor();
-    constructor.setAccessible(true);
-    return (Serializer<T>) constructor.newInstance();
   }
 
   public static <T> void write(MemoryBuffer buffer, Serializer<T> serializer, T obj) {

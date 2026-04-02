@@ -59,6 +59,7 @@ import org.apache.fory.resolver.RefResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -946,6 +947,12 @@ public class CollectionSerializers {
     @Override
     public T copy(T value) {
       return fory.copyObject(value, (Serializer<T>) serializer);
+    }
+
+    public void clearGraalvmBuildtimeState() {
+      if (serializer instanceof ObjectStreamSerializer) {
+        ((ObjectStreamSerializer) serializer).clearGraalvmBuildtimeState();
+      }
     }
   }
 

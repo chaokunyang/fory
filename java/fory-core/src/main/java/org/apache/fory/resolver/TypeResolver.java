@@ -1548,6 +1548,23 @@ public abstract class TypeResolver {
 
   public void resetWrite() {}
 
+  protected final void clearGraalvmTypeInfoSerializer(TypeInfo typeInfo) {
+    if (typeInfo != null
+        && typeInfo.serializer != null
+        && !extRegistry.registeredTypeInfos.contains(typeInfo)) {
+      typeInfo.serializer = null;
+    }
+  }
+
+  protected final void clearGraalvmGeneratedTypeInfoSerializers() {
+    classInfoMap.forEach((cls, typeInfo) -> clearGraalvmTypeInfoSerializer(typeInfo));
+    for (TypeInfo typeInfo : typeIdToTypeInfo) {
+      clearGraalvmTypeInfoSerializer(typeInfo);
+    }
+    userTypeIdToTypeInfo.forEachValue(this::clearGraalvmTypeInfoSerializer);
+    extRegistry.typeInfoByTypeDefId.forEachValue(this::clearGraalvmTypeInfoSerializer);
+  }
+
   // CHECKSTYLE.OFF:MethodName
   public static void _addGraalvmClassRegistry(int foryConfigHash, ClassResolver classResolver) {
     // CHECKSTYLE.ON:MethodName
@@ -1568,22 +1585,29 @@ public abstract class TypeResolver {
 
   final Class<? extends Serializer> getSerializerClassFromGraalvmRegistry(Class<?> cls) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    List<TypeResolver> resolvers = registry.resolvers;
-    if (resolvers.isEmpty()) {
-      return null;
+    Class<? extends Serializer> serializerClass = registry.serializerClassMap.get(cls);
+    if (serializerClass != null) {
+      return serializerClass;
     }
-    for (TypeResolver resolver : resolvers) {
-      if (resolver != this) {
-        TypeInfo typeInfo = resolver.getTypeInfo(cls, false);
-        if (typeInfo != null && typeInfo.serializer != null) {
-          return resolver.getGraalvmSerializerClass(typeInfo.serializer);
+    if (!cls.isEnum() && Enum.class.isAssignableFrom(cls) && cls != Enum.class) {
+      Class<?> enclosingClass = cls.getEnclosingClass();
+      if (enclosingClass != null && enclosingClass.isEnum()) {
+        serializerClass = registry.serializerClassMap.get(enclosingClass);
+        if (serializerClass != null) {
+          return serializerClass;
         }
       }
     }
-    Class<? extends Serializer> serializerClass = registry.serializerClassMap.get(cls);
-    // noinspection Duplicates
-    if (serializerClass != null) {
-      return serializerClass;
+    List<TypeResolver> resolvers = registry.resolvers;
+    if (!resolvers.isEmpty()) {
+      for (TypeResolver resolver : resolvers) {
+        if (resolver != this) {
+          TypeInfo typeInfo = resolver.getTypeInfo(cls, false);
+          if (typeInfo != null && typeInfo.serializer != null) {
+            return resolver.getGraalvmSerializerClass(typeInfo.serializer);
+          }
+        }
+      }
     }
     if (GraalvmSupport.isGraalRuntime()) {
       if (Functions.isLambda(cls) || ReflectionUtils.isJdkProxy(cls)) {
@@ -1597,15 +1621,13 @@ public abstract class TypeResolver {
   private Class<? extends Serializer> getMetaSharedDeserializerClassFromGraalvmRegistry(
       Class<?> cls, TypeDef typeDef) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    List<TypeResolver> resolvers = registry.resolvers;
-    if (resolvers.isEmpty()) {
-      return null;
-    }
     Class<? extends Serializer> deserializerClass =
         registry.deserializerClassMap.get(typeDef.getId());
-    // noinspection Duplicates
     if (deserializerClass != null) {
       return deserializerClass;
+    }
+    if (registry.resolvers.isEmpty()) {
+      return null;
     }
     if (GraalvmSupport.isGraalRuntime()) {
       if (Functions.isLambda(cls) || ReflectionUtils.isJdkProxy(cls)) {

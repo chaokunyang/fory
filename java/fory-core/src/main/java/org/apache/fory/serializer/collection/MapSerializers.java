@@ -41,6 +41,7 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -475,6 +476,12 @@ public class MapSerializers {
     @Override
     public T copy(T value) {
       return fory.copyObject(value, (Serializer<T>) serializer);
+    }
+
+    public void clearGraalvmBuildtimeState() {
+      if (serializer instanceof ObjectStreamSerializer) {
+        ((ObjectStreamSerializer) serializer).clearGraalvmBuildtimeState();
+      }
     }
   }
 

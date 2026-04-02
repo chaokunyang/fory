@@ -101,7 +101,6 @@ public class ForyGraalVMFeature implements Feature {
 
     if (RecordUtils.isRecord(clazz)) {
       RuntimeReflection.registerAllRecordComponents(clazz);
-      RuntimeReflection.registerForReflectiveInstantiation(clazz);
     } else if (GraalvmSupport.needReflectionRegisterForCreation(clazz)) {
       registerForReflectiveInstantiation(clazz);
     }

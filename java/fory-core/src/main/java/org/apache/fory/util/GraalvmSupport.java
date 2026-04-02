@@ -23,13 +23,35 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.ArraySerializers;
+import org.apache.fory.serializer.BufferSerializers;
+import org.apache.fory.serializer.EnumSerializer;
+import org.apache.fory.serializer.ExternalizableSerializer;
+import org.apache.fory.serializer.JavaSerializer;
+import org.apache.fory.serializer.JdkProxySerializer;
+import org.apache.fory.serializer.LambdaSerializer;
+import org.apache.fory.serializer.ObjectSerializer;
+import org.apache.fory.serializer.ObjectStreamSerializer;
+import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.TimeSerializers;
+import org.apache.fory.serializer.UnknownClassSerializers;
+import org.apache.fory.serializer.collection.ChildContainerSerializers;
+import org.apache.fory.serializer.collection.CollectionSerializer;
+import org.apache.fory.serializer.collection.CollectionSerializers;
+import org.apache.fory.serializer.collection.MapSerializer;
+import org.apache.fory.serializer.collection.MapSerializers;
+import org.apache.fory.serializer.scala.SingletonCollectionSerializer;
+import org.apache.fory.serializer.scala.SingletonMapSerializer;
+import org.apache.fory.serializer.scala.SingletonObjectSerializer;
 import org.apache.fory.util.record.RecordUtils;
 
 /** A helper for Graalvm native image support. */
@@ -45,10 +67,42 @@ public class GraalvmSupport {
 
   private static final Map<Integer, GraalvmClassRegistry> GRAALVM_REGISTRY =
       new ConcurrentHashMap<>();
+  private static final Set<Class<? extends Serializer>> DEFAULT_SERIALIZER_CLASSES =
+      new LinkedHashSet<>();
 
   static {
     String imageCode = System.getProperty(GRAAL_IMAGE_CODE_KEY);
     IN_GRAALVM_NATIVE_IMAGE = imageCode != null;
+    registerDefaultSerializerClass(ArraySerializers.ObjectArraySerializer.class);
+    registerDefaultSerializerClass(ArraySerializers.UnknownArraySerializer.class);
+    registerDefaultSerializerClass(EnumSerializer.class);
+    registerDefaultSerializerClass(UnknownClassSerializers.UnknownEnumSerializer.class);
+    registerDefaultSerializerClass(CollectionSerializers.EnumSetSerializer.class);
+    registerDefaultSerializerClass(Serializers.CharsetSerializer.class);
+    registerDefaultSerializerClass(ReplaceResolveSerializer.class);
+    registerDefaultSerializerClass(JdkProxySerializer.class);
+    registerDefaultSerializerClass(LambdaSerializer.class);
+    registerDefaultSerializerClass(TimeSerializers.CalendarSerializer.class);
+    registerDefaultSerializerClass(TimeSerializers.ZoneIdSerializer.class);
+    registerDefaultSerializerClass(TimeSerializers.TimeZoneSerializer.class);
+    registerDefaultSerializerClass(BufferSerializers.ByteBufferSerializer.class);
+    registerDefaultSerializerClass(MapSerializers.StringKeyMapSerializer.class);
+    registerDefaultSerializerClass(ChildContainerSerializers.ChildArrayListSerializer.class);
+    registerDefaultSerializerClass(ChildContainerSerializers.ChildCollectionSerializer.class);
+    registerDefaultSerializerClass(ChildContainerSerializers.ChildMapSerializer.class);
+    registerDefaultSerializerClass(SingletonCollectionSerializer.class);
+    registerDefaultSerializerClass(SingletonMapSerializer.class);
+    registerDefaultSerializerClass(SingletonObjectSerializer.class);
+    registerDefaultSerializerClass(CollectionSerializers.JDKCompatibleCollectionSerializer.class);
+    registerDefaultSerializerClass(CollectionSerializers.DefaultJavaCollectionSerializer.class);
+    registerDefaultSerializerClass(CollectionSerializer.class);
+    registerDefaultSerializerClass(MapSerializers.JDKCompatibleMapSerializer.class);
+    registerDefaultSerializerClass(MapSerializers.DefaultJavaMapSerializer.class);
+    registerDefaultSerializerClass(MapSerializer.class);
+    registerDefaultSerializerClass(ExternalizableSerializer.class);
+    registerDefaultSerializerClass(ObjectStreamSerializer.class);
+    registerDefaultSerializerClass(JavaSerializer.class);
+    registerDefaultSerializerClass(ObjectSerializer.class);
   }
 
   /** Returns true if current process is running in graalvm native image build stage. */
@@ -84,11 +138,22 @@ public class GraalvmSupport {
   /** Returns all serializer classes registered for GraalVM native image compilation. */
   public static Set<Class<? extends Serializer>> getRegisteredSerializerClasses() {
     Set<Class<? extends Serializer>> serializerClasses = ConcurrentHashMap.newKeySet();
+    serializerClasses.addAll(DEFAULT_SERIALIZER_CLASSES);
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
+      serializerClasses.addAll(registry.registeredSerializerClasses);
       serializerClasses.addAll(registry.serializerClassMap.values());
       serializerClasses.addAll(registry.deserializerClassMap.values());
     }
     return Collections.unmodifiableSet(serializerClasses);
+  }
+
+  public static void registerDefaultSerializerClasses(int configHash) {
+    if (!IN_GRAALVM_NATIVE_IMAGE) {
+      return;
+    }
+    GraalvmClassRegistry registry =
+        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
+    registry.registeredSerializerClasses.addAll(DEFAULT_SERIALIZER_CLASSES);
   }
 
   /** Clears all GraalVM native image registrations. Primarily for testing purposes. */
@@ -96,6 +161,7 @@ public class GraalvmSupport {
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
       registry.registeredClasses.clear();
       registry.proxyInterfaces.clear();
+      registry.registeredSerializerClasses.clear();
       registry.serializerClassMap.clear();
       registry.deserializerClassMap.clear();
       registry.resolvers.clear();
@@ -148,6 +214,21 @@ public class GraalvmSupport {
     registerProxyInterface(proxyInterface, 0);
   }
 
+  public static void registerSerializerClass(
+      Class<? extends Serializer> serializerClass, int configHash) {
+    if (!IN_GRAALVM_NATIVE_IMAGE || serializerClass == null) {
+      return;
+    }
+    GraalvmClassRegistry registry =
+        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
+    registry.registeredSerializerClasses.add(serializerClass);
+  }
+
+  private static void registerDefaultSerializerClass(
+      Class<? extends Serializer> serializerClass) {
+    DEFAULT_SERIALIZER_CLASSES.add(serializerClass);
+  }
+
   public static ForyException throwNoArgCtrException(Class<?> type) {
     throw new ForyException("Please provide a no-arg constructor for " + type);
   }
@@ -183,8 +264,10 @@ public class GraalvmSupport {
   /**
    * Checks whether a class requires reflective instantiation handling in GraalVM.
    *
-   * <p>Returns true when the class does not expose an accessible no-arg constructor and therefore
-   * needs reflective registration for instantiation during native image builds.
+   * <p>Returns true only when Fory will instantiate the class through its declared no-arg
+   * constructor and that constructor is not publicly accessible. Classes without a no-arg
+   * constructor use the unsafe allocation path instead, so registering them for reflective
+   * instantiation is both unnecessary and invalid for types such as JDK immutable collections.
    *
    * @param type the class to check
    * @return true if reflective instantiation handling is required, false otherwise
@@ -200,17 +283,18 @@ public class GraalvmSupport {
     }
     Constructor<?>[] constructors = type.getDeclaredConstructors();
     if (constructors.length == 0) {
-      return true;
+      return !Modifier.isPublic(type.getModifiers());
     }
     for (Constructor<?> constructor : constructors) {
       if (constructor.getParameterCount() == 0) {
-        return false;
+        return !Modifier.isPublic(type.getModifiers())
+            || !Modifier.isPublic(constructor.getModifiers());
       }
     }
     if (RecordUtils.isRecord(type)) {
       return !isRecordConstructorPublicAccessible(type);
     }
-    return true;
+    return false;
   }
 
   /**
@@ -227,6 +311,7 @@ public class GraalvmSupport {
   /** GraalVM class registry. */
   public static class GraalvmClassRegistry {
     public final List<TypeResolver> resolvers;
+    public final Set<Class<? extends Serializer>> registeredSerializerClasses;
     public final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
     public final Map<Long, Class<? extends Serializer>> deserializerClassMap;
     public final Set<Class<?>> registeredClasses;
@@ -234,6 +319,7 @@ public class GraalvmSupport {
 
     private GraalvmClassRegistry() {
       resolvers = Collections.synchronizedList(new ArrayList<>());
+      registeredSerializerClasses = ConcurrentHashMap.newKeySet();
       serializerClassMap = new ConcurrentHashMap<>();
       deserializerClassMap = new ConcurrentHashMap<>();
       registeredClasses = ConcurrentHashMap.newKeySet();

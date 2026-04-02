@@ -22,6 +22,7 @@ package org.apache.fory.collection;
 import static org.apache.fory.collection.ForyObjectMap.MASK_NUMBER;
 
 import java.util.Arrays;
+import java.util.function.Consumer;
 
 // Derived from
 // https://github.com/EsotericSoftware/kryo/blob/135df69526615bb3f6b34846e58ba3fec3b631c3/src/com/esotericsoftware/kryo/util/IntMap.java.
@@ -268,6 +269,7 @@ public class LongMap<V> {
       next = next + 1 & mask;
     }
     keyTable[i] = 0;
+    valueTable[i] = null;
     size--;
     return oldValue;
   }
@@ -314,6 +316,19 @@ public class LongMap<V> {
       return hasZeroValue;
     }
     return locateKey(key) >= 0;
+  }
+
+  public void forEachValue(Consumer<? super V> consumer) {
+    if (hasZeroValue) {
+      consumer.accept(zeroValue);
+    }
+    long[] keyTable = this.keyTable;
+    V[] valueTable = this.valueTable;
+    for (int i = 0; i < keyTable.length; i++) {
+      if (keyTable[i] != 0) {
+        consumer.accept(valueTable[i]);
+      }
+    }
   }
 
   /**

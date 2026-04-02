@@ -629,6 +629,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final Class<?> layerMarkerClass;
     // mark non-final for async-jit to update it to jit-serializer.
     private MetaSharedLayerSerializerBase slotsSerializer;
+    private Class<? extends Serializer> generatedSlotsSerializerClass;
     private final ObjectIntMap<String> fieldIndexMap;
     private final int numPutFields;
     private final Class<?>[] putFieldTypes;
@@ -670,9 +671,17 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       if (fory.getConfig().isCodeGenEnabled()
           && supportsGeneratedLayerSerializer(fory, type, this.layerTypeDef)) {
         if (GraalvmSupport.isGraalBuildtime()) {
-          MetaSharedLayerSerializerBase<?> generatedSerializer = createGeneratedLayerSerializer();
-          this.slotsSerializer = generatedSerializer;
-          updateCachedLayerSerializer(generatedSerializer);
+          this.generatedSlotsSerializerClass =
+              CodecUtils.loadOrGenMetaSharedLayerCodecClass(
+                  cls, fory, layerTypeDef, layerMarkerClass);
+          int configHash = fory.getConfig().getConfigHash();
+          GraalvmSupport.registerSerializerClass(generatedSlotsSerializerClass, configHash);
+          GraalvmSupport.registerLayerSerializerClass(
+              layerTypeDef.getId(), generatedSlotsSerializerClass, configHash);
+        } else if (GraalvmSupport.isGraalRuntime()) {
+          this.generatedSlotsSerializerClass =
+              GraalvmSupport.getLayerSerializerClass(
+                  layerTypeDef.getId(), fory.getConfig().getConfigHash());
         } else {
           SlotsInfo thisInfo = this;
           MetaSharedLayerSerializerBase<?> serializer =
@@ -745,6 +754,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     public MetaSharedLayerSerializerBase getSlotsSerializer() {
+      ensureRuntimeGeneratedSlotsSerializer();
       return slotsSerializer;
     }
 
@@ -824,6 +834,27 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       }
     }
 
+    private void ensureRuntimeGeneratedSlotsSerializer() {
+      if (!GraalvmSupport.isGraalRuntime() || generatedSlotsSerializerClass == null) {
+        return;
+      }
+      if (generatedSlotsSerializerClass.isInstance(slotsSerializer)) {
+        return;
+      }
+      try {
+        fory.getJITContext().lock();
+        if (!generatedSlotsSerializerClass.isInstance(slotsSerializer)) {
+          MetaSharedLayerSerializerBase<?> serializer =
+              newGeneratedSerializer(
+                  fory, cls, generatedSlotsSerializerClass, layerTypeDef, layerMarkerClass);
+          slotsSerializer = serializer;
+          updateCachedLayerSerializer(serializer);
+        }
+      } finally {
+        fory.getJITContext().unlock();
+      }
+    }
+
     private boolean supportsGeneratedLayerSerializer(Fory fory, Class<?> type, TypeDef typeDef) {
       for (Descriptor descriptor :
           fory.getTypeResolver().createDescriptorGrouper(typeDef, type).getSortedDescriptors()) {
@@ -837,6 +868,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private MetaSharedLayerSerializerBase<?> createGeneratedLayerSerializer() {
       Class<? extends Serializer> serializerClass =
           CodecUtils.loadOrGenMetaSharedLayerCodecClass(cls, fory, layerTypeDef, layerMarkerClass);
+      if (GraalvmSupport.isGraalBuildtime()) {
+        GraalvmSupport.registerSerializerClass(serializerClass, fory.getConfig().getConfigHash());
+      }
       return newGeneratedSerializer(
           fory, cls, serializerClass, layerTypeDef, layerMarkerClass);
     }

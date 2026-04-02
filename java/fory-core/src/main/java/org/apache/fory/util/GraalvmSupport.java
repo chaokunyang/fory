@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.fory.builder.Generated;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializers;
@@ -153,8 +154,24 @@ public class GraalvmSupport {
     Set<Class<? extends Serializer>> serializerClasses = ConcurrentHashMap.newKeySet();
     serializerClasses.addAll(DEFAULT_SERIALIZER_CLASSES);
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
+      serializerClasses.addAll(registry.serializerClasses);
       serializerClasses.addAll(registry.serializerClassMap.values());
       serializerClasses.addAll(registry.deserializerClassMap.values());
+    }
+    return Collections.unmodifiableSet(serializerClasses);
+  }
+
+  /**
+   * Returns serializer classes that are safe to initialize at GraalVM build time.
+   *
+   * <p>Generated codec classes must remain runtime-initialized.
+   */
+  public static Set<Class<? extends Serializer>> getBuildTimeInitializedSerializerClasses() {
+    Set<Class<? extends Serializer>> serializerClasses = ConcurrentHashMap.newKeySet();
+    for (Class<? extends Serializer> serializerClass : getRegisteredSerializerClasses()) {
+      if (!Generated.class.isAssignableFrom(serializerClass)) {
+        serializerClasses.add(serializerClass);
+      }
     }
     return Collections.unmodifiableSet(serializerClasses);
   }
@@ -164,8 +181,10 @@ public class GraalvmSupport {
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
       registry.registeredClasses.clear();
       registry.proxyInterfaceLists.clear();
+      registry.serializerClasses.clear();
       registry.serializerClassMap.clear();
       registry.deserializerClassMap.clear();
+      registry.layerSerializerClassMap.clear();
       registry.resolvers.clear();
     }
   }
@@ -183,6 +202,45 @@ public class GraalvmSupport {
     GraalvmClassRegistry registry =
         GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
     registry.registeredClasses.add(cls);
+  }
+
+  /**
+   * Register a serializer class in the GraalVM registry for native image compilation.
+   *
+   * @param serializerClass the serializer class to register
+   * @param configHash the configuration hash for the Fory instance
+   */
+  public static void registerSerializerClass(
+      Class<? extends Serializer> serializerClass, int configHash) {
+    if (!IN_GRAALVM_NATIVE_IMAGE) {
+      return;
+    }
+    GraalvmClassRegistry registry =
+        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
+    registry.serializerClasses.add(serializerClass);
+  }
+
+  /**
+   * Register a generated object-stream layer serializer class in the GraalVM registry.
+   *
+   * @param typeDefId the layer TypeDef id
+   * @param serializerClass the generated serializer class
+   * @param configHash the configuration hash for the Fory instance
+   */
+  public static void registerLayerSerializerClass(
+      long typeDefId, Class<? extends Serializer> serializerClass, int configHash) {
+    if (!IN_GRAALVM_NATIVE_IMAGE) {
+      return;
+    }
+    GraalvmClassRegistry registry =
+        GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
+    registry.layerSerializerClassMap.put(typeDefId, serializerClass);
+    registry.serializerClasses.add(serializerClass);
+  }
+
+  /** Returns the generated object-stream layer serializer class for the given TypeDef id. */
+  public static Class<? extends Serializer> getLayerSerializerClass(long typeDefId, int configHash) {
+    return getClassRegistry(configHash).layerSerializerClassMap.get(typeDefId);
   }
 
   /**
@@ -339,15 +397,19 @@ public class GraalvmSupport {
   /** GraalVM class registry. */
   public static class GraalvmClassRegistry {
     public final List<TypeResolver> resolvers;
+    public final Set<Class<? extends Serializer>> serializerClasses;
     public final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
     public final Map<Long, Class<? extends Serializer>> deserializerClassMap;
+    public final Map<Long, Class<? extends Serializer>> layerSerializerClassMap;
     public final Set<Class<?>> registeredClasses;
     public final Set<List<Class<?>>> proxyInterfaceLists;
 
     private GraalvmClassRegistry() {
       resolvers = Collections.synchronizedList(new ArrayList<>());
+      serializerClasses = ConcurrentHashMap.newKeySet();
       serializerClassMap = new ConcurrentHashMap<>();
       deserializerClassMap = new ConcurrentHashMap<>();
+      layerSerializerClassMap = new ConcurrentHashMap<>();
       registeredClasses = ConcurrentHashMap.newKeySet();
       proxyInterfaceLists = ConcurrentHashMap.newKeySet();
     }

@@ -64,7 +64,7 @@ public class ForyGraalVMFeature implements Feature {
 
   @Override
   public void beforeAnalysis(BeforeAnalysisAccess access) {
-    for (Class<?> serializerClass : GraalvmSupport.getRegisteredSerializerClasses()) {
+    for (Class<?> serializerClass : GraalvmSupport.getBuildTimeInitializedSerializerClasses()) {
       RuntimeClassInitialization.initializeAtBuildTime(serializerClass);
     }
   }
@@ -107,7 +107,6 @@ public class ForyGraalVMFeature implements Feature {
 
   private void registerClass(Class<?> clazz) {
     RuntimeReflection.register(clazz);
-    RuntimeReflection.registerClassLookup(clazz.getName());
     registerFields(clazz);
     registerMethods(clazz);
     registerConstructors(clazz);
@@ -123,8 +122,6 @@ public class ForyGraalVMFeature implements Feature {
   }
 
   private void registerSerializerClass(Class<?> clazz) {
-    RuntimeReflection.register(clazz);
-    RuntimeReflection.registerClassLookup(clazz.getName());
     registerConstructors(clazz);
   }
 
@@ -139,21 +136,18 @@ public class ForyGraalVMFeature implements Feature {
   private void registerFields(Class<?> clazz) {
     for (Field field : clazz.getDeclaredFields()) {
       RuntimeReflection.register(field);
-      RuntimeReflection.registerFieldLookup(clazz, field.getName());
     }
   }
 
   private void registerMethods(Class<?> clazz) {
     for (Method method : clazz.getDeclaredMethods()) {
       RuntimeReflection.register(method);
-      RuntimeReflection.registerMethodLookup(clazz, method.getName(), method.getParameterTypes());
     }
   }
 
   private void registerConstructors(Class<?> clazz) {
     for (Constructor<?> constructor : clazz.getDeclaredConstructors()) {
       RuntimeReflection.register(constructor);
-      RuntimeReflection.registerConstructorLookup(clazz, constructor.getParameterTypes());
     }
   }
 }

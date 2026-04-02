@@ -313,12 +313,7 @@ public abstract class TypeResolver {
     if (fory.getConfig().getCompatibleMode() != CompatibleMode.COMPATIBLE) {
       return false;
     }
-    return (serializer instanceof GeneratedObjectSerializer
-        // May already switched to MetaSharedSerializer when update class info cache.
-        || serializer instanceof GeneratedMetaSharedSerializer
-        || serializer instanceof LazyInitBeanSerializer
-        || serializer instanceof ObjectSerializer
-        || serializer instanceof MetaSharedSerializer);
+    return isStructSerializer(serializer);
   }
 
   public abstract boolean isRegistered(Class<?> cls);
@@ -924,6 +919,12 @@ public abstract class TypeResolver {
                     c -> typeInfo.setSerializer(this, Serializers.newSerializer(fory, cls, c)));
       }
     }
+    if (GraalvmSupport.isGraalBuildtime()
+        && GeneratedMetaSharedSerializer.class.isAssignableFrom(sc)) {
+      getGraalvmClassRegistry().deserializerClassMap.putIfAbsent(typeDef.getId(), sc);
+      typeInfo.setSerializer(this, new MetaSharedSerializer(fory, cls, typeDef));
+      return typeInfo;
+    }
     if (sc == MetaSharedSerializer.class) {
       typeInfo.setSerializer(this, new MetaSharedSerializer(fory, cls, typeDef));
     } else {
@@ -959,6 +960,22 @@ public abstract class TypeResolver {
         || serializer instanceof LazyInitBeanSerializer
         || serializer instanceof ObjectSerializer
         || serializer instanceof MetaSharedSerializer;
+  }
+
+  protected static boolean isStructSerializerClass(
+      Class<? extends Serializer> serializerClass) {
+    return GeneratedObjectSerializer.class.isAssignableFrom(serializerClass)
+        || GeneratedMetaSharedSerializer.class.isAssignableFrom(serializerClass)
+        || LazyInitBeanSerializer.class.isAssignableFrom(serializerClass)
+        || ObjectSerializer.class.isAssignableFrom(serializerClass)
+        || MetaSharedSerializer.class.isAssignableFrom(serializerClass);
+  }
+
+  public final boolean needToWriteTypeDef(Class<? extends Serializer> serializerClass) {
+    if (fory.getConfig().getCompatibleMode() != CompatibleMode.COMPATIBLE) {
+      return false;
+    }
+    return isStructSerializerClass(serializerClass);
   }
 
   protected TypeDef readTypeDef(MemoryBuffer buffer, long header) {
@@ -1607,7 +1624,7 @@ public abstract class TypeResolver {
   final Class<? extends Serializer> getGraalvmSerializerClass(Serializer serializer) {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && serializer instanceof LazyInitBeanSerializer) {
       return ((CodegenSerializer.LazyInitBeanSerializer<?>) serializer)
-          .getGeneratedSerializerClass();
+          .loadGeneratedSerializerClass();
     }
     return serializer.getClass();
   }
@@ -1647,7 +1664,7 @@ public abstract class TypeResolver {
     return null;
   }
 
-  private Class<? extends Serializer> getMetaSharedDeserializerClassFromGraalvmRegistry(
+  protected final Class<? extends Serializer> getMetaSharedDeserializerClassFromGraalvmRegistry(
       Class<?> cls, TypeDef typeDef) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
     Class<? extends Serializer> deserializerClass =

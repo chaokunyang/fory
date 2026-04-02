@@ -71,6 +71,7 @@ import org.apache.fory.ForyCopyable;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.JITContext;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
@@ -1580,34 +1581,66 @@ public class ClassResolver extends TypeResolver {
     return serializer;
   }
 
+  private Class<? extends Serializer> getSerializerClassForGraalvmBuild(Class<?> cls) {
+    Class<? extends Serializer> serializerClass = getSerializerClass(cls, false);
+    boolean canUseCodegen =
+        serializerClass == ObjectSerializer.class
+            && fory.getConfig().isCodeGenEnabled()
+            && supportCodegenForJavaSerialization(cls);
+    if (canUseCodegen) {
+      serializerClass = loadCodegenSerializer(fory, cls);
+    }
+    return serializerClass;
+  }
+
+  private Class<? extends Serializer> getMetaSharedDeserializerClassForGraalvmBuild(
+      Class<?> cls, TypeDef typeDef) {
+    Class<? extends Serializer> serializerClass =
+        getMetaSharedDeserializerClassFromGraalvmRegistry(cls, typeDef);
+    if (serializerClass != null) {
+      return serializerClass;
+    }
+    return CodecUtils.loadOrGenMetaSharedCodecClass(fory, cls, typeDef);
+  }
+
+  private void registerGraalvmSerializerClass(Class<?> cls) {
+    TypeInfo typeInfo = classInfoMap.get(cls);
+    Preconditions.checkNotNull(typeInfo);
+    Class<? extends Serializer> serializerClass =
+        typeInfo.serializer != null
+            ? getGraalvmSerializerClass(typeInfo.serializer)
+            : getSerializerClassForGraalvmBuild(cls);
+    getGraalvmClassRegistry().serializerClassMap.put(cls, serializerClass);
+    if (metaContextShareEnabled && needToWriteTypeDef(serializerClass)) {
+      TypeDef typeDef = typeInfo.typeDef;
+      if (typeDef == null) {
+        typeDef = buildTypeDef(typeInfo, serializerClass);
+      }
+      getGraalvmClassRegistry()
+          .deserializerClassMap
+          .put(typeDef.getId(), getMetaSharedDeserializerClassForGraalvmBuild(cls, typeDef));
+      extRegistry.typeInfoByTypeDefId.remove(typeDef.getId());
+    }
+    typeInfoCache = NIL_TYPE_INFO;
+    if (RecordUtils.isRecord(cls)) {
+      RecordUtils.getRecordConstructor(cls);
+      RecordUtils.getRecordComponents(cls);
+    }
+    ObjectCreators.getObjectCreator(cls);
+  }
+
   private void createSerializer0(Class<?> cls) {
+    if (GraalvmSupport.isGraalBuildtime()) {
+      registerGraalvmSerializerClass(cls);
+      return;
+    }
     TypeInfo typeInfo = getTypeInfo(cls);
-    TypeInfo deserializationTypeInfo;
     if (metaContextShareEnabled && needToWriteTypeDef(typeInfo.serializer)) {
       TypeDef typeDef = typeInfo.typeDef;
       if (typeDef == null) {
         typeDef = buildTypeDef(typeInfo);
       }
-      deserializationTypeInfo = buildMetaSharedTypeInfo(typeDef);
-      if (deserializationTypeInfo != null && GraalvmSupport.isGraalBuildtime()) {
-        getGraalvmClassRegistry()
-            .deserializerClassMap
-            .put(typeDef.getId(), getGraalvmSerializerClass(deserializationTypeInfo.serializer));
-        typeInfoCache = NIL_TYPE_INFO;
-        extRegistry.typeInfoByTypeDefId.remove(typeDef.getId());
-      }
-    }
-    if (GraalvmSupport.isGraalBuildtime()) {
-      // Instance for generated class should be hold at graalvm runtime only.
-      getGraalvmClassRegistry()
-          .serializerClassMap
-          .put(cls, getGraalvmSerializerClass(typeInfo.serializer));
-      typeInfoCache = NIL_TYPE_INFO;
-      if (RecordUtils.isRecord(cls)) {
-        RecordUtils.getRecordConstructor(cls);
-        RecordUtils.getRecordComponents(cls);
-      }
-      ObjectCreators.getObjectCreator(cls);
+      buildMetaSharedTypeInfo(typeDef);
     }
   }
 
@@ -1682,11 +1715,13 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   protected TypeDef buildTypeDef(TypeInfo typeInfo) {
+    return buildTypeDef(typeInfo, typeInfo.serializer.getClass());
+  }
+
+  private TypeDef buildTypeDef(TypeInfo typeInfo, Class<? extends Serializer> serializerClass) {
     TypeDef typeDef;
-    Serializer<?> serializer = typeInfo.serializer;
-    Preconditions.checkArgument(
-        serializer.getClass() != UnknownClassSerializers.UnknownStructSerializer.class);
-    if (needToWriteTypeDef(serializer)) {
+    Preconditions.checkArgument(serializerClass != UnknownClassSerializers.UnknownStructSerializer.class);
+    if (needToWriteTypeDef(serializerClass)) {
       typeDef =
           cacheTypeDef(
               typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(fory, cls)));

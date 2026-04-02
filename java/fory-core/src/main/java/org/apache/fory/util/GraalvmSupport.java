@@ -132,9 +132,20 @@ public class GraalvmSupport {
   public static Set<Class<?>> getProxyInterfaces() {
     Set<Class<?>> allInterfaces = ConcurrentHashMap.newKeySet();
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
-      allInterfaces.addAll(registry.proxyInterfaces);
+      for (List<Class<?>> proxyInterfaceList : registry.proxyInterfaceLists) {
+        allInterfaces.addAll(proxyInterfaceList);
+      }
     }
     return Collections.unmodifiableSet(allInterfaces);
+  }
+
+  /** Returns all proxy interface lists registered for GraalVM native image compilation. */
+  public static Set<List<Class<?>>> getProxyInterfaceLists() {
+    Set<List<Class<?>>> allInterfaceLists = ConcurrentHashMap.newKeySet();
+    for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
+      allInterfaceLists.addAll(registry.proxyInterfaceLists);
+    }
+    return Collections.unmodifiableSet(allInterfaceLists);
   }
 
   /** Returns all serializer classes registered for GraalVM native image compilation. */
@@ -152,7 +163,7 @@ public class GraalvmSupport {
   public static void clearRegistrations() {
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
       registry.registeredClasses.clear();
-      registry.proxyInterfaces.clear();
+      registry.proxyInterfaceLists.clear();
       registry.serializerClassMap.clear();
       registry.deserializerClassMap.clear();
       registry.resolvers.clear();
@@ -181,19 +192,24 @@ public class GraalvmSupport {
    * @param configHash the configuration hash for the Fory instance
    */
   public static void registerProxyInterface(Class<?> proxyInterface, int configHash) {
+    registerProxyInterfaces(configHash, proxyInterface);
+  }
+
+  private static void registerProxyInterfaces(
+      int configHash, Class<?> proxyInterface, Class<?>... otherProxyInterfaces) {
     if (!IN_GRAALVM_NATIVE_IMAGE) {
       return;
     }
-    if (proxyInterface == null) {
-      throw new NullPointerException("Proxy interface must not be null");
-    }
-    if (!proxyInterface.isInterface()) {
-      throw new IllegalArgumentException(
-          "Proxy type must be an interface: " + proxyInterface.getName());
+    ArrayList<Class<?>> proxyInterfaceList = new ArrayList<>(otherProxyInterfaces.length + 1);
+    LinkedHashSet<Class<?>> deduplicatedInterfaces =
+        new LinkedHashSet<>(otherProxyInterfaces.length + 1);
+    addProxyInterface(proxyInterfaceList, deduplicatedInterfaces, proxyInterface);
+    for (Class<?> otherProxyInterface : otherProxyInterfaces) {
+      addProxyInterface(proxyInterfaceList, deduplicatedInterfaces, otherProxyInterface);
     }
     GraalvmClassRegistry registry =
         GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
-    registry.proxyInterfaces.add(proxyInterface);
+    registry.proxyInterfaceLists.add(Collections.unmodifiableList(proxyInterfaceList));
   }
 
   /**
@@ -203,6 +219,37 @@ public class GraalvmSupport {
    */
   public static void registerProxySupport(Class<?> proxyInterface) {
     registerProxyInterface(proxyInterface, 0);
+  }
+
+  /**
+   * Register proxy support for a GraalVM native image proxy that implements multiple interfaces.
+   *
+   * <p>The interface order must match the order used in {@code Proxy.newProxyInstance(...)}.
+   *
+   * @param proxyInterface the first proxy interface to register
+   * @param otherProxyInterfaces additional proxy interfaces to register in proxy definition order
+   */
+  public static void registerProxySupport(
+      Class<?> proxyInterface, Class<?>... otherProxyInterfaces) {
+    registerProxyInterfaces(0, proxyInterface, otherProxyInterfaces);
+  }
+
+  private static void addProxyInterface(
+      List<Class<?>> proxyInterfaceList,
+      Set<Class<?>> deduplicatedInterfaces,
+      Class<?> proxyInterface) {
+    if (proxyInterface == null) {
+      throw new NullPointerException("Proxy interface must not be null");
+    }
+    if (!proxyInterface.isInterface()) {
+      throw new IllegalArgumentException(
+          "Proxy type must be an interface: " + proxyInterface.getName());
+    }
+    if (!deduplicatedInterfaces.add(proxyInterface)) {
+      throw new IllegalArgumentException(
+          "Duplicate proxy interface: " + proxyInterface.getName());
+    }
+    proxyInterfaceList.add(proxyInterface);
   }
 
   private static void registerDefaultSerializerClass(
@@ -295,14 +342,14 @@ public class GraalvmSupport {
     public final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
     public final Map<Long, Class<? extends Serializer>> deserializerClassMap;
     public final Set<Class<?>> registeredClasses;
-    public final Set<Class<?>> proxyInterfaces;
+    public final Set<List<Class<?>>> proxyInterfaceLists;
 
     private GraalvmClassRegistry() {
       resolvers = Collections.synchronizedList(new ArrayList<>());
       serializerClassMap = new ConcurrentHashMap<>();
       deserializerClassMap = new ConcurrentHashMap<>();
       registeredClasses = ConcurrentHashMap.newKeySet();
-      proxyInterfaces = ConcurrentHashMap.newKeySet();
+      proxyInterfaceLists = ConcurrentHashMap.newKeySet();
     }
   }
 }

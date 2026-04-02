@@ -23,12 +23,14 @@ import java.io.Serializable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.record.RecordUtils;
 import org.graalvm.nativeimage.hosted.Feature;
 import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
+import org.graalvm.nativeimage.hosted.RuntimeProxyCreation;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 import org.graalvm.nativeimage.hosted.RuntimeSerialization;
 
@@ -52,6 +54,7 @@ public class ForyGraalVMFeature implements Feature {
 
   private final Set<Class<?>> processedClasses = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedProxyInterfaces = ConcurrentHashMap.newKeySet();
+  private final Set<List<Class<?>>> processedProxyInterfaceLists = ConcurrentHashMap.newKeySet();
   private final Set<Class<?>> processedSerializerClasses = ConcurrentHashMap.newKeySet();
 
   @Override
@@ -84,10 +87,15 @@ public class ForyGraalVMFeature implements Feature {
       }
     }
 
-    for (Class<?> proxyInterface : GraalvmSupport.getProxyInterfaces()) {
-      if (processedProxyInterfaces.add(proxyInterface)) {
-        RuntimeReflection.register(proxyInterface);
-        RuntimeReflection.register(proxyInterface.getMethods());
+    for (List<Class<?>> proxyInterfaceList : GraalvmSupport.getProxyInterfaceLists()) {
+      if (processedProxyInterfaceLists.add(proxyInterfaceList)) {
+        RuntimeProxyCreation.register(proxyInterfaceList.toArray(new Class<?>[0]));
+        for (Class<?> proxyInterface : proxyInterfaceList) {
+          if (processedProxyInterfaces.add(proxyInterface)) {
+            RuntimeReflection.register(proxyInterface);
+            RuntimeReflection.register(proxyInterface.getMethods());
+          }
+        }
         changed = true;
       }
     }

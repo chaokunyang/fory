@@ -139,16 +139,25 @@ public class ProxyExample {
     String execute();
   }
 
+  public interface Audited {
+    String traceId();
+  }
+
   static Fory fory;
 
   static {
     fory = Fory.builder().build();
-    // Register proxy interface for serialization
-    GraalvmSupport.registerProxySupport(MyService.class);
+    // Register the exact interface list used by Proxy.newProxyInstance(...)
+    GraalvmSupport.registerProxySupport(MyService.class, Audited.class);
     fory.ensureSerializersCompiled();
   }
 }
 ```
+
+Use `registerProxySupport(MyService.class)` for a single-interface proxy. For proxies that implement
+multiple interfaces, pass the full interface list in the same order used to create the proxy. With
+`fory-graalvm-feature` on the classpath, this replaces manual `proxy-config.json` entries for those
+registered proxy shapes.
 
 ## Thread-Safe Fory
 
@@ -165,8 +174,8 @@ public class ThreadSafeExample {
   static ThreadSafeFory fory;
 
   static {
-    fory = new ThreadLocalFory(classLoader -> {
-      Fory f = Fory.builder().build();
+    fory = new ThreadLocalFory(builder -> {
+      Fory f = builder.build();
       f.register(Foo.class);
       f.ensureSerializersCompiled();
       return f;

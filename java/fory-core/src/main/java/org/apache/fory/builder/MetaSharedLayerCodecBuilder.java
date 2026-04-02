@@ -21,7 +21,6 @@ package org.apache.fory.builder;
 
 import static org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer.SERIALIZER_FIELD_NAME;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
@@ -32,8 +31,10 @@ import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializerBase;
+import org.apache.fory.serializer.Serializers;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.ExceptionUtils;
@@ -65,8 +66,8 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
         "Class version check should be disabled when compatible mode is enabled.");
     this.layerTypeDef = layerTypeDef;
     this.layerMarkerClass = layerMarkerClass;
-    Collection<Descriptor> descriptors = layerTypeDef.getDescriptors(typeResolver, beanClass);
-    DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(descriptors, false));
+    DescriptorGrouper grouper =
+        typeResolver(r -> r.createDescriptorGrouper(layerTypeDef, beanClass));
     objectCodecOptimizer = new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
   }
 
@@ -130,27 +131,22 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static MetaSharedLayerSerializerBase setCodegenSerializer(
       Fory fory, Class<?> cls, GeneratedMetaSharedLayerSerializer s) {
-    // In native-image mode, including build time, do not rely on the cached layer bootstrap
-    // context. We only populate that cache on the regular JVM path, so native-image execution
-    // must resolve through the type resolver instead.
-    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+    if (GraalvmSupport.isGraalRuntime()) {
       return (MetaSharedLayerSerializerBase) typeResolver(fory, r -> r.getSerializer(s.getType()));
     }
-    // Layer serializers don't have a generic no-arg/newSerializer construction path. The
-    // outer ObjectStreamSerializer JIT step already resolved the layer TypeDef and marker, so
-    // generated serializers look up that cached context here and bootstrap the interpreter
-    // delegate synchronously in their constructor.
-    CodecUtils.MetaSharedLayerCodecContext context =
-        CodecUtils.getMetaSharedLayerCodecContext(s.getClass());
-    Preconditions.checkNotNull(
-        context,
-        "Missing layer codec context for generated serializer "
-            + s.getClass()
-            + "; loadOrGenMetaSharedLayerCodecClass should cache it before serializer"
-            + " instantiation.");
-    s.serializer =
-        new MetaSharedLayerSerializer(fory, cls, context.layerTypeDef, context.layerMarkerClass);
-    return s.serializer;
+    // This method hold jit lock, so create jit serializer async to avoid block serialization.
+    // Use MetaSharedLayerSerializer as fallback since it's compatible with
+    // MetaSharedLayerSerializerBase
+    Class serializerClass =
+        fory.getJITContext()
+            .registerSerializerJITCallback(
+                () -> MetaSharedLayerSerializer.class,
+                () -> CodegenSerializer.loadCodegenSerializer(fory, s.getType()),
+                c ->
+                    s.serializer =
+                        (MetaSharedLayerSerializerBase)
+                            Serializers.newSerializer(fory, s.getType(), c));
+    return (MetaSharedLayerSerializerBase) Serializers.newSerializer(fory, cls, serializerClass);
   }
 
   @Override

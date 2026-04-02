@@ -297,7 +297,9 @@ public class ClassResolver extends TypeResolver {
     registerDefaultClasses();
     addDefaultSerializers();
     shimDispatcher.initialize();
-    registerClassesForGraalvmReflection();
+    if (GraalvmSupport.isGraalBuildtime()) {
+      GraalvmSupport.registerDefaultSerializerClasses(fory.getConfig().getConfigHash());
+    }
     if (GraalvmSupport.isGraalBuildtime()) {
       classInfoMap.forEach(
           (cls, classInfo) -> {
@@ -970,14 +972,14 @@ public class ClassResolver extends TypeResolver {
    */
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
     checkRegisterAllowed();
-    rejectRawObjectStreamRegistration(type, serializerClass);
+    checkSerializerRegistration(type, serializerClass);
     registerSerializer(type, Serializers.newSerializer(fory, type, serializerClass));
   }
 
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
     checkRegisterAllowed();
-    rejectRawObjectStreamRegistration(type, serializer);
+    checkSerializerRegistration(type, serializer.getClass());
     if (!serializer.getClass().getPackage().getName().startsWith("org.apache.fory")) {
       SerializationUtils.validate(type, serializer.getClass());
     }
@@ -1030,33 +1032,16 @@ public class ClassResolver extends TypeResolver {
     GraalvmSupport.registerClass(cls, fory.getConfig().getConfigHash());
   }
 
-  private void registerClassesForGraalvmReflection() {
-    if (!GraalvmSupport.isGraalBuildtime()) {
+  private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
+    if (!ObjectStreamSerializer.class.isAssignableFrom(serializerClass)) {
       return;
     }
-    GraalvmSupport.registerDefaultSerializerClasses(fory.getConfig().getConfigHash());
-  }
-
-  private void rejectRawObjectStreamRegistration(
-      Class<?> type, Class<? extends Serializer> serializerClass) {
-    if (ObjectStreamSerializer.class.isAssignableFrom(serializerClass)) {
-      rejectRawObjectStreamRegistration(type);
-    }
-  }
-
-  private void rejectRawObjectStreamRegistration(Class<?> type, Serializer<?> serializer) {
-    if (serializer instanceof ObjectStreamSerializer) {
-      rejectRawObjectStreamRegistration(type);
-    }
-  }
-
-  private void rejectRawObjectStreamRegistration(Class<?> type) {
     if (isCollection(type)) {
       throw new IllegalArgumentException(
           String.format(
-              "Raw ObjectStreamSerializer is not supported for collection type %s. "
-                  + "Use %s instead.",
-              type.getName(), CollectionSerializers.JDKCompatibleCollectionSerializer.class.getName()));
+              "Raw ObjectStreamSerializer is not supported for collection type %s. Use %s instead.",
+              type.getName(),
+              CollectionSerializers.JDKCompatibleCollectionSerializer.class.getName()));
     }
     if (isMap(type)) {
       throw new IllegalArgumentException(

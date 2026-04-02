@@ -1561,8 +1561,9 @@ public abstract class TypeResolver {
     for (TypeInfo typeInfo : typeIdToTypeInfo) {
       clearGraalvmTypeInfoSerializer(typeInfo);
     }
-    userTypeIdToTypeInfo.forEachValue(this::clearGraalvmTypeInfoSerializer);
-    extRegistry.typeInfoByTypeDefId.forEachValue(this::clearGraalvmTypeInfoSerializer);
+    userTypeIdToTypeInfo.forEach((id, typeInfo) -> clearGraalvmTypeInfoSerializer(typeInfo));
+    extRegistry.typeInfoByTypeDefId.forEach(
+        (typeDefId, typeInfo) -> clearGraalvmTypeInfoSerializer(typeInfo));
   }
 
   // CHECKSTYLE.OFF:MethodName

@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.fory.builder.Generated;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializers;
@@ -151,21 +150,6 @@ public class GraalvmSupport {
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
       serializerClasses.addAll(registry.serializerClassMap.values());
       serializerClasses.addAll(registry.deserializerClassMap.values());
-    }
-    return Collections.unmodifiableSet(serializerClasses);
-  }
-
-  /**
-   * Returns serializer classes that are safe to initialize at GraalVM build time.
-   *
-   * <p>Generated codec classes must remain runtime-initialized.
-   */
-  public static Set<Class<? extends Serializer>> getBuildTimeInitializedSerializerClasses() {
-    Set<Class<? extends Serializer>> serializerClasses = ConcurrentHashMap.newKeySet();
-    for (Class<? extends Serializer> serializerClass : getRegisteredSerializerClasses()) {
-      if (!Generated.class.isAssignableFrom(serializerClass)) {
-        serializerClasses.add(serializerClass);
-      }
     }
     return Collections.unmodifiableSet(serializerClasses);
   }

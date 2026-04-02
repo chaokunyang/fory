@@ -64,7 +64,7 @@ public class ForyGraalVMFeature implements Feature {
 
   @Override
   public void beforeAnalysis(BeforeAnalysisAccess access) {
-    for (Class<?> serializerClass : GraalvmSupport.getBuildTimeInitializedSerializerClasses()) {
+    for (Class<?> serializerClass : GraalvmSupport.getRegisteredSerializerClasses()) {
       RuntimeClassInitialization.initializeAtBuildTime(serializerClass);
     }
   }

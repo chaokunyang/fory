@@ -1311,6 +1311,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test(timeOut = 60000)
   public void testAsyncCompilationTreeSetSubclassJDKCompatibleCollectionSerializer()
       throws InterruptedException {
+    warmUpAsyncTreeSetSubclassLayerCodegen();
     Fory fory = newCompatibleAsyncObjectStreamFory(true);
     fory.registerSerializer(
         AsyncTreeSetSubclass.class,
@@ -1550,6 +1551,19 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
         .withCompatibleMode(CompatibleMode.COMPATIBLE)
         .withAsyncCompilation(asyncCompilation)
         .build();
+  }
+
+  private void warmUpAsyncTreeSetSubclassLayerCodegen() throws InterruptedException {
+    Fory fory = newCompatibleAsyncObjectStreamFory(true);
+    fory.registerSerializer(
+        AsyncTreeSetSubclass.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(
+            fory, AsyncTreeSetSubclass.class));
+    AsyncTreeSetSubclass values = new AsyncTreeSetSubclass();
+    values.add("one");
+    values.add("two");
+    serDeCheckSerializer(fory, values, "JDKCompatibleCollectionSerializer");
+    waitForGeneratedLayerSerializer(fory, AsyncTreeSetSubclass.class);
   }
 
   private void waitForGeneratedLayerSerializer(Fory fory, Class<?> type)

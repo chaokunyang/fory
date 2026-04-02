@@ -44,6 +44,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.CodecUtils;
+import org.apache.fory.builder.Generated;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectArray;
@@ -689,12 +690,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
                   .registerSerializerJITCallback(
                       () -> thisInfo.slotsSerializer,
                       thisInfo::createGeneratedLayerSerializer,
-                      generatedSerializer -> {
-                        thisInfo.slotsSerializer = generatedSerializer;
-                        thisInfo.updateCachedLayerSerializer(generatedSerializer);
-                      });
-          this.slotsSerializer = serializer;
-          updateCachedLayerSerializer(serializer);
+                      thisInfo::publishSlotsSerializer);
+          publishSlotsSerializer(serializer);
         }
       }
 
@@ -831,6 +828,27 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       TypeInfo typeInfo = typeDefIdToTypeInfo.get(layerTypeDef.getId());
       if (typeInfo != null) {
         typeInfo.setSerializer(serializer);
+      }
+    }
+
+    /**
+     * Publish the best known serializer for this layer under the JIT lock.
+     *
+     * <p>When a generated layer class is already cached, the async callback can publish the
+     * generated serializer immediately after {@code registerSerializerJITCallback} releases the
+     * lock. The constructor still needs to publish the returned placeholder/generator result for
+     * synchronous paths, but it must not overwrite an already-published generated serializer with
+     * the stale interpreter placeholder.
+     */
+    private void publishSlotsSerializer(MetaSharedLayerSerializerBase<?> serializer) {
+      try {
+        fory.getJITContext().lock();
+        if (serializer instanceof Generated || !(slotsSerializer instanceof Generated)) {
+          slotsSerializer = serializer;
+          updateCachedLayerSerializer(serializer);
+        }
+      } finally {
+        fory.getJITContext().unlock();
       }
     }
 

@@ -316,6 +316,13 @@ public abstract class TypeResolver {
     return isStructSerializer(serializer);
   }
 
+  public final boolean needToWriteTypeDef(Class<? extends Serializer> serializerClass) {
+    if (fory.getConfig().getCompatibleMode() != CompatibleMode.COMPATIBLE) {
+      return false;
+    }
+    return isStructSerializerClass(serializerClass);
+  }
+
   public abstract boolean isRegistered(Class<?> cls);
 
   public abstract boolean isRegisteredById(Class<?> cls);
@@ -969,13 +976,6 @@ public abstract class TypeResolver {
         || LazyInitBeanSerializer.class.isAssignableFrom(serializerClass)
         || ObjectSerializer.class.isAssignableFrom(serializerClass)
         || MetaSharedSerializer.class.isAssignableFrom(serializerClass);
-  }
-
-  public final boolean needToWriteTypeDef(Class<? extends Serializer> serializerClass) {
-    if (fory.getConfig().getCompatibleMode() != CompatibleMode.COMPATIBLE) {
-      return false;
-    }
-    return isStructSerializerClass(serializerClass);
   }
 
   protected TypeDef readTypeDef(MemoryBuffer buffer, long header) {

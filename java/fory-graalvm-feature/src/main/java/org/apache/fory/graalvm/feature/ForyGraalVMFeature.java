@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.record.RecordUtils;
 import org.graalvm.nativeimage.hosted.Feature;
+import org.graalvm.nativeimage.hosted.RuntimeClassInitialization;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
 import org.graalvm.nativeimage.hosted.RuntimeSerialization;
 
@@ -56,6 +57,13 @@ public class ForyGraalVMFeature implements Feature {
   @Override
   public String getDescription() {
     return "Registers Fory serialization classes and proxy interfaces for GraalVM native image";
+  }
+
+  @Override
+  public void beforeAnalysis(BeforeAnalysisAccess access) {
+    for (Class<?> serializerClass : GraalvmSupport.getRegisteredSerializerClasses()) {
+      RuntimeClassInitialization.initializeAtBuildTime(serializerClass);
+    }
   }
 
   @Override

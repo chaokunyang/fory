@@ -107,9 +107,7 @@ public class ForyGraalVMFeature implements Feature {
 
   private void registerClass(Class<?> clazz) {
     RuntimeReflection.register(clazz);
-    registerFields(clazz);
-    registerMethods(clazz);
-    registerConstructors(clazz);
+    registerHierarchyMembers(clazz);
     if (Serializable.class.isAssignableFrom(clazz)) {
       registerSerializableHierarchy(clazz);
     }
@@ -118,6 +116,17 @@ public class ForyGraalVMFeature implements Feature {
       RuntimeReflection.registerAllRecordComponents(clazz);
     } else if (GraalvmSupport.needReflectionRegisterForCreation(clazz)) {
       RuntimeReflection.registerForReflectiveInstantiation(clazz);
+    }
+  }
+
+  private void registerHierarchyMembers(Class<?> clazz) {
+    for (Class<?> current = clazz;
+        current != null && current != Object.class;
+        current = current.getSuperclass()) {
+      RuntimeReflection.register(current);
+      registerFields(current);
+      registerMethods(current);
+      registerConstructors(current);
     }
   }
 

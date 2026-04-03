@@ -76,7 +76,8 @@ public class ExceptionExample {
     Preconditions.checkArgument(copy.tags.equals(value.tags));
     Preconditions.checkArgument(copy.getCause() == null);
     Preconditions.checkArgument(
-        ReflectionUtils.getObjectFieldValue(copy, ReflectionUtils.getField(Throwable.class, "cause"))
+        ReflectionUtils.getObjectFieldValue(
+                copy, ReflectionUtils.getField(Throwable.class, "cause"))
             == copy);
   }
 

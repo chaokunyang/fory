@@ -593,9 +593,13 @@ jobs:
       - name: Cache Bazel repository cache
         uses: actions/cache@v4
         with:
+          # setup-bazel uses ~/.bazel on GitHub-hosted runners.
           path: |
+            ~/.bazel/external
             ~/.cache/bazel/_bazel_*/*/external
             ~/Library/Caches/bazel/_bazel_*/*/external
+            ~/Library/Caches/bazel/external
+            C:\users\runneradmin\.bazel\external
             C:\users\runneradmin\_bazel_runneradmin\*/external
           key: bazel-repo-${{ runner.os }}-${{ runner.arch }}-py311-${{ hashFiles('WORKSPACE', '.bazelrc', 'bazel/**') }}
           restore-keys: |
@@ -603,9 +607,12 @@ jobs:
       - name: Cache Bazel build outputs
         uses: actions/cache@v4
         with:
+          # setup-bazel uses ~/.bazel on GitHub-hosted runners.
           path: |
+            ~/.bazel
             ~/.cache/bazel
             ~/Library/Caches/bazel
+            C:\users\runneradmin\.bazel
             C:\users\runneradmin\_bazel_runneradmin
           key: bazel-build-cpp-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('cpp/**', 'BUILD', 'WORKSPACE') }}
       - name: Run C++ CI with Bazel
@@ -641,7 +648,9 @@ jobs:
       - name: Cache Bazel repository cache
         uses: actions/cache@v4
         with:
+          # setup-bazel uses ~/.bazel on GitHub-hosted runners.
           path: |
+            ~/.bazel/external
             ~/.cache/bazel/_bazel_*/*/external
           key: bazel-repo-sanitizer-${{ runner.os }}-${{ runner.arch }}-py311-${{ hashFiles('WORKSPACE', '.bazelrc', 'bazel/**') }}
           restore-keys: |
@@ -649,7 +658,10 @@ jobs:
       - name: Cache Bazel build outputs
         uses: actions/cache@v4
         with:
-          path: ~/.cache/bazel
+          # setup-bazel uses ~/.bazel on GitHub-hosted runners.
+          path: |
+            ~/.bazel
+            ~/.cache/bazel
           key: bazel-build-cpp-sanitizer-${{ runner.os }}-${{ runner.arch }}-${{ matrix.sanitizer }}-${{ hashFiles('cpp/**', 'BUILD', 'WORKSPACE', '.bazelrc') }}
       - name: Install Bazel and C++ deps
         run: python ./ci/run_ci.py cpp --install-deps-only

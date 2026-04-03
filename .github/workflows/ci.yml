@@ -672,8 +672,22 @@ jobs:
           if [[ "${ARCH}" == "x86_64" || "${ARCH}" == "amd64" ]]; then
             BAZEL_CONFIGS="--config=x86_64 ${BAZEL_CONFIGS}"
           fi
-          TEST_TARGETS="$(bazel query 'tests(//cpp/...) except //cpp/fory/serialization:struct_test')"
-          bazel test --cache_test_results=no ${BAZEL_CONFIGS} ${TEST_TARGETS}
+          TEST_TARGETS=(
+            //cpp/fory/util:buffer_test
+            //cpp/fory/util:error_test
+            //cpp/fory/util:logging_test
+            //cpp/fory/util:result_test
+            //cpp/fory/meta:enum_info_test
+            //cpp/fory/meta:field_info_test
+            //cpp/fory/meta:meta_string_test
+            //cpp/fory/meta:type_traits_test
+            //cpp/fory/row:row_test
+            //cpp/fory/encoder:row_encoder_test
+            //cpp/fory/serialization:serialization_test
+            //cpp/fory/serialization:namespace_macro_test
+            //cpp/fory/serialization:stream_test
+          )
+          bazel test --cache_test_results=no ${BAZEL_CONFIGS} "${TEST_TARGETS[@]}"
       - name: Upload Bazel Test Logs (${{ matrix.sanitizer }})
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

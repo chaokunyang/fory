@@ -659,7 +659,11 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   public TypeInfo getTypeInfo(Class<?> cls) {
-    return buildTypeInfo(cls);
+    TypeInfo typeInfo = classInfoMap.get(cls);
+    if (typeInfo == null || typeInfo.serializer == null) {
+      typeInfo = buildTypeInfo(cls);
+    }
+    return typeInfo;
   }
 
   @Override
@@ -673,7 +677,10 @@ public class XtypeResolver extends TypeResolver {
   public TypeInfo getTypeInfo(Class<?> cls, TypeInfoHolder classInfoHolder) {
     TypeInfo typeInfo = classInfoHolder.typeInfo;
     if (typeInfo.getCls() != cls) {
-      typeInfo = buildTypeInfo(cls);
+      typeInfo = classInfoMap.get(cls);
+      if (typeInfo == null || typeInfo.serializer == null) {
+        typeInfo = buildTypeInfo(cls);
+      }
       classInfoHolder.typeInfo = typeInfo;
     }
     assert typeInfo.serializer != null;

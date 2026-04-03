@@ -111,7 +111,6 @@ import org.apache.fory.serializer.LambdaSerializer;
 import org.apache.fory.serializer.LocaleSerializer;
 import org.apache.fory.serializer.NoneSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
-import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.OptionalSerializers;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
@@ -127,10 +126,12 @@ import org.apache.fory.serializer.UnknownClass.UnknownStruct;
 import org.apache.fory.serializer.UnknownClassSerializers;
 import org.apache.fory.serializer.UnsignedSerializers;
 import org.apache.fory.serializer.collection.ChildContainerSerializers;
+import org.apache.fory.serializer.collection.CollectionLikeSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializer;
 import org.apache.fory.serializer.collection.CollectionSerializers;
 import org.apache.fory.serializer.collection.GuavaCollectionSerializers;
 import org.apache.fory.serializer.collection.ImmutableCollectionSerializers;
+import org.apache.fory.serializer.collection.MapLikeSerializer;
 import org.apache.fory.serializer.collection.MapSerializer;
 import org.apache.fory.serializer.collection.MapSerializers;
 import org.apache.fory.serializer.collection.PrimitiveListSerializers;
@@ -1027,21 +1028,25 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
-    if (!ObjectStreamSerializer.class.isAssignableFrom(serializerClass)) {
-      return;
-    }
     if (isCollection(type)) {
-      throw new IllegalArgumentException(
-          String.format(
-              "Raw ObjectStreamSerializer is not supported for collection type %s. Use %s instead.",
-              type.getName(),
-              CollectionSerializers.JDKCompatibleCollectionSerializer.class.getName()));
+      if (!CollectionLikeSerializer.class.isAssignableFrom(serializerClass)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Serializer %s is not supported for collection type %s. Use %s instead.",
+                serializerClass.getName(),
+                type.getName(),
+                CollectionSerializers.JDKCompatibleCollectionSerializer.class.getName()));
+      }
     }
     if (isMap(type)) {
-      throw new IllegalArgumentException(
-          String.format(
-              "Raw ObjectStreamSerializer is not supported for map type %s. Use %s instead.",
-              type.getName(), MapSerializers.JDKCompatibleMapSerializer.class.getName()));
+      if (!MapLikeSerializer.class.isAssignableFrom(serializerClass)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Serializer %s is not supported for map type %s. Use %s instead.",
+                serializerClass.getName(),
+                type.getName(),
+                MapSerializers.JDKCompatibleMapSerializer.class.getName()));
+      }
     }
   }
 

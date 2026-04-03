@@ -41,7 +41,6 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -392,7 +391,13 @@ public class MapSerializers {
           !fory.isCrossLanguage(),
           "Fory cross-language default map serializer should use " + MapSerializer.class);
       fory.getTypeResolver().setSerializer(cls, this);
-      dataSerializer = Serializers.newSerializer(fory, cls, ObjectSerializer.class);
+      Class<? extends Serializer> serializerClass =
+          ((ClassResolver) fory.getTypeResolver())
+              .getObjectSerializerClass(
+                  cls, sc -> dataSerializer = Serializers.newSerializer(fory, cls, sc));
+      dataSerializer = Serializers.newSerializer(fory, cls, serializerClass);
+      // No need to set object serializer to this, it will be set in class resolver later.
+      // fory.getTypeResolver().setSerializer(cls, this);
     }
 
     @Override

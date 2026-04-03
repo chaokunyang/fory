@@ -59,7 +59,6 @@ import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.SerializerUnregisteredException;
 import org.apache.fory.logging.Logger;
@@ -310,14 +309,14 @@ public abstract class TypeResolver {
   }
 
   public final boolean needToWriteTypeDef(Serializer serializer) {
-    if (fory.getConfig().getCompatibleMode() != CompatibleMode.COMPATIBLE) {
+    if (!fory.getConfig().isCompatible()) {
       return false;
     }
     return isStructSerializer(serializer);
   }
 
   public final boolean needToWriteTypeDef(Class<? extends Serializer> serializerClass) {
-    if (fory.getConfig().getCompatibleMode() != CompatibleMode.COMPATIBLE) {
+    if (!fory.getConfig().isCompatible()) {
       return false;
     }
     return isStructSerializerClass(serializerClass);
@@ -1172,30 +1171,11 @@ public abstract class TypeResolver {
       } else {
         try {
           extRegistry.getClassCtx.add(cls);
-          Class<? extends Serializer> sc;
-          switch (fory.getCompatibleMode()) {
-            case SCHEMA_CONSISTENT:
-              sc =
-                  fory.getJITContext()
-                      .registerSerializerJITCallback(
-                          () -> ObjectSerializer.class,
-                          () -> CodegenSerializer.loadCodegenSerializer(fory, cls),
-                          callback);
-              return sc;
-            case COMPATIBLE:
-              // Always use ObjectSerializer for compatible mode.
-              // Class definition will be sent to peer to create serializer for deserialization.
-              sc =
-                  fory.getJITContext()
-                      .registerSerializerJITCallback(
-                          () -> ObjectSerializer.class,
-                          () -> CodegenSerializer.loadCodegenSerializer(fory, cls),
-                          callback);
-              return sc;
-            default:
-              throw new UnsupportedOperationException(
-                  String.format("Unsupported mode %s", fory.getCompatibleMode()));
-          }
+          return fory.getJITContext()
+              .registerSerializerJITCallback(
+                  () -> ObjectSerializer.class,
+                  () -> CodegenSerializer.loadCodegenSerializer(fory, cls),
+                  callback);
         } finally {
           extRegistry.getClassCtx.remove(cls);
         }

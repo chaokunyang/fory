@@ -78,7 +78,7 @@ public final class ForyBuilder {
   boolean compressLongArray = false;
   boolean compressString = false;
   Boolean writeNumUtf16BytesForUtf8Encoding;
-  CompatibleMode compatibleMode = CompatibleMode.SCHEMA_CONSISTENT;
+  boolean compatible = false;
   boolean checkJdkClassSerializable = true;
   Class<? extends Serializer> defaultJDKStreamSerializerType = ObjectStreamSerializer.class;
   boolean requireClassRegistration = true;
@@ -290,13 +290,24 @@ public final class ForyBuilder {
    * @see CompatibleMode
    */
   public ForyBuilder withCompatibleMode(CompatibleMode compatibleMode) {
-    this.compatibleMode = compatibleMode;
+    CompatibleMode mode = Objects.requireNonNull(compatibleMode);
+    switch (mode) {
+      case SCHEMA_CONSISTENT:
+        this.compatible = false;
+        break;
+      case COMPATIBLE:
+        this.compatible = true;
+        break;
+      default:
+        throw new UnsupportedOperationException(String.format("Unsupported mode %s", mode));
+    }
     recordAction(b -> b.withCompatibleMode(compatibleMode));
     return this;
   }
 
+  /** Whether class schema compatibility mode is enabled. */
   public ForyBuilder withCompatible(boolean compatible) {
-    this.compatibleMode = compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT;
+    this.compatible = compatible;
     recordAction(b -> b.withCompatible(compatible));
     return this;
   }
@@ -307,7 +318,7 @@ public final class ForyBuilder {
    * class won't evolve.
    */
   public ForyBuilder withClassVersionCheck(boolean checkClassVersion) {
-    if (xlang && compatibleMode == CompatibleMode.SCHEMA_CONSISTENT && !checkClassVersion) {
+    if (xlang && !compatible && !checkClassVersion) {
       throw new IllegalArgumentException(
           "XLANG Schema consistent mode must enable class version check");
     }
@@ -525,7 +536,7 @@ public final class ForyBuilder {
     if (writeNumUtf16BytesForUtf8Encoding == null) {
       writeNumUtf16BytesForUtf8Encoding = !xlang;
     }
-    if (compatibleMode == CompatibleMode.COMPATIBLE) {
+    if (compatible) {
       checkClassVersion = false;
       if (deserializeUnknownClass == null) {
         deserializeUnknownClass = true;
@@ -547,7 +558,9 @@ public final class ForyBuilder {
         deserializeUnknownClass = false;
       }
       if (scopedMetaShareEnabled != null && scopedMetaShareEnabled) {
-        LOG.warn("Scoped meta share is for CompatibleMode only, disable it for {}", compatibleMode);
+        LOG.warn(
+            "Scoped meta share is for CompatibleMode only, disable it for {}",
+            CompatibleMode.SCHEMA_CONSISTENT);
       }
       scopedMetaShareEnabled = false;
       if (metaShareEnabled == null) {

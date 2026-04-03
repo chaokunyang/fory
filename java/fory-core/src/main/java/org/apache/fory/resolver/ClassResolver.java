@@ -1363,30 +1363,9 @@ public class ClassResolver extends TypeResolver {
       } else {
         try {
           extRegistry.getClassCtx.add(cls);
-          Class<? extends Serializer> sc;
-          switch (fory.getCompatibleMode()) {
-            case SCHEMA_CONSISTENT:
-              sc =
-                  fory.getJITContext()
-                      .registerSerializerJITCallback(
-                          () -> ObjectSerializer.class,
-                          () -> loadCodegenSerializer(fory, cls),
-                          callback);
-              return sc;
-            case COMPATIBLE:
-              // Always use ObjectSerializer for compatible mode.
-              // Class definition will be sent to peer to create serializer for deserialization.
-              sc =
-                  fory.getJITContext()
-                      .registerSerializerJITCallback(
-                          () -> ObjectSerializer.class,
-                          () -> loadCodegenSerializer(fory, cls),
-                          callback);
-              return sc;
-            default:
-              throw new UnsupportedOperationException(
-                  String.format("Unsupported mode %s", fory.getCompatibleMode()));
-          }
+          return fory.getJITContext()
+              .registerSerializerJITCallback(
+                  () -> ObjectSerializer.class, () -> loadCodegenSerializer(fory, cls), callback);
         } finally {
           extRegistry.getClassCtx.remove(cls);
         }

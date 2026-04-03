@@ -1682,7 +1682,6 @@ public class ClassResolver extends TypeResolver {
 
   private boolean isSecure(Class<?> cls) {
     if (isRegisteredByNameLocalOrFrozen(cls)
-        || isJdkThrowableSupportType(cls)
         || hasGraalvmSerializerClass(cls)
         || shimDispatcher.contains(cls)) {
       return true;
@@ -1706,19 +1705,6 @@ public class ClassResolver extends TypeResolver {
     } else {
       return extRegistry.typeChecker.checkType(this, cls.getName());
     }
-  }
-
-  private static boolean isJdkThrowableSupportType(Class<?> cls) {
-    if (cls == StackTraceElement.class) {
-      return true;
-    }
-    if (!Throwable.class.isAssignableFrom(cls)) {
-      return false;
-    }
-    String className = cls.getName();
-    return className.startsWith("java.")
-        || className.startsWith("javax.")
-        || className.startsWith("jdk.");
   }
 
   /**

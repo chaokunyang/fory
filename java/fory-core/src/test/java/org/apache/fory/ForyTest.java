@@ -233,7 +233,12 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testSerializeException() {
-    Fory fory = Fory.builder().withLanguage(Language.JAVA).withRefTracking(true).build();
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withRefTracking(true)
+            .requireClassRegistration(true)
+            .build();
     Exception value = new Exception("test-serialize-exception");
     Exception copy = serDe(fory, value);
     Assert.assertEquals(

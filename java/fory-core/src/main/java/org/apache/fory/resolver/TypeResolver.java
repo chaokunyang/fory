@@ -1544,30 +1544,6 @@ public abstract class TypeResolver {
 
   public void resetWrite() {}
 
-  protected final TypeInfo ensureGraalvmRuntimeSerializer(TypeInfo typeInfo) {
-    if (typeInfo != null && typeInfo.serializer == null && GraalvmSupport.isGraalRuntime()) {
-      Class<?> serializerType = typeInfo.getCls();
-      if (serializerType != null
-          && !ReflectionUtils.isAbstract(serializerType)
-          && !serializerType.isInterface()) {
-        Class<? extends Serializer> serializerClass =
-            getSerializerClassFromGraalvmRegistry(serializerType);
-        if (serializerClass != null) {
-          boolean added = extRegistry.getClassCtx.add(serializerType);
-          try {
-            typeInfo.setSerializer(
-                this, Serializers.newSerializer(fory, serializerType, serializerClass));
-          } finally {
-            if (added) {
-              extRegistry.getClassCtx.remove(serializerType);
-            }
-          }
-        }
-      }
-    }
-    return typeInfo;
-  }
-
   protected final void clearGraalvmTypeInfoSerializer(TypeInfo typeInfo) {
     if (typeInfo != null
         && typeInfo.serializer != null
@@ -1584,6 +1560,27 @@ public abstract class TypeResolver {
     userTypeIdToTypeInfo.forEach((id, typeInfo) -> clearGraalvmTypeInfoSerializer(typeInfo));
     extRegistry.typeInfoByTypeDefId.forEach(
         (typeDefId, typeInfo) -> clearGraalvmTypeInfoSerializer(typeInfo));
+  }
+
+  protected final void registerGraalvmClass(Class<?> cls) {
+    GraalvmSupport.registerClass(cls);
+  }
+
+  protected final boolean hasGraalvmSerializerClass(Class<?> cls) {
+    if (!GraalvmSupport.isGraalRuntime()) {
+      return false;
+    }
+    GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
+    if (registry.serializerClassMap.containsKey(cls)) {
+      return true;
+    }
+    if (!cls.isEnum() && Enum.class.isAssignableFrom(cls) && cls != Enum.class) {
+      Class<?> enclosingClass = cls.getEnclosingClass();
+      return enclosingClass != null
+          && enclosingClass.isEnum()
+          && registry.serializerClassMap.containsKey(enclosingClass);
+    }
+    return false;
   }
 
   // CHECKSTYLE.OFF:MethodName

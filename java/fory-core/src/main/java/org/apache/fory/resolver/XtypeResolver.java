@@ -188,7 +188,7 @@ public class XtypeResolver extends TypeResolver {
     TypeInfo typeInfo = classInfoMap.get(type);
     if (type.isArray()) {
       buildTypeInfo(type);
-      GraalvmSupport.registerClass(type);
+      registerGraalvmClass(type);
       return;
     }
     Serializer<?> serializer = null;
@@ -292,7 +292,7 @@ public class XtypeResolver extends TypeResolver {
     String qualifiedName = qualifiedName(namespace, typeName);
     qualifiedType2TypeInfo.put(qualifiedName, typeInfo);
     extRegistry.registeredClasses.put(qualifiedName, type);
-    GraalvmSupport.registerClass(type);
+    registerGraalvmClass(type);
     if (serializer == null) {
       if (type.isEnum()) {
         typeInfo.serializer = new EnumSerializer(fory, (Class<Enum>) type);
@@ -681,9 +681,16 @@ public class XtypeResolver extends TypeResolver {
   }
 
   private TypeInfo buildTypeInfo(Class<?> cls) {
-    TypeInfo typeInfo = ensureGraalvmRuntimeSerializer(classInfoMap.get(cls));
-    if (typeInfo != null) {
+    TypeInfo typeInfo = classInfoMap.get(cls);
+    if (typeInfo != null && typeInfo.serializer != null) {
       return typeInfo;
+    }
+    if (typeInfo != null) {
+      Class<? extends Serializer> serializerClass = getSerializerClassFromGraalvmRegistry(cls);
+      if (serializerClass != null) {
+        typeInfo.setSerializer(this, Serializers.newSerializer(fory, cls, serializerClass));
+        return typeInfo;
+      }
     }
     Serializer serializer;
     int typeId;
@@ -1267,7 +1274,7 @@ public class XtypeResolver extends TypeResolver {
   public void ensureSerializersCompiled() {
     classInfoMap.forEach(
         (cls, classInfo) -> {
-          GraalvmSupport.registerClass(cls);
+          registerGraalvmClass(cls);
           if (classInfo.serializer != null) {
             // Trigger serializer initialization and resolution for deferred serializers
             if (classInfo.serializer

@@ -491,7 +491,7 @@ public class ClassResolver extends TypeResolver {
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
-    GraalvmSupport.registerClass(cls);
+    registerGraalvmClass(cls);
   }
 
   @Override
@@ -511,7 +511,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    GraalvmSupport.registerClass(cls);
+    registerGraalvmClass(cls);
   }
 
   @Override
@@ -538,7 +538,7 @@ public class ClassResolver extends TypeResolver {
     compositeNameBytes2TypeInfo.put(
         new TypeNameBytes(nsBytes.encoded.hash, nameBytes.encoded.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
-    GraalvmSupport.registerClass(cls);
+    registerGraalvmClass(cls);
   }
 
   /**
@@ -611,7 +611,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    GraalvmSupport.registerClass(cls);
+    registerGraalvmClass(cls);
   }
 
   private void registerUserImpl(Class<?> cls, int userId) {
@@ -628,7 +628,7 @@ public class ClassResolver extends TypeResolver {
     }
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
-    GraalvmSupport.registerClass(cls);
+    registerGraalvmClass(cls);
   }
 
   private int buildUserTypeId(Class<?> cls, Serializer<?> serializer) {
@@ -1395,7 +1395,7 @@ public class ClassResolver extends TypeResolver {
   // Invoked by fory JIT.
   @Override
   public TypeInfo getTypeInfo(Class<?> cls) {
-    TypeInfo typeInfo = ensureGraalvmRuntimeSerializer(classInfoMap.get(cls));
+    TypeInfo typeInfo = classInfoMap.get(cls);
     if (typeInfo == null || typeInfo.serializer == null) {
       addSerializer(cls, createSerializer(cls));
       typeInfo = classInfoMap.get(cls);
@@ -1404,7 +1404,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   public TypeInfo getTypeInfo(short classId) {
-    TypeInfo typeInfo = ensureGraalvmRuntimeSerializer(typeIdToTypeInfo[classId]);
+    TypeInfo typeInfo = typeIdToTypeInfo[classId];
     assert typeInfo != null : classId;
     if (typeInfo.serializer == null) {
       addSerializer(typeInfo.cls, createSerializer(typeInfo.cls));
@@ -1418,7 +1418,7 @@ public class ClassResolver extends TypeResolver {
   public TypeInfo getTypeInfo(Class<?> cls, TypeInfoHolder classInfoHolder) {
     TypeInfo typeInfo = classInfoHolder.typeInfo;
     if (typeInfo.getCls() != cls) {
-      typeInfo = ensureGraalvmRuntimeSerializer(classInfoMap.get(cls));
+      typeInfo = classInfoMap.get(cls);
       if (typeInfo == null || typeInfo.serializer == null) {
         addSerializer(cls, createSerializer(cls));
         typeInfo = Objects.requireNonNull(classInfoMap.get(cls));
@@ -1452,7 +1452,7 @@ public class ClassResolver extends TypeResolver {
   public TypeInfo getOrUpdateTypeInfo(Class<?> cls) {
     TypeInfo typeInfo = typeInfoCache;
     if (typeInfo.cls != cls) {
-      typeInfo = ensureGraalvmRuntimeSerializer(classInfoMap.get(cls));
+      typeInfo = classInfoMap.get(cls);
       if (typeInfo == null || typeInfo.serializer == null) {
         addSerializer(cls, createSerializer(cls));
         typeInfo = classInfoMap.get(cls);
@@ -1468,7 +1468,7 @@ public class ClassResolver extends TypeResolver {
     Preconditions.checkArgument(
         internalInfo != null, "Internal class id %s is not registered", classId);
     if (typeInfo != internalInfo) {
-      typeInfo = ensureGraalvmRuntimeSerializer(internalInfo);
+      typeInfo = internalInfo;
       if (typeInfo.serializer == null) {
         addSerializer(typeInfo.cls, createSerializer(typeInfo.cls));
         typeInfo = classInfoMap.get(typeInfo.cls);
@@ -1508,6 +1508,8 @@ public class ClassResolver extends TypeResolver {
           && !Functions.isLambda(cls)
           && !ReflectionUtils.isJdkProxy(cls)
           && !isRegisteredByIdLocalOrFrozen(cls)
+          && !isRegisteredByNameLocalOrFrozen(cls)
+          && !hasGraalvmSerializerClass(cls)
           && !shimDispatcher.contains(cls)
           && !extRegistry.isTypeCheckerSet()) {
         LOG.warn(generateSecurityMsg(cls));
@@ -1553,7 +1555,19 @@ public class ClassResolver extends TypeResolver {
     }
 
     Class<? extends Serializer> serializerClass = getSerializerClass(cls);
-    Serializer serializer = Serializers.newSerializer(fory, cls, serializerClass);
+    Serializer serializer;
+    if (GraalvmSupport.isGraalRuntime()) {
+      boolean added = extRegistry.getClassCtx.add(cls);
+      try {
+        serializer = Serializers.newSerializer(fory, cls, serializerClass);
+      } finally {
+        if (added) {
+          extRegistry.getClassCtx.remove(cls);
+        }
+      }
+    } else {
+      serializer = Serializers.newSerializer(fory, cls, serializerClass);
+    }
     if (ForyCopyable.class.isAssignableFrom(cls)) {
       serializer = new ForyCopyableSerializer<>(fory, cls, serializer);
     }
@@ -1634,7 +1648,9 @@ public class ClassResolver extends TypeResolver {
   }
 
   private boolean isSecure(Class<?> cls) {
-    if (isRegisteredByNameLocalOrFrozen(cls) || shimDispatcher.contains(cls)) {
+    if (isRegisteredByNameLocalOrFrozen(cls)
+        || hasGraalvmSerializerClass(cls)
+        || shimDispatcher.contains(cls)) {
       return true;
     }
     if (cls.isArray()) {
@@ -1987,7 +2003,7 @@ public class ClassResolver extends TypeResolver {
       }
       classInfoMap.forEach(
           (cls, classInfo) -> {
-            GraalvmSupport.registerClass(cls);
+            registerGraalvmClass(cls);
             if (classInfo.serializer == null) {
               if (isSerializable(classInfo.cls)) {
                 createSerializer0(cls);

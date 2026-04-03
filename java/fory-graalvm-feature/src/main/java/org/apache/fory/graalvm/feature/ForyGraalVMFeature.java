@@ -120,7 +120,8 @@ public class ForyGraalVMFeature implements Feature {
   }
 
   private void registerHierarchyMembers(Class<?> clazz) {
-    for (Class<?> current = clazz; current != null && current != Object.class;
+    for (Class<?> current = clazz;
+        current != null && current != Object.class;
         current = current.getSuperclass()) {
       RuntimeReflection.register(current);
       registerFields(current);

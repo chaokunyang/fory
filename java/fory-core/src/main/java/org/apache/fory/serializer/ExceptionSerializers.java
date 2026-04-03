@@ -85,8 +85,7 @@ public final class ExceptionSerializers {
       String detailMessage = fory.readStringRef(buffer);
       skipExtraFields(buffer);
       Platform.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
-      Platform.putObject(
-          obj, ThrowableOffsets.CAUSE_FIELD_OFFSET, cause == null ? obj : cause);
+      Platform.putObject(obj, ThrowableOffsets.CAUSE_FIELD_OFFSET, cause == null ? obj : cause);
       Platform.putObject(obj, ThrowableOffsets.STACK_TRACE_FIELD_OFFSET, stackTrace);
       readAndSetFields(fory, buffer, obj, slotsSerializers);
       return obj;
@@ -228,15 +227,15 @@ public final class ExceptionSerializers {
                   lineNumber);
         }
         return (StackTraceElement)
-            STACK_TRACE_ELEMENT_CTR_V1.invoke(
-                declaringClass, methodName, fileName, lineNumber);
+            STACK_TRACE_ELEMENT_CTR_V1.invoke(declaringClass, methodName, fileName, lineNumber);
       } catch (Throwable t) {
         throw new RuntimeException(t);
       }
     }
   }
 
-  private static <T extends Throwable> ObjectCreator<T> createThrowableObjectCreator(Class<T> type) {
+  private static <T extends Throwable> ObjectCreator<T> createThrowableObjectCreator(
+      Class<T> type) {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new ObjectCreators.UnsafeObjectCreator<>(type);
     }

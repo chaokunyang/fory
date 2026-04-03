@@ -73,7 +73,8 @@ public class ExceptionSerializersTest extends ForyTestBase {
 
     Assert.assertNull(copy.getCause());
     Assert.assertSame(
-        ReflectionUtils.getObjectFieldValue(copy, ReflectionUtils.getField(Throwable.class, "cause")),
+        ReflectionUtils.getObjectFieldValue(
+            copy, ReflectionUtils.getField(Throwable.class, "cause")),
         copy);
     Assert.assertEquals(copy.parentCode, value.parentCode);
     Assert.assertEquals(copy.tags, value.tags);
@@ -82,11 +83,7 @@ public class ExceptionSerializersTest extends ForyTestBase {
   @Test
   public void testBuiltInThrowableWithClassRegistrationRequired() {
     Fory fory =
-        builder()
-            .requireClassRegistration(true)
-            .withRefTracking(false)
-            .withCodegen(false)
-            .build();
+        builder().requireClassRegistration(true).withRefTracking(false).withCodegen(false).build();
     IllegalStateException value =
         new IllegalStateException("registered-built-in", new IllegalArgumentException("cause"));
 

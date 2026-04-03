@@ -1594,11 +1594,15 @@ public class ClassResolver extends TypeResolver {
     return ObjectSerializer.class;
   }
 
-  private boolean needsGraalvmObjectSerializerClass(Class<?> cls) {
-    return useReplaceResolveSerializer(cls)
-        && !Externalizable.class.isAssignableFrom(cls)
-        && JavaSerializer.getReadObjectMethod(cls, true) == null
-        && JavaSerializer.getWriteObjectMethod(cls, true) == null;
+  private boolean needsGraalvmObjectSerializerClass(
+      Class<?> cls, Class<? extends Serializer> serializerClass) {
+    if (serializerClass == ReplaceResolveSerializer.class) {
+      return !Externalizable.class.isAssignableFrom(cls)
+          && JavaSerializer.getReadObjectMethod(cls, true) == null
+          && JavaSerializer.getWriteObjectMethod(cls, true) == null;
+    }
+    return serializerClass == CollectionSerializers.DefaultJavaCollectionSerializer.class
+        || serializerClass == MapSerializers.DefaultJavaMapSerializer.class;
   }
 
   private Class<? extends Serializer> getMetaSharedDeserializerClassForGraalvmBuild(
@@ -1619,7 +1623,7 @@ public class ClassResolver extends TypeResolver {
             ? getGraalvmSerializerClass(typeInfo.serializer)
             : getSerializerClassForGraalvmBuild(cls);
     getGraalvmClassRegistry().putSerializerClass(cls, serializerClass);
-    if (needsGraalvmObjectSerializerClass(cls)) {
+    if (needsGraalvmObjectSerializerClass(cls, serializerClass)) {
       getGraalvmClassRegistry()
           .putObjectSerializerClass(cls, getObjectSerializerClassForGraalvmBuild(cls));
     }

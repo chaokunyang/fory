@@ -102,8 +102,7 @@ public class ReplaceResolveSerializerTest extends ForyTestBase {
     serDeCheck(fory, map1);
     assertTrue(
         fory.getTypeResolver().getSerializer(list1.getClass()) instanceof CollectionLikeSerializer);
-    assertTrue(
-        fory.getTypeResolver().getSerializer(map1.getClass()) instanceof MapLikeSerializer);
+    assertTrue(fory.getTypeResolver().getSerializer(map1.getClass()) instanceof MapLikeSerializer);
   }
 
   @Test(dataProvider = "foryCopyConfig")
@@ -491,10 +490,14 @@ public class ReplaceResolveSerializerTest extends ForyTestBase {
     fory.registerSerializer(SimpleMapTest.class, ReplaceResolveSerializer.class);
     assertThrows(
         IllegalArgumentException.class,
-        () -> fory.registerSerializer(ImmutableList.of(1, 2).getClass(), ReplaceResolveSerializer.class));
+        () ->
+            fory.registerSerializer(
+                ImmutableList.of(1, 2).getClass(), ReplaceResolveSerializer.class));
     assertThrows(
         IllegalArgumentException.class,
-        () -> fory.registerSerializer(ImmutableMap.of("1", 2).getClass(), ReplaceResolveSerializer.class));
+        () ->
+            fory.registerSerializer(
+                ImmutableMap.of("1", 2).getClass(), ReplaceResolveSerializer.class));
     copyCheck(fory, ImmutableList.of(1, 2));
     copyCheck(fory, ImmutableList.of("a", "b"));
     copyCheck(fory, new SimpleCollectionTest(ImmutableList.of(1, 2), ImmutableList.of("a", "b")));
@@ -515,10 +518,14 @@ public class ReplaceResolveSerializerTest extends ForyTestBase {
     ImmutableMap<String, Integer> map = ImmutableMap.of("k1", 1, "k2", 2);
     assertThrows(
         IllegalArgumentException.class,
-        () -> fory.registerSerializer(list.getClass(), new ReplaceResolveSerializer(fory, list.getClass())));
+        () ->
+            fory.registerSerializer(
+                list.getClass(), new ReplaceResolveSerializer(fory, list.getClass())));
     assertThrows(
         IllegalArgumentException.class,
-        () -> fory.registerSerializer(map.getClass(), new ReplaceResolveSerializer(fory, map.getClass())));
+        () ->
+            fory.registerSerializer(
+                map.getClass(), new ReplaceResolveSerializer(fory, map.getClass())));
   }
 
   @Data

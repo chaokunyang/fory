@@ -667,8 +667,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           new MetaSharedLayerSerializer(fory, type, this.layerTypeDef, this.layerMarkerClass);
 
       // Register JIT callback to replace with JIT serializer when ready
-      if (fory.getConfig().isCodeGenEnabled()
-          && supportsGeneratedLayerSerializer(fory, type, this.layerTypeDef)) {
+      if (fory.getConfig().isCodeGenEnabled()) {
         if (GraalvmSupport.isGraalBuildtime()) {
           Class<? extends Serializer> generatedSlotsSerializerClass =
               CodecUtils.loadOrGenMetaSharedLayerCodecClass(
@@ -852,16 +851,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       } finally {
         fory.getJITContext().unlock();
       }
-    }
-
-    private boolean supportsGeneratedLayerSerializer(Fory fory, Class<?> type, TypeDef typeDef) {
-      for (Descriptor descriptor :
-          fory.getTypeResolver().createDescriptorGrouper(typeDef, type).getSortedDescriptors()) {
-        if (descriptor.getField() == null) {
-          return false;
-        }
-      }
-      return true;
     }
 
     private MetaSharedLayerSerializerBase<?> createGeneratedLayerSerializer() {

@@ -147,6 +147,22 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   }
 
   @Override
+  protected Expression serializeField(
+      Expression fieldValue, Expression buffer, Descriptor descriptor) {
+    if (descriptor.getField() == null
+        && fieldValue instanceof Literal
+        && ((Literal) fieldValue).getValue() == null
+        && !descriptor.getTypeRef().isPrimitive()) {
+      if (descriptor.isTrackingRef()) {
+        return writeRefOrNull(buffer, fieldValue);
+      }
+      return serializeForNullable(
+          fieldValue, buffer, descriptor.getTypeRef(), null, false, descriptor.isNullable());
+    }
+    return super.serializeField(fieldValue, buffer, descriptor);
+  }
+
+  @Override
   protected Expression serializeForNullable(
       Expression inputObject,
       Expression buffer,

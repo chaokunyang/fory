@@ -886,6 +886,51 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     assertEquals(result.value, 42);
   }
 
+  public static class PutFieldsStringDefaultReadIntClass implements Serializable {
+    private int count;
+
+    private static final ObjectStreamField[] serialPersistentFields = {
+      new ObjectStreamField("count", String.class)
+    };
+
+    public PutFieldsStringDefaultReadIntClass() {}
+
+    public PutFieldsStringDefaultReadIntClass(int count) {
+      this.count = count;
+    }
+
+    private void writeObject(ObjectOutputStream s) throws IOException {
+      ObjectOutputStream.PutField fields = s.putFields();
+      fields.put("count", Integer.toString(count));
+      s.writeFields();
+    }
+
+    private void readObject(ObjectInputStream s) throws IOException, ClassNotFoundException {
+      s.defaultReadObject();
+    }
+  }
+
+  @Test(timeOut = 60000)
+  public void testAsyncCompilationLayerSerializerSkipsIncompatibleFieldTypes()
+      throws InterruptedException {
+    Fory fory = newCompatibleAsyncObjectStreamFory(true);
+    fory.registerSerializer(
+        PutFieldsStringDefaultReadIntClass.class,
+        new ObjectStreamSerializer(fory, PutFieldsStringDefaultReadIntClass.class));
+
+    PutFieldsStringDefaultReadIntClass obj = new PutFieldsStringDefaultReadIntClass(42);
+
+    PutFieldsStringDefaultReadIntClass first =
+        (PutFieldsStringDefaultReadIntClass) serDe(fory, obj);
+    assertEquals(first.count, 0);
+
+    waitForGeneratedLayerSerializer(fory, PutFieldsStringDefaultReadIntClass.class);
+
+    PutFieldsStringDefaultReadIntClass second =
+        (PutFieldsStringDefaultReadIntClass) serDe(fory, obj);
+    assertEquals(second.count, 0);
+  }
+
   // ==================== Complex Hierarchy Schema Evolution Tests ====================
 
   /** Parent class with putFields writer. */

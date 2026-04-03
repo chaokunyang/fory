@@ -629,7 +629,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final Class<?> layerMarkerClass;
     // mark non-final for async-jit to update it to jit-serializer.
     private MetaSharedLayerSerializerBase slotsSerializer;
-    private Class<? extends Serializer> generatedSlotsSerializerClass;
     private final ObjectIntMap<String> fieldIndexMap;
     private final int numPutFields;
     private final Class<?>[] putFieldTypes;
@@ -671,7 +670,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       if (fory.getConfig().isCodeGenEnabled()
           && supportsGeneratedLayerSerializer(fory, type, this.layerTypeDef)) {
         if (GraalvmSupport.isGraalBuildtime()) {
-          this.generatedSlotsSerializerClass =
+          Class<? extends Serializer> generatedSlotsSerializerClass =
               CodecUtils.loadOrGenMetaSharedLayerCodecClass(
                   cls, fory, layerTypeDef, layerMarkerClass);
           int configHash = fory.getConfig().getConfigHash();
@@ -679,9 +678,14 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           GraalvmSupport.registerLayerSerializerClass(
               layerTypeDef.getId(), generatedSlotsSerializerClass, configHash);
         } else if (GraalvmSupport.isGraalRuntime()) {
-          this.generatedSlotsSerializerClass =
+          Class<? extends Serializer> generatedSlotsSerializerClass =
               GraalvmSupport.getLayerSerializerClass(
                   layerTypeDef.getId(), fory.getConfig().getConfigHash());
+          if (generatedSlotsSerializerClass != null) {
+            replaceSlotsSerializer(
+                newGeneratedSerializer(
+                    fory, cls, generatedSlotsSerializerClass, layerTypeDef, layerMarkerClass));
+          }
         } else {
           SlotsInfo thisInfo = this;
           MetaSharedLayerSerializerBase<?> serializer =
@@ -689,8 +693,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
                   .registerSerializerJITCallback(
                       () -> thisInfo.slotsSerializer,
                       thisInfo::createGeneratedLayerSerializer,
-                      thisInfo::publishSlotsSerializer);
-          publishSlotsSerializer(serializer);
+                      thisInfo::replaceSlotsSerializer);
+          replaceSlotsSerializer(serializer);
         }
       }
 
@@ -750,7 +754,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     public MetaSharedLayerSerializerBase getSlotsSerializer() {
-      ensureRuntimeGeneratedSlotsSerializer();
       return slotsSerializer;
     }
 
@@ -831,39 +834,18 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     /**
-     * Publish the best known serializer for this layer under the JIT lock.
+     * Replace the serializer for this layer under the JIT lock.
      *
-     * <p>When a generated layer class is already cached, the async callback can publish the
-     * generated serializer immediately after {@code registerSerializerJITCallback} releases the
-     * lock. The constructor still needs to publish the returned placeholder/generator result for
-     * synchronous paths, but it must not overwrite an already-published generated serializer with
-     * the stale interpreter placeholder.
+     * <p>When a generated layer class is already cached, the async callback can replace the
+     * interpreter serializer immediately after {@code registerSerializerJITCallback} releases the
+     * lock. The constructor still needs to apply the returned placeholder or generated serializer
+     * for synchronous paths, but it must not overwrite an already-installed generated serializer
+     * with the stale interpreter placeholder.
      */
-    private void publishSlotsSerializer(MetaSharedLayerSerializerBase<?> serializer) {
+    private void replaceSlotsSerializer(MetaSharedLayerSerializerBase<?> serializer) {
       try {
         fory.getJITContext().lock();
         if (serializer instanceof Generated || !(slotsSerializer instanceof Generated)) {
-          slotsSerializer = serializer;
-          updateCachedLayerSerializer(serializer);
-        }
-      } finally {
-        fory.getJITContext().unlock();
-      }
-    }
-
-    private void ensureRuntimeGeneratedSlotsSerializer() {
-      if (!GraalvmSupport.isGraalRuntime() || generatedSlotsSerializerClass == null) {
-        return;
-      }
-      if (generatedSlotsSerializerClass.isInstance(slotsSerializer)) {
-        return;
-      }
-      try {
-        fory.getJITContext().lock();
-        if (!generatedSlotsSerializerClass.isInstance(slotsSerializer)) {
-          MetaSharedLayerSerializerBase<?> serializer =
-              newGeneratedSerializer(
-                  fory, cls, generatedSlotsSerializerClass, layerTypeDef, layerMarkerClass);
           slotsSerializer = serializer;
           updateCachedLayerSerializer(serializer);
         }

@@ -1274,8 +1274,6 @@ public class XtypeResolver extends TypeResolver {
                 instanceof DeferedLazySerializer.DeferredLazyObjectSerializer) {
               ((DeferedLazySerializer.DeferredLazyObjectSerializer) classInfo.serializer)
                   .resolveSerializer();
-            } else {
-              classInfo.serializer.getClass();
             }
           }
           // For enums at GraalVM build time, also handle anonymous enum value classes

@@ -104,6 +104,7 @@ import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.CopyOnlyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.ExternalizableSerializer;
+import org.apache.fory.serializer.ExceptionSerializers;
 import org.apache.fory.serializer.ForyCopyableSerializer;
 import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.JdkProxySerializer;
@@ -322,6 +323,9 @@ public class ClassResolver extends TypeResolver {
     OptionalSerializers.registerDefaultSerializers(fory);
     CollectionSerializers.registerDefaultSerializers(fory);
     MapSerializers.registerDefaultSerializers(fory);
+    addDefaultSerializer(
+        StackTraceElement[].class,
+        new ArraySerializers.ObjectArraySerializer<>(fory, StackTraceElement[].class));
     addDefaultSerializer(Locale.class, new LocaleSerializer(fory));
     addDefaultSerializer(
         SerializedLambda.class, new SerializedLambdaSerializer(fory, SerializedLambda.class));
@@ -1213,6 +1217,12 @@ public class ClassResolver extends TypeResolver {
       throw new UnsupportedOperationException(
           String.format("Class %s doesn't support serialization.", cls));
     }
+    if (cls == StackTraceElement.class) {
+      return ExceptionSerializers.StackTraceElementSerializer.class;
+    }
+    if (Throwable.class.isAssignableFrom(cls)) {
+      return ExceptionSerializers.ExceptionSerializer.class;
+    }
     Class<? extends Serializer> serializerClass = getSerializerClassFromGraalvmRegistry(cls);
     if (serializerClass != null) {
       return serializerClass;
@@ -1672,6 +1682,7 @@ public class ClassResolver extends TypeResolver {
 
   private boolean isSecure(Class<?> cls) {
     if (isRegisteredByNameLocalOrFrozen(cls)
+        || isJdkThrowableSupportType(cls)
         || hasGraalvmSerializerClass(cls)
         || shimDispatcher.contains(cls)) {
       return true;
@@ -1695,12 +1706,19 @@ public class ClassResolver extends TypeResolver {
     } else {
       return extRegistry.typeChecker.checkType(this, cls.getName());
     }
-    // Don't take java Exception as secure in case future JDK introduce insecure JDK exception.
-    // if (Exception.class.isAssignableFrom(cls)
-    //     && cls.getName().startsWith("java.")
-    //     && !cls.getName().startsWith("java.sql")) {
-    //   return true;
-    // }
+  }
+
+  private static boolean isJdkThrowableSupportType(Class<?> cls) {
+    if (cls == StackTraceElement.class) {
+      return true;
+    }
+    if (!Throwable.class.isAssignableFrom(cls)) {
+      return false;
+    }
+    String className = cls.getName();
+    return className.startsWith("java.")
+        || className.startsWith("javax.")
+        || className.startsWith("jdk.");
   }
 
   /**

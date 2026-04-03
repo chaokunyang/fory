@@ -34,6 +34,7 @@ import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BufferSerializers;
 import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.EnumSerializer;
+import org.apache.fory.serializer.ExceptionSerializers;
 import org.apache.fory.serializer.ExternalizableSerializer;
 import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.JdkProxySerializer;
@@ -106,6 +107,8 @@ public class GraalvmSupport {
     registerDefaultSerializerClass(MapSerializer.class);
     registerDefaultSerializerClass(CodegenSerializer.LazyInitBeanSerializer.class);
     registerDefaultSerializerClass(ExternalizableSerializer.class);
+    registerDefaultSerializerClass(ExceptionSerializers.ExceptionSerializer.class);
+    registerDefaultSerializerClass(ExceptionSerializers.StackTraceElementSerializer.class);
     registerDefaultSerializerClass(ObjectStreamSerializer.class);
     registerDefaultSerializerClass(JavaSerializer.class);
     registerDefaultSerializerClass(ObjectSerializer.class);

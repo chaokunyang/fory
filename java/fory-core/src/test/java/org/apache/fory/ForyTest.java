@@ -63,6 +63,7 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.exception.SerializationException;
+import org.apache.fory.serializer.ExceptionSerializers;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.memory.Platform;
@@ -233,7 +234,13 @@ public class ForyTest extends ForyTestBase {
   @Test
   public void testSerializeException() {
     Fory fory = Fory.builder().withLanguage(Language.JAVA).withRefTracking(true).build();
-    fory.serialize(new Exception());
+    Exception value = new Exception("test-serialize-exception");
+    Exception copy = serDe(fory, value);
+    Assert.assertEquals(
+        fory.getTypeResolver().getSerializerClass(Exception.class),
+        ExceptionSerializers.ExceptionSerializer.class);
+    Assert.assertEquals(copy.getMessage(), value.getMessage());
+    Assert.assertEquals(copy.getStackTrace()[0], value.getStackTrace()[0]);
   }
 
   @Test(dataProvider = "referenceTrackingConfig")

@@ -148,8 +148,7 @@ public class GraalvmSupport {
     serializerClasses.addAll(DEFAULT_SERIALIZER_CLASSES);
     serializerClasses.addAll(REGISTERED_SERIALIZER_CLASSES);
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
-      serializerClasses.addAll(registry.serializerClassMap.values());
-      serializerClasses.addAll(registry.deserializerClassMap.values());
+      serializerClasses.addAll(registry.getRegisteredSerializerClasses());
     }
     return Collections.unmodifiableSet(serializerClasses);
   }
@@ -160,10 +159,7 @@ public class GraalvmSupport {
     PROXY_INTERFACE_LISTS.clear();
     REGISTERED_SERIALIZER_CLASSES.clear();
     for (GraalvmClassRegistry registry : GRAALVM_REGISTRY.values()) {
-      registry.serializerClassMap.clear();
-      registry.deserializerClassMap.clear();
-      registry.layerSerializerClassMap.clear();
-      registry.resolvers.clear();
+      registry.clear();
     }
   }
 
@@ -205,14 +201,14 @@ public class GraalvmSupport {
     }
     GraalvmClassRegistry registry =
         GRAALVM_REGISTRY.computeIfAbsent(configHash, k -> new GraalvmClassRegistry());
-    registry.layerSerializerClassMap.put(typeDefId, serializerClass);
+    registry.putLayerSerializerClass(typeDefId, serializerClass);
     REGISTERED_SERIALIZER_CLASSES.add(serializerClass);
   }
 
   /** Returns the generated object-stream layer serializer class for the given TypeDef id. */
   public static Class<? extends Serializer> getLayerSerializerClass(
       long typeDefId, int configHash) {
-    return getClassRegistry(configHash).layerSerializerClassMap.get(typeDefId);
+    return getClassRegistry(configHash).getLayerSerializerClass(typeDefId);
   }
 
   /**
@@ -363,16 +359,111 @@ public class GraalvmSupport {
 
   /** GraalVM class registry. */
   public static class GraalvmClassRegistry {
-    public final List<TypeResolver> resolvers;
-    public final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
-    public final Map<Long, Class<? extends Serializer>> deserializerClassMap;
-    public final Map<Long, Class<? extends Serializer>> layerSerializerClassMap;
+    private final List<TypeResolver> resolvers;
+    private final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
+    private final Map<Class<?>, Class<? extends Serializer>> objectSerializerClassMap;
+    private final Map<Long, Class<? extends Serializer>> deserializerClassMap;
+    private final Map<Long, Class<? extends Serializer>> layerSerializerClassMap;
 
     private GraalvmClassRegistry() {
       resolvers = Collections.synchronizedList(new ArrayList<>());
       serializerClassMap = new ConcurrentHashMap<>();
+      objectSerializerClassMap = new ConcurrentHashMap<>();
       deserializerClassMap = new ConcurrentHashMap<>();
       layerSerializerClassMap = new ConcurrentHashMap<>();
+    }
+
+    public void addResolver(TypeResolver resolver) {
+      resolvers.add(resolver);
+    }
+
+    public List<TypeResolver> getResolvers() {
+      return resolvers;
+    }
+
+    public boolean hasResolvers() {
+      return !resolvers.isEmpty();
+    }
+
+    public void clearResolvers() {
+      resolvers.clear();
+    }
+
+    public boolean hasSerializerClass(Class<?> cls) {
+      return getSerializerClass(cls) != null;
+    }
+
+    public Class<? extends Serializer> getSerializerClass(Class<?> cls) {
+      return getRegisteredClassValue(serializerClassMap, cls);
+    }
+
+    public void putSerializerClass(Class<?> cls, Class<? extends Serializer> serializerClass) {
+      serializerClassMap.put(cls, serializerClass);
+    }
+
+    public Class<? extends Serializer> getObjectSerializerClass(Class<?> cls) {
+      return getRegisteredClassValue(objectSerializerClassMap, cls);
+    }
+
+    public void putObjectSerializerClass(
+        Class<?> cls, Class<? extends Serializer> serializerClass) {
+      objectSerializerClassMap.put(cls, serializerClass);
+    }
+
+    public Class<? extends Serializer> getDeserializerClass(long typeDefId) {
+      return deserializerClassMap.get(typeDefId);
+    }
+
+    public void putDeserializerClass(long typeDefId, Class<? extends Serializer> serializerClass) {
+      deserializerClassMap.put(typeDefId, serializerClass);
+    }
+
+    public void putIfAbsentDeserializerClass(
+        long typeDefId, Class<? extends Serializer> serializerClass) {
+      deserializerClassMap.putIfAbsent(typeDefId, serializerClass);
+    }
+
+    public Map<Long, Class<? extends Serializer>> getDeserializerClasses() {
+      return Collections.unmodifiableMap(deserializerClassMap);
+    }
+
+    public Class<? extends Serializer> getLayerSerializerClass(long typeDefId) {
+      return layerSerializerClassMap.get(typeDefId);
+    }
+
+    public void putLayerSerializerClass(
+        long typeDefId, Class<? extends Serializer> serializerClass) {
+      layerSerializerClassMap.put(typeDefId, serializerClass);
+    }
+
+    public Set<Class<? extends Serializer>> getRegisteredSerializerClasses() {
+      Set<Class<? extends Serializer>> serializerClasses = ConcurrentHashMap.newKeySet();
+      serializerClasses.addAll(serializerClassMap.values());
+      serializerClasses.addAll(objectSerializerClassMap.values());
+      serializerClasses.addAll(deserializerClassMap.values());
+      return serializerClasses;
+    }
+
+    public void clear() {
+      serializerClassMap.clear();
+      objectSerializerClassMap.clear();
+      deserializerClassMap.clear();
+      layerSerializerClassMap.clear();
+      resolvers.clear();
+    }
+
+    private static <T> T getRegisteredClassValue(Map<Class<?>, T> registryMap, Class<?> cls) {
+      T value = registryMap.get(cls);
+      if (value != null) {
+        return value;
+      }
+      if (!cls.isEnum() && Enum.class.isAssignableFrom(cls) && cls != Enum.class) {
+        Class<?> enclosingClass = cls.getEnclosingClass();
+        if (enclosingClass != null && enclosingClass.isEnum()) {
+          return registryMap.get(enclosingClass);
+        }
+      }
+      return null;
     }
   }
 }

@@ -1294,13 +1294,12 @@ public class XtypeResolver extends TypeResolver {
           }
           if (GraalvmSupport.isGraalBuildtime() && classInfo.serializer != null) {
             getGraalvmClassRegistry()
-                .serializerClassMap
-                .put(cls, getGraalvmSerializerClass(classInfo.serializer));
+                .putSerializerClass(cls, getGraalvmSerializerClass(classInfo.serializer));
           }
         });
     if (GraalvmSupport.isGraalBuildtime()) {
       clearGraalvmGeneratedTypeInfoSerializers();
-      getGraalvmClassRegistry().resolvers.clear();
+      getGraalvmClassRegistry().clearResolvers();
     }
     extRegistry.registeredTypeInfos.clear();
   }

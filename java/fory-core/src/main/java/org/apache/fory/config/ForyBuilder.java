@@ -291,15 +291,12 @@ public final class ForyBuilder {
    */
   public ForyBuilder withCompatibleMode(CompatibleMode compatibleMode) {
     CompatibleMode mode = Objects.requireNonNull(compatibleMode);
-    switch (mode) {
-      case SCHEMA_CONSISTENT:
-        this.compatible = false;
-        break;
-      case COMPATIBLE:
-        this.compatible = true;
-        break;
-      default:
-        throw new UnsupportedOperationException(String.format("Unsupported mode %s", mode));
+    if (mode == CompatibleMode.SCHEMA_CONSISTENT) {
+      this.compatible = false;
+    } else if (mode == CompatibleMode.COMPATIBLE) {
+      this.compatible = true;
+    } else {
+      throw new UnsupportedOperationException(String.format("Unsupported mode %s", mode));
     }
     recordAction(b -> b.withCompatibleMode(compatibleMode));
     return this;

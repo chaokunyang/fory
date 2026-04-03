@@ -1356,6 +1356,13 @@ public class ClassResolver extends TypeResolver {
       boolean shareMeta,
       boolean codegen,
       JITContext.SerializerJITCallback<Class<? extends Serializer>> callback) {
+    if (GraalvmSupport.isGraalRuntime()) {
+      Class<? extends Serializer> serializerClass =
+          getObjectSerializerClassFromGraalvmRegistry(cls);
+      if (serializerClass != null) {
+        return serializerClass;
+      }
+    }
     if (codegen) {
       if (extRegistry.getClassCtx.contains(cls)) {
         // avoid potential recursive call for seq codec generation.
@@ -1556,18 +1563,7 @@ public class ClassResolver extends TypeResolver {
 
     Class<? extends Serializer> serializerClass = getSerializerClass(cls);
     Serializer serializer;
-    if (GraalvmSupport.isGraalRuntime()) {
-      boolean added = extRegistry.getClassCtx.add(cls);
-      try {
-        serializer = Serializers.newSerializer(fory, cls, serializerClass);
-      } finally {
-        if (added) {
-          extRegistry.getClassCtx.remove(cls);
-        }
-      }
-    } else {
-      serializer = Serializers.newSerializer(fory, cls, serializerClass);
-    }
+    serializer = Serializers.newSerializer(fory, cls, serializerClass);
     if (ForyCopyable.class.isAssignableFrom(cls)) {
       serializer = new ForyCopyableSerializer<>(fory, cls, serializer);
     }
@@ -1584,6 +1580,20 @@ public class ClassResolver extends TypeResolver {
       serializerClass = loadCodegenSerializer(fory, cls);
     }
     return serializerClass;
+  }
+
+  private Class<? extends Serializer> getObjectSerializerClassForGraalvmBuild(Class<?> cls) {
+    if (fory.getConfig().isCodeGenEnabled() && supportCodegenForJavaSerialization(cls)) {
+      return loadCodegenSerializer(fory, cls);
+    }
+    return ObjectSerializer.class;
+  }
+
+  private boolean needsGraalvmObjectSerializerClass(Class<?> cls) {
+    return useReplaceResolveSerializer(cls)
+        && !Externalizable.class.isAssignableFrom(cls)
+        && JavaSerializer.getReadObjectMethod(cls, true) == null
+        && JavaSerializer.getWriteObjectMethod(cls, true) == null;
   }
 
   private Class<? extends Serializer> getMetaSharedDeserializerClassForGraalvmBuild(
@@ -1603,15 +1613,19 @@ public class ClassResolver extends TypeResolver {
         typeInfo.serializer != null
             ? getGraalvmSerializerClass(typeInfo.serializer)
             : getSerializerClassForGraalvmBuild(cls);
-    getGraalvmClassRegistry().serializerClassMap.put(cls, serializerClass);
+    getGraalvmClassRegistry().putSerializerClass(cls, serializerClass);
+    if (needsGraalvmObjectSerializerClass(cls)) {
+      getGraalvmClassRegistry()
+          .putObjectSerializerClass(cls, getObjectSerializerClassForGraalvmBuild(cls));
+    }
     if (metaContextShareEnabled && needToWriteTypeDef(serializerClass)) {
       TypeDef typeDef = typeInfo.typeDef;
       if (typeDef == null) {
         typeDef = buildTypeDef(typeInfo, serializerClass);
       }
       getGraalvmClassRegistry()
-          .deserializerClassMap
-          .put(typeDef.getId(), getMetaSharedDeserializerClassForGraalvmBuild(cls, typeDef));
+          .putDeserializerClass(
+              typeDef.getId(), getMetaSharedDeserializerClassForGraalvmBuild(cls, typeDef));
       extRegistry.typeInfoByTypeDefId.remove(typeDef.getId());
     }
     typeInfoCache = NIL_TYPE_INFO;
@@ -2041,8 +2055,7 @@ public class ClassResolver extends TypeResolver {
             }
             if (GraalvmSupport.isGraalBuildtime() && classInfo.serializer != null) {
               getGraalvmClassRegistry()
-                  .serializerClassMap
-                  .put(cls, getGraalvmSerializerClass(classInfo.serializer));
+                  .putSerializerClass(cls, getGraalvmSerializerClass(classInfo.serializer));
             }
           });
       if (GraalvmSupport.isGraalBuildtime()) {
@@ -2050,7 +2063,7 @@ public class ClassResolver extends TypeResolver {
         clearGraalvmGeneratedTypeInfoSerializers();
         compositeNameBytes2TypeInfo.forEach(
             (typeNameBytes, typeInfo) -> clearGraalvmTypeInfoSerializer(typeInfo));
-        getGraalvmClassRegistry().resolvers.clear();
+        getGraalvmClassRegistry().clearResolvers();
       }
       // clear it to reduce memory footprint for massive virtual threads.
       extRegistry.registeredTypeInfos.clear();

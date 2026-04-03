@@ -927,7 +927,7 @@ public abstract class TypeResolver {
     }
     if (GraalvmSupport.isGraalBuildtime()
         && GeneratedMetaSharedSerializer.class.isAssignableFrom(sc)) {
-      getGraalvmClassRegistry().deserializerClassMap.putIfAbsent(typeDef.getId(), sc);
+      getGraalvmClassRegistry().putIfAbsentDeserializerClass(typeDef.getId(), sc);
       typeInfo.setSerializer(this, new MetaSharedSerializer(fory, cls, typeDef));
       return typeInfo;
     }
@@ -1567,20 +1567,12 @@ public abstract class TypeResolver {
   }
 
   protected final boolean hasGraalvmSerializerClass(Class<?> cls) {
-    if (!GraalvmSupport.isGraalRuntime()) {
-      return false;
-    }
-    GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    if (registry.serializerClassMap.containsKey(cls)) {
-      return true;
-    }
-    if (!cls.isEnum() && Enum.class.isAssignableFrom(cls) && cls != Enum.class) {
-      Class<?> enclosingClass = cls.getEnclosingClass();
-      return enclosingClass != null
-          && enclosingClass.isEnum()
-          && registry.serializerClassMap.containsKey(enclosingClass);
-    }
-    return false;
+    return GraalvmSupport.isGraalRuntime() && getGraalvmClassRegistry().hasSerializerClass(cls);
+  }
+
+  protected final Class<? extends Serializer> getObjectSerializerClassFromGraalvmRegistry(
+      Class<?> cls) {
+    return getGraalvmClassRegistry().getObjectSerializerClass(cls);
   }
 
   // CHECKSTYLE.OFF:MethodName
@@ -1589,7 +1581,7 @@ public abstract class TypeResolver {
     if (GraalvmSupport.isGraalBuildtime()) {
       GraalvmSupport.GraalvmClassRegistry registry =
           GraalvmSupport.getClassRegistry(foryConfigHash);
-      registry.resolvers.add(classResolver);
+      registry.addResolver(classResolver);
     }
   }
 
@@ -1607,20 +1599,11 @@ public abstract class TypeResolver {
 
   final Class<? extends Serializer> getSerializerClassFromGraalvmRegistry(Class<?> cls) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    Class<? extends Serializer> serializerClass = registry.serializerClassMap.get(cls);
+    Class<? extends Serializer> serializerClass = registry.getSerializerClass(cls);
     if (serializerClass != null) {
       return serializerClass;
     }
-    if (!cls.isEnum() && Enum.class.isAssignableFrom(cls) && cls != Enum.class) {
-      Class<?> enclosingClass = cls.getEnclosingClass();
-      if (enclosingClass != null && enclosingClass.isEnum()) {
-        serializerClass = registry.serializerClassMap.get(enclosingClass);
-        if (serializerClass != null) {
-          return serializerClass;
-        }
-      }
-    }
-    List<TypeResolver> resolvers = registry.resolvers;
+    List<TypeResolver> resolvers = registry.getResolvers();
     if (!resolvers.isEmpty()) {
       for (TypeResolver resolver : resolvers) {
         if (resolver != this) {
@@ -1643,12 +1626,11 @@ public abstract class TypeResolver {
   protected final Class<? extends Serializer> getMetaSharedDeserializerClassFromGraalvmRegistry(
       Class<?> cls, TypeDef typeDef) {
     GraalvmSupport.GraalvmClassRegistry registry = getGraalvmClassRegistry();
-    Class<? extends Serializer> deserializerClass =
-        registry.deserializerClassMap.get(typeDef.getId());
+    Class<? extends Serializer> deserializerClass = registry.getDeserializerClass(typeDef.getId());
     if (deserializerClass != null) {
       return deserializerClass;
     }
-    if (registry.resolvers.isEmpty()) {
+    if (!registry.hasResolvers()) {
       return null;
     }
     if (GraalvmSupport.isGraalRuntime()) {
@@ -1658,7 +1640,7 @@ public abstract class TypeResolver {
       throw new RuntimeException(
           String.format(
               "Class %s is not registered, registered classes: %s",
-              cls, registry.deserializerClassMap));
+              cls, registry.getDeserializerClasses()));
     }
     return null;
   }

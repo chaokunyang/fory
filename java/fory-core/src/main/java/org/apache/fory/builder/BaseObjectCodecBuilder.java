@@ -160,6 +160,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   public static final String READ_CONTEXT_NAME = "_f_readContext";
   public static final String CONSTRUCTOR_TYPE_RESOLVER_NAME = "_f_ctorTypeResolver";
   public static final String TYPE_RESOLVER_NAME = "_f_typeResolver";
+  public static final String REF_WRITER_NAME = "_f_refWriter";
+  public static final String WRITE_STRING_SERIALIZER_NAME = "_f_writeStringSerializer";
   public static final String POJO_CLASS_TYPE_NAME = "_f_classType";
   private static final TypeRef<?> STRING_SERIALIZER_TYPE_TOKEN = TypeRef.of(StringSerializer.class);
   private static final TypeRef<?> SERIALIZER_TYPE = TypeRef.of(Serializer.class);
@@ -172,9 +174,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   protected final Fory fory;
   protected final TypeRef<?> concreteTypeResolverType;
+  protected final TypeRef<?> concreteRefWriterType;
   protected final Reference typeResolverRef;
   protected final Reference writeContextRef;
   protected final Reference readContextRef;
+  protected final Reference refWriterRef;
+  protected final Reference writeStringSerializerRef;
   protected final TypeResolver typeResolver;
   private final Map<Class<?>, Reference> serializerMap = new HashMap<>();
   private final Map<String, Object> sharedFieldMap = new HashMap<>();
@@ -197,11 +202,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     ctx.reserveName(WRITE_CONTEXT_NAME);
     ctx.reserveName(READ_CONTEXT_NAME);
     ctx.reserveName(CONSTRUCTOR_TYPE_RESOLVER_NAME);
+    ctx.reserveName(REF_WRITER_NAME);
+    ctx.reserveName(WRITE_STRING_SERIALIZER_NAME);
     // use concrete type to avoid virtual methods call in generated code
     concreteTypeResolverType = TypeRef.of(typeResolver.getClass());
+    concreteRefWriterType = TypeRef.of(fory.getWriteContext().getRefWriter().getClass());
     typeResolverRef = fieldRef(TYPE_RESOLVER_NAME, concreteTypeResolverType);
     writeContextRef = new Reference(WRITE_CONTEXT_NAME, TypeRef.of(WriteContext.class), false);
     readContextRef = new Reference(READ_CONTEXT_NAME, TypeRef.of(ReadContext.class), false);
+    refWriterRef = new Reference(REF_WRITER_NAME, concreteRefWriterType, false);
+    writeStringSerializerRef =
+        new Reference(WRITE_STRING_SERIALIZER_NAME, STRING_SERIALIZER_TYPE_TOKEN, false);
     ctx.addField(ctx.type(concreteTypeResolverType), TYPE_RESOLVER_NAME);
     jitCallbackUpdateFields = new HashMap<>();
     descriptorDispatchId = new HashMap<>();
@@ -295,17 +306,40 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     String encodeCode = encodeExpr.genCode(ctx).code();
     encodeCode = ctx.optimizeMethodCode(encodeCode);
     encodeCode = encodeCode == null ? "" : encodeCode;
-    encodeCode =
-        StringUtils.format(
-            "${bufferType} ${buffer} = ${writeContext}.getBuffer();\n${code}",
-            "bufferType",
-            ctx.type(MemoryBuffer.class),
-            "buffer",
-            BUFFER_NAME,
-            "writeContext",
-            WRITE_CONTEXT_NAME,
-            "code",
-            encodeCode);
+    StringBuilder encodeCodeBuilder =
+        new StringBuilder(
+            StringUtils.format(
+                "${bufferType} ${buffer} = ${writeContext}.getBuffer();\n",
+                "bufferType",
+                ctx.type(MemoryBuffer.class),
+                "buffer",
+                BUFFER_NAME,
+                "writeContext",
+                WRITE_CONTEXT_NAME));
+    if (encodeCode.contains(REF_WRITER_NAME)) {
+      encodeCodeBuilder.append(
+          StringUtils.format(
+              "${refWriterType} ${refWriter} = (${refWriterType}) ${writeContext}.getRefWriter();\n",
+              "refWriterType",
+              ctx.type(concreteRefWriterType),
+              "refWriter",
+              REF_WRITER_NAME,
+              "writeContext",
+              WRITE_CONTEXT_NAME));
+    }
+    if (encodeCode.contains(WRITE_STRING_SERIALIZER_NAME)) {
+      encodeCodeBuilder.append(
+          StringUtils.format(
+              "${stringSerializerType} ${stringSerializer} = ${writeContext}.getStringSerializer();\n",
+              "stringSerializerType",
+              ctx.type(STRING_SERIALIZER_TYPE_TOKEN),
+              "stringSerializer",
+              WRITE_STRING_SERIALIZER_NAME,
+              "writeContext",
+              WRITE_CONTEXT_NAME));
+    }
+    encodeCodeBuilder.append(encodeCode);
+    encodeCode = encodeCodeBuilder.toString();
     ctx.clearExprState();
     String decodeCode = decodeExpr.genCode(ctx).code();
     decodeCode = ctx.optimizeMethodCode(decodeCode);
@@ -478,10 +512,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression inputObject, Expression buffer, Descriptor descriptor, Expression serializer) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     Class<?> clz = getRawType(typeRef);
-      if (isPrimitiveLikeDescriptor(descriptor, clz)) {
-        return serializePrimitiveField(inputObject, buffer, descriptor);
-      } else {
-        if (clz == String.class) {
+    if (isPrimitiveLikeDescriptor(descriptor, clz)) {
+      return serializePrimitiveField(inputObject, buffer, descriptor);
+    } else {
+      if (clz == String.class) {
         return new StringSerializer(typeResolver.getConfig())
             .writeStringExpr(writeStringSerializerRef(), buffer, inputObject);
       }
@@ -621,7 +655,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   protected Expression writeRefOrNull(Expression buffer, Expression object) {
-    return inlineInvokeWriteContext("writeRefOrNull", PRIMITIVE_BOOLEAN_TYPE, object);
+    return inlineInvoke(refWriterRef(), "writeRefOrNull", PRIMITIVE_BOOLEAN_TYPE, buffer, object);
   }
 
   protected Expression serializeForNotNull(
@@ -2772,7 +2806,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   protected Expression writeStringSerializerRef() {
-    return invokeWriteContext("getStringSerializer", STRING_SERIALIZER_TYPE_TOKEN);
+    return writeStringSerializerRef;
   }
 
   protected Expression readStringSerializerRef() {
@@ -2815,6 +2849,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Set<Expression> writeCutPoints(Expression... expressions) {
     Set<Expression> cutPoints = ofHashSet(expressions);
     cutPoints.add(writeContextRef());
+    cutPoints.add(refWriterRef());
+    cutPoints.add(writeStringSerializerRef());
     return cutPoints;
   }
 
@@ -2822,5 +2858,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Set<Expression> cutPoints = ofHashSet(expressions);
     cutPoints.add(readContextRef());
     return cutPoints;
+  }
+
+  protected Expression refWriterRef() {
+    return refWriterRef;
   }
 }

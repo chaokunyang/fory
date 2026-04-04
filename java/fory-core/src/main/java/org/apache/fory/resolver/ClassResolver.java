@@ -1482,15 +1482,19 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
-  private TypeInfo getCachedTypeInfo(Class<?> cls) {
-    TypeInfo typeInfo = classInfoMap.get(cls);
-    if (typeInfo != null && typeInfo.namespaceBytes != null && typeInfo.typeNameBytes != null) {
-      TypeNameBytes typeNameBytes =
+  @Override
+  protected void updateTypeInfo(Class<?> cls, TypeInfo typeInfo) {
+    super.updateTypeInfo(cls, typeInfo);
+    if (typeInfo.namespaceBytes != null && typeInfo.typeNameBytes != null) {
+      compositeNameBytes2TypeInfo.put(
           new TypeNameBytes(
-              typeInfo.namespaceBytes.encoded.hash, typeInfo.typeNameBytes.encoded.hash);
-      compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
+              typeInfo.namespaceBytes.encoded.hash, typeInfo.typeNameBytes.encoded.hash),
+          typeInfo);
     }
-    return typeInfo;
+  }
+
+  private TypeInfo getCachedTypeInfo(Class<?> cls) {
+    return classInfoMap.get(cls);
   }
 
   private TypeInfo ensureTypeInfoWithSerializer(Class<?> cls, TypeInfo typeInfo) {

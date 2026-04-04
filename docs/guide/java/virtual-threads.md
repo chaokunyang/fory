@@ -19,10 +19,9 @@ license: |
   limitations under the License.
 ---
 
-Apache Fory Java uses `buildThreadSafeFory()` for virtual-thread workloads. It builds a pooled
-thread-safe runtime. If you want to make the virtual-thread intent explicit, use
-`buildVirtualThreadSafeFory()`. If you need to control how many idle `Fory` instances are retained
-for reuse after a burst, use `buildThreadSafeForyPool(maxPoolSize)`.
+Apache Fory Java uses `buildThreadSafeFory()` for virtual-thread workloads. It builds a fixed-size
+shared `ThreadPoolFory` sized to `4 * availableProcessors()`. If you need a different fixed pool
+size, use `buildThreadSafeForyPool(poolSize)`.
 
 ## Use Binary Input/Output APIs
 

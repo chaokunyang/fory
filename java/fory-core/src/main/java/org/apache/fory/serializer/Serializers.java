@@ -188,6 +188,12 @@ public class Serializers {
     if (serializerClass == ObjectStreamSerializer.class) {
       return new ObjectStreamSerializer(typeResolver, type);
     }
+    if (serializerClass == ExceptionSerializers.ExceptionSerializer.class) {
+      return new ExceptionSerializers.ExceptionSerializer(typeResolver, type);
+    }
+    if (serializerClass == ExceptionSerializers.StackTraceElementSerializer.class) {
+      return (Serializer<T>) new ExceptionSerializers.StackTraceElementSerializer(config);
+    }
     if (serializerClass == MetaSharedSerializer.class) {
       TypeDef typeDef = typeResolver.getTypeDef(type, true);
       return new MetaSharedSerializer(typeResolver, type, typeDef);

@@ -91,6 +91,14 @@ public final class CodegenSerializer {
       return getOrCreateGeneratedSerializer().read(readContext);
     }
 
+    public Class<? extends Serializer> loadGeneratedSerializerClass() {
+      return CodegenSerializer.loadCodegenSerializer(typeResolver, type);
+    }
+
+    public Class<? extends Serializer> getGeneratedSerializerClass() {
+      return getOrCreateGeneratedSerializer().getClass();
+    }
+
     @SuppressWarnings({"rawtypes"})
     private Serializer<T> getOrCreateGeneratedSerializer() {
       if (serializer == null) {

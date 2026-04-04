@@ -99,12 +99,13 @@ public final class Fory implements BaseFory {
   private MemoryBuffer buffer;
 
   public Fory(ForyBuilder builder, ClassLoader classLoader) {
-    this(builder, classLoader, new SharedRegistry());
+    this(builder, classLoader, null);
   }
 
   public Fory(ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
     // Prefer the explicit constructor argument over retaining loader state on the builder used to
     // create thread-safe factories.
+    boolean sharedRegistryProvided = sharedRegistry != null;
     if (sharedRegistry == null) {
       sharedRegistry = new SharedRegistry();
     }
@@ -133,7 +134,7 @@ public final class Fory implements BaseFory {
             : new ClassResolver(config, classLoader, sharedRegistry, jitContext);
     typeResolver.initialize();
     MetaStringWriter metaStringWriter =
-        config.forVirtualThread()
+        config.forVirtualThread() || sharedRegistryProvided
             ? new MetaStringWriter.MapStateMetaStringWriter(sharedRegistry)
             : new MetaStringWriter.FieldStateMetaStringWriter(sharedRegistry);
     MetaStringReader metaStringReader = new MetaStringReader(sharedRegistry);

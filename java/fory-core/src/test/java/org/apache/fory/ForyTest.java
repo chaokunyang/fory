@@ -74,6 +74,7 @@ import org.apache.fory.context.MetaContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
 import org.apache.fory.serializer.EnumSerializerTest;
+import org.apache.fory.serializer.ExceptionSerializers;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.BeanA;
@@ -237,8 +238,19 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testSerializeException() {
-    Fory fory = Fory.builder().withLanguage(Language.JAVA).withRefTracking(true).build();
-    fory.serialize(new Exception());
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.JAVA)
+            .withRefTracking(true)
+            .requireClassRegistration(true)
+            .build();
+    Exception value = new Exception("test-serialize-exception");
+    Exception copy = serDe(fory, value);
+    Assert.assertEquals(
+        fory.getTypeResolver().getSerializerClass(Exception.class),
+        ExceptionSerializers.ExceptionSerializer.class);
+    Assert.assertEquals(copy.getMessage(), value.getMessage());
+    Assert.assertEquals(copy.getStackTrace()[0], value.getStackTrace()[0]);
   }
 
   @Test(dataProvider = "referenceTrackingConfig")

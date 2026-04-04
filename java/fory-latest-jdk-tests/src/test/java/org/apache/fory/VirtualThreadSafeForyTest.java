@@ -19,16 +19,18 @@
 
 package org.apache.fory;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
-import org.apache.fory.config.CompatibleMode;
-import org.apache.fory.config.Config;
-import org.apache.fory.config.LongEncoding;
-import org.apache.fory.config.UnknownEnumValueStrategy;
+import org.apache.fory.pool.ThreadPoolFory;
 import org.testng.annotations.Test;
 
 public class VirtualThreadSafeForyTest {
@@ -67,67 +69,50 @@ public class VirtualThreadSafeForyTest {
   }
 
   @Test
-  public void testBuildVirtualThreadSafeForyReplaysBuilderConfigToPooledFory() {
-    ThreadSafeFory fory =
-        Fory.builder()
-            .withName("virtual-thread-replay")
-            .withRefTracking(true)
-            .withRefCopy(true)
-            .ignoreStringRef(false)
-            .withUnknownEnumValueStrategy(UnknownEnumValueStrategy.RETURN_NULL)
-            .serializeEnumByName(true)
-            .ignoreTimeRef(false)
-            .withIntCompressed(false)
-            .withLongCompressed(LongEncoding.FIXED)
-            .withIntArrayCompressed(true)
-            .withLongArrayCompressed(true)
-            .withStringCompressed(true)
-            .withWriteNumUtf16BytesForUtf8Encoding(false)
-            .withBufferSizeLimitBytes(2048)
-            .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withJdkClassSerializableCheck(false)
-            .registerGuavaTypes(false)
-            .requireClassRegistration(false)
-            .suppressClassRegistrationWarnings(false)
-            .withMetaShare(true)
-            .withScopedMetaShare(true)
-            .withDeserializeUnknownClass(true)
-            .withCodegen(false)
-            .withAsyncCompilation(true)
-            .withMaxDepth(64)
-            .withMapRefLoadFactor(0.75f)
-            .buildVirtualThreadSafeFory(1);
-    fory.execute(
-        f -> {
-          Config config = f.getConfig();
-          assertEquals(config.getName(), "virtual-thread-replay");
-          assertTrue(config.trackingRef());
-          assertTrue(config.copyRef());
-          assertFalse(config.isStringRefIgnored());
-          assertEquals(config.getUnknownEnumValueStrategy(), UnknownEnumValueStrategy.RETURN_NULL);
-          assertTrue(config.serializeEnumByName());
-          assertFalse(config.isTimeRefIgnored());
-          assertFalse(config.compressInt());
-          assertEquals(config.longEncoding(), LongEncoding.FIXED);
-          assertTrue(config.compressIntArray());
-          assertTrue(config.compressLongArray());
-          assertTrue(config.compressString());
-          assertFalse(config.writeNumUtf16BytesForUtf8Encoding());
-          assertEquals(config.bufferSizeLimitBytes(), 2048);
-          assertEquals(config.getCompatibleMode(), CompatibleMode.COMPATIBLE);
-          assertFalse(config.checkJdkClassSerializable());
-          assertFalse(config.registerGuavaTypes());
-          assertFalse(config.requireClassRegistration());
-          assertFalse(config.suppressClassRegistrationWarnings());
-          assertTrue(config.isMetaShareEnabled());
-          assertTrue(config.isScopedMetaShareEnabled());
-          assertTrue(config.deserializeUnknownClass());
-          assertFalse(config.isCodeGenEnabled());
-          assertTrue(config.isAsyncCompilationEnabled());
-          assertEquals(config.maxDepth(), 64);
-          assertEquals(config.mapRefLoadFactor(), 0.75f);
-          assertTrue(config.forVirtualThread());
-          return null;
-        });
+  public void testVirtualThreadsUseFixedSizeThreadPoolFory() throws Exception {
+    ThreadPoolFory fory =
+        (ThreadPoolFory) Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2);
+    int threadCount = 8;
+    CountDownLatch acquired = new CountDownLatch(2);
+    CountDownLatch release = new CountDownLatch(1);
+    Set<Integer> identities = ConcurrentHashMap.newKeySet();
+    AtomicReference<Throwable> error = new AtomicReference<>();
+    List<Thread> threads = new ArrayList<>(threadCount);
+    for (int i = 0; i < threadCount; i++) {
+      threads.add(
+          Thread.startVirtualThread(
+              () -> {
+                try {
+                  fory.execute(
+                      instance -> {
+                        identities.add(System.identityHashCode(instance));
+                        acquired.countDown();
+                        await(release);
+                        return null;
+                      });
+                } catch (Throwable t) {
+                  error.compareAndSet(null, t);
+                }
+              }));
+    }
+    assertTrue(acquired.await(10, SECONDS));
+    assertEquals(identities.size(), 2);
+    release.countDown();
+    for (Thread thread : threads) {
+      thread.join();
+    }
+    if (error.get() != null) {
+      throw new AssertionError(error.get());
+    }
+    assertEquals(identities.size(), 2);
+  }
+
+  private static void await(CountDownLatch latch) {
+    try {
+      latch.await(10, SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError(e);
+    }
   }
 }

@@ -103,6 +103,7 @@ import org.apache.fory.serializer.BufferSerializers;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.CopyOnlyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
+import org.apache.fory.serializer.ExceptionSerializers;
 import org.apache.fory.serializer.ExternalizableSerializer;
 import org.apache.fory.serializer.ForyCopyableSerializer;
 import org.apache.fory.serializer.JavaSerializer;
@@ -1296,6 +1297,10 @@ public class ClassResolver extends TypeResolver {
         return EnumSerializer.class;
       } else if (EnumSet.class.isAssignableFrom(cls)) {
         return CollectionSerializers.EnumSetSerializer.class;
+      } else if (cls == StackTraceElement.class) {
+        return ExceptionSerializers.StackTraceElementSerializer.class;
+      } else if (Throwable.class.isAssignableFrom(cls)) {
+        return ExceptionSerializers.ExceptionSerializer.class;
       } else if (Charset.class.isAssignableFrom(cls)) {
         return Serializers.CharsetSerializer.class;
       } else if (ReflectionUtils.isJdkProxy(cls)) {

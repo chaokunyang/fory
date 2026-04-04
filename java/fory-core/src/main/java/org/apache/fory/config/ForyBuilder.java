@@ -23,14 +23,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
-import org.apache.fory.ThreadSafeForyPool;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.apache.fory.meta.MetaCompressor;
+import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.JavaSerializer;
@@ -48,6 +50,8 @@ import org.apache.fory.util.Preconditions;
 @SuppressWarnings("rawtypes")
 public final class ForyBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(ForyBuilder.class);
+  private static final int DEFAULT_THREAD_SAFE_POOL_SIZE =
+      Math.max(1, Runtime.getRuntime().availableProcessors() * 4);
 
   private static final boolean ENABLE_CLASS_REGISTRATION_FORCIBLY;
 
@@ -74,7 +78,7 @@ public final class ForyBuilder {
   boolean compressLongArray = false;
   boolean compressString = false;
   Boolean writeNumUtf16BytesForUtf8Encoding;
-  CompatibleMode compatibleMode = CompatibleMode.SCHEMA_CONSISTENT;
+  boolean compatible = false;
   boolean checkJdkClassSerializable = true;
   Class<? extends Serializer> defaultJDKStreamSerializerType = ObjectStreamSerializer.class;
   boolean requireClassRegistration = true;
@@ -265,11 +269,8 @@ public final class ForyBuilder {
   /**
    * Set classloader for fory to load classes, this classloader can't up updated. Fory will cache
    * the class meta data, if classloader can be updated, there may be class meta collision if
-   * different classloaders have classes with same name.
-   *
-   * <p>If you need a different classloader, create a new {@link Fory} or {@link ThreadSafeFory}
-   * configured with that loader. For simple cases, you can rely on the thread context classloader
-   * instead of setting this explicitly.
+   * different classloaders have classes with same name. If you need a different classloader, build
+   * a different {@link Fory} or {@link ThreadSafeFory} instance.
    */
   public ForyBuilder withClassLoader(ClassLoader classLoader) {
     this.classLoader = classLoader;
@@ -289,13 +290,21 @@ public final class ForyBuilder {
    * @see CompatibleMode
    */
   public ForyBuilder withCompatibleMode(CompatibleMode compatibleMode) {
-    this.compatibleMode = compatibleMode;
+    CompatibleMode mode = Objects.requireNonNull(compatibleMode);
+    if (mode == CompatibleMode.SCHEMA_CONSISTENT) {
+      this.compatible = false;
+    } else if (mode == CompatibleMode.COMPATIBLE) {
+      this.compatible = true;
+    } else {
+      throw new UnsupportedOperationException(String.format("Unsupported mode %s", mode));
+    }
     recordAction(b -> b.withCompatibleMode(compatibleMode));
     return this;
   }
 
+  /** Whether class schema compatibility mode is enabled. */
   public ForyBuilder withCompatible(boolean compatible) {
-    this.compatibleMode = compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT;
+    this.compatible = compatible;
     recordAction(b -> b.withCompatible(compatible));
     return this;
   }
@@ -306,7 +315,7 @@ public final class ForyBuilder {
    * class won't evolve.
    */
   public ForyBuilder withClassVersionCheck(boolean checkClassVersion) {
-    if (xlang && compatibleMode == CompatibleMode.SCHEMA_CONSISTENT && !checkClassVersion) {
+    if (xlang && !compatible && !checkClassVersion) {
       throw new IllegalArgumentException(
           "XLANG Schema consistent mode must enable class version check");
     }
@@ -442,7 +451,7 @@ public final class ForyBuilder {
     return this;
   }
 
-  /** Set loadFactor of the reference writer identity map. Default value is 0.51 */
+  /** Set loadFactor of MapRefResolver writtenObjects. Default value is 0.51 */
   public ForyBuilder withMapRefLoadFactor(float loadFactor) {
     Preconditions.checkArgument(
         loadFactor > 0 && loadFactor < 1, "loadFactor must > 0 and < 1 but got %s", loadFactor);
@@ -524,7 +533,7 @@ public final class ForyBuilder {
     if (writeNumUtf16BytesForUtf8Encoding == null) {
       writeNumUtf16BytesForUtf8Encoding = !xlang;
     }
-    if (compatibleMode == CompatibleMode.COMPATIBLE) {
+    if (compatible) {
       checkClassVersion = false;
       if (deserializeUnknownClass == null) {
         deserializeUnknownClass = true;
@@ -546,7 +555,9 @@ public final class ForyBuilder {
         deserializeUnknownClass = false;
       }
       if (scopedMetaShareEnabled != null && scopedMetaShareEnabled) {
-        LOG.warn("Scoped meta share is for CompatibleMode only, disable it for {}", compatibleMode);
+        LOG.warn(
+            "Scoped meta share is for CompatibleMode only, disable it for {}",
+            CompatibleMode.SCHEMA_CONSISTENT);
       }
       scopedMetaShareEnabled = false;
       if (metaShareEnabled == null) {
@@ -575,7 +586,7 @@ public final class ForyBuilder {
    * exception explicitly for better debugging.
    */
   private static Fory newFory(ForyBuilder builder, ClassLoader classLoader) {
-    return newFory(builder, classLoader, new SharedRegistry());
+    return newFory(builder, classLoader, builder.sharedRegistry);
   }
 
   private static Fory newFory(
@@ -593,73 +604,64 @@ public final class ForyBuilder {
   public Fory build() {
     finish();
     ClassLoader loader = this.classLoader;
-    // Clear the builder reference after build so the configured classloader is not retained longer
-    // than necessary.
+    // Clear the builder field so follow-up thread-safe factories don't retain the loader through
+    // this builder instance longer than needed.
     this.classLoader = null;
     return newFory(this, loader, sharedRegistry);
   }
 
-  /** Build thread safe fory. */
+  /**
+   * Builds a thread-safe {@link Fory} using the default runtime for the current JDK.
+   *
+   * <p>This variant uses {@link ThreadPoolFory} with a shared {@link SharedRegistry} and a fixed
+   * pool sized to 4x the current JVM's available processors.
+   *
+   * <p>Prefer the byte-array and {@link org.apache.fory.memory.MemoryBuffer} APIs. Stream and
+   * channel APIs keep a pooled {@link Fory} instance occupied for the whole blocking call.
+   */
   public ThreadSafeFory buildThreadSafeFory() {
-    return buildThreadSafeForyPool(2048);
-  }
-
-  /**
-   * Builds a thread-safe {@link Fory} optimized for JDK 21+ virtual-thread workloads.
-   *
-   * <p>This variant reuses a shared registry and retains idle pooled serializers for reuse. Active
-   * concurrent operations may still create more instances temporarily, but idle retention is capped
-   * once the burst subsides.
-   */
-  public ThreadSafeFory buildVirtualThreadSafeFory() {
-    return buildThreadSafeFory();
-  }
-
-  /**
-   * Builds a thread-safe {@link Fory} optimized for JDK 21+ virtual-thread workloads.
-   *
-   * <p>This variant uses {@link ThreadSafeForyPool} with a shared {@link SharedRegistry}. The
-   * {@code maxPoolSize} parameter limits how many idle pooled {@link Fory} instances are retained
-   * for reuse after operations complete. It does not cap the number of concurrently active {@link
-   * Fory} instances during a burst.
-   *
-   * @param maxPoolSize maximum number of idle pooled {@link Fory} instances to retain, must be
-   *     non-negative
-   */
-  public ThreadSafeFory buildVirtualThreadSafeFory(int maxPoolSize) {
-    forVirtualThread = true;
     finish();
-    ClassLoader builderClassLoader = this.classLoader;
-    ClassLoader resolvedClassLoader =
-        builderClassLoader != null
-            ? builderClassLoader
-            : Thread.currentThread().getContextClassLoader();
-    if (resolvedClassLoader == null) {
-      resolvedClassLoader = Fory.class.getClassLoader();
-    }
-    final ClassLoader finalClassLoader = resolvedClassLoader;
+    ClassLoader loader = this.classLoader;
     this.classLoader = null;
-    SharedRegistry sharedRegistry = new SharedRegistry();
-    List<Consumer<ForyBuilder>> actions = new ArrayList<>(this.actions);
-    return new ThreadSafeForyPool(
-        builder -> {
-          builder.replayActions(actions);
-          builder.forVirtualThread = true;
-          builder.finish();
-          return newFory(builder, finalClassLoader, sharedRegistry);
-        },
-        sharedRegistry,
-        maxPoolSize);
+    return new ThreadPoolFory(factory(loader), DEFAULT_THREAD_SAFE_POOL_SIZE);
+  }
+
+  /** Build thread safe fory backed by {@link ThreadLocalFory}. */
+  public ThreadLocalFory buildThreadLocalFory() {
+    finish();
+    ClassLoader loader = this.classLoader;
+    this.classLoader = null;
+    return new ThreadLocalFory(factory(loader));
   }
 
   /**
-   * Build pooled ThreadSafeFory.
+   * Build a thread-safe {@link ThreadSafeFory} backed by a fixed-size shared pool.
    *
-   * @param maxPoolSize max number of idle pooled serializers retained for reuse
-   * @return ThreadSafeForyPool
+   * <p>{@code poolSize} {@link Fory} instances are created eagerly and kept in shared fixed slots.
+   * Each call borrows one instance through a thread-agnostic fast path and only blocks when every
+   * pooled instance is already in use. The runtime never keys reuse by {@link Thread}.
+   *
+   * @param poolSize fixed number of pooled instances
+   * @return thread-safe fory backed by a fixed-size shared pool
    */
-  public ThreadSafeFory buildThreadSafeForyPool(int maxPoolSize) {
-    return buildVirtualThreadSafeFory(maxPoolSize);
+  public ThreadSafeFory buildThreadSafeForyPool(int poolSize) {
+    if (poolSize <= 0) {
+      throw new IllegalArgumentException(
+          String.format(
+              "thread safe fory pool's size error, please check it, size:[%s]", poolSize));
+    }
+    finish();
+    ClassLoader loader = this.classLoader;
+    this.classLoader = null;
+    return new ThreadPoolFory(factory(loader), poolSize);
   }
 
+  private Function<ForyBuilder, Fory> factory(ClassLoader loader) {
+    List<Consumer<ForyBuilder>> actions = new ArrayList<>(this.actions);
+    return builder -> {
+      builder.replayActions(actions);
+      builder.finish();
+      return newFory(builder, loader, builder.sharedRegistry);
+    };
+  }
 }

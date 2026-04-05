@@ -54,7 +54,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -75,7 +75,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -98,7 +98,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -121,7 +121,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -142,7 +142,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -163,7 +163,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -195,7 +195,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -217,7 +217,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -293,7 +293,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -315,7 +315,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -336,7 +336,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -357,7 +357,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -378,7 +378,7 @@ public class PrimitiveSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

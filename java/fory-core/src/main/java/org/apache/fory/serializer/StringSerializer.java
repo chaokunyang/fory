@@ -154,11 +154,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     return readString(readContext.getBuffer());
   }
 
-  @Override
-  public boolean threadSafe() {
-    return false;
-  }
-
   public static Expression writeStringExpr(Expression strSerializer, Expression buffer, Expression str, boolean compressString) {
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {

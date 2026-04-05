@@ -41,5 +41,5 @@ public class UuidSerializer(config: Config) : ImmutableSerializer<Uuid>(config, 
     return Uuid.fromLongs(buffer.readInt64(), buffer.readInt64())
   }
 
-  override fun threadSafe(): Boolean = true
+  override fun shareable(): Boolean = true
 }

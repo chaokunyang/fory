@@ -125,7 +125,7 @@ public class ProtobufSerializer extends Serializer<Message> {
   }
 
   @Override
-  public boolean threadSafe() {
+  public boolean shareable() {
     return true;
   }
 }

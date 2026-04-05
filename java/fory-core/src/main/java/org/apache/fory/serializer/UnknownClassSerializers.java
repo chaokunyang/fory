@@ -294,7 +294,7 @@ public final class UnknownClassSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

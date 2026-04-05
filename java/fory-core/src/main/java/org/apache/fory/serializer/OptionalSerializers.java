@@ -84,7 +84,7 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -113,7 +113,7 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -142,7 +142,7 @@ public final class OptionalSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

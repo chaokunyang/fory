@@ -434,7 +434,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -461,7 +461,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -488,7 +488,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -515,7 +515,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -542,7 +542,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -570,7 +570,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -591,7 +591,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -611,7 +611,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -633,7 +633,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -659,7 +659,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -684,7 +684,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -705,7 +705,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -732,7 +732,7 @@ public class Serializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

@@ -41,7 +41,7 @@ public final class Float16Serializer extends ImmutableSerializer<Float16> {
   }
 
   @Override
-  public boolean threadSafe() {
+  public boolean shareable() {
     return true;
   }
 }

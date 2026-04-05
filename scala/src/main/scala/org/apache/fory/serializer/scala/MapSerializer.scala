@@ -22,7 +22,6 @@ package org.apache.fory.serializer.scala
 import org.apache.fory.collection.MapEntry
 import org.apache.fory.context.ReadContext
 import org.apache.fory.context.WriteContext
-import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.resolver.TypeResolver
 import org.apache.fory.serializer.collection.MapLikeSerializer
 
@@ -48,9 +47,10 @@ import scala.collection.{Factory, mutable}
  */
 abstract class AbstractScalaMapSerializer[K, V, T](typeResolver: TypeResolver, cls: Class[T])
   extends MapLikeSerializer[T](typeResolver, cls) {
-  def onMapWrite(writeContext: WriteContext, buffer: MemoryBuffer, value: T): util.Map[_, _]
+  def onMapWrite(writeContext: WriteContext, value: T): util.Map[_, _]
 
-  override def newMap(readContext: ReadContext, buffer: MemoryBuffer): util.Map[_, _] = {
+  override def newMap(readContext: ReadContext): util.Map[_, _] = {
+    val buffer = readContext.getBuffer
     val numElements = buffer.readVarUint32()
     setNumElements(numElements)
     val factory = readContext.readRef().asInstanceOf[Factory[(K, V), T]]
@@ -118,8 +118,8 @@ class ScalaMapSerializer[K, V, T <: scala.collection.Map[K, V]](
 
   override def onMapWrite(
       writeContext: WriteContext,
-      buffer: MemoryBuffer,
       value: T): util.Map[_, _] = {
+    val buffer = writeContext.getBuffer
     buffer.writeVarUint32Small7(value.size)
     val factory = value.mapFactory.mapFactory[Any, Any].asInstanceOf[Factory[Any, Any]]
     writeContext.writeRef(factory)
@@ -138,8 +138,8 @@ class ScalaSortedMapSerializer[K, V, T <: scala.collection.SortedMap[K, V]](
   extends AbstractScalaMapSerializer[K, V, T](typeResolver, cls) {
   override def onMapWrite(
       writeContext: WriteContext,
-      buffer: MemoryBuffer,
       value: T): util.Map[_, _] = {
+    val buffer = writeContext.getBuffer
     buffer.writeVarUint32Small7(value.size)
     val factory = value.sortedMapFactory.sortedMapFactory[Any, Any](
       value.ordering.asInstanceOf[Ordering[Any]]).asInstanceOf[Factory[Any, Any]]

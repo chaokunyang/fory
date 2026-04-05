@@ -19,8 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import static org.apache.fory.serializer.AbstractObjectSerializer.readBuildInFieldValue;
-
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 
@@ -62,7 +60,6 @@ import org.apache.fory.util.record.RecordUtils;
  *   <li>class that can't be handled by other serializers or codegen-based serializers
  * </ul>
  */
-// TODO(chaokunyang) support generics optimization for {@code SomeClass<T>}
 public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(ObjectSerializer.class);
 

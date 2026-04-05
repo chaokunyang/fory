@@ -27,7 +27,8 @@ Custom serializers should not retain `Fory`.
 
 - Use `Config` when the serializer only depends on immutable configuration and can be shared.
 - Use `TypeResolver` when the serializer needs type metadata, generics, or nested dynamic dispatch.
-- If a serializer retains `TypeResolver`, it is not thread-safe and should keep the default `threadSafe() == false`.
+- If a serializer retains `TypeResolver`, it is usually not shareable and should keep the default
+  `shareable() == false`.
 
 ## Basic Serializer
 
@@ -62,7 +63,7 @@ public final class FooSerializer extends Serializer<Foo> {
   }
 
   @Override
-  public boolean threadSafe() {
+  public boolean shareable() {
     return true;
   }
 }
@@ -81,14 +82,14 @@ If your serializer needs to write or read nested objects, use the context helper
 retaining `Fory`:
 
 ```java
+import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 
 public final class EnvelopeSerializer extends Serializer<Envelope> {
-  public EnvelopeSerializer(TypeResolver typeResolver) {
-    super(typeResolver, Envelope.class);
+  public EnvelopeSerializer(Config config) {
+    super(config, Envelope.class);
   }
 
   @Override
@@ -107,7 +108,7 @@ public final class EnvelopeSerializer extends Serializer<Envelope> {
 }
 ```
 
-This serializer is not thread-safe because it retains `TypeResolver`.
+This serializer can be shareable because it retains no runtime-local mutable state.
 
 ## Collection Serializers
 
@@ -123,6 +124,8 @@ Example:
 ```java
 import java.util.ArrayList;
 import java.util.Collection;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionSerializer;
@@ -134,8 +137,8 @@ public final class CustomCollectionSerializer<T extends Collection<?>>
   }
 
   @Override
-  public Collection onCollectionWrite(MemoryBuffer buffer, T value) {
-    buffer.writeVarUint32Small7(value.size());
+  public Collection onCollectionWrite(WriteContext writeContext, T value) {
+    writeContext.getBuffer().writeVarUint32Small7(value.size());
     return value;
   }
 
@@ -145,7 +148,8 @@ public final class CustomCollectionSerializer<T extends Collection<?>>
   }
 
   @Override
-  public Collection newCollection(MemoryBuffer buffer) {
+  public Collection newCollection(ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     int numElements = buffer.readVarUint32Small7();
     setNumElements(numElements);
     return new ArrayList(numElements);
@@ -161,6 +165,8 @@ For Java maps, extend `MapSerializer` or `MapLikeSerializer`.
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.MapSerializer;
 
@@ -170,8 +176,8 @@ public final class CustomMapSerializer<T extends Map<?, ?>> extends MapSerialize
   }
 
   @Override
-  public Map onMapWrite(MemoryBuffer buffer, T value) {
-    buffer.writeVarUint32Small7(value.size());
+  public Map onMapWrite(WriteContext writeContext, T value) {
+    writeContext.getBuffer().writeVarUint32Small7(value.size());
     return value;
   }
 
@@ -181,7 +187,8 @@ public final class CustomMapSerializer<T extends Map<?, ?>> extends MapSerialize
   }
 
   @Override
-  public Map newMap(MemoryBuffer buffer) {
+  public Map newMap(ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     int numElements = buffer.readVarUint32Small7();
     setNumElements(numElements);
     return new LinkedHashMap(numElements);
@@ -209,14 +216,15 @@ fory.registerSerializer(
     CustomMap.class, resolver -> new CustomMapSerializer<>(resolver, CustomMap.class));
 ```
 
-## Thread Safety
+## Shareability
 
-Override `threadSafe()` only when all retained fields are immutable and the serializer does not
-retain `TypeResolver`, `Fory`, or other runtime state.
+Override `shareable()` only when the serializer can be safely reused across equivalent runtimes and
+concurrent operations. In practice, that means the serializer must not retain operation state,
+runtime-local mutable state, or mutable scratch buffers that are shared across calls.
 
 In practice:
 
-- `Config`-only serializers are often thread-safe.
-- `TypeResolver`-based serializers are not thread-safe.
+- `Config`-only serializers are often shareable.
+- `TypeResolver`-based serializers are usually not shareable.
 - Operation state belongs in `WriteContext`, `ReadContext`, and `CopyContext`, not in serializer
   fields.

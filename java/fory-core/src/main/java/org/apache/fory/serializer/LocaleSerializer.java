@@ -105,7 +105,7 @@ public final class LocaleSerializer extends ImmutableSerializer<Locale> {
   }
 
   @Override
-  public boolean threadSafe() {
+  public boolean shareable() {
     return true;
   }
 }

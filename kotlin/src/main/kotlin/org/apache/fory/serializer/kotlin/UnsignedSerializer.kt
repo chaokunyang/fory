@@ -47,7 +47,7 @@ public class UByteSerializer(
     return readContext.buffer.readByte().toUByte()
   }
 
-  override fun threadSafe(): Boolean = true
+  override fun shareable(): Boolean = true
 }
 
 /**
@@ -72,7 +72,7 @@ public class UShortSerializer(
     return readContext.buffer.readVarUint32().toUShort()
   }
 
-  override fun threadSafe(): Boolean = true
+  override fun shareable(): Boolean = true
 }
 
 /**
@@ -98,7 +98,7 @@ public class UIntSerializer(
     return readContext.buffer.readVarUint32().toUInt()
   }
 
-  override fun threadSafe(): Boolean = true
+  override fun shareable(): Boolean = true
 }
 
 /**
@@ -123,5 +123,5 @@ public class ULongSerializer(
     return readContext.buffer.readVarUint64().toULong()
   }
 
-  override fun threadSafe(): Boolean = true
+  override fun shareable(): Boolean = true
 }

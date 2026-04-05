@@ -67,7 +67,7 @@ public class BufferSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

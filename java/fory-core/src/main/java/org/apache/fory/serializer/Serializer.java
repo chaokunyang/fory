@@ -19,7 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.Fory;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
@@ -39,12 +38,11 @@ import org.apache.fory.type.TypeUtils;
  * <p>This type stays an abstract class instead of an interface so hot-path flag checks such as
  * {@link #needToWriteRef()} avoid an extra virtual dispatch.
  *
- * <p>Unless a subclass overrides {@link #threadSafe()}, instances are runtime-local and must not be
- * shared across concurrent operations.
+ * <p>Unless a subclass overrides {@link #shareable()}, instances are runtime-local and must not be
+ * shared across equivalent runtimes or concurrent operations.
  *
  * @param <T> value type handled by this serializer
  */
-@NotThreadSafe
 @SuppressWarnings("unchecked")
 public abstract class Serializer<T> {
   protected final Class<T> type;
@@ -207,12 +205,31 @@ public abstract class Serializer<T> {
   }
 
   /**
-   * Returns whether this serializer instance can be safely shared across concurrent operations.
+   * Returns whether this serializer instance may be shared across equivalent runtimes.
    *
-   * <p>The default is {@code false}. Override only when all internal state is immutable or
-   * otherwise concurrency-safe.
+   * <p>The default is {@code false}, which means the serializer instance is runtime-local and must
+   * only be used by the runtime that created it.
+   *
+   * <p>Returning {@code true} is a stronger contract than ordinary thread safety. A shareable
+   * serializer must satisfy all the following:
+   *
+   * <ul>
+   *   <li>It is safe for concurrent use by multiple threads.
+   *   <li>It does not retain operation-local mutable state such as active {@link WriteContext},
+   *       {@link ReadContext}, {@link CopyContext}, or temporary {@link MemoryBuffer} references.
+   *   <li>It does not retain runtime-local mutable state whose behavior depends on a specific
+   *       runtime instance, such as mutable resolver state tied to a particular class-loading or
+   *       registration session.
+   *   <li>Any retained fields are immutable, effectively immutable, or otherwise concurrency-safe
+   *       and independent of the calling runtime.
+   * </ul>
+   *
+   * <p>Override this only in concrete leaf serializers. Intermediate base classes should keep the
+   * default to avoid accidentally widening sharing for subclasses that carry mutable state.
+   *
+   * <p>If in doubt, keep the default {@code false}.
    */
-  public boolean threadSafe() {
+  public boolean shareable() {
     return false;
   }
 }

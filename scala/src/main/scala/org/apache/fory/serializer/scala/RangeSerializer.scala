@@ -53,7 +53,7 @@ class RangeSerializer[T <: Range](config: Config, cls: Class[T])
     }
   }
 
-  override def threadSafe(): Boolean = true
+  override def shareable(): Boolean = true
 }
 
 
@@ -96,5 +96,5 @@ class NumericRangeSerializer[A, T <: NumericRange[A]](config: Config, cls: Class
     ctr.invoke(start, end, step, readContext.readRef()).asInstanceOf[T]
   }
 
-  override def threadSafe(): Boolean = true
+  override def shareable(): Boolean = true
 }

@@ -247,7 +247,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -277,7 +277,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -307,7 +307,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -337,7 +337,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -409,7 +409,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -516,7 +516,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -571,7 +571,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -602,7 +602,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -629,7 +629,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -659,7 +659,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -687,7 +687,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -717,7 +717,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -745,7 +745,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -775,7 +775,7 @@ public class TimeSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

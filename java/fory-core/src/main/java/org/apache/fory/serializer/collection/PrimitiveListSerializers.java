@@ -51,7 +51,7 @@ public class PrimitiveListSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

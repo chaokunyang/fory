@@ -399,7 +399,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    * Skip data for a layer that exists in sender but not in receiver. This is needed for schema
    * evolution when sender's class hierarchy has layers that receiver doesn't have.
    *
-   * @param buffer the memory buffer to read from
+   * @param readContext the read context to read from
    * @param senderClass the class from sender that receiver doesn't have
    */
   private void skipUnknownLayerData(ReadContext readContext, Class<?> senderClass) {

@@ -71,7 +71,7 @@ public class EnsureSerializerExample {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

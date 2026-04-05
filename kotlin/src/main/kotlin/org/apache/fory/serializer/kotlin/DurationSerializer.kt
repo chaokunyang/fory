@@ -122,5 +122,5 @@ public class DurationSerializer(config: Config) :
     }
   }
 
-  override fun threadSafe(): Boolean = true
+  override fun shareable(): Boolean = true
 }

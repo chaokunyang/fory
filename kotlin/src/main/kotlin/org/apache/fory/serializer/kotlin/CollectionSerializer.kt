@@ -21,7 +21,6 @@ package org.apache.fory.serializer.kotlin
 
 import org.apache.fory.context.ReadContext
 import org.apache.fory.context.WriteContext
-import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.resolver.TypeResolver
 import org.apache.fory.serializer.collection.CollectionLikeSerializer
 
@@ -33,7 +32,6 @@ public abstract class AbstractKotlinCollectionSerializer<E, T : Iterable<E>>(
 ) : CollectionLikeSerializer<T>(typeResolver, cls) {
   abstract override fun onCollectionWrite(
     writeContext: WriteContext,
-    buffer: MemoryBuffer,
     value: T,
   ): Collection<E>
 
@@ -50,15 +48,15 @@ public class KotlinArrayDequeSerializer<E>(
 ) : AbstractKotlinCollectionSerializer<E, ArrayDeque<E>>(typeResolver, cls) {
   override fun onCollectionWrite(
     writeContext: WriteContext,
-    buffer: MemoryBuffer,
     value: ArrayDeque<E>,
   ): Collection<E> {
     val adapter = IterableAdapter<E>(value)
-    buffer.writeVarUint32Small7(adapter.size)
+    writeContext.buffer.writeVarUint32Small7(adapter.size)
     return adapter
   }
 
-  override fun newCollection(readContext: ReadContext, buffer: MemoryBuffer): Collection<E> {
+  override fun newCollection(readContext: ReadContext): Collection<E> {
+    val buffer = readContext.buffer
     val numElements = buffer.readVarUint32Small7()
     setNumElements(numElements)
     return ArrayDequeBuilder<E>(ArrayDeque<E>(numElements))

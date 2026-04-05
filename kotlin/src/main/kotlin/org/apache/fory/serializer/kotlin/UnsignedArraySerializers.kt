@@ -56,7 +56,7 @@ public abstract class AbstractDelegatingArraySerializer<T, T_Delegate>(
     return fromDelegateClass(delegatedValue)
   }
 
-  override fun threadSafe(): Boolean = true
+  override fun shareable(): Boolean = true
 }
 
 public class UByteArraySerializer(

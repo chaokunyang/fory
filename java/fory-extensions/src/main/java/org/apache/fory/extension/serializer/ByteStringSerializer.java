@@ -65,7 +65,7 @@ public class ByteStringSerializer extends Serializer<ByteString> {
   }
 
   @Override
-  public boolean threadSafe() {
+  public boolean shareable() {
     return true;
   }
 }

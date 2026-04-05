@@ -48,7 +48,7 @@ public class UnsignedSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -69,7 +69,7 @@ public class UnsignedSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -90,7 +90,7 @@ public class UnsignedSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }
@@ -111,7 +111,7 @@ public class UnsignedSerializers {
     }
 
     @Override
-    public boolean threadSafe() {
+    public boolean shareable() {
       return true;
     }
   }

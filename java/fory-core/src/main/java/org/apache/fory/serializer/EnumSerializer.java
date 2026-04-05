@@ -113,7 +113,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
   }
 
   @Override
-  public boolean threadSafe() {
+  public boolean shareable() {
     return config.forVirtualThread();
   }
 }

@@ -129,12 +129,44 @@ public class TypeInfo {
     this.userTypeId = userTypeId;
   }
 
+  public TypeInfo copy(int typeId) {
+    if (typeId == this.typeId) {
+      return this;
+    }
+    return new TypeInfo(
+        cls,
+        namespaceBytes,
+        typeNameBytes,
+        isDynamicGeneratedClass,
+        serializer,
+        typeId,
+        userTypeId);
+  }
+
+  public TypeInfo copy(int typeId, int userTypeId) {
+    if (typeId == this.typeId && userTypeId == this.userTypeId) {
+      return this;
+    }
+    return new TypeInfo(
+        cls,
+        namespaceBytes,
+        typeNameBytes,
+        isDynamicGeneratedClass,
+        serializer,
+        typeId,
+        userTypeId);
+  }
+
   public Class<?> getCls() {
     return cls;
   }
 
   public TypeDef getTypeDef() {
     return typeDef;
+  }
+
+  void setTypeDef(TypeDef typeDef) {
+    this.typeDef = typeDef;
   }
 
   /** Returns the fory type ID for this class. */

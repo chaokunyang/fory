@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.ConcurrentIdentityMap;
@@ -37,25 +36,11 @@ import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.GraalvmSupport;
-import org.apache.fory.util.GraalvmSupport.GraalvmSerializerHolder;
 
-/**
- * Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances.
- *
- * <p>A {@code SharedRegistry} is scoped to one effective config hash. Do not share it across
- * incompatible configs.
- *
- * <p>Only thread-safe serializers and immutable pre-registered {@link TypeInfo} instances live in
- * this registry. User-registered or meta-shared {@link TypeInfo} must stay local to each {@link
- * TypeResolver}. Shared pre-registered {@link TypeInfo} are keyed by the exact {@code (class,
- * typeId)} pair because one Java class can map to multiple xlang built-in type IDs. A shared
- * pre-registered {@link TypeInfo} is canonical and must never be mutated in a local resolver. If a
- * resolver needs a different serializer, it must install a new local {@link TypeInfo} instead.
- */
+/** Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances. */
 @Internal
 public final class SharedRegistry {
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
@@ -75,14 +60,6 @@ public final class SharedRegistry {
   final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap =
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<MetaStringKey, EncodedMetaString> metaStringMap =
-      new ConcurrentHashMap<>();
-  final ConcurrentHashMap<MetaStringKey, MetaStringRef> metaStringRefsByKey =
-      new ConcurrentHashMap<>();
-  final ConcurrentHashMap<EncodedMetaString, MetaStringRef> metaStringRefsByEncoded =
-      new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<SerializerCacheKey, Serializer<?>> serializers =
-      new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<PreRegisteredTypeInfoKey, TypeInfo> preRegisteredTypeInfos =
       new ConcurrentHashMap<>();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
@@ -118,84 +95,6 @@ public final class SharedRegistry {
     return metaStringMap.computeIfAbsent(key, ignored -> encoder.encodeBinary(string, encoding));
   }
 
-  public MetaStringRef getOrCreateMetaStringRef(EncodedMetaString encodedMetaString) {
-    return metaStringRefsByEncoded.computeIfAbsent(encodedMetaString, MetaStringRef::new);
-  }
-
-  public MetaStringRef getOrCreateMetaStringRef(
-      String string,
-      MetaStringEncoder encoder,
-      MetaString.Encoding encoding,
-      String encoderTypeKey) {
-    MetaStringKey key = new MetaStringKey(string, encoderTypeKey, encoding);
-    return metaStringRefsByKey.computeIfAbsent(
-        key,
-        ignored ->
-            new MetaStringRef(
-                getOrCreateEncodedMetaString(string, encoder, encoding, encoderTypeKey)));
-  }
-
-  @FunctionalInterface
-  public interface SerializerBuilder<T extends Serializer<?>> {
-    T build();
-  }
-
-  @SuppressWarnings("unchecked")
-  public <T> Serializer<T> getSerializer(
-      Class<?> type, Class<? extends Serializer> serializerClass) {
-    return (Serializer<T>) serializers.get(new SerializerCacheKey(type, serializerClass));
-  }
-
-  @SuppressWarnings("unchecked")
-  public <T extends Serializer<?>> T getOrCreateSerializer(
-      Class<?> type, Class<? extends Serializer> serializerClass, SerializerBuilder<T> builder) {
-    SerializerCacheKey key = new SerializerCacheKey(type, serializerClass);
-    Serializer<?> existing = serializers.get(key);
-    if (existing != null) {
-      return (T) existing;
-    }
-    T serializer = builder.build();
-    if (serializer == null || !serializer.threadSafe()) {
-      return serializer;
-    }
-    Serializer<?> winner = serializers.putIfAbsent(key, serializer);
-    return winner == null ? serializer : (T) winner;
-  }
-
-  @SuppressWarnings("unchecked")
-  public <T extends Serializer<?>> T shareSerializer(Class<?> type, T serializer) {
-    if (serializer == null || !serializer.threadSafe()) {
-      return serializer;
-    }
-    SerializerCacheKey key = new SerializerCacheKey(type, serializerClass(serializer));
-    Serializer<?> existing = serializers.putIfAbsent(key, serializer);
-    return existing == null ? serializer : (T) existing;
-  }
-
-  public <T extends Serializer<?>> T setSerializer(Class<?> type, T serializer) {
-    if (serializer == null || !serializer.threadSafe()) {
-      return serializer;
-    }
-    serializers.put(new SerializerCacheKey(type, serializerClass(serializer)), serializer);
-    return serializer;
-  }
-
-  public TypeInfo getPreRegisteredTypeInfo(Class<?> type, int typeId) {
-    return preRegisteredTypeInfos.get(new PreRegisteredTypeInfoKey(type, typeId));
-  }
-
-  public TypeInfo getOrCreatePreRegisteredTypeInfo(
-      Class<?> type, int typeId, Supplier<TypeInfo> builder) {
-    PreRegisteredTypeInfoKey key = new PreRegisteredTypeInfoKey(type, typeId);
-    TypeInfo typeInfo = preRegisteredTypeInfos.get(key);
-    if (typeInfo != null) {
-      return typeInfo;
-    }
-    TypeInfo created = builder.get();
-    TypeInfo existing = preRegisteredTypeInfos.putIfAbsent(key, created);
-    return existing == null ? created : existing;
-  }
-
   TypeDef getOrCreateTypeDef(TypeDef typeDef) {
     TypeDef existingTypeDef = typeDefById.putIfAbsent(typeDef.getId(), typeDef);
     return existingTypeDef == null ? typeDef : existingTypeDef;
@@ -216,8 +115,7 @@ public final class SharedRegistry {
     if (GraalvmSupport.isGraalBuildtime()) {
       return Collections.unmodifiableList(new ArrayList<>(factory.get()));
     }
-    TypeDefDescriptorsKey key =
-        new TypeDefDescriptorsKey(typeDef.getId(), type, typeDef.getClassSpec().type);
+    TypeDefDescriptorsKey key = new TypeDefDescriptorsKey(typeDef.getId(), type);
     return typeDefDescriptorsCache.computeIfAbsent(
         key, ignored -> Collections.unmodifiableList(new ArrayList<>(factory.get())));
   }
@@ -250,72 +148,10 @@ public final class SharedRegistry {
     }
     TypeDefDescriptorGrouperKey key =
         new TypeDefDescriptorGrouperKey(
-            new TypeDefDescriptorsKey(typeDef.getId(), type, typeDef.getClassSpec().type),
+            new TypeDefDescriptorsKey(typeDef.getId(), type),
             descriptorsGroupedOrdered,
             descriptorUpdator);
     return typeDefDescriptorGrouperCache.computeIfAbsent(key, ignored -> factory.get());
-  }
-
-  @SuppressWarnings("unchecked")
-  private static Class<? extends Serializer> serializerClass(Serializer<?> serializer) {
-    if (serializer instanceof GraalvmSerializerHolder) {
-      return ((GraalvmSerializerHolder) serializer).getSerializerClass();
-    }
-    return (Class<? extends Serializer>) serializer.getClass();
-  }
-
-  private static final class SerializerCacheKey {
-    private final Class<?> type;
-    private final Class<? extends Serializer> serializerClass;
-
-    private SerializerCacheKey(Class<?> type, Class<? extends Serializer> serializerClass) {
-      this.type = Objects.requireNonNull(type);
-      this.serializerClass = Objects.requireNonNull(serializerClass);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (!(o instanceof SerializerCacheKey)) {
-        return false;
-      }
-      SerializerCacheKey that = (SerializerCacheKey) o;
-      return type == that.type && serializerClass == that.serializerClass;
-    }
-
-    @Override
-    public int hashCode() {
-      return 31 * System.identityHashCode(type) + System.identityHashCode(serializerClass);
-    }
-  }
-
-  private static final class PreRegisteredTypeInfoKey {
-    private final Class<?> type;
-    private final int typeId;
-
-    private PreRegisteredTypeInfoKey(Class<?> type, int typeId) {
-      this.type = Objects.requireNonNull(type);
-      this.typeId = typeId;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (!(o instanceof PreRegisteredTypeInfoKey)) {
-        return false;
-      }
-      PreRegisteredTypeInfoKey that = (PreRegisteredTypeInfoKey) o;
-      return type == that.type && typeId == that.typeId;
-    }
-
-    @Override
-    public int hashCode() {
-      return 31 * System.identityHashCode(type) + typeId;
-    }
   }
 
   private static final class MetaStringKey {
@@ -379,17 +215,10 @@ public final class SharedRegistry {
   private static final class TypeDefDescriptorsKey {
     private final long typeDefId;
     private final Class<?> type;
-    private final Class<?> typeDefClass;
 
-    private TypeDefDescriptorsKey(long typeDefId, Class<?> type, Class<?> typeDefClass) {
+    private TypeDefDescriptorsKey(long typeDefId, Class<?> type) {
       this.typeDefId = typeDefId;
       this.type = Objects.requireNonNull(type);
-      this.typeDefClass = typeDefClass;
-    }
-
-    private boolean referencesClassLoader(ClassLoader loader) {
-      return type.getClassLoader() == loader
-          || (typeDefClass != null && typeDefClass.getClassLoader() == loader);
     }
 
     @Override

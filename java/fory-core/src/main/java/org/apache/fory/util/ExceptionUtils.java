@@ -62,7 +62,7 @@ public class ExceptionUtils {
     }
     ReadContext readContext = fory.getReadContext();
     if (readContext.getRefReader() instanceof MapRefReader) {
-      ObjectArray readObjects = ((MapRefReader) readContext.getRefReader()).getReadObjects();
+      ObjectArray readObjects = ((MapRefReader) readContext.getRefReader()).getReadRefs();
       // carry with read objects for better trouble shooting.
       List<Object> objects = Arrays.asList(readObjects.objects).subList(0, readObjects.size);
       throw new DeserializationException(objects, t);

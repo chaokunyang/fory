@@ -113,10 +113,10 @@ public abstract class Serializer<T> {
       int nextReadRefId = readContext.tryPreserveRefId();
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         obj = read(readContext);
-        readContext.setReadObject(nextReadRefId, obj);
+        readContext.setReadRef(nextReadRefId, obj);
         return obj;
       } else {
-        return (T) readContext.getReadObject();
+        return (T) readContext.getReadRef();
       }
     } else if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
       if (needToWriteRef) {

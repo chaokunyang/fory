@@ -1117,7 +1117,7 @@ public class XtypeResolver extends TypeResolver {
   // nilTypeInfo and nilTypeInfoHolder are inherited from TypeResolver
 
   @Override
-  protected TypeInfo getListTypeInfo(ReadContext readContext) {
+  protected TypeInfo readListTypeInfo(ReadContext readContext) {
     GenericType genericType = readContext.getGenerics().nextGenericType(readContext.getDepth() + 1);
     if (genericType != null) {
       return getOrBuildTypeInfo(genericType.getCls());
@@ -1126,7 +1126,7 @@ public class XtypeResolver extends TypeResolver {
   }
 
   @Override
-  protected TypeInfo getTimestampTypeInfo(ReadContext readContext) {
+  protected TypeInfo readTimestampTypeInfo(ReadContext readContext) {
     GenericType genericType = readContext.getGenerics().nextGenericType(readContext.getDepth() + 1);
     if (genericType != null) {
       return getOrBuildTypeInfo(genericType.getCls());

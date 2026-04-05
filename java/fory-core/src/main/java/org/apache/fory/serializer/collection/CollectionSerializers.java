@@ -479,7 +479,7 @@ public class CollectionSerializers {
       // It's possible that comparator/elements has circular ref to set.
       Comparator comparator = (Comparator) readContext.readRef();
       ConcurrentSkipListSet skipListSet = new ConcurrentSkipListSet(comparator);
-      readContext.setReadObject(refId, skipListSet);
+      readContext.setReadRef(refId, skipListSet);
       return skipListSet;
     }
 
@@ -536,7 +536,7 @@ public class CollectionSerializers {
         }
         setNumElements(0);
       }
-      readContext.setReadObject(refId, set);
+      readContext.setReadRef(refId, set);
       return set;
     }
 

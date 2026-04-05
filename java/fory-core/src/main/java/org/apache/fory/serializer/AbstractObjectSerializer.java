@@ -164,10 +164,10 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
                 .readTypeInfo(readContext, fieldInfo.type)
                 .getSerializer()
                 .read(readContext);
-        refReader.setReadObject(nextReadRefId, value);
+        refReader.setReadRef(nextReadRefId, value);
         return value;
       }
-      return refReader.getReadObject();
+      return refReader.getReadRef();
     }
     if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
       TypeInfo typeInfo = typeResolver.readTypeInfo(readContext, fieldInfo.type);
@@ -574,10 +574,10 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       } else {
         value = readContext.readData(typeResolver.readTypeInfo(readContext));
       }
-      refReader.setReadObject(nextReadRefId, value);
+      refReader.setReadRef(nextReadRefId, value);
       return value;
     }
-    return refReader.getReadObject();
+    return refReader.getReadRef();
   }
 
   /**

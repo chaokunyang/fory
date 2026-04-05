@@ -1899,13 +1899,13 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression needDeserialize =
         ExpressionUtils.egt(refId, new Literal(Fory.NOT_NULL_VALUE_FLAG, PRIMITIVE_BYTE_TYPE));
     Expression deserializedValue = deserializeForNotNull.get();
-    Expression setReadObject = invokeReadContext("setReadObject", refId, deserializedValue);
-    Expression readValue = inlineInvokeReadContext("getReadObject", OBJECT_TYPE);
+    Expression setReadRef = invokeReadContext("setReadRef", refId, deserializedValue);
+    Expression readValue = inlineInvokeReadContext("getReadRef", OBJECT_TYPE);
     // use false to ignore null
     return new If(
         needDeserialize,
         callback.apply(
-            new ListExpression(refId, deserializedValue, setReadObject, deserializedValue)),
+            new ListExpression(refId, deserializedValue, setReadRef, deserializedValue)),
         callback.apply(readValue),
         false);
   }
@@ -2050,7 +2050,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     // Check if the TYPE normally needs ref tracking, ignoring field-level metadata.
     // When global ref tracking is enabled, serializers call reference() at the end.
     // If field has trackingRef=false but the type's serializer calls reference(),
-    // we need to push a stub -1 so reference() can pop it and skip setReadObject.
+    // we need to push a stub -1 so reference() can pop it and skip setReadRef.
     // Use raw type without metadata to check type-level ref tracking.
     boolean serializerCallsReference = needWriteRef(TypeRef.of(typeRef.getRawType()));
 
@@ -2065,7 +2065,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           // When a field explicitly disables ref tracking (@ForyField(trackingRef=false))
           // but global ref tracking is enabled, the serializer will call reference().
           // We need to preserve a -1 id so that when the deserializer calls reference(),
-          // it will pop this -1 and skip the setReadObject call.
+          // it will pop this -1 and skip the setReadRef call.
           Expression preserveStubRefId =
               invokeReadContext("preserveRefId", new Literal(-1, PRIMITIVE_INT_TYPE));
           return new ListExpression(preserveStubRefId, value, callback.apply(value));

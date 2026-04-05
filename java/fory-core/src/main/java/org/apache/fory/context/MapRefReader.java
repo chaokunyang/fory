@@ -37,7 +37,7 @@ public final class MapRefReader implements RefReader {
   public byte readRefOrNull(MemoryBuffer buffer) {
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.REF_FLAG) {
-      readObject = getReadObject(buffer.readVarUint32Small14());
+      readObject = getReadRef(buffer.readVarUint32Small14());
     } else {
       readObject = null;
     }
@@ -62,7 +62,7 @@ public final class MapRefReader implements RefReader {
   public int tryPreserveRefId(MemoryBuffer buffer) {
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.REF_FLAG) {
-      readObject = getReadObject(buffer.readVarUint32Small14());
+      readObject = getReadRef(buffer.readVarUint32Small14());
     } else {
       readObject = null;
       if (headFlag == Fory.REF_VALUE_FLAG) {
@@ -85,27 +85,27 @@ public final class MapRefReader implements RefReader {
   @Override
   public void reference(Object object) {
     int refId = readRefIds.pop();
-    setReadObject(refId, object);
+    setReadRef(refId, object);
   }
 
   @Override
-  public Object getReadObject(int id) {
+  public Object getReadRef(int id) {
     return readObjects.get(id);
   }
 
   @Override
-  public Object getReadObject() {
+  public Object getReadRef() {
     return readObject;
   }
 
   @Override
-  public void setReadObject(int id, Object object) {
+  public void setReadRef(int id, Object object) {
     if (id >= 0) {
       readObjects.set(id, object);
     }
   }
 
-  public ObjectArray getReadObjects() {
+  public ObjectArray getReadRefs() {
     return readObjects;
   }
 

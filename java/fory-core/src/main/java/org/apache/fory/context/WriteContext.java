@@ -86,10 +86,6 @@ public final class WriteContext {
   }
 
   public MemoryBuffer getBuffer() {
-    return Preconditions.checkNotNull(buffer);
-  }
-
-  public MemoryBuffer getBufferOrNull() {
     return buffer;
   }
 
@@ -297,7 +293,6 @@ public final class WriteContext {
    * the object graph.
    */
   public void writeNonRef(Object obj) {
-    MemoryBuffer buffer = this.buffer;
     TypeResolver resolver = typeResolver;
     TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass());
     if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
@@ -317,7 +312,6 @@ public final class WriteContext {
   }
 
   public void writeNonRef(Object obj, TypeInfoHolder holder) {
-    MemoryBuffer buffer = this.buffer;
     TypeResolver resolver = typeResolver;
     TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass(), holder);
     if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
@@ -331,7 +325,6 @@ public final class WriteContext {
   }
 
   public void writeNonRef(Object obj, TypeInfo typeInfo) {
-    MemoryBuffer buffer = this.buffer;
     if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
       depth++;
       typeInfo.getSerializer().write(this, obj);

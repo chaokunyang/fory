@@ -102,7 +102,7 @@ public class JdkProxySerializer extends Serializer {
     Preconditions.checkNotNull(interfaces);
     Object proxy =
         Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
-    readContext.setReadObject(refId, proxy);
+    readContext.setReadRef(refId, proxy);
     InvocationHandler invocationHandler = (InvocationHandler) readContext.readRef();
     Preconditions.checkNotNull(invocationHandler);
     Platform.putObject(proxy, PROXY_HANDLER_FIELD_OFFSET, invocationHandler);

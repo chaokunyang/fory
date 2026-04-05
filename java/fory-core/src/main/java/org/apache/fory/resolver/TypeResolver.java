@@ -117,7 +117,6 @@ public abstract class TypeResolver {
   static final long MAX_USER_TYPE_ID = 0xffff_fffEL;
 
   final Config config;
-  final ClassLoader classLoader;
   final boolean metaContextShareEnabled;
   final SharedRegistry sharedRegistry;
   final JITContext jitContext;
@@ -140,11 +139,10 @@ public abstract class TypeResolver {
       SharedRegistry sharedRegistry,
       JITContext jitContext) {
     this.config = config;
-    this.classLoader = classLoader;
     this.sharedRegistry = sharedRegistry;
     this.jitContext = jitContext;
     metaContextShareEnabled = config.isMetaShareEnabled();
-    extRegistry = new ExtRegistry(sharedRegistry);
+    extRegistry = new ExtRegistry(classLoader, sharedRegistry);
     typeDefMap = sharedRegistry.typeDefMap;
     int length = isCrossLanguage() ? Types.BOUND : INTERNAL_NATIVE_ID_LIMIT;
     typeIdToTypeInfo = new TypeInfo[length];
@@ -155,7 +153,7 @@ public abstract class TypeResolver {
   }
 
   public final ClassLoader getClassLoader() {
-    return classLoader;
+    return extRegistry.classLoader;
   }
 
   public final SharedRegistry getSharedRegistry() {
@@ -545,10 +543,10 @@ public abstract class TypeResolver {
         }
         break;
       case Types.LIST:
-        typeInfo = getListTypeInfo(readContext);
+        typeInfo = readListTypeInfo(readContext);
         break;
       case Types.TIMESTAMP:
-        typeInfo = getTimestampTypeInfo(readContext);
+        typeInfo = readTimestampTypeInfo(readContext);
         break;
       default:
         typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
@@ -590,10 +588,10 @@ public abstract class TypeResolver {
         }
         break;
       case Types.LIST:
-        typeInfo = getListTypeInfo(readContext);
+        typeInfo = readListTypeInfo(readContext);
         break;
       case Types.TIMESTAMP:
-        typeInfo = getTimestampTypeInfo(readContext);
+        typeInfo = readTimestampTypeInfo(readContext);
         break;
       default:
         typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
@@ -640,10 +638,10 @@ public abstract class TypeResolver {
         }
         break;
       case Types.LIST:
-        typeInfo = getListTypeInfo(readContext);
+        typeInfo = readListTypeInfo(readContext);
         break;
       case Types.TIMESTAMP:
-        typeInfo = getTimestampTypeInfo(readContext);
+        typeInfo = readTimestampTypeInfo(readContext);
         break;
       default:
         typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
@@ -690,10 +688,10 @@ public abstract class TypeResolver {
         }
         break;
       case Types.LIST:
-        typeInfo = getListTypeInfo(readContext);
+        typeInfo = readListTypeInfo(readContext);
         break;
       case Types.TIMESTAMP:
-        typeInfo = getTimestampTypeInfo(readContext);
+        typeInfo = readTimestampTypeInfo(readContext);
         break;
       default:
         typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
@@ -864,11 +862,11 @@ public abstract class TypeResolver {
    */
   protected abstract TypeInfo ensureSerializerForTypeInfo(TypeInfo typeInfo);
 
-  protected TypeInfo getListTypeInfo(ReadContext readContext) {
+  protected TypeInfo readListTypeInfo(ReadContext readContext) {
     return getInternalTypeInfoByTypeId(Types.LIST);
   }
 
-  protected TypeInfo getTimestampTypeInfo(ReadContext readContext) {
+  protected TypeInfo readTimestampTypeInfo(ReadContext readContext) {
     return getInternalTypeInfoByTypeId(Types.TIMESTAMP);
   }
 
@@ -1078,7 +1076,7 @@ public abstract class TypeResolver {
       return cls;
     }
     try {
-      return Class.forName(className, false, classLoader);
+      return Class.forName(className, false, extRegistry.classLoader);
     } catch (ClassNotFoundException e) {
       try {
         return Class.forName(className, false, Thread.currentThread().getContextClassLoader());
@@ -1086,7 +1084,7 @@ public abstract class TypeResolver {
         String msg =
             String.format(
                 "Class %s not found from classloaders [%s, %s]",
-                className, classLoader, Thread.currentThread().getContextClassLoader());
+                className, extRegistry.classLoader, Thread.currentThread().getContextClassLoader());
         if (deserializeUnknownClass) {
           LOG.warn(msg);
           return UnknownClass.getUnknowClass(className, isEnum, arrayDims, metaContextShareEnabled);
@@ -1797,8 +1795,10 @@ public abstract class TypeResolver {
     final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>
         descriptorsCache;
     final ConcurrentHashMap<List<ClassLoader>, CodeGenerator> codeGeneratorMap;
+    final ClassLoader classLoader;
 
-    ExtRegistry(SharedRegistry sharedRegistry) {
+    ExtRegistry(ClassLoader classLoader, SharedRegistry sharedRegistry) {
+      this.classLoader = classLoader;
       currentLayerTypeDef = sharedRegistry.currentLayerTypeDef;
       descriptorsCache = sharedRegistry.descriptorsCache;
       codeGeneratorMap = sharedRegistry.codeGeneratorMap;

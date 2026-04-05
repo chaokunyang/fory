@@ -36,11 +36,11 @@ public interface RefReader {
 
   void reference(Object object);
 
-  Object getReadObject(int id);
+  Object getReadRef(int id);
 
-  Object getReadObject();
+  Object getReadRef();
 
-  void setReadObject(int id, Object object);
+  void setReadRef(int id, Object object);
 
   void reset();
 
@@ -79,17 +79,17 @@ public interface RefReader {
     public void reference(Object object) {}
 
     @Override
-    public Object getReadObject(int id) {
+    public Object getReadRef(int id) {
       return null;
     }
 
     @Override
-    public Object getReadObject() {
+    public Object getReadRef() {
       return null;
     }
 
     @Override
-    public void setReadObject(int id, Object object) {}
+    public void setReadRef(int id, Object object) {}
 
     @Override
     public void reset() {}

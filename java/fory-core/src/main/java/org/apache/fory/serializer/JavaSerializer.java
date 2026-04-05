@@ -146,15 +146,15 @@ public class JavaSerializer extends AbstractObjectSerializer {
       new ClassValue<Method>() {
         @Override
         protected Method computeValue(Class<?> type) {
-          return getReadObjectMethod(type, true);
+          return getReadRefMethod(type, true);
         }
       };
 
-  public static Method getReadObjectMethod(Class<?> clz) {
+  public static Method getReadRefMethod(Class<?> clz) {
     return readObjectMethodCache.get(clz);
   }
 
-  public static Method getReadObjectMethod(Class<?> clz, boolean searchParent) {
+  public static Method getReadRefMethod(Class<?> clz, boolean searchParent) {
     Method readObject = getMethod(clz, "readObject", searchParent);
     if (readObject != null && isReadObjectMethod(readObject)) {
       return readObject;
@@ -169,7 +169,7 @@ public class JavaSerializer extends AbstractObjectSerializer {
         && Modifier.isPrivate(method.getModifiers());
   }
 
-  public static Method getReadObjectNoData(Class<?> clz, boolean searchParent) {
+  public static Method getReadRefNoData(Class<?> clz, boolean searchParent) {
     Method method = getMethod(clz, "readObjectNoData", searchParent);
     if (method != null
         && method.getParameterTypes().length == 0

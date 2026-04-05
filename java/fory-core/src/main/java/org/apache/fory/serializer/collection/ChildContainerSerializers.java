@@ -87,7 +87,7 @@ public class ChildContainerSerializers {
           return ChildCollectionSerializer.class;
         }
       } else {
-        if (JavaSerializer.getReadObjectMethod(cls, false) != null
+        if (JavaSerializer.getReadRefMethod(cls, false) != null
             || JavaSerializer.getWriteObjectMethod(cls, false) != null) {
           return null;
         }
@@ -115,7 +115,7 @@ public class ChildContainerSerializers {
       if (ChildMapSerializer.superClasses.contains(cls)) {
         return ChildMapSerializer.class;
       } else {
-        if (JavaSerializer.getReadObjectMethod(cls, false) != null
+        if (JavaSerializer.getReadRefMethod(cls, false) != null
             || JavaSerializer.getWriteObjectMethod(cls, false) != null) {
           return null;
         }

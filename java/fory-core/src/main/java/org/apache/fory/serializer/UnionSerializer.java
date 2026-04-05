@@ -169,9 +169,9 @@ public class UnionSerializer extends Serializer<Union> {
       } else {
         caseValue = Serializers.read(readContext, readTypeInfo.getSerializer());
       }
-      readContext.setReadObject(nextReadRefId, caseValue);
+      readContext.setReadRef(nextReadRefId, caseValue);
     } else {
-      caseValue = readContext.getReadObject();
+      caseValue = readContext.getReadRef();
     }
     return factory.apply(index, caseValue);
   }

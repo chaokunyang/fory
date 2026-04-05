@@ -269,21 +269,21 @@ public final class Fory implements BaseFory {
 
   @Override
   public byte[] serialize(Object obj) {
-    MemoryBuffer buf = getWriteBuffer();
+    MemoryBuffer buf = getBuffer();
     buf.writerIndex(0);
     serialize(buf, obj, null);
     byte[] bytes = buf.getBytes(0, buf.writerIndex());
-    recycleWriteBuffer(buf);
+    resetBuffer();
     return bytes;
   }
 
   @Override
   public byte[] serialize(Object obj, BufferCallback callback) {
-    MemoryBuffer buf = getWriteBuffer();
+    MemoryBuffer buf = getBuffer();
     buf.writerIndex(0);
     serialize(buf, obj, callback);
     byte[] bytes = buf.getBytes(0, buf.writerIndex());
-    recycleWriteBuffer(buf);
+    resetBuffer();
     return bytes;
   }
 
@@ -520,11 +520,11 @@ public final class Fory implements BaseFory {
       RefReader refReader = readContext.getRefReader();
       int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId < NOT_NULL_VALUE_FLAG) {
-        return (T) refReader.getReadObject();
+        return (T) refReader.getReadRef();
       }
       TypeInfo typeInfo = typeResolver.readTypeInfo(readContext, type);
       Object value = readContext.readNonRef(typeInfo);
-      refReader.setReadObject(nextReadRefId, value);
+      refReader.setReadRef(nextReadRefId, value);
       return (T) value;
     } finally {
       readContext.getGenerics().popGenericType(readContext.getDepth());
@@ -583,13 +583,12 @@ public final class Fory implements BaseFory {
     copyContext.reference(o1, o2);
   }
 
-  @SuppressWarnings("unchecked")
   public <T> T getCopyObject(T originObj) {
     return copyContext.getCopyObject(originObj);
   }
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
-    MemoryBuffer buf = getWriteBuffer();
+    MemoryBuffer buf = getBuffer();
     if (outputStream.getClass() == ByteArrayOutputStream.class) {
       byte[] oldBytes = buf.getHeapMemory(); // Note: This should not be null.
       assert oldBytes != null;
@@ -597,7 +596,7 @@ public final class Fory implements BaseFory {
       function.accept(buf);
       MemoryUtils.wrap(buf, (ByteArrayOutputStream) outputStream);
       buf.pointTo(oldBytes, 0, oldBytes.length);
-      recycleWriteBuffer(buf);
+      resetBuffer();
     } else {
       buf.writerIndex(0);
       function.accept(buf);
@@ -612,25 +611,23 @@ public final class Fory implements BaseFory {
       } catch (IOException e) {
         throw new SerializationException(e);
       } finally {
-        recycleWriteBuffer(buf);
+        resetBuffer();
       }
     }
   }
 
-  private MemoryBuffer getWriteBuffer() {
-    MemoryBuffer buffer = this.buffer;
-    if (buffer == null) {
-      buffer = MemoryBuffer.newHeapBuffer(64);
-      this.buffer = buffer;
+  public MemoryBuffer getBuffer() {
+    MemoryBuffer buf = buffer;
+    if (buf == null) {
+      buf = buffer = MemoryBuffer.newHeapBuffer(64);
     }
-    return buffer;
+    return buf;
   }
 
-  private void recycleWriteBuffer(MemoryBuffer buffer) {
-    if (buffer.size() > config.bufferSizeLimitBytes()) {
-      this.buffer = MemoryBuffer.newHeapBuffer(config.bufferSizeLimitBytes());
-    } else {
-      this.buffer = buffer;
+  public void resetBuffer() {
+    MemoryBuffer buf = buffer;
+    if (buf != null && buf.size() > config.bufferSizeLimitBytes()) {
+      buffer = MemoryBuffer.newHeapBuffer(config.bufferSizeLimitBytes());
     }
   }
 

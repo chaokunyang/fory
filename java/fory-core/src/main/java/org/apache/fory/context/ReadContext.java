@@ -156,16 +156,16 @@ public final class ReadContext {
     refReader.reference(object);
   }
 
-  public Object getReadObject(int id) {
-    return refReader.getReadObject(id);
+  public Object getReadRef(int id) {
+    return refReader.getReadRef(id);
   }
 
-  public Object getReadObject() {
-    return refReader.getReadObject();
+  public Object getReadRef() {
+    return refReader.getReadRef();
   }
 
-  public void setReadObject(int id, Object object) {
-    refReader.setReadObject(id, object);
+  public void setReadRef(int id, Object object) {
+    refReader.setReadRef(id, object);
   }
 
   public MetaStringReader getMetaStringReader() {
@@ -260,10 +260,10 @@ public final class ReadContext {
       int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         String obj = stringSerializer.read(this);
-        refReader.setReadObject(nextReadRefId, obj);
+        refReader.setReadRef(nextReadRefId, obj);
         return obj;
       }
-      return (String) refReader.getReadObject();
+      return (String) refReader.getReadRef();
     }
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.NULL_FLAG) {
@@ -284,20 +284,20 @@ public final class ReadContext {
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       TypeInfo typeInfo = typeResolver.readTypeInfo(this);
       Object o = readNonRef(typeInfo);
-      refReader.setReadObject(nextReadRefId, o);
+      refReader.setReadRef(nextReadRefId, o);
       return o;
     }
-    return refReader.getReadObject();
+    return refReader.getReadRef();
   }
 
   public Object readRef(TypeInfo typeInfo) {
     int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       Object o = readNonRef(typeInfo);
-      refReader.setReadObject(nextReadRefId, o);
+      refReader.setReadRef(nextReadRefId, o);
       return o;
     }
-    return refReader.getReadObject();
+    return refReader.getReadRef();
   }
 
   public Object readRef(TypeInfoHolder classInfoHolder) {
@@ -305,10 +305,10 @@ public final class ReadContext {
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       TypeInfo typeInfo = typeResolver.readTypeInfo(this, classInfoHolder);
       Object o = readNonRef(typeInfo);
-      refReader.setReadObject(nextReadRefId, o);
+      refReader.setReadRef(nextReadRefId, o);
       return o;
     }
-    return refReader.getReadObject();
+    return refReader.getReadRef();
   }
 
   public <T> T readRef(Serializer<T> serializer) {
@@ -316,10 +316,10 @@ public final class ReadContext {
       int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         Object o = readNonRef(serializer);
-        refReader.setReadObject(nextReadRefId, o);
+        refReader.setReadRef(nextReadRefId, o);
         return (T) o;
       }
-      return (T) refReader.getReadObject();
+      return (T) refReader.getReadRef();
     }
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.NULL_FLAG) {

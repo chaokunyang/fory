@@ -186,7 +186,7 @@ public class ReplaceResolveSerializer extends Serializer {
     Class<? extends Serializer> serializerClass;
     if (Externalizable.class.isAssignableFrom(cls)) {
       serializerClass = ExternalizableSerializer.class;
-    } else if (JavaSerializer.getReadObjectMethod(cls, true) == null
+    } else if (JavaSerializer.getReadRefMethod(cls, true) == null
         && JavaSerializer.getWriteObjectMethod(cls, true) == null) {
       serializerClass =
           classResolver.getObjectSerializerClass(
@@ -316,11 +316,11 @@ public class ReplaceResolveSerializer extends Serializer {
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         // ref value or not-null value
         Object o = readContext.readData(classResolver.readTypeInfo(readContext));
-        readContext.setReadObject(nextReadRefId, o);
-        readContext.setReadObject(outerRefId, o);
+        readContext.setReadRef(nextReadRefId, o);
+        readContext.setReadRef(outerRefId, o);
         return o;
       } else {
-        return readContext.getReadObject();
+        return readContext.getReadRef();
       }
     } else if (flag == REPLACED_SAME_TYPE) {
       int outerRefId = readContext.lastPreservedRefId();
@@ -328,11 +328,11 @@ public class ReplaceResolveSerializer extends Serializer {
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         // ref value or not-null value
         Object o = readObject(readContext, buffer);
-        readContext.setReadObject(nextReadRefId, o);
-        readContext.setReadObject(outerRefId, o);
+        readContext.setReadRef(nextReadRefId, o);
+        readContext.setReadRef(outerRefId, o);
         return o;
       } else {
-        return readContext.getReadObject();
+        return readContext.getReadRef();
       }
     } else {
       Preconditions.checkArgument(flag == ORIGINAL);

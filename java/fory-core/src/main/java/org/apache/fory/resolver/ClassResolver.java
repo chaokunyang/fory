@@ -966,7 +966,7 @@ public class ClassResolver extends TypeResolver {
       if ("sun.reflect.annotation.AnnotationInvocationHandler".equals(clz.getName())) {
         return false;
       }
-      return JavaSerializer.getReadObjectMethod(clz) != null
+      return JavaSerializer.getReadRefMethod(clz) != null
           || JavaSerializer.getWriteObjectMethod(clz) != null;
     }
   }
@@ -1603,7 +1603,7 @@ public class ClassResolver extends TypeResolver {
       Class<?> cls, Class<? extends Serializer> serializerClass) {
     if (serializerClass == ReplaceResolveSerializer.class) {
       return !Externalizable.class.isAssignableFrom(cls)
-          && JavaSerializer.getReadObjectMethod(cls, true) == null
+          && JavaSerializer.getReadRefMethod(cls, true) == null
           && JavaSerializer.getWriteObjectMethod(cls, true) == null;
     }
     return serializerClass == CollectionSerializers.DefaultJavaCollectionSerializer.class

@@ -179,9 +179,9 @@ public class ArraySerializers {
           int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             elem = componentTypeSerializer.read(readContext);
-            readContext.setReadObject(nextReadRefId, elem);
+            readContext.setReadRef(nextReadRefId, elem);
           } else {
-            elem = readContext.getReadObject();
+            elem = readContext.getReadRef();
           }
           value[i] = elem;
         }
@@ -193,9 +193,9 @@ public class ArraySerializers {
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             // ref value or not-null value
             o = readContext.readNonRef(classInfoHolder);
-            readContext.setReadObject(nextReadRefId, o);
+            readContext.setReadRef(nextReadRefId, o);
           } else {
-            o = readContext.getReadObject();
+            o = readContext.getReadRef();
           }
           value[i] = o;
         }
@@ -1150,9 +1150,9 @@ public class ArraySerializers {
           int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             elem = readInnerElement(readContext, buffer);
-            readContext.setReadObject(nextReadRefId, elem);
+            readContext.setReadRef(nextReadRefId, elem);
           } else {
-            elem = readContext.getReadObject();
+            elem = readContext.getReadRef();
           }
           value[i] = elem;
         }
@@ -1176,9 +1176,9 @@ public class ArraySerializers {
           int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             elem = read1DArray(readContext, buffer);
-            readContext.setReadObject(nextReadRefId, elem);
+            readContext.setReadRef(nextReadRefId, elem);
           } else {
-            elem = (Object[]) readContext.getReadObject();
+            elem = (Object[]) readContext.getReadRef();
           }
           value[i] = elem;
         }
@@ -1202,9 +1202,9 @@ public class ArraySerializers {
           int nextReadRefId = readContext.tryPreserveRefId();
           if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
             elem = read2DArray(readContext, buffer);
-            readContext.setReadObject(nextReadRefId, elem);
+            readContext.setReadRef(nextReadRefId, elem);
           } else {
-            elem = (Object[][]) readContext.getReadObject();
+            elem = (Object[][]) readContext.getReadRef();
           }
           value[i] = elem;
         }

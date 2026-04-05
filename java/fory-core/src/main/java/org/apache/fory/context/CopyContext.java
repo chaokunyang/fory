@@ -32,7 +32,6 @@ public final class CopyContext {
   private final TypeResolver typeResolver;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
-  private int depth;
 
   public CopyContext(TypeResolver typeResolver, boolean copyRefTracking) {
     this.typeResolver = typeResolver;
@@ -44,19 +43,10 @@ public final class CopyContext {
     if (copyRefTracking) {
       originToCopyMap.clear();
     }
-    depth = 0;
-  }
-
-  public int getDepth() {
-    return depth;
   }
 
   public TypeResolver getTypeResolver() {
     return typeResolver;
-  }
-
-  public void increaseDepth(int diff) {
-    depth += diff;
   }
 
   public boolean copyTrackingRef() {
@@ -150,20 +140,15 @@ public final class CopyContext {
   }
 
   public <T> T copyObject(T obj, Serializer<T> serializer) {
-    depth++;
-    try {
-      if (serializer.needToCopyRef()) {
-        T existing = getCopyObject(obj);
-        if (existing != null) {
-          return existing;
-        }
-        T copied = serializer.copy(this, obj);
-        originToCopyMap.put(obj, copied);
-        return copied;
+    if (serializer.needToCopyRef()) {
+      T existing = getCopyObject(obj);
+      if (existing != null) {
+        return existing;
       }
-      return serializer.copy(this, obj);
-    } finally {
-      depth--;
+      T copied = serializer.copy(this, obj);
+      originToCopyMap.put(obj, copied);
+      return copied;
     }
+    return serializer.copy(this, obj);
   }
 }

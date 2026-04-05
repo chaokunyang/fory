@@ -676,7 +676,7 @@ public class CollectionSerializers {
     @Override
     public EnumSet read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      Class elemClass = typeResolver.readTypeInfo(readContext).getCls();
+      Class elemClass = typeResolver.readTypeInfo(readContext).getType();
       EnumSet object = EnumSet.noneOf(elemClass);
       Serializer elemSerializer = typeResolver.getSerializer(elemClass);
       int length = buffer.readVarUint32Small7();

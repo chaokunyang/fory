@@ -414,7 +414,7 @@ public final class ReadContext {
       case Types.FLOAT64:
         return buffer.readFloat64();
       case Types.STRING:
-        if (typeInfo.getCls() == String.class) {
+        if (typeInfo.getType() == String.class) {
           return stringSerializer.readString(buffer);
         }
         increaseDepth();

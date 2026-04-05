@@ -215,7 +215,7 @@ public final class WriteContext {
     if (!refWriter.writeRefOrNull(buffer, obj)) {
       TypeResolver resolver = typeResolver;
       TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass());
-      if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
+      if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
         depth++;
         typeInfo.getSerializer().write(this, obj);
         depth--;
@@ -231,7 +231,7 @@ public final class WriteContext {
     if (!refWriter.writeRefOrNull(buffer, obj)) {
       TypeResolver resolver = typeResolver;
       TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass(), classInfoHolder);
-      if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
+      if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
         depth++;
         typeInfo.getSerializer().write(this, obj);
         depth--;
@@ -244,7 +244,7 @@ public final class WriteContext {
 
   public void writeRef(Object obj, TypeInfo typeInfo) {
     MemoryBuffer buffer = this.buffer;
-    if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
+    if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
       if (!refWriter.writeRefOrNull(buffer, obj)) {
         depth++;
         typeInfo.getSerializer().write(this, obj);
@@ -300,7 +300,7 @@ public final class WriteContext {
     MemoryBuffer buffer = this.buffer;
     TypeResolver resolver = typeResolver;
     TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass());
-    if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
+    if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
       depth++;
       typeInfo.getSerializer().write(this, obj);
       depth--;
@@ -320,7 +320,7 @@ public final class WriteContext {
     MemoryBuffer buffer = this.buffer;
     TypeResolver resolver = typeResolver;
     TypeInfo typeInfo = resolver.getTypeInfo(obj.getClass(), holder);
-    if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
+    if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
       depth++;
       typeInfo.getSerializer().write(this, obj);
       depth--;
@@ -332,7 +332,7 @@ public final class WriteContext {
 
   public void writeNonRef(Object obj, TypeInfo typeInfo) {
     MemoryBuffer buffer = this.buffer;
-    if (crossLanguage && typeInfo.getCls() == UnknownStruct.class) {
+    if (crossLanguage && typeInfo.getType() == UnknownStruct.class) {
       depth++;
       typeInfo.getSerializer().write(this, obj);
       depth--;
@@ -383,7 +383,7 @@ public final class WriteContext {
         buffer.writeFloat64((Double) obj);
         break;
       case Types.STRING:
-        if (typeInfo.getCls() == String.class) {
+        if (typeInfo.getType() == String.class) {
           stringSerializer.writeString(buffer, (String) obj);
           break;
         }

@@ -134,8 +134,8 @@ public class RegisterTest extends ForyTestBase {
     typeResolver.getSerializer(StringBuffer.class);
     typeResolver.getSerializer(AtomicInteger.class);
 
-    Assert.assertSame(typeResolver.getTypeInfoByTypeId(Types.STRING).getCls(), String.class);
-    Assert.assertSame(typeResolver.getTypeInfoByTypeId(Types.INT32).getCls(), Integer.class);
+    Assert.assertSame(typeResolver.getTypeInfoByTypeId(Types.STRING).getType(), String.class);
+    Assert.assertSame(typeResolver.getTypeInfoByTypeId(Types.INT32).getType(), Integer.class);
 
     Object stringValue = fory.deserialize(fory.serialize("str"));
     Assert.assertSame(stringValue.getClass(), String.class);

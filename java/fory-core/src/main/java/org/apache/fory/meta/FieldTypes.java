@@ -563,7 +563,7 @@ public class FieldTypes {
       if (resolver instanceof XtypeResolver) {
         TypeInfo xtypeInfo = ((XtypeResolver) resolver).getXtypeInfo(typeId);
         Preconditions.checkNotNull(xtypeInfo);
-        cls = xtypeInfo.getCls();
+        cls = xtypeInfo.getType();
       } else {
         cls = ((ClassResolver) resolver).getRegisteredClassByTypeId(typeId);
       }

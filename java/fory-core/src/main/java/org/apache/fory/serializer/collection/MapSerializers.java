@@ -351,7 +351,7 @@ public class MapSerializers {
     @Override
     public EnumMap newMap(ReadContext readContext, MemoryBuffer buffer) {
       setNumElements(buffer.readVarUint32Small7());
-      Class<?> keyType = typeResolver.readTypeInfo(readContext).getCls();
+      Class<?> keyType = typeResolver.readTypeInfo(readContext).getType();
       return new EnumMap(keyType);
     }
 

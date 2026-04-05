@@ -52,7 +52,6 @@ import lombok.ToString;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.builder.Generated;
-import org.apache.fory.config.Config;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.logging.Logger;
@@ -481,8 +480,8 @@ public class ClassResolverTest extends ForyTestBase {
       }
       fory.getReadContext().prepare(buffer, null, false);
       try {
-        Assert.assertSame(classResolver.readTypeInfo(fory.getReadContext()).getCls(), getClass());
-        Assert.assertSame(classResolver.readTypeInfo(fory.getReadContext()).getCls(), getClass());
+        Assert.assertSame(classResolver.readTypeInfo(fory.getReadContext()).getType(), getClass());
+        Assert.assertSame(classResolver.readTypeInfo(fory.getReadContext()).getType(), getClass());
       } finally {
         fory.getReadContext().reset();
       }

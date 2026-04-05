@@ -173,7 +173,7 @@ public class XtypeResolver extends TypeResolver {
     }
     // Preserve the canonical built-in decode target for shared xtype ids such as STRING and INT32.
     TypeInfo currentTypeInfo = getInternalTypeInfoByTypeId(typeInfo.typeId);
-    if (currentTypeInfo == null || currentTypeInfo.getCls() == cls) {
+    if (currentTypeInfo == null || currentTypeInfo.getType() == cls) {
       putInternalTypeInfo(typeInfo.typeId, typeInfo);
     }
   }
@@ -250,7 +250,7 @@ public class XtypeResolver extends TypeResolver {
     Serializer<?> serializer = null;
     if (typeInfo != null) {
       serializer = typeInfo.serializer;
-      if (typeInfo.typeNameBytes != null) {
+      if (typeInfo.typeName != null) {
         String prevNamespace = typeInfo.decodeNamespace();
         String prevTypeName = typeInfo.decodeTypeName();
         if (!namespace.equals(prevNamespace) || typeName.equals(prevTypeName)) {
@@ -363,7 +363,7 @@ public class XtypeResolver extends TypeResolver {
         "Typename %s should not contains `.`, please put it into namespace",
         typeName);
     TypeInfo typeInfo = classInfoMap.get(type);
-    if (typeInfo != null && typeInfo.typeNameBytes != null) {
+    if (typeInfo != null && typeInfo.typeName != null) {
       String prevNamespace = typeInfo.decodeNamespace();
       String prevTypeName = typeInfo.decodeTypeName();
       if (!namespace.equals(prevNamespace) || typeName.equals(prevTypeName)) {
@@ -436,7 +436,7 @@ public class XtypeResolver extends TypeResolver {
       int userTypeId) {
     EncodedMetaString nsBytes = sharedRegistry.getPackageEncodedMetaString(namespace);
     EncodedMetaString classNameBytes = sharedRegistry.getTypeNameEncodedMetaString(typeName);
-    return new TypeInfo(type, nsBytes, classNameBytes, false, serializer, typeId, userTypeId);
+    return new TypeInfo(type, nsBytes, classNameBytes, serializer, typeId, userTypeId);
   }
 
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
@@ -461,12 +461,12 @@ public class XtypeResolver extends TypeResolver {
     typeInfo = typeInfo.copy(foryId);
     typeInfo.setSerializer(this, serializer);
     updateTypeInfo(type, typeInfo);
-    if (typeInfo.typeNameBytes != null) {
+    if (typeInfo.typeName != null) {
       String qualifiedName = qualifiedName(typeInfo.decodeNamespace(), typeInfo.decodeTypeName());
       qualifiedType2TypeInfo.put(qualifiedName, typeInfo);
       TypeNameBytes typeNameBytes =
           new TypeNameBytes(
-              typeInfo.namespaceBytes.hash, typeInfo.typeNameBytes.hash);
+              typeInfo.namespace.hash, typeInfo.typeName.hash);
       compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
   }
@@ -683,7 +683,7 @@ public class XtypeResolver extends TypeResolver {
 
   public TypeInfo getTypeInfo(Class<?> cls, TypeInfoHolder classInfoHolder) {
     TypeInfo typeInfo = classInfoHolder.typeInfo;
-    if (typeInfo.getCls() != cls) {
+    if (typeInfo.getType() != cls) {
       typeInfo = classInfoMap.get(cls);
       if (typeInfo == null || typeInfo.serializer == null) {
         typeInfo = buildTypeInfo(cls);
@@ -1085,7 +1085,7 @@ public class XtypeResolver extends TypeResolver {
   protected TypeDef buildTypeDef(TypeInfo typeInfo) {
     TypeDef typeDef =
         cacheTypeDef(
-            typeDefMap.computeIfAbsent(typeInfo.cls, cls -> TypeDef.buildTypeDef(this, cls)));
+            typeDefMap.computeIfAbsent(typeInfo.type, cls -> TypeDef.buildTypeDef(this, cls)));
     typeInfo.typeDef = typeDef;
     return typeDef;
   }
@@ -1159,17 +1159,17 @@ public class XtypeResolver extends TypeResolver {
   @Override
   protected TypeInfo ensureSerializerForTypeInfo(TypeInfo typeInfo) {
     if (typeInfo.serializer == null) {
-      Class<?> cls = typeInfo.cls;
+      Class<?> cls = typeInfo.type;
       if (cls != null && (ReflectionUtils.isAbstract(cls) || cls.isInterface())) {
         return typeInfo;
       }
       // Get or create TypeInfo with serializer
-      TypeInfo newTypeInfo = getTypeInfo(typeInfo.cls);
+      TypeInfo newTypeInfo = getTypeInfo(typeInfo.type);
       // Update the cache with the correct TypeInfo that has a serializer
-      if (typeInfo.typeNameBytes != null) {
+      if (typeInfo.typeName != null) {
         TypeNameBytes typeNameBytes =
             new TypeNameBytes(
-                typeInfo.namespaceBytes.hash, typeInfo.typeNameBytes.hash);
+                typeInfo.namespace.hash, typeInfo.typeName.hash);
         compositeClassNameBytes2TypeInfo.put(typeNameBytes, newTypeInfo);
       }
       return newTypeInfo;
@@ -1225,7 +1225,6 @@ public class XtypeResolver extends TypeResolver {
               type,
               packageBytes,
               simpleClassNameBytes,
-              false,
               null,
               NOT_SUPPORT_XLANG,
               INVALID_USER_TYPE_ID);

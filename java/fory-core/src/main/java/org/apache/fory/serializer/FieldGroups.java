@@ -180,7 +180,7 @@ public class FieldGroups {
             && typeInfo.getSerializer() instanceof ReplaceResolveSerializer) {
           // overwrite replace resolve serializer for final field
           typeInfo.setSerializer(
-              new FinalFieldReplaceResolveSerializer(resolver, typeInfo.getCls()));
+              new FinalFieldReplaceResolveSerializer(resolver, typeInfo.getType()));
         }
       } else {
         typeInfo = null;

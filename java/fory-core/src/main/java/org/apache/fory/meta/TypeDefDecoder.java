@@ -70,7 +70,7 @@ class TypeDefDecoder {
       if (userTypeInfo == null) {
         classSpec = new ClassSpec(UnknownClass.UnknownStruct.class);
       } else {
-        classSpec = new ClassSpec(userTypeInfo.getCls());
+        classSpec = new ClassSpec(userTypeInfo.getType());
       }
     } else {
       int typeId = buffer.readUint8();
@@ -79,7 +79,7 @@ class TypeDefDecoder {
       if (userTypeInfo == null) {
         classSpec = new ClassSpec(UnknownClass.UnknownStruct.class, typeId, userTypeId);
       } else {
-        classSpec = new ClassSpec(userTypeInfo.getCls(), typeId, userTypeId);
+        classSpec = new ClassSpec(userTypeInfo.getType(), typeId, userTypeId);
       }
     }
     List<FieldInfo> classFields =

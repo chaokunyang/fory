@@ -90,7 +90,7 @@ public final class CopyContext {
       case Types.FLOAT64:
         return obj;
       case Types.STRING:
-        if (typeInfo.getCls() == String.class) {
+        if (typeInfo.getType() == String.class) {
           return obj;
         }
         return copyObject(obj, typeInfo.getSerializer());

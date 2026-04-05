@@ -60,6 +60,8 @@ import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaStringReader;
+import org.apache.fory.context.MetaStringWriter;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
@@ -103,7 +105,7 @@ public abstract class TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ClassResolver.class);
 
   static final TypeInfo NIL_TYPE_INFO =
-      new TypeInfo(null, null, null, false, null, Types.UNKNOWN, INVALID_USER_TYPE_ID);
+      new TypeInfo(null, null, null, null, Types.UNKNOWN, INVALID_USER_TYPE_ID);
   // use a lower load factor to minimize hash collision
   static final float foryMapLoadFactor = 0.5f;
   static final String SET_META__CONTEXT_MSG =
@@ -443,10 +445,11 @@ public abstract class TypeResolver {
       case Types.NAMED_EXT:
       case Types.NAMED_UNION:
         if (!metaContextShareEnabled) {
-          Preconditions.checkNotNull(typeInfo.namespaceBytes);
-          writeContext.getMetaStringWriter().writeMetaStringBytes(buffer, typeInfo.namespaceBytes);
-          Preconditions.checkNotNull(typeInfo.typeNameBytes);
-          writeContext.getMetaStringWriter().writeMetaStringBytes(buffer, typeInfo.typeNameBytes);
+          Preconditions.checkNotNull(typeInfo.namespace);
+          MetaStringWriter metaStringWriter = writeContext.getMetaStringWriter();
+          metaStringWriter.writeMetaStringBytes(buffer, typeInfo.namespace);
+          Preconditions.checkNotNull(typeInfo.typeName);
+          metaStringWriter.writeMetaStringBytes(buffer, typeInfo.typeName);
         } else {
           writeSharedClassMeta(writeContext, typeInfo);
         }
@@ -488,7 +491,7 @@ public abstract class TypeResolver {
     assert metaContext != null : SET_META__CONTEXT_MSG;
     IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
     int newId = classMap.size;
-    int id = classMap.putOrGet(typeInfo.cls, newId);
+    int id = classMap.putOrGet(typeInfo.type, newId);
     if (id >= 0) {
       // Reference to previously written type: (index << 1) | 1, LSB=1
       buffer.writeVarUint32((id << 1) | 1);
@@ -720,18 +723,19 @@ public abstract class TypeResolver {
   protected final TypeInfo readTypeInfoFromBytes(
       ReadContext readContext, TypeInfo typeInfoCache, int header) {
     MemoryBuffer buffer = readContext.getBuffer();
-    EncodedMetaString typeNameBytesCache = typeInfoCache != null ? typeInfoCache.typeNameBytes : null;
+    EncodedMetaString typeNameBytesCache = typeInfoCache != null ? typeInfoCache.typeName : null;
     EncodedMetaString namespaceBytes;
     EncodedMetaString simpleClassNameBytes;
 
+    MetaStringReader metaStringReader = readContext.getMetaStringReader();
     if (typeNameBytesCache != null) {
       // Use cache for faster comparison
-      EncodedMetaString packageNameBytesCache = typeInfoCache.namespaceBytes;
+      EncodedMetaString packageNameBytesCache = typeInfoCache.namespace;
       namespaceBytes =
-          readContext.getMetaStringReader().readMetaStringBytes(buffer, packageNameBytesCache);
+          metaStringReader.readMetaStringBytes(buffer, packageNameBytesCache);
       assert packageNameBytesCache != null;
       simpleClassNameBytes =
-          readContext.getMetaStringReader().readMetaStringBytes(buffer, typeNameBytesCache);
+          metaStringReader.readMetaStringBytes(buffer, typeNameBytesCache);
 
       // Fast path: if hashes match, return cached TypeInfo (already has serializer)
       if (typeNameBytesCache.hash == simpleClassNameBytes.hash
@@ -740,8 +744,8 @@ public abstract class TypeResolver {
       }
     } else {
       // No cache available, read fresh
-      namespaceBytes = readContext.getMetaStringReader().readMetaStringBytes(buffer);
-      simpleClassNameBytes = readContext.getMetaStringReader().readMetaStringBytes(buffer);
+      namespaceBytes = metaStringReader.readMetaStringBytes(buffer);
+      simpleClassNameBytes = metaStringReader.readMetaStringBytes(buffer);
     }
 
     // Load class info from bytes (subclass-specific).
@@ -786,7 +790,7 @@ public abstract class TypeResolver {
 
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
     TypeInfo typeInfo = readSharedClassMeta(readContext);
-    Class<?> readClass = typeInfo.getCls();
+    Class<?> readClass = typeInfo.getType();
     // replace target class if needed
     if (targetClass != readClass) {
       return getTargetTypeInfo(typeInfo, targetClass);
@@ -796,7 +800,7 @@ public abstract class TypeResolver {
 
   private TypeInfo getTargetTypeInfo(TypeInfo typeInfo, Class<?> targetClass) {
     Tuple2<Class<?>, TypeInfo>[] infos = extRegistry.transformedTypeInfo.get(targetClass);
-    Class<?> readClass = typeInfo.getCls();
+    Class<?> readClass = typeInfo.getType();
     if (infos != null) {
       // It's ok to use loop here since most of case the array size will be 1.
       for (Tuple2<Class<?>, TypeInfo> info : infos) {
@@ -809,7 +813,7 @@ public abstract class TypeResolver {
   }
 
   private TypeInfo transformTypeInfo(TypeInfo typeInfo, Class<?> targetClass) {
-    Class<?> readClass = typeInfo.getCls();
+    Class<?> readClass = typeInfo.getType();
     TypeInfo newTypeInfo;
     if (targetClass.isAssignableFrom(readClass)) {
       newTypeInfo = typeInfo;

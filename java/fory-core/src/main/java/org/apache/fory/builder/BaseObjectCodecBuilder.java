@@ -770,7 +770,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     if (classInfoRef.f1) {
       writeClassAndObject.add(
           new If(
-              neq(new Invoke(classInfo, "getCls", CLASS_TYPE), clsExpr),
+              neq(new Invoke(classInfo, "getType", CLASS_TYPE), clsExpr),
               new Assign(
                   classInfo,
                   inlineInvoke(typeResolverRef, "getTypeInfo", classInfoTypeRef, clsExpr))));
@@ -799,7 +799,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression classInfo = classInfoRef.f0;
     writeClassAction.add(
         new If(
-            neq(inlineInvoke(classInfo, "getCls", CLASS_TYPE), clsExpr),
+            neq(inlineInvoke(classInfo, "getType", CLASS_TYPE), clsExpr),
             new Assign(
                 classInfo,
                 inlineInvoke(typeResolverRef, "getTypeInfo", classInfoTypeRef, clsExpr))));
@@ -1083,7 +1083,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         Expression clsExpr = new Invoke(collection, "getClass", "cls", CLASS_TYPE);
         writeClassAction.add(
             new If(
-                neq(new Invoke(classInfo, "getCls", CLASS_TYPE), clsExpr),
+                neq(new Invoke(classInfo, "getType", CLASS_TYPE), clsExpr),
                 new Assign(
                     classInfo,
                     inlineInvoke(typeResolverRef, "getTypeInfo", classInfoTypeRef, clsExpr))));
@@ -1445,7 +1445,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         Expression clsExpr = new Invoke(map, "getClass", "cls", CLASS_TYPE);
         writeClassAction.add(
             new If(
-                neq(new Invoke(classInfo, "getCls", CLASS_TYPE), clsExpr),
+                neq(new Invoke(classInfo, "getType", CLASS_TYPE), clsExpr),
                 new Assign(
                     classInfo,
                     inlineInvoke(typeResolverRef, "getTypeInfo", classInfoTypeRef, clsExpr))));

@@ -30,10 +30,19 @@ import org.apache.fory.resolver.RefMode;
 import org.apache.fory.type.TypeUtils;
 
 /**
- * Serialize/deserializer objects into binary. Note that this class is designed as an abstract class
- * instead of interface to reduce virtual method call cost of {@link #needToWriteRef}.
+ * Base contract for reading, writing, and copying a specific Java type.
  *
- * @param <T> type of objects being serializing/deserializing
+ * <p>A serializer is responsible only for the payload of {@code T}. Type metadata, ref/null
+ * headers, and operation state are owned by {@link WriteContext}, {@link ReadContext}, and
+ * {@link CopyContext}.
+ *
+ * <p>This type stays an abstract class instead of an interface so hot-path flag checks such as
+ * {@link #needToWriteRef()} avoid an extra virtual dispatch.
+ *
+ * <p>Unless a subclass overrides {@link #threadSafe()}, instances are runtime-local and must not be
+ * shared across concurrent operations.
+ *
+ * @param <T> value type handled by this serializer
  */
 @NotThreadSafe
 @SuppressWarnings("unchecked")
@@ -49,6 +58,12 @@ public abstract class Serializer<T> {
 
   protected final boolean immutable;
 
+  /**
+   * Creates a serializer using ref/copy defaults derived from {@link Config} and {@code type}.
+   *
+   * <p>Primitive and boxed primitive types are treated as immutable. Boxed primitives also skip
+   * ref tracking even when the runtime tracks references for general objects.
+   */
   public Serializer(Config config, Class<T> type) {
     this(
         config,
@@ -57,6 +72,10 @@ public abstract class Serializer<T> {
         TypeUtils.isPrimitive(type) || TypeUtils.isBoxed(type));
   }
 
+  /**
+   * Creates a serializer with an explicit immutability contract while keeping default ref-tracking
+   * behavior derived from {@link Config}.
+   */
   public Serializer(Config config, Class<T> type, boolean immutable) {
     this(
         config,
@@ -65,6 +84,14 @@ public abstract class Serializer<T> {
         immutable);
   }
 
+  /**
+   * Creates a serializer with explicit ref-writing and immutability behavior.
+   *
+   * @param config runtime configuration used to derive copy-ref behavior
+   * @param type value type handled by this serializer
+   * @param needToWriteRef whether payload reads and writes participate in runtime ref tracking
+   * @param immutable whether values can be returned directly during copy
+   */
   public Serializer(Config config, Class<T> type, boolean needToWriteRef, boolean immutable) {
     this.type = type;
     this.needToWriteRef = needToWriteRef;
@@ -73,9 +100,10 @@ public abstract class Serializer<T> {
   }
 
   /**
-   * Write value to buffer, this method may write ref/null flags based passed {@code refMode}, and
-   * the passed value can be null. Note that this method don't write type info, this method is
-   * mostly be used in cases the context has already knows the value type when deserialization.
+   * Writes a nullable value using the supplied ref/null policy.
+   *
+   * <p>This helper writes ref or null flags according to {@code refMode}, but it never writes type
+   * metadata. Callers are expected to already know which serializer should handle the payload.
    */
   public void write(WriteContext writeContext, RefMode refMode, T value) {
     MemoryBuffer buffer = writeContext.getBuffer();
@@ -96,15 +124,20 @@ public abstract class Serializer<T> {
   }
 
   /**
-   * Write value to buffer, this method do not write ref/null flags and the passed value must not be
-   * null.
+   * Writes a non-null payload without ref/null flags or type metadata.
+   *
+   * <p>This is the core write hook implemented by subclasses.
    */
   public abstract void write(WriteContext writeContext, T value);
 
   /**
-   * Read value from buffer, this method may read ref/null flags based passed {@code refMode}, and
-   * the read value can be null. Note that this method don't read type info, this method is mostly
-   * be used in cases the context has already knows the value type for deserialization.
+   * Reads a nullable value using the supplied ref/null policy.
+   *
+   * <p>This helper consumes ref or null flags according to {@code refMode}, but it never reads
+   * type metadata. Callers are expected to already know which serializer should handle the payload.
+   *
+   * <p>When ref tracking is enabled, the returned instance is also registered with the active
+   * {@link ReadContext}.
    */
   public T read(ReadContext readContext, RefMode refMode) {
     MemoryBuffer buffer = readContext.getBuffer();
@@ -130,10 +163,21 @@ public abstract class Serializer<T> {
   }
 
   /**
-   * Read value from buffer, this method wont read ref/null flags and the read value won't be null.
+   * Reads a non-null payload without consuming ref/null flags or type metadata.
+   *
+   * <p>This is the core read hook implemented by subclasses.
    */
   public abstract T read(ReadContext readContext);
 
+  /**
+   * Copies a value into the active {@link CopyContext}.
+   *
+   * <p>Immutable serializers return the original value by default. Mutable serializers that support
+   * copy must override this method.
+   *
+   * @throws UnsupportedOperationException if copy is requested for a mutable serializer that does
+   *     not implement it
+   */
   public T copy(CopyContext copyContext, T value) {
     if (isImmutable()) {
       return value;
@@ -142,22 +186,32 @@ public abstract class Serializer<T> {
         String.format("Copy for %s is not supported", value.getClass()));
   }
 
+  /** Returns whether payload reads and writes participate in runtime ref tracking. */
   public final boolean needToWriteRef() {
     return needToWriteRef;
   }
 
+  /** Returns whether {@link CopyContext} tracks origin-to-copy references for this serializer. */
   public final boolean needToCopyRef() {
     return needToCopyRef;
   }
 
+  /** Returns the Java type handled by this serializer. */
   public Class<T> getType() {
     return type;
   }
 
+  /** Returns whether values can be reused directly during copy operations. */
   public boolean isImmutable() {
     return immutable;
   }
 
+  /**
+   * Returns whether this serializer instance can be safely shared across concurrent operations.
+   *
+   * <p>The default is {@code false}. Override only when all internal state is immutable or
+   * otherwise concurrency-safe.
+   */
   public boolean threadSafe() {
     return false;
   }

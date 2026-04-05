@@ -27,40 +27,58 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Types;
 import org.apache.fory.collection.IdentityMap;
 
+/**
+ * Per-operation state for object graph copy.
+ *
+ * <p>{@code CopyContext} keeps the runtime services needed by serializer copy paths and optionally
+ * tracks origin-to-copy identity mappings so mutable cyclic graphs can be copied correctly.
+ *
+ * <p>The context is owned by a single top-level copy operation and must be {@link #reset()} before
+ * reuse.
+ */
 @SuppressWarnings("unchecked")
 public final class CopyContext {
   private final TypeResolver typeResolver;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
 
+  /**
+   * Creates a copy context for one runtime.
+   *
+   * @param typeResolver resolver used to discover serializers and type ids during copy
+   * @param copyRefTracking whether mutable origin-to-copy references should be tracked
+   */
   public CopyContext(TypeResolver typeResolver, boolean copyRefTracking) {
     this.typeResolver = typeResolver;
     this.copyRefTracking = copyRefTracking;
     originToCopyMap = new IdentityMap<>(2);
   }
 
+  /** Clears all per-operation state so this context can be reused for another copy. */
   public void reset() {
     if (copyRefTracking) {
       originToCopyMap.clear();
     }
   }
 
+  /** Returns the resolver used for serializer lookup during copy. */
   public TypeResolver getTypeResolver() {
     return typeResolver;
   }
 
+  /** Returns whether origin-to-copy identity tracking is enabled for this context. */
   public boolean copyTrackingRef() {
     return copyRefTracking;
   }
 
   /**
-   * Track ref for copy.
+   * Registers a newly created copy for an origin object.
    *
-   * <p>Call this method immediately after composited object such as object
-   * array/map/collection/bean is created so that circular reference can be copy correctly.
+   * <p>Call this method immediately after creating a composite object such as an array, collection,
+   * map, or bean so cyclic graphs can resolve back-references to the new copy.
    *
-   * @param origin object before copying
-   * @param copied the copied object
+   * @param origin original object in the source graph
+   * @param copied newly created copy in the destination graph
    */
   public <T> void reference(T origin, T copied) {
     if (copyRefTracking && origin != null) {
@@ -68,10 +86,17 @@ public final class CopyContext {
     }
   }
 
+  /** Returns the previously registered copy for {@code origin}, or {@code null} if absent. */
   public <T> T getCopyObject(T origin) {
     return (T) originToCopyMap.get(origin);
   }
 
+  /**
+   * Copies an object by resolving its runtime type and dispatching to the corresponding serializer.
+   *
+   * <p>Primitive values, boxed primitives, strings, and common primitive arrays use specialized
+   * fast paths before falling back to serializer dispatch.
+   */
   public <T> T copyObject(T obj) {
     if (obj == null) {
       return null;
@@ -116,6 +141,11 @@ public final class CopyContext {
     }
   }
 
+  /**
+   * Copies an object when the caller already knows the runtime type id.
+   *
+   * <p>This avoids a second type-id lookup for callers that already have that information in hand.
+   */
   public <T> T copyObject(T obj, int classId) {
     if (obj == null) {
       return null;
@@ -148,6 +178,12 @@ public final class CopyContext {
     }
   }
 
+  /**
+   * Copies an object using a specific serializer.
+   *
+   * <p>If the serializer participates in copy ref tracking, this method consults the current
+   * origin-to-copy map first and records the new copy before returning it.
+   */
   public <T> T copyObject(T obj, Serializer<T> serializer) {
     if (serializer.needToCopyRef()) {
       T existing = getCopyObject(obj);

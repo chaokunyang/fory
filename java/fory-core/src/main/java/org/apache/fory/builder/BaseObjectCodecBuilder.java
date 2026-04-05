@@ -570,10 +570,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     } else if (clz == short.class || clz == Short.class) {
       return new Invoke(buffer, "writeInt16", inputObject);
     } else if (clz == int.class || clz == Integer.class) {
-      String func = typeResolver.getConfig().compressInt() ? "writeVarInt32" : "writeInt32";
+      String func = config.compressInt() ? "writeVarInt32" : "writeInt32";
       return new Invoke(buffer, func, inputObject);
     } else if (clz == long.class || clz == Long.class) {
-      return LongSerializer.writeInt64(buffer, inputObject, typeResolver.getConfig().longEncoding(), true);
+      return LongSerializer.writeInt64(buffer, inputObject, config.longEncoding(), true);
     } else if (clz == float.class || clz == Float.class) {
       return new Invoke(buffer, "writeFloat32", inputObject);
     } else if (clz == double.class || clz == Double.class) {
@@ -2189,9 +2189,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     } else if (cls == short.class || cls == Short.class) {
       return readInt16(buffer);
     } else if (cls == int.class || cls == Integer.class) {
-      return typeResolver.getConfig().compressInt() ? readVarInt32(buffer) : readInt32(buffer);
+      return config.compressInt() ? readVarInt32(buffer) : readInt32(buffer);
     } else if (cls == long.class || cls == Long.class) {
-      return LongSerializer.readInt64(buffer, typeResolver.getConfig().longEncoding());
+      return LongSerializer.readInt64(buffer, config.longEncoding());
     } else if (cls == float.class || cls == Float.class) {
       return readFloat32(buffer);
     } else if (cls == double.class || cls == Double.class) {

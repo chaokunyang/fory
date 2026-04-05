@@ -25,7 +25,13 @@ import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.EncodedMetaString;
 
-/** Write-side state for meta-string references. */
+/**
+ * Write-side state for meta-string references.
+ *
+ * <p>The writer deduplicates {@link EncodedMetaString} instances by identity for one operation and
+ * assigns dense dynamic ids to repeated occurrences. Only the encoded payload is shared; the write
+ * ids are local to this writer instance.
+ */
 @Internal
 public final class MetaStringWriter {
   private static final int INITIAL_CAPACITY = 2;
@@ -36,8 +42,15 @@ public final class MetaStringWriter {
   private final IdentityObjectIntMap<EncodedMetaString> dynamicWrittenStrings =
       new IdentityObjectIntMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
 
+  /** Creates an empty writer state for one serialization stream. */
   public MetaStringWriter() {}
 
+  /**
+   * Writes a meta string preceded by the protocol variant that carries an explicit flag bit.
+   *
+   * <p>If the same encoded meta string was already written by this writer, a compact dynamic ref id
+   * is emitted instead of the full payload.
+   */
   public void writeMetaStringWithFlag(
       MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
     Objects.requireNonNull(encodedMetaString);
@@ -49,6 +62,12 @@ public final class MetaStringWriter {
     }
   }
 
+  /**
+   * Writes a meta string using the protocol variant without an extra caller-supplied flag bit.
+   *
+   * <p>If the same encoded meta string was already written by this writer, a compact dynamic ref id
+   * is emitted instead of the full payload.
+   */
   public void writeMetaString(MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
     Objects.requireNonNull(encodedMetaString);
     int id = dynamicWrittenStrings.putOrGet(encodedMetaString, dynamicWrittenStrings.size);
@@ -59,6 +78,7 @@ public final class MetaStringWriter {
     }
   }
 
+  /** Clears all dynamic ids so this writer can be reused for a new serialization stream. */
   public void reset() {
     dynamicWrittenStrings.clear();
   }

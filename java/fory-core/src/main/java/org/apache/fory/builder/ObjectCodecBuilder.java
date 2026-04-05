@@ -240,7 +240,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     if (totalSize == 0) {
       return new ArrayList<>();
     }
-    if (typeResolver.getConfig().compressInt() || typeResolver.getConfig().compressLong()) {
+    if (config.compressInt() || config.compressLong()) {
       return serializePrimitivesCompressed(bean, buffer, primitiveGroups, totalSize);
     } else {
       return serializePrimitivesUnCompressed(bean, buffer, primitiveGroups, totalSize);
@@ -642,7 +642,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     if (totalSize == 0) {
       return new ArrayList<>();
     }
-    if (typeResolver.getConfig().compressInt() || typeResolver.getConfig().compressLong()) {
+    if (config.compressInt() || config.compressLong()) {
       return deserializeCompressedPrimitives(bean, buffer, primitiveGroups);
     } else {
       return deserializeUnCompressedPrimitives(bean, buffer, primitiveGroups, totalSize);

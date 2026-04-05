@@ -24,6 +24,13 @@ import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.util.Preconditions;
 
+/**
+ * Default {@link RefWriter} implementation backed by an identity map.
+ *
+ * <p>Each distinct object written during one operation is assigned a dense ref id in encounter
+ * order. Later visits to the same instance emit {@link Fory#REF_FLAG} instead of rewriting the
+ * payload.
+ */
 public final class MapRefWriter implements RefWriter {
   private static final boolean ENABLE_FORY_REF_PROFILING =
       "true".equalsIgnoreCase(System.getProperty("fory.enable_ref_profiling"));
@@ -33,10 +40,16 @@ public final class MapRefWriter implements RefWriter {
   private long writeTotalObjectSize = 0;
   private final IdentityObjectIntMap<Object> writtenObjects;
 
+  /**
+   * Creates a writer with the given identity-map load factor.
+   *
+   * <p>The runtime uses this to tune ref-table behavior for different workloads.
+   */
   public MapRefWriter(float loadFactor) {
     writtenObjects = new IdentityObjectIntMap<>(DEFAULT_MAP_CAPACITY, loadFactor);
   }
 
+  /** Writes a ref-or-null header and records a fresh ref id for new non-null objects. */
   @Override
   public boolean writeRefOrNull(MemoryBuffer buffer, Object obj) {
     buffer.grow(10);
@@ -58,6 +71,7 @@ public final class MapRefWriter implements RefWriter {
     return false;
   }
 
+  /** Writes a ref-or-value header for a non-null object. */
   @Override
   public boolean writeRefValueFlag(MemoryBuffer buffer, Object obj) {
     assert obj != null;
@@ -76,6 +90,7 @@ public final class MapRefWriter implements RefWriter {
     return true;
   }
 
+  /** Writes a null header when needed and otherwise leaves the buffer unchanged. */
   @Override
   public boolean writeNullFlag(MemoryBuffer buffer, Object obj) {
     if (obj == null) {
@@ -85,6 +100,7 @@ public final class MapRefWriter implements RefWriter {
     return false;
   }
 
+  /** Rebinds the ref id for {@code original} to the already assigned id of {@code newObject}. */
   @Override
   public void replaceRef(Object original, Object newObject) {
     int newObjectId = writtenObjects.get(newObject, -1);
@@ -92,6 +108,7 @@ public final class MapRefWriter implements RefWriter {
     writtenObjects.put(original, newObjectId);
   }
 
+  /** Clears the current write state and keeps an approximate capacity for the next operation. */
   @Override
   public void reset() {
     long totalObjectSize = this.writeTotalObjectSize + writtenObjects.size;

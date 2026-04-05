@@ -24,6 +24,13 @@ import org.apache.fory.collection.IntArray;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.memory.MemoryBuffer;
 
+/**
+ * Default {@link RefReader} implementation backed by indexed arrays.
+ *
+ * <p>Read reference ids are assigned densely as objects appear in the input stream. The resolved
+ * object instances are stored in {@link #readObjects}, while {@link #readRefIds} tracks ids that
+ * have been reserved but not yet bound to concrete instances.
+ */
 public final class MapRefReader implements RefReader {
   private static final int DEFAULT_ARRAY_CAPACITY = 3;
 
@@ -33,6 +40,7 @@ public final class MapRefReader implements RefReader {
   private final IntArray readRefIds = new IntArray(DEFAULT_ARRAY_CAPACITY);
   private Object readObject;
 
+  /** Reads a ref-or-null header and resolves cached references immediately when present. */
   @Override
   public byte readRefOrNull(MemoryBuffer buffer) {
     byte headFlag = buffer.readByte();
@@ -44,6 +52,7 @@ public final class MapRefReader implements RefReader {
     return headFlag;
   }
 
+  /** Reserves the next dense read ref id for an object that is about to be materialized. */
   @Override
   public int preserveRefId() {
     int nextReadRefId = readObjects.size();
@@ -52,12 +61,14 @@ public final class MapRefReader implements RefReader {
     return nextReadRefId;
   }
 
+  /** Pushes an already known ref id for later binding. */
   @Override
   public int preserveRefId(int refId) {
     readRefIds.add(refId);
     return refId;
   }
 
+  /** Reads a ref/value header and reserves a new id only for fresh values. */
   @Override
   public int tryPreserveRefId(MemoryBuffer buffer) {
     byte headFlag = buffer.readByte();
@@ -72,32 +83,38 @@ public final class MapRefReader implements RefReader {
     return headFlag;
   }
 
+  /** Returns the last ref id reserved by {@link #preserveRefId()} or {@link #preserveRefId(int)}. */
   @Override
   public int lastPreservedRefId() {
     return readRefIds.get(readRefIds.size - 1);
   }
 
+  /** Returns whether there is at least one reserved ref id waiting to be bound. */
   @Override
   public boolean hasPreservedRefId() {
     return readRefIds.size > 0;
   }
 
+  /** Binds the most recently reserved ref id to {@code object}. */
   @Override
   public void reference(Object object) {
     int refId = readRefIds.pop();
     setReadRef(refId, object);
   }
 
+  /** Returns the previously materialized object stored at {@code id}. */
   @Override
   public Object getReadRef(int id) {
     return readObjects.get(id);
   }
 
+  /** Returns the object resolved by the last ref header that pointed to an existing instance. */
   @Override
   public Object getReadRef() {
     return readObject;
   }
 
+  /** Stores {@code object} under an already reserved read ref id. */
   @Override
   public void setReadRef(int id, Object object) {
     if (id >= 0) {
@@ -105,10 +122,12 @@ public final class MapRefReader implements RefReader {
     }
   }
 
+  /** Exposes the resolved read-reference table for debugging and focused tests. */
   public ObjectArray getReadRefs() {
     return readObjects;
   }
 
+  /** Clears the current read state and keeps an approximate capacity for the next operation. */
   @Override
   public void reset() {
     long totalObjectSize = this.readTotalObjectSize + readObjects.size();

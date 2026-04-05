@@ -22,9 +22,15 @@ package org.apache.fory.context;
 import org.apache.fory.collection.IdentityObjectIntMap;
 
 /**
- * Context for sharing class meta across multiple serialization writes.
+ * Write-side state for meta-share serialization.
+ *
+ * <p>When scoped meta share is disabled, the same instance can be reused across multiple writes so
+ * already announced classes are not sent repeatedly.
  */
 public class MetaWriteContext {
-  /** Classes which have sent definitions to peer. */
+  /**
+   * Classes whose definitions have already been announced to the peer, mapped to the protocol id
+   * used by the current or shared meta-share session.
+   */
   public final IdentityObjectIntMap<Class<?>> classMap = new IdentityObjectIntMap<>(1, 0.5f);
 }

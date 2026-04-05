@@ -28,7 +28,12 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.util.MurmurHash3;
 
-/** Read-side state for meta-string references. */
+/**
+ * Read-side state for meta-string references.
+ *
+ * <p>The reader interns incoming {@link EncodedMetaString} values and assigns dense dynamic ids to
+ * newly seen entries so later references can resolve them without allocating new wrappers.
+ */
 @Internal
 public final class MetaStringReader {
   private static final int INITIAL_CAPACITY = 2;
@@ -42,9 +47,13 @@ public final class MetaStringReader {
   private EncodedMetaString[] dynamicReadStringIds = new EncodedMetaString[INITIAL_CAPACITY];
   private short dynamicReadStringId;
 
-  public MetaStringReader() {
-  }
+  /** Creates an empty reader state for one deserialization stream. */
+  public MetaStringReader() {}
 
+  /**
+   * Reads a meta string whose header has already been parsed from the stream and includes the
+   * protocol flag bit layout.
+   */
   public EncodedMetaString readMetaStringWithFlag(MemoryBuffer buffer, int header) {
     int len = header >>> 2;
     if ((header & 0b10) == 0) {
@@ -58,6 +67,12 @@ public final class MetaStringReader {
     return dynamicReadStringIds[len - 1];
   }
 
+  /**
+   * Reads a flagged meta string while consulting a caller-supplied cache candidate first.
+   *
+   * <p>The cache allows call sites with a likely expected value to avoid an additional map lookup
+   * for exact matches.
+   */
   public EncodedMetaString readMetaStringWithFlag(
       MemoryBuffer buffer, EncodedMetaString cache, int header) {
     int len = header >>> 2;
@@ -72,6 +87,7 @@ public final class MetaStringReader {
     return dynamicReadStringIds[len - 1];
   }
 
+  /** Reads a meta string from the current buffer, including any dynamic-id indirection. */
   public EncodedMetaString readMetaString(MemoryBuffer buffer) {
     int header = buffer.readVarUint32Small7();
     int len = header >>> 1;
@@ -86,6 +102,10 @@ public final class MetaStringReader {
     return dynamicReadStringIds[len - 1];
   }
 
+  /**
+   * Reads a meta string from the current buffer while consulting a caller-supplied cache candidate
+   * first.
+   */
   public EncodedMetaString readMetaString(MemoryBuffer buffer, EncodedMetaString cache) {
     int header = buffer.readVarUint32Small7();
     int len = header >>> 1;
@@ -197,6 +217,7 @@ public final class MetaStringReader {
     return expanded;
   }
 
+  /** Clears all dynamic ids so this reader can be reused for a new deserialization stream. */
   public void reset() {
     int dynamicReadId = dynamicReadStringId;
     if (dynamicReadId != 0) {

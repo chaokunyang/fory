@@ -1786,8 +1786,8 @@ public class ClassResolver extends TypeResolver {
       // let the lowermost bit of next byte be set, so the deserialization can know
       // whether need to read class by name in advance
       MetaStringWriter metaStringWriter = writeContext.getMetaStringWriter();
-      metaStringWriter.writeMetaStringBytesWithFlag(buffer, typeInfo.namespace);
-      metaStringWriter.writeMetaStringBytes(buffer, typeInfo.typeName);
+      metaStringWriter.writeMetaStringWithFlag(buffer, typeInfo.namespace);
+      metaStringWriter.writeMetaString(buffer, typeInfo.typeName);
     }
   }
 
@@ -1821,9 +1821,9 @@ public class ClassResolver extends TypeResolver {
       // whether need to read class by name in advance
       MetaStringReader metaStringReader = readContext.getMetaStringReader();
       EncodedMetaString packageBytes =
-          metaStringReader.readMetaStringBytesWithFlag(buffer, header);
+          metaStringReader.readMetaStringWithFlag(buffer, header);
       EncodedMetaString simpleClassNameBytes =
-          metaStringReader.readMetaStringBytes(buffer);
+          metaStringReader.readMetaString(buffer);
       return loadBytesToTypeInfo(packageBytes, simpleClassNameBytes).type;
     }
     int typeId = header >>> 1;

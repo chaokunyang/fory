@@ -41,10 +41,10 @@ public class MetaStringIOTest {
     String str = StringUtils.random(128, 0);
     EncodedMetaString encodedMetaString = newGenericMetaString(str);
     for (int i = 0; i < 128; i++) {
-      writer.writeMetaStringBytes(buffer, encodedMetaString);
+      writer.writeMetaString(buffer, encodedMetaString);
     }
     for (int i = 0; i < 128; i++) {
-      String decoded = reader.readMetaString(buffer);
+      String decoded = reader.readMetaString(buffer).decode(Encoders.GENERIC_DECODER);
       assertEquals(decoded.hashCode(), str.hashCode());
       assertEquals(decoded.getBytes(), str.getBytes());
     }
@@ -61,8 +61,8 @@ public class MetaStringIOTest {
         String str = StringUtils.random(i, 0);
         MetaStringWriter writer = new MetaStringWriter();
         MetaStringReader reader = new MetaStringReader();
-        writer.writeMetaStringBytes(buffer, newGenericMetaString(str));
-        String metaString = reader.readMetaString(buffer);
+        writer.writeMetaString(buffer, newGenericMetaString(str));
+        String metaString = reader.readMetaString(buffer).decode(Encoders.GENERIC_DECODER);
         assertEquals(metaString.hashCode(), str.hashCode());
         assertEquals(metaString.getBytes(), str.getBytes());
         buffer.readerIndex(0);
@@ -78,12 +78,12 @@ public class MetaStringIOTest {
     EncodedMetaString metaString = newGenericMetaString("thread_safe_fory");
     MemoryBuffer buffer = MemoryUtils.buffer(64);
 
-    writer.writeMetaStringBytes(buffer, metaString);
+    writer.writeMetaString(buffer, metaString);
     writer.reset();
     buffer.writerIndex(0);
     buffer.readerIndex(0);
 
-    writer.writeMetaStringBytes(buffer, metaString);
+    writer.writeMetaString(buffer, metaString);
 
     assertEquals(reader.readMetaString(buffer), "thread_safe_fory");
   }

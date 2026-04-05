@@ -23,11 +23,9 @@ import java.util.Arrays;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.LongLongByteMap;
 import org.apache.fory.collection.LongMap;
-import org.apache.fory.collection.ObjectMap;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.EncodedMetaString;
-import org.apache.fory.meta.Encoders;
 import org.apache.fory.util.MurmurHash3;
 
 /** Read-side state for meta-string references. */
@@ -37,8 +35,6 @@ public final class MetaStringReader {
   private static final float LOAD_FACTOR = 0.5f;
   private static final int SMALL_STRING_THRESHOLD = 16;
 
-  private final ObjectMap<EncodedMetaString, String> metaString2StringMap =
-      new ObjectMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
   private final LongMap<EncodedMetaString> hash2MetaStringMap =
       new LongMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
   private final LongLongByteMap<EncodedMetaString> longLongMetaStringMap =
@@ -47,85 +43,74 @@ public final class MetaStringReader {
   private short dynamicReadStringId;
 
   public MetaStringReader() {
-    metaString2StringMap.put(EncodedMetaString.EMPTY, "");
   }
 
-  public String readMetaString(MemoryBuffer buffer) {
-    EncodedMetaString encodedMetaString = readMetaStringBytes(buffer);
-    String str = metaString2StringMap.get(encodedMetaString);
-    if (str == null) {
-      str = encodedMetaString.decode(Encoders.GENERIC_DECODER);
-      metaString2StringMap.put(encodedMetaString, str);
-    }
-    return str;
-  }
-
-  public EncodedMetaString readMetaStringBytesWithFlag(MemoryBuffer buffer, int header) {
+  public EncodedMetaString readMetaStringWithFlag(MemoryBuffer buffer, int header) {
     int len = header >>> 2;
     if ((header & 0b10) == 0) {
       EncodedMetaString encodedMetaString =
           len <= SMALL_STRING_THRESHOLD
-              ? readSmallMetaStringBytes(buffer, len)
-              : readBigMetaStringBytes(buffer, len, buffer.readInt64());
+              ? readSmallMetaString(buffer, len)
+              : readBigMetaString(buffer, len, buffer.readInt64());
       updateDynamicString(encodedMetaString);
       return encodedMetaString;
     }
     return dynamicReadStringIds[len - 1];
   }
 
-  public EncodedMetaString readMetaStringBytesWithFlag(
+  public EncodedMetaString readMetaStringWithFlag(
       MemoryBuffer buffer, EncodedMetaString cache, int header) {
     int len = header >>> 2;
     if ((header & 0b10) == 0) {
       EncodedMetaString encodedMetaString =
           len <= SMALL_STRING_THRESHOLD
-              ? readSmallMetaStringBytes(buffer, cache, len)
-              : readBigMetaStringBytes(buffer, cache, len);
+              ? readSmallMetaString(buffer, cache, len)
+              : readBigMetaString(buffer, cache, len);
       updateDynamicString(encodedMetaString);
       return encodedMetaString;
     }
     return dynamicReadStringIds[len - 1];
   }
 
-  public EncodedMetaString readMetaStringBytes(MemoryBuffer buffer) {
+  public EncodedMetaString readMetaString(MemoryBuffer buffer) {
     int header = buffer.readVarUint32Small7();
     int len = header >>> 1;
     if ((header & 0b1) == 0) {
       EncodedMetaString encodedMetaString =
           len > SMALL_STRING_THRESHOLD
-              ? readBigMetaStringBytes(buffer, len, buffer.readInt64())
-              : readSmallMetaStringBytes(buffer, len);
+              ? readBigMetaString(buffer, len, buffer.readInt64())
+              : readSmallMetaString(buffer, len);
       updateDynamicString(encodedMetaString);
       return encodedMetaString;
     }
     return dynamicReadStringIds[len - 1];
   }
 
-  public EncodedMetaString readMetaStringBytes(MemoryBuffer buffer, EncodedMetaString cache) {
+  public EncodedMetaString readMetaString(MemoryBuffer buffer, EncodedMetaString cache) {
     int header = buffer.readVarUint32Small7();
     int len = header >>> 1;
     if ((header & 0b1) == 0) {
       EncodedMetaString encodedMetaString =
           len <= SMALL_STRING_THRESHOLD
-              ? readSmallMetaStringBytes(buffer, cache, len)
-              : readBigMetaStringBytes(buffer, cache, len);
+              ? readSmallMetaString(buffer, cache, len)
+              : readBigMetaString(buffer, cache, len);
       updateDynamicString(encodedMetaString);
       return encodedMetaString;
     }
     return dynamicReadStringIds[len - 1];
   }
 
-  private EncodedMetaString readBigMetaStringBytes(
+  private EncodedMetaString readBigMetaString(
       MemoryBuffer buffer, EncodedMetaString cache, int len) {
     long hashCode = buffer.readInt64();
     if (cache.hash == hashCode) {
       buffer.increaseReaderIndex(len);
       return cache;
     }
-    return readBigMetaStringBytes(buffer, len, hashCode);
+    return readBigMetaString(buffer, len, hashCode);
   }
 
-  private EncodedMetaString readBigMetaStringBytes(
+  private EncodedMetaString readBigMetaString(
       MemoryBuffer buffer, int len, long hashCode) {
     EncodedMetaString encodedMetaString = hash2MetaStringMap.get(hashCode);
     if (encodedMetaString == null) {
@@ -137,7 +122,7 @@ public final class MetaStringReader {
     return encodedMetaString;
   }
 
-  private EncodedMetaString readSmallMetaStringBytes(MemoryBuffer buffer, int len) {
+  private EncodedMetaString readSmallMetaString(MemoryBuffer buffer, int len) {
     if (len == 0) {
       return EncodedMetaString.EMPTY;
     }
@@ -152,12 +137,12 @@ public final class MetaStringReader {
     }
     EncodedMetaString encodedMetaString = longLongMetaStringMap.get(v1, v2, encoding);
     if (encodedMetaString == null) {
-      return createSmallMetaStringBytes(len, encoding, v1, v2);
+      return createSmallMetaString(len, encoding, v1, v2);
     }
     return encodedMetaString;
   }
 
-  private EncodedMetaString readSmallMetaStringBytes(
+  private EncodedMetaString readSmallMetaString(
       MemoryBuffer buffer, EncodedMetaString cache, int len) {
     if (len == 0) {
       return EncodedMetaString.EMPTY;
@@ -176,12 +161,12 @@ public final class MetaStringReader {
     }
     EncodedMetaString encodedMetaString = longLongMetaStringMap.get(v1, v2, encoding);
     if (encodedMetaString == null) {
-      return createSmallMetaStringBytes(len, encoding, v1, v2);
+      return createSmallMetaString(len, encoding, v1, v2);
     }
     return encodedMetaString;
   }
 
-  private EncodedMetaString createSmallMetaStringBytes(int len, byte encoding, long v1, long v2) {
+  private EncodedMetaString createSmallMetaString(int len, byte encoding, long v1, long v2) {
     byte[] data = new byte[16];
     LittleEndian.putInt64(data, 0, v1);
     LittleEndian.putInt64(data, 8, v2);

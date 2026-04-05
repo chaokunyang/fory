@@ -448,9 +448,9 @@ public abstract class TypeResolver {
         if (!metaContextShareEnabled) {
           Preconditions.checkNotNull(typeInfo.namespace);
           MetaStringWriter metaStringWriter = writeContext.getMetaStringWriter();
-          metaStringWriter.writeMetaStringBytes(buffer, typeInfo.namespace);
+          metaStringWriter.writeMetaString(buffer, typeInfo.namespace);
           Preconditions.checkNotNull(typeInfo.typeName);
-          metaStringWriter.writeMetaStringBytes(buffer, typeInfo.typeName);
+          metaStringWriter.writeMetaString(buffer, typeInfo.typeName);
         } else {
           writeSharedClassMeta(writeContext, typeInfo);
         }
@@ -733,10 +733,10 @@ public abstract class TypeResolver {
       // Use cache for faster comparison
       EncodedMetaString packageNameBytesCache = typeInfoCache.namespace;
       namespaceBytes =
-          metaStringReader.readMetaStringBytes(buffer, packageNameBytesCache);
+          metaStringReader.readMetaString(buffer, packageNameBytesCache);
       assert packageNameBytesCache != null;
       simpleClassNameBytes =
-          metaStringReader.readMetaStringBytes(buffer, typeNameBytesCache);
+          metaStringReader.readMetaString(buffer, typeNameBytesCache);
 
       // Fast path: if hashes match, return cached TypeInfo (already has serializer)
       if (typeNameBytesCache.hash == simpleClassNameBytes.hash
@@ -745,8 +745,8 @@ public abstract class TypeResolver {
       }
     } else {
       // No cache available, read fresh
-      namespaceBytes = metaStringReader.readMetaStringBytes(buffer);
-      simpleClassNameBytes = metaStringReader.readMetaStringBytes(buffer);
+      namespaceBytes = metaStringReader.readMetaString(buffer);
+      simpleClassNameBytes = metaStringReader.readMetaString(buffer);
     }
 
     // Load class info from bytes (subclass-specific).

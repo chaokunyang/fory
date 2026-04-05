@@ -38,34 +38,32 @@ public final class MetaStringWriter {
 
   public MetaStringWriter() {}
 
-  public void writeMetaStringBytesWithFlag(
+  public void writeMetaStringWithFlag(
       MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
     Objects.requireNonNull(encodedMetaString);
     int id = dynamicWrittenStrings.putOrGet(encodedMetaString, dynamicWrittenStrings.size);
     if (id == MISSING_DYNAMIC_WRITE_STRING_ID) {
-      writeNewMetaStringBytesWithFlag(buffer, encodedMetaString);
+      writeNewMetaStringWithFlag(buffer, encodedMetaString);
     } else {
       buffer.writeVarUint32Small7(((id + 1) << 2) | 0b11);
     }
   }
 
-  public void writeMetaStringBytes(MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
+  public void writeMetaString(MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
     Objects.requireNonNull(encodedMetaString);
     int id = dynamicWrittenStrings.putOrGet(encodedMetaString, dynamicWrittenStrings.size);
     if (id == MISSING_DYNAMIC_WRITE_STRING_ID) {
-      writeNewMetaStringBytes(buffer, encodedMetaString);
+      writeNewMetaString(buffer, encodedMetaString);
     } else {
       buffer.writeVarUint32Small7(((id + 1) << 1) | 1);
     }
   }
 
   public void reset() {
-    if (!dynamicWrittenStrings.isEmpty()) {
-      dynamicWrittenStrings.clear();
-    }
+    dynamicWrittenStrings.clear();
   }
 
-  private void writeNewMetaStringBytesWithFlag(
+  private void writeNewMetaStringWithFlag(
       MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
     int length = encodedMetaString.bytes.length;
     buffer.writeVarUint32Small7(length << 2 | 0b1);
@@ -77,7 +75,7 @@ public final class MetaStringWriter {
     buffer.writeBytes(encodedMetaString.bytes);
   }
 
-  private void writeNewMetaStringBytes(MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
+  private void writeNewMetaString(MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
     int length = encodedMetaString.bytes.length;
     buffer.writeVarUint32Small7(length << 1);
     if (length > SMALL_STRING_THRESHOLD) {

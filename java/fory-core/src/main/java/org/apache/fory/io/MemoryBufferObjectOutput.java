@@ -34,27 +34,23 @@ import org.apache.fory.util.Preconditions;
 public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutput {
   private final boolean compressInt;
   private final LongEncoding longEncoding;
-  private final StringSerializer stringSerializer;
   private WriteContext writeContext;
   private MemoryBuffer buffer;
 
   public MemoryBufferObjectOutput(Config config, MemoryBuffer buffer) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
-    this.stringSerializer = new StringSerializer(config);
-    this.buffer = buffer;
-  }
-
-  public MemoryBuffer getBuffer() {
-    return buffer;
-  }
-
-  public void setBuffer(MemoryBuffer buffer) {
     this.buffer = buffer;
   }
 
   public void setWriteContext(WriteContext writeContext) {
     this.writeContext = writeContext;
+    this.buffer = writeContext.getBuffer();
+  }
+
+  public void clearWriteContext() {
+    this.writeContext = null;
+    this.buffer = null;
   }
 
   @Override
@@ -133,21 +129,13 @@ public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutp
   @Override
   public void writeChars(String s) throws IOException {
     Preconditions.checkNotNull(s);
-    if (writeContext != null) {
-      writeContext.getStringSerializer().writeString(buffer, s);
-    } else {
-      stringSerializer.writeString(buffer, s);
-    }
+    writeContext.writeString(s);
   }
 
   @Override
   public void writeUTF(String s) throws IOException {
     Preconditions.checkNotNull(s);
-    if (writeContext != null) {
-      writeContext.getStringSerializer().writeString(buffer, s);
-    } else {
-      stringSerializer.writeString(buffer, s);
-    }
+    writeContext.writeString(s);
   }
 
   @Override

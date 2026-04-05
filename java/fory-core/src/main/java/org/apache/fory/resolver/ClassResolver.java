@@ -163,6 +163,8 @@ import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
 import org.apache.fory.util.record.RecordUtils;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 /**
  * Class registry for types of serializing objects, responsible for reading/writing types, setting
  * up relations between serializer and types.
@@ -184,6 +186,7 @@ import org.apache.fory.util.record.RecordUtils;
  * @see #register(Class)
  * @see #register(Class, long)
  */
+@NotThreadSafe
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ClassResolver extends TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(ClassResolver.class);
@@ -327,6 +330,9 @@ public class ClassResolver extends TypeResolver {
     OptionalSerializers.registerDefaultSerializers(this);
     CollectionSerializers.registerDefaultSerializers(this);
     MapSerializers.registerDefaultSerializers(this);
+    addDefaultSerializer(
+        StackTraceElement[].class,
+        new ArraySerializers.ObjectArraySerializer<>(this, StackTraceElement[].class));
     addDefaultSerializer(Locale.class, new LocaleSerializer(config));
     addDefaultSerializer(
         SerializedLambda.class, new SerializedLambdaSerializer(this, SerializedLambda.class));
@@ -506,11 +512,11 @@ public class ClassResolver extends TypeResolver {
     int typeId = Types.TYPED_UNION;
     TypeInfo typeInfo = classInfoMap.get(cls);
     if (typeInfo == null) {
-      typeInfo = new TypeInfo(this, cls, null, typeId, checkedUserId);
+      typeInfo = new TypeInfo(this, cls, serializer, typeId, checkedUserId);
     } else {
       typeInfo = typeInfo.copy(typeId, checkedUserId);
+      typeInfo.setSerializer(this, serializer);
     }
-    typeInfo.setSerializer(this, serializer);
     updateTypeInfo(cls, typeInfo);
     extRegistry.registeredClasses.put(cls.getName(), cls);
     registerGraalvmClass(cls);
@@ -534,7 +540,7 @@ public class ClassResolver extends TypeResolver {
     EncodedMetaString nsBytes = sharedRegistry.getPackageEncodedMetaString(namespace);
     EncodedMetaString nameBytes = sharedRegistry.getTypeNameEncodedMetaString(name);
     int typeId = Types.NAMED_UNION;
-    TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, false, null, typeId, -1);
+    TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, false, serializer, typeId, -1);
     typeInfo.setSerializer(this, serializer);
     classInfoMap.put(cls, typeInfo);
     compositeNameBytes2TypeInfo.put(
@@ -1029,21 +1035,25 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
-    if (isCollection(type) && !CollectionLikeSerializer.class.isAssignableFrom(serializerClass)) {
-      throw new IllegalArgumentException(
-          String.format(
-              "Serializer %s is not supported for collection type %s. Use %s instead.",
-              serializerClass.getName(),
-              type.getName(),
-              CollectionSerializers.JDKCompatibleCollectionSerializer.class.getName()));
+    if (isCollection(type)) {
+      if (!CollectionLikeSerializer.class.isAssignableFrom(serializerClass)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Serializer %s is not supported for collection type %s. Use %s instead.",
+                serializerClass.getName(),
+                type.getName(),
+                CollectionSerializers.JDKCompatibleCollectionSerializer.class.getName()));
+      }
     }
-    if (isMap(type) && !MapLikeSerializer.class.isAssignableFrom(serializerClass)) {
-      throw new IllegalArgumentException(
-          String.format(
-              "Serializer %s is not supported for map type %s. Use %s instead.",
-              serializerClass.getName(),
-              type.getName(),
-              MapSerializers.JDKCompatibleMapSerializer.class.getName()));
+    if (isMap(type)) {
+      if (!MapLikeSerializer.class.isAssignableFrom(serializerClass)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Serializer %s is not supported for map type %s. Use %s instead.",
+                serializerClass.getName(),
+                type.getName(),
+                MapSerializers.JDKCompatibleMapSerializer.class.getName()));
+      }
     }
   }
 
@@ -1076,7 +1086,7 @@ public class ClassResolver extends TypeResolver {
       Class<?> cls = entry.getKey();
       if (cls.getName().equals(className)) {
         LOG.info("Clear serializer for class {}.", className);
-        setSerializer((Class) cls, Serializers.newSerializer(this, cls, serializer));
+        entry.getValue().setSerializer(this, Serializers.newSerializer(this, cls, serializer));
         typeInfoCache = NIL_TYPE_INFO;
         return;
       }
@@ -1093,7 +1103,7 @@ public class ClassResolver extends TypeResolver {
       }
       if (className.startsWith(classNamePrefix)) {
         LOG.info("Clear serializer for class {}.", className);
-        setSerializer((Class) cls, Serializers.newSerializer(this, cls, serializer));
+        entry.getValue().setSerializer(this, Serializers.newSerializer(this, cls, serializer));
         typeInfoCache = NIL_TYPE_INFO;
       }
     }
@@ -1115,13 +1125,15 @@ public class ClassResolver extends TypeResolver {
 
   /** Clear serializer associated with <code>cls</code> if not null. */
   public void clearSerializer(Class<?> cls) {
-    resetSerializer((Class) cls, null);
+    TypeInfo typeInfo = classInfoMap.get(cls);
+    if (typeInfo != null) {
+      typeInfo.setSerializer(this, null);
+    }
   }
 
   /** Add serializer for specified class. */
   public void addSerializer(Class<?> type, Serializer<?> serializer) {
     Preconditions.checkNotNull(serializer);
-    TypeInfo currentTypeInfo = classInfoMap.get(type);
     TypeInfo typeInfo;
     Integer classId = getRegisteredClassIdLocalOrFrozen(type);
     boolean registered = classId != null;
@@ -1129,34 +1141,32 @@ public class ClassResolver extends TypeResolver {
       int id = classId;
       boolean internal = isInternalRegisteredClassId(type, id);
       int typeId = internal ? id : buildUserTypeId(type, serializer);
-      int userTypeId = internal ? INVALID_USER_TYPE_ID : id;
-      if (currentTypeInfo == null) {
+      typeInfo = classInfoMap.get(type);
+      if (typeInfo == null) {
         typeInfo = new TypeInfo(this, type, null, typeId, internal ? INVALID_USER_TYPE_ID : id);
-      } else if (currentTypeInfo.getTypeId() != typeId
-          || currentTypeInfo.getUserTypeId() != userTypeId) {
-        typeInfo = currentTypeInfo.copy(typeId, userTypeId);
       } else {
-        typeInfo = currentTypeInfo;
+        typeInfo = typeInfo.copy(typeId);
       }
+      updateTypeInfo(type, typeInfo);
     } else {
       int typeId = buildUnregisteredTypeId(type, serializer);
-      if (currentTypeInfo == null) {
+      typeInfo = classInfoMap.get(type);
+      if (typeInfo == null) {
         typeInfo = new TypeInfo(this, type, null, typeId, INVALID_USER_TYPE_ID);
-      } else if (currentTypeInfo.getTypeId() != typeId
-          || currentTypeInfo.getUserTypeId() != INVALID_USER_TYPE_ID) {
-        typeInfo = currentTypeInfo.copy(typeId, INVALID_USER_TYPE_ID);
       } else {
-        typeInfo = currentTypeInfo;
+        typeInfo = typeInfo.copy(typeId);
+      }
+      updateTypeInfo(type, typeInfo);
+      // Add to compositeNameBytes2TypeInfo for unregistered classes so that
+      // readTypeInfo can find the TypeInfo by name bytes during deserialization.
+      // This is important for dynamically created classes that can't be loaded by name.
+      if (typeInfo.namespaceBytes != null && typeInfo.typeNameBytes != null) {
+        TypeNameBytes typeNameBytes =
+            new TypeNameBytes(typeInfo.namespaceBytes.hash, typeInfo.typeNameBytes.hash);
+        compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
       }
     }
     typeInfo.setSerializer(this, serializer);
-    updateTypeInfo(type, typeInfo);
-    if (typeInfo.namespaceBytes != null && typeInfo.typeNameBytes != null) {
-      TypeNameBytes typeNameBytes =
-          new TypeNameBytes(
-              typeInfo.namespaceBytes.hash, typeInfo.typeNameBytes.hash);
-      compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
-    }
   }
 
   @SuppressWarnings("unchecked")
@@ -1191,10 +1201,7 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   public Class<? extends Serializer> getSerializerClass(Class<?> cls) {
-    boolean codegen =
-        config.isCodeGenEnabled()
-            && !GraalvmSupport.isGraalRuntime()
-            && supportCodegenForJavaSerialization(cls);
+    boolean codegen = config.isCodeGenEnabled() && supportCodegenForJavaSerialization(cls);
     return getSerializerClass(cls, codegen);
   }
 
@@ -1202,6 +1209,12 @@ public class ClassResolver extends TypeResolver {
     if (!cls.isEnum() && (ReflectionUtils.isAbstract(cls) || cls.isInterface())) {
       throw new UnsupportedOperationException(
           String.format("Class %s doesn't support serialization.", cls));
+    }
+    if (cls == StackTraceElement.class) {
+      return ExceptionSerializers.StackTraceElementSerializer.class;
+    }
+    if (Throwable.class.isAssignableFrom(cls)) {
+      return ExceptionSerializers.ExceptionSerializer.class;
     }
     Class<? extends Serializer> serializerClass = getSerializerClassFromGraalvmRegistry(cls);
     if (serializerClass != null) {
@@ -1212,7 +1225,7 @@ public class ClassResolver extends TypeResolver {
     if (typeInfo != null && typeInfo.serializer != null) {
       // Note: need to check `classInfo.serializer != null`, because sometimes `cls` is already
       // serialized, which will create a class info with serializer null, see `#writeClassInternal`
-      return typeInfo.serializer.getClass();
+      return getGraalvmSerializerClass(typeInfo.serializer);
     } else {
       if (getSerializerFactory() != null) {
         Serializer serializer = getSerializerFactory().createSerializer(this, cls);
@@ -1232,10 +1245,6 @@ public class ClassResolver extends TypeResolver {
         return EnumSerializer.class;
       } else if (EnumSet.class.isAssignableFrom(cls)) {
         return CollectionSerializers.EnumSetSerializer.class;
-      } else if (cls == StackTraceElement.class) {
-        return ExceptionSerializers.StackTraceElementSerializer.class;
-      } else if (Throwable.class.isAssignableFrom(cls)) {
-        return ExceptionSerializers.ExceptionSerializer.class;
       } else if (Charset.class.isAssignableFrom(cls)) {
         return Serializers.CharsetSerializer.class;
       } else if (ReflectionUtils.isJdkProxy(cls)) {
@@ -1402,7 +1411,12 @@ public class ClassResolver extends TypeResolver {
   // Invoked by fory JIT.
   @Override
   public TypeInfo getTypeInfo(Class<?> cls) {
-    return getOrUpdateTypeInfo(cls);
+    TypeInfo typeInfo = classInfoMap.get(cls);
+    if (typeInfo == null || typeInfo.serializer == null) {
+      addSerializer(cls, createSerializer(cls));
+      typeInfo = classInfoMap.get(cls);
+    }
+    return typeInfo;
   }
 
   public TypeInfo getTypeInfo(short classId) {
@@ -1510,6 +1524,8 @@ public class ClassResolver extends TypeResolver {
           && !Functions.isLambda(cls)
           && !ReflectionUtils.isJdkProxy(cls)
           && !isRegisteredByIdLocalOrFrozen(cls)
+          && !isRegisteredByNameLocalOrFrozen(cls)
+          && !hasGraalvmSerializerClass(cls)
           && !shimDispatcher.contains(cls)
           && !extRegistry.isTypeCheckerSet()) {
         LOG.warn(generateSecurityMsg(cls));
@@ -1658,7 +1674,9 @@ public class ClassResolver extends TypeResolver {
   }
 
   private boolean isSecure(Class<?> cls) {
-    if (isRegisteredByNameLocalOrFrozen(cls) || shimDispatcher.contains(cls)) {
+    if (isRegisteredByNameLocalOrFrozen(cls)
+        || hasGraalvmSerializerClass(cls)
+        || shimDispatcher.contains(cls)) {
       return true;
     }
     if (cls.isArray()) {
@@ -1680,12 +1698,6 @@ public class ClassResolver extends TypeResolver {
     } else {
       return extRegistry.typeChecker.checkType(this, cls.getName());
     }
-    // Don't take java Exception as secure in case future JDK introduce insecure JDK exception.
-    // if (Exception.class.isAssignableFrom(cls)
-    //     && cls.getName().startsWith("java.")
-    //     && !cls.getName().startsWith("java.sql")) {
-    //   return true;
-    // }
   }
 
   /**
@@ -1998,9 +2010,9 @@ public class ClassResolver extends TypeResolver {
       getJITContext().lock();
       // Lambda and JdkProxy serializers use java.lang.Class which is not supported in xlang mode
       if (!isCrossLanguage()) {
-        Serializers.newSerializer(this, LambdaSerializer.ReplaceStub.class, LambdaSerializer.class);
+        Serializers.newSerializer(this, LambdaSerializer.STUB_LAMBDA_CLASS, LambdaSerializer.class);
         Serializers.newSerializer(
-            this, JdkProxySerializer.ReplaceStub.class, JdkProxySerializer.class);
+            this, JdkProxySerializer.SUBT_PROXY.getClass(), JdkProxySerializer.class);
       }
       classInfoMap.forEach(
           (cls, classInfo) -> {

@@ -69,7 +69,7 @@ public final class WriteContext {
     this.typeResolver = typeResolver;
     this.refWriter = refWriter;
     this.metaStringWriter = metaStringWriter;
-    stringSerializer = new StringSerializer(config);
+    stringSerializer = (StringSerializer) typeResolver.getSerializer(String.class);
     crossLanguage = config.isXlang();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();

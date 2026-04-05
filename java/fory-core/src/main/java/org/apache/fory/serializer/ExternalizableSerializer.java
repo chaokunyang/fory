@@ -43,30 +43,30 @@ public class ExternalizableSerializer<T extends Externalizable>
 
   @Override
   public void write(WriteContext writeContext, T value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
     if (config.isXlang()) {
       throw new UnsupportedOperationException("Externalizable can only be used in java");
     }
-    objectOutput.setBuffer(buffer);
     objectOutput.setWriteContext(writeContext);
     try {
       value.writeExternal(objectOutput);
     } catch (IOException e) {
       Platform.throwException(e);
+    } finally {
+      objectOutput.clearWriteContext();
     }
   }
 
   @Override
   public T read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
     T t = objectCreator.newInstance();
     readContext.reference(t);
-    objectInput.setBuffer(buffer);
     objectInput.setReadContext(readContext);
     try {
       t.readExternal(objectInput);
     } catch (IOException | ClassNotFoundException e) {
       Platform.throwException(e);
+    } finally {
+      objectInput.clearReadContext();
     }
     return t;
   }

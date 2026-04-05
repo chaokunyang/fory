@@ -69,7 +69,7 @@ public final class ReadContext {
     this.typeResolver = typeResolver;
     this.refReader = refReader;
     this.metaStringReader = metaStringReader;
-    stringSerializer = new StringSerializer(config);
+    stringSerializer = (StringSerializer) typeResolver.getSerializer(String.class);
     crossLanguage = config.isXlang();
     compressInt = config.compressInt();
     longEncoding = config.longEncoding();

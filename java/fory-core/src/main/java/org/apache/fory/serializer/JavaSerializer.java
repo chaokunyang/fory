@@ -74,9 +74,7 @@ public class JavaSerializer extends AbstractObjectSerializer {
 
   @Override
   public void write(WriteContext writeContext, Object value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
     try {
-      objectOutput.setBuffer(buffer);
       objectOutput.setWriteContext(writeContext);
       ObjectOutputStream objectOutputStream =
           (ObjectOutputStream) writeContext.getContextObject(objectOutput);
@@ -88,6 +86,8 @@ public class JavaSerializer extends AbstractObjectSerializer {
       objectOutputStream.flush();
     } catch (IOException e) {
       Platform.throwException(e);
+    } finally {
+      objectOutput.clearWriteContext();
     }
   }
 
@@ -107,6 +107,8 @@ public class JavaSerializer extends AbstractObjectSerializer {
       return objectInputStream.readObject();
     } catch (IOException | ClassNotFoundException e) {
       Platform.throwException(e);
+    } finally {
+      objectInput.clearReadContext();
     }
     throw new IllegalStateException("unreachable code");
   }

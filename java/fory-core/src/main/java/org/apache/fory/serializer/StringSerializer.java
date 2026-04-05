@@ -159,7 +159,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     return false;
   }
 
-  public Expression writeStringExpr(Expression strSerializer, Expression buffer, Expression str) {
+  public static Expression writeStringExpr(Expression strSerializer, Expression buffer, Expression str, boolean compressString) {
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
         return new Invoke(strSerializer, "writeCompressedBytesString", buffer, str);
@@ -186,7 +186,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     }
   }
 
-  public Expression readStringExpr(Expression strSerializer, Expression buffer) {
+  public static Expression readStringExpr(Expression strSerializer, Expression buffer, boolean compressString) {
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
         return new Invoke(strSerializer, "readCompressedBytesString", STRING_TYPE, buffer);

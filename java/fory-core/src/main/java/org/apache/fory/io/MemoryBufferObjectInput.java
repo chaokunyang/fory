@@ -34,20 +34,15 @@ import org.apache.fory.util.Preconditions;
 public class MemoryBufferObjectInput extends InputStream implements ObjectInput {
   private final boolean compressInt;
   private final LongEncoding longEncoding;
-  private final StringSerializer stringSerializer;
   private MemoryBuffer buffer;
   private ReadContext readContext;
 
   public MemoryBufferObjectInput(Config config, MemoryBuffer buffer) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
-    this.stringSerializer = new StringSerializer(config);
     this.buffer = buffer;
   }
 
-  public MemoryBuffer getBuffer() {
-    return buffer;
-  }
 
   public void setBuffer(MemoryBuffer buffer) {
     this.buffer = buffer;
@@ -55,6 +50,12 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
 
   public void setReadContext(ReadContext readContext) {
     this.readContext = readContext;
+    this.buffer = readContext.getBuffer();
+  }
+
+  public void clearReadContext() {
+    this.readContext = null;
+    this.buffer = null;
   }
 
   @Override
@@ -169,9 +170,6 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
 
   @Override
   public String readUTF() throws IOException {
-    if (readContext != null) {
-      return readContext.getStringSerializer().readString(buffer);
-    }
-    return stringSerializer.readString(buffer);
+    return readContext.getStringSerializer().readString(buffer);
   }
 }

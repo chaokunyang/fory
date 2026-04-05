@@ -79,6 +79,7 @@ import static org.apache.fory.type.TypeUtils.isBoxed;
 import static org.apache.fory.type.TypeUtils.isPrimitive;
 import static org.apache.fory.util.Preconditions.checkArgument;
 
+import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 
@@ -178,6 +179,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected final Reference readContextRef;
   protected final Reference refWriterRef;
   protected final TypeResolver typeResolver;
+  protected final Config config;
   private final Map<Class<?>, Reference> serializerMap = new HashMap<>();
   private final Map<String, Object> sharedFieldMap = new HashMap<>();
   protected final Class<?> parentSerializerClass;
@@ -191,6 +193,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     super(new CodegenContext(), beanType);
     this.fory = fory;
     typeResolver = fory.getTypeResolver();
+    config = this.typeResolver.getConfig();
     this.parentSerializerClass = parentSerializerClass;
     writeMethodName = "write";
     readMethodName = "read";
@@ -499,8 +502,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return serializePrimitiveField(inputObject, buffer, descriptor);
     } else {
       if (clz == String.class) {
-        return new StringSerializer(typeResolver.getConfig())
-            .writeStringExpr(getOrCreateStringSerializer(), buffer, inputObject);
+        return StringSerializer.writeStringExpr(getOrCreateStringSerializer(), buffer, inputObject, config.compressString());
       }
       Expression action;
       if (useCollectionSerialization(typeRef)) {
@@ -673,8 +675,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return serializePrimitive(inputObject, buffer, clz);
     } else {
       if (clz == String.class) {
-        return new StringSerializer(typeResolver.getConfig())
-            .writeStringExpr(getOrCreateStringSerializer(), buffer, inputObject);
+        return  StringSerializer
+            .writeStringExpr(getOrCreateStringSerializer(), buffer, inputObject, config.compressString());
       }
       Expression action;
       // this is different from ITERABLE_TYPE in RowCodecBuilder. In row-format we don't need to
@@ -2003,8 +2005,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return deserializePrimitive(buffer, cls);
     } else {
       if (cls == String.class) {
-        return new StringSerializer(typeResolver.getConfig())
-            .readStringExpr(getOrCreateStringSerializer(), buffer);
+        return  StringSerializer
+            .readStringExpr(getOrCreateStringSerializer(), buffer, config.compressString());
       }
       Expression obj;
       if (useCollectionSerialization(typeRef)) {
@@ -2099,8 +2101,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return deserializePrimitiveField(buffer, descriptor);
     } else {
       if (cls == String.class) {
-        return new StringSerializer(typeResolver.getConfig())
-            .readStringExpr(getOrCreateStringSerializer(), buffer);
+        return StringSerializer.readStringExpr(getOrCreateStringSerializer(), buffer, config.compressString());
       }
       Expression obj;
       if (useCollectionSerialization(typeRef)) {

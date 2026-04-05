@@ -22,7 +22,6 @@ package org.apache.fory.serializer.collection;
 import java.util.Map;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 
 /** Base serializer for all java maps. */
@@ -42,8 +41,8 @@ public class MapSerializer<T extends Map> extends MapLikeSerializer<T> {
   }
 
   @Override
-  public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
-    buffer.writeVarUint32Small7(value.size());
+  public Map onMapWrite(WriteContext writeContext, T value) {
+    writeContext.getBuffer().writeVarUint32Small7(value.size());
     return value;
   }
 

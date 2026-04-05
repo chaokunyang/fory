@@ -61,7 +61,8 @@ public class MapSerializers {
     }
 
     @Override
-    public HashMap newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public HashMap newMap(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashMap hashMap = new HashMap(numElements);
@@ -81,7 +82,8 @@ public class MapSerializers {
     }
 
     @Override
-    public LinkedHashMap newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public LinkedHashMap newMap(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       LinkedHashMap hashMap = new LinkedHashMap(numElements);
@@ -101,7 +103,8 @@ public class MapSerializers {
     }
 
     @Override
-    public LazyMap newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public LazyMap newMap(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       LazyMap map = new LazyMap(numElements);
@@ -138,7 +141,8 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
+    public Map onMapWrite(WriteContext writeContext, T value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUint32Small7(value.size());
       if (config.isXlang()) {
         return value;
@@ -150,8 +154,9 @@ public class MapSerializers {
 
     @SuppressWarnings("unchecked")
     @Override
-    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public Map newMap(ReadContext readContext) {
       assert !config.isXlang();
+      MemoryBuffer buffer = readContext.getBuffer();
       setNumElements(buffer.readVarUint32Small7());
       T map;
       Comparator comparator = (Comparator) readContext.readRef();
@@ -272,7 +277,8 @@ public class MapSerializers {
     }
 
     @Override
-    public ConcurrentHashMap newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public ConcurrentHashMap newMap(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       ConcurrentHashMap map = new ConcurrentHashMap(numElements);
@@ -294,9 +300,8 @@ public class MapSerializers {
     }
 
     @Override
-    public MapSnapshot onMapWrite(
-        WriteContext writeContext, MemoryBuffer buffer, ConcurrentSkipListMap value) {
-      MapSnapshot snapshot = super.onMapWrite(writeContext, buffer, value);
+    public MapSnapshot onMapWrite(WriteContext writeContext, ConcurrentSkipListMap value) {
+      MapSnapshot snapshot = super.onMapWrite(writeContext, value);
       if (config.isXlang()) {
         return snapshot;
       }
@@ -305,7 +310,8 @@ public class MapSerializers {
     }
 
     @Override
-    public ConcurrentSkipListMap newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public ConcurrentSkipListMap newMap(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       Comparator comparator = (Comparator) readContext.readRef();
@@ -341,15 +347,17 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, EnumMap value) {
+    public Map onMapWrite(WriteContext writeContext, EnumMap value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUint32Small7(value.size());
       Class keyType = (Class) Platform.getObject(value, keyTypeFieldOffset);
-      ((ClassResolver) typeResolver).writeClassAndUpdateCache(writeContext, buffer, keyType);
+      ((ClassResolver) typeResolver).writeClassAndUpdateCache(writeContext, keyType);
       return value;
     }
 
     @Override
-    public EnumMap newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public EnumMap newMap(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       setNumElements(buffer.readVarUint32Small7());
       Class<?> keyType = typeResolver.readTypeInfo(readContext).getType();
       return new EnumMap(keyType);
@@ -412,7 +420,7 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
+    public Map onMapWrite(WriteContext writeContext, T value) {
       throw new IllegalStateException();
     }
 
@@ -458,7 +466,7 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
+    public Map onMapWrite(WriteContext writeContext, T value) {
       throw new IllegalStateException();
     }
 
@@ -496,7 +504,8 @@ public class MapSerializers {
     }
 
     @Override
-    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, Object value) {
+    public Map onMapWrite(WriteContext writeContext, Object value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       Map v = (Map) value;
       buffer.writeVarUint32Small7(v.size());
       return v;
@@ -507,7 +516,8 @@ public class MapSerializers {
       throw new IllegalStateException("should not be called");
     }
 
-    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public Map newMap(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       HashMap<Object, Object> map = new HashMap<>(numElements);

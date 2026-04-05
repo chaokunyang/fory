@@ -145,8 +145,8 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(
-        WriteContext writeContext, MemoryBuffer buffer, T value) {
+    public Collection onCollectionWrite(WriteContext writeContext, T value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUint32Small7(value.size());
       for (Serializer slotsSerializer : slotsSerializers) {
         slotsSerializer.write(writeContext, value);
@@ -154,9 +154,9 @@ public class ChildContainerSerializers {
       return value;
     }
 
-    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
-      Collection collection = super.newCollection(readContext, buffer);
-      readAndSetFields(readContext, typeResolver, buffer, collection, slotsSerializers);
+    public Collection newCollection(ReadContext readContext) {
+      Collection collection = super.newCollection(readContext);
+      readAndSetFields(readContext, typeResolver, collection, slotsSerializers);
       return collection;
     }
 
@@ -179,8 +179,8 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public T newCollection(ReadContext readContext, MemoryBuffer buffer) {
-      T collection = (T) super.newCollection(readContext, buffer);
+    public T newCollection(ReadContext readContext) {
+      T collection = (T) super.newCollection(readContext);
       int numElements = getAndClearNumElements();
       setNumElements(numElements);
       collection.ensureCapacity(numElements);
@@ -207,7 +207,8 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value) {
+    public Map onMapWrite(WriteContext writeContext, T value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUint32Small7(value.size());
       for (Serializer slotsSerializer : slotsSerializers) {
         slotsSerializer.write(writeContext, value);
@@ -216,9 +217,9 @@ public class ChildContainerSerializers {
     }
 
     @Override
-    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
-      Map map = super.newMap(readContext, buffer);
-      readAndSetFields(readContext, typeResolver, buffer, map, slotsSerializers);
+    public Map newMap(ReadContext readContext) {
+      Map map = super.newMap(readContext);
+      readAndSetFields(readContext, typeResolver, map, slotsSerializers);
       return map;
     }
 
@@ -261,7 +262,6 @@ public class ChildContainerSerializers {
   private static void readAndSetFields(
       ReadContext readContext,
       TypeResolver typeResolver,
-      MemoryBuffer buffer,
       Object collection,
       Serializer[] slotsSerializers) {
     for (Serializer slotsSerializer : slotsSerializers) {
@@ -270,11 +270,11 @@ public class ChildContainerSerializers {
         // Read layer class meta first if meta share is enabled
         // This corresponds to writeLayerClassMeta() in MetaSharedLayerSerializer.write()
         if (typeResolver.getConfig().isMetaShareEnabled()) {
-          readAndSkipLayerClassMeta(readContext, buffer);
+          readAndSkipLayerClassMeta(readContext);
         }
-        metaSerializer.readAndSetFields(readContext, buffer, collection);
+        metaSerializer.readAndSetFields(readContext, collection);
       } else {
-        ((ObjectSerializer) slotsSerializer).readAndSetFields(readContext, buffer, collection);
+        ((ObjectSerializer) slotsSerializer).readAndSetFields(readContext, collection);
       }
     }
   }
@@ -285,7 +285,8 @@ public class ChildContainerSerializers {
    * ChildContainerSerializers, we use the same serializer on both write and read sides, so we just
    * need to skip the meta without actually parsing it.
    */
-  private static void readAndSkipLayerClassMeta(ReadContext readContext, MemoryBuffer buffer) {
+  private static void readAndSkipLayerClassMeta(ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     MetaReadContext metaReadContext = readContext.getMetaReadContext();
     if (metaReadContext == null) {
       return;

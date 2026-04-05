@@ -284,22 +284,21 @@ public class ReplaceResolveSerializer extends Serializer {
             // written `REF_VALUE_FLAG`/`NOT_NULL_VALUE_FLAG` id outside this method call will be
             // ignored.
             writeContext.replaceRef(original, value);
-            writeObject(writeContext, buffer, value, jdkMethodInfoCache);
+            writeObject(writeContext, value, jdkMethodInfoCache);
           }
         } else {
           buffer.writeByte(ORIGINAL);
-          writeObject(writeContext, buffer, value, jdkMethodInfoCache);
+          writeObject(writeContext, value, jdkMethodInfoCache);
         }
       }
     } else {
       buffer.writeByte(ORIGINAL);
-      writeObject(writeContext, buffer, value, jdkMethodInfoCache);
+      writeObject(writeContext, value, jdkMethodInfoCache);
     }
   }
 
   protected void writeObject(
       WriteContext writeContext,
-      MemoryBuffer buffer,
       Object value,
       MethodInfoCache jdkMethodInfoCache) {
     classResolver.writeClassInternal(writeContext, writeTypeInfo);
@@ -327,7 +326,7 @@ public class ReplaceResolveSerializer extends Serializer {
       int nextReadRefId = readContext.tryPreserveRefId();
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         // ref value or not-null value
-        Object o = readObject(readContext, buffer);
+        Object o = readObject(readContext);
         readContext.setReadRef(nextReadRefId, o);
         readContext.setReadRef(outerRefId, o);
         return o;
@@ -336,11 +335,11 @@ public class ReplaceResolveSerializer extends Serializer {
       }
     } else {
       Preconditions.checkArgument(flag == ORIGINAL);
-      return readObject(readContext, buffer);
+      return readObject(readContext);
     }
   }
 
-  protected Object readObject(ReadContext readContext, MemoryBuffer buffer) {
+  protected Object readObject(ReadContext readContext) {
     Class cls = classResolver.readClassInternal(readContext);
     MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(cls);
     Object o = jdkMethodInfoCache.objectSerializer.read(readContext);

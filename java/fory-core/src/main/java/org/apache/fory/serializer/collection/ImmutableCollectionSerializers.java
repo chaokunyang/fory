@@ -110,7 +110,8 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       if (Platform.JAVA_VERSION > 8) {
@@ -160,7 +161,8 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       if (Platform.JAVA_VERSION > 8) {
@@ -210,7 +212,8 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
+    public Map newMap(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       if (Platform.JAVA_VERSION > 8) {

@@ -24,7 +24,6 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.collection.CollectionSnapshot;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.collection.ObjectArray;
-import org.apache.fory.memory.MemoryBuffer;
 
 /**
  * Serializer for concurrent collection implementations that require thread-safe serialization.
@@ -73,19 +72,17 @@ public class ConcurrentCollectionSerializer<T extends Collection> extends Collec
    * concurrent modification issues during serialization. The collection size is written to the
    * buffer before returning the snapshot.
    *
-   * @param buffer the memory buffer to write serialization data to
    * @param value the concurrent collection to serialize
    * @return a snapshot of the collection for safe iteration during serialization
    */
   @Override
-  public CollectionSnapshot onCollectionWrite(
-      WriteContext writeContext, MemoryBuffer buffer, T value) {
+  public CollectionSnapshot onCollectionWrite(WriteContext writeContext, T value) {
     CollectionSnapshot snapshot = snapshots.popOrNull();
     if (snapshot == null) {
       snapshot = new CollectionSnapshot();
     }
     snapshot.setCollection(value);
-    buffer.writeVarUint32Small7(snapshot.size());
+    writeContext.getBuffer().writeVarUint32Small7(snapshot.size());
     return snapshot;
   }
 

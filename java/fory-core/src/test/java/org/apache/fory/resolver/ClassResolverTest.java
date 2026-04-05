@@ -473,8 +473,8 @@ public class ClassResolverTest extends ForyTestBase {
       MemoryBuffer buffer = MemoryUtils.buffer(32);
       fory.getWriteContext().prepare(buffer, null);
       try {
-        classResolver.writeClassAndUpdateCache(fory.getWriteContext(), buffer, getClass());
-        classResolver.writeClassAndUpdateCache(fory.getWriteContext(), buffer, getClass());
+        classResolver.writeClassAndUpdateCache(fory.getWriteContext(), getClass());
+        classResolver.writeClassAndUpdateCache(fory.getWriteContext(), getClass());
       } finally {
         fory.getWriteContext().reset();
       }

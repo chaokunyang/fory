@@ -27,7 +27,6 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -90,7 +89,7 @@ public class SubListSerializers {
     }
 
     @Override
-    public Collection onCollectionWrite(WriteContext writeContext, MemoryBuffer buffer, List value) {
+    public Collection onCollectionWrite(WriteContext writeContext, List value) {
       throw new IllegalStateException();
     }
 
@@ -154,7 +153,8 @@ public class SubListSerializers {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext) {
+      org.apache.fory.memory.MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32Small7();
       setNumElements(numElements);
       return new ArrayList(numElements);

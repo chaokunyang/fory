@@ -127,7 +127,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   @Override
   public void write(WriteContext writeContext, T value) {
     MemoryBuffer buffer = writeContext.getBuffer();
-    Map map = onMapWrite(writeContext, buffer, value);
+    Map map = onMapWrite(writeContext, value);
     if (map.isEmpty()) {
       return;
     }
@@ -138,9 +138,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     while (entry != null) {
       GenericType genericType = generics.nextGenericType(writeContext.getDepth());
       if (genericType == null) {
-        entry = writeJavaNullChunk(writeContext, buffer, entry, iterator, null, null);
+        entry = writeJavaNullChunk(writeContext, entry, iterator, null, null);
         if (entry != null) {
-          entry = writeJavaChunk(writeContext, classResolver, buffer, entry, iterator, null, null);
+          entry = writeJavaChunk(writeContext, classResolver, entry, iterator, null, null);
         }
       } else {
         if (genericType.getTypeParametersCount() < 2) {
@@ -150,11 +150,10 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         GenericType valueGenericType = genericType.getTypeParameter1();
         entry =
             writeJavaNullChunkGeneric(
-                writeContext, buffer, entry, iterator, keyGenericType, valueGenericType);
+                writeContext, entry, iterator, keyGenericType, valueGenericType);
         if (entry != null) {
           entry =
-              writeJavaChunkGeneric(
-                  writeContext, classResolver, generics, genericType, buffer, entry, iterator);
+              writeJavaChunkGeneric(writeContext, classResolver, generics, genericType, entry, iterator);
         }
       }
     }
@@ -163,7 +162,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   public final Entry writeJavaNullChunk(
       WriteContext writeContext,
-      MemoryBuffer buffer,
       Entry entry,
       Iterator<Entry<Object, Object>> iterator,
       Serializer keySerializer,
@@ -175,9 +173,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         if (value != null) {
           return entry;
         }
-        writeNullValueChunk(writeContext, buffer, keySerializer, key);
+        writeNullValueChunk(writeContext, keySerializer, key);
       } else {
-        writeNullKeyChunk(writeContext, buffer, valueSerializer, value);
+        writeNullKeyChunk(writeContext, valueSerializer, value);
       }
       if (iterator.hasNext()) {
         entry = iterator.next();
@@ -188,7 +186,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   private void writeNullValueChunk(
-      WriteContext writeContext, MemoryBuffer buffer, Serializer keySerializer, Object key) {
+      WriteContext writeContext, Serializer keySerializer, Object key) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     // noinspection Duplicates
     if (keySerializer != null) {
       if (keySerializer.needToWriteRef()) {
@@ -211,9 +210,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    */
   private void writeNullKeyChunk(
       WriteContext writeContext,
-      MemoryBuffer buffer,
       Serializer valueSerializer,
       Object value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     if (value != null) {
       // noinspection Duplicates
       if (valueSerializer != null) {
@@ -236,11 +235,11 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   @CodegenInvoke
   public final Entry writeNullChunkKVFinalNoRef(
       WriteContext writeContext,
-      MemoryBuffer buffer,
       Entry entry,
       Iterator<Entry<Object, Object>> iterator,
       Serializer keySerializer,
       Serializer valueSerializer) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     while (true) {
       Object key = entry.getKey();
       Object value = entry.getValue();
@@ -251,7 +250,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         buffer.writeByte(NULL_VALUE_KEY_DECL_TYPE);
         keySerializer.write(writeContext, key);
       } else {
-        writeNullKeyChunk(writeContext, buffer, valueSerializer, value);
+        writeNullKeyChunk(writeContext, valueSerializer, value);
       }
       if (iterator.hasNext()) {
         entry = iterator.next();
@@ -263,7 +262,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   public final Entry writeJavaNullChunkGeneric(
       WriteContext writeContext,
-      MemoryBuffer buffer,
       Entry entry,
       Iterator<Entry<Object, Object>> iterator,
       GenericType keyType,
@@ -275,9 +273,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
         if (value != null) {
           return entry;
         }
-        writeKeyForNullValueChunkGeneric(writeContext, buffer, key, keyType);
+        writeKeyForNullValueChunkGeneric(writeContext, key, keyType);
       } else {
-        writeValueForNullKeyChunkGeneric(writeContext, buffer, value, valueType);
+        writeValueForNullKeyChunkGeneric(writeContext, value, valueType);
       }
       if (iterator.hasNext()) {
         entry = iterator.next();
@@ -288,7 +286,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   private void writeKeyForNullValueChunkGeneric(
-      WriteContext writeContext, MemoryBuffer buffer, Object key, GenericType keyType) {
+      WriteContext writeContext, Object key, GenericType keyType) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     boolean trackingRef = keyType.trackingRef(typeResolver);
     if (!keyType.isMonomorphic()) {
       if (trackingRef) {
@@ -319,8 +318,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     }
   }
 
-  private void writeValueForNullKeyChunkGeneric(
-      WriteContext writeContext, MemoryBuffer buffer, Object value, GenericType valueType) {
+  private void writeValueForNullKeyChunkGeneric(WriteContext writeContext, Object value, GenericType valueType) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     boolean trackingRef = valueType.trackingRef(typeResolver);
     if (!valueType.isMonomorphic()) {
       if (trackingRef) {
@@ -355,11 +354,11 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   private Entry writeJavaChunk(
       WriteContext writeContext,
       TypeResolver classResolver,
-      MemoryBuffer buffer,
       Entry<Object, Object> entry,
       Iterator<Entry<Object, Object>> iterator,
       Serializer keySerializer,
       Serializer valueSerializer) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     Object key = entry.getKey();
     Object value = entry.getValue();
     Class keyType = key.getClass();
@@ -371,12 +370,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     if (keySerializer != null) {
       chunkHeader |= KEY_DECL_TYPE;
     } else {
-      keySerializer = writeKeyTypeInfo(writeContext, classResolver, keyType, buffer);
+      keySerializer = writeKeyTypeInfo(writeContext, classResolver, keyType);
     }
     if (valueSerializer != null) {
       chunkHeader |= VALUE_DECL_TYPE;
     } else {
-      valueSerializer = writeValueTypeInfo(writeContext, classResolver, valueType, buffer);
+      valueSerializer = writeValueTypeInfo(writeContext, classResolver, valueType);
     }
     // noinspection Duplicates
     boolean keyWriteRef = keySerializer.needToWriteRef();
@@ -422,7 +421,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   private Serializer writeKeyTypeInfo(
-      WriteContext writeContext, TypeResolver classResolver, Class keyType, MemoryBuffer buffer) {
+      WriteContext writeContext, TypeResolver classResolver, Class keyType) {
     TypeInfo typeInfo = classResolver.getTypeInfo(keyType, mapTypeCache().keyTypeInfoWriteCache);
     classResolver.writeTypeInfo(writeContext, typeInfo);
     return typeInfo.getSerializer();
@@ -431,8 +430,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   private Serializer writeValueTypeInfo(
       WriteContext writeContext,
       TypeResolver classResolver,
-      Class valueType,
-      MemoryBuffer buffer) {
+      Class valueType) {
     TypeInfo typeInfo =
         classResolver.getTypeInfo(valueType, mapTypeCache().valueTypeInfoWriteCache);
     classResolver.writeTypeInfo(writeContext, typeInfo);
@@ -445,9 +443,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       TypeResolver classResolver,
       Generics generics,
       GenericType genericType,
-      MemoryBuffer buffer,
       Entry<Object, Object> entry,
       Iterator<Entry<Object, Object>> iterator) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     // type parameters count for `Map field` will be 0;
     // type parameters count for `SubMap<V> field` which SubMap is
     // `SubMap<V> implements Map<String, V>` will be 1;
@@ -457,7 +455,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     GenericType keyGenericType = genericType.getTypeParameter0();
     GenericType valueGenericType = genericType.getTypeParameter1();
     if (keyGenericType == objType && valueGenericType == objType) {
-      return writeJavaChunk(writeContext, classResolver, buffer, entry, iterator, null, null);
+      return writeJavaChunk(writeContext, classResolver, entry, iterator, null, null);
     }
     // Can't avoid push generics repeatedly in loop by stack depth, because push two
     // generic type changed generics stack top, which is depth index, update stack top
@@ -481,13 +479,13 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       chunkHeader |= KEY_DECL_TYPE;
       keySerializer = keyGenericType.getSerializer(classResolver);
     } else {
-      keySerializer = writeKeyTypeInfo(writeContext, classResolver, keyType, buffer);
+      keySerializer = writeKeyTypeInfo(writeContext, classResolver, keyType);
     }
     if (valueGenericTypeFinal) {
       chunkHeader |= VALUE_DECL_TYPE;
       valueSerializer = valueGenericType.getSerializer(classResolver);
     } else {
-      valueSerializer = writeValueTypeInfo(writeContext, classResolver, valueType, buffer);
+      valueSerializer = writeValueTypeInfo(writeContext, classResolver, valueType);
     }
     boolean trackingKeyRef = keyGenericType.trackingRef(typeResolver);
     boolean trackingValueRef = valueGenericType.trackingRef(typeResolver);
@@ -654,21 +652,21 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   @Override
   public T read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    Map map = newMap(readContext, buffer);
+    Map map = newMap(readContext);
     int size = getAndClearNumElements();
-    readElements(readContext, buffer, size, map);
+    readElements(readContext, size, map);
     return onMapRead(map);
   }
 
-  public void readElements(ReadContext readContext, MemoryBuffer buffer, int size, Map map) {
+  public void readElements(ReadContext readContext, int size, Map map) {
+    MemoryBuffer buffer = readContext.getBuffer();
     int chunkHeader = 0;
     if (size != 0) {
       chunkHeader = buffer.readUnsignedByte();
     }
     Generics generics = readContext.getGenerics();
     while (size > 0) {
-      long sizeAndHeader = readJavaNullChunk(readContext, buffer, map, chunkHeader, size, null, null);
+      long sizeAndHeader = readJavaNullChunk(readContext, map, chunkHeader, size, null, null);
       chunkHeader = (int) (sizeAndHeader & 0xff);
       size = (int) (sizeAndHeader >>> 8);
       if (size == 0) {
@@ -676,11 +674,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       }
       GenericType genericType = generics.nextGenericType(readContext.getDepth());
       if (genericType == null) {
-        sizeAndHeader = readJavaChunk(readContext, buffer, map, size, chunkHeader, null, null);
+        sizeAndHeader = readJavaChunk(readContext, map, size, chunkHeader, null, null);
       } else {
-        sizeAndHeader =
-            readJavaChunkGeneric(
-                readContext, generics, genericType, buffer, map, size, chunkHeader);
+        sizeAndHeader = readJavaChunkGeneric(readContext, generics, genericType, map, size, chunkHeader);
       }
       chunkHeader = (int) (sizeAndHeader & 0xff);
       size = (int) (sizeAndHeader >>> 8);
@@ -689,12 +685,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   public long readJavaNullChunk(
       ReadContext readContext,
-      MemoryBuffer buffer,
       Map map,
       int chunkHeader,
       long size,
       Serializer keySerializer,
       Serializer valueSerializer) {
+    MemoryBuffer buffer = readContext.getBuffer();
     MapTypeCache state = mapTypeCache();
     while (true) {
       boolean keyHasNull = (chunkHeader & KEY_HAS_NULL) != 0;
@@ -706,9 +702,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
           boolean trackKeyRef = (chunkHeader & TRACKING_KEY_REF) != 0;
           Object key;
           if ((chunkHeader & KEY_DECL_TYPE) != 0) {
-              if (keySerializer == null) {
-              key = readNonEmptyValueFromNullChunk(readContext, buffer, trackKeyRef, true);
-              } else {
+            if (keySerializer == null) {
+              key = readNonEmptyValueFromNullChunk(readContext, trackKeyRef, true);
+            } else {
               readContext.increaseDepth();
               if (trackKeyRef) {
                 key = keySerializer.read(readContext, RefMode.TRACKING);
@@ -727,7 +723,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
           map.put(key, null);
         }
       } else {
-        readNullKeyChunk(readContext, buffer, map, chunkHeader, valueSerializer, valueHasNull);
+        readNullKeyChunk(readContext, map, chunkHeader, valueSerializer, valueHasNull);
       }
       if (--size == 0) {
         return 0;
@@ -744,7 +740,6 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    */
   private void readNullKeyChunk(
       ReadContext readContext,
-      MemoryBuffer buffer,
       Map map,
       int chunkHeader,
       Serializer valueSerializer,
@@ -755,7 +750,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       boolean trackValueRef = (chunkHeader & TRACKING_VALUE_REF) != 0;
       if ((chunkHeader & VALUE_DECL_TYPE) != 0) {
         if (valueSerializer == null) {
-          value = readNonEmptyValueFromNullChunk(readContext, buffer, trackValueRef, false);
+          value = readNonEmptyValueFromNullChunk(readContext, trackValueRef, false);
         } else {
           readContext.increaseDepth();
           if (trackValueRef) {
@@ -779,7 +774,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   private Object readNonEmptyValueFromNullChunk(
-      ReadContext readContext, MemoryBuffer buffer, boolean trackRef, boolean isKey) {
+      ReadContext readContext, boolean trackRef, boolean isKey) {
     Generics generics = readContext.getGenerics();
     GenericType genericType = generics.nextGenericType(readContext.getDepth());
     if (genericType.getTypeParametersCount() < 2) {
@@ -803,12 +798,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   @CodegenInvoke
   public long readNullChunkKVFinalNoRef(
       ReadContext readContext,
-      MemoryBuffer buffer,
       Map map,
       int chunkHeader,
       long size,
       Serializer keySerializer,
       Serializer valueSerializer) {
+    MemoryBuffer buffer = readContext.getBuffer();
     while (true) {
       boolean keyHasNull = (chunkHeader & KEY_HAS_NULL) != 0;
       boolean valueHasNull = (chunkHeader & VALUE_HAS_NULL) != 0;
@@ -822,7 +817,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
           readContext.decreaseDepth();
         }
       } else {
-        readNullKeyChunk(readContext, buffer, map, chunkHeader, valueSerializer, valueHasNull);
+        readNullKeyChunk(readContext, map, chunkHeader, valueSerializer, valueHasNull);
       }
       if (--size == 0) {
         return 0;
@@ -835,12 +830,12 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   @CodegenInvoke
   public long readJavaChunk(
       ReadContext readContext,
-      MemoryBuffer buffer,
       Map map,
       long size,
       int chunkHeader,
       Serializer keySerializer,
       Serializer valueSerializer) {
+    MemoryBuffer buffer = readContext.getBuffer();
     MapTypeCache state = mapTypeCache();
     // noinspection Duplicates
     boolean trackKeyRef = (chunkHeader & TRACKING_KEY_REF) != 0;
@@ -880,10 +875,10 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       ReadContext readContext,
       Generics generics,
       GenericType genericType,
-      MemoryBuffer buffer,
       Map map,
       long size,
       int chunkHeader) {
+    MemoryBuffer buffer = readContext.getBuffer();
     MapTypeCache state = mapTypeCache();
     // type parameters count for `Map field` will be 0;
     // type parameters count for `SubMap<V> field` which SubMap is
@@ -960,7 +955,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    *   <li>write keys/values
    * </ol>
    */
-  public abstract Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, T value);
+  public abstract Map onMapWrite(WriteContext writeContext, T value);
 
   public void onMapWriteFinish(Map map) {}
 
@@ -982,7 +977,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    * <p>without default constructor, created list will have elementData as null, adding elements
    * will raise NPE.
    */
-  public Map newMap(ReadContext readContext, MemoryBuffer buffer) {
+  public Map newMap(ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     numElements = buffer.readVarUint32Small7();
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
@@ -1017,7 +1013,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   /**
    * Get and reset numElements of deserializing collection. Should be called after {@link
-   * #newMap(ReadContext, MemoryBuffer)}. Nested read may overwrite this element, reset is
+   * #newMap(ReadContext)}. Nested read may overwrite this element, reset is
    * necessary to avoid use wrong value by mistake.
    */
   public int getAndClearNumElements() {

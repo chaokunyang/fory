@@ -23,7 +23,6 @@ import java.lang.reflect.Field;
 import java.util.Collection;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionLikeSerializer;
@@ -51,8 +50,7 @@ public class SingletonCollectionSerializer extends CollectionLikeSerializer {
   }
 
   @Override
-  public Collection onCollectionWrite(
-      WriteContext writeContext, MemoryBuffer buffer, Object value) {
+  public Collection onCollectionWrite(WriteContext writeContext, Object value) {
     throw new IllegalStateException("unreachable");
   }
 

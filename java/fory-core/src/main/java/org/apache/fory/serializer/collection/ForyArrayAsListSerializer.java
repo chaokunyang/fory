@@ -37,7 +37,8 @@ public final class ForyArrayAsListSerializer
     super(typeResolver, ArrayAsList.class, true);
   }
 
-  public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
+  public Collection newCollection(ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     int numElements = buffer.readVarUint32Small7();
     setNumElements(numElements);
     return new ArrayAsList(numElements);

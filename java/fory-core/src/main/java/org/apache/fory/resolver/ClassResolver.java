@@ -1708,8 +1708,8 @@ public class ClassResolver extends TypeResolver {
    * serializing object, if this writes are aligned, then later serialization will be more
    * efficient.
    */
-  public void writeClassAndUpdateCache(
-      WriteContext writeContext, MemoryBuffer buffer, Class<?> cls) {
+  public void writeClassAndUpdateCache(WriteContext writeContext, Class<?> cls) {
+    MemoryBuffer buffer = writeContext.getBuffer();
     // fast path for common type
     if (cls == Integer.class) {
       buffer.writeVarUint32Small7(Types.INT32);

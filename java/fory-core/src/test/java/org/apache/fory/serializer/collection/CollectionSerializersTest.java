@@ -1360,7 +1360,8 @@ public class CollectionSerializersTest extends ForyTestBase {
     }
 
     @Override
-    public Collection newCollection(ReadContext readContext, MemoryBuffer buffer) {
+    public Collection newCollection(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUint32();
       setNumElements(numElements);
       return new ArrayList<>(numElements);

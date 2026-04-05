@@ -171,7 +171,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     if (isRecord) {
       Object[] fieldValues =
           new Object[buildInFields.length + otherFields.length + containerFields.length];
-      readFields(readContext, buffer, fieldValues);
+      readFields(readContext, fieldValues);
       fieldValues = RecordUtils.remapping(recordInfo, fieldValues);
       T t = objectCreator.newInstanceWithArguments(fieldValues);
       Arrays.fill(recordInfo.getRecordComponents(), null);
@@ -196,7 +196,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
           // Skip the field value from buffer since it doesn't exist in current class
           FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
         } else {
-          compatibleRead(readContext, buffer, fieldInfo, targetObject);
+          compatibleRead(readContext, fieldInfo, targetObject);
         }
       }
     }
@@ -228,14 +228,16 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private void compatibleRead(
-      ReadContext readContext, MemoryBuffer buffer, SerializationFieldInfo fieldInfo, Object obj) {
+      ReadContext readContext, SerializationFieldInfo fieldInfo, Object obj) {
+    MemoryBuffer buffer = readContext.getBuffer();
     Object fieldValue =
         AbstractObjectSerializer.readBuildInFieldValue(
             readContext, typeResolver, readContext.getRefReader(), fieldInfo, buffer);
     fieldInfo.fieldConverter.set(obj, fieldValue);
   }
 
-  private void readFields(ReadContext readContext, MemoryBuffer buffer, Object[] fields) {
+  private void readFields(ReadContext readContext, Object[] fields) {
+    MemoryBuffer buffer = readContext.getBuffer();
     int counter = 0;
     RefReader refReader = readContext.getRefReader();
     // read order: primitive,boxed,final,other,collection,map

@@ -92,11 +92,11 @@ public final class ExceptionSerializers {
       StackTraceElement[] stackTrace = (StackTraceElement[]) readContext.readRef();
       Throwable cause = (Throwable) readContext.readRef();
       String detailMessage = readContext.readStringRef();
-      skipExtraFields(readContext, buffer);
+      skipExtraFields(readContext);
       Platform.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
       Platform.putObject(obj, ThrowableOffsets.CAUSE_FIELD_OFFSET, cause == null ? obj : cause);
       Platform.putObject(obj, ThrowableOffsets.STACK_TRACE_FIELD_OFFSET, stackTrace);
-      readAndSetFields(readContext, buffer, obj, slotsSerializers, config);
+      readAndSetFields(readContext, obj, slotsSerializers, config);
       return obj;
     }
 
@@ -113,7 +113,8 @@ public final class ExceptionSerializers {
       }
     }
 
-    private void skipExtraFields(ReadContext readContext, MemoryBuffer buffer) {
+    private void skipExtraFields(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       int numExtraFields = buffer.readVarUint32();
       for (int i = 0; i < numExtraFields; i++) {
         readContext.readString();
@@ -280,7 +281,6 @@ public final class ExceptionSerializers {
 
   private static void readAndSetFields(
       ReadContext readContext,
-      MemoryBuffer buffer,
       Object target,
       Serializer[] slotsSerializers,
       Config config) {
@@ -288,16 +288,17 @@ public final class ExceptionSerializers {
       if (slotsSerializer instanceof MetaSharedLayerSerializer) {
         MetaSharedLayerSerializer metaSerializer = (MetaSharedLayerSerializer) slotsSerializer;
         if (config.isMetaShareEnabled()) {
-          readAndSkipLayerClassMeta(readContext, buffer);
+          readAndSkipLayerClassMeta(readContext);
         }
-        metaSerializer.readAndSetFields(readContext, buffer, target);
+        metaSerializer.readAndSetFields(readContext, target);
       } else {
-        ((ObjectSerializer) slotsSerializer).readAndSetFields(readContext, buffer, target);
+        ((ObjectSerializer) slotsSerializer).readAndSetFields(readContext, target);
       }
     }
   }
 
-  private static void readAndSkipLayerClassMeta(ReadContext readContext, MemoryBuffer buffer) {
+  private static void readAndSkipLayerClassMeta(ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
     MetaReadContext metaReadContext = readContext.getMetaReadContext();
     if (metaReadContext == null) {
       return;

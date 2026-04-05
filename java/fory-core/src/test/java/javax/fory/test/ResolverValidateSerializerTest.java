@@ -85,8 +85,7 @@ public class ResolverValidateSerializerTest {
       }
 
       @Override
-      public Collection<?> onCollectionWrite(
-          WriteContext writeContext, MemoryBuffer buffer, ValidList value) {
+      public Collection<?> onCollectionWrite(WriteContext writeContext, ValidList value) {
         return Collections.emptyList();
       }
 
@@ -137,8 +136,7 @@ public class ResolverValidateSerializerTest {
       }
 
       @Override
-      public Map<?, ?> onMapWrite(
-          WriteContext writeContext, MemoryBuffer buffer, ValidMap value) {
+      public Map<?, ?> onMapWrite(WriteContext writeContext, ValidMap value) {
         return Collections.emptyMap();
       }
 

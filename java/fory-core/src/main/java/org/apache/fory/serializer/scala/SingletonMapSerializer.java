@@ -23,7 +23,6 @@ import java.lang.reflect.Field;
 import java.util.Map;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.MapLikeSerializer;
@@ -51,7 +50,7 @@ public class SingletonMapSerializer extends MapLikeSerializer {
   }
 
   @Override
-  public Map onMapWrite(WriteContext writeContext, MemoryBuffer buffer, Object value) {
+  public Map onMapWrite(WriteContext writeContext, Object value) {
     throw new IllegalStateException("unreachable");
   }
 

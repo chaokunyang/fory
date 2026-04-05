@@ -111,6 +111,16 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     String encodeCode = buildEncodeExpression().genCode(ctx).code();
     encodeCode = ctx.optimizeMethodCode(encodeCode);
     encodeCode = encodeCode == null ? "" : encodeCode;
+    encodeCode =
+        StringUtils.format(
+                "${bufferType} ${buffer} = ${writeContext}.getBuffer();\n",
+                "bufferType",
+                ctx.type(MemoryBuffer.class),
+                "buffer",
+                BUFFER_NAME,
+                "writeContext",
+                WRITE_CONTEXT_NAME)
+            + encodeCode;
     if (encodeCode.contains(REF_WRITER_NAME)) {
       encodeCode =
           StringUtils.format(
@@ -128,6 +138,16 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     String decodeCode = buildReadAndSetFieldsExpression().genCode(ctx).code();
     decodeCode = ctx.optimizeMethodCode(decodeCode);
     decodeCode = decodeCode == null ? "" : decodeCode;
+    decodeCode =
+        StringUtils.format(
+                "${bufferType} ${buffer} = ${readContext}.getBuffer();\n",
+                "bufferType",
+                ctx.type(MemoryBuffer.class),
+                "buffer",
+                BUFFER_NAME,
+                "readContext",
+                READ_CONTEXT_NAME)
+            + decodeCode;
 
     ctx.overrideMethod(
         "writeFieldsOnly",
@@ -135,8 +155,6 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
         void.class,
         WriteContext.class,
         WRITE_CONTEXT_NAME,
-        MemoryBuffer.class,
-        BUFFER_NAME,
         Object.class,
         ROOT_OBJECT_NAME);
     ctx.overrideMethod(
@@ -145,8 +163,6 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
         Object.class,
         ReadContext.class,
         READ_CONTEXT_NAME,
-        MemoryBuffer.class,
-        BUFFER_NAME,
         Object.class,
         ROOT_OBJECT_NAME);
     registerJITNotifyCallback();

@@ -94,8 +94,8 @@ public final class UnknownClassSerializers {
      * rewinds that placeholder typeId and writes the original class's typeId, then writes the
      * shared TypeDef inline using the stream meta protocol.
      */
-    private void writeTypeDef(
-        WriteContext writeContext, MemoryBuffer buffer, UnknownClass.UnknownStruct value) {
+    private void writeTypeDef(WriteContext writeContext, UnknownClass.UnknownStruct value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
       MetaWriteContext metaWriteContext = writeContext.getMetaWriteContext();
       IdentityObjectIntMap classMap = metaWriteContext.classMap;
       int newId = classMap.size;
@@ -175,7 +175,7 @@ public final class UnknownClassSerializers {
           buffer.writeBytes(payload);
         }
       }
-      writeTypeDef(writeContext, buffer, value);
+      writeTypeDef(writeContext, value);
       TypeDef typeDef = value.typeDef;
       ClassFieldsInfo fieldsInfo = getClassFieldsInfo(typeDef);
       if (config.checkClassVersion()) {

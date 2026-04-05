@@ -129,8 +129,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
      * @param buffer the memory buffer to read TypeDef from
      * @return the serializer to use for reading
      */
-    MetaSharedLayerSerializerBase getReadSerializer(
-        TypeResolver typeResolver, ReadContext readContext, MemoryBuffer buffer);
+    MetaSharedLayerSerializerBase getReadSerializer(TypeResolver typeResolver, ReadContext readContext);
 
     /**
      * Get the current read serializer (last returned by {@link #getReadSerializer}). This is used
@@ -237,13 +236,13 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         // Write layer class meta first (if meta share enabled)
         MetaSharedLayerSerializerBase serializer = slotsInfo.getSlotsSerializer();
         if (config.isMetaShareEnabled()) {
-          serializer.writeLayerClassMeta(writeContext, buffer);
+          serializer.writeLayerClassMeta(writeContext);
         }
         StreamTypeInfo streamTypeInfo = slotsInfo.getStreamTypeInfo();
         Method writeObjectMethod = streamTypeInfo.writeObjectMethod;
         if (writeObjectMethod == null) {
           // No custom writeObject - write fields directly
-          serializer.writeFieldsOnly(writeContext, buffer, value);
+          serializer.writeFieldsOnly(writeContext, value);
         } else {
           ForyObjectOutputStream objectOutputStream = slotsInfo.getObjectOutputStream();
           Object oldObject = objectOutputStream.targetObject;
@@ -321,20 +320,20 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
         if (matchedSlot == null) {
           // Sender has a layer that receiver doesn't have - read TypeDef and skip the data
-          skipUnknownLayerData(readContext, buffer, currentClass);
+          skipUnknownLayerData(readContext, currentClass);
           continue;
         }
 
         // Read data for the matched layer - getReadSerializer reads TypeDef from buffer
         // This must be called exactly once per layer to read the TypeDef
-        matchedSlot.getReadSerializer(typeResolver, readContext, buffer);
+        matchedSlot.getReadSerializer(typeResolver, readContext);
 
         StreamTypeInfo streamTypeInfo = matchedSlot.getStreamTypeInfo();
         Method readObjectMethod = streamTypeInfo.readObjectMethod;
 
         if (readObjectMethod == null) {
           // For standard field serialization - use getCurrentReadSerializer()
-          matchedSlot.getCurrentReadSerializer().readAndSetFields(readContext, buffer, obj);
+          matchedSlot.getCurrentReadSerializer().readAndSetFields(readContext, obj);
         } else {
           // For custom readObject, it handles its own format
           ForyObjectInputStream objectInputStream = matchedSlot.getObjectInputStream();
@@ -403,8 +402,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    * @param buffer the memory buffer to read from
    * @param senderClass the class from sender that receiver doesn't have
    */
-  private void skipUnknownLayerData(
-      ReadContext readContext, MemoryBuffer buffer, Class<?> senderClass) {
+  private void skipUnknownLayerData(ReadContext readContext, Class<?> senderClass) {
+    MemoryBuffer buffer = readContext.getBuffer();
     // For layers without custom writeObject, we can skip using a serializer created from the
     // TypeDef. Note: For layers with custom writeObject, the sender would have that class
     // locally, and we'd have a matching slot. This method is only called when sender has a
@@ -455,7 +454,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       typeInfo.setSerializer(newSerializer);
       skipSerializer = newSerializer;
     }
-    skipSerializer.skipFields(readContext, buffer);
+    skipSerializer.skipFields(readContext);
   }
 
   private static void throwUnsupportedEncodingException(Class<?> cls)
@@ -790,14 +789,14 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     @Override
     @SuppressWarnings("unchecked")
     public MetaSharedLayerSerializerBase getReadSerializer(
-        TypeResolver typeResolver, ReadContext readContext, MemoryBuffer buffer) {
+        TypeResolver typeResolver, ReadContext readContext) {
       MetaSharedLayerSerializerBase result;
       if (!typeResolver.getConfig().isMetaShareEnabled()) {
         // Meta share not enabled - use the default slots serializer
         result = slotsSerializer;
       } else {
         // Read TypeInfo from buffer (creates new or returns existing)
-        TypeInfo typeInfo = readLayerTypeInfo(typeResolver, readContext, buffer);
+        TypeInfo typeInfo = readLayerTypeInfo(typeResolver, readContext);
         if (typeInfo == null) {
           result = slotsSerializer;
         } else {
@@ -825,8 +824,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       return currentReadSerializer;
     }
 
-    private TypeInfo readLayerTypeInfo(
-        TypeResolver typeResolver, ReadContext readContext, MemoryBuffer buffer) {
+    private TypeInfo readLayerTypeInfo(TypeResolver typeResolver, ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
       MetaReadContext metaReadContext = readContext.getMetaReadContext();
       if (metaReadContext == null) {
         return null;
@@ -999,7 +998,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         throw new NotActiveException("no current PutField object");
       }
       // Write field values using MetaShare serialization
-      slotsInfo.getSlotsSerializer().writeFieldValues(writeContext, buffer, curPut.vals);
+      slotsInfo.getSlotsSerializer().writeFieldValues(writeContext, curPut.vals);
       Arrays.fill(curPut.vals, null);
       putFieldsCache.add(curPut);
       this.curPut = null;
@@ -1039,7 +1038,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         throw new NotActiveException("not in writeObject invocation or fields already written");
       }
       // Write fields using MetaShare serialization (layer meta already written by write())
-      slotsInfo.getSlotsSerializer().writeFieldsOnly(writeContext, buffer, targetObject);
+      slotsInfo.getSlotsSerializer().writeFieldsOnly(writeContext, targetObject);
       fieldsWritten = true;
     }
 
@@ -1345,7 +1344,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         throw new NotActiveException("not in readObject invocation or fields already read");
       }
       // Read field values using MetaShare serialization
-      Object[] vals = slotsInfo.getCurrentReadSerializer().readFieldValues(readContext, buffer);
+      Object[] vals = slotsInfo.getCurrentReadSerializer().readFieldValues(readContext);
       System.arraycopy(vals, 0, getField.vals, 0, vals.length);
       fieldsRead = true;
       return getField;
@@ -1385,7 +1384,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         throw new NotActiveException("not in readObject invocation or fields already read");
       }
       // Read fields using MetaShare serialization (layer meta already read by getReadSerializer())
-      slotsInfo.getCurrentReadSerializer().readAndSetFields(readContext, buffer, targetObject);
+      slotsInfo.getCurrentReadSerializer().readAndSetFields(readContext, targetObject);
       fieldsRead = true;
     }
 

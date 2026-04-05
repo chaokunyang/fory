@@ -242,9 +242,6 @@ public class ReflectionUtils {
   public static boolean hasException(Class<?> cls, String methodName) {
     List<Method> methods = findMethods(cls, methodName);
     if (methods.isEmpty()) {
-      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-        return false;
-      }
       String msg = String.format("class %s doesn't have method %s", cls, methodName);
       throw new IllegalArgumentException(msg);
     }
@@ -260,9 +257,6 @@ public class ReflectionUtils {
   public static boolean hasCheckedException(Class<?> cls, String methodName) {
     List<Method> methods = findMethods(cls, methodName);
     if (methods.isEmpty()) {
-      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-        return false;
-      }
       String msg = String.format("class %s doesn't have method %s", cls, methodName);
       throw new IllegalArgumentException(msg);
     }

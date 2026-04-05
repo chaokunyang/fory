@@ -1143,7 +1143,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             "onCollectionWrite",
             TypeUtils.collectionOf(elementType),
             writeContextRef(),
-            buffer,
             collection);
     boolean isList = List.class.isAssignableFrom(getRawType(collection.type()));
     collection =
@@ -1286,26 +1285,24 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression bitmap;
       if (trackingRef) {
         if (elementType == Object.class) {
-          bitmap =
-              new Invoke(
-                  collectionSerializer,
-                  "writeTypeHeader",
-                  PRIMITIVE_INT_TYPE,
-                  writeContextRef(),
-                  buffer,
-                  value,
-                  classInfoHolder);
+              bitmap =
+                  new Invoke(
+                      collectionSerializer,
+                      "writeTypeHeader",
+                      PRIMITIVE_INT_TYPE,
+                      writeContextRef(),
+                      value,
+                      classInfoHolder);
         } else {
-          bitmap =
-              new Invoke(
-                  collectionSerializer,
-                  "writeTypeHeader",
-                  PRIMITIVE_INT_TYPE,
-                  writeContextRef(),
-                  buffer,
-                  value,
-                  elementTypeExpr,
-                  classInfoHolder);
+              bitmap =
+                  new Invoke(
+                      collectionSerializer,
+                      "writeTypeHeader",
+                      PRIMITIVE_INT_TYPE,
+                      writeContextRef(),
+                      value,
+                      elementTypeExpr,
+                      classInfoHolder);
         }
       } else {
         bitmap =
@@ -1314,7 +1311,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 "writeTypeNullabilityHeader",
                 PRIMITIVE_INT_TYPE,
                 writeContextRef(),
-                buffer,
                 value,
                 elementTypeExpr,
                 classInfoHolder);
@@ -1507,7 +1503,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             "onMapWrite",
             TypeUtils.mapOf(keyType, valueType),
             writeContextRef(),
-            buffer,
             map);
     Expression iterator =
         new Invoke(inlineInvoke(map, "entrySet", SET_TYPE), "iterator", ITERATOR_TYPE);
@@ -1550,7 +1545,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                         method,
                         MAP_ENTRY_TYPE,
                         writeContextRef(),
-                        buffer,
                         entry,
                         iterator,
                         getGenericTypeField(keyType),
@@ -1562,7 +1556,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                         method,
                         MAP_ENTRY_TYPE,
                         writeContextRef(),
-                        buffer,
                         entry,
                         iterator,
                         keySerializer,
@@ -2278,7 +2271,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
     Invoke supportHook = inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE);
     Expression collection =
-        new Invoke(serializer, "newCollection", COLLECTION_TYPE, readContextRef, buffer);
+        new Invoke(serializer, "newCollection", COLLECTION_TYPE, readContextRef);
     Expression size = new Invoke(serializer, "getAndClearNumElements", "size", PRIMITIVE_INT_TYPE);
     // if add branch by `ArrayList`, generated code will be > 325 bytes.
     // and List#add is more likely be inlined if there is only one subclass.
@@ -2526,7 +2519,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression mapSerializer = serializer;
     Invoke supportHook = inlineInvoke(serializer, "supportCodegenHook", PRIMITIVE_BOOLEAN_TYPE);
     ListExpression expressions = new ListExpression();
-    Expression newMap = new Invoke(serializer, "newMap", MAP_TYPE, readContextRef, buffer);
+    Expression newMap = new Invoke(serializer, "newMap", MAP_TYPE, readContextRef);
     Expression size = new Invoke(serializer, "getAndClearNumElements", "size", PRIMITIVE_INT_TYPE);
     Expression chunkHeader =
         new If(
@@ -2563,7 +2556,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                       PRIMITIVE_LONG_TYPE,
                       false,
                       readContextRef,
-                      buffer,
                       newMap,
                       chunkHeader,
                       size,

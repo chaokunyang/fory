@@ -23,6 +23,7 @@ import static org.apache.fory.meta.Encoders.PACKAGE_DECODER;
 import static org.apache.fory.meta.Encoders.TYPE_NAME_DECODER;
 
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -36,8 +37,8 @@ import org.apache.fory.util.function.Functions;
  */
 public class TypeInfo {
   final Class<?> cls;
-  final MetaStringRef namespaceBytes;
-  final MetaStringRef typeNameBytes;
+  final EncodedMetaString namespaceBytes;
+  final EncodedMetaString typeNameBytes;
   final boolean isDynamicGeneratedClass;
   // Fory type ID for both native and xlang modes.
   // - Types 0-30: Shared internal types (Types.BOOL, Types.STRING, etc.)
@@ -51,8 +52,8 @@ public class TypeInfo {
 
   TypeInfo(
       Class<?> cls,
-      MetaStringRef namespaceBytes,
-      MetaStringRef typeNameBytes,
+      EncodedMetaString namespaceBytes,
+      EncodedMetaString typeNameBytes,
       boolean isDynamicGeneratedClass,
       Serializer<?> serializer,
       int typeId,
@@ -106,8 +107,8 @@ public class TypeInfo {
             || typeId == ClassResolver.REPLACE_STUB_ID;
     if (cls != null && isNamedType) {
       Tuple2<String, String> tuple2 = Encoders.encodePkgAndClass(cls);
-      this.namespaceBytes = classResolver.getOrCreatePackageMetaStringBytes(tuple2.f0);
-      this.typeNameBytes = classResolver.getOrCreateTypeNameMetaStringBytes(tuple2.f1);
+      this.namespaceBytes = classResolver.sharedRegistry.getPackageEncodedMetaString(tuple2.f0);
+      this.typeNameBytes = classResolver.sharedRegistry.getTypeNameEncodedMetaString(tuple2.f1);
     } else {
       this.namespaceBytes = null;
       this.typeNameBytes = null;
@@ -129,12 +130,44 @@ public class TypeInfo {
     this.userTypeId = userTypeId;
   }
 
+  public TypeInfo copy(int typeId) {
+    if (typeId == this.typeId) {
+      return this;
+    }
+    return new TypeInfo(
+        cls,
+        namespaceBytes,
+        typeNameBytes,
+        isDynamicGeneratedClass,
+        serializer,
+        typeId,
+        userTypeId);
+  }
+
+  public TypeInfo copy(int typeId, int userTypeId) {
+    if (typeId == this.typeId && userTypeId == this.userTypeId) {
+      return this;
+    }
+    return new TypeInfo(
+        cls,
+        namespaceBytes,
+        typeNameBytes,
+        isDynamicGeneratedClass,
+        serializer,
+        typeId,
+        userTypeId);
+  }
+
   public Class<?> getCls() {
     return cls;
   }
 
   public TypeDef getTypeDef() {
     return typeDef;
+  }
+
+  void setTypeDef(TypeDef typeDef) {
+    this.typeDef = typeDef;
   }
 
   /** Returns the fory type ID for this class. */

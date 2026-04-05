@@ -1230,7 +1230,7 @@ public class ArraySerializers {
       if (TypeUtils.getArrayComponent(cls).isEnum()) {
         componentSerializer = new UnknownClassSerializers.UnknownEnumSerializer(typeResolver);
       } else {
-        if (typeResolver.getConfig().getCompatibleMode() == CompatibleMode.COMPATIBLE) {
+        if (typeResolver.getConfig().isCompatible()) {
           componentSerializer =
               new ObjectSerializer<>(typeResolver, UnknownClass.UnknownEmptyStruct.class);
         } else {

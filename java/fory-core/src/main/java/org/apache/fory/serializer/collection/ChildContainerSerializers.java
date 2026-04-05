@@ -40,7 +40,6 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
-import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.context.MetaContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
@@ -242,7 +241,7 @@ public class ChildContainerSerializers {
     int layerIndex = 0;
     while (!superClasses.contains(cls)) {
       Serializer slotsSerializer;
-      if (typeResolver.getConfig().getCompatibleMode() == CompatibleMode.COMPATIBLE) {
+      if (typeResolver.getConfig().isCompatible()) {
         TypeDef layerTypeDef = typeResolver.getTypeDef(cls, false);
         // Use layer index within class hierarchy (not global counter)
         // This ensures unique marker classes for each layer

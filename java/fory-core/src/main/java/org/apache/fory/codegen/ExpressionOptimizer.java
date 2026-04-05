@@ -41,8 +41,6 @@ import org.apache.fory.util.function.SerializableSupplier;
  * org.apache.fory.codegen.Expression} to invoke the new generated method.
  */
 public class ExpressionOptimizer {
-  private static final String JAVA_IDENTIFIER_PATTERN = "[A-Za-z_$][A-Za-z\\d_$]*";
-
   public static Expression invokeGenerated(
       CodegenContext ctx,
       SerializableSupplier<Expression> groupExpressionsGenerator,
@@ -95,6 +93,9 @@ public class ExpressionOptimizer {
       if (expression == null) {
         continue;
       }
+      if (expression instanceof Reference && ((Reference) expression).isFieldRef()) {
+        continue;
+      }
       if (expression instanceof Literal) {
         continue;
       }
@@ -106,7 +107,7 @@ public class ExpressionOptimizer {
       }
       Preconditions.checkArgument(
           expression.type() != PRIMITIVE_VOID_TYPE, "Cut on block is not supported currently.");
-      String param = getParamName(ctx, expression);
+      String param = ctx.newName(getRawType(expression.type()));
       availableCutExprMap.put(expression, new Reference(param, expression.type()));
     }
     LinkedHashMap<Expression, Reference> cutExprMap = new LinkedHashMap<>();
@@ -133,9 +134,7 @@ public class ExpressionOptimizer {
     CodegenContext codegenContext =
         new CodegenContext(ctx.getPackage(), ctx.getValNames(), ctx.getImports());
     for (Reference reference : cutExprMap.values()) {
-      if (!codegenContext.containName(reference.name())) {
-        codegenContext.reserveName(reference.name());
-      }
+      Preconditions.checkArgument(codegenContext.containName(reference.name()));
     }
     String methodName = ctx.newName(methodPrefix);
     String code = groupExpressions.genCode(codegenContext).code();
@@ -169,15 +168,5 @@ public class ExpressionOptimizer {
           false,
           actualParams.toArray(new Expression[0]));
     }
-  }
-
-  private static String getParamName(CodegenContext ctx, Expression expression) {
-    if (expression instanceof Reference) {
-      String name = ((Reference) expression).name();
-      if (name.matches(JAVA_IDENTIFIER_PATTERN)) {
-        return name;
-      }
-    }
-    return ctx.newName(getRawType(expression.type()));
   }
 }

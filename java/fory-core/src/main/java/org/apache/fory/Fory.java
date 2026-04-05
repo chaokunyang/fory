@@ -32,9 +32,10 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MapRefReader;
 import org.apache.fory.context.MapRefWriter;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaStringReader;
 import org.apache.fory.context.MetaStringWriter;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
 import org.apache.fory.context.RefWriter;
@@ -548,43 +549,8 @@ public final class Fory implements BaseFory {
     } catch (Throwable e) {
       throw processCopyError(e);
     } finally {
-      resetCopy();
+      copyContext.reset();
     }
-  }
-
-  /**
-   * Copy object. This method provides a fast copy of common types.
-   *
-   * @param obj object to copy
-   * @return copied object
-   */
-  public <T> T copyObject(T obj) {
-    return copyContext.copyObject(obj);
-  }
-
-  public <T> T copyObject(T obj, int classId) {
-    return copyContext.copyObject(obj, classId);
-  }
-
-  public <T> T copyObject(T obj, Serializer<T> serializer) {
-    return copyContext.copyObject(obj, serializer);
-  }
-
-  /**
-   * Track ref for copy.
-   *
-   * <p>Call this method immediately after composited object such as object
-   * array/map/collection/bean is created so that circular reference can be copy correctly.
-   *
-   * @param o1 object before copying
-   * @param o2 the copied object
-   */
-  public <T> void reference(T o1, T o2) {
-    copyContext.reference(o1, o2);
-  }
-
-  public <T> T getCopyObject(T originObj) {
-    return copyContext.getCopyObject(originObj);
   }
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
@@ -632,20 +598,8 @@ public final class Fory implements BaseFory {
   }
 
   public void reset() {
-    resetWrite();
-    resetRead();
-    resetCopy();
-  }
-
-  public void resetWrite() {
     writeContext.reset();
-  }
-
-  public void resetRead() {
     readContext.reset();
-  }
-
-  public void resetCopy() {
     copyContext.reset();
   }
 
@@ -674,22 +628,12 @@ public final class Fory implements BaseFory {
     return jitContext;
   }
 
-  public BufferCallback getBufferCallback() {
-    return writeContext.getBufferCallback();
-  }
-
-  public boolean isPeerOutOfBandEnabled() {
-    return readContext.isPeerOutOfBandEnabled();
-  }
-
   /**
    * Don't use this API for type resolving and dispatch, methods on returned resolver has
    * polymorphic invoke cost.
    */
   @Internal
-  // CHECKSTYLE.OFF:MethodName
   public TypeResolver getTypeResolver() {
-    // CHECKSTYLE.ON:MethodName
     return typeResolver;
   }
 
@@ -701,9 +645,12 @@ public final class Fory implements BaseFory {
     return readContext;
   }
 
-  public void setMetaContext(MetaContext metaContext) {
-    writeContext.setMetaContext(metaContext);
-    readContext.setMetaContext(metaContext);
+  public void setMetaWriteContext(MetaWriteContext metaWriteContext) {
+    writeContext.setMetaWriteContext(metaWriteContext);
+  }
+
+  public void setMetaReadContext(MetaReadContext metaReadContext) {
+    readContext.setMetaReadContext(metaReadContext);
   }
 
   public ClassLoader getClassLoader() {
@@ -711,7 +658,7 @@ public final class Fory implements BaseFory {
   }
 
   @Internal
-  public SharedRegistry getSharedRegistry() {
+  SharedRegistry getSharedRegistry() {
     return sharedRegistry;
   }
 

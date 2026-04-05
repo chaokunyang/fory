@@ -55,7 +55,7 @@ public final class WriteContext {
   private final IdentityHashMap<Object, Object> contextObjects = new IdentityHashMap<>();
   private MemoryBuffer buffer;
   private BufferCallback bufferCallback;
-  private MetaContext metaContext;
+  private MetaWriteContext metaWriteContext;
   private int depth;
 
   public WriteContext(
@@ -76,7 +76,7 @@ public final class WriteContext {
     forVirtualThread = config.forVirtualThread();
     scopedMetaShareEnabled = config.isScopedMetaShareEnabled();
     if (scopedMetaShareEnabled) {
-      metaContext = new MetaContext();
+      metaWriteContext = new MetaWriteContext();
     }
   }
 
@@ -96,9 +96,9 @@ public final class WriteContext {
       contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
-      metaContext.classMap.clear();
+      metaWriteContext.classMap.clear();
     } else {
-      metaContext = null;
+      metaWriteContext = null;
     }
     buffer = null;
     bufferCallback = null;
@@ -160,13 +160,13 @@ public final class WriteContext {
     return contextObjects.get(key);
   }
 
-  public MetaContext getMetaContext() {
-    return metaContext;
+  public MetaWriteContext getMetaWriteContext() {
+    return metaWriteContext;
   }
 
-  public void setMetaContext(MetaContext metaContext) {
+  public void setMetaWriteContext(MetaWriteContext metaWriteContext) {
     Preconditions.checkArgument(!scopedMetaShareEnabled);
-    this.metaContext = metaContext;
+    this.metaWriteContext = metaWriteContext;
   }
 
   public boolean isCrossLanguage() {

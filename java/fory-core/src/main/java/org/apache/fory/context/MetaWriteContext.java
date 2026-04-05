@@ -20,17 +20,11 @@
 package org.apache.fory.context;
 
 import org.apache.fory.collection.IdentityObjectIntMap;
-import org.apache.fory.collection.ObjectArray;
-import org.apache.fory.resolver.TypeInfo;
 
 /**
- * Context for sharing class meta across multiple serialization. Class name, field name and field
- * type will be shared between different serialization.
+ * Context for sharing class meta across multiple serialization writes.
  */
-public class MetaContext {
-  /** Classes which has sent definitions to peer. */
+public class MetaWriteContext {
+  /** Classes which have sent definitions to peer. */
   public final IdentityObjectIntMap<Class<?>> classMap = new IdentityObjectIntMap<>(1, 0.5f);
-
-  /** TypeInfos read from peer for reference lookup during deserialization. */
-  public final ObjectArray<TypeInfo> readTypeInfos = new ObjectArray<>();
 }

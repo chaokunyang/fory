@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Set;
 import org.apache.fory.config.Config;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
@@ -298,8 +298,8 @@ public final class ExceptionSerializers {
   }
 
   private static void readAndSkipLayerClassMeta(ReadContext readContext, MemoryBuffer buffer) {
-    MetaContext metaContext = readContext.getMetaContext();
-    if (metaContext == null) {
+    MetaReadContext metaReadContext = readContext.getMetaReadContext();
+    if (metaReadContext == null) {
       return;
     }
     int indexMarker = buffer.readVarUint32Small14();
@@ -309,7 +309,7 @@ public final class ExceptionSerializers {
     }
     long typeDefId = buffer.readInt64();
     TypeDef.skipTypeDef(buffer, typeDefId);
-    metaContext.readTypeInfos.add(null);
+    metaReadContext.readTypeInfos.add(null);
   }
 
   private static final class ThrowableOffsets {

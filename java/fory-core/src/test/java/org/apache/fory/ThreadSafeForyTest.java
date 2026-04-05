@@ -33,7 +33,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.Data;
 import org.apache.fory.config.Language;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
@@ -260,13 +261,13 @@ public class ThreadSafeForyTest extends ForyTestBase {
                 byte[] sharedBytes =
                     shared.execute(
                         f -> {
-                          f.setMetaContext(new MetaContext());
+                          f.setMetaWriteContext(new MetaWriteContext());
                           return f.serialize(beanA);
                         });
                 Object sharedObj =
                     shared.execute(
                         f -> {
-                          f.setMetaContext(new MetaContext());
+                          f.setMetaReadContext(new MetaReadContext());
                           return f.deserialize(sharedBytes);
                         });
                 assertEquals(sharedObj, beanA);
@@ -284,7 +285,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
-  public void testThreadLocalMetaShareWithPerThreadMetaContext() throws InterruptedException {
+  public void testThreadLocalMetaShareWithPerThreadMetaContexts() throws InterruptedException {
     ThreadSafeFory fory =
         Fory.builder()
             .withLanguage(Language.JAVA)
@@ -293,25 +294,28 @@ public class ThreadSafeForyTest extends ForyTestBase {
             .buildThreadLocalFory();
     BeanA beanA = BeanA.createBeanA(2);
     ExecutorService executorService = Executors.newFixedThreadPool(12);
-    ConcurrentHashMap<Thread, MetaContext> metaMap = new ConcurrentHashMap<>();
+    ConcurrentHashMap<Thread, MetaWriteContext> writeMetaMap = new ConcurrentHashMap<>();
+    ConcurrentHashMap<Thread, MetaReadContext> readMetaMap = new ConcurrentHashMap<>();
     AtomicReference<Throwable> error = new AtomicReference<>();
     for (int i = 0; i < 200; i++) {
       executorService.execute(
           () -> {
             try {
               for (int j = 0; j < 10; j++) {
-                MetaContext metaContext =
-                    metaMap.computeIfAbsent(Thread.currentThread(), t -> new MetaContext());
+                MetaWriteContext metaWriteContext =
+                    writeMetaMap.computeIfAbsent(Thread.currentThread(), t -> new MetaWriteContext());
+                MetaReadContext metaReadContext =
+                    readMetaMap.computeIfAbsent(Thread.currentThread(), t -> new MetaReadContext());
                 byte[] serialized =
                     fory.execute(
                         f -> {
-                          f.setMetaContext(metaContext);
+                          f.setMetaWriteContext(metaWriteContext);
                           return f.serialize(beanA);
                         });
                 Object newObj =
                     fory.execute(
                         f -> {
-                          f.setMetaContext(metaContext);
+                          f.setMetaReadContext(metaReadContext);
                           return f.deserialize(serialized);
                         });
                 assertEquals(newObj, beanA);

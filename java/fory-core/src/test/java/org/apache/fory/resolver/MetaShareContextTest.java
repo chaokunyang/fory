@@ -28,14 +28,15 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
 import org.apache.fory.test.bean.Foo;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-public class MetaContextTest extends ForyTestBase {
+public class MetaShareContextTest extends ForyTestBase {
   @Test
   public void testShareClassName() {
     Fory fory =
@@ -68,17 +69,18 @@ public class MetaContextTest extends ForyTestBase {
   }
 
   private void checkMetaShared(Fory fory, Object o) {
-    MetaContext context = new MetaContext();
-    fory.setMetaContext(context);
+    MetaWriteContext metaWriteContext = new MetaWriteContext();
+    MetaReadContext metaReadContext = new MetaReadContext();
+    setMetaContexts(fory, metaWriteContext, metaReadContext);
     byte[] bytes = fory.serialize(o);
-    fory.setMetaContext(context);
+    setMetaContexts(fory, metaWriteContext, metaReadContext);
     Assert.assertEquals(fory.deserialize(bytes), o);
-    fory.setMetaContext(context);
+    setMetaContexts(fory, metaWriteContext, metaReadContext);
     byte[] bytes1 = fory.serialize(o);
     Assert.assertTrue(bytes1.length < bytes.length);
-    fory.setMetaContext(context);
+    setMetaContexts(fory, metaWriteContext, metaReadContext);
     Assert.assertEquals(fory.deserialize(bytes1), o);
-    fory.setMetaContext(new MetaContext());
+    setMetaContexts(fory, new MetaWriteContext(), new MetaReadContext());
     Assert.assertEquals(fory.serialize(o), bytes);
     assertThrowsCause(AssertionError.class, () -> fory.serialize(o));
   }

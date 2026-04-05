@@ -53,6 +53,15 @@ public final class CopyContext {
     return copyRefTracking;
   }
 
+  /**
+   * Track ref for copy.
+   *
+   * <p>Call this method immediately after composited object such as object
+   * array/map/collection/bean is created so that circular reference can be copy correctly.
+   *
+   * @param origin object before copying
+   * @param copied the copied object
+   */
   public <T> void reference(T origin, T copied) {
     if (copyRefTracking && origin != null) {
       originToCopyMap.put(origin, copied);

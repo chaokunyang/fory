@@ -21,7 +21,7 @@ package org.apache.fory.serializer;
 
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.ObjectIntMap;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
 import org.apache.fory.context.RefWriter;
@@ -84,11 +84,11 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
 
   public void writeLayerClassMeta(WriteContext writeContext, MemoryBuffer buffer) {
     checkLayerSerializerMeta();
-    MetaContext metaContext = writeContext.getMetaContext();
-    if (metaContext == null) {
+    MetaWriteContext metaWriteContext = writeContext.getMetaWriteContext();
+    if (metaWriteContext == null) {
       return;
     }
-    IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
+    IdentityObjectIntMap<Class<?>> classMap = metaWriteContext.classMap;
     int newId = classMap.size;
     int id = classMap.putOrGet(layerMarkerClass, newId);
     if (id >= 0) {

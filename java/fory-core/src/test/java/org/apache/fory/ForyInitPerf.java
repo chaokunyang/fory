@@ -27,7 +27,8 @@ import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.Foo;
@@ -124,13 +125,13 @@ public class ForyInitPerf {
   }
 
   private static void initializeFory(Fory fory) {
-    fory.setMetaContext(new MetaContext());
+    fory.setMetaWriteContext(new MetaWriteContext());
     byte[] beanBytes = fory.serialize(BeanA.createBeanA(2));
-    fory.setMetaContext(new MetaContext());
+    fory.setMetaReadContext(new MetaReadContext());
     fory.deserialize(beanBytes);
-    fory.setMetaContext(new MetaContext());
+    fory.setMetaWriteContext(new MetaWriteContext());
     byte[] fooBytes = fory.serialize(Foo.create());
-    fory.setMetaContext(new MetaContext());
+    fory.setMetaReadContext(new MetaReadContext());
     fory.deserialize(fooBytes);
   }
 

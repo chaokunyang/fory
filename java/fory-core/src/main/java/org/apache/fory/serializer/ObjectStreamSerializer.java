@@ -49,7 +49,7 @@ import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.config.LongEncoding;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
@@ -418,9 +418,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     // Read TypeInfo from buffer (maintains index alignment with readTypeInfos)
-    MetaContext metaContext = readContext.getMetaContext();
-    if (metaContext == null) {
-      throw new IllegalStateException("MetaContext is null but meta share is enabled");
+    MetaReadContext metaReadContext = readContext.getMetaReadContext();
+    if (metaReadContext == null) {
+      throw new IllegalStateException("MetaReadContext is null but meta share is enabled");
     }
     int indexMarker = buffer.readVarUint32Small14();
     boolean isRef = (indexMarker & 1) == 1;
@@ -428,7 +428,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     TypeInfo typeInfo;
     if (isRef) {
       // Reference to previously read TypeInfo
-      typeInfo = metaContext.readTypeInfos.get(index);
+      typeInfo = metaReadContext.readTypeInfos.get(index);
     } else {
       // New TypeDef in stream - read ID first to check cache
       long typeDefId = buffer.readInt64();
@@ -442,7 +442,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         typeInfo = new TypeInfo(senderClass, typeDef);
         typeDefIdToTypeInfo.put(typeDefId, typeInfo);
       }
-      metaContext.readTypeInfos.add(typeInfo);
+      metaReadContext.readTypeInfos.add(typeInfo);
     }
 
     // Get or create serializer from TypeInfo to skip the fields
@@ -827,8 +827,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     private TypeInfo readLayerTypeInfo(
         TypeResolver typeResolver, ReadContext readContext, MemoryBuffer buffer) {
-      MetaContext metaContext = readContext.getMetaContext();
-      if (metaContext == null) {
+      MetaReadContext metaReadContext = readContext.getMetaReadContext();
+      if (metaReadContext == null) {
         return null;
       }
       int indexMarker = buffer.readVarUint32Small14();
@@ -836,7 +836,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       int index = indexMarker >>> 1;
       if (isRef) {
         // Reference to previously read TypeInfo
-        return metaContext.readTypeInfos.get(index);
+        return metaReadContext.readTypeInfos.get(index);
       } else {
         // New TypeDef in stream - read ID first to check cache
         long typeDefId = buffer.readInt64();
@@ -850,7 +850,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           typeInfo = new TypeInfo(cls, typeDef);
           typeDefIdToTypeInfo.put(typeDefId, typeInfo);
         }
-        metaContext.readTypeInfos.add(typeInfo);
+        metaReadContext.readTypeInfos.add(typeInfo);
         return typeInfo;
       }
     }

@@ -39,8 +39,9 @@ import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.context.CopyContext;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.io.ClassLoaderObjectInputStream;
 import org.apache.fory.memory.MemoryBuffer;
@@ -436,11 +437,18 @@ public abstract class ForyTestBase {
   }
 
   public static Object serDeMetaShared(Fory fory, Object obj) {
-    MetaContext context = new MetaContext();
-    fory.setMetaContext(context);
+    MetaWriteContext metaWriteContext = new MetaWriteContext();
+    MetaReadContext metaReadContext = new MetaReadContext();
+    setMetaContexts(fory, metaWriteContext, metaReadContext);
     byte[] bytes = fory.serialize(obj);
-    fory.setMetaContext(context);
+    setMetaContexts(fory, metaWriteContext, metaReadContext);
     return fory.deserialize(bytes);
+  }
+
+  public static void setMetaContexts(
+      Fory fory, MetaWriteContext metaWriteContext, MetaReadContext metaReadContext) {
+    fory.setMetaWriteContext(metaWriteContext);
+    fory.setMetaReadContext(metaReadContext);
   }
 
   public static byte[] jdkSerialize(Object o) {

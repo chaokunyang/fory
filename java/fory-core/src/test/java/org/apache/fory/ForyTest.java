@@ -70,7 +70,8 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
 import org.apache.fory.serializer.EnumSerializerTest;
@@ -633,10 +634,11 @@ public class ForyTest extends ForyTestBase {
             .requireClassRegistration(false)
             .withMetaShare(true)
             .build();
-    MetaContext metaContext = new MetaContext();
-    fory.setMetaContext(metaContext);
+    MetaWriteContext metaWriteContext = new MetaWriteContext();
+    MetaReadContext metaReadContext = new MetaReadContext();
+    fory.setMetaWriteContext(metaWriteContext);
     byte[] bytes = fory.serialize(null);
-    fory.setMetaContext(metaContext);
+    fory.setMetaReadContext(metaReadContext);
     Object obj = fory.deserialize(bytes);
     assertNull(obj);
   }

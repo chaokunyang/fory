@@ -41,19 +41,26 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.builder.Generated;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
+import org.apache.fory.context.MetaWriteContext;
+import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
+import org.apache.fory.serializer.collection.CollectionSerializers;
+import org.apache.fory.serializer.collection.MapSerializers;
 import org.apache.fory.util.Preconditions;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -229,19 +236,18 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
 
   @Test(dataProvider = "javaFory")
   public void testJDKCompatibleMap(Fory fory) {
-    ImmutableMap<String, Integer> mapData = ImmutableMap.of("k1", 1, "k2", 2);
+    AsyncTreeMapSubclass map = new AsyncTreeMapSubclass();
+    map.put("alpha", "A");
+    map.put("beta", "B");
     fory.registerSerializer(
-        ConcurrentHashMap.class,
-        new ObjectStreamSerializer(fory.getTypeResolver(), ConcurrentHashMap.class));
-    Map<String, Integer> hashMap = new HashMap<>(mapData);
-    fory.registerSerializer(
-        hashMap.getClass(), new ObjectStreamSerializer(fory.getTypeResolver(), hashMap.getClass()));
+        AsyncTreeMapSubclass.class,
+        new MapSerializers.JDKCompatibleMapSerializer<>(
+            fory.getTypeResolver(), AsyncTreeMapSubclass.class));
 
     {
       ObjectStreamSerializer serializer =
-          new ObjectStreamSerializer(fory.getTypeResolver(), ConcurrentHashMap.class);
+          new ObjectStreamSerializer(fory.getTypeResolver(), AsyncTreeMapSubclass.class);
       MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
-      ConcurrentHashMap<String, Integer> map = new ConcurrentHashMap<>(mapData);
       withWriteContext(
           fory,
           buffer,
@@ -263,36 +269,26 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
       // the active read/write contexts.
       fory.reset();
     }
-    {
-      serDeCheck(fory, new ConcurrentHashMap<>(mapData));
-      assertSame(
-          fory.getTypeResolver().getSerializer(ConcurrentHashMap.class).getClass(),
-          ObjectStreamSerializer.class);
-    }
-    {
-      // ImmutableMap use writeReplace, which needs special handling.
-      serDeCheck(fory, hashMap);
-    }
+    serDeCheck(fory, map);
+    assertSame(
+        fory.getTypeResolver().getSerializer(AsyncTreeMapSubclass.class).getClass(),
+        MapSerializers.JDKCompatibleMapSerializer.class);
   }
 
   @Test(dataProvider = "foryCopyConfig")
   public void testJDKCompatibleMapCopy(Fory fory) {
-    ImmutableMap<String, Integer> mapData = ImmutableMap.of("k1", 1, "k2", 2);
-    Map<String, Integer> map = new HashMap<>(mapData);
+    AsyncTreeMapSubclass map = new AsyncTreeMapSubclass();
+    map.put("alpha", "A");
+    map.put("beta", "B");
     fory.registerSerializer(
-        ConcurrentHashMap.class,
-        new ObjectStreamSerializer(fory.getTypeResolver(), ConcurrentHashMap.class));
-    fory.registerSerializer(
-        map.getClass(), new ObjectStreamSerializer(fory.getTypeResolver(), map.getClass()));
+        AsyncTreeMapSubclass.class,
+        new MapSerializers.JDKCompatibleMapSerializer<>(
+            fory.getTypeResolver(), AsyncTreeMapSubclass.class));
     {
       ObjectStreamSerializer serializer =
-          new ObjectStreamSerializer(fory.getTypeResolver(), ConcurrentHashMap.class);
-      ConcurrentHashMap<String, Integer> concurrentMap = new ConcurrentHashMap<>(mapData);
-      Object copy = withCopyContext(fory, context -> serializer.copy(context, concurrentMap));
-      assertEquals(copy, concurrentMap);
-    }
-    {
-      copyCheck(fory, new ConcurrentHashMap<>(mapData));
+          new ObjectStreamSerializer(fory.getTypeResolver(), AsyncTreeMapSubclass.class);
+      Object copy = withCopyContext(fory, context -> serializer.copy(context, map));
+      assertEquals(copy, map);
     }
     copyCheck(fory, map);
   }
@@ -300,11 +296,26 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test(dataProvider = "javaFory")
   public void testJDKCompatibleList(Fory fory) {
     fory.registerSerializer(
-        ArrayList.class, new ObjectStreamSerializer(fory.getTypeResolver(), ArrayList.class));
+        ArrayList.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(
+            fory.getTypeResolver(), ArrayList.class));
     fory.registerSerializer(
-        LinkedList.class, new ObjectStreamSerializer(fory.getTypeResolver(), LinkedList.class));
+        LinkedList.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(
+            fory.getTypeResolver(), LinkedList.class));
     fory.registerSerializer(
-        Vector.class, new ObjectStreamSerializer(fory.getTypeResolver(), Vector.class));
+        Vector.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(
+            fory.getTypeResolver(), Vector.class));
+    assertSame(
+        fory.getTypeResolver().getSerializerClass(ArrayList.class),
+        CollectionSerializers.JDKCompatibleCollectionSerializer.class);
+    assertSame(
+        fory.getTypeResolver().getSerializerClass(LinkedList.class),
+        CollectionSerializers.JDKCompatibleCollectionSerializer.class);
+    assertSame(
+        fory.getTypeResolver().getSerializerClass(Vector.class),
+        CollectionSerializers.JDKCompatibleCollectionSerializer.class);
 
     List<String> list = new ArrayList<>(ImmutableList.of("a", "b", "c", "d"));
     serDeCheck(fory, list);
@@ -315,11 +326,17 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test(dataProvider = "foryCopyConfig")
   public void testJDKCompatibleListCopy(Fory fory) {
     fory.registerSerializer(
-        ArrayList.class, new ObjectStreamSerializer(fory.getTypeResolver(), ArrayList.class));
+        ArrayList.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(
+            fory.getTypeResolver(), ArrayList.class));
     fory.registerSerializer(
-        LinkedList.class, new ObjectStreamSerializer(fory.getTypeResolver(), LinkedList.class));
+        LinkedList.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(
+            fory.getTypeResolver(), LinkedList.class));
     fory.registerSerializer(
-        Vector.class, new ObjectStreamSerializer(fory.getTypeResolver(), Vector.class));
+        Vector.class,
+        new CollectionSerializers.JDKCompatibleCollectionSerializer<>(
+            fory.getTypeResolver(), Vector.class));
     List<String> list = new ArrayList<>(ImmutableList.of("a", "b", "c", "d"));
     copyCheck(fory, list);
     copyCheck(fory, new LinkedList<>(list));
@@ -337,7 +354,8 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
             .build();
     fory.registerSerializer(
         ConcurrentHashMap.class,
-        new ObjectStreamSerializer(fory.getTypeResolver(), ConcurrentHashMap.class));
+        new MapSerializers.JDKCompatibleMapSerializer<>(
+            fory.getTypeResolver(), ConcurrentHashMap.class));
     {
       ObjectStreamSerializer serializer =
           new ObjectStreamSerializer(fory.getTypeResolver(), ConcurrentHashMap.class);
@@ -1084,12 +1102,12 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
         MixedSerializationClass.class,
         new ObjectStreamSerializer(readerFory2.getTypeResolver(), MixedSerializationClass.class));
 
-    writerFory.setMetaContext(new MetaContext());
+    writerFory.setMetaWriteContext(new MetaWriteContext());
     byte[] bytes = writerFory.serialize(new MixedSerializationClass("shared", 7));
 
-    readerFory1.setMetaContext(new MetaContext());
+    readerFory1.setMetaReadContext(new MetaReadContext());
     readerFory1.deserialize(bytes);
-    readerFory2.setMetaContext(new MetaContext());
+    readerFory2.setMetaReadContext(new MetaReadContext());
     readerFory2.deserialize(bytes);
 
     TypeInfo typeInfo1 =
@@ -1286,6 +1304,14 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     assertEquals(result.nestedList.size(), 2);
     assertEquals(result.nestedList.get(0).nestedValue, "list1");
     assertEquals(result.nestedList.get(1).nestedValue, "list2");
+  }
+
+  public static class AsyncTreeSetSubclass extends TreeSet<String> {
+    public AsyncTreeSetSubclass() {}
+  }
+
+  public static class AsyncTreeMapSubclass extends TreeMap<String, String> {
+    public AsyncTreeMapSubclass() {}
   }
 
   // ==================== Circular Reference in Custom Serialization ====================

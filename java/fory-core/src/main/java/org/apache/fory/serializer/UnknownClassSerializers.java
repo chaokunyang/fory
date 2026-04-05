@@ -26,7 +26,7 @@ import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.MapEntry;
 import org.apache.fory.config.Config;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
@@ -96,8 +96,8 @@ public final class UnknownClassSerializers {
      */
     private void writeTypeDef(
         WriteContext writeContext, MemoryBuffer buffer, UnknownClass.UnknownStruct value) {
-      MetaContext metaContext = writeContext.getMetaContext();
-      IdentityObjectIntMap classMap = metaContext.classMap;
+      MetaWriteContext metaWriteContext = writeContext.getMetaWriteContext();
+      IdentityObjectIntMap classMap = metaWriteContext.classMap;
       int newId = classMap.size;
       // class not exist, use class def id for identity.
       int id = classMap.putOrGet(value.typeDef.getId(), newId);

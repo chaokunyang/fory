@@ -59,7 +59,8 @@ import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.MetaStringReader;
 import org.apache.fory.context.MetaStringWriter;
 import org.apache.fory.context.ReadContext;
@@ -108,8 +109,10 @@ public abstract class TypeResolver {
       new TypeInfo(null, null, null, null, Types.UNKNOWN, INVALID_USER_TYPE_ID);
   // use a lower load factor to minimize hash collision
   static final float foryMapLoadFactor = 0.5f;
-  static final String SET_META__CONTEXT_MSG =
-      "Meta context must be set on the active context before serialization/deserialization.";
+  static final String SET_META_WRITE_CONTEXT_MSG =
+      "Meta write context must be set on the active write context before serialization.";
+  static final String SET_META_READ_CONTEXT_MSG =
+      "Meta read context must be set on the active read context before deserialization.";
   // reserved last 5 internal type ids for future use
   static final int INTERNAL_NATIVE_ID_LIMIT = 250;
   private static final GenericType OBJECT_GENERIC_TYPE = GenericType.build(Object.class);
@@ -485,9 +488,9 @@ public abstract class TypeResolver {
    */
   protected final void writeSharedClassMeta(WriteContext writeContext, TypeInfo typeInfo) {
     MemoryBuffer buffer = writeContext.getBuffer();
-    MetaContext metaContext = writeContext.getMetaContext();
-    assert metaContext != null : SET_META__CONTEXT_MSG;
-    IdentityObjectIntMap<Class<?>> classMap = metaContext.classMap;
+    MetaWriteContext metaWriteContext = writeContext.getMetaWriteContext();
+    assert metaWriteContext != null : SET_META_WRITE_CONTEXT_MSG;
+    IdentityObjectIntMap<Class<?>> classMap = metaWriteContext.classMap;
     int newId = classMap.size;
     int id = classMap.putOrGet(typeInfo.type, newId);
     if (id >= 0) {
@@ -756,15 +759,15 @@ public abstract class TypeResolver {
    */
   protected final TypeInfo readSharedClassMeta(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
-    MetaContext metaContext = readContext.getMetaContext();
-    assert metaContext != null : SET_META__CONTEXT_MSG;
+    MetaReadContext metaReadContext = readContext.getMetaReadContext();
+    assert metaReadContext != null : SET_META_READ_CONTEXT_MSG;
     int indexMarker = buffer.readVarUint32Small14();
     boolean isRef = (indexMarker & 1) == 1;
     int index = indexMarker >>> 1;
     TypeInfo typeInfo;
     if (isRef) {
       // Reference to previously read type in this stream
-      typeInfo = metaContext.readTypeInfos.get(index);
+      typeInfo = metaReadContext.readTypeInfos.get(index);
     } else {
       // New type in stream - but may already be known from registry
       long id = buffer.readInt64();
@@ -781,7 +784,7 @@ public abstract class TypeResolver {
         typeInfo = buildMetaSharedTypeInfo(typeDef);
       }
       // index == readTypeInfos.size() since types are written sequentially
-      metaContext.readTypeInfos.add(typeInfo);
+      metaReadContext.readTypeInfos.add(typeInfo);
     }
     return typeInfo;
   }

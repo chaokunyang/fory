@@ -54,7 +54,7 @@ public final class ReadContext {
   private final IdentityHashMap<Object, Object> contextObjects = new IdentityHashMap<>();
   private MemoryBuffer buffer;
   private Iterator<MemoryBuffer> outOfBandBuffers;
-  private MetaContext metaContext;
+  private MetaReadContext metaReadContext;
   private boolean peerOutOfBandEnabled;
   private int depth;
 
@@ -77,7 +77,7 @@ public final class ReadContext {
     forVirtualThread = config.forVirtualThread();
     scopedMetaShareEnabled = config.isScopedMetaShareEnabled();
     if (scopedMetaShareEnabled) {
-      metaContext = new MetaContext();
+      metaReadContext = new MetaReadContext();
     }
   }
 
@@ -99,9 +99,9 @@ public final class ReadContext {
       contextObjects.clear();
     }
     if (scopedMetaShareEnabled) {
-      metaContext.readTypeInfos.size = 0;
+      metaReadContext.readTypeInfos.size = 0;
     } else {
-      metaContext = null;
+      metaReadContext = null;
     }
     if (forVirtualThread) {
       stringSerializer.clearBuffer(config.bufferSizeLimitBytes());
@@ -188,13 +188,13 @@ public final class ReadContext {
     return contextObjects.get(key);
   }
 
-  public MetaContext getMetaContext() {
-    return metaContext;
+  public MetaReadContext getMetaReadContext() {
+    return metaReadContext;
   }
 
-  public void setMetaContext(MetaContext metaContext) {
+  public void setMetaReadContext(MetaReadContext metaReadContext) {
     Preconditions.checkArgument(!scopedMetaShareEnabled);
-    this.metaContext = metaContext;
+    this.metaReadContext = metaReadContext;
   }
 
   public boolean isPeerOutOfBandEnabled() {

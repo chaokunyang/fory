@@ -40,7 +40,7 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
-import org.apache.fory.context.MetaContext;
+import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -286,8 +286,8 @@ public class ChildContainerSerializers {
    * need to skip the meta without actually parsing it.
    */
   private static void readAndSkipLayerClassMeta(ReadContext readContext, MemoryBuffer buffer) {
-    MetaContext metaContext = readContext.getMetaContext();
-    if (metaContext == null) {
+    MetaReadContext metaReadContext = readContext.getMetaReadContext();
+    if (metaReadContext == null) {
       return;
     }
     int indexMarker = buffer.readVarUint32Small14();
@@ -304,6 +304,6 @@ public class ChildContainerSerializers {
     // The write side (writeLayerClassMeta) adds layer marker classes to classMap which shares
     // the same index space as writeSharedClassMeta. Without this placeholder, subsequent
     // readSharedClassMeta reference lookups would use wrong indices.
-    metaContext.readTypeInfos.add(null);
+    metaReadContext.readTypeInfos.add(null);
   }
 }

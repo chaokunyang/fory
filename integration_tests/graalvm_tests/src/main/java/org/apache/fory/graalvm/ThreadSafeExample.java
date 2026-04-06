@@ -25,31 +25,39 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.apache.fory.Fory;
+import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.collection.Collections;
 import org.apache.fory.util.Preconditions;
 
 public class ThreadSafeExample {
-  private static ThreadSafeFory createFory() {
-    ThreadSafeFory fory =
-        Fory.builder()
-            .withName(ThreadSafeExample.class.getName())
-            .requireClassRegistration(true)
-            .withCodegen(false)
-            .buildThreadSafeFory();
-    fory.register(Foo.class);
-    fory.ensureSerializersCompiled();
-    return fory;
+  static ThreadSafeFory fory;
+
+  static {
+    fory =
+        new ThreadLocalFory(
+            classLoader -> {
+              Fory f =
+                  Fory.builder()
+                      .withName(ThreadSafeExample.class.getName())
+                      .requireClassRegistration(true)
+                      .build();
+              // register and generate serializer code.
+              f.register(Foo.class);
+              f.ensureSerializersCompiled();
+              return f;
+            });
+    System.out.println("Init fory at build time");
   }
 
   public static void main(String[] args) throws Throwable {
-    test(createFory());
+    test(fory);
     System.out.println("ThreadSafeExample succeed");
   }
 
   static void test(ThreadSafeFory fory) throws Throwable {
     ThreadSafeExample threadSafeExample = new ThreadSafeExample();
-    threadSafeExample.runChecks(fory);
+    threadSafeExample.test();
     System.out.println("single thread works");
     ExecutorService service = Executors.newFixedThreadPool(10);
     System.out.println("Start to submit tasks");
@@ -57,7 +65,7 @@ public class ThreadSafeExample {
       service.submit(
           () -> {
             try {
-              threadSafeExample.runChecks(fory);
+              threadSafeExample.test();
             } catch (Throwable t) {
               threadSafeExample.throwable = t;
             }
@@ -75,7 +83,7 @@ public class ThreadSafeExample {
 
   private volatile Throwable throwable;
 
-  private void runChecks(ThreadSafeFory fory) {
+  private void test() {
     Preconditions.checkArgument("abc".equals(fory.deserialize(fory.serialize("abc"))));
     Preconditions.checkArgument(
         List.of(1, 2, 3).equals(fory.deserialize(fory.serialize(List.of(1, 2, 3)))));

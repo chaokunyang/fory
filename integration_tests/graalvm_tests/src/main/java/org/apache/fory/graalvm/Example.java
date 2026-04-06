@@ -25,16 +25,13 @@ import org.apache.fory.Fory;
 import org.apache.fory.util.Preconditions;
 
 public class Example {
-  private static Fory createFory() {
-    Fory fory =
-        Fory.builder()
-            .withName(Example.class.getName())
-            .requireClassRegistration(true)
-            .withCodegen(false)
-            .build();
+  static Fory fory;
+
+  static {
+    fory = Fory.builder().withName(Example.class.getName()).requireClassRegistration(true).build();
+    // register and generate serializer code.
     fory.register(Foo.class);
     fory.ensureSerializersCompiled();
-    return fory;
   }
 
   static void test(Fory fory) {
@@ -53,7 +50,7 @@ public class Example {
   }
 
   public static void main(String[] args) {
-    test(createFory());
+    test(fory);
     System.out.println("Example succeed");
   }
 }

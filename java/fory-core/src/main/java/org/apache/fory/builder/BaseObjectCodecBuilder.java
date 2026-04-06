@@ -820,10 +820,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return getOrCreateSerializer(cls, false);
   }
 
-  protected Expression getOrCreateStringSerializer() {
-    return getOrCreateSerializer(String.class);
-  }
-
   private Expression getOrCreateSerializer(Class<?> cls, boolean isField) {
     // Not need to check cls final, take collection writeSameTypeElements as an example.
     // Preconditions.checkArgument(isMonomorphic(cls), cls);
@@ -912,6 +908,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       serializerMap.put(cls, serializerRef);
     }
     return serializerRef;
+  }
+
+  protected Expression getOrCreateStringSerializer() {
+    return getOrCreateSerializer(String.class);
   }
 
   protected Expression getClassExpr(Class<?> cls) {

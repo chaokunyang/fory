@@ -126,7 +126,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
      * #getCurrentReadSerializer()}.
      *
      * @param typeResolver the type resolver
-     * @param buffer the memory buffer to read TypeDef from
+     * @param readContext the context to read TypeDef from
      * @return the serializer to use for reading
      */
     MetaSharedLayerSerializerBase getReadSerializer(TypeResolver typeResolver, ReadContext readContext);

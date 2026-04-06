@@ -1639,7 +1639,7 @@ public class ClassResolver extends TypeResolver {
     if (metaContextShareEnabled && needToWriteTypeDef(serializerClass)) {
       TypeDef typeDef = typeInfo.typeDef;
       if (typeDef == null) {
-        typeDef = buildTypeDef(typeInfo);
+        typeDef = buildTypeDef(typeInfo, serializerClass);
       }
       getGraalvmClassRegistry()
           .putDeserializerClass(
@@ -1737,11 +1737,14 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   protected TypeDef buildTypeDef(TypeInfo typeInfo) {
+    return buildTypeDef(typeInfo, typeInfo.serializer.getClass());
+  }
+
+  private TypeDef buildTypeDef(TypeInfo typeInfo, Class<? extends Serializer> serializerClass) {
     TypeDef typeDef;
-    Serializer<?> serializer = typeInfo.serializer;
     Preconditions.checkArgument(
-        serializer.getClass() != UnknownClassSerializers.UnknownStructSerializer.class);
-    if (needToWriteTypeDef(serializer)) {
+        serializerClass != UnknownClassSerializers.UnknownStructSerializer.class);
+    if (needToWriteTypeDef(serializerClass)) {
       typeDef =
           cacheTypeDef(
               typeDefMap.computeIfAbsent(typeInfo.type, cls -> TypeDef.buildTypeDef(this, cls)));

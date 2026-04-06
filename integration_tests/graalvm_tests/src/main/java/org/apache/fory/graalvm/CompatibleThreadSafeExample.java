@@ -20,25 +20,33 @@
 package org.apache.fory.graalvm;
 
 import org.apache.fory.Fory;
+import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.config.CompatibleMode;
 
 public class CompatibleThreadSafeExample {
-  private static ThreadSafeFory createFory() {
-    ThreadSafeFory fory =
-        Fory.builder()
-            .withName(CompatibleThreadSafeExample.class.getName())
-            .requireClassRegistration(true)
-            .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withCodegen(false)
-            .buildThreadSafeFory();
-    fory.register(Foo.class);
-    fory.ensureSerializersCompiled();
-    return fory;
+  static ThreadSafeFory fory;
+
+  static {
+    fory =
+        new ThreadLocalFory(
+            classLoader -> {
+              Fory f =
+                  Fory.builder()
+                      .withName(CompatibleThreadSafeExample.class.getName())
+                      .requireClassRegistration(true)
+                      .withCompatibleMode(CompatibleMode.COMPATIBLE)
+                      .build();
+              // register and generate serializer code.
+              f.register(Foo.class);
+              f.ensureSerializersCompiled();
+              return f;
+            });
+    System.out.println("Init fory at build time");
   }
 
   public static void main(String[] args) throws Throwable {
-    ThreadSafeExample.test(createFory());
+    ThreadSafeExample.test(fory);
     System.out.println("CompatibleThreadSafeExample succeed");
   }
 }

@@ -23,6 +23,7 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import org.apache.fory.Fory;
+import org.apache.fory.builder.Generated;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
@@ -62,12 +63,17 @@ public class FeatureTestExample {
     }
   }
 
+  static Fory fory;
+
+  static {
+    fory = createFory();
+  }
+
   private static Fory createFory() {
     Fory fory =
         Fory.builder()
             .withName(FeatureTestExample.class.getName())
             .requireClassRegistration(true)
-            .withCodegen(false)
             .build();
     fory.register(PrivateConstructorClass.class);
     fory.register(TestInvocationHandler.class);
@@ -77,13 +83,14 @@ public class FeatureTestExample {
   }
 
   public static void main(String[] args) {
-    Fory fory = createFory();
     System.out.println("Testing Fory GraalVM Feature...");
 
     // Test class with private constructor
     PrivateConstructorClass original = new PrivateConstructorClass("test-value");
     PrivateConstructorClass deserialized =
         (PrivateConstructorClass) fory.deserialize(fory.serialize(original));
+    Preconditions.checkArgument(
+        fory.getTypeResolver().getSerializer(PrivateConstructorClass.class) instanceof Generated);
     Preconditions.checkArgument("test-value".equals(deserialized.getValue()));
     System.out.println("Private constructor class test passed");
 

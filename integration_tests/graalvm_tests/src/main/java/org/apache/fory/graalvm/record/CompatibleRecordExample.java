@@ -23,13 +23,18 @@ import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 
 public class CompatibleRecordExample {
+  static Fory fory;
+
+  static {
+    fory = createFory();
+  }
+
   private static Fory createFory() {
     Fory fory =
         Fory.builder()
             .withName(CompatibleRecordExample.class.getName())
             .requireClassRegistration(true)
             .withCompatibleMode(CompatibleMode.COMPATIBLE)
-            .withCodegen(false)
             .build();
     // register and generate serializer code.
     fory.register(RecordExample.Record.class);
@@ -38,7 +43,6 @@ public class CompatibleRecordExample {
   }
 
   public static void main(String[] args) {
-    Fory fory = createFory();
     RecordExample.test(fory);
     fory = createFory();
     RecordExample.test(fory);

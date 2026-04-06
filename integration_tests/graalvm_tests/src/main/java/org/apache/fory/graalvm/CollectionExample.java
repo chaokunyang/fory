@@ -29,12 +29,14 @@ import org.apache.fory.Fory;
 import org.apache.fory.util.Preconditions;
 
 public class CollectionExample {
-  private static Fory createFory() {
-    return Fory.builder()
-        .withName(CollectionExample.class.getName())
-        .requireClassRegistration(true)
-        .withCodegen(false)
-        .build();
+  static Fory fory;
+
+  static {
+    fory =
+        Fory.builder()
+            .withName(CollectionExample.class.getName())
+            .requireClassRegistration(true)
+            .build();
   }
 
   static void test(Fory fory) {
@@ -54,7 +56,7 @@ public class CollectionExample {
   }
 
   public static void main(String[] args) {
-    test(createFory());
+    test(fory);
     System.out.println("Collection succeed");
   }
 }

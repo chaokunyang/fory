@@ -27,12 +27,17 @@ import org.apache.fory.util.Preconditions;
 public class RecordExample {
   public record Record(int f1, String f2, List<String> f3, Map<String, Long> f4) {}
 
+  static Fory fory;
+
+  static {
+    fory = createFory();
+  }
+
   private static Fory createFory() {
     Fory fory =
         Fory.builder()
             .withName(RecordExample.class.getName())
             .requireClassRegistration(true)
-            .withCodegen(false)
             .build();
     // register and generate serializer code.
     fory.register(Record.class);
@@ -51,7 +56,6 @@ public class RecordExample {
 
   public static void main(String[] args) {
     System.out.println("RecordExample started");
-    Fory fory = createFory();
     test(fory);
     System.out.println("RecordExample succeed 1/2");
     fory = createFory();

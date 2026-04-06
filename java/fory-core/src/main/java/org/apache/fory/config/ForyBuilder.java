@@ -419,8 +419,12 @@ public final class ForyBuilder {
    * since no need to generate code, but later will be much slower compared jit mode.
    */
   public ForyBuilder withCodegen(boolean codeGen) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      codeGen = true;
+    }
     this.codeGenEnabled = codeGen;
-    recordAction(b -> b.withCodegen(codeGen));
+    boolean enableCodegen = codeGen;
+    recordAction(b -> b.withCodegen(enableCodegen));
     return this;
   }
 

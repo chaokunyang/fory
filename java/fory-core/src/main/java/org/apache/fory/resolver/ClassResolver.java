@@ -1037,8 +1037,12 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
+    boolean replaceResolveSerializer =
+        ReplaceResolveSerializer.class.isAssignableFrom(serializerClass)
+            && useReplaceResolveSerializer(type);
     if (isCollection(type)) {
-      if (!CollectionLikeSerializer.class.isAssignableFrom(serializerClass)) {
+      if (!CollectionLikeSerializer.class.isAssignableFrom(serializerClass)
+          && !replaceResolveSerializer) {
         throw new IllegalArgumentException(
             String.format(
                 "Serializer %s is not supported for collection type %s. Use %s instead.",
@@ -1048,7 +1052,7 @@ public class ClassResolver extends TypeResolver {
       }
     }
     if (isMap(type)) {
-      if (!MapLikeSerializer.class.isAssignableFrom(serializerClass)) {
+      if (!MapLikeSerializer.class.isAssignableFrom(serializerClass) && !replaceResolveSerializer) {
         throw new IllegalArgumentException(
             String.format(
                 "Serializer %s is not supported for map type %s. Use %s instead.",

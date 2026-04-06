@@ -37,10 +37,13 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
   private MemoryBuffer buffer;
   private ReadContext readContext;
 
-  public MemoryBufferObjectInput(Config config, MemoryBuffer buffer) {
+  public MemoryBufferObjectInput(Config config, ReadContext readContext) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
-    this.buffer = buffer;
+    this.readContext = readContext;
+    if (readContext != null) {
+      this.buffer = readContext.getBuffer();
+    }
   }
 
 

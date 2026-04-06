@@ -21,18 +21,18 @@ package org.apache.fory.serializer.scala
 
 import org.apache.fory.context.ReadContext
 import org.apache.fory.context.WriteContext
-import org.apache.fory.config.Config
-import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.reflect.FieldAccessor
-import org.apache.fory.serializer.ImmutableSerializer
 import org.apache.fory.serializer.Serializer
+import org.apache.fory.serializer.collection.CollectionLikeSerializer
+import org.apache.fory.resolver.TypeResolver
+import java.util
 import org.apache.fory.util.unsafe._JDKAccess
 
 import java.lang.invoke.{MethodHandle, MethodHandles}
 import scala.collection.immutable.NumericRange
 
-class RangeSerializer[T <: Range](config: Config, cls: Class[T])
-  extends ImmutableSerializer[T](config, cls) {
+class RangeSerializer[T <: Range](typeResolver: TypeResolver, cls: Class[T])
+  extends CollectionLikeSerializer[T](typeResolver, cls, false) {
   private val rangeClass = cls
 
   override def write(writeContext: WriteContext, value: T): Unit = {
@@ -54,6 +54,12 @@ class RangeSerializer[T <: Range](config: Config, cls: Class[T])
   }
 
   override def shareable(): Boolean = true
+
+  override def onCollectionWrite(writeContext: WriteContext, value: T): util.Collection[_] =
+    throw new IllegalStateException(s"supportCodegenHook is disabled for ${getType.getName}")
+
+  override def onCollectionRead(collection: util.Collection[_]): T =
+    throw new IllegalStateException(s"supportCodegenHook is disabled for ${getType.getName}")
 }
 
 
@@ -67,8 +73,8 @@ private object RangeUtils {
 }
 
 
-class NumericRangeSerializer[A, T <: NumericRange[A]](config: Config, cls: Class[T])
-  extends ImmutableSerializer[T](config, cls) {
+class NumericRangeSerializer[A, T <: NumericRange[A]](typeResolver: TypeResolver, cls: Class[T])
+  extends CollectionLikeSerializer[T](typeResolver, cls, false) {
   private val ctr = RangeUtils.lookupCache.get(cls)
   private val getter =
     FieldAccessor.createAccessor(
@@ -97,4 +103,10 @@ class NumericRangeSerializer[A, T <: NumericRange[A]](config: Config, cls: Class
   }
 
   override def shareable(): Boolean = true
+
+  override def onCollectionWrite(writeContext: WriteContext, value: T): util.Collection[_] =
+    throw new IllegalStateException(s"supportCodegenHook is disabled for ${getType.getName}")
+
+  override def onCollectionRead(collection: util.Collection[_]): T =
+    throw new IllegalStateException(s"supportCodegenHook is disabled for ${getType.getName}")
 }

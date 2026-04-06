@@ -98,13 +98,13 @@ public class KotlinSerializers {
 
     // Unsigned array classes: UByteArray, UShortArray, UIntArray, ULongArray.
     resolver.register(UByteArray.class);
-    resolver.registerSerializer(UByteArray.class, new UByteArraySerializer(config));
+    resolver.registerSerializer(UByteArray.class, new UByteArraySerializer(resolver));
     resolver.register(UShortArray.class);
-    resolver.registerSerializer(UShortArray.class, new UShortArraySerializer(config));
+    resolver.registerSerializer(UShortArray.class, new UShortArraySerializer(resolver));
     resolver.register(UIntArray.class);
-    resolver.registerSerializer(UIntArray.class, new UIntArraySerializer(config));
+    resolver.registerSerializer(UIntArray.class, new UIntArraySerializer(resolver));
     resolver.register(ULongArray.class);
-    resolver.registerSerializer(ULongArray.class, new ULongArraySerializer(config));
+    resolver.registerSerializer(ULongArray.class, new ULongArraySerializer(resolver));
 
     // Ranges and Progressions.
     resolver.register(kotlin.ranges.CharRange.class);

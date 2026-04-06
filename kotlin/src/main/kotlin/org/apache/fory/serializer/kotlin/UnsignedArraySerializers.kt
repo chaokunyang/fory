@@ -21,17 +21,18 @@
 
 package org.apache.fory.serializer.kotlin
 
-import org.apache.fory.config.Config
 import org.apache.fory.context.CopyContext
 import org.apache.fory.context.ReadContext
 import org.apache.fory.context.WriteContext
+import org.apache.fory.resolver.TypeResolver
 import org.apache.fory.serializer.Serializer
+import org.apache.fory.serializer.collection.CollectionLikeSerializer
 
 public abstract class AbstractDelegatingArraySerializer<T, T_Delegate>(
-  config: Config,
+  typeResolver: TypeResolver,
   cls: Class<T>,
   private val delegateClass: Class<T_Delegate>
-) : Serializer<T>(config, cls) {
+) : CollectionLikeSerializer<T>(typeResolver, cls, false) {
 
   @Suppress("UNCHECKED_CAST")
   private fun delegatingSerializer(writeContext: WriteContext): Serializer<T_Delegate> {
@@ -56,14 +57,22 @@ public abstract class AbstractDelegatingArraySerializer<T, T_Delegate>(
     return fromDelegateClass(delegatedValue)
   }
 
+  override fun onCollectionWrite(writeContext: WriteContext, value: T): MutableCollection<Any?> {
+    throw IllegalStateException("supportCodegenHook is disabled for ${type.name}")
+  }
+
+  override fun onCollectionRead(collection: Collection<*>): T {
+    throw IllegalStateException("supportCodegenHook is disabled for ${type.name}")
+  }
+
   override fun shareable(): Boolean = true
 }
 
 public class UByteArraySerializer(
-  config: Config,
+  typeResolver: TypeResolver,
 ) :
   AbstractDelegatingArraySerializer<UByteArray, ByteArray>(
-    config,
+    typeResolver,
     UByteArray::class.java,
     ByteArray::class.java
   ) {
@@ -75,10 +84,10 @@ public class UByteArraySerializer(
 }
 
 public class UShortArraySerializer(
-  config: Config,
+  typeResolver: TypeResolver,
 ) :
   AbstractDelegatingArraySerializer<UShortArray, ShortArray>(
-    config,
+    typeResolver,
     UShortArray::class.java,
     ShortArray::class.java
   ) {
@@ -90,10 +99,10 @@ public class UShortArraySerializer(
 }
 
 public class UIntArraySerializer(
-  config: Config,
+  typeResolver: TypeResolver,
 ) :
   AbstractDelegatingArraySerializer<UIntArray, IntArray>(
-    config,
+    typeResolver,
     UIntArray::class.java,
     IntArray::class.java
   ) {
@@ -105,10 +114,10 @@ public class UIntArraySerializer(
 }
 
 public class ULongArraySerializer(
-  config: Config,
+  typeResolver: TypeResolver,
 ) :
   AbstractDelegatingArraySerializer<ULongArray, LongArray>(
-    config,
+    typeResolver,
     ULongArray::class.java,
     LongArray::class.java
   ) {

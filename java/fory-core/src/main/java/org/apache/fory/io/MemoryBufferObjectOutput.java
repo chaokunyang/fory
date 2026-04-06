@@ -37,10 +37,13 @@ public class MemoryBufferObjectOutput extends OutputStream implements ObjectOutp
   private WriteContext writeContext;
   private MemoryBuffer buffer;
 
-  public MemoryBufferObjectOutput(Config config, MemoryBuffer buffer) {
+  public MemoryBufferObjectOutput(Config config, WriteContext writeContext) {
     this.compressInt = config.compressInt();
     this.longEncoding = config.longEncoding();
-    this.buffer = buffer;
+    this.writeContext = writeContext;
+    if (writeContext != null) {
+      this.buffer = writeContext.getBuffer();
+    }
   }
 
   public void setWriteContext(WriteContext writeContext) {

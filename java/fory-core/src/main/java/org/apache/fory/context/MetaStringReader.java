@@ -26,6 +26,7 @@ import org.apache.fory.collection.LongMap;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.EncodedMetaString;
+import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.util.MurmurHash3;
 
 /**
@@ -44,11 +45,14 @@ public final class MetaStringReader {
       new LongMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
   private final LongLongByteMap<EncodedMetaString> longLongMetaStringMap =
       new LongLongByteMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
+  private final SharedRegistry sharedRegistry;
   private EncodedMetaString[] dynamicReadStringIds = new EncodedMetaString[INITIAL_CAPACITY];
   private short dynamicReadStringId;
 
   /** Creates an empty reader state for one deserialization stream. */
-  public MetaStringReader() {}
+  public MetaStringReader(SharedRegistry sharedRegistry) {
+    this.sharedRegistry = sharedRegistry;
+  }
 
   /**
    * Reads a meta string whose header has already been parsed from the stream and includes the
@@ -134,9 +138,9 @@ public final class MetaStringReader {
       MemoryBuffer buffer, int len, long hashCode) {
     EncodedMetaString encodedMetaString = hash2MetaStringMap.get(hashCode);
     if (encodedMetaString == null) {
-      EncodedMetaString newMetaString = new EncodedMetaString(buffer.readBytes(len), hashCode);
-      hash2MetaStringMap.put(hashCode, newMetaString);
-      return newMetaString;
+      encodedMetaString = sharedRegistry.getOrCreateEncodedMetaString(buffer.readBytes(len), hashCode);
+      hash2MetaStringMap.put(hashCode, encodedMetaString);
+      return encodedMetaString;
     }
     buffer.increaseReaderIndex(len);
     return encodedMetaString;
@@ -193,7 +197,8 @@ public final class MetaStringReader {
     long hashCode = MurmurHash3.murmurhash3_x64_128(data, 0, len, 47)[0];
     hashCode = Math.abs(hashCode);
     hashCode = (hashCode & 0xffffffffffffff00L) | encoding;
-    EncodedMetaString encodedMetaString = new EncodedMetaString(Arrays.copyOf(data, len), hashCode);
+    EncodedMetaString encodedMetaString =
+        sharedRegistry.getOrCreateEncodedMetaString(Arrays.copyOf(data, len), hashCode);
     longLongMetaStringMap.put(v1, v2, encoding, encodedMetaString);
     return encodedMetaString;
   }

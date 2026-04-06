@@ -134,7 +134,7 @@ public final class Fory implements BaseFory {
             : new ClassResolver(config, classLoader, sharedRegistry, jitContext);
     typeResolver.initialize();
     MetaStringWriter metaStringWriter = new MetaStringWriter();
-    MetaStringReader metaStringReader = new MetaStringReader();
+    MetaStringReader metaStringReader = new MetaStringReader(sharedRegistry);
     writeContext =
         new WriteContext(
             config,

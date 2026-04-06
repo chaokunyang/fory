@@ -58,8 +58,10 @@ public class PrimitiveSerializersTest extends ForyTestBase {
     assertEquals(readSerializer(fory, serializer, buffer), Integer.valueOf(0));
     writeSerializer(fory, serializer, buffer, 255);
     assertEquals(readSerializer(fory, serializer, buffer), Integer.valueOf(255));
-    assertThrows(IllegalArgumentException.class, () -> writeSerializer(fory, serializer, buffer, -1));
-    assertThrows(IllegalArgumentException.class, () -> writeSerializer(fory, serializer, buffer, 256));
+    assertThrows(
+        IllegalArgumentException.class, () -> writeSerializer(fory, serializer, buffer, -1));
+    assertThrows(
+        IllegalArgumentException.class, () -> writeSerializer(fory, serializer, buffer, 256));
   }
 
   @Test
@@ -72,7 +74,8 @@ public class PrimitiveSerializersTest extends ForyTestBase {
     assertEquals(readSerializer(fory, serializer, buffer), Integer.valueOf(0));
     writeSerializer(fory, serializer, buffer, 65535);
     assertEquals(readSerializer(fory, serializer, buffer), Integer.valueOf(65535));
-    assertThrows(IllegalArgumentException.class, () -> writeSerializer(fory, serializer, buffer, -1));
+    assertThrows(
+        IllegalArgumentException.class, () -> writeSerializer(fory, serializer, buffer, -1));
     assertThrows(
         IllegalArgumentException.class, () -> writeSerializer(fory, serializer, buffer, 65536));
   }

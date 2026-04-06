@@ -51,8 +51,7 @@ public final class MetaStringWriter {
    * <p>If the same encoded meta string was already written by this writer, a compact dynamic ref id
    * is emitted instead of the full payload.
    */
-  public void writeMetaStringWithFlag(
-      MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
+  public void writeMetaStringWithFlag(MemoryBuffer buffer, EncodedMetaString encodedMetaString) {
     Objects.requireNonNull(encodedMetaString);
     int id = dynamicWrittenStrings.putOrGet(encodedMetaString, dynamicWrittenStrings.size);
     if (id == MISSING_DYNAMIC_WRITE_STRING_ID) {

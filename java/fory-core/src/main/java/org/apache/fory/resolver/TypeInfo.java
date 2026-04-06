@@ -127,26 +127,14 @@ public class TypeInfo {
     if (typeId == this.typeId) {
       return this;
     }
-    return new TypeInfo(
-        type,
-        namespace,
-        typeName,
-        serializer,
-        typeId,
-        userTypeId);
+    return new TypeInfo(type, namespace, typeName, serializer, typeId, userTypeId);
   }
 
   public TypeInfo copy(int typeId, int userTypeId) {
     if (typeId == this.typeId && userTypeId == this.userTypeId) {
       return this;
     }
-    return new TypeInfo(
-        type,
-        namespace,
-        typeName,
-        serializer,
-        typeId,
-        userTypeId);
+    return new TypeInfo(type, namespace, typeName, serializer, typeId, userTypeId);
   }
 
   public Class<?> getType() {

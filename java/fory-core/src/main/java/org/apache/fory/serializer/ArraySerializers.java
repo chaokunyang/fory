@@ -22,7 +22,6 @@ package org.apache.fory.serializer;
 import java.lang.reflect.Array;
 import java.util.Arrays;
 import org.apache.fory.Fory;
-import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
 import org.apache.fory.context.CopyContext;
@@ -893,7 +892,7 @@ public class ArraySerializers {
 
     @Override
     public void write(WriteContext writeContext, Float16[] value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       int length = value.length;
       for (int i = 0; i < length; i++) {
         if (value[i] == null) {
@@ -929,7 +928,7 @@ public class ArraySerializers {
 
     @Override
     public Float16[] read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       int size = buffer.readVarUint32Small7();
       int numElements = size / 2;
       Float16[] values = new Float16[numElements];

@@ -55,8 +55,7 @@ public class SingletonMapSerializer extends MapLikeSerializer {
   }
 
   @Override
-  public void write(WriteContext writeContext, Object value) {
-  }
+  public void write(WriteContext writeContext, Object value) {}
 
   @Override
   public Object read(ReadContext readContext) {

@@ -68,7 +68,9 @@ public class CodecUtils {
 
   public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedCodecClass(
       TypeResolver typeResolver, Class<T> cls, TypeDef typeDef) {
-    return typeResolver.getJITContext().asyncVisitFory(f -> loadOrGenMetaSharedCodecClass(f, cls, typeDef));
+    return typeResolver
+        .getJITContext()
+        .asyncVisitFory(f -> loadOrGenMetaSharedCodecClass(f, cls, typeDef));
   }
 
   /**

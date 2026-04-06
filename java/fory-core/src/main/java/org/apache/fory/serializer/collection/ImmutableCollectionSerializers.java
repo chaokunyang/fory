@@ -122,8 +122,7 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Collection copy(
-        CopyContext copyContext, Collection originCollection) {
+    public Collection copy(CopyContext copyContext, Collection originCollection) {
       if (Platform.JAVA_VERSION <= 8) {
         throw new UnsupportedOperationException(
             String.format(
@@ -173,8 +172,7 @@ public class ImmutableCollectionSerializers {
     }
 
     @Override
-    public Collection copy(
-        CopyContext copyContext, Collection originCollection) {
+    public Collection copy(CopyContext copyContext, Collection originCollection) {
       if (Platform.JAVA_VERSION <= 8) {
         throw new UnsupportedOperationException(
             String.format(

@@ -21,10 +21,6 @@ package org.apache.fory.serializer.collection;
 
 import static org.apache.fory.collection.Collections.ofHashSet;
 
-import org.apache.fory.context.CopyContext;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import java.lang.reflect.Field;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -40,11 +36,15 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
+import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaReadContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.FieldGroups;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -52,7 +52,6 @@ import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -247,7 +246,8 @@ public class ChildContainerSerializers {
         // Use layer index within class hierarchy (not global counter)
         // This ensures unique marker classes for each layer
         Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(cls, layerIndex);
-        slotsSerializer = new MetaSharedLayerSerializer(typeResolver, cls, layerTypeDef, layerMarkerClass);
+        slotsSerializer =
+            new MetaSharedLayerSerializer(typeResolver, cls, layerTypeDef, layerMarkerClass);
       } else {
         slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false);
       }

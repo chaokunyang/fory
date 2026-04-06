@@ -240,8 +240,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(
-        CopyContext copyContext, Collection originCollection) {
+    public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       Collection collection;
       Comparator comparator = copyContext.copyObject(((SortedSet) originCollection).comparator());
       if (Objects.equals(type, TreeSet.class)) {
@@ -292,7 +291,8 @@ public class CollectionSerializers {
   public static class CopyOnWriteArrayListSerializer
       extends ConcurrentCollectionSerializer<CopyOnWriteArrayList> {
 
-    public CopyOnWriteArrayListSerializer(TypeResolver typeResolver, Class<CopyOnWriteArrayList> type) {
+    public CopyOnWriteArrayListSerializer(
+        TypeResolver typeResolver, Class<CopyOnWriteArrayList> type) {
       super(typeResolver, type, true);
     }
 
@@ -325,7 +325,8 @@ public class CollectionSerializers {
   public static class CopyOnWriteArraySetSerializer
       extends ConcurrentCollectionSerializer<CopyOnWriteArraySet> {
 
-    public CopyOnWriteArraySetSerializer(TypeResolver typeResolver, Class<CopyOnWriteArraySet> type) {
+    public CopyOnWriteArraySetSerializer(
+        TypeResolver typeResolver, Class<CopyOnWriteArraySet> type) {
       super(typeResolver, type, true);
     }
 
@@ -344,8 +345,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public CopyOnWriteArraySet copy(
-        CopyContext copyContext, CopyOnWriteArraySet originCollection) {
+    public CopyOnWriteArraySet copy(CopyContext copyContext, CopyOnWriteArraySet originCollection) {
       CopyOnWriteArraySet newCollection = new CopyOnWriteArraySet();
       copyContext.reference(originCollection, newCollection);
       List copyList = new ArrayList(originCollection.size());
@@ -463,12 +463,14 @@ public class CollectionSerializers {
   public static final class ConcurrentSkipListSetSerializer
       extends ConcurrentCollectionSerializer<ConcurrentSkipListSet> {
 
-    public ConcurrentSkipListSetSerializer(TypeResolver typeResolver, Class<ConcurrentSkipListSet> cls) {
+    public ConcurrentSkipListSetSerializer(
+        TypeResolver typeResolver, Class<ConcurrentSkipListSet> cls) {
       super(typeResolver, cls, true);
     }
 
     @Override
-    public CollectionSnapshot onCollectionWrite(WriteContext writeContext, ConcurrentSkipListSet value) {
+    public CollectionSnapshot onCollectionWrite(
+        WriteContext writeContext, ConcurrentSkipListSet value) {
       CollectionSnapshot snapshot = super.onCollectionWrite(writeContext, value);
       if (config.isXlang()) {
         return snapshot;
@@ -550,8 +552,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(
-        CopyContext copyContext, Collection originCollection) {
+    public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       assert !config.isXlang();
       Map<?, Boolean> map =
           (Map<?, Boolean>) Platform.getObject(originCollection, MAP_FIELD_OFFSET);
@@ -746,8 +747,7 @@ public class CollectionSerializers {
     }
 
     @Override
-    public Collection newCollection(
-        CopyContext copyContext, Collection collection) {
+    public Collection newCollection(CopyContext copyContext, Collection collection) {
       return new PriorityQueue(
           collection.size(), copyContext.copyObject(((PriorityQueue) collection).comparator()));
     }
@@ -798,7 +798,8 @@ public class CollectionSerializers {
     }
 
     @Override
-    public CollectionSnapshot onCollectionWrite(WriteContext writeContext, ArrayBlockingQueue value) {
+    public CollectionSnapshot onCollectionWrite(
+        WriteContext writeContext, ArrayBlockingQueue value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       // Read capacity before creating snapshot to ensure consistency
       int capacity = getCapacity(value);
@@ -847,7 +848,8 @@ public class CollectionSerializers {
       }
     }
 
-    public LinkedBlockingQueueSerializer(TypeResolver typeResolver, Class<LinkedBlockingQueue> cls) {
+    public LinkedBlockingQueueSerializer(
+        TypeResolver typeResolver, Class<LinkedBlockingQueue> cls) {
       super(typeResolver, cls, true);
     }
 
@@ -856,7 +858,8 @@ public class CollectionSerializers {
     }
 
     @Override
-    public CollectionSnapshot onCollectionWrite(WriteContext writeContext, LinkedBlockingQueue value) {
+    public CollectionSnapshot onCollectionWrite(
+        WriteContext writeContext, LinkedBlockingQueue value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       // Read capacity before creating snapshot to ensure consistency
       int capacity = getCapacity(value);
@@ -902,9 +905,7 @@ public class CollectionSerializers {
       Class<? extends Serializer> serializerClass =
           ((ClassResolver) typeResolver)
               .getObjectSerializerClass(
-                  cls,
-                  sc ->
-                      dataSerializer = Serializers.newSerializer(typeResolver, cls, sc));
+                  cls, sc -> dataSerializer = Serializers.newSerializer(typeResolver, cls, sc));
       dataSerializer = Serializers.newSerializer(typeResolver, cls, serializerClass);
       // No need to set object serializer to this, it will be set in class resolver later.
       // typeResolver.setSerializer(cls, this);
@@ -1043,8 +1044,7 @@ public class CollectionSerializers {
     resolver.registerInternalSerializer(
         LinkedList.class, new CollectionSerializer(resolver, LinkedList.class, true));
     resolver.registerInternalSerializer(HashSet.class, new HashSetSerializer(resolver));
-    resolver.registerInternalSerializer(
-        LinkedHashSet.class, new LinkedHashSetSerializer(resolver));
+    resolver.registerInternalSerializer(LinkedHashSet.class, new LinkedHashSetSerializer(resolver));
     resolver.registerInternalSerializer(
         TreeSet.class, new SortedSetSerializer<>(resolver, TreeSet.class));
     resolver.registerInternalSerializer(

@@ -34,14 +34,12 @@ import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
-import org.apache.fory.Fory;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
@@ -84,7 +82,8 @@ public class SynchronizedSerializers {
     private final Function factory;
     private final long offset;
 
-    public SynchronizedCollectionSerializer(TypeResolver typeResolver, Class cls, Function factory, long offset) {
+    public SynchronizedCollectionSerializer(
+        TypeResolver typeResolver, Class cls, Function factory, long offset) {
       super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
@@ -116,7 +115,8 @@ public class SynchronizedSerializers {
     private final Function factory;
     private final long offset;
 
-    public SynchronizedMapSerializer(TypeResolver typeResolver, Class cls, Function factory, long offset) {
+    public SynchronizedMapSerializer(
+        TypeResolver typeResolver, Class cls, Function factory, long offset) {
       super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;

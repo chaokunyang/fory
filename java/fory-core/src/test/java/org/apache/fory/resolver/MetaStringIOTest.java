@@ -90,7 +90,8 @@ public class MetaStringIOTest {
 
     writer.writeMetaString(buffer, metaString);
 
-    assertEquals(reader.readMetaString(buffer).decode(Encoders.GENERIC_DECODER), "thread_safe_fory");
+    assertEquals(
+        reader.readMetaString(buffer).decode(Encoders.GENERIC_DECODER), "thread_safe_fory");
   }
 
   @Test
@@ -105,7 +106,8 @@ public class MetaStringIOTest {
 
     EncodedMetaString readMetaString = reader.readMetaString(buffer);
     EncodedMetaString cachedMetaString =
-        sharedRegistry.getOrCreateEncodedMetaString(encodedMetaString.bytes, encodedMetaString.hash);
+        sharedRegistry.getOrCreateEncodedMetaString(
+            encodedMetaString.bytes, encodedMetaString.hash);
 
     assertSame(readMetaString, cachedMetaString);
   }
@@ -145,6 +147,7 @@ public class MetaStringIOTest {
 
   private static EncodedMetaString newGenericMetaString(SharedRegistry sharedRegistry, String str) {
     EncodedMetaString encodedMetaString = newGenericMetaString(str);
-    return sharedRegistry.getOrCreateEncodedMetaString(encodedMetaString.bytes, encodedMetaString.hash);
+    return sharedRegistry.getOrCreateEncodedMetaString(
+        encodedMetaString.bytes, encodedMetaString.hash);
   }
 }

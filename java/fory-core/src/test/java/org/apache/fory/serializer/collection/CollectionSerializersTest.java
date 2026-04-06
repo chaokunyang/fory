@@ -211,12 +211,10 @@ public class CollectionSerializersTest extends ForyTestBase {
     List<String> data = new ArrayList<>(ImmutableList.of("a", "b", "c"));
     byte[] bytes1 = fory.serialize(data);
     GenericType genericType = GenericType.build(new TypeRef<List<String>>() {});
-    fory
-        .getWriteContext()
+    fory.getWriteContext()
         .getGenerics()
         .pushGenericType(genericType, fory.getWriteContext().getDepth());
-    fory
-        .getReadContext()
+    fory.getReadContext()
         .getGenerics()
         .pushGenericType(genericType, fory.getReadContext().getDepth());
     byte[] bytes2 = fory.serialize(data);
@@ -253,12 +251,10 @@ public class CollectionSerializersTest extends ForyTestBase {
     TreeSet<String> data = new TreeSet<>(ImmutableSet.of("a", "b", "c"));
     serDeCheckSerializer(fory, data, "SortedSet");
     byte[] bytes1 = fory.serialize(data);
-    fory
-        .getWriteContext()
+    fory.getWriteContext()
         .getGenerics()
         .pushGenericType(
-            GenericType.build(new TypeRef<List<String>>() {}),
-            fory.getWriteContext().getDepth());
+            GenericType.build(new TypeRef<List<String>>() {}), fory.getWriteContext().getDepth());
     byte[] bytes2 = fory.serialize(data);
     Assert.assertTrue(bytes1.length > bytes2.length);
     fory.getWriteContext().getGenerics().popGenericType(fory.getWriteContext().getDepth());
@@ -467,7 +463,8 @@ public class CollectionSerializersTest extends ForyTestBase {
     // SortedSetSerializer
     fory.registerSerializer(
         ChildTreeSet.class,
-        new CollectionSerializers.SortedSetSerializer<>(fory.getTypeResolver(), ChildTreeSet.class));
+        new CollectionSerializers.SortedSetSerializer<>(
+            fory.getTypeResolver(), ChildTreeSet.class));
     ChildTreeSet set = new ChildTreeSet();
     set.add("b");
     set.add("a");

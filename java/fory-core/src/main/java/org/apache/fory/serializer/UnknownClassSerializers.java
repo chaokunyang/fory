@@ -21,7 +21,6 @@ package org.apache.fory.serializer;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.fory.Fory;
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.MapEntry;
@@ -241,12 +240,7 @@ public final class UnknownClassSerializers {
       for (SerializationFieldInfo fieldInfo : allFieldsInfo.containerFields) {
         Object fieldValue =
             AbstractObjectSerializer.readContainerFieldValue(
-                readContext,
-                typeResolver,
-                readContext.getRefReader(),
-                generics,
-                fieldInfo,
-                buffer);
+                readContext, typeResolver, readContext.getRefReader(), generics, fieldInfo, buffer);
         entries.add(new MapEntry(fieldInfo.qualifiedFieldName, fieldValue));
       }
       for (SerializationFieldInfo fieldInfo : allFieldsInfo.otherFields) {
@@ -299,7 +293,8 @@ public final class UnknownClassSerializers {
     }
   }
 
-  public static Serializer getSerializer(TypeResolver typeResolver, String className, Class<?> cls) {
+  public static Serializer getSerializer(
+      TypeResolver typeResolver, String className, Class<?> cls) {
     if (cls.isArray()) {
       return new ArraySerializers.UnknownArraySerializer(typeResolver, className, cls);
     } else {

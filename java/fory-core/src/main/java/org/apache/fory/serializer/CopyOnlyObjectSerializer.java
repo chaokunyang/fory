@@ -19,7 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import org.apache.fory.Fory;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.InsecureException;

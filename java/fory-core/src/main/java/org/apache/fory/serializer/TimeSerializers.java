@@ -293,14 +293,14 @@ public class TimeSerializers {
 
     @Override
     public void write(WriteContext writeContext, Duration value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarInt64(value.getSeconds());
       buffer.writeInt32(value.getNano());
     }
 
     @Override
     public Duration read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       long seconds = buffer.readVarInt64();
       int nanos = buffer.readInt32();
       return Duration.ofSeconds(seconds, nanos);
@@ -323,14 +323,14 @@ public class TimeSerializers {
 
     @Override
     public void write(WriteContext writeContext, LocalDateTime value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       LocalDateSerializer.writeLocalDate(buffer, value.toLocalDate());
       LocalTimeSerializer.writeLocalTime(buffer, value.toLocalTime());
     }
 
     @Override
     public LocalDateTime read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       LocalDate date = LocalDateSerializer.readLocalDate(buffer);
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
       return LocalDateTime.of(date, time);
@@ -353,7 +353,7 @@ public class TimeSerializers {
 
     @Override
     public void write(WriteContext writeContext, LocalTime time) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       writeLocalTime(buffer, time);
     }
 
@@ -381,7 +381,7 @@ public class TimeSerializers {
 
     @Override
     public LocalTime read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       return readLocalTime(buffer);
     }
 
@@ -618,13 +618,13 @@ public class TimeSerializers {
 
     @Override
     public void write(WriteContext writeContext, Year obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(obj.getValue());
     }
 
     @Override
     public Year read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       return Year.of(buffer.readInt32());
     }
 
@@ -645,14 +645,14 @@ public class TimeSerializers {
 
     @Override
     public void write(WriteContext writeContext, YearMonth obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(obj.getYear());
       buffer.writeByte(obj.getMonthValue());
     }
 
     @Override
     public YearMonth read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       int year = buffer.readInt32();
       byte month = buffer.readByte();
       return YearMonth.of(year, month);
@@ -674,13 +674,13 @@ public class TimeSerializers {
     }
 
     public void write(WriteContext writeContext, MonthDay obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeByte(obj.getMonthValue());
       buffer.writeByte(obj.getDayOfMonth());
     }
 
     public MonthDay read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       byte month = buffer.readByte();
       byte day = buffer.readByte();
       return MonthDay.of(month, day);
@@ -702,14 +702,14 @@ public class TimeSerializers {
     }
 
     public void write(WriteContext writeContext, Period obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeInt32(obj.getYears());
       buffer.writeInt32(obj.getMonths());
       buffer.writeInt32(obj.getDays());
     }
 
     public Period read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       int years = buffer.readInt32();
       int months = buffer.readInt32();
       int days = buffer.readInt32();
@@ -732,13 +732,13 @@ public class TimeSerializers {
     }
 
     public void write(WriteContext writeContext, OffsetTime obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       LocalTimeSerializer.writeLocalTime(buffer, obj.toLocalTime());
       ZoneOffsetSerializer.writeZoneOffset(buffer, obj.getOffset());
     }
 
     public OffsetTime read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
       ZoneOffset offset = ZoneOffsetSerializer.readZoneOffset(buffer);
       return OffsetTime.of(time, offset);
@@ -760,14 +760,14 @@ public class TimeSerializers {
     }
 
     public void write(WriteContext writeContext, OffsetDateTime obj) {
-    MemoryBuffer buffer = writeContext.getBuffer();
+      MemoryBuffer buffer = writeContext.getBuffer();
       LocalDateSerializer.writeLocalDate(buffer, obj.toLocalDate());
       LocalTimeSerializer.writeLocalTime(buffer, obj.toLocalTime());
       ZoneOffsetSerializer.writeZoneOffset(buffer, obj.getOffset());
     }
 
     public OffsetDateTime read(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
+      MemoryBuffer buffer = readContext.getBuffer();
       LocalDate date = LocalDateSerializer.readLocalDate(buffer);
       LocalTime time = LocalTimeSerializer.readLocalTime(buffer);
       ZoneOffset offset = ZoneOffsetSerializer.readZoneOffset(buffer);

@@ -89,8 +89,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         LOG.info("  [{}] {}", i, typeDef.getFieldsInfo().get(i));
       }
     }
-    DescriptorGrouper descriptorGrouper =
-        typeResolver.createDescriptorGrouper(typeDef, type);
+    DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(typeDef, type);
     if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info(
           "========== MetaSharedSerializer sorted descriptors for {} ==========", type.getName());
@@ -125,8 +124,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     if (config.isScalaOptimizationEnabled()) {
       defaultValueSupport = DefaultValueUtils.getScalaDefaultValueSupport();
       hasDefaultValues = defaultValueSupport.hasDefaultValues(type);
-          defaultValueFields =
-              defaultValueSupport.buildDefaultValueFields(
+      defaultValueFields =
+          defaultValueSupport.buildDefaultValueFields(
               typeResolver, type, descriptorGrouper.getSortedDescriptors());
     }
     if (!hasDefaultValues) {
@@ -218,7 +217,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+          AbstractObjectSerializer.readField(
+              readContext, typeResolver, refReader, fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(targetObject, fieldValue);
@@ -273,7 +273,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+          AbstractObjectSerializer.readField(
+              readContext, typeResolver, refReader, fieldInfo, buffer);
       fields[counter++] = fieldValue;
     }
   }

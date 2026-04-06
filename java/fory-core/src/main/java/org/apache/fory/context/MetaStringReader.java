@@ -134,11 +134,11 @@ public final class MetaStringReader {
     return readBigMetaString(buffer, len, hashCode);
   }
 
-  private EncodedMetaString readBigMetaString(
-      MemoryBuffer buffer, int len, long hashCode) {
+  private EncodedMetaString readBigMetaString(MemoryBuffer buffer, int len, long hashCode) {
     EncodedMetaString encodedMetaString = hash2MetaStringMap.get(hashCode);
     if (encodedMetaString == null) {
-      encodedMetaString = sharedRegistry.getOrCreateEncodedMetaString(buffer.readBytes(len), hashCode);
+      encodedMetaString =
+          sharedRegistry.getOrCreateEncodedMetaString(buffer.readBytes(len), hashCode);
       hash2MetaStringMap.put(hashCode, encodedMetaString);
       return encodedMetaString;
     }

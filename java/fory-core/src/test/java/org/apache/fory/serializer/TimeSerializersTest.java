@@ -331,7 +331,8 @@ public class TimeSerializersTest extends ForyTestBase {
               .withRefTracking(true)
               .ignoreTimeRef(true)
               .build();
-      fory.registerSerializer(Date.class, new TimeSerializers.DateSerializer(fory.getConfig(), true));
+      fory.registerSerializer(
+          Date.class, new TimeSerializers.DateSerializer(fory.getConfig(), true));
       fory.registerSerializer(
           java.sql.Date.class, new TimeSerializers.SqlDateSerializer(fory.getConfig(), true));
       fory.registerSerializer(

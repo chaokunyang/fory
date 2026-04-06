@@ -84,7 +84,9 @@ public class SubListSerializers {
     private boolean serializedBefore;
 
     public SubListViewSerializer(TypeResolver typeResolver, Class cls) {
-      super(typeResolver, Stub.class.isAssignableFrom(cls) ? (Class<List>) ArrayListSubListClass : cls);
+      super(
+          typeResolver,
+          Stub.class.isAssignableFrom(cls) ? (Class<List>) ArrayListSubListClass : cls);
       assert !config.isXlang();
     }
 

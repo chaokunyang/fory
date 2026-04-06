@@ -136,19 +136,9 @@ public final class Fory implements BaseFory {
     MetaStringWriter metaStringWriter = new MetaStringWriter();
     MetaStringReader metaStringReader = new MetaStringReader(sharedRegistry);
     writeContext =
-        new WriteContext(
-            config,
-            new Generics(),
-            typeResolver,
-            refWriter,
-            metaStringWriter);
+        new WriteContext(config, new Generics(), typeResolver, refWriter, metaStringWriter);
     readContext =
-        new ReadContext(
-            config,
-            new Generics(),
-            typeResolver,
-            refReader,
-            metaStringReader);
+        new ReadContext(config, new Generics(), typeResolver, refReader, metaStringReader);
     copyContext = new CopyContext(typeResolver, config.copyRef());
     LOG.info("Created new fory {}", this);
   }
@@ -470,7 +460,8 @@ public final class Fory implements BaseFory {
           "outOfBandBuffers should be null when the serialized stream is "
               + "produced with bufferCallback null.");
     }
-    readContext.prepare(buffer, peerOutOfBandEnabled ? outOfBandBuffers : null, peerOutOfBandEnabled);
+    readContext.prepare(
+        buffer, peerOutOfBandEnabled ? outOfBandBuffers : null, peerOutOfBandEnabled);
     try {
       try {
         jitContext.lock();
@@ -516,7 +507,9 @@ public final class Fory implements BaseFory {
 
   @SuppressWarnings("unchecked")
   private <T> T deserializeByType(MemoryBuffer buffer, Class<T> type) {
-    readContext.getGenerics().pushGenericType(typeResolver.buildGenericType(type), readContext.getDepth());
+    readContext
+        .getGenerics()
+        .pushGenericType(typeResolver.buildGenericType(type), readContext.getDepth());
     try {
       RefReader refReader = readContext.getRefReader();
       int nextReadRefId = refReader.tryPreserveRefId(buffer);

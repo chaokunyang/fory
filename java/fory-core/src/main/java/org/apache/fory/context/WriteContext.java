@@ -47,8 +47,8 @@ import org.apache.fory.util.Preconditions;
  * state, and a small scratch map for serializers that need operation-local coordination. The
  * context is prepared by {@code Fory} for one write operation and {@link #reset()} before reuse.
  *
- * <p>Generated and hand-written serializers should treat this type as the root source of
- * write-time services instead of storing ambient state themselves.
+ * <p>Generated and hand-written serializers should treat this type as the root source of write-time
+ * services instead of storing ambient state themselves.
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class WriteContext {
@@ -321,7 +321,9 @@ public final class WriteContext {
     return refWriter.writeRefOrNull(buffer, obj);
   }
 
-  /** Delegates to {@link RefWriter#writeRefValueFlag(MemoryBuffer, Object)} on the current buffer. */
+  /**
+   * Delegates to {@link RefWriter#writeRefValueFlag(MemoryBuffer, Object)} on the current buffer.
+   */
   public boolean writeRefValueFlag(Object obj) {
     return refWriter.writeRefValueFlag(buffer, obj);
   }
@@ -331,7 +333,10 @@ public final class WriteContext {
     return refWriter.writeNullFlag(buffer, obj);
   }
 
-  /** Rebinds the recorded ref id of {@code original} to the id already assigned to {@code newObject}. */
+  /**
+   * Rebinds the recorded ref id of {@code original} to the id already assigned to {@code
+   * newObject}.
+   */
   public void replaceRef(Object original, Object newObject) {
     refWriter.replaceRef(original, newObject);
   }

@@ -239,8 +239,7 @@ public class PrimitiveListSerializers {
 
     public Int64ListSerializer(TypeResolver typeResolver) {
       super(typeResolver, Int64List.class);
-      compressLongArray =
-          config.compressLongArray() && config.longEncoding() != LongEncoding.FIXED;
+      compressLongArray = config.compressLongArray() && config.longEncoding() != LongEncoding.FIXED;
     }
 
     @Override
@@ -461,8 +460,7 @@ public class PrimitiveListSerializers {
 
     public Uint64ListSerializer(TypeResolver typeResolver) {
       super(typeResolver, Uint64List.class);
-      compressLongArray =
-          config.compressLongArray() && config.longEncoding() != LongEncoding.FIXED;
+      compressLongArray = config.compressLongArray() && config.longEncoding() != LongEncoding.FIXED;
     }
 
     @Override

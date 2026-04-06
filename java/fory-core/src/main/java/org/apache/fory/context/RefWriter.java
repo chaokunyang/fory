@@ -30,7 +30,9 @@ import org.apache.fory.memory.MemoryBuffer;
  * another.
  */
 public interface RefWriter {
-  /** Writes a ref-or-null header for {@code obj} and returns whether the payload is fully handled. */
+  /**
+   * Writes a ref-or-null header for {@code obj} and returns whether the payload is fully handled.
+   */
   boolean writeRefOrNull(MemoryBuffer buffer, Object obj);
 
   /** Writes a ref-or-value header for a non-null object. */
@@ -39,7 +41,10 @@ public interface RefWriter {
   /** Writes only a null marker when {@code obj} is {@code null}. */
   boolean writeNullFlag(MemoryBuffer buffer, Object obj);
 
-  /** Rebinds the recorded ref id of {@code original} to the id already assigned to {@code newObject}. */
+  /**
+   * Rebinds the recorded ref id of {@code original} to the id already assigned to {@code
+   * newObject}.
+   */
   void replaceRef(Object original, Object newObject);
 
   /** Clears all per-operation ref-tracking state. */

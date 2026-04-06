@@ -146,7 +146,8 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
         }
       } else {
         if (trackingRef) {
-          return writeTypeHeader(writeContext, value, elemGenericType.getCls(), elementTypeInfoHolder);
+          return writeTypeHeader(
+              writeContext, value, elemGenericType.getCls(), elementTypeInfoHolder);
         } else {
           return writeTypeNullabilityHeader(
               writeContext, value, elemGenericType.getCls(), elementTypeInfoHolder);
@@ -223,8 +224,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   /** Maybe track elements ref, or write elements nullability. */
   @CodegenInvoke
-  public int writeTypeHeader(
-      WriteContext writeContext, Collection value, TypeInfoHolder cache) {
+  public int writeTypeHeader(WriteContext writeContext, Collection value, TypeInfoHolder cache) {
     MemoryBuffer buffer = writeContext.getBuffer();
     int bitmap = 0;
     boolean hasDifferentClass = false;
@@ -338,10 +338,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   }
 
   private void javaWriteWithGenerics(
-      WriteContext writeContext,
-      Collection collection,
-      GenericType elemGenericType,
-      int flags) {
+      WriteContext writeContext, Collection collection, GenericType elemGenericType, int flags) {
     boolean hasGenericParameters = elemGenericType.hasGenericParameters();
     org.apache.fory.type.Generics generics = writeContext.getGenerics();
     if (hasGenericParameters) {
@@ -361,10 +358,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   }
 
   private void generalJavaWrite(
-      WriteContext writeContext,
-      Collection collection,
-      GenericType elemGenericType,
-      int flags) {
+      WriteContext writeContext, Collection collection, GenericType elemGenericType, int flags) {
     if ((flags & CollectionFlags.IS_SAME_TYPE) == CollectionFlags.IS_SAME_TYPE) {
       Serializer serializer;
       if ((flags & CollectionFlags.IS_DECL_ELEMENT_TYPE) == CollectionFlags.IS_DECL_ELEMENT_TYPE) {
@@ -478,8 +472,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     }
   }
 
-  public Collection newCollection(
-      CopyContext copyContext, Collection collection) {
+  public Collection newCollection(CopyContext copyContext, Collection collection) {
     return newCollection(collection);
   }
 
@@ -498,9 +491,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   }
 
   public void copyElements(
-      CopyContext copyContext,
-      Collection originCollection,
-      Collection newCollection) {
+      CopyContext copyContext, Collection originCollection, Collection newCollection) {
     for (Object element : originCollection) {
       if (element != null) {
         TypeInfo typeInfo = typeResolver.getTypeInfo(element.getClass(), elementTypeInfoHolder);
@@ -533,8 +524,8 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   /**
    * Get and reset numElements of deserializing collection. Should be called after {@link
-   * #newCollection(ReadContext)}. Nested read may overwrite this element, reset is
-   * necessary to avoid use wrong value by mistake.
+   * #newCollection(ReadContext)}. Nested read may overwrite this element, reset is necessary to
+   * avoid use wrong value by mistake.
    */
   public int getAndClearNumElements() {
     int size = numElements;
@@ -548,8 +539,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   public abstract T onCollectionRead(Collection collection);
 
-  protected void readElements(
-      ReadContext readContext, Collection collection, int numElements) {
+  protected void readElements(ReadContext readContext, Collection collection, int numElements) {
     MemoryBuffer buffer = readContext.getBuffer();
     int flags = buffer.readByte();
     GenericType elemGenericType = getElementGenericType(readContext, readContext.getDepth());
@@ -604,11 +594,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   /** Read elements whose type are same. */
   private <T extends Collection> void readSameTypeElements(
-      ReadContext readContext,
-      Serializer serializer,
-      int flags,
-      T collection,
-      int numElements) {
+      ReadContext readContext, Serializer serializer, int flags, T collection, int numElements) {
     readContext.increaseDepth();
     if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF) {
       for (int i = 0; i < numElements; i++) {

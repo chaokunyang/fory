@@ -66,6 +66,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.ForyCopyable;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.ForyField;
@@ -164,8 +165,6 @@ import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
 import org.apache.fory.util.record.RecordUtils;
-
-import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Class registry for types of serializing objects, responsible for reading/writing types, setting
@@ -498,8 +497,7 @@ public class ClassResolver extends TypeResolver {
         buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
     TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, null, typeId, -1);
     classInfoMap.put(cls, typeInfo);
-    compositeNameBytes2TypeInfo.put(
-        new TypeNameBytes(nsBytes.hash, nameBytes.hash), typeInfo);
+    compositeNameBytes2TypeInfo.put(new TypeNameBytes(nsBytes.hash, nameBytes.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
     registerGraalvmClass(cls);
   }
@@ -545,8 +543,7 @@ public class ClassResolver extends TypeResolver {
     TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, serializer, typeId, -1);
     typeInfo.setSerializer(this, serializer);
     classInfoMap.put(cls, typeInfo);
-    compositeNameBytes2TypeInfo.put(
-        new TypeNameBytes(nsBytes.hash, nameBytes.hash), typeInfo);
+    compositeNameBytes2TypeInfo.put(new TypeNameBytes(nsBytes.hash, nameBytes.hash), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
     registerGraalvmClass(cls);
   }
@@ -831,8 +828,7 @@ public class ClassResolver extends TypeResolver {
     classInfoMap.put(cls, typeInfo);
     if (typeInfo.namespace != null && typeInfo.typeName != null) {
       TypeNameBytes typeNameBytes =
-          new TypeNameBytes(
-              typeInfo.namespace.hash, typeInfo.typeName.hash);
+          new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
       compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
     return typeId;
@@ -1385,8 +1381,9 @@ public class ClassResolver extends TypeResolver {
           return getJITContext()
               .registerSerializerJITCallback(
                   () -> ObjectSerializer.class,
-                  () -> org.apache.fory.serializer.CodegenSerializer.loadCodegenSerializer(
-                      ClassResolver.this, cls),
+                  () ->
+                      org.apache.fory.serializer.CodegenSerializer.loadCodegenSerializer(
+                          ClassResolver.this, cls),
                   callback);
         } finally {
           extRegistry.getClassCtx.remove(cls);
@@ -1827,10 +1824,8 @@ public class ClassResolver extends TypeResolver {
       // let the lowermost bit of next byte be set, so the deserialization can know
       // whether need to read class by name in advance
       MetaStringReader metaStringReader = readContext.getMetaStringReader();
-      EncodedMetaString packageBytes =
-          metaStringReader.readMetaStringWithFlag(buffer, header);
-      EncodedMetaString simpleClassNameBytes =
-          metaStringReader.readMetaString(buffer);
+      EncodedMetaString packageBytes = metaStringReader.readMetaStringWithFlag(buffer, header);
+      EncodedMetaString simpleClassNameBytes = metaStringReader.readMetaString(buffer);
       return loadBytesToTypeInfo(packageBytes, simpleClassNameBytes).type;
     }
     int typeId = header >>> 1;
@@ -1862,8 +1857,7 @@ public class ClassResolver extends TypeResolver {
   @Override
   protected TypeInfo loadBytesToTypeInfo(
       EncodedMetaString packageBytes, EncodedMetaString simpleClassNameBytes) {
-    TypeNameBytes typeNameBytes =
-        new TypeNameBytes(packageBytes.hash, simpleClassNameBytes.hash);
+    TypeNameBytes typeNameBytes = new TypeNameBytes(packageBytes.hash, simpleClassNameBytes.hash);
     TypeInfo typeInfo = compositeNameBytes2TypeInfo.get(typeNameBytes);
     if (typeInfo == null) {
       typeInfo = populateBytesToTypeInfo(typeNameBytes, packageBytes, simpleClassNameBytes);
@@ -1886,8 +1880,7 @@ public class ClassResolver extends TypeResolver {
       // Update the cache with the correct TypeInfo that has a serializer
       if (typeInfo.typeName != null) {
         TypeNameBytes typeNameBytes =
-            new TypeNameBytes(
-                typeInfo.namespace.hash, typeInfo.typeName.hash);
+            new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
         compositeNameBytes2TypeInfo.put(typeNameBytes, newTypeInfo);
       }
       return newTypeInfo;
@@ -1905,8 +1898,7 @@ public class ClassResolver extends TypeResolver {
     Class<?> cls = loadClass(classSpec.entireClassName, classSpec.isEnum, classSpec.dimension);
     int typeId = buildUnregisteredTypeId(cls, null);
     TypeInfo typeInfo =
-        new TypeInfo(
-            cls, packageBytes, simpleClassNameBytes, null, typeId, INVALID_USER_TYPE_ID);
+        new TypeInfo(cls, packageBytes, simpleClassNameBytes, null, typeId, INVALID_USER_TYPE_ID);
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       typeInfo.serializer =
           UnknownClassSerializers.getSerializer(this, classSpec.entireClassName, cls);
@@ -1927,8 +1919,7 @@ public class ClassResolver extends TypeResolver {
     EncodedMetaString pkgBytes = sharedRegistry.getPackageEncodedMetaString(pkg);
     EncodedMetaString typeBytes = sharedRegistry.getTypeNameEncodedMetaString(typeName);
     TypeInfo cachedInfo =
-        compositeNameBytes2TypeInfo.get(
-            new TypeNameBytes(pkgBytes.hash, typeBytes.hash));
+        compositeNameBytes2TypeInfo.get(new TypeNameBytes(pkgBytes.hash, typeBytes.hash));
     if (cachedInfo != null) {
       return cachedInfo.type;
     }

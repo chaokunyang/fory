@@ -145,7 +145,8 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
       vals[index++] =
-          AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+          AbstractObjectSerializer.readField(
+              readContext, typeResolver, refReader, fieldInfo, buffer);
     }
     return vals;
   }
@@ -277,7 +278,8 @@ public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSer
     RefReader refReader = readContext.getRefReader();
     for (SerializationFieldInfo fieldInfo : otherFields) {
       Object fieldValue =
-          AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+          AbstractObjectSerializer.readField(
+              readContext, typeResolver, refReader, fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
         fieldAccessor.putObject(obj, fieldValue);

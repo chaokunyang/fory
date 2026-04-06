@@ -87,7 +87,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer,
       Object fieldValue) {
-    writeField(writeContext, typeResolver, refWriter, fieldInfo, fieldInfo.refMode, buffer, fieldValue);
+    writeField(
+        writeContext, typeResolver, refWriter, fieldInfo, fieldInfo.refMode, buffer, fieldValue);
   }
 
   static void writeField(
@@ -224,7 +225,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         return;
       }
       buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-      writeNotPrimitiveFieldValue(writeContext, typeResolver, refWriter, buffer, fieldValue, fieldInfo);
+      writeNotPrimitiveFieldValue(
+          writeContext, typeResolver, refWriter, buffer, fieldValue, fieldInfo);
     } else {
       writeField(writeContext, typeResolver, refWriter, fieldInfo, buffer, fieldValue);
     }
@@ -465,7 +467,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         buffer.writeInt16(((Float16) fieldValue).toBits());
         return;
       default:
-        writeField(writeContext, typeResolver, refWriter, fieldInfo, RefMode.NONE, buffer, fieldValue);
+        writeField(
+            writeContext, typeResolver, refWriter, fieldInfo, RefMode.NONE, buffer, fieldValue);
     }
   }
 
@@ -543,7 +546,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         break;
       case TRACKING:
         generics.pushGenericType(fieldInfo.genericType, readContext.getDepth());
-        fieldValue = readContainerFieldValueRef(readContext, typeResolver, refReader, fieldInfo, buffer);
+        fieldValue =
+            readContainerFieldValueRef(readContext, typeResolver, refReader, fieldInfo, buffer);
         generics.popGenericType(readContext.getDepth());
         break;
       default:
@@ -611,13 +615,15 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     // Use refMode to determine if there's a null flag prefix in the stream
     if (refMode == RefMode.NONE) {
       // No null flag in stream - read directly
-      return readNotNullBuildInFieldValue(readContext, typeResolver, refReader, buffer, fieldInfo, dispatchId);
+      return readNotNullBuildInFieldValue(
+          readContext, typeResolver, refReader, buffer, fieldInfo, dispatchId);
     } else if (refMode == RefMode.NULL_ONLY) {
       // Read null flag from buffer
       if (buffer.readByte() == Fory.NULL_FLAG) {
         return null;
       }
-      return readNotNullBuildInFieldValue(readContext, typeResolver, refReader, buffer, fieldInfo, dispatchId);
+      return readNotNullBuildInFieldValue(
+          readContext, typeResolver, refReader, buffer, fieldInfo, dispatchId);
     }
     return readField(readContext, typeResolver, refReader, fieldInfo, buffer);
   }
@@ -948,7 +954,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         return;
       default:
         // Use RefMode.NONE because null flag was already handled by caller
-        Object fieldValue = readField(readContext, typeResolver, refReader, fieldInfo, RefMode.NONE, buffer);
+        Object fieldValue =
+            readField(readContext, typeResolver, refReader, fieldInfo, RefMode.NONE, buffer);
         fieldAccessor.putObject(targetObject, fieldValue);
     }
   }
@@ -994,7 +1001,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         if (fieldInfo.isPrimitiveField) {
           fieldValues[i] = copyPrimitiveField(originObj, fieldOffset, fieldInfo.dispatchId);
         } else {
-          fieldValues[i] = copyNotPrimitiveField(copyContext, originObj, fieldOffset, fieldInfo.dispatchId);
+          fieldValues[i] =
+              copyNotPrimitiveField(copyContext, originObj, fieldOffset, fieldInfo.dispatchId);
         }
       } else {
         // field in record class has offset -1
@@ -1005,8 +1013,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     return RecordUtils.remapping(copyRecordInfo, fieldValues);
   }
 
-  private void copyFields(
-      CopyContext copyContext, T originObj, T newObj) {
+  private void copyFields(CopyContext copyContext, T originObj, T newObj) {
     SerializationFieldInfo[] fieldInfos = this.fieldInfos;
     if (fieldInfos == null) {
       fieldInfos = buildFieldsInfo();
@@ -1075,11 +1082,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   private static void copySetNotPrimitiveField(
-      CopyContext copyContext,
-      Object originObj,
-      Object newObj,
-      long fieldOffset,
-      int typeId) {
+      CopyContext copyContext, Object originObj, Object newObj, long fieldOffset, int typeId) {
     switch (typeId) {
       case DispatchId.BOOL:
       case DispatchId.INT8:
@@ -1111,7 +1114,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         break;
       default:
         Platform.putObject(
-            newObj, fieldOffset, copyContext.copyObject(Platform.getObject(originObj, fieldOffset)));
+            newObj,
+            fieldOffset,
+            copyContext.copyObject(Platform.getObject(originObj, fieldOffset)));
     }
   }
 
@@ -1149,10 +1154,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   private Object copyNotPrimitiveField(
-      CopyContext copyContext,
-      Object targetObject,
-      long fieldOffset,
-      int typeId) {
+      CopyContext copyContext, Object targetObject, long fieldOffset, int typeId) {
     switch (typeId) {
       case DispatchId.BOOL:
       case DispatchId.INT8:

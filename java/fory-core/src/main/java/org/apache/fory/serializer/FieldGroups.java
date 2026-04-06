@@ -128,7 +128,8 @@ public class FieldGroups {
     SerializationFieldInfo[] otherFields =
         new SerializationFieldInfo[grouper.getOtherDescriptors().size()];
     for (Descriptor descriptor : grouper.getOtherDescriptors()) {
-      SerializationFieldInfo genericTypeField = new SerializationFieldInfo(typeResolver, descriptor);
+      SerializationFieldInfo genericTypeField =
+          new SerializationFieldInfo(typeResolver, descriptor);
       otherFields[cnt++] = genericTypeField;
     }
     cnt = 0;

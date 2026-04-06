@@ -79,10 +79,6 @@ import static org.apache.fory.type.TypeUtils.isBoxed;
 import static org.apache.fory.type.TypeUtils.isPrimitive;
 import static org.apache.fory.util.Preconditions.checkArgument;
 
-import org.apache.fory.config.Config;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.HashMap;
@@ -118,6 +114,9 @@ import org.apache.fory.codegen.Expression.While;
 import org.apache.fory.codegen.ExpressionUtils;
 import org.apache.fory.codegen.ExpressionVisitor.ExprHolder;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.config.Config;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -349,7 +348,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         WRITE_CONTEXT_NAME,
         Object.class,
         ROOT_OBJECT_NAME);
-    ctx.overrideMethod(readMethodName, decodeCode, Object.class, ReadContext.class, READ_CONTEXT_NAME);
+    ctx.overrideMethod(
+        readMethodName, decodeCode, Object.class, ReadContext.class, READ_CONTEXT_NAME);
     registerJITNotifyCallback();
     ctx.addConstructor(
         constructorCode,
@@ -414,11 +414,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
    */
   protected void addCommonImports() {
     ctx.addImports(
-        Fory.class,
-        MemoryBuffer.class,
-        WriteContext.class,
-        ReadContext.class,
-        Platform.class);
+        Fory.class, MemoryBuffer.class, WriteContext.class, ReadContext.class, Platform.class);
     ctx.addImports(TypeInfo.class, TypeInfoHolder.class, ClassResolver.class);
     ctx.addImport(Generated.class);
     ctx.addImports(LazyInitBeanSerializer.class, EnumSerializer.class);
@@ -502,7 +498,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return serializePrimitiveField(inputObject, buffer, descriptor);
     } else {
       if (clz == String.class) {
-        return StringSerializer.writeStringExpr(getOrCreateStringSerializer(), buffer, inputObject, config.compressString());
+        return StringSerializer.writeStringExpr(
+            getOrCreateStringSerializer(), buffer, inputObject, config.compressString());
       }
       Expression action;
       if (useCollectionSerialization(typeRef)) {
@@ -675,8 +672,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return serializePrimitive(inputObject, buffer, clz);
     } else {
       if (clz == String.class) {
-        return  StringSerializer
-            .writeStringExpr(getOrCreateStringSerializer(), buffer, inputObject, config.compressString());
+        return StringSerializer.writeStringExpr(
+            getOrCreateStringSerializer(), buffer, inputObject, config.compressString());
       }
       Expression action;
       // this is different from ITERABLE_TYPE in RowCodecBuilder. In row-format we don't need to
@@ -884,8 +881,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       if (finalClassAsFieldCondition) {
         // Create serializer directly without going through resolver registration.
         newSerializerExpr =
-            new Expression.NewInstance(
-                FINAL_FIELD_SERIALIZER_TYPE, typeResolverRef, fieldTypeExpr);
+            new Expression.NewInstance(FINAL_FIELD_SERIALIZER_TYPE, typeResolverRef, fieldTypeExpr);
       } else {
         newSerializerExpr =
             inlineInvoke(typeResolverRef, "getRawSerializer", SERIALIZER_TYPE, fieldTypeExpr);
@@ -1118,11 +1114,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     ListExpression actions = new ListExpression(collection, ifExpr);
     if (generateNewMethod) {
       return invokeGenerated(
-          ctx,
-          writeCutPoints(buffer, collection, serializer),
-          actions,
-          "writeCollection",
-          false);
+          ctx, writeCutPoints(buffer, collection, serializer), actions, "writeCollection", false);
     }
     return actions;
   }
@@ -1209,8 +1201,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 writeContainerElements(
                     elementType, false, elemSerializer, hasNull, buffer, collection, size),
                 false));
-        Set<Expression> cutPoint =
-            writeCutPoints(buffer, collection, size, trackRef, hasNull);
+        Set<Expression> cutPoint = writeCutPoints(buffer, collection, size, trackRef, hasNull);
         if (maybeDecl) {
           cutPoint.add(flags);
         }
@@ -1285,24 +1276,24 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression bitmap;
       if (trackingRef) {
         if (elementType == Object.class) {
-              bitmap =
-                  new Invoke(
-                      collectionSerializer,
-                      "writeTypeHeader",
-                      PRIMITIVE_INT_TYPE,
-                      writeContextRef(),
-                      value,
-                      classInfoHolder);
+          bitmap =
+              new Invoke(
+                  collectionSerializer,
+                  "writeTypeHeader",
+                  PRIMITIVE_INT_TYPE,
+                  writeContextRef(),
+                  value,
+                  classInfoHolder);
         } else {
-              bitmap =
-                  new Invoke(
-                      collectionSerializer,
-                      "writeTypeHeader",
-                      PRIMITIVE_INT_TYPE,
-                      writeContextRef(),
-                      value,
-                      elementTypeExpr,
-                      classInfoHolder);
+          bitmap =
+              new Invoke(
+                  collectionSerializer,
+                  "writeTypeHeader",
+                  PRIMITIVE_INT_TYPE,
+                  writeContextRef(),
+                  value,
+                  elementTypeExpr,
+                  classInfoHolder);
         }
       } else {
         bitmap =
@@ -1453,11 +1444,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         // Spit this into a separate method to avoid method too big to inline.
         serializer =
             invokeGenerated(
-                ctx,
-                writeCutPoints(buffer, map),
-                writeClassAction,
-                "writeMapTypeInfo",
-                false);
+                ctx, writeCutPoints(buffer, map), writeClassAction, "writeMapTypeInfo", false);
       }
     } else if (!MapLikeSerializer.class.isAssignableFrom(serializer.type().getRawType())) {
       serializer = cast(serializer, TypeRef.of(MapLikeSerializer.class), "mapSerializer");
@@ -1499,11 +1486,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     TypeRef<?> valueType = keyValueType.f1;
     map =
         new Invoke(
-            serializer,
-            "onMapWrite",
-            TypeUtils.mapOf(keyType, valueType),
-            writeContextRef(),
-            map);
+            serializer, "onMapWrite", TypeUtils.mapOf(keyType, valueType), writeContextRef(), map);
     Expression iterator =
         new Invoke(inlineInvoke(map, "entrySet", SET_TYPE), "iterator", ITERATOR_TYPE);
     Expression entry = cast(inlineInvoke(iterator, "next", OBJECT_TYPE), MAP_ENTRY_TYPE, "entry");
@@ -1897,8 +1880,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     // use false to ignore null
     return new If(
         needDeserialize,
-        callback.apply(
-            new ListExpression(refId, deserializedValue, setReadRef, deserializedValue)),
+        callback.apply(new ListExpression(refId, deserializedValue, setReadRef, deserializedValue)),
         callback.apply(readValue),
         false);
   }
@@ -1998,8 +1980,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return deserializePrimitive(buffer, cls);
     } else {
       if (cls == String.class) {
-        return  StringSerializer
-            .readStringExpr(getOrCreateStringSerializer(), buffer, config.compressString());
+        return StringSerializer.readStringExpr(
+            getOrCreateStringSerializer(), buffer, config.compressString());
       }
       Expression obj;
       if (useCollectionSerialization(typeRef)) {
@@ -2094,7 +2076,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       return deserializePrimitiveField(buffer, descriptor);
     } else {
       if (cls == String.class) {
-        return StringSerializer.readStringExpr(getOrCreateStringSerializer(), buffer, config.compressString());
+        return StringSerializer.readStringExpr(
+            getOrCreateStringSerializer(), buffer, config.compressString());
       }
       Expression obj;
       if (useCollectionSerialization(typeRef)) {
@@ -2206,8 +2189,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       read = new Invoke(serializer, readMethodName, returnType, readContextRef());
     } else {
       // janino take inherited generic method return type as return type of erased `T`.
-      read =
-          new Invoke(serializer, readMethodName, OBJECT_TYPE, readContextRef(), ofEnum(refMode));
+      read = new Invoke(serializer, readMethodName, OBJECT_TYPE, readContextRef(), ofEnum(refMode));
       read = cast(inline(read), returnType);
     }
     if (ReflectionUtils.isMonomorphic(type) && !TypeUtils.hasExpandableLeafs(type)) {
@@ -2215,10 +2197,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
     read = uninline(read);
     return new ListExpression(
-        invokeReadContext("increaseDepth"),
-        read,
-        invokeReadContext("decreaseDepth"),
-        read);
+        invokeReadContext("increaseDepth"), read, invokeReadContext("decreaseDepth"), read);
   }
 
   protected Expression readForNotNullNonFinal(
@@ -2304,7 +2283,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> elemClass = TypeUtils.getRawType(elementType);
     walkPath.add(elementType.toString());
     boolean finalType = isMonomorphic(elemClass);
-    boolean trackingRef = typeResolver.trackingRef() && !(isPrimitive(elemClass) || isBoxed(elemClass));
+    boolean trackingRef =
+        typeResolver.trackingRef() && !(isPrimitive(elemClass) || isBoxed(elemClass));
     Literal trackingRefFlag = ofInt(CollectionFlags.TRACKING_REF);
     Expression trackRef = eq(new BitAnd(flags, trackingRefFlag), trackingRefFlag, "trackRef");
     if (finalType) {
@@ -2579,7 +2559,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
               return exprs;
             });
     Set<Expression> chunkLoopCutPoints =
-        readCutPoints(buffer, newMap, chunkHeader, size, mapSerializer, keySerializer, valueSerializer);
+        readCutPoints(
+            buffer, newMap, chunkHeader, size, mapSerializer, keySerializer, valueSerializer);
     Expression chunkLoopExpr =
         invokeGenerated(ctx, chunkLoopCutPoints, chunksLoop, "readMapChunks", false);
     expressions.add(chunkLoopExpr, newMap);
@@ -2810,7 +2791,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   protected Invoke invokeReadContext(
       String methodName, String returnNamePrefix, TypeRef<?> returnType, Expression... arguments) {
-    return new Invoke(readContextRef(), methodName, returnNamePrefix, returnType, false, false, arguments);
+    return new Invoke(
+        readContextRef(), methodName, returnNamePrefix, returnType, false, false, arguments);
   }
 
   protected Invoke inlineInvokeReadContext(

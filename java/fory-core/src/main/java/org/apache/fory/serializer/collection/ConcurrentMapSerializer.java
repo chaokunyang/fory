@@ -20,10 +20,10 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Map;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.collection.MapSnapshot;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.collection.ObjectArray;
+import org.apache.fory.context.WriteContext;
+import org.apache.fory.resolver.TypeResolver;
 
 /**
  * Serializer for concurrent map implementations that require thread-safe serialization.

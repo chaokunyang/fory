@@ -32,8 +32,8 @@ import org.apache.fory.type.TypeUtils;
  * Base contract for reading, writing, and copying a specific Java type.
  *
  * <p>A serializer is responsible only for the payload of {@code T}. Type metadata, ref/null
- * headers, and operation state are owned by {@link WriteContext}, {@link ReadContext}, and
- * {@link CopyContext}.
+ * headers, and operation state are owned by {@link WriteContext}, {@link ReadContext}, and {@link
+ * CopyContext}.
  *
  * <p>This type stays an abstract class instead of an interface so hot-path flag checks such as
  * {@link #needToWriteRef()} avoid an extra virtual dispatch.
@@ -59,8 +59,8 @@ public abstract class Serializer<T> {
   /**
    * Creates a serializer using ref/copy defaults derived from {@link Config} and {@code type}.
    *
-   * <p>Primitive and boxed primitive types are treated as immutable. Boxed primitives also skip
-   * ref tracking even when the runtime tracks references for general objects.
+   * <p>Primitive and boxed primitive types are treated as immutable. Boxed primitives also skip ref
+   * tracking even when the runtime tracks references for general objects.
    */
   public Serializer(Config config, Class<T> type) {
     this(
@@ -75,11 +75,7 @@ public abstract class Serializer<T> {
    * behavior derived from {@link Config}.
    */
   public Serializer(Config config, Class<T> type, boolean immutable) {
-    this(
-        config,
-        type,
-        config.trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)),
-        immutable);
+    this(config, type, config.trackingRef() && !TypeUtils.isBoxed(TypeUtils.wrap(type)), immutable);
   }
 
   /**
@@ -131,8 +127,8 @@ public abstract class Serializer<T> {
   /**
    * Reads a nullable value using the supplied ref/null policy.
    *
-   * <p>This helper consumes ref or null flags according to {@code refMode}, but it never reads
-   * type metadata. Callers are expected to already know which serializer should handle the payload.
+   * <p>This helper consumes ref or null flags according to {@code refMode}, but it never reads type
+   * metadata. Callers are expected to already know which serializer should handle the payload.
    *
    * <p>When ref tracking is enabled, the returned instance is also registered with the active
    * {@link ReadContext}.

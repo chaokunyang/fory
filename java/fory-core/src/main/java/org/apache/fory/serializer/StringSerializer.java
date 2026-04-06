@@ -23,9 +23,6 @@ import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_ASCII_MASK;
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_LATIN_MASK;
 
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -37,10 +34,12 @@ import java.util.Arrays;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.apache.fory.annotation.CodegenInvoke;
-import org.apache.fory.config.Config;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
 import org.apache.fory.codegen.Expression.StaticInvoke;
+import org.apache.fory.config.Config;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
@@ -154,7 +153,8 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     return readString(readContext.getBuffer());
   }
 
-  public static Expression writeStringExpr(Expression strSerializer, Expression buffer, Expression str, boolean compressString) {
+  public static Expression writeStringExpr(
+      Expression strSerializer, Expression buffer, Expression str, boolean compressString) {
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
         return new Invoke(strSerializer, "writeCompressedBytesString", buffer, str);
@@ -181,7 +181,8 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     }
   }
 
-  public static Expression readStringExpr(Expression strSerializer, Expression buffer, boolean compressString) {
+  public static Expression readStringExpr(
+      Expression strSerializer, Expression buffer, boolean compressString) {
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
         return new Invoke(strSerializer, "readCompressedBytesString", STRING_TYPE, buffer);

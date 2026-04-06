@@ -133,7 +133,8 @@ public class ObjectSerializerTest extends ForyTestBase {
             .build();
     MemoryBuffer buffer = MemoryUtils.buffer(32);
 
-    ObjectSerializer<Cyclic> serializer = new ObjectSerializer<>(fory.getTypeResolver(), Cyclic.class);
+    ObjectSerializer<Cyclic> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), Cyclic.class);
     withWriteContext(
         fory,
         buffer,
@@ -158,7 +159,8 @@ public class ObjectSerializerTest extends ForyTestBase {
   @Test(dataProvider = "foryCopyConfig")
   public void testCopyCircularReference(Fory fory) {
     Cyclic cyclic = Cyclic.create(true);
-    ObjectSerializer<Cyclic> serializer = new ObjectSerializer<>(fory.getTypeResolver(), Cyclic.class);
+    ObjectSerializer<Cyclic> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), Cyclic.class);
     Cyclic cyclic1 = withCopyContext(fory, context -> serializer.copy(context, cyclic));
     assertEquals(cyclic1, cyclic);
     assertNotSame(cyclic1, cyclic);

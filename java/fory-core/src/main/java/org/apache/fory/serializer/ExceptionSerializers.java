@@ -29,8 +29,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import org.apache.fory.config.Config;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
+import org.apache.fory.config.Config;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -280,10 +280,7 @@ public final class ExceptionSerializers {
   }
 
   private static void readAndSetFields(
-      ReadContext readContext,
-      Object target,
-      Serializer[] slotsSerializers,
-      Config config) {
+      ReadContext readContext, Object target, Serializer[] slotsSerializers, Config config) {
     for (Serializer slotsSerializer : slotsSerializers) {
       if (slotsSerializer instanceof MetaSharedLayerSerializer) {
         MetaSharedLayerSerializer metaSerializer = (MetaSharedLayerSerializer) slotsSerializer;

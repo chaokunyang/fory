@@ -25,9 +25,6 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Primitives;
 import java.lang.reflect.Method;
@@ -54,6 +51,8 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -559,7 +558,8 @@ public class ClassResolverTest extends ForyTestBase {
             .build();
     ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
     {
-      classResolver.setSerializer(Foo.class, new ObjectSerializer<>(fory.getTypeResolver(), Foo.class));
+      classResolver.setSerializer(
+          Foo.class, new ObjectSerializer<>(fory.getTypeResolver(), Foo.class));
       TypeInfo typeInfo = classResolver.getTypeInfo(Foo.class);
       assertSame(typeInfo.getSerializer().getClass(), ObjectSerializer.class);
       // Create another ObjectSerializer to test setSerializer updates the existing classInfo
@@ -571,7 +571,8 @@ public class ClassResolverTest extends ForyTestBase {
     {
       classResolver.registerInternal(Bar.class);
       TypeInfo typeInfo = classResolver.getTypeInfo(Bar.class);
-      classResolver.setSerializer(Bar.class, new ObjectSerializer<>(fory.getTypeResolver(), Bar.class));
+      classResolver.setSerializer(
+          Bar.class, new ObjectSerializer<>(fory.getTypeResolver(), Bar.class));
       Assert.assertSame(classResolver.getTypeInfo(Bar.class), typeInfo);
       assertSame(typeInfo.getSerializer().getClass(), ObjectSerializer.class);
       // Create another ObjectSerializer to test setSerializer updates the existing classInfo
@@ -914,5 +915,4 @@ public class ClassResolverTest extends ForyTestBase {
     Assert.assertEquals(result[0].getValue(), 1);
     Assert.assertEquals(result[1].getValue(), 2);
   }
-
 }

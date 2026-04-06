@@ -19,7 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import org.apache.fory.Fory;
 import org.apache.fory.ForyCopyable;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;

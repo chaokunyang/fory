@@ -81,7 +81,8 @@ public final class CompressedArraySerializers {
       resolver.registerInternalSerializer(int[].class, new CompressedIntArraySerializer(resolver));
     }
     if (compressLong) {
-      resolver.registerInternalSerializer(long[].class, new CompressedLongArraySerializer(resolver));
+      resolver.registerInternalSerializer(
+          long[].class, new CompressedLongArraySerializer(resolver));
     }
   }
 

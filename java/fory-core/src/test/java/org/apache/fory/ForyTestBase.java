@@ -40,17 +40,16 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaReadContext;
-import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.MetaWriteContext;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.io.ClassLoaderObjectInputStream;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.BufferObject;
 import org.apache.fory.serializer.Serializer;
-import org.testng.Assert.ThrowingRunnable;
 import org.testng.Assert;
+import org.testng.Assert.ThrowingRunnable;
 import org.testng.annotations.DataProvider;
 
 /** Fory unit test base class. */
@@ -352,9 +351,9 @@ public abstract class ForyTestBase {
     return fory2.deserialize(buffer);
   }
 
-  public static void withWriteContext(Fory fory, MemoryBuffer buffer, Consumer<WriteContext> action) {
-    WriteContext context =
-        (WriteContext) ReflectionUtils.getObjectFieldValue(fory, "writeContext");
+  public static void withWriteContext(
+      Fory fory, MemoryBuffer buffer, Consumer<WriteContext> action) {
+    WriteContext context = (WriteContext) ReflectionUtils.getObjectFieldValue(fory, "writeContext");
     context.prepare(buffer, null);
     try {
       action.accept(context);

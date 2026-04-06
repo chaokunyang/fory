@@ -23,10 +23,8 @@ import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.TestUtils;
-import org.apache.fory.config.Language;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 

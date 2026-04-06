@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import org.apache.fory.Fory;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
 import org.apache.fory.collection.LongMap;
@@ -102,7 +101,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       TypeDef layerTypeDef,
       Class<?> layerMarkerClass) {
     MetaSharedLayerSerializerBase<?> serializer =
-        (MetaSharedLayerSerializerBase<?>) Serializers.newSerializer(typeResolver, cls, serializerClass);
+        (MetaSharedLayerSerializerBase<?>)
+            Serializers.newSerializer(typeResolver, cls, serializerClass);
     serializer.setLayerSerializerMeta(layerTypeDef, layerMarkerClass);
     return serializer;
   }
@@ -129,7 +129,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
      * @param readContext the context to read TypeDef from
      * @return the serializer to use for reading
      */
-    MetaSharedLayerSerializerBase getReadSerializer(TypeResolver typeResolver, ReadContext readContext);
+    MetaSharedLayerSerializerBase getReadSerializer(
+        TypeResolver typeResolver, ReadContext readContext);
 
     /**
      * Get the current read serializer (last returned by {@link #getReadSerializer}). This is used
@@ -437,7 +438,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         TypeDef.skipTypeDef(buffer, typeDefId);
       } else {
         // Not cached - read full TypeDef and create TypeInfo
-        TypeDef typeDef = typeResolver.cacheTypeDef(TypeDef.readTypeDef(typeResolver, buffer, typeDefId));
+        TypeDef typeDef =
+            typeResolver.cacheTypeDef(TypeDef.readTypeDef(typeResolver, buffer, typeDefId));
         typeInfo = new TypeInfo(senderClass, typeDef);
         typeDefIdToTypeInfo.put(typeDefId, typeInfo);
       }
@@ -450,7 +452,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     if (skipSerializer == null) {
       Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(senderClass, 0);
       MetaSharedLayerSerializer<?> newSerializer =
-          new MetaSharedLayerSerializer(typeResolver, senderClass, typeInfo.getTypeDef(), layerMarkerClass);
+          new MetaSharedLayerSerializer(
+              typeResolver, senderClass, typeInfo.getTypeDef(), layerMarkerClass);
       typeInfo.setSerializer(newSerializer);
       skipSerializer = newSerializer;
     }
@@ -662,7 +665,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         List<FieldInfo> fieldInfos =
             buildFieldInfoFromObjectStreamClass(typeResolver, objectStreamClass, type);
         layerTypeDef =
-            NativeTypeDefEncoder.buildTypeDefWithFieldInfos((ClassResolver) typeResolver, type, fieldInfos, true);
+            NativeTypeDefEncoder.buildTypeDefWithFieldInfos(
+                (ClassResolver) typeResolver, type, fieldInfos, true);
       } else {
         // Fallback when ObjectStreamClass is not available (e.g., GraalVM native image)
         layerTypeDef = typeResolver.getTypeDef(type, false);
@@ -672,12 +676,14 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(type, 0);
 
       // Create interpreter-mode serializer first
-      this.slotsSerializer = new MetaSharedLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
+      this.slotsSerializer =
+          new MetaSharedLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
 
       // Register JIT callback to replace with JIT serializer when ready
       if (config.isCodeGenEnabled() && !GraalvmSupport.isGraalRuntime()) {
         SlotsInfo thisInfo = this;
-        typeResolver.getJITContext()
+        typeResolver
+            .getJITContext()
             .registerSerializerJITCallback(
                 () -> MetaSharedLayerSerializer.class,
                 () ->
@@ -808,7 +814,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
             // Create a new serializer based on the TypeDef from stream
             Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(cls, 0);
             MetaSharedLayerSerializer<?> newSerializer =
-                new MetaSharedLayerSerializer(typeResolver, cls, typeInfo.getTypeDef(), layerMarkerClass);
+                new MetaSharedLayerSerializer(
+                    typeResolver, cls, typeInfo.getTypeDef(), layerMarkerClass);
             typeInfo.setSerializer(newSerializer);
             result = newSerializer;
           }
@@ -845,7 +852,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           TypeDef.skipTypeDef(buffer, typeDefId);
         } else {
           // Not cached - read full TypeDef and create TypeInfo
-          TypeDef typeDef = typeResolver.cacheTypeDef(TypeDef.readTypeDef(typeResolver, buffer, typeDefId));
+          TypeDef typeDef =
+              typeResolver.cacheTypeDef(TypeDef.readTypeDef(typeResolver, buffer, typeDefId));
           typeInfo = new TypeInfo(cls, typeDef);
           typeDefIdToTypeInfo.put(typeDefId, typeInfo);
         }

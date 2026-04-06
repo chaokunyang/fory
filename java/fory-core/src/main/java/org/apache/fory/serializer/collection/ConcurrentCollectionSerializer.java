@@ -20,10 +20,10 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Collection;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.collection.CollectionSnapshot;
-import org.apache.fory.context.WriteContext;
 import org.apache.fory.collection.ObjectArray;
+import org.apache.fory.context.WriteContext;
+import org.apache.fory.resolver.TypeResolver;
 
 /**
  * Serializer for concurrent collection implementations that require thread-safe serialization.
@@ -60,7 +60,8 @@ public class ConcurrentCollectionSerializer<T extends Collection> extends Collec
    * @param type the class type of the concurrent collection to serialize
    * @param supportCodegen whether code generation is supported for this serializer
    */
-  public ConcurrentCollectionSerializer(TypeResolver typeResolver, Class<T> type, boolean supportCodegen) {
+  public ConcurrentCollectionSerializer(
+      TypeResolver typeResolver, Class<T> type, boolean supportCodegen) {
     super(typeResolver, type, supportCodegen);
   }
 

@@ -38,12 +38,12 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.Types;
+import org.apache.fory.type.union.Union;
 import org.apache.fory.type.union.Union2;
 import org.apache.fory.type.union.Union3;
 import org.apache.fory.type.union.Union4;
 import org.apache.fory.type.union.Union5;
 import org.apache.fory.type.union.Union6;
-import org.apache.fory.type.union.Union;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -186,8 +186,7 @@ public class UnionSerializer extends Serializer<Union> {
     return factory.apply(union.getIndex(), copiedValue);
   }
 
-  private void writeCaseValue(
-      WriteContext writeContext, Object value, int typeId, int caseId) {
+  private void writeCaseValue(WriteContext writeContext, Object value, int typeId, int caseId) {
     MemoryBuffer buffer = writeContext.getBuffer();
     byte internalTypeId = (byte) typeId;
     boolean primitiveArray = Types.isPrimitiveArray(internalTypeId);
@@ -224,10 +223,7 @@ public class UnionSerializer extends Serializer<Union> {
   }
 
   private void writeValue(
-      WriteContext writeContext,
-      Object value,
-      int typeId,
-      Serializer serializer) {
+      WriteContext writeContext, Object value, int typeId, Serializer serializer) {
     MemoryBuffer buffer = writeContext.getBuffer();
     int internalTypeId = typeId;
     switch (internalTypeId) {

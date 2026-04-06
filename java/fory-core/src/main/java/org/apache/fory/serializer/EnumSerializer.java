@@ -19,14 +19,13 @@
 
 package org.apache.fory.serializer;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.util.Preconditions;
-
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 @SuppressWarnings("rawtypes")
 public class EnumSerializer extends ImmutableSerializer<Enum> {
@@ -52,7 +51,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> {
       for (Enum enumConstant : enumConstants) {
         stringToEnum.put(enumConstant.name(), enumConstant);
       }
-    }  else {
+    } else {
       stringToEnum = null;
     }
   }

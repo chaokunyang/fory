@@ -21,14 +21,12 @@ package org.apache.fory.serializer;
 
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
 
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
-import org.apache.fory.Fory;
-import org.apache.fory.config.Config;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
+import org.apache.fory.config.Config;
 import org.apache.fory.config.LongEncoding;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
@@ -386,7 +384,8 @@ public class PrimitiveSerializers {
   public static void registerDefaultSerializers(TypeResolver resolver) {
     // primitive types will be boxed.
     Config config = resolver.getConfig();
-    resolver.registerInternalSerializer(boolean.class, new BooleanSerializer(config, boolean.class));
+    resolver.registerInternalSerializer(
+        boolean.class, new BooleanSerializer(config, boolean.class));
     resolver.registerInternalSerializer(byte.class, new ByteSerializer(config, byte.class));
     resolver.registerInternalSerializer(short.class, new ShortSerializer(config, short.class));
     resolver.registerInternalSerializer(char.class, new CharSerializer(config, char.class));
@@ -394,7 +393,8 @@ public class PrimitiveSerializers {
     resolver.registerInternalSerializer(long.class, new LongSerializer(config, long.class));
     resolver.registerInternalSerializer(float.class, new FloatSerializer(config, float.class));
     resolver.registerInternalSerializer(double.class, new DoubleSerializer(config, double.class));
-    resolver.registerInternalSerializer(Boolean.class, new BooleanSerializer(config, Boolean.class));
+    resolver.registerInternalSerializer(
+        Boolean.class, new BooleanSerializer(config, Boolean.class));
     resolver.registerInternalSerializer(Byte.class, new ByteSerializer(config, Byte.class));
     resolver.registerInternalSerializer(Short.class, new ShortSerializer(config, Short.class));
     resolver.registerInternalSerializer(

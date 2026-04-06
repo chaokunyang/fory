@@ -27,7 +27,6 @@ import org.apache.fory.config.LongEncoding;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
-import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 
 /** ObjectInput based on {@link MemoryBuffer}. */
@@ -45,7 +44,6 @@ public class MemoryBufferObjectInput extends InputStream implements ObjectInput 
       this.buffer = readContext.getBuffer();
     }
   }
-
 
   public void setBuffer(MemoryBuffer buffer) {
     this.buffer = buffer;

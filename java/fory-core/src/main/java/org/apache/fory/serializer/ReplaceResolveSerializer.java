@@ -190,7 +190,9 @@ public class ReplaceResolveSerializer extends Serializer {
         && JavaSerializer.getWriteObjectMethod(cls, true) == null) {
       serializerClass =
           classResolver.getObjectSerializerClass(
-              cls, sc -> methodInfoCache.setObjectSerializer(createDataSerializer(typeResolver, cls, sc)));
+              cls,
+              sc ->
+                  methodInfoCache.setObjectSerializer(createDataSerializer(typeResolver, cls, sc)));
     } else {
       serializerClass = typeResolver.getDefaultJDKStreamSerializerType();
     }
@@ -298,9 +300,7 @@ public class ReplaceResolveSerializer extends Serializer {
   }
 
   protected void writeObject(
-      WriteContext writeContext,
-      Object value,
-      MethodInfoCache jdkMethodInfoCache) {
+      WriteContext writeContext, Object value, MethodInfoCache jdkMethodInfoCache) {
     classResolver.writeClassInternal(writeContext, writeTypeInfo);
     jdkMethodInfoCache.objectSerializer.write(writeContext, value);
   }

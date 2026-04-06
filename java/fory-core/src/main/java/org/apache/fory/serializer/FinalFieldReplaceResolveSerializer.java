@@ -41,9 +41,7 @@ public class FinalFieldReplaceResolveSerializer extends ReplaceResolveSerializer
 
   @Override
   protected void writeObject(
-      WriteContext writeContext,
-      Object value,
-      MethodInfoCache jdkMethodInfoCache) {
+      WriteContext writeContext, Object value, MethodInfoCache jdkMethodInfoCache) {
     jdkMethodInfoCache.objectSerializer.write(writeContext, value);
   }
 

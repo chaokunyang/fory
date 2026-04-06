@@ -22,9 +22,6 @@ package javax.fory.test;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import java.util.AbstractList;
 import java.util.AbstractMap;
 import java.util.Collection;
@@ -32,7 +29,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import org.apache.fory.Fory;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.collection.CollectionSerializer;
@@ -192,7 +190,8 @@ public class ResolverValidateSerializerTest {
             fory.registerSerializer(InvalidMap.class, f -> new InvalidMap.InvalidMapSerializer(f)));
     // Map valid
     fory.register(ValidMap.class);
-    fory.registerSerializer(ValidMap.class, new ValidMap.ValidMapSerializer(fory.getTypeResolver()));
+    fory.registerSerializer(
+        ValidMap.class, new ValidMap.ValidMapSerializer(fory.getTypeResolver()));
     Object listResult = fory.deserialize(fory.serialize(new ValidList()));
     assertTrue(listResult instanceof ValidList);
     Object mapResult = fory.deserialize(fory.serialize(new ValidMap()));

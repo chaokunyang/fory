@@ -90,7 +90,8 @@ public class LambdaSerializer extends Serializer {
   @Override
   public Object read(ReadContext readContext) {
     try {
-      return SerializedLambdaSerializer.readResolve(serializedLambdaSerializer.readUnresolved(readContext));
+      return SerializedLambdaSerializer.readResolve(
+          serializedLambdaSerializer.readUnresolved(readContext));
     } catch (Throwable e) {
       throw new RuntimeException("Can't deserialize lambda", e);
     }

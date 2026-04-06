@@ -59,8 +59,7 @@ class NativeTypeDefDecoder {
     byte[] encodedTypeDef = inputBuffer.readBytes(size);
     encoded.writeBytes(encodedTypeDef);
     if ((id & COMPRESS_META_FLAG) != 0) {
-      encodedTypeDef =
-          resolver.getConfig().getMetaCompressor().decompress(encodedTypeDef, 0, size);
+      encodedTypeDef = resolver.getConfig().getMetaCompressor().decompress(encodedTypeDef, 0, size);
     }
     return Tuple2.of(encodedTypeDef, encoded.getBytes(0, encoded.writerIndex()));
   }

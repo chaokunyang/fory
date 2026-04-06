@@ -125,8 +125,7 @@ public class MapSerializersTest extends ForyTestBase {
 
     // testMapGenerics
     byte[] bytes1 = fory.serialize(data);
-    fory
-        .getWriteContext()
+    fory.getWriteContext()
         .getGenerics()
         .pushGenericType(
             GenericType.build(new TypeRef<Map<String, Integer>>() {}),
@@ -140,8 +139,7 @@ public class MapSerializersTest extends ForyTestBase {
     Map<String, Integer> treeMap = new TreeMap<>(ImmutableMap.of("a", 1, "b", 2));
     serDeCheckSerializer(fory, treeMap, "SortedMap");
     byte[] sortMapBytes1 = fory.serialize(treeMap);
-    fory
-        .getWriteContext()
+    fory.getWriteContext()
         .getGenerics()
         .pushGenericType(
             GenericType.build(new TypeRef<Map<String, Integer>>() {}),
@@ -298,8 +296,7 @@ public class MapSerializersTest extends ForyTestBase {
             .build();
     Map<String, Integer> data = new HashMap<>(ImmutableMap.of("a", 1, "b", 2));
     byte[] bytes1 = fory.serialize(data);
-    fory
-        .getWriteContext()
+    fory.getWriteContext()
         .getGenerics()
         .pushGenericType(
             GenericType.build(new TypeRef<Map<String, Integer>>() {}),
@@ -321,8 +318,7 @@ public class MapSerializersTest extends ForyTestBase {
     Map<String, Integer> data = new TreeMap<>(ImmutableMap.of("a", 1, "b", 2));
     serDeCheckSerializer(fory, data, "SortedMap");
     byte[] bytes1 = fory.serialize(data);
-    fory
-        .getWriteContext()
+    fory.getWriteContext()
         .getGenerics()
         .pushGenericType(
             GenericType.build(new TypeRef<Map<String, Integer>>() {}),

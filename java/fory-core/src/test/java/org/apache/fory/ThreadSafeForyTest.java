@@ -303,7 +303,8 @@ public class ThreadSafeForyTest extends ForyTestBase {
             try {
               for (int j = 0; j < 10; j++) {
                 MetaWriteContext metaWriteContext =
-                    writeMetaMap.computeIfAbsent(Thread.currentThread(), t -> new MetaWriteContext());
+                    writeMetaMap.computeIfAbsent(
+                        Thread.currentThread(), t -> new MetaWriteContext());
                 MetaReadContext metaReadContext =
                     readMetaMap.computeIfAbsent(Thread.currentThread(), t -> new MetaReadContext());
                 byte[] serialized =

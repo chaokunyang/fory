@@ -21,10 +21,6 @@ package org.apache.fory.serializer;
 
 import static org.apache.fory.util.function.Functions.makeGetterFunction;
 
-import org.apache.fory.context.CopyContext;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import java.lang.invoke.MethodHandle;
@@ -48,6 +44,9 @@ import java.util.regex.Pattern;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
@@ -130,7 +129,8 @@ public class Serializers {
       TypeResolver typeResolver, Class type, Class<? extends Serializer> serializerClass) {
     try {
       Config config = typeResolver.getConfig();
-      Serializer<T> serializer = buildBuiltinSerializer(typeResolver, config, type, serializerClass);
+      Serializer<T> serializer =
+          buildBuiltinSerializer(typeResolver, config, type, serializerClass);
       if (serializer != null) {
         return serializer;
       }
@@ -559,8 +559,7 @@ public class Serializers {
     }
 
     @Override
-    public AtomicReference copy(
-        CopyContext copyContext, AtomicReference origin) {
+    public AtomicReference copy(CopyContext copyContext, AtomicReference origin) {
       return new AtomicReference(copyContext.copyObject(origin.get()));
     }
 

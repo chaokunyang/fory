@@ -516,7 +516,8 @@ public class TypeDefTest extends ForyTestBase {
   public void testTypeDefSerializationBasic() {
     Fory fory = builder().withLanguage(Language.XLANG).withMetaShare(true).build();
     fory.register(TestFieldsOrderClass1.class, "demo.Class1");
-    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), TestFieldsOrderClass1.class, true);
+    TypeDef typeDef =
+        TypeDef.buildTypeDef(fory.getTypeResolver(), TestFieldsOrderClass1.class, true);
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
     typeDef.writeTypeDef(buffer);
     TypeDef typeDef1 = TypeDef.readTypeDef(fory.getTypeResolver(), buffer);

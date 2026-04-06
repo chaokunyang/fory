@@ -37,10 +37,8 @@ import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Vector;
@@ -48,15 +46,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.builder.Generated;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Language;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
-import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.serializer.collection.CollectionSerializers;
@@ -97,7 +93,8 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
         WriteObjectTestClass.class,
         new ObjectStreamSerializer(fory.getTypeResolver(), WriteObjectTestClass.class));
     fory.registerSerializer(
-        StringBuilder.class, new ObjectStreamSerializer(fory.getTypeResolver(), StringBuilder.class));
+        StringBuilder.class,
+        new ObjectStreamSerializer(fory.getTypeResolver(), StringBuilder.class));
 
     WriteObjectTestClass o = new WriteObjectTestClass(new char[] {'a', 'b'});
     serDeCheckSerializer(fory, o, "ObjectStreamSerializer");
@@ -111,7 +108,8 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   @Test(dataProvider = "foryCopyConfig")
   public void testJDKCompatibleCommonCopy(Fory fory) {
     fory.registerSerializer(
-        StringBuilder.class, new ObjectStreamSerializer(fory.getTypeResolver(), StringBuilder.class));
+        StringBuilder.class,
+        new ObjectStreamSerializer(fory.getTypeResolver(), StringBuilder.class));
     StringBuilder sb = fory.copy(new StringBuilder("abc"));
     assertEquals(sb.toString(), "abc");
   }

@@ -83,7 +83,9 @@ public final class MapRefReader implements RefReader {
     return headFlag;
   }
 
-  /** Returns the last ref id reserved by {@link #preserveRefId()} or {@link #preserveRefId(int)}. */
+  /**
+   * Returns the last ref id reserved by {@link #preserveRefId()} or {@link #preserveRefId(int)}.
+   */
   @Override
   public int lastPreservedRefId() {
     return readRefIds.get(readRefIds.size - 1);

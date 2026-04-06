@@ -20,12 +20,12 @@
 package org.apache.fory.context;
 
 import java.util.Arrays;
+import org.apache.fory.collection.IdentityMap;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Types;
-import org.apache.fory.collection.IdentityMap;
 
 /**
  * Per-operation state for object graph copy.

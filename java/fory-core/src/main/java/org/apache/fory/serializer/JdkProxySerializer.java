@@ -26,7 +26,6 @@ import java.lang.reflect.Proxy;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
@@ -88,10 +87,10 @@ public class JdkProxySerializer extends Serializer {
     InvocationHandler invocationHandler = Proxy.getInvocationHandler(value);
     Preconditions.checkNotNull(interfaces);
     Preconditions.checkNotNull(invocationHandler);
-    Object proxy =
-        Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
+    Object proxy = Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
     copyContext.reference(value, proxy);
-    Platform.putObject(proxy, PROXY_HANDLER_FIELD_OFFSET, copyContext.copyObject(invocationHandler));
+    Platform.putObject(
+        proxy, PROXY_HANDLER_FIELD_OFFSET, copyContext.copyObject(invocationHandler));
     return proxy;
   }
 
@@ -100,8 +99,7 @@ public class JdkProxySerializer extends Serializer {
     final int refId = readContext.lastPreservedRefId();
     final Class<?>[] interfaces = (Class<?>[]) readContext.readRef();
     Preconditions.checkNotNull(interfaces);
-    Object proxy =
-        Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
+    Object proxy = Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
     readContext.setReadRef(refId, proxy);
     InvocationHandler invocationHandler = (InvocationHandler) readContext.readRef();
     Preconditions.checkNotNull(invocationHandler);

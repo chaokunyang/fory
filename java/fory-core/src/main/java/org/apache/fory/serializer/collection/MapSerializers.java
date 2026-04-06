@@ -26,8 +26,8 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.Map.Entry;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -226,8 +226,7 @@ public class MapSerializers {
     }
 
     @Override
-    public void write(WriteContext writeContext, SortedMap<?, ?> value) {
-    }
+    public void write(WriteContext writeContext, SortedMap<?, ?> value) {}
 
     @Override
     public SortedMap<?, ?> read(ReadContext readContext) {
@@ -295,7 +294,8 @@ public class MapSerializers {
   public static final class ConcurrentSkipListMapSerializer
       extends ConcurrentMapSerializer<ConcurrentSkipListMap> {
 
-    public ConcurrentSkipListMapSerializer(TypeResolver typeResolver, Class<ConcurrentSkipListMap> cls) {
+    public ConcurrentSkipListMapSerializer(
+        TypeResolver typeResolver, Class<ConcurrentSkipListMap> cls) {
       super(typeResolver, cls, true);
     }
 
@@ -411,9 +411,7 @@ public class MapSerializers {
       Class<? extends Serializer> serializerClass =
           ((ClassResolver) typeResolver)
               .getObjectSerializerClass(
-                  cls,
-                  sc ->
-                      dataSerializer = Serializers.newSerializer(typeResolver, cls, sc));
+                  cls, sc -> dataSerializer = Serializers.newSerializer(typeResolver, cls, sc));
       dataSerializer = Serializers.newSerializer(typeResolver, cls, serializerClass);
       // No need to set object serializer to this, it will be set in class resolver later.
       // typeResolver.setSerializer(cls, this);
@@ -534,8 +532,7 @@ public class MapSerializers {
   // TODO(chaokunyang) support ConcurrentSkipListMap.SubMap mo efficiently.
   public static void registerDefaultSerializers(TypeResolver resolver) {
     resolver.registerInternalSerializer(HashMap.class, new HashMapSerializer(resolver));
-    resolver.registerInternalSerializer(
-        LinkedHashMap.class, new LinkedHashMapSerializer(resolver));
+    resolver.registerInternalSerializer(LinkedHashMap.class, new LinkedHashMapSerializer(resolver));
     resolver.registerInternalSerializer(
         TreeMap.class, new SortedMapSerializer<>(resolver, TreeMap.class));
     resolver.registerInternalSerializer(

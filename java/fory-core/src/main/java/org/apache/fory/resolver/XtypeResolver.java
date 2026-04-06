@@ -117,6 +117,7 @@ import org.apache.fory.type.unsigned.Uint64;
 import org.apache.fory.type.unsigned.Uint8;
 import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
+
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class XtypeResolver extends TypeResolver {
   private static final Logger LOG = LoggerFactory.getLogger(XtypeResolver.class);
@@ -465,8 +466,7 @@ public class XtypeResolver extends TypeResolver {
       String qualifiedName = qualifiedName(typeInfo.decodeNamespace(), typeInfo.decodeTypeName());
       qualifiedType2TypeInfo.put(qualifiedName, typeInfo);
       TypeNameBytes typeNameBytes =
-          new TypeNameBytes(
-              typeInfo.namespace.hash, typeInfo.typeName.hash);
+          new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
       compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
   }
@@ -973,21 +973,13 @@ public class XtypeResolver extends TypeResolver {
     registerType(
         Types.INT8_ARRAY, Int8List.class, new PrimitiveListSerializers.Int8ListSerializer(this));
     registerType(
-        Types.INT16_ARRAY,
-        Int16List.class,
-        new PrimitiveListSerializers.Int16ListSerializer(this));
+        Types.INT16_ARRAY, Int16List.class, new PrimitiveListSerializers.Int16ListSerializer(this));
     registerType(
-        Types.INT32_ARRAY,
-        Int32List.class,
-        new PrimitiveListSerializers.Int32ListSerializer(this));
+        Types.INT32_ARRAY, Int32List.class, new PrimitiveListSerializers.Int32ListSerializer(this));
     registerType(
-        Types.INT64_ARRAY,
-        Int64List.class,
-        new PrimitiveListSerializers.Int64ListSerializer(this));
+        Types.INT64_ARRAY, Int64List.class, new PrimitiveListSerializers.Int64ListSerializer(this));
     registerType(
-        Types.UINT8_ARRAY,
-        Uint8List.class,
-        new PrimitiveListSerializers.Uint8ListSerializer(this));
+        Types.UINT8_ARRAY, Uint8List.class, new PrimitiveListSerializers.Uint8ListSerializer(this));
     registerType(
         Types.UINT16_ARRAY,
         Uint16List.class,
@@ -1168,8 +1160,7 @@ public class XtypeResolver extends TypeResolver {
       // Update the cache with the correct TypeInfo that has a serializer
       if (typeInfo.typeName != null) {
         TypeNameBytes typeNameBytes =
-            new TypeNameBytes(
-                typeInfo.namespace.hash, typeInfo.typeName.hash);
+            new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
         compositeClassNameBytes2TypeInfo.put(typeNameBytes, newTypeInfo);
       }
       return newTypeInfo;
@@ -1179,8 +1170,7 @@ public class XtypeResolver extends TypeResolver {
 
   private TypeInfo loadBytesToTypeInfoWithTypeId(
       int internalTypeId, EncodedMetaString packageBytes, EncodedMetaString simpleClassNameBytes) {
-    TypeNameBytes typeNameBytes =
-        new TypeNameBytes(packageBytes.hash, simpleClassNameBytes.hash);
+    TypeNameBytes typeNameBytes = new TypeNameBytes(packageBytes.hash, simpleClassNameBytes.hash);
     TypeInfo typeInfo = compositeClassNameBytes2TypeInfo.get(typeNameBytes);
     if (typeInfo == null) {
       typeInfo =

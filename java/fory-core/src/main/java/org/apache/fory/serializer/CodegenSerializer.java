@@ -21,14 +21,12 @@ package org.apache.fory.serializer;
 
 import static org.apache.fory.util.Preconditions.checkArgument;
 
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import java.lang.reflect.Modifier;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated;
-import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.resolver.TypeResolver;
 
 /** Util for JIT Serialization. */
@@ -115,8 +113,7 @@ public final class CodegenSerializer {
             // jit not finished, avoid recursive call current serializer.
             Class<? extends Serializer> sc = typeResolver.getSerializerClass(type, false);
             typeResolver.getTypeInfo(type).setSerializer(this);
-            return interpreterSerializer =
-                Serializers.newSerializer(typeResolver, type, sc);
+            return interpreterSerializer = Serializers.newSerializer(typeResolver, type, sc);
           } else {
             Class<? extends Serializer> sc = typeResolver.getSerializerClass(type);
             typeResolver.getTypeInfo(type).setSerializer(this);

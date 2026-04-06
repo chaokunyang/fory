@@ -56,7 +56,9 @@ public class ExpressionVisitorTest {
     // Traversal relies on getDeclaredFields(), nondeterministic order.
     Set<Expression> expressionsSet = new HashSet<>(expressions);
     assertEquals(expressionsSet.size(), 8);
-    assertTrue(expressionsSet.containsAll(Arrays.asList(forLoop, e1, ref, holder.get("e2"), list, literal1)));
+    assertTrue(
+        expressionsSet.containsAll(
+            Arrays.asList(forLoop, e1, ref, holder.get("e2"), list, literal1)));
     assertTrue(
         expressionsSet.stream()
             .anyMatch(

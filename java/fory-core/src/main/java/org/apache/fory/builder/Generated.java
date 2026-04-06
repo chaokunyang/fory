@@ -74,8 +74,7 @@ public interface Generated {
                   new JITContext.NotifyCallback() {
                     @Override
                     public void onNotifyResult(Object result) {
-                      Serializer<?> fieldSerializer =
-                          typeResolver.getSerializer(beanFieldType);
+                      Serializer<?> fieldSerializer = typeResolver.getSerializer(beanFieldType);
                       Preconditions.checkState(beanFieldType == fieldSerializer.getType());
                       Preconditions.checkState(result == fieldSerializer.getClass());
                       ReflectionUtils.setObjectFieldValue(
@@ -84,8 +83,7 @@ public interface Generated {
 
                     @Override
                     public void onNotifyMissed() {
-                      Serializer<?> fieldSerializer =
-                          typeResolver.getSerializer(beanFieldType);
+                      Serializer<?> fieldSerializer = typeResolver.getSerializer(beanFieldType);
                       ReflectionUtils.setObjectFieldValue(
                           subclassSerializer, field, fieldSerializer);
                     }
@@ -124,8 +122,8 @@ public interface Generated {
    * GeneratedMetaSharedSerializer}, this serializer only handles fields from a single class layer
    * and does not include parent class fields.
    */
-  abstract class GeneratedMetaSharedLayerSerializer
-      extends MetaSharedLayerSerializerBase implements Generated {
+  abstract class GeneratedMetaSharedLayerSerializer extends MetaSharedLayerSerializerBase
+      implements Generated {
     public GeneratedMetaSharedLayerSerializer(TypeResolver typeResolver, Class<?> cls) {
       super(typeResolver, cls);
     }

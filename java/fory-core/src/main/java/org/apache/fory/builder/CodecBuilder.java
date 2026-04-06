@@ -454,7 +454,9 @@ public abstract class CodecBuilder {
                 inlineInvoke(
                     classExpr, "getDeclaredField", fieldTypeRef, Literal.ofString(fieldName));
           } else {
-            fieldExpr = reflectionUtilsInvoke("getField", fieldTypeRef, classExpr, Literal.ofString(fieldName));
+            fieldExpr =
+                reflectionUtilsInvoke(
+                    "getField", fieldTypeRef, classExpr, Literal.ofString(fieldName));
           }
           if (!setAccessible) {
             return fieldExpr;
@@ -538,7 +540,9 @@ public abstract class CodecBuilder {
           true,
           Class.class,
           name,
-          () -> inlineReflectionUtilsInvoke("loadClass", CLASS_TYPE, Literal.ofString(cls.getName())));
+          () ->
+              inlineReflectionUtilsInvoke(
+                  "loadClass", CLASS_TYPE, Literal.ofString(cls.getName())));
     }
     throw new UnsupportedOperationException();
   }
@@ -564,9 +568,9 @@ public abstract class CodecBuilder {
     return getOrCreateField(
         true,
         Class.class,
-      fieldName,
-      () ->
-          inlineReflectionUtilsInvoke("loadClass", CLASS_TYPE, Literal.ofString(cls.getName())));
+        fieldName,
+        () ->
+            inlineReflectionUtilsInvoke("loadClass", CLASS_TYPE, Literal.ofString(cls.getName())));
   }
 
   private StaticInvoke reflectionUtilsInvoke(

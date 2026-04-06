@@ -1267,14 +1267,7 @@ public interface Expression {
         boolean inline,
         boolean needTryCatch,
         Expression... arguments) {
-      super(
-          functionName,
-          type,
-          arguments,
-          returnNamePrefix,
-          returnNullable,
-          inline,
-          needTryCatch);
+      super(functionName, type, arguments, returnNamePrefix, returnNullable, inline, needTryCatch);
       this.staticObject = staticObject;
       if (inline && needTryCatch) {
         throw new UnsupportedOperationException(
@@ -2515,8 +2508,7 @@ public interface Expression {
       leftElementRef = new Reference(refNamePrefix + "_leftElemValue", this.leftElemType, true);
       // elemValue nullability check uses isNullAt inside action, so elemValueRef's nullable is
       // false.
-      rightElementRef =
-          new Reference(refNamePrefix + "_rightElemValue", this.rightElemType, false);
+      rightElementRef = new Reference(refNamePrefix + "_rightElemValue", this.rightElemType, false);
       loopAction = action.apply(indexRef, leftElementRef, rightElementRef);
     }
 

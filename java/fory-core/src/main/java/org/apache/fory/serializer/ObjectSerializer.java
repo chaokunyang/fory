@@ -19,23 +19,22 @@
 
 package org.apache.fory.serializer;
 
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
 import org.apache.fory.context.RefWriter;
-import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.struct.Fingerprint;
 import org.apache.fory.type.Descriptor;
@@ -241,7 +240,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          readContainerFieldValue(readContext, typeResolver, refReader, generics, fieldInfo, buffer);
+          readContainerFieldValue(
+              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
       fieldValues[counter++] = fieldValue;
     }
     for (SerializationFieldInfo fieldInfo : otherFields) {
@@ -275,7 +275,8 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         printReadFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          readContainerFieldValue(readContext, typeResolver, refReader, generics, fieldInfo, buffer);
+          readContainerFieldValue(
+              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       fieldAccessor.putObject(obj, fieldValue);
     }

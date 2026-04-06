@@ -60,9 +60,9 @@ import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.MetaReadContext;
-import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.MetaStringReader;
 import org.apache.fory.context.MetaStringWriter;
+import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
@@ -732,11 +732,9 @@ public abstract class TypeResolver {
     if (typeNameBytesCache != null) {
       // Use cache for faster comparison
       EncodedMetaString packageNameBytesCache = typeInfoCache.namespace;
-      namespaceBytes =
-          metaStringReader.readMetaString(buffer, packageNameBytesCache);
+      namespaceBytes = metaStringReader.readMetaString(buffer, packageNameBytesCache);
       assert packageNameBytesCache != null;
-      simpleClassNameBytes =
-          metaStringReader.readMetaString(buffer, typeNameBytesCache);
+      simpleClassNameBytes = metaStringReader.readMetaString(buffer, typeNameBytesCache);
 
       // Fast path: if hashes match, return cached TypeInfo (already has serializer)
       if (typeNameBytesCache.hash == simpleClassNameBytes.hash
@@ -993,11 +991,10 @@ public abstract class TypeResolver {
             sc);
       } else {
         sc =
-            jitContext
-                .registerSerializerJITCallback(
-                    () -> MetaSharedSerializer.class,
-                    () -> CodecUtils.loadOrGenMetaSharedCodecClass(this, cls, typeDef),
-                    c -> typeInfo.setSerializer(this, Serializers.newSerializer(this, cls, c)));
+            jitContext.registerSerializerJITCallback(
+                () -> MetaSharedSerializer.class,
+                () -> CodecUtils.loadOrGenMetaSharedCodecClass(this, cls, typeDef),
+                c -> typeInfo.setSerializer(this, Serializers.newSerializer(this, cls, c)));
       }
     }
     if (GraalvmSupport.isGraalBuildtime()
@@ -1246,11 +1243,10 @@ public abstract class TypeResolver {
       } else {
         try {
           extRegistry.getClassCtx.add(cls);
-          return jitContext
-              .registerSerializerJITCallback(
-                  () -> ObjectSerializer.class,
-                  () -> CodegenSerializer.loadCodegenSerializer(this, cls),
-                  callback);
+          return jitContext.registerSerializerJITCallback(
+              () -> ObjectSerializer.class,
+              () -> CodegenSerializer.loadCodegenSerializer(this, cls),
+              callback);
         } finally {
           extRegistry.getClassCtx.remove(cls);
         }

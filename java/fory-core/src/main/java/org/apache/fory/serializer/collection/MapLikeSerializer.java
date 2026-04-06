@@ -32,10 +32,6 @@ import static org.apache.fory.serializer.collection.MapFlags.VALUE_DECL_TYPE;
 import static org.apache.fory.serializer.collection.MapFlags.VALUE_HAS_NULL;
 import static org.apache.fory.type.TypeUtils.MAP_TYPE;
 
-import org.apache.fory.context.CopyContext;
-import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.WriteContext;
-
 import com.google.common.collect.ImmutableMap.Builder;
 import java.lang.invoke.MethodHandle;
 import java.util.Iterator;
@@ -44,6 +40,9 @@ import java.util.Map.Entry;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
@@ -153,7 +152,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
                 writeContext, entry, iterator, keyGenericType, valueGenericType);
         if (entry != null) {
           entry =
-              writeJavaChunkGeneric(writeContext, classResolver, generics, genericType, entry, iterator);
+              writeJavaChunkGeneric(
+                  writeContext, classResolver, generics, genericType, entry, iterator);
         }
       }
     }
@@ -209,9 +209,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    * jit inline.
    */
   private void writeNullKeyChunk(
-      WriteContext writeContext,
-      Serializer valueSerializer,
-      Object value) {
+      WriteContext writeContext, Serializer valueSerializer, Object value) {
     MemoryBuffer buffer = writeContext.getBuffer();
     if (value != null) {
       // noinspection Duplicates
@@ -318,7 +316,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     }
   }
 
-  private void writeValueForNullKeyChunkGeneric(WriteContext writeContext, Object value, GenericType valueType) {
+  private void writeValueForNullKeyChunkGeneric(
+      WriteContext writeContext, Object value, GenericType valueType) {
     MemoryBuffer buffer = writeContext.getBuffer();
     boolean trackingRef = valueType.trackingRef(typeResolver);
     if (!valueType.isMonomorphic()) {
@@ -428,9 +427,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   private Serializer writeValueTypeInfo(
-      WriteContext writeContext,
-      TypeResolver classResolver,
-      Class valueType) {
+      WriteContext writeContext, TypeResolver classResolver, Class valueType) {
     TypeInfo typeInfo =
         classResolver.getTypeInfo(valueType, mapTypeCache().valueTypeInfoWriteCache);
     classResolver.writeTypeInfo(writeContext, typeInfo);
@@ -576,8 +573,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     state.partialGenericKVTypeValue0 = mapGenericType;
   }
 
-  protected <K, V> void copyEntry(
-      CopyContext copyContext, Map<K, V> originMap, Map<K, V> newMap) {
+  protected <K, V> void copyEntry(CopyContext copyContext, Map<K, V> originMap, Map<K, V> newMap) {
     TypeResolver classResolver = typeResolver;
     MapTypeCache state = mapTypeCache();
     for (Map.Entry<K, V> entry : originMap.entrySet()) {
@@ -624,8 +620,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     }
   }
 
-  protected <K, V> void copyEntry(
-      CopyContext copyContext, Map<K, V> originMap, Object[] elements) {
+  protected <K, V> void copyEntry(CopyContext copyContext, Map<K, V> originMap, Object[] elements) {
     TypeResolver classResolver = typeResolver;
     MapTypeCache state = mapTypeCache();
     int index = 0;
@@ -676,7 +671,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       if (genericType == null) {
         sizeAndHeader = readJavaChunk(readContext, map, size, chunkHeader, null, null);
       } else {
-        sizeAndHeader = readJavaChunkGeneric(readContext, generics, genericType, map, size, chunkHeader);
+        sizeAndHeader =
+            readJavaChunkGeneric(readContext, generics, genericType, map, size, chunkHeader);
       }
       chunkHeader = (int) (sizeAndHeader & 0xff);
       size = (int) (sizeAndHeader >>> 8);
@@ -1013,8 +1009,8 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   /**
    * Get and reset numElements of deserializing collection. Should be called after {@link
-   * #newMap(ReadContext)}. Nested read may overwrite this element, reset is
-   * necessary to avoid use wrong value by mistake.
+   * #newMap(ReadContext)}. Nested read may overwrite this element, reset is necessary to avoid use
+   * wrong value by mistake.
    */
   public int getAndClearNumElements() {
     int size = numElements;

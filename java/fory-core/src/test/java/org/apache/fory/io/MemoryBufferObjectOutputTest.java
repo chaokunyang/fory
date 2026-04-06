@@ -26,7 +26,6 @@ import java.io.IOException;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.serializer.StringSerializer;
 import org.testng.annotations.Test;
 
 public class MemoryBufferObjectOutputTest {

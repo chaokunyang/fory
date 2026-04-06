@@ -23,8 +23,6 @@ import static org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer.SE
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
-import org.apache.fory.context.ReadContext;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.util.List;
@@ -39,11 +37,13 @@ import org.apache.fory.codegen.Expression.Literal;
 import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.ForyBuilder;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -53,7 +53,6 @@ import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.GraalvmSupport;
@@ -195,7 +194,8 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
             READ_CONTEXT_NAME,
             "code",
             decodeCode);
-    ctx.overrideMethod(readMethodName, decodeCode, Object.class, ReadContext.class, READ_CONTEXT_NAME);
+    ctx.overrideMethod(
+        readMethodName, decodeCode, Object.class, ReadContext.class, READ_CONTEXT_NAME);
     registerJITNotifyCallback();
     ctx.addConstructor(
         constructorCode,
@@ -223,7 +223,8 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     }
     // This method hold jit lock, so create jit serializer async to avoid block serialization.
     Class serializerClass =
-        typeResolver.getJITContext()
+        typeResolver
+            .getJITContext()
             .registerSerializerJITCallback(
                 () -> ObjectSerializer.class,
                 () -> CodegenSerializer.loadCodegenSerializer(typeResolver, s.getType()),

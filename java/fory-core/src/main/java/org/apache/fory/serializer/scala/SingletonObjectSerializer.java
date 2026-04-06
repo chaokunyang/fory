@@ -53,8 +53,7 @@ public class SingletonObjectSerializer extends Serializer {
   }
 
   @Override
-  public void write(WriteContext writeContext, Object value) {
-  }
+  public void write(WriteContext writeContext, Object value) {}
 
   @Override
   public Object read(ReadContext readContext) {

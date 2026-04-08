@@ -1,3 +1,20 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 from pyfory.context import EncodedMetaString, EMPTY_ENCODED_META_STRING
 from pyfory.resolver import NULL_FLAG, REF_FLAG, NOT_NULL_VALUE_FLAG, REF_VALUE_FLAG
 
@@ -6,6 +23,29 @@ INT64_TYPE_ID = TypeId.VARINT64
 FLOAT64_TYPE_ID = TypeId.FLOAT64
 BOOL_TYPE_ID = TypeId.BOOL
 STRING_TYPE_ID = TypeId.STRING
+
+
+cdef inline uint64_t _mix64(uint64_t x):
+    x ^= x >> 33
+    x *= <uint64_t>0xff51afd7ed558ccd
+    x ^= x >> 33
+    x *= <uint64_t>0xc4ceb9fe1a85ec53
+    x ^= x >> 33
+    return x
+
+
+cdef inline int64_t _hash_small_metastring(
+    int64_t v1,
+    int64_t v2,
+    int32_t length,
+    uint8_t encoding,
+):
+    cdef uint64_t k = <uint64_t>0x9e3779b97f4a7c15
+    cdef uint64_t x = (<uint64_t>v1) ^ ((<uint64_t>v2) * k)
+    x ^= (<uint64_t>length) << 56
+    cdef uint64_t h = _mix64(x)
+    h = (h & <uint64_t>0xffffffffffffff00) | encoding
+    return <int64_t>h
 
 
 cdef class WriteContext

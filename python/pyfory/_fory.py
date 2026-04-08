@@ -27,6 +27,7 @@ _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBL
 from pyfory.resolver import NOT_NULL_VALUE_FLAG
 from pyfory.types import TypeId
 from pyfory.policy import DeserializationPolicy, DEFAULT_POLICY
+
 DYNAMIC_TYPE_ID = -1
 # preserve 0 as flag for type id not set in TypeInfo`
 NO_TYPE_ID = 0

@@ -1,3 +1,20 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 import dataclasses
 import typing
 
@@ -430,13 +447,17 @@ cdef class DataClassSerializer(Serializer):
 
 @cython.final
 cdef class DataClassStubSerializer(Serializer):
+    # apache/main exposes the lazy dataclass stub from struct.py in Python mode.
+    # Keep the parallel Cython stub only for Cython mode so TypeInfo.serializer
+    # can remain on the Cython serializer hierarchy until the real serializer is
+    # materialized on first use.
     cpdef write(self, WriteContext write_context, value):
         self._replace().write(write_context, value)
 
     cpdef read(self, ReadContext read_context):
         return self._replace().read(read_context)
 
-    cdef inline object _replace(self):
+    cpdef object _replace(self):
         cdef TypeInfo typeinfo = self.type_resolver.get_type_info(self.type_)
         typeinfo.serializer = DataClassSerializer(self.type_resolver, self.type_)
         return typeinfo.serializer

@@ -220,11 +220,11 @@ cdef class TypeResolver:
 
     def register_type(
         self,
-        cls,
+        cls: Union[type, TypeVar],
         *,
-        type_id=None,
-        namespace=None,
-        typename=None,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
         serializer=None,
     ):
         return self.resolver.register_type(
@@ -237,11 +237,11 @@ cdef class TypeResolver:
 
     def register_union(
         self,
-        cls,
+        cls: Union[type, TypeVar],
         *,
-        type_id=None,
-        namespace=None,
-        typename=None,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
         serializer=None,
     ):
         return self.resolver.register_union(
@@ -465,29 +465,6 @@ cdef class TypeResolver:
             )
         ] = <PyObject *>typeinfo
         return typeinfo
-
-cdef inline uint64_t _mix64(uint64_t x):
-    x ^= x >> 33
-    x *= <uint64_t>0xff51afd7ed558ccd
-    x ^= x >> 33
-    x *= <uint64_t>0xc4ceb9fe1a85ec53
-    x ^= x >> 33
-    return x
-
-
-cdef inline int64_t _hash_small_metastring(
-    int64_t v1,
-    int64_t v2,
-    int32_t length,
-    uint8_t encoding,
-):
-    cdef uint64_t k = <uint64_t>0x9e3779b97f4a7c15
-    cdef uint64_t x = (<uint64_t>v1) ^ ((<uint64_t>v2) * k)
-    x ^= (<uint64_t>length) << 56
-    cdef uint64_t h = _mix64(x)
-    h = (h & <uint64_t>0xffffffffffffff00) | encoding
-    return <int64_t>h
-
 
 cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):
     cdef int32_t meta_size = <int32_t>(header & 0xFF)
@@ -716,11 +693,11 @@ cdef class Fory:
 
     def register_type(
         self,
-        cls,
+        cls: Union[type, TypeVar],
         *,
-        type_id=None,
-        namespace=None,
-        typename=None,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
         serializer=None,
     ):
         cdef TypeInfo typeinfo = self.type_resolver.register_type(
@@ -734,11 +711,11 @@ cdef class Fory:
 
     def register_union(
         self,
-        cls,
+        cls: Union[type, TypeVar],
         *,
-        type_id=None,
-        namespace=None,
-        typename=None,
+        type_id: int = None,
+        namespace: str = None,
+        typename: str = None,
         serializer=None,
     ):
         cdef TypeInfo typeinfo = self.type_resolver.register_union(

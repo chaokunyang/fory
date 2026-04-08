@@ -16,10 +16,11 @@
 # under the License.
 
 """
-Pure Python collection serializers for debugging purposes only.
+Pure Python collection serializers for debugging and Python-only execution.
 
-This module provides the active collection serializers used by the Python facade
-in both debug and Cython-buffer-backed modes.
+In Cython mode the active collection serializers live in `collection.pxi` and
+are imported through `pyfory.serialization`. This module is the pure-Python
+fallback only.
 """
 
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION

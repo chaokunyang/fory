@@ -219,10 +219,14 @@ cdef class TypeResolver:
         self._ns_type_to_type_info = resolver._ns_type_to_type_info
         self._meta_shared_type_info = resolver._meta_shared_type_info
         for typeinfo in resolver._types_info.values():
-            self.register_typeinfo(typeinfo)
+            self._populate_type_info(typeinfo)
 
     def initialize(self):
-        return self.resolver.initialize()
+        cdef object typeinfo
+        self.resolver._set_actual_resolver(self)
+        self.resolver.initialize()
+        for typeinfo in self.resolver._types_info.values():
+            self._populate_type_info(typeinfo)
 
     def register_type(
         self,
@@ -233,13 +237,15 @@ cdef class TypeResolver:
         typename: str = None,
         serializer=None,
     ):
-        return self.resolver.register_type(
+        cdef TypeInfo typeinfo = self.resolver.register_type(
             cls,
             type_id=type_id,
             namespace=namespace,
             typename=typename,
             serializer=serializer,
         )
+        self._populate_type_info(typeinfo)
+        return typeinfo
 
     def register_union(
         self,
@@ -250,16 +256,38 @@ cdef class TypeResolver:
         typename: str = None,
         serializer=None,
     ):
-        return self.resolver.register_union(
+        cdef TypeInfo typeinfo = self.resolver.register_union(
             cls,
             type_id=type_id,
             namespace=namespace,
             typename=typename,
             serializer=serializer,
         )
+        self._populate_type_info(typeinfo)
+        return typeinfo
 
     def register_serializer(self, cls, serializer):
-        return self.resolver.register_serializer(cls, serializer)
+        cdef TypeInfo typeinfo
+        cdef uint8_t previous_type_id
+        cdef uint32_t previous_user_type_id
+        typeinfo = self.resolver.get_type_info(cls)
+        previous_type_id = typeinfo.type_id
+        previous_user_type_id = typeinfo.user_type_id
+        self.resolver.register_serializer(cls, serializer)
+        typeinfo = self.resolver.get_type_info(cls)
+        if previous_type_id != typeinfo.type_id or previous_user_type_id != typeinfo.user_type_id:
+            if (
+                previous_type_id == <uint8_t>TypeId.ENUM
+                or previous_type_id == <uint8_t>TypeId.STRUCT
+                or previous_type_id == <uint8_t>TypeId.COMPATIBLE_STRUCT
+                or previous_type_id == <uint8_t>TypeId.EXT
+                or previous_type_id == <uint8_t>TypeId.TYPED_UNION
+            ):
+                if previous_user_type_id != <uint32_t>NO_USER_TYPE_ID:
+                    self._c_user_type_id_to_type_info[previous_user_type_id] = NULL
+            elif previous_type_id > 0 and previous_type_id < self._c_registered_id_to_type_info.size():
+                self._c_registered_id_to_type_info[previous_type_id] = NULL
+        self._populate_type_info(typeinfo)
 
     cpdef TypeInfo get_type_info(self, cls, create=True):
         cdef PyObject * typeinfo_ptr = self._c_types_info[<uintptr_t> <PyObject *> cls]
@@ -268,17 +296,32 @@ cdef class TypeResolver:
             typeinfo = <TypeInfo> typeinfo_ptr
             if typeinfo.serializer is None:
                 typeinfo = self.resolver.get_type_info(cls, create=create)
-                self.register_typeinfo(typeinfo)
+                self._populate_type_info(typeinfo)
             return typeinfo
         if not create:
             return None
         typeinfo = self.resolver.get_type_info(cls, create=create)
-        self.register_typeinfo(typeinfo)
+        self._populate_type_info(typeinfo)
         return typeinfo
 
     cpdef Serializer get_serializer(self, cls):
         cdef TypeInfo typeinfo = self.get_type_info(cls)
         return None if typeinfo is None else typeinfo.serializer
+
+    def get_type_info_by_id(self, type_id, user_type_id=NO_USER_TYPE_ID):
+        return self.resolver.get_type_info_by_id(type_id, user_type_id=user_type_id)
+
+    def get_type_info_by_name(self, namespace, typename):
+        return self.resolver.get_type_info_by_name(namespace, typename)
+
+    def get_registered_name(self, cls):
+        return self.resolver.get_registered_name(cls)
+
+    def get_registered_type_ids(self, cls):
+        return self.resolver.get_registered_type_ids(cls)
+
+    def is_registered_by_name(self, cls):
+        return self.resolver.is_registered_by_name(cls)
 
     cpdef write_type_info(self, WriteContext write_context, TypeInfo typeinfo):
         cdef uint8_t type_id
@@ -354,10 +397,14 @@ cdef class TypeResolver:
                 return typeinfo
         return self.resolver.get_type_info_by_id(type_id)
 
-    cpdef bint is_registered_by_id(self, cls):
-        return self.resolver.is_registered_by_id(cls)
+    def is_registered_by_id(self, cls=None, type_id=None, user_type_id=NO_USER_TYPE_ID):
+        return self.resolver.is_registered_by_id(
+            cls=cls,
+            type_id=type_id,
+            user_type_id=user_type_id,
+        )
 
-    cpdef register_typeinfo(self, TypeInfo typeinfo):
+    cdef _populate_type_info(self, TypeInfo typeinfo):
         cdef uint8_t type_id = typeinfo.type_id
         if (
             type_id == <uint8_t>TypeId.ENUM
@@ -503,18 +550,15 @@ cdef class Serializer:
     cdef readonly object type_
     cdef public bint need_to_write_ref
 
-    def __init__(self, type_resolver, type_: Union[type, TypeVar]):
+    def __init__(self, TypeResolver type_resolver, type_: Union[type, TypeVar]):
         """
         Initialize a serializer for one declared Python type.
 
         Args:
-            type_resolver: Active resolver for type lookup and configuration.
+            type_resolver: Active Cython resolver for type lookup and configuration.
             type_: Declared Python type handled by this serializer.
         """
-        if isinstance(type_resolver, TypeResolver):
-            self.type_resolver = <TypeResolver>type_resolver
-        else:
-            self.type_resolver = TypeResolver(type_resolver)
+        self.type_resolver = type_resolver
         self.type_ = type_
         self.need_to_write_ref = self.type_resolver.track_ref and not is_primitive_type(type_)
 
@@ -600,8 +644,8 @@ cdef class Fory:
     cdef public int32_t max_collection_size
     cdef public int32_t max_binary_size
     cdef public Config config
-    cdef public object type_resolver
-    cdef readonly TypeResolver _type_resolver
+    cdef public TypeResolver type_resolver
+    cdef readonly object _py_type_resolver
     cdef public WriteContext write_context
     cdef public ReadContext read_context
     cdef public Buffer buffer
@@ -665,16 +709,16 @@ cdef class Fory:
 
         shared_registry = SharedRegistry()
 
-        self.type_resolver = PyTypeResolver(
+        self._py_type_resolver = PyTypeResolver(
             self.config,
             shared_registry=shared_registry,
             meta_share=compatible,
             meta_compressor=meta_compressor,
         )
+        self.type_resolver = TypeResolver(self._py_type_resolver)
         self.type_resolver.initialize()
-        self._type_resolver = TypeResolver(self.type_resolver)
-        self.write_context = WriteContext(self.config, self._type_resolver)
-        self.read_context = ReadContext(self.config, self._type_resolver)
+        self.write_context = WriteContext(self.config, self.type_resolver)
+        self.read_context = ReadContext(self.config, self.type_resolver)
         self.buffer = Buffer.allocate(32, max_binary_size=max_binary_size)
 
     def register(
@@ -703,14 +747,13 @@ cdef class Fory:
         typename: str = None,
         serializer=None,
     ):
-        cdef TypeInfo typeinfo = self.type_resolver.register_type(
+        self.type_resolver.register_type(
             cls,
             type_id=type_id,
             namespace=namespace,
             typename=typename,
             serializer=serializer,
         )
-        self._type_resolver.register_typeinfo(typeinfo)
 
     def register_union(
         self,
@@ -721,18 +764,16 @@ cdef class Fory:
         typename: str = None,
         serializer=None,
     ):
-        cdef TypeInfo typeinfo = self.type_resolver.register_union(
+        self.type_resolver.register_union(
             cls,
             type_id=type_id,
             namespace=namespace,
             typename=typename,
             serializer=serializer,
         )
-        self._type_resolver.register_typeinfo(typeinfo)
 
     def register_serializer(self, cls, serializer):
         self.type_resolver.register_serializer(cls, serializer)
-        self._type_resolver.register_typeinfo(self.type_resolver.get_type_info(cls))
 
     def dumps(
         self,

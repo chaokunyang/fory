@@ -43,9 +43,10 @@ _WINDOWS = os.name == "nt"
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 
 # Keep the mode switch here instead of inside `_serializer.py`.
-# In Cython mode the active serializer classes come from `pyfory.serialization`,
-# including EnumSerializer and SliceSerializer. `_serializer.py` stays a
-# pure-Python shim for debugging and Python-only execution.
+# In Cython mode the active hot-path serializer classes, including primitive,
+# enum/slice, and collection serializers, must come from `pyfory.serialization`.
+# `_serializer.py` and `collection.py` stay pure-Python shims for debugging and
+# Python-only execution.
 if ENABLE_FORY_CYTHON_SERIALIZATION:
     from pyfory.serialization import (  # noqa: F401 # pylint: disable=unused-import
         Serializer,
@@ -71,9 +72,16 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         StringSerializer,
         DateSerializer,
         TimestampSerializer,
+        CollectionSerializer,
+        ListSerializer,
+        TupleSerializer,
+        StringArraySerializer,
+        SetSerializer,
+        MapSerializer,
         EnumSerializer,
         SliceSerializer,
     )
+    from pyfory.union import UnionSerializer  # noqa: F401
 else:
     from pyfory._serializer import (  # noqa: F401 # pylint: disable=unused-import
         Serializer,
@@ -102,15 +110,15 @@ else:
         EnumSerializer,
         SliceSerializer,
     )
-from pyfory.union import UnionSerializer  # noqa: F401
-from pyfory.collection import (
-    CollectionSerializer,
-    ListSerializer,
-    TupleSerializer,
-    StringArraySerializer,
-    SetSerializer,
-    MapSerializer,
-)
+    from pyfory.union import UnionSerializer  # noqa: F401
+    from pyfory.collection import (
+        CollectionSerializer,
+        ListSerializer,
+        TupleSerializer,
+        StringArraySerializer,
+        SetSerializer,
+        MapSerializer,
+    )
 
 from pyfory.types import (
     int8_array,

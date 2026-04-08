@@ -595,6 +595,7 @@ class DataClassStubSerializer(DataClassSerializer):
         typeinfo.serializer = DataClassSerializer(self.type_resolver, self.type_)
         return typeinfo.serializer
 
+
 basic_types = {
     bool,
     # Signed integers

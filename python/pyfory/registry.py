@@ -187,10 +187,8 @@ def _construct_serializer(serializer_factory, type_resolver, cls):
     ):
         if _accepts_n_positional_args(serializer_factory, nargs):
             return serializer_factory(*args)
-    raise TypeError(
-        f"Unsupported serializer constructor for {serializer_factory!r}; expected "
-        "`(type_resolver, cls)`, `(type_resolver)`, or `()`."
-    )
+    raise TypeError(f"Unsupported serializer constructor for {serializer_factory!r}; expected `(type_resolver, cls)`, `(type_resolver)`, or `()`.")
+
 
 if ENABLE_FORY_CYTHON_SERIALIZATION:
     from pyfory.serialization import TypeInfo
@@ -348,9 +346,7 @@ class TypeResolver:
         self._meta_shared_type_info = {}
         self.typename_encoder = MetaStringEncoder("$", "_")
         self.typename_decoder = MetaStringDecoder("$", "_")
-        self.meta_compressor = (
-            config.meta_compressor if config.meta_compressor is not None else DeflaterMetaCompressor()
-        )
+        self.meta_compressor = config.meta_compressor if config.meta_compressor is not None else DeflaterMetaCompressor()
         self.meta_share = config.meta_share
         self._internal_py_serializer_map = {}
         self._actual_type_resolver = self

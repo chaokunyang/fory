@@ -34,6 +34,7 @@ from cpython.list cimport PyList_New, PyList_SET_ITEM
 from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.ref cimport Py_INCREF, Py_XDECREF
 from pyfory.includes.libabsl cimport flat_hash_map
+from pyfory.includes.libutil cimport FlatIntMap
 from pyfory._fory import NO_USER_TYPE_ID, NOT_NULL_INT64_FLAG
 from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
 from pyfory.meta.metastring import MetaStringDecoder
@@ -571,6 +572,81 @@ cdef class Serializer:
     @classmethod
     def support_subclass(cls) -> bool:
         return False
+
+
+@cython.final
+cdef class EnumSerializer(Serializer):
+    cdef tuple _members
+    cdef dict _ordinal_by_member
+
+    def __init__(self, TypeResolver type_resolver, type_):
+        super().__init__(type_resolver, type_)
+        self.need_to_write_ref = False
+        self._members = tuple(type_)
+        self._ordinal_by_member = {member: idx for idx, member in enumerate(self._members)}
+
+    @classmethod
+    def support_subclass(cls) -> bool:
+        return True
+
+    cpdef inline write(self, WriteContext write_context, value):
+        write_context.write_var_uint32(self._ordinal_by_member[value])
+
+    cpdef inline read(self, ReadContext read_context):
+        cdef uint32_t ordinal = read_context.read_var_uint32()
+        return self._members[ordinal]
+
+
+@cython.final
+cdef class SliceSerializer(Serializer):
+    cpdef inline write(self, WriteContext write_context, v):
+        cdef slice value = v
+        start, stop, step = value.start, value.stop, value.step
+        if type(start) is int:
+            write_context.write_int16(NOT_NULL_INT64_FLAG)
+            write_context.write_varint64(start)
+        else:
+            if start is None:
+                write_context.write_int8(NULL_FLAG)
+            else:
+                write_context.write_int8(NOT_NULL_VALUE_FLAG)
+                write_context.write_no_ref(start)
+        if type(stop) is int:
+            write_context.write_int16(NOT_NULL_INT64_FLAG)
+            write_context.write_varint64(stop)
+        else:
+            if stop is None:
+                write_context.write_int8(NULL_FLAG)
+            else:
+                write_context.write_int8(NOT_NULL_VALUE_FLAG)
+                write_context.write_no_ref(stop)
+        if type(step) is int:
+            write_context.write_int16(NOT_NULL_INT64_FLAG)
+            write_context.write_varint64(step)
+        else:
+            if step is None:
+                write_context.write_int8(NULL_FLAG)
+            else:
+                write_context.write_int8(NOT_NULL_VALUE_FLAG)
+                write_context.write_no_ref(step)
+
+    cpdef inline read(self, ReadContext read_context):
+        cdef object start
+        cdef object stop
+        cdef object step
+        if read_context.read_int8() == NULL_FLAG:
+            start = None
+        else:
+            start = read_context.read_no_ref()
+        if read_context.read_int8() == NULL_FLAG:
+            stop = None
+        else:
+            stop = read_context.read_no_ref()
+        if read_context.read_int8() == NULL_FLAG:
+            step = None
+        else:
+            step = read_context.read_no_ref()
+        return slice(start, stop, step)
 
 
 @cython.final

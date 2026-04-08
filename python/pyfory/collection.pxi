@@ -41,6 +41,7 @@ cdef int8_t NULL_KEY_VALUE_DECL_TYPE = KEY_HAS_NULL | VALUE_DECL_TYPE
 cdef int8_t NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF = KEY_HAS_NULL | VALUE_DECL_TYPE | TRACKING_VALUE_REF
 cdef int8_t NULL_VALUE_KEY_DECL_TYPE = VALUE_HAS_NULL | KEY_DECL_TYPE
 cdef int8_t NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF = VALUE_HAS_NULL | KEY_DECL_TYPE | TRACKING_KEY_REF
+ctypedef PyObject *PyObjectPtr
 
 
 cdef class CollectionSerializer(Serializer):
@@ -585,6 +586,8 @@ cdef class MapSerializer(Serializer):
     cdef Serializer value_serializer
     cdef bint key_tracking_ref
     cdef bint value_tracking_ref
+    cdef FlatIntMap[uint64_t, PyObjectPtr] _key_typeinfo_cache
+    cdef FlatIntMap[uint64_t, PyObjectPtr] _value_typeinfo_cache
 
     def __init__(
         self,
@@ -598,6 +601,8 @@ cdef class MapSerializer(Serializer):
         super().__init__(type_resolver, type_)
         self.key_serializer = key_serializer
         self.value_serializer = value_serializer
+        self._key_typeinfo_cache = FlatIntMap[uint64_t, PyObjectPtr](4)
+        self._value_typeinfo_cache = FlatIntMap[uint64_t, PyObjectPtr](4)
         self.key_tracking_ref = False
         self.value_tracking_ref = False
         if key_serializer is not None:
@@ -627,6 +632,12 @@ cdef class MapSerializer(Serializer):
         cdef bint value_write_ref
         cdef object key_cls
         cdef object value_cls
+        cdef uint64_t key_cls_addr
+        cdef uint64_t value_cls_addr
+        cdef PyObjectPtr key_typeinfo_ptr
+        cdef PyObjectPtr value_typeinfo_ptr
+        cdef type key_serializer_type
+        cdef type value_serializer_type
 
         write_context.write_var_uint32(length)
         if length == 0:
@@ -686,14 +697,26 @@ cdef class MapSerializer(Serializer):
             if key_serializer is not None:
                 chunk_header |= KEY_DECL_TYPE
             else:
-                key_type_info = self.type_resolver.get_type_info(key_cls)
+                key_cls_addr = <uint64_t> <uintptr_t> <PyObject *> key_cls
+                key_typeinfo_ptr = self._key_typeinfo_cache[key_cls_addr]
+                if key_typeinfo_ptr == NULL:
+                    key_type_info = self.type_resolver.get_type_info(key_cls)
+                    self._key_typeinfo_cache[key_cls_addr] = <PyObject *> key_type_info
+                else:
+                    key_type_info = <TypeInfo> key_typeinfo_ptr
                 self.type_resolver.write_type_info(write_context, key_type_info)
                 key_serializer = key_type_info.serializer
 
             if value_serializer is not None:
                 chunk_header |= VALUE_DECL_TYPE
             else:
-                value_type_info = self.type_resolver.get_type_info(value_cls)
+                value_cls_addr = <uint64_t> <uintptr_t> <PyObject *> value_cls
+                value_typeinfo_ptr = self._value_typeinfo_cache[value_cls_addr]
+                if value_typeinfo_ptr == NULL:
+                    value_type_info = self.type_resolver.get_type_info(value_cls)
+                    self._value_typeinfo_cache[value_cls_addr] = <PyObject *> value_type_info
+                else:
+                    value_type_info = <TypeInfo> value_typeinfo_ptr
                 self.type_resolver.write_type_info(write_context, value_type_info)
                 value_serializer = value_type_info.serializer
 
@@ -705,14 +728,40 @@ cdef class MapSerializer(Serializer):
                 chunk_header |= TRACKING_VALUE_REF
 
             write_context.buffer.put_uint8(chunk_size_offset - 1, chunk_header)
+            key_serializer_type = type(key_serializer)
+            value_serializer_type = type(value_serializer)
             chunk_size = 0
             while chunk_size < MAX_CHUNK_SIZE:
                 if key is None or value is None or type(key) is not key_cls or type(value) is not value_cls:
                     break
                 if not key_write_ref or not ref_writer.write_ref_or_null(write_context, key):
-                    self._write_obj(key_serializer, write_context, key)
+                    if key_cls is str:
+                        write_context.write_string(key)
+                    elif key_serializer_type is Int64Serializer:
+                        write_context.write_varint64(key)
+                    elif key_serializer_type is Float64Serializer:
+                        write_context.write_double(key)
+                    elif key_serializer_type is Int32Serializer:
+                        write_context.write_varint32(key)
+                    elif key_serializer_type is Float32Serializer:
+                        write_context.write_float(key)
+                    else:
+                        key_serializer.write(write_context, key)
                 if not value_write_ref or not ref_writer.write_ref_or_null(write_context, value):
-                    self._write_obj(value_serializer, write_context, value)
+                    if value_cls is str:
+                        write_context.write_string(value)
+                    elif value_serializer_type is Int64Serializer:
+                        write_context.write_varint64(value)
+                    elif value_serializer_type is Float64Serializer:
+                        write_context.write_double(value)
+                    elif value_serializer_type is Int32Serializer:
+                        write_context.write_varint32(value)
+                    elif value_serializer_type is Float32Serializer:
+                        write_context.write_float(value)
+                    elif value_serializer_type is BooleanSerializer:
+                        write_context.write_bool(value)
+                    else:
+                        value_serializer.write(write_context, value)
                 chunk_size += 1
                 try:
                     key, value = next(items_iter)
@@ -741,6 +790,8 @@ cdef class MapSerializer(Serializer):
         cdef bint value_is_declared_type
         cdef int32_t chunk_size
         cdef int32_t ref_id
+        cdef type key_serializer_type
+        cdef type value_serializer_type
 
         if size > read_context.max_collection_size:
             raise ValueError(f"Map size {size} exceeds the configured limit of {read_context.max_collection_size}")
@@ -799,6 +850,8 @@ cdef class MapSerializer(Serializer):
                 key_serializer = self.type_resolver.read_type_info(read_context).serializer
             if not value_is_declared_type:
                 value_serializer = self.type_resolver.read_type_info(read_context).serializer
+            key_serializer_type = type(key_serializer)
+            value_serializer_type = type(value_serializer)
             for _ in range(chunk_size):
                 if track_key_ref:
                     ref_id = ref_reader.try_preserve_ref_id(read_context)
@@ -808,7 +861,18 @@ cdef class MapSerializer(Serializer):
                         key = self._read_obj(key_serializer, read_context)
                         ref_reader.set_read_ref(ref_id, key)
                 else:
-                    key = self._read_obj_no_ref(key_serializer, read_context)
+                    if key_serializer_type is StringSerializer:
+                        key = read_context.read_string()
+                    elif key_serializer_type is Int64Serializer:
+                        key = read_context.read_varint64()
+                    elif key_serializer_type is Float64Serializer:
+                        key = read_context.read_double()
+                    elif key_serializer_type is Int32Serializer:
+                        key = read_context.read_varint32()
+                    elif key_serializer_type is Float32Serializer:
+                        key = read_context.read_float()
+                    else:
+                        key = read_context.read_non_ref(key_serializer)
                 if track_value_ref:
                     ref_id = ref_reader.try_preserve_ref_id(read_context)
                     if ref_id < NOT_NULL_VALUE_FLAG:
@@ -817,7 +881,20 @@ cdef class MapSerializer(Serializer):
                         value = self._read_obj(value_serializer, read_context)
                         ref_reader.set_read_ref(ref_id, value)
                 else:
-                    value = self._read_obj_no_ref(value_serializer, read_context)
+                    if value_serializer_type is StringSerializer:
+                        value = read_context.read_string()
+                    elif value_serializer_type is Int64Serializer:
+                        value = read_context.read_varint64()
+                    elif value_serializer_type is Float64Serializer:
+                        value = read_context.read_double()
+                    elif value_serializer_type is Int32Serializer:
+                        value = read_context.read_varint32()
+                    elif value_serializer_type is Float32Serializer:
+                        value = read_context.read_float()
+                    elif value_serializer_type is BooleanSerializer:
+                        value = read_context.read_bool()
+                    else:
+                        value = read_context.read_non_ref(value_serializer)
                 map_[key] = value
                 size -= 1
             if size != 0:

@@ -15,10 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# Keep primitive serializers in Cython so hot scalar paths stay on direct
-# WriteContext/ReadContext primitive helpers instead of bouncing through Python.
-
-
 @cython.final
 cdef class BooleanSerializer(Serializer):
     cpdef inline write(self, WriteContext write_context, value):
@@ -199,19 +195,19 @@ cdef class TaggedUint64Serializer(Serializer):
 @cython.final
 cdef class Float32Serializer(Serializer):
     cpdef inline write(self, WriteContext write_context, value):
-        write_context.write_float32(value)
+        write_context.write_float(value)
 
     cpdef inline read(self, ReadContext read_context):
-        return read_context.read_float32()
+        return read_context.read_float()
 
 
 @cython.final
 cdef class Float64Serializer(Serializer):
     cpdef inline write(self, WriteContext write_context, value):
-        write_context.write_float64(value)
+        write_context.write_double(value)
 
     cpdef inline read(self, ReadContext read_context):
-        return read_context.read_float64()
+        return read_context.read_double()
 
 
 @cython.final
@@ -240,10 +236,12 @@ cdef class DateSerializer(Serializer):
                     value, datetime.date, type(value)
                 )
             )
-        write_context.write_int32((value - _base_date).days)
+        days = (value - _base_date).days
+        write_context.write_int32(days)
 
     cpdef inline read(self, ReadContext read_context):
-        return datetime.date.fromordinal(_base_date_ordinal + read_context.read_int32())
+        days = read_context.read_int32()
+        return datetime.date.fromordinal(_base_date_ordinal + days)
 
 
 @cython.final
@@ -272,110 +270,21 @@ cdef class TimestampSerializer(Serializer):
         if micros_rem < 0:
             seconds -= 1
             micros_rem += 1000000
-        return seconds, micros_rem * 1000
+        return seconds, <unsigned int>(micros_rem * 1000)
 
     cpdef inline write(self, WriteContext write_context, value):
+        if type(value) is not datetime.datetime:
+            raise TypeError(
+                "{} should be {} instead of {}".format(value, datetime, type(value))
+            )
         cdef long long seconds
-        cdef long long nanos
+        cdef unsigned int nanos
         seconds, nanos = self._get_timestamp(value)
         write_context.write_int64(seconds)
-        write_context.write_int32(nanos)
+        write_context.write_uint32(nanos)
 
     cpdef inline read(self, ReadContext read_context):
         cdef long long seconds = read_context.read_int64()
-        cdef long long nanos = read_context.read_int32()
-        return datetime.datetime.fromtimestamp(
-            seconds + nanos / 1000000000,
-            tz=datetime.timezone.utc,
-        )
-
-
-@cython.final
-cdef class EnumSerializer(Serializer):
-    """
-    Cython enum serializer for the active Cython runtime.
-
-    Keep this implementation on the Cython side so Cython mode does not fall
-    back to `_serializer.py` for enum handling during future refactors.
-    """
-
-    cdef tuple _members
-    cdef dict _ordinal_by_member
-
-    def __init__(self, type_resolver, type_):
-        super().__init__(type_resolver, type_)
-        self.need_to_write_ref = False
-        self._members = tuple(type_)
-        self._ordinal_by_member = {member: idx for idx, member in enumerate(self._members)}
-
-    @classmethod
-    def support_subclass(cls) -> bool:
-        return True
-
-    cpdef inline write(self, WriteContext write_context, value):
-        write_context.write_var_uint32(self._ordinal_by_member[value])
-
-    cpdef inline read(self, ReadContext read_context):
-        cdef uint32_t ordinal = read_context.read_var_uint32()
-        return self._members[ordinal]
-
-
-@cython.final
-cdef class SliceSerializer(Serializer):
-    """
-    Cython slice serializer for the active Cython runtime.
-
-    Keep this implementation on the Cython side so Cython mode does not depend
-    on the pure-Python `_serializer.py` shim for slice serialization.
-    """
-
-    cpdef inline write(self, WriteContext write_context, v):
-        cdef slice value = v
-        cdef Buffer buffer = write_context.buffer
-        start, stop, step = value.start, value.stop, value.step
-        if type(start) is int:
-            buffer.write_int16(NOT_NULL_INT64_FLAG)
-            buffer.write_varint64(start)
-        else:
-            if start is None:
-                buffer.write_int8(NULL_FLAG)
-            else:
-                buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                write_context.write_no_ref(start)
-        if type(stop) is int:
-            buffer.write_int16(NOT_NULL_INT64_FLAG)
-            buffer.write_varint64(stop)
-        else:
-            if stop is None:
-                buffer.write_int8(NULL_FLAG)
-            else:
-                buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                write_context.write_no_ref(stop)
-        if type(step) is int:
-            buffer.write_int16(NOT_NULL_INT64_FLAG)
-            buffer.write_varint64(step)
-        else:
-            if step is None:
-                buffer.write_int8(NULL_FLAG)
-            else:
-                buffer.write_int8(NOT_NULL_VALUE_FLAG)
-                write_context.write_no_ref(step)
-
-    cpdef inline read(self, ReadContext read_context):
-        cdef Buffer buffer = read_context.buffer
-        cdef object start
-        cdef object stop
-        cdef object step
-        if buffer.read_int8() == NULL_FLAG:
-            start = None
-        else:
-            start = read_context.read_no_ref()
-        if buffer.read_int8() == NULL_FLAG:
-            stop = None
-        else:
-            stop = read_context.read_no_ref()
-        if buffer.read_int8() == NULL_FLAG:
-            step = None
-        else:
-            step = read_context.read_no_ref()
-        return slice(start, stop, step)
+        cdef unsigned int nanos = read_context.read_uint32()
+        ts = seconds + (<double>nanos) / 1000000000.0
+        return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)

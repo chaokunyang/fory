@@ -447,10 +447,8 @@ cdef class DataClassSerializer(Serializer):
 
 @cython.final
 cdef class DataClassStubSerializer(Serializer):
-    # apache/main exposes the lazy dataclass stub from struct.py in Python mode.
-    # Keep the parallel Cython stub only for Cython mode so TypeInfo.serializer
-    # can remain on the Cython serializer hierarchy until the real serializer is
-    # materialized on first use.
+    # Keep a lazy stub so recursive dataclass registration can install the real
+    # serializer on first use without re-entering construction.
     cpdef write(self, WriteContext write_context, value):
         self._replace().write(write_context, value)
 

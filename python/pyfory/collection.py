@@ -547,12 +547,6 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         MapSerializer as CythonMapSerializer,
     )
 
-    PythonCollectionSerializer = CollectionSerializer
-    PythonListSerializer = ListSerializer
-    PythonTupleSerializer = TupleSerializer
-    PythonStringArraySerializer = StringArraySerializer
-    PythonSetSerializer = SetSerializer
-    PythonMapSerializer = MapSerializer
     CollectionSerializer = CythonCollectionSerializer
     ListSerializer = CythonListSerializer
     TupleSerializer = CythonTupleSerializer

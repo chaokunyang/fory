@@ -218,6 +218,7 @@ class Fory:
             track_ref=ref,
             strict=self.strict,
             compatible=compatible,
+            meta_share=compatible,
             scoped_meta_share_enabled=compatible,
             max_depth=max_depth,
             field_nullable=field_nullable,
@@ -232,8 +233,6 @@ class Fory:
         self.type_resolver = TypeResolver(
             self.config,
             shared_registry=shared_registry,
-            meta_share=compatible,
-            meta_compressor=meta_compressor,
         )
         self.type_resolver.initialize()
         self.write_context = WriteContext(self.config, self.type_resolver)

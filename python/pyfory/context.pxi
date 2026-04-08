@@ -65,18 +65,18 @@ cdef class RefWriter:
     def __dealloc__(self):
         self.reset()
 
-    cpdef inline bint write_ref_or_null(self, WriteContext write_context, obj):
+    cdef inline bint write_ref_or_null(self, CBuffer * c_buffer, obj):
         cdef uint64_t object_id
         cdef int32_t next_id
         cdef flat_hash_map[uint64_t, int32_t].iterator it
         if not self.track_ref:
             if obj is None:
-                write_context.write_int8(NULL_FLAG)
+                deref(c_buffer).write_int8(NULL_FLAG)
                 return True
-            write_context.write_int8(NOT_NULL_VALUE_FLAG)
+            deref(c_buffer).write_int8(NOT_NULL_VALUE_FLAG)
             return False
         if obj is None:
-            write_context.write_int8(NULL_FLAG)
+            deref(c_buffer).write_int8(NULL_FLAG)
             return True
         object_id = <uintptr_t> <PyObject *> obj
         it = self.written_objects_id.find(object_id)
@@ -85,19 +85,19 @@ cdef class RefWriter:
             self.written_objects_id[object_id] = next_id
             self.written_objects.push_back(<PyObject *> obj)
             Py_INCREF(obj)
-            write_context.write_int8(REF_VALUE_FLAG)
+            deref(c_buffer).write_int8(REF_VALUE_FLAG)
             return False
-        write_context.write_int8(REF_FLAG)
-        write_context.write_var_uint32(<uint64_t> deref(it).second)
+        deref(c_buffer).write_int8(REF_FLAG)
+        deref(c_buffer).write_var_uint32(<uint64_t> deref(it).second)
         return True
 
-    cpdef inline bint write_ref_value_flag(self, WriteContext write_context, obj):
+    cdef inline bint write_ref_value_flag(self, CBuffer * c_buffer, obj):
         cdef uint64_t object_id
         cdef int32_t next_id
         cdef flat_hash_map[uint64_t, int32_t].iterator it
         assert obj is not None
         if not self.track_ref:
-            write_context.write_int8(NOT_NULL_VALUE_FLAG)
+            deref(c_buffer).write_int8(NOT_NULL_VALUE_FLAG)
             return True
         object_id = <uintptr_t> <PyObject *> obj
         it = self.written_objects_id.find(object_id)
@@ -106,15 +106,15 @@ cdef class RefWriter:
             self.written_objects_id[object_id] = next_id
             self.written_objects.push_back(<PyObject *> obj)
             Py_INCREF(obj)
-            write_context.write_int8(REF_VALUE_FLAG)
+            deref(c_buffer).write_int8(REF_VALUE_FLAG)
             return True
-        write_context.write_int8(REF_FLAG)
-        write_context.write_var_uint32(<uint64_t> deref(it).second)
+        deref(c_buffer).write_int8(REF_FLAG)
+        deref(c_buffer).write_var_uint32(<uint64_t> deref(it).second)
         return False
 
-    cpdef inline bint write_null_flag(self, WriteContext write_context, obj):
+    cdef inline bint write_null_flag(self, CBuffer * c_buffer, obj):
         if obj is None:
-            write_context.write_int8(NULL_FLAG)
+            deref(c_buffer).write_int8(NULL_FLAG)
             return True
         return False
 
@@ -132,76 +132,78 @@ cdef class RefWriter:
 cdef class RefReader:
     cdef vector[PyObject *] read_objects
     cdef vector[int32_t] read_ref_ids
-    cdef PyObject * read_object
+    # Keep the last resolved reference in its own object slot so hot REF_FLAG
+    # reads can return it directly instead of probing read_objects again.
+    cdef object read_object
     cdef readonly bint track_ref
 
     def __cinit__(self, bint track_ref):
         self.track_ref = track_ref
-        self.read_object = NULL
+        self.read_object = None
 
     def __dealloc__(self):
         self.reset()
 
-    cpdef inline int32_t read_ref_or_null(self, ReadContext read_context):
-        cdef int8_t head_flag = read_context.read_int8()
+    cdef inline int32_t read_ref_or_null(self, Buffer buffer):
+        cdef int8_t head_flag = buffer.c_buffer.read_int8(buffer._error)
         cdef int32_t ref_id
         cdef int32_t size
         cdef PyObject *obj
         if not self.track_ref:
             return head_flag
         if head_flag == REF_FLAG:
-            ref_id = read_context.read_var_uint32()
+            ref_id = buffer.c_buffer.read_var_uint32(buffer._error)
             size = self.read_objects.size()
             if ref_id < 0 or ref_id >= size:
                 raise ValueError(f"Invalid ref id {ref_id}, current size {size}")
             obj = self.read_objects[ref_id]
             if obj == NULL:
                 raise ValueError(f"Invalid ref id {ref_id}, current size {size}")
-            Py_INCREF(<object>obj)
-            Py_XDECREF(self.read_object)
-            self.read_object = obj
+            self.read_object = <object>obj
             return REF_FLAG
-        Py_XDECREF(self.read_object)
-        self.read_object = NULL
+        self.read_object = None
         return head_flag
 
-    cpdef inline int32_t preserve_ref_id(self, int32_t ref_id=-2147483648):
+    cdef inline int32_t preserve_next_ref_id(self):
+        cdef int32_t ref_id
         if not self.track_ref:
             return -1
-        if ref_id == -2147483648:
-            ref_id = self.read_objects.size()
-            self.read_objects.push_back(NULL)
+        ref_id = self.read_objects.size()
+        self.read_objects.push_back(NULL)
         self.read_ref_ids.push_back(ref_id)
         return ref_id
 
-    cpdef inline int32_t try_preserve_ref_id(self, ReadContext read_context):
+    cdef inline int32_t preserve_ref_id(self, int32_t ref_id):
+        if not self.track_ref:
+            return -1
+        self.read_ref_ids.push_back(ref_id)
+        return ref_id
+
+    cdef inline int32_t try_preserve_ref_id(self, Buffer buffer):
         cdef int8_t head_flag
         cdef int32_t ref_id
         cdef int32_t size
         cdef PyObject *obj
         if not self.track_ref:
-            return read_context.read_int8()
-        head_flag = read_context.read_int8()
+            return buffer.c_buffer.read_int8(buffer._error)
+        head_flag = buffer.c_buffer.read_int8(buffer._error)
         if head_flag == REF_FLAG:
-            ref_id = read_context.read_var_uint32()
+            ref_id = buffer.c_buffer.read_var_uint32(buffer._error)
             size = self.read_objects.size()
             if ref_id < 0 or ref_id >= size:
                 raise ValueError(f"Invalid ref id {ref_id}, current size {size}")
             obj = self.read_objects[ref_id]
             if obj == NULL:
                 raise ValueError(f"Invalid ref id {ref_id}, current size {size}")
-            Py_INCREF(<object>obj)
-            Py_XDECREF(self.read_object)
-            self.read_object = obj
+            self.read_object = <object>obj
             return head_flag
-        Py_XDECREF(self.read_object)
-        self.read_object = NULL
+        self.read_object = None
         if head_flag == REF_VALUE_FLAG:
-            return self.preserve_ref_id()
+            return self.preserve_next_ref_id()
         self.read_ref_ids.push_back(-1)
         return head_flag
 
-    cpdef inline int32_t last_preserved_ref_id(self):
+    cdef inline int32_t last_preserved_ref_id(self):
         cdef int32_t length
         if not self.track_ref:
             return -1
@@ -209,12 +211,12 @@ cdef class RefReader:
         assert length > 0
         return self.read_ref_ids[length - 1]
 
-    cpdef inline bint has_preserved_ref_id(self):
+    cdef inline bint has_preserved_ref_id(self):
         if not self.track_ref:
             return False
         return self.read_ref_ids.size() != 0
 
-    cpdef inline reference(self, obj):
+    cdef inline reference(self, obj):
         cdef int32_t ref_id
         cdef bint need_inc
         if not self.track_ref:
@@ -226,18 +228,16 @@ cdef class RefReader:
         need_inc = self.read_objects[ref_id] == NULL
         if need_inc:
             Py_INCREF(obj)
-        self.read_objects[ref_id] = <PyObject *> obj
+        self.read_objects[ref_id] = <PyObject *>obj
 
-    cpdef inline get_read_ref(self, id_=None):
+    cdef inline get_read_ref(self, id_=None):
         cdef int32_t ref_id
         cdef int32_t size
         cdef PyObject *obj
         if not self.track_ref:
             return None
         if id_ is None:
-            if self.read_object == NULL:
-                return None
-            return <object> self.read_object
+            return self.read_object
         ref_id = id_
         size = self.read_objects.size()
         if ref_id < 0 or ref_id >= size:
@@ -247,16 +247,17 @@ cdef class RefReader:
             raise ValueError(f"Invalid ref id {ref_id}, current size {size}")
         return <object> obj
 
-    cpdef inline set_read_ref(self, int32_t ref_id, obj):
-        cdef bint need_inc
-        if not self.track_ref or ref_id < 0:
+    cdef inline set_read_ref(self, int32_t ref_id, obj):
+        if not self.track_ref:
             return
-        if ref_id >= self.read_objects.size():
-            raise RuntimeError(f"Ref id {ref_id} invalid")
-        need_inc = self.read_objects[ref_id] == NULL
-        if need_inc:
-            Py_INCREF(obj)
-        self.read_objects[ref_id] = <PyObject *> obj
+        if ref_id >= 0:
+            # ref_id < 0 is the NOT_NULL_VALUE_FLAG sentinel path and has no
+            # slot in read_objects. Referenceable containers/structs populate
+            # their slot eagerly through reference(), so the follow-up store here
+            # should only fill slots that are still empty.
+            if self.read_objects[ref_id] == NULL:
+                Py_INCREF(obj)
+                self.read_objects[ref_id] = <PyObject *>obj
 
     cpdef inline reset(self):
         cdef PyObject *item
@@ -265,8 +266,7 @@ cdef class RefReader:
                 Py_XDECREF(item)
             self.read_objects.clear()
             self.read_ref_ids.clear()
-        Py_XDECREF(self.read_object)
-        self.read_object = NULL
+        self.read_object = None
 
 
 @cython.final
@@ -437,23 +437,12 @@ cdef class WriteContext:
         self.context_objects = {}
         self.depth = 0
 
-    cpdef prepare(self, Buffer buffer, buffer_callback=None, unsupported_callback=None):
+    cpdef inline prepare(self, Buffer buffer, buffer_callback=None, unsupported_callback=None):
         self.buffer = buffer
         self.c_buffer = buffer.c_buffer
         self.buffer_callback = buffer_callback
         self.unsupported_callback = unsupported_callback
         self.depth = 0
-
-    cpdef Buffer serialize_root(self, obj, Buffer buffer, buffer_callback=None, unsupported_callback=None):
-        cdef uint8_t header = 0b10
-        self.prepare(buffer, buffer_callback=buffer_callback, unsupported_callback=unsupported_callback)
-        if obj is None:
-            header |= 0b1
-        if buffer_callback is not None:
-            header |= 0b100
-        self.c_buffer.write_uint8(header)
-        self.write_ref(obj)
-        return buffer
 
     cpdef inline reset(self):
         self.ref_writer.reset()
@@ -484,19 +473,19 @@ cdef class WriteContext:
         self.depth -= diff
 
     cpdef inline bint write_ref_or_null(self, obj):
-        return self.ref_writer.write_ref_or_null(self, obj)
+        return self.ref_writer.write_ref_or_null(self.c_buffer, obj)
 
     cpdef inline bint write_ref_value_flag(self, obj):
-        return self.ref_writer.write_ref_value_flag(self, obj)
+        return self.ref_writer.write_ref_value_flag(self.c_buffer, obj)
 
     cpdef inline bint write_null_flag(self, obj):
-        return self.ref_writer.write_null_flag(self, obj)
+        return self.ref_writer.write_null_flag(self.c_buffer, obj)
 
     cpdef inline write_ref(self, obj, TypeInfo typeinfo=None, Serializer serializer=None):
         if serializer is None and typeinfo is not None:
             serializer = typeinfo.serializer
         if serializer is None or serializer.need_to_write_ref:
-            if self.ref_writer.write_ref_or_null(self, obj):
+            if self.ref_writer.write_ref_or_null(self.c_buffer, obj):
                 return
             self.write_non_ref(obj, serializer=serializer, typeinfo=typeinfo)
             return
@@ -718,7 +707,7 @@ cdef class ReadContext:
         self.context_objects = {}
         self.depth = 0
 
-    cpdef prepare(
+    cpdef inline prepare(
         self,
         Buffer buffer,
         buffers=None,
@@ -731,28 +720,6 @@ cdef class ReadContext:
         self.unsupported_objects = iter(unsupported_objects) if unsupported_objects is not None else None
         self.peer_out_of_band_enabled = peer_out_of_band_enabled
         self.depth = 0
-
-    cpdef deserialize_root(self, Buffer buffer, buffers=None, unsupported_objects=None):
-        cdef uint8_t header = buffer.read_uint8()
-        cdef bint peer_out_of_band_enabled
-        if header & 0b1:
-            return None
-        peer_out_of_band_enabled = (header & 0b100) != 0
-        if peer_out_of_band_enabled:
-            assert buffers is not None, (
-                "buffers shouldn't be null when the serialized stream is produced with buffer_callback not null."
-            )
-        else:
-            assert buffers is None, (
-                "buffers should be null when the serialized stream is produced with buffer_callback null."
-            )
-        self.prepare(
-            buffer,
-            buffers=buffers,
-            unsupported_objects=unsupported_objects,
-            peer_out_of_band_enabled=peer_out_of_band_enabled,
-        )
-        return self.read_ref()
 
     cpdef inline reset(self):
         self.ref_reader.reset()
@@ -777,7 +744,7 @@ cdef class ReadContext:
     cpdef inline get_context_object(self, key, default=None):
         return self.context_objects.get(id(key), default)
 
-    cpdef increase_depth(self, int32_t diff=1):
+    cpdef inline increase_depth(self, int32_t diff=1):
         # Depth accounting is paired on the successful path only.
         # If a nested read raises, the top-level deserialize/reset path clears
         # `depth`, so nested readers must not add local try/finally wrappers
@@ -789,20 +756,20 @@ cdef class ReadContext:
                 "If it's not malicious, please increase max read depth by Fory(..., max_depth=...)"
             )
 
-    cpdef decrease_depth(self, int32_t diff=1):
+    cpdef inline decrease_depth(self, int32_t diff=1):
         # Only call this after the matching nested read completed successfully.
         self.depth -= diff
 
     cpdef inline int32_t read_ref_or_null(self):
-        return self.ref_reader.read_ref_or_null(self)
+        return self.ref_reader.read_ref_or_null(self.buffer)
 
     cpdef inline int32_t preserve_ref_id(self, ref_id=None):
         if ref_id is None:
-            return self.ref_reader.preserve_ref_id()
+            return self.ref_reader.preserve_next_ref_id()
         return self.ref_reader.preserve_ref_id(ref_id)
 
     cpdef inline int32_t try_preserve_ref_id(self):
-        return self.ref_reader.try_preserve_ref_id(self)
+        return self.ref_reader.try_preserve_ref_id(self.buffer)
 
     cpdef inline int32_t last_preserved_ref_id(self):
         return self.ref_reader.last_preserved_ref_id()
@@ -821,21 +788,54 @@ cdef class ReadContext:
 
     cpdef inline read_ref(self, Serializer serializer=None):
         cdef int32_t ref_id
+        cdef TypeInfo typeinfo
+        cdef uint8_t type_id
         cdef object obj
+        cdef Buffer buffer = self.buffer
         if serializer is None or serializer.need_to_write_ref:
-            ref_id = self.ref_reader.try_preserve_ref_id(self)
-            if ref_id >= NOT_NULL_VALUE_FLAG:
-                obj = self._read_non_ref_internal(serializer)
-                self.ref_reader.set_read_ref(ref_id, obj)
-                return obj
-            return self.ref_reader.get_read_ref()
+            ref_id = self.ref_reader.try_preserve_ref_id(buffer)
+            if ref_id < NOT_NULL_VALUE_FLAG:
+                return self.ref_reader.get_read_ref()
+            if serializer is None:
+                typeinfo = self.type_resolver.read_type_info(self)
+                type_id = typeinfo.type_id
+                if type_id == STRING_TYPE_ID:
+                    obj = self.buffer.read_string()
+                    if ref_id >= 0 and self.ref_reader.read_objects[ref_id] == NULL:
+                        Py_INCREF(obj)
+                        self.ref_reader.read_objects[ref_id] = <PyObject *>obj
+                    return obj
+                if type_id == INT64_TYPE_ID:
+                    obj = self.read_varint64()
+                    if ref_id >= 0 and self.ref_reader.read_objects[ref_id] == NULL:
+                        Py_INCREF(obj)
+                        self.ref_reader.read_objects[ref_id] = <PyObject *>obj
+                    return obj
+                if type_id == BOOL_TYPE_ID:
+                    obj = self.read_bool()
+                    if ref_id >= 0 and self.ref_reader.read_objects[ref_id] == NULL:
+                        Py_INCREF(obj)
+                        self.ref_reader.read_objects[ref_id] = <PyObject *>obj
+                    return obj
+                if type_id == FLOAT64_TYPE_ID:
+                    obj = self.read_double()
+                    if ref_id >= 0 and self.ref_reader.read_objects[ref_id] == NULL:
+                        Py_INCREF(obj)
+                        self.ref_reader.read_objects[ref_id] = <PyObject *>obj
+                    return obj
+                serializer = typeinfo.serializer
+            obj = self._read_non_ref_internal(serializer)
+            if ref_id >= 0 and self.ref_reader.read_objects[ref_id] == NULL:
+                Py_INCREF(obj)
+                self.ref_reader.read_objects[ref_id] = <PyObject *>obj
+            return obj
         if self.read_int8() == NULL_FLAG:
             return None
         return self._read_non_ref_internal(serializer)
 
     cpdef inline read_non_ref(self, Serializer serializer=None):
-        if self.track_ref and (serializer is None or serializer.need_to_write_ref):
-            self.ref_reader.preserve_ref_id(-1)
+        if self.track_ref:
+            self.ref_reader.read_ref_ids.push_back(-1)
         return self._read_non_ref_internal(serializer)
 
     cpdef inline read_no_ref(self, Serializer serializer=None):
@@ -895,108 +895,125 @@ cdef class ReadContext:
         return next(self.unsupported_objects)
 
     cpdef inline bint read_bool(self):
-        cdef uint8_t value = self.c_buffer.read_uint8(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef uint8_t value = self.c_buffer.read_uint8(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value != 0
 
     cpdef inline uint8_t read_uint8(self):
-        cdef uint8_t value = self.c_buffer.read_uint8(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef uint8_t value = self.c_buffer.read_uint8(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline int8_t read_int8(self):
-        cdef int8_t value = self.c_buffer.read_int8(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef int8_t value = self.c_buffer.read_int8(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline int16_t read_int16(self):
-        cdef int16_t value = self.c_buffer.read_int16(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef int16_t value = self.c_buffer.read_int16(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline uint16_t read_uint16(self):
-        cdef uint16_t value = self.c_buffer.read_uint16(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef uint16_t value = self.c_buffer.read_uint16(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline int32_t read_int32(self):
-        cdef int32_t value = self.c_buffer.read_int32(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef int32_t value = self.c_buffer.read_int32(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline uint32_t read_uint32(self):
-        cdef uint32_t value = self.c_buffer.read_uint32(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef uint32_t value = self.c_buffer.read_uint32(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline int64_t read_int64(self):
-        cdef int64_t value = self.c_buffer.read_int64(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef int64_t value = self.c_buffer.read_int64(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline uint64_t read_uint64(self):
-        cdef uint64_t value = self.c_buffer.read_uint64(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef uint64_t value = self.c_buffer.read_uint64(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline int32_t read_varint32(self):
-        cdef int32_t value = self.c_buffer.read_var_int32(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef int32_t value = self.c_buffer.read_var_int32(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline uint32_t read_var_uint32(self):
-        cdef uint32_t value = self.c_buffer.read_var_uint32(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef uint32_t value = self.c_buffer.read_var_uint32(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline int64_t read_varint64(self):
-        cdef int64_t value = self.c_buffer.read_var_int64(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef int64_t value = self.c_buffer.read_var_int64(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline uint64_t read_var_uint64(self):
-        cdef uint64_t value = self.c_buffer.read_var_uint64(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef uint64_t value = self.c_buffer.read_var_uint64(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline int64_t read_tagged_int64(self):
-        cdef int64_t value = self.c_buffer.read_tagged_int64(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef int64_t value = self.c_buffer.read_tagged_int64(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline uint64_t read_tagged_uint64(self):
-        cdef uint64_t value = self.c_buffer.read_tagged_uint64(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef uint64_t value = self.c_buffer.read_tagged_uint64(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline float read_float(self):
-        cdef float value = self.c_buffer.read_float(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef float value = self.c_buffer.read_float(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline float read_float32(self):
         return self.read_float()
 
     cpdef inline double read_double(self):
-        cdef double value = self.c_buffer.read_double(self.buffer._error)
-        if not self.buffer._error.ok():
-            self.buffer._raise_if_error()
+        cdef Buffer buffer = self.buffer
+        cdef double value = self.c_buffer.read_double(buffer._error)
+        if not buffer._error.ok():
+            buffer._raise_if_error()
         return value
 
     cpdef inline double read_float64(self):

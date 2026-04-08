@@ -43,6 +43,8 @@ cdef int8_t NULL_VALUE_KEY_DECL_TYPE = VALUE_HAS_NULL | KEY_DECL_TYPE
 cdef int8_t NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF = VALUE_HAS_NULL | KEY_DECL_TYPE | TRACKING_KEY_REF
 ctypedef PyObject *PyObjectPtr
 
+cdef class ListSerializer
+
 
 cdef class CollectionSerializer(Serializer):
     # Element serializers may be Cython or pure-Python implementations.
@@ -253,6 +255,9 @@ cdef class CollectionSerializer(Serializer):
 
     cpdef _write_same_type_ref(self, WriteContext write_context, value, Serializer serializer):
         cdef RefWriter ref_writer = write_context.ref_writer
+        # Hoist the raw CBuffer* once for the loop. Ref tracking only needs
+        # primitive flag writes here, so it should not bounce through Buffer.
+        cdef CBuffer * c_buffer = write_context.c_buffer
         cdef PyObject **items = fory_sequence_get_items(value)
         cdef Py_ssize_t i
         cdef Py_ssize_t size
@@ -260,27 +265,34 @@ cdef class CollectionSerializer(Serializer):
             size = Py_SIZE(value)
             for i in range(size):
                 item_obj = <object>items[i]
-                if not ref_writer.write_ref_or_null(write_context, item_obj):
+                if not ref_writer.write_ref_or_null(c_buffer, item_obj):
                     serializer.write(write_context, item_obj)
             return
         for item_obj in value:
-            if not ref_writer.write_ref_or_null(write_context, item_obj):
+            if not ref_writer.write_ref_or_null(c_buffer, item_obj):
                 serializer.write(write_context, item_obj)
 
     cpdef _read_same_type_ref(self, ReadContext read_context, int64_t len_, object collection_, Serializer serializer):
         cdef RefReader ref_reader = read_context.ref_reader
+        # Keep a local Buffer for the ref-tracking loop so the reader can reuse
+        # the same typed buffer/error carrier on each flag read.
+        cdef Buffer buffer = read_context.buffer
         cdef PyObject **items = fory_sequence_get_items(collection_)
         cdef bint is_list = type(collection_) is list
         cdef int64_t i
+        cdef int32_t ref_id
+        cdef object obj
         read_context.increase_depth()
         if items != NULL:
             for i in range(len_):
-                ref_id = ref_reader.try_preserve_ref_id(read_context)
+                ref_id = ref_reader.try_preserve_ref_id(buffer)
                 if ref_id < NOT_NULL_VALUE_FLAG:
                     obj = ref_reader.get_read_ref()
                 else:
                     obj = serializer.read(read_context)
-                    ref_reader.set_read_ref(ref_id, obj)
+                    if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
+                        Py_INCREF(obj)
+                        ref_reader.read_objects[ref_id] = <PyObject *>obj
                 Py_INCREF(obj)
                 if is_list:
                     PyList_SET_ITEM(collection_, i, obj)
@@ -289,12 +301,14 @@ cdef class CollectionSerializer(Serializer):
             read_context.decrease_depth()
             return
         for i in range(len_):
-            ref_id = ref_reader.try_preserve_ref_id(read_context)
+            ref_id = ref_reader.try_preserve_ref_id(buffer)
             if ref_id < NOT_NULL_VALUE_FLAG:
                 obj = ref_reader.get_read_ref()
             else:
                 obj = serializer.read(read_context)
-                ref_reader.set_read_ref(ref_id, obj)
+                if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
+                    Py_INCREF(obj)
+                    ref_reader.read_objects[ref_id] = <PyObject *>obj
             self._add_element(collection_, i, obj)
         read_context.decrease_depth()
 
@@ -302,20 +316,89 @@ cdef class CollectionSerializer(Serializer):
         cdef bint tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
         cdef bint has_null = (collect_flag & COLL_HAS_NULL) != 0
         cdef RefWriter ref_writer = write_context.ref_writer
+        # This path mixes primitive fast branches with ref tracking, so keep the
+        # raw CBuffer* local for the ref flag writes.
+        cdef CBuffer * c_buffer = write_context.c_buffer
         cdef TypeInfo typeinfo
+        cdef PyObject **items = fory_sequence_get_items(value)
+        cdef Py_ssize_t size = Py_SIZE(value)
+        cdef Py_ssize_t i
+        cdef PyObject *item
+        cdef PyTypeObject *item_type
+        cdef object item_obj
 
         if tracking_ref:
+            if items != NULL:
+                for i in range(size):
+                    item = items[i]
+                    item_obj = <object> item
+                    item_type = item.ob_type
+                    if item_type == <PyTypeObject *> str:
+                        write_context.write_int16(NOT_NULL_STRING_FLAG)
+                        write_context.write_string(item_obj)
+                    elif item_type == <PyTypeObject *> int:
+                        write_context.write_int8(NOT_NULL_VALUE_FLAG)
+                        typeinfo = self.type_resolver.get_type_info(<object> item_type)
+                        self.type_resolver.write_type_info(write_context, typeinfo)
+                        typeinfo.serializer.write(write_context, item_obj)
+                    elif item_type == <PyTypeObject *> bool:
+                        write_context.write_int16(NOT_NULL_BOOL_FLAG)
+                        write_context.write_bool(item_obj)
+                    elif item_type == <PyTypeObject *> float:
+                        write_context.write_int16(NOT_NULL_FLOAT64_FLAG)
+                        write_context.write_double(item_obj)
+                    else:
+                        if not ref_writer.write_ref_or_null(c_buffer, item_obj):
+                            typeinfo = self.type_resolver.get_type_info(<object> item_type)
+                            self.type_resolver.write_type_info(write_context, typeinfo)
+                            typeinfo.serializer.write(write_context, item_obj)
+                return
             for item_obj in value:
-                if not ref_writer.write_ref_or_null(write_context, item_obj):
-                    typeinfo = self.type_resolver.get_type_info(type(item_obj))
+                if type(item_obj) is str:
+                    write_context.write_int16(NOT_NULL_STRING_FLAG)
+                    write_context.write_string(item_obj)
+                elif type(item_obj) is int:
+                    write_context.write_int8(NOT_NULL_VALUE_FLAG)
+                    typeinfo = self.type_resolver.get_type_info(int)
                     self.type_resolver.write_type_info(write_context, typeinfo)
                     typeinfo.serializer.write(write_context, item_obj)
+                elif type(item_obj) is bool:
+                    write_context.write_int16(NOT_NULL_BOOL_FLAG)
+                    write_context.write_bool(item_obj)
+                elif type(item_obj) is float:
+                    write_context.write_int16(NOT_NULL_FLOAT64_FLAG)
+                    write_context.write_double(item_obj)
+                else:
+                    if not ref_writer.write_ref_or_null(c_buffer, item_obj):
+                        typeinfo = self.type_resolver.get_type_info(type(item_obj))
+                        self.type_resolver.write_type_info(write_context, typeinfo)
+                        typeinfo.serializer.write(write_context, item_obj)
             return
         if not has_null:
+            if items != NULL:
+                for i in range(size):
+                    item = items[i]
+                    item_obj = <object> item
+                    typeinfo = self.type_resolver.get_type_info(<object> item.ob_type)
+                    self.type_resolver.write_type_info(write_context, typeinfo)
+                    typeinfo.serializer.write(write_context, item_obj)
+                return
             for item_obj in value:
                 typeinfo = self.type_resolver.get_type_info(type(item_obj))
                 self.type_resolver.write_type_info(write_context, typeinfo)
                 typeinfo.serializer.write(write_context, item_obj)
+            return
+        if items != NULL:
+            for i in range(size):
+                item = items[i]
+                if item == <PyObject *>None:
+                    write_context.write_int8(NULL_FLAG)
+                else:
+                    item_obj = <object> item
+                    write_context.write_int8(NOT_NULL_VALUE_FLAG)
+                    typeinfo = self.type_resolver.get_type_info(<object> item.ob_type)
+                    self.type_resolver.write_type_info(write_context, typeinfo)
+                    typeinfo.serializer.write(write_context, item_obj)
             return
         for item_obj in value:
             if item_obj is None:
@@ -330,29 +413,43 @@ cdef class CollectionSerializer(Serializer):
         raise NotImplementedError
 
 
-cdef inline object get_next_element(ReadContext read_context):
-    cdef int32_t ref_id = read_context.try_preserve_ref_id()
+cdef inline object get_next_element(
+    ReadContext read_context,
+    Buffer buffer,
+    RefReader ref_reader,
+    TypeResolver type_resolver,
+):
+    cdef int32_t ref_id = ref_reader.try_preserve_ref_id(buffer)
     cdef TypeInfo typeinfo
     cdef object obj
     if ref_id < NOT_NULL_VALUE_FLAG:
-        return read_context.get_read_ref()
-    typeinfo = read_context.type_resolver.read_type_info(read_context)
+        return ref_reader.get_read_ref()
+    typeinfo = type_resolver.read_type_info(read_context)
     obj = typeinfo.serializer.read(read_context)
-    read_context.set_read_ref(ref_id, obj)
+    if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
+        Py_INCREF(obj)
+        ref_reader.read_objects[ref_id] = <PyObject *>obj
     return obj
 
 
 cdef class ListSerializer(CollectionSerializer):
     cpdef read(self, ReadContext read_context):
-        cdef int32_t len_ = read_context.read_var_uint32()
+        # Hoist Buffer once for the entire collection read. The element loops
+        # below hit the buffer repeatedly and should not reload it from the
+        # context on every scalar read.
+        cdef Buffer buffer = read_context.buffer
+        cdef int32_t len_ = buffer.read_var_uint32()
         cdef list list_
         cdef int8_t collect_flag
         cdef TypeInfo typeinfo
+        cdef TypeResolver type_resolver = self.type_resolver
+        cdef RefReader ref_reader = read_context.ref_reader
         cdef Serializer elem_serializer = self.elem_serializer
         cdef uint8_t type_id = 0
         cdef bint tracking_ref
         cdef bint has_null
         cdef int8_t head_flag
+        cdef int32_t ref_id
         cdef int64_t i
 
         if len_ > read_context.max_collection_size:
@@ -363,11 +460,11 @@ cdef class ListSerializer(CollectionSerializer):
         if len_ == 0:
             return list_
 
-        collect_flag = read_context.read_int8()
+        collect_flag = buffer.read_int8()
         read_context.reference(list_)
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
-                typeinfo = self.type_resolver.read_type_info(read_context)
+                typeinfo = type_resolver.read_type_info(read_context)
                 elem_serializer = typeinfo.serializer
             else:
                 typeinfo = self.elem_type_info
@@ -391,26 +488,54 @@ cdef class ListSerializer(CollectionSerializer):
         has_null = (collect_flag & COLL_HAS_NULL) != 0
         if tracking_ref:
             for i in range(len_):
-                elem = get_next_element(read_context)
+                elem = get_next_element(read_context, buffer, ref_reader, type_resolver)
                 Py_INCREF(elem)
                 PyList_SET_ITEM(list_, i, elem)
             read_context.decrease_depth()
             return list_
         if not has_null:
             for i in range(len_):
-                typeinfo = self.type_resolver.read_type_info(read_context)
-                elem = read_context.read_non_ref(typeinfo.serializer)
+                typeinfo = type_resolver.read_type_info(read_context)
+                type_id = typeinfo.type_id
+                if type_id == <uint8_t>TypeId.STRING:
+                    elem = buffer.read_string()
+                elif type_id == <uint8_t>TypeId.INT8:
+                    elem = buffer.read_int8()
+                elif type_id == <uint8_t>TypeId.INT16:
+                    elem = buffer.read_int16()
+                elif type_id == <uint8_t>TypeId.INT32:
+                    elem = buffer.read_int32()
+                elif type_id == <uint8_t>TypeId.BOOL:
+                    elem = buffer.read_bool()
+                elif type_id == <uint8_t>TypeId.FLOAT64:
+                    elem = buffer.read_double()
+                else:
+                    elem = read_context.read_non_ref(typeinfo.serializer)
                 Py_INCREF(elem)
                 PyList_SET_ITEM(list_, i, elem)
             read_context.decrease_depth()
             return list_
         for i in range(len_):
-            head_flag = read_context.read_int8()
+            head_flag = buffer.read_int8()
             if head_flag == NULL_FLAG:
                 elem = None
             else:
-                typeinfo = self.type_resolver.read_type_info(read_context)
-                elem = read_context.read_non_ref(typeinfo.serializer)
+                typeinfo = type_resolver.read_type_info(read_context)
+                type_id = typeinfo.type_id
+                if type_id == <uint8_t>TypeId.STRING:
+                    elem = buffer.read_string()
+                elif type_id == <uint8_t>TypeId.INT8:
+                    elem = buffer.read_int8()
+                elif type_id == <uint8_t>TypeId.INT16:
+                    elem = buffer.read_int16()
+                elif type_id == <uint8_t>TypeId.INT32:
+                    elem = buffer.read_int32()
+                elif type_id == <uint8_t>TypeId.BOOL:
+                    elem = buffer.read_bool()
+                elif type_id == <uint8_t>TypeId.FLOAT64:
+                    elem = buffer.read_double()
+                else:
+                    elem = read_context.read_non_ref(typeinfo.serializer)
             Py_INCREF(elem)
             PyList_SET_ITEM(list_, i, elem)
         read_context.decrease_depth()
@@ -424,10 +549,16 @@ cdef class ListSerializer(CollectionSerializer):
 @cython.final
 cdef class TupleSerializer(CollectionSerializer):
     cpdef read(self, ReadContext read_context):
-        cdef int32_t len_ = read_context.read_var_uint32()
+        # Hoist Buffer once for the entire collection read. The element loops
+        # below hit the buffer repeatedly and should not reload it from the
+        # context on every scalar read.
+        cdef Buffer buffer = read_context.buffer
+        cdef int32_t len_ = buffer.read_var_uint32()
         cdef tuple tuple_
         cdef int8_t collect_flag
         cdef TypeInfo typeinfo
+        cdef TypeResolver type_resolver = self.type_resolver
+        cdef RefReader ref_reader = read_context.ref_reader
         cdef Serializer elem_serializer = self.elem_serializer
         cdef uint8_t type_id = 0
         cdef bint tracking_ref
@@ -443,10 +574,10 @@ cdef class TupleSerializer(CollectionSerializer):
         if len_ == 0:
             return tuple_
 
-        collect_flag = read_context.read_int8()
+        collect_flag = buffer.read_int8()
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
-                typeinfo = self.type_resolver.read_type_info(read_context)
+                typeinfo = type_resolver.read_type_info(read_context)
                 elem_serializer = typeinfo.serializer
             else:
                 typeinfo = self.elem_type_info
@@ -470,26 +601,54 @@ cdef class TupleSerializer(CollectionSerializer):
         has_null = (collect_flag & COLL_HAS_NULL) != 0
         if tracking_ref:
             for i in range(len_):
-                elem = get_next_element(read_context)
+                elem = get_next_element(read_context, buffer, ref_reader, type_resolver)
                 Py_INCREF(elem)
                 PyTuple_SET_ITEM(tuple_, i, elem)
             read_context.decrease_depth()
             return tuple_
         if not has_null:
             for i in range(len_):
-                typeinfo = self.type_resolver.read_type_info(read_context)
-                elem = read_context.read_non_ref(typeinfo.serializer)
+                typeinfo = type_resolver.read_type_info(read_context)
+                type_id = typeinfo.type_id
+                if type_id == <uint8_t>TypeId.STRING:
+                    elem = buffer.read_string()
+                elif type_id == <uint8_t>TypeId.INT8:
+                    elem = buffer.read_int8()
+                elif type_id == <uint8_t>TypeId.INT16:
+                    elem = buffer.read_int16()
+                elif type_id == <uint8_t>TypeId.INT32:
+                    elem = buffer.read_int32()
+                elif type_id == <uint8_t>TypeId.BOOL:
+                    elem = buffer.read_bool()
+                elif type_id == <uint8_t>TypeId.FLOAT64:
+                    elem = buffer.read_double()
+                else:
+                    elem = read_context.read_non_ref(typeinfo.serializer)
                 Py_INCREF(elem)
                 PyTuple_SET_ITEM(tuple_, i, elem)
             read_context.decrease_depth()
             return tuple_
         for i in range(len_):
-            head_flag = read_context.read_int8()
+            head_flag = buffer.read_int8()
             if head_flag == NULL_FLAG:
                 elem = None
             else:
-                typeinfo = self.type_resolver.read_type_info(read_context)
-                elem = read_context.read_non_ref(typeinfo.serializer)
+                typeinfo = type_resolver.read_type_info(read_context)
+                type_id = typeinfo.type_id
+                if type_id == <uint8_t>TypeId.STRING:
+                    elem = buffer.read_string()
+                elif type_id == <uint8_t>TypeId.INT8:
+                    elem = buffer.read_int8()
+                elif type_id == <uint8_t>TypeId.INT16:
+                    elem = buffer.read_int16()
+                elif type_id == <uint8_t>TypeId.INT32:
+                    elem = buffer.read_int32()
+                elif type_id == <uint8_t>TypeId.BOOL:
+                    elem = buffer.read_bool()
+                elif type_id == <uint8_t>TypeId.FLOAT64:
+                    elem = buffer.read_double()
+                else:
+                    elem = read_context.read_non_ref(typeinfo.serializer)
             Py_INCREF(elem)
             PyTuple_SET_ITEM(tuple_, i, elem)
         read_context.decrease_depth()
@@ -513,15 +672,22 @@ cdef class SetSerializer(CollectionSerializer):
         cdef int32_t len_
         cdef int8_t collect_flag
         cdef TypeInfo typeinfo
+        cdef TypeResolver type_resolver = self.type_resolver
+        cdef RefReader ref_reader = read_context.ref_reader
+        # Hoist Buffer once for the entire collection read. The element loops
+        # below hit the buffer repeatedly and should not reload it from the
+        # context on every scalar read.
+        cdef Buffer buffer = read_context.buffer
         cdef Serializer elem_serializer = self.elem_serializer
         cdef uint8_t type_id = 0
         cdef bint tracking_ref
         cdef bint has_null
         cdef int8_t head_flag
+        cdef int32_t ref_id
         cdef int64_t i
 
         read_context.reference(instance)
-        len_ = read_context.read_var_uint32()
+        len_ = buffer.read_var_uint32()
         if len_ > read_context.max_collection_size:
             raise ValueError(
                 f"Set size {len_} exceeds the configured limit of {read_context.max_collection_size}"
@@ -529,10 +695,10 @@ cdef class SetSerializer(CollectionSerializer):
         if len_ == 0:
             return instance
 
-        collect_flag = read_context.read_int8()
+        collect_flag = buffer.read_int8()
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
-                typeinfo = self.type_resolver.read_type_info(read_context)
+                typeinfo = type_resolver.read_type_info(read_context)
                 elem_serializer = typeinfo.serializer
             else:
                 typeinfo = self.elem_type_info
@@ -556,22 +722,50 @@ cdef class SetSerializer(CollectionSerializer):
         has_null = (collect_flag & COLL_HAS_NULL) != 0
         if tracking_ref:
             for _ in range(len_):
-                instance.add(get_next_element(read_context))
+                instance.add(get_next_element(read_context, buffer, ref_reader, type_resolver))
             read_context.decrease_depth()
             return instance
         if not has_null:
             for _ in range(len_):
-                typeinfo = self.type_resolver.read_type_info(read_context)
-                instance.add(read_context.read_non_ref(typeinfo.serializer))
+                typeinfo = type_resolver.read_type_info(read_context)
+                type_id = typeinfo.type_id
+                if type_id == <uint8_t>TypeId.STRING:
+                    instance.add(buffer.read_string())
+                elif type_id == <uint8_t>TypeId.INT8:
+                    instance.add(buffer.read_int8())
+                elif type_id == <uint8_t>TypeId.INT16:
+                    instance.add(buffer.read_int16())
+                elif type_id == <uint8_t>TypeId.INT32:
+                    instance.add(buffer.read_int32())
+                elif type_id == <uint8_t>TypeId.BOOL:
+                    instance.add(buffer.read_bool())
+                elif type_id == <uint8_t>TypeId.FLOAT64:
+                    instance.add(buffer.read_double())
+                else:
+                    instance.add(read_context.read_non_ref(typeinfo.serializer))
             read_context.decrease_depth()
             return instance
         for _ in range(len_):
-            head_flag = read_context.read_int8()
+            head_flag = buffer.read_int8()
             if head_flag == NULL_FLAG:
                 instance.add(None)
             else:
-                typeinfo = self.type_resolver.read_type_info(read_context)
-                instance.add(read_context.read_non_ref(typeinfo.serializer))
+                typeinfo = type_resolver.read_type_info(read_context)
+                type_id = typeinfo.type_id
+                if type_id == <uint8_t>TypeId.STRING:
+                    instance.add(buffer.read_string())
+                elif type_id == <uint8_t>TypeId.INT8:
+                    instance.add(buffer.read_int8())
+                elif type_id == <uint8_t>TypeId.INT16:
+                    instance.add(buffer.read_int16())
+                elif type_id == <uint8_t>TypeId.INT32:
+                    instance.add(buffer.read_int32())
+                elif type_id == <uint8_t>TypeId.BOOL:
+                    instance.add(buffer.read_bool())
+                elif type_id == <uint8_t>TypeId.FLOAT64:
+                    instance.add(buffer.read_double())
+                else:
+                    instance.add(read_context.read_non_ref(typeinfo.serializer))
         read_context.decrease_depth()
         return instance
 
@@ -614,90 +808,96 @@ cdef class MapSerializer(Serializer):
             if value_tracking_ref is not None:
                 self.value_tracking_ref = bool(value_tracking_ref) and type_resolver.track_ref
 
-    cpdef write(self, WriteContext write_context, obj):
+    cpdef inline write(self, WriteContext write_context, o):
+        cdef dict obj = o
         cdef int32_t length = len(obj)
+        write_context.write_var_uint32(length)
+        if length == 0:
+            return
+        cdef int64_t key_addr
+        cdef int64_t value_addr
+        cdef Py_ssize_t pos = 0
         cdef RefWriter ref_writer = write_context.ref_writer
         cdef Serializer key_serializer = self.key_serializer
         cdef Serializer value_serializer = self.value_serializer
-        cdef object items_iter
         cdef object key
         cdef object value
-        cdef bint has_next = True
-        cdef int32_t chunk_size_offset
-        cdef int8_t chunk_header
-        cdef int32_t chunk_size
-        cdef TypeInfo key_type_info
-        cdef TypeInfo value_type_info
-        cdef bint key_write_ref
-        cdef bint value_write_ref
-        cdef object key_cls
-        cdef object value_cls
+        cdef type key_cls
+        cdef type value_cls
+        cdef type key_serializer_type
+        cdef type value_serializer_type
         cdef uint64_t key_cls_addr
         cdef uint64_t value_cls_addr
         cdef PyObjectPtr key_typeinfo_ptr
         cdef PyObjectPtr value_typeinfo_ptr
-        cdef type key_serializer_type
-        cdef type value_serializer_type
-
-        write_context.write_var_uint32(length)
-        if length == 0:
-            return
-
-        items_iter = iter(obj.items())
-        key, value = next(items_iter)
-        while has_next:
-            while True:
+        cdef TypeInfo key_type_info
+        cdef TypeInfo value_type_info
+        cdef int32_t chunk_size_offset
+        cdef int32_t chunk_header
+        cdef int32_t chunk_size
+        cdef bint key_write_ref
+        cdef bint value_write_ref
+        # Map chunking needs Buffer for header patching and raw CBuffer* for the
+        # ref-flag fast path.
+        cdef Buffer buffer = write_context.buffer
+        cdef CBuffer * c_buffer = write_context.c_buffer
+        cdef int has_next = PyDict_Next(obj, &pos, <PyObject **>&key_addr, <PyObject **>&value_addr)
+        while has_next != 0:
+            key = int2obj(key_addr)
+            Py_INCREF(key)
+            value = int2obj(value_addr)
+            Py_INCREF(value)
+            while has_next != 0:
                 if key is not None:
                     if value is not None:
                         break
                     if key_serializer is not None:
-                        key_write_ref = self.key_tracking_ref
+                        key_write_ref = self.key_tracking_ref == 1
                         if key_write_ref:
                             write_context.write_int8(NULL_VALUE_KEY_DECL_TYPE_TRACKING_REF)
-                            if not ref_writer.write_ref_or_null(write_context, key):
-                                self._write_obj(key_serializer, write_context, key)
+                            if not ref_writer.write_ref_or_null(c_buffer, key):
+                                key_serializer.write(write_context, key)
                         else:
                             write_context.write_int8(NULL_VALUE_KEY_DECL_TYPE)
-                            self._write_obj(key_serializer, write_context, key)
+                            key_serializer.write(write_context, key)
                     else:
                         write_context.write_int8(VALUE_HAS_NULL | TRACKING_KEY_REF)
                         write_context.write_ref(key)
                 else:
                     if value is not None:
                         if value_serializer is not None:
-                            value_write_ref = self.value_tracking_ref
+                            value_write_ref = self.value_tracking_ref == 1
                             if value_write_ref:
                                 write_context.write_int8(NULL_KEY_VALUE_DECL_TYPE_TRACKING_REF)
-                                if not ref_writer.write_ref_or_null(write_context, value):
-                                    self._write_obj(value_serializer, write_context, value)
+                                if not ref_writer.write_ref_or_null(c_buffer, value):
+                                    value_serializer.write(write_context, value)
                             else:
                                 write_context.write_int8(NULL_KEY_VALUE_DECL_TYPE)
-                                self._write_obj(value_serializer, write_context, value)
+                                value_serializer.write(write_context, value)
                         else:
                             write_context.write_int8(KEY_HAS_NULL | TRACKING_VALUE_REF)
                             write_context.write_ref(value)
                     else:
                         write_context.write_int8(KV_NULL)
-                try:
-                    key, value = next(items_iter)
-                except StopIteration:
-                    has_next = False
+                has_next = PyDict_Next(obj, &pos, <PyObject **>&key_addr, <PyObject **>&value_addr)
+                if has_next == 0:
                     break
-
-            if not has_next:
+                key = int2obj(key_addr)
+                Py_INCREF(key)
+                value = int2obj(value_addr)
+                Py_INCREF(value)
+            if has_next == 0:
                 break
-
             key_cls = type(key)
             value_cls = type(value)
             write_context.enter_flush_barrier()
             write_context.write_int16(-1)
-            chunk_size_offset = write_context.buffer.get_writer_index() - 1
+            chunk_size_offset = buffer.get_writer_index() - 1
             chunk_header = 0
-
             if key_serializer is not None:
                 chunk_header |= KEY_DECL_TYPE
             else:
-                key_cls_addr = <uint64_t> <uintptr_t> <PyObject *> key_cls
+                key_cls_addr = <uint64_t><uintptr_t><PyObject *> key_cls
                 key_typeinfo_ptr = self._key_typeinfo_cache[key_cls_addr]
                 if key_typeinfo_ptr == NULL:
                     key_type_info = self.type_resolver.get_type_info(key_cls)
@@ -706,11 +906,10 @@ cdef class MapSerializer(Serializer):
                     key_type_info = <TypeInfo> key_typeinfo_ptr
                 self.type_resolver.write_type_info(write_context, key_type_info)
                 key_serializer = key_type_info.serializer
-
             if value_serializer is not None:
                 chunk_header |= VALUE_DECL_TYPE
             else:
-                value_cls_addr = <uint64_t> <uintptr_t> <PyObject *> value_cls
+                value_cls_addr = <uint64_t><uintptr_t><PyObject *> value_cls
                 value_typeinfo_ptr = self._value_typeinfo_cache[value_cls_addr]
                 if value_typeinfo_ptr == NULL:
                     value_type_info = self.type_resolver.get_type_info(value_cls)
@@ -719,22 +918,26 @@ cdef class MapSerializer(Serializer):
                     value_type_info = <TypeInfo> value_typeinfo_ptr
                 self.type_resolver.write_type_info(write_context, value_type_info)
                 value_serializer = value_type_info.serializer
-
-            key_write_ref = self.key_tracking_ref if self.key_serializer is not None else key_serializer.need_to_write_ref
-            value_write_ref = self.value_tracking_ref if self.value_serializer is not None else value_serializer.need_to_write_ref
+            if self.key_serializer is not None:
+                key_write_ref = self.key_tracking_ref == 1
+            else:
+                key_write_ref = key_serializer.need_to_write_ref
+            if self.value_serializer is not None:
+                value_write_ref = self.value_tracking_ref == 1
+            else:
+                value_write_ref = value_serializer.need_to_write_ref
             if key_write_ref:
                 chunk_header |= TRACKING_KEY_REF
             if value_write_ref:
                 chunk_header |= TRACKING_VALUE_REF
-
-            write_context.buffer.put_uint8(chunk_size_offset - 1, chunk_header)
+            buffer.put_uint8(chunk_size_offset - 1, chunk_header)
             key_serializer_type = type(key_serializer)
             value_serializer_type = type(value_serializer)
             chunk_size = 0
-            while chunk_size < MAX_CHUNK_SIZE:
+            while True:
                 if key is None or value is None or type(key) is not key_cls or type(value) is not value_cls:
                     break
-                if not key_write_ref or not ref_writer.write_ref_or_null(write_context, key):
+                if not key_write_ref or not ref_writer.write_ref_or_null(c_buffer, key):
                     if key_cls is str:
                         write_context.write_string(key)
                     elif key_serializer_type is Int64Serializer:
@@ -747,7 +950,7 @@ cdef class MapSerializer(Serializer):
                         write_context.write_float(key)
                     else:
                         key_serializer.write(write_context, key)
-                if not value_write_ref or not ref_writer.write_ref_or_null(write_context, value):
+                if not value_write_ref or not ref_writer.write_ref_or_null(c_buffer, value):
                     if value_cls is str:
                         write_context.write_string(value)
                     elif value_serializer_type is Int64Serializer:
@@ -763,38 +966,47 @@ cdef class MapSerializer(Serializer):
                     else:
                         value_serializer.write(write_context, value)
                 chunk_size += 1
-                try:
-                    key, value = next(items_iter)
-                except StopIteration:
-                    has_next = False
+                has_next = PyDict_Next(obj, &pos, <PyObject **>&key_addr, <PyObject **>&value_addr)
+                if has_next == 0:
                     break
-
+                if chunk_size == MAX_CHUNK_SIZE:
+                    break
+                key = int2obj(key_addr)
+                Py_INCREF(key)
+                value = int2obj(value_addr)
+                Py_INCREF(value)
             key_serializer = self.key_serializer
             value_serializer = self.value_serializer
-            write_context.buffer.put_uint8(chunk_size_offset, chunk_size)
+            buffer.put_uint8(chunk_size_offset, chunk_size)
             write_context.exit_flush_barrier()
             write_context.try_flush()
 
-    cpdef read(self, ReadContext read_context):
+    cpdef inline read(self, ReadContext read_context):
         cdef int32_t size = read_context.read_var_uint32()
-        cdef dict map_ = {}
-        cdef int8_t chunk_header = read_context.read_uint8() if size != 0 else 0
+        cdef int32_t ref_id
+        if size > read_context.max_collection_size:
+            raise ValueError(f"Map size {size} exceeds the configured limit of {read_context.max_collection_size}")
+        cdef dict map_ = _PyDict_NewPresized(size)
+        cdef int8_t chunk_header = 0
+        if size != 0:
+            chunk_header = read_context.read_uint8()
         cdef RefReader ref_reader = read_context.ref_reader
         cdef Serializer key_serializer = self.key_serializer
         cdef Serializer value_serializer = self.value_serializer
+        cdef object key
+        cdef object value
         cdef bint key_has_null
         cdef bint value_has_null
         cdef bint track_key_ref
         cdef bint track_value_ref
         cdef bint key_is_declared_type
         cdef bint value_is_declared_type
-        cdef int32_t chunk_size
-        cdef int32_t ref_id
         cdef type key_serializer_type
         cdef type value_serializer_type
-
-        if size > read_context.max_collection_size:
-            raise ValueError(f"Map size {size} exceeds the configured limit of {read_context.max_collection_size}")
+        cdef int32_t chunk_size
+        # Keep Buffer local for the chunk loop so ref reads reuse the same typed
+        # buffer/error carrier without reloading read_context.buffer.
+        cdef Buffer buffer = read_context.buffer
         read_context.reference(map_)
         read_context.increase_depth()
         while size > 0:
@@ -807,12 +1019,14 @@ cdef class MapSerializer(Serializer):
                     track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
                     if (chunk_header & KEY_DECL_TYPE) != 0:
                         if track_key_ref:
-                            ref_id = ref_reader.try_preserve_ref_id(read_context)
+                            ref_id = ref_reader.try_preserve_ref_id(buffer)
                             if ref_id < NOT_NULL_VALUE_FLAG:
                                 key = ref_reader.get_read_ref()
                             else:
                                 key = self._read_obj(key_serializer, read_context)
-                                ref_reader.set_read_ref(ref_id, key)
+                                if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
+                                    Py_INCREF(key)
+                                    ref_reader.read_objects[ref_id] = <PyObject *>key
                         else:
                             key = self._read_obj_no_ref(key_serializer, read_context)
                     else:
@@ -822,12 +1036,14 @@ cdef class MapSerializer(Serializer):
                     track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
                     if (chunk_header & VALUE_DECL_TYPE) != 0:
                         if track_value_ref:
-                            ref_id = ref_reader.try_preserve_ref_id(read_context)
+                            ref_id = ref_reader.try_preserve_ref_id(buffer)
                             if ref_id < NOT_NULL_VALUE_FLAG:
                                 value = ref_reader.get_read_ref()
                             else:
                                 value = self._read_obj(value_serializer, read_context)
-                                ref_reader.set_read_ref(ref_id, value)
+                                if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
+                                    Py_INCREF(value)
+                                    ref_reader.read_objects[ref_id] = <PyObject *>value
                         else:
                             value = self._read_obj_no_ref(value_serializer, read_context)
                     else:
@@ -840,7 +1056,6 @@ cdef class MapSerializer(Serializer):
                     read_context.decrease_depth()
                     return map_
                 chunk_header = read_context.read_uint8()
-
             track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
             track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
             key_is_declared_type = (chunk_header & KEY_DECL_TYPE) != 0
@@ -854,12 +1069,14 @@ cdef class MapSerializer(Serializer):
             value_serializer_type = type(value_serializer)
             for _ in range(chunk_size):
                 if track_key_ref:
-                    ref_id = ref_reader.try_preserve_ref_id(read_context)
+                    ref_id = ref_reader.try_preserve_ref_id(buffer)
                     if ref_id < NOT_NULL_VALUE_FLAG:
                         key = ref_reader.get_read_ref()
                     else:
                         key = self._read_obj(key_serializer, read_context)
-                        ref_reader.set_read_ref(ref_id, key)
+                        if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
+                            Py_INCREF(key)
+                            ref_reader.read_objects[ref_id] = <PyObject *>key
                 else:
                     if key_serializer_type is StringSerializer:
                         key = read_context.read_string()
@@ -874,12 +1091,14 @@ cdef class MapSerializer(Serializer):
                     else:
                         key = read_context.read_non_ref(key_serializer)
                 if track_value_ref:
-                    ref_id = ref_reader.try_preserve_ref_id(read_context)
+                    ref_id = ref_reader.try_preserve_ref_id(buffer)
                     if ref_id < NOT_NULL_VALUE_FLAG:
                         value = ref_reader.get_read_ref()
                     else:
                         value = self._read_obj(value_serializer, read_context)
-                        ref_reader.set_read_ref(ref_id, value)
+                        if ref_id >= 0 and ref_reader.read_objects[ref_id] == NULL:
+                            Py_INCREF(value)
+                            ref_reader.read_objects[ref_id] = <PyObject *>value
                 else:
                     if value_serializer_type is StringSerializer:
                         value = read_context.read_string()

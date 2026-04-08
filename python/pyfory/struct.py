@@ -595,11 +595,6 @@ class DataClassStubSerializer(DataClassSerializer):
         typeinfo.serializer = DataClassSerializer(self.type_resolver, self.type_)
         return typeinfo.serializer
 
-
-PythonDataClassSerializer = DataClassSerializer
-DataClassSerializer = PythonDataClassSerializer
-
-
 basic_types = {
     bool,
     # Signed integers
@@ -1022,7 +1017,5 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         DataClassStubSerializer as CythonDataClassStubSerializer,
     )
 
-    PythonDataClassSerializer = DataClassSerializer
-    PythonDataClassStubSerializer = DataClassStubSerializer
     DataClassSerializer = CythonDataClassSerializer
     DataClassStubSerializer = CythonDataClassStubSerializer

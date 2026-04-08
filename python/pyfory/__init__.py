@@ -29,9 +29,7 @@ except ImportError:
 from pyfory.registry import TypeInfo
 
 if ENABLE_FORY_CYTHON_SERIALIZATION:
-    from pyfory.serialization import Fory, TypeInfo, Config  # noqa: F401,F811
-else:
-    from pyfory.serialization import Config  # noqa: F401
+    from pyfory.serialization import Fory, TypeInfo  # noqa: F401,F811
 
 from pyfory.serialization import Buffer  # noqa: F401 # pylint: disable=unused-import
 
@@ -128,7 +126,6 @@ __all__ = [
     "Fory",
     "ThreadSafeFory",
     "TypeInfo",
-    "Config",
     "Buffer",
     "DeserializationPolicy",
     # Field metadata

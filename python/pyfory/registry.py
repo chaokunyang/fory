@@ -20,6 +20,7 @@ import dataclasses
 import datetime
 import enum
 import functools
+import inspect
 import logging
 import pickle
 import types
@@ -148,6 +149,49 @@ _NO_REF_NUMERIC_TYPE_IDS = frozenset(
     }
 )
 
+
+def _accepts_n_positional_args(factory, nargs: int) -> bool:
+    try:
+        signature = inspect.signature(factory)
+        parameters = tuple(signature.parameters.values())
+    except (TypeError, ValueError):
+        try:
+            signature = inspect.signature(factory.__init__)
+            parameters = tuple(signature.parameters.values())[1:]
+        except (AttributeError, TypeError, ValueError):
+            if inspect.isclass(factory) and issubclass(factory, Serializer):
+                return nargs == 2
+            raise TypeError(f"Unable to inspect serializer constructor for {factory!r}")
+    min_args = 0
+    max_args = 0
+    has_varargs = False
+    for parameter in parameters:
+        if parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
+            max_args += 1
+            if parameter.default is inspect._empty:
+                min_args += 1
+        elif parameter.kind == inspect.Parameter.VAR_POSITIONAL:
+            has_varargs = True
+    if nargs < min_args:
+        return False
+    if has_varargs:
+        return True
+    return nargs <= max_args
+
+
+def _construct_serializer(serializer_factory, type_resolver, cls):
+    for nargs, args in (
+        (2, (type_resolver, cls)),
+        (1, (type_resolver,)),
+        (0, ()),
+    ):
+        if _accepts_n_positional_args(serializer_factory, nargs):
+            return serializer_factory(*args)
+    raise TypeError(
+        f"Unsupported serializer constructor for {serializer_factory!r}; expected "
+        "`(type_resolver, cls)`, `(type_resolver)`, or `()`."
+    )
+
 if ENABLE_FORY_CYTHON_SERIALIZATION:
     from pyfory.serialization import TypeInfo
 else:
@@ -246,18 +290,19 @@ class SharedRegistry:
 
 class TypeResolver:
     __slots__ = (
-        "config",
+        "xlang",
+        "track_ref",
+        "strict",
+        "compatible",
+        "field_nullable",
+        "policy",
+        "max_collection_size",
+        "max_binary_size",
         "shared_registry",
-        "_metastr_to_str",
         "_type_id_counter",
         "_types_info",
-        "_hash_to_metastring",
         "_metastr_to_type",
         "_hash_to_type_info",
-        "_dynamic_id_to_type_info_list",
-        "_dynamic_id_to_metastr_list",
-        "_dynamic_write_string_id",
-        "_dynamic_written_metastr",
         "_ns_type_to_type_info",
         "_named_type_to_type_info",
         "namespace_encoder",
@@ -274,20 +319,23 @@ class TypeResolver:
         "_internal_py_serializer_map",
     )
 
-    def __init__(self, fory, meta_share=False, meta_compressor=None):
-        self.config = fory.config
-        self.shared_registry = SharedRegistry()
-        self.require_registration = self.config.strict
-        self._metastr_to_str = dict()
+    def __init__(self, config, *, shared_registry, meta_share=False, meta_compressor=None):
+        self.xlang = config.xlang
+        self.track_ref = config.track_ref
+        self.strict = config.strict
+        self.compatible = config.compatible
+        self.field_nullable = config.field_nullable
+        self.policy = config.policy
+        self.max_collection_size = config.max_collection_size
+        self.max_binary_size = config.max_binary_size
+        self.shared_registry = shared_registry
+        self.require_registration = self.strict
         self._metastr_to_type = dict()
-        self._hash_to_metastring = dict()
         self._hash_to_type_info = dict()
-        self._dynamic_written_metastr = []
         self._type_id_to_type_info = dict()
         self._user_type_id_to_type_info = dict()
         self._used_user_type_ids = set()
         self._type_id_counter = 64
-        self._dynamic_write_string_id = 0
         # hold objects to avoid gc, since `flat_hash_map/vector` doesn't
         # hold python reference.
         self._types_info = dict()
@@ -305,7 +353,7 @@ class TypeResolver:
 
     def initialize(self):
         self._initialize_common()
-        if not self.config.xlang:
+        if not self.xlang:
             self._initialize_py()
         else:
             self._initialize_xlang()
@@ -447,13 +495,7 @@ class TypeResolver:
         if serializer is None:
             raise TypeError("register_union requires a serializer")
         if serializer is not None and not isinstance(serializer, Serializer):
-            try:
-                serializer = serializer(self, cls)
-            except BaseException:
-                try:
-                    serializer = serializer(self)
-                except BaseException:
-                    serializer = serializer()
+            serializer = _construct_serializer(serializer, self, cls)
         if typename is not None and type_id is not None:
             raise TypeError(f"type name {typename} and id {type_id} should not be set at the same time")
         if typename is None and type_id is None:
@@ -494,13 +536,7 @@ class TypeResolver:
             if user_type_id not in {None, NO_USER_TYPE_ID} and (user_type_id < 0 or user_type_id > 0xFFFFFFFE):
                 raise ValueError(f"user_type_id must be in range [0, 0xfffffffe], got {user_type_id}")
         if serializer is not None and not isinstance(serializer, Serializer):
-            try:
-                serializer = serializer(self, cls)
-            except BaseException:
-                try:
-                    serializer = serializer(self)
-                except BaseException:
-                    serializer = serializer()
+            serializer = _construct_serializer(serializer, self, cls)
         if (
             cls in self._types_info
             and type_id is None
@@ -682,7 +718,7 @@ class TypeResolver:
         return self.get_type_info(cls).serializer
 
     def get_type_info(self, cls, create=True):
-        if cls is tuple and self.config.xlang:
+        if cls is tuple and self.xlang:
             return self.get_type_info(list, create=create)
         type_info = self._types_info.get(cls)
         if type_info is not None:
@@ -698,7 +734,7 @@ class TypeResolver:
         logger.info("Type %s not registered", cls)
         serializer = self._create_serializer(cls)
         type_id = None
-        if not self.config.xlang:
+        if not self.xlang:
             if isinstance(serializer, EnumSerializer):
                 type_id = TypeId.NAMED_ENUM
             elif isinstance(serializer, (ObjectSerializer, StatefulSerializer)):
@@ -1055,44 +1091,3 @@ class TypeResolver:
             # Cache the tuple for future use
             self._meta_shared_type_info[header] = type_info
         return type_info
-
-    @property
-    def track_ref(self):
-        return self.config.track_ref
-
-    @property
-    def xlang(self):
-        return self.config.xlang
-
-    @property
-    def strict(self):
-        return self.config.strict
-
-    @property
-    def compatible(self):
-        return self.config.compatible
-
-    @property
-    def field_nullable(self):
-        return self.config.field_nullable
-
-    @property
-    def policy(self):
-        return self.config.policy
-
-    @property
-    def max_collection_size(self):
-        return self.config.max_collection_size
-
-    @property
-    def max_binary_size(self):
-        return self.config.max_binary_size
-
-    def reset(self):
-        pass
-
-    def reset_read(self):
-        pass
-
-    def reset_write(self):
-        pass

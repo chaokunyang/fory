@@ -189,63 +189,57 @@ class CollectionSerializer(Serializer):
 
     def _read_same_type_no_ref(self, read_context, length, collection_, serializer):
         read_context.increase_depth()
-        try:
-            for _ in range(length):
-                self._add_element(collection_, read_context.read_no_ref(serializer=serializer))
-        finally:
-            read_context.decrease_depth()
+        for _ in range(length):
+            self._add_element(collection_, read_context.read_no_ref(serializer=serializer))
+        read_context.decrease_depth()
 
     def _read_same_type_has_null(self, read_context, length, collection_, serializer):
         read_context.increase_depth()
-        try:
-            for _ in range(length):
-                if read_context.read_int8() == NULL_FLAG:
-                    self._add_element(collection_, None)
-                else:
-                    self._add_element(collection_, read_context.read_no_ref(serializer=serializer))
-        finally:
-            read_context.decrease_depth()
+        for _ in range(length):
+            if read_context.read_int8() == NULL_FLAG:
+                self._add_element(collection_, None)
+            else:
+                self._add_element(collection_, read_context.read_no_ref(serializer=serializer))
+        read_context.decrease_depth()
 
     def _read_same_type_ref(self, read_context, length, collection_, serializer):
         read_context.increase_depth()
-        try:
-            ref_reader = read_context.ref_reader
-            for _ in range(length):
-                ref_id = ref_reader.try_preserve_ref_id(read_context)
-                if ref_id < NOT_NULL_VALUE_FLAG:
-                    obj = ref_reader.get_read_ref()
-                else:
-                    obj = serializer.read(read_context)
-                    ref_reader.set_read_ref(ref_id, obj)
-                self._add_element(collection_, obj)
-        finally:
-            read_context.decrease_depth()
+        ref_reader = read_context.ref_reader
+        for _ in range(length):
+            ref_id = ref_reader.try_preserve_ref_id(read_context)
+            if ref_id < NOT_NULL_VALUE_FLAG:
+                obj = ref_reader.get_read_ref()
+            else:
+                obj = serializer.read(read_context)
+                ref_reader.set_read_ref(ref_id, obj)
+            self._add_element(collection_, obj)
+        read_context.decrease_depth()
 
     def _read_different_types(self, read_context, length, collection_, collect_flag):
         read_context.increase_depth()
-        try:
-            tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
-            has_null = (collect_flag & COLL_HAS_NULL) != 0
-            if tracking_ref:
-                for _ in range(length):
-                    self._add_element(collection_, get_next_element(read_context))
-                return
-            if not has_null:
-                for _ in range(length):
-                    typeinfo = self.type_resolver.read_type_info(read_context)
-                    elem = None if typeinfo is None else read_context.read_no_ref(serializer=typeinfo.serializer)
-                    self._add_element(collection_, elem)
-                return
+        tracking_ref = (collect_flag & COLL_TRACKING_REF) != 0
+        has_null = (collect_flag & COLL_HAS_NULL) != 0
+        if tracking_ref:
             for _ in range(length):
-                head_flag = read_context.read_int8()
-                if head_flag == NULL_FLAG:
-                    elem = None
-                else:
-                    typeinfo = self.type_resolver.read_type_info(read_context)
-                    elem = None if typeinfo is None else read_context.read_no_ref(serializer=typeinfo.serializer)
-                self._add_element(collection_, elem)
-        finally:
+                self._add_element(collection_, get_next_element(read_context))
             read_context.decrease_depth()
+            return
+        if not has_null:
+            for _ in range(length):
+                typeinfo = self.type_resolver.read_type_info(read_context)
+                elem = None if typeinfo is None else read_context.read_no_ref(serializer=typeinfo.serializer)
+                self._add_element(collection_, elem)
+            read_context.decrease_depth()
+            return
+        for _ in range(length):
+            head_flag = read_context.read_int8()
+            if head_flag == NULL_FLAG:
+                elem = None
+            else:
+                typeinfo = self.type_resolver.read_type_info(read_context)
+                elem = None if typeinfo is None else read_context.read_no_ref(serializer=typeinfo.serializer)
+            self._add_element(collection_, elem)
+        read_context.decrease_depth()
 
 
 class ListSerializer(CollectionSerializer):
@@ -450,85 +444,84 @@ class MapSerializer(Serializer):
         key_serializer = self.key_serializer
         value_serializer = self.value_serializer
         read_context.increase_depth()
-        try:
-            while size > 0:
-                while True:
-                    key_has_null = (chunk_header & KEY_HAS_NULL) != 0
-                    value_has_null = (chunk_header & VALUE_HAS_NULL) != 0
-                    if not key_has_null and not value_has_null:
-                        break
-                    if not key_has_null:
-                        track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
-                        if (chunk_header & KEY_DECL_TYPE) != 0:
-                            if track_key_ref:
-                                ref_id = ref_reader.try_preserve_ref_id(read_context)
-                                if ref_id < NOT_NULL_VALUE_FLAG:
-                                    key = ref_reader.get_read_ref()
-                                else:
-                                    key = self._read_obj(key_serializer, read_context)
-                                    ref_reader.set_read_ref(ref_id, key)
+        while size > 0:
+            while True:
+                key_has_null = (chunk_header & KEY_HAS_NULL) != 0
+                value_has_null = (chunk_header & VALUE_HAS_NULL) != 0
+                if not key_has_null and not value_has_null:
+                    break
+                if not key_has_null:
+                    track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
+                    if (chunk_header & KEY_DECL_TYPE) != 0:
+                        if track_key_ref:
+                            ref_id = ref_reader.try_preserve_ref_id(read_context)
+                            if ref_id < NOT_NULL_VALUE_FLAG:
+                                key = ref_reader.get_read_ref()
                             else:
-                                key = self._read_obj_no_ref(key_serializer, read_context)
+                                key = self._read_obj(key_serializer, read_context)
+                                ref_reader.set_read_ref(ref_id, key)
                         else:
-                            key = read_context.read_ref()
-                        map_[key] = None
-                    elif not value_has_null:
-                        track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
-                        if (chunk_header & VALUE_DECL_TYPE) != 0:
-                            if track_value_ref:
-                                ref_id = ref_reader.try_preserve_ref_id(read_context)
-                                if ref_id < NOT_NULL_VALUE_FLAG:
-                                    value = ref_reader.get_read_ref()
-                                else:
-                                    value = self._read_obj(value_serializer, read_context)
-                                    ref_reader.set_read_ref(ref_id, value)
-                            else:
-                                value = self._read_obj_no_ref(value_serializer, read_context)
-                        else:
-                            value = read_context.read_ref()
-                        map_[None] = value
+                            key = self._read_obj_no_ref(key_serializer, read_context)
                     else:
-                        map_[None] = None
-                    size -= 1
-                    if size == 0:
-                        return map_
-                    chunk_header = read_context.read_uint8()
+                        key = read_context.read_ref()
+                    map_[key] = None
+                elif not value_has_null:
+                    track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
+                    if (chunk_header & VALUE_DECL_TYPE) != 0:
+                        if track_value_ref:
+                            ref_id = ref_reader.try_preserve_ref_id(read_context)
+                            if ref_id < NOT_NULL_VALUE_FLAG:
+                                value = ref_reader.get_read_ref()
+                            else:
+                                value = self._read_obj(value_serializer, read_context)
+                                ref_reader.set_read_ref(ref_id, value)
+                        else:
+                            value = self._read_obj_no_ref(value_serializer, read_context)
+                    else:
+                        value = read_context.read_ref()
+                    map_[None] = value
+                else:
+                    map_[None] = None
+                size -= 1
+                if size == 0:
+                    read_context.decrease_depth()
+                    return map_
+                chunk_header = read_context.read_uint8()
 
-                track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
-                track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
-                key_is_declared_type = (chunk_header & KEY_DECL_TYPE) != 0
-                value_is_declared_type = (chunk_header & VALUE_DECL_TYPE) != 0
-                chunk_size = read_context.read_uint8()
-                if not key_is_declared_type:
-                    key_serializer = self.type_resolver.read_type_info(read_context).serializer
-                if not value_is_declared_type:
-                    value_serializer = self.type_resolver.read_type_info(read_context).serializer
-                for _ in range(chunk_size):
-                    if track_key_ref:
-                        ref_id = ref_reader.try_preserve_ref_id(read_context)
-                        if ref_id < NOT_NULL_VALUE_FLAG:
-                            key = ref_reader.get_read_ref()
-                        else:
-                            key = self._read_obj(key_serializer, read_context)
-                            ref_reader.set_read_ref(ref_id, key)
+            track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
+            track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
+            key_is_declared_type = (chunk_header & KEY_DECL_TYPE) != 0
+            value_is_declared_type = (chunk_header & VALUE_DECL_TYPE) != 0
+            chunk_size = read_context.read_uint8()
+            if not key_is_declared_type:
+                key_serializer = self.type_resolver.read_type_info(read_context).serializer
+            if not value_is_declared_type:
+                value_serializer = self.type_resolver.read_type_info(read_context).serializer
+            for _ in range(chunk_size):
+                if track_key_ref:
+                    ref_id = ref_reader.try_preserve_ref_id(read_context)
+                    if ref_id < NOT_NULL_VALUE_FLAG:
+                        key = ref_reader.get_read_ref()
                     else:
-                        key = self._read_obj_no_ref(key_serializer, read_context)
-                    if track_value_ref:
-                        ref_id = ref_reader.try_preserve_ref_id(read_context)
-                        if ref_id < NOT_NULL_VALUE_FLAG:
-                            value = ref_reader.get_read_ref()
-                        else:
-                            value = self._read_obj(value_serializer, read_context)
-                            ref_reader.set_read_ref(ref_id, value)
+                        key = self._read_obj(key_serializer, read_context)
+                        ref_reader.set_read_ref(ref_id, key)
+                else:
+                    key = self._read_obj_no_ref(key_serializer, read_context)
+                if track_value_ref:
+                    ref_id = ref_reader.try_preserve_ref_id(read_context)
+                    if ref_id < NOT_NULL_VALUE_FLAG:
+                        value = ref_reader.get_read_ref()
                     else:
-                        value = self._read_obj_no_ref(value_serializer, read_context)
-                    map_[key] = value
-                    size -= 1
-                if size != 0:
-                    chunk_header = read_context.read_uint8()
-            return map_
-        finally:
-            read_context.decrease_depth()
+                        value = self._read_obj(value_serializer, read_context)
+                        ref_reader.set_read_ref(ref_id, value)
+                else:
+                    value = self._read_obj_no_ref(value_serializer, read_context)
+                map_[key] = value
+                size -= 1
+            if size != 0:
+                chunk_header = read_context.read_uint8()
+        read_context.decrease_depth()
+        return map_
 
     def _write_obj(self, serializer, write_context, obj):
         serializer.write(write_context, obj)

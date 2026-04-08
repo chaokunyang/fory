@@ -260,7 +260,7 @@ cdef class DataClassSerializer(Serializer):
         cdef object default_factory
 
         self._missing_field_defaults = ()
-        if not self.type_resolver.config.compatible or not self._default_values_factory:
+        if not self.type_resolver.compatible or not self._default_values_factory:
             return
 
         missing_fields = set(self._get_field_names(self.type_)) - set(self._field_names)

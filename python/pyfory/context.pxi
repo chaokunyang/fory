@@ -259,6 +259,8 @@ cdef class MetaStringReader:
         cdef int32_t length = header >> 1
         cdef object encoded_meta_string
         if header & 0b1 != 0:
+            if length <= 0:
+                raise ValueError("Invalid dynamic metastring id 0")
             return self._dynamic_id_to_encoded_meta_strings[length - 1]
         if length <= 16:
             encoded_meta_string = self._read_small_encoded_meta_string(buffer, length)
@@ -338,8 +340,15 @@ cdef class WriteContext:
     callback hooks, and context-local objects used during one top-level write.
     """
 
-    cdef readonly Config config
     cdef readonly TypeResolver type_resolver
+    cdef readonly bint xlang
+    cdef readonly bint track_ref
+    cdef readonly bint strict
+    cdef readonly bint compatible
+    cdef readonly bint field_nullable
+    cdef readonly object policy
+    cdef readonly int32_t max_collection_size
+    cdef readonly int32_t max_binary_size
     cdef readonly RefWriter ref_writer
     cdef readonly MetaStringWriter meta_string_writer
     cdef readonly MetaShareWriteContext meta_share_context
@@ -358,11 +367,18 @@ cdef class WriteContext:
             config: Immutable runtime configuration for this Fory instance.
             type_resolver: Active Cython resolver cache used during writes.
         """
-        self.config = config
         self.type_resolver = type_resolver
-        self.ref_writer = RefWriter(self.config.track_ref)
+        self.xlang = config.xlang
+        self.track_ref = config.track_ref
+        self.strict = config.strict
+        self.compatible = config.compatible
+        self.field_nullable = config.field_nullable
+        self.policy = config.policy
+        self.max_collection_size = config.max_collection_size
+        self.max_binary_size = config.max_binary_size
+        self.ref_writer = RefWriter(self.track_ref)
         self.meta_string_writer = MetaStringWriter()
-        self.meta_share_context = MetaShareWriteContext() if self.config.scoped_meta_share_enabled else None
+        self.meta_share_context = MetaShareWriteContext() if config.scoped_meta_share_enabled else None
         self.buffer = None
         self.c_buffer = NULL
         self.buffer_callback = None
@@ -385,7 +401,7 @@ cdef class WriteContext:
         if buffer_callback is not None:
             header |= 0b100
         self.c_buffer.write_uint8(header)
-        if not self.config.track_ref:
+        if not self.track_ref:
             if obj is None:
                 self.write_int8(NULL_FLAG)
             else:
@@ -531,38 +547,6 @@ cdef class WriteContext:
         if output_stream is not None:
             output_stream.force_flush()
 
-    @property
-    def track_ref(self):
-        return self.config.track_ref
-
-    @property
-    def xlang(self):
-        return self.config.xlang
-
-    @property
-    def compatible(self):
-        return self.config.compatible
-
-    @property
-    def strict(self):
-        return self.config.strict
-
-    @property
-    def field_nullable(self):
-        return self.config.field_nullable
-
-    @property
-    def policy(self):
-        return self.config.policy
-
-    @property
-    def max_collection_size(self):
-        return self.config.max_collection_size
-
-    @property
-    def max_binary_size(self):
-        return self.config.max_binary_size
-
     cpdef inline void write_bool(self, bint value):
         self.c_buffer.write_uint8(<uint8_t>value)
 
@@ -649,8 +633,16 @@ cdef class ReadContext:
     object iterators, and the active read depth for one top-level read.
     """
 
-    cdef readonly Config config
     cdef readonly TypeResolver type_resolver
+    cdef readonly bint xlang
+    cdef readonly bint track_ref
+    cdef readonly bint strict
+    cdef readonly bint compatible
+    cdef readonly bint field_nullable
+    cdef readonly object policy
+    cdef readonly int32_t max_depth
+    cdef readonly int32_t max_collection_size
+    cdef readonly int32_t max_binary_size
     cdef readonly RefReader ref_reader
     cdef readonly MetaStringReader meta_string_reader
     cdef readonly MetaShareReadContext meta_share_context
@@ -670,11 +662,19 @@ cdef class ReadContext:
             config: Immutable runtime configuration for this Fory instance.
             type_resolver: Active Cython resolver cache used during reads.
         """
-        self.config = config
         self.type_resolver = type_resolver
-        self.ref_reader = RefReader(self.config.track_ref)
+        self.xlang = config.xlang
+        self.track_ref = config.track_ref
+        self.strict = config.strict
+        self.compatible = config.compatible
+        self.field_nullable = config.field_nullable
+        self.policy = config.policy
+        self.max_depth = config.max_depth
+        self.max_collection_size = config.max_collection_size
+        self.max_binary_size = config.max_binary_size
+        self.ref_reader = RefReader(self.track_ref)
         self.meta_string_reader = MetaStringReader(self.type_resolver.shared_registry)
-        self.meta_share_context = MetaShareReadContext() if self.config.scoped_meta_share_enabled else None
+        self.meta_share_context = MetaShareReadContext() if config.scoped_meta_share_enabled else None
         self.buffer = None
         self.c_buffer = NULL
         self.buffers = None
@@ -717,7 +717,7 @@ cdef class ReadContext:
             unsupported_objects=unsupported_objects,
             peer_out_of_band_enabled=peer_out_of_band_enabled,
         )
-        if not self.config.track_ref:
+        if not self.track_ref:
             if self.read_int8() == NULL_FLAG:
                 return None
             return self.read_non_ref()
@@ -747,14 +747,19 @@ cdef class ReadContext:
         return self.context_objects.get(id(key), default)
 
     cpdef increase_depth(self, int32_t diff=1):
+        # Depth accounting is paired on the successful path only.
+        # If a nested read raises, the top-level deserialize/reset path clears
+        # `depth`, so nested readers must not add local try/finally wrappers
+        # around increase/decrease pairs.
         self.depth += diff
-        if self.depth > self.config.max_depth:
+        if self.depth > self.max_depth:
             raise Exception(
                 f"Read depth exceed max depth: {self.depth}, the deserialization data may be malicious. "
                 "If it's not malicious, please increase max read depth by Fory(..., max_depth=...)"
             )
 
     cpdef decrease_depth(self, int32_t diff=1):
+        # Only call this after the matching nested read completed successfully.
         self.depth -= diff
 
     cpdef int32_t read_ref_or_null(self):
@@ -798,7 +803,7 @@ cdef class ReadContext:
         return self._read_non_ref_internal(serializer)
 
     cpdef read_non_ref(self, Serializer serializer=None):
-        if self.config.track_ref and (serializer is None or serializer.need_to_write_ref):
+        if self.track_ref and (serializer is None or serializer.need_to_write_ref):
             self.ref_reader.preserve_ref_id(-1)
         return self._read_non_ref_internal(serializer)
 
@@ -857,38 +862,6 @@ cdef class ReadContext:
     cpdef handle_unsupported_read(self):
         assert self.unsupported_objects is not None
         return next(self.unsupported_objects)
-
-    @property
-    def track_ref(self):
-        return self.config.track_ref
-
-    @property
-    def xlang(self):
-        return self.config.xlang
-
-    @property
-    def compatible(self):
-        return self.config.compatible
-
-    @property
-    def strict(self):
-        return self.config.strict
-
-    @property
-    def field_nullable(self):
-        return self.config.field_nullable
-
-    @property
-    def policy(self):
-        return self.config.policy
-
-    @property
-    def max_collection_size(self):
-        return self.config.max_collection_size
-
-    @property
-    def max_binary_size(self):
-        return self.config.max_binary_size
 
     cpdef inline bint read_bool(self):
         cdef uint8_t value = self.c_buffer.read_uint8(self.buffer._error)

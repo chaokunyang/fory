@@ -226,9 +226,15 @@ class Fory:
             max_collection_size=max_collection_size,
             max_binary_size=max_binary_size,
         )
-        from pyfory.registry import TypeResolver
+        from pyfory.registry import SharedRegistry, TypeResolver
 
-        self.type_resolver = TypeResolver(self, meta_share=compatible, meta_compressor=meta_compressor)
+        shared_registry = SharedRegistry()
+        self.type_resolver = TypeResolver(
+            self.config,
+            shared_registry=shared_registry,
+            meta_share=compatible,
+            meta_compressor=meta_compressor,
+        )
         self.type_resolver.initialize()
         self.write_context = WriteContext(self.config, self.type_resolver)
         self.read_context = ReadContext(self.config, self.type_resolver)
@@ -573,29 +579,26 @@ class Fory:
         """
         Reset write state after serialization.
 
-        Clears internal write buffers, reference tracking state, and type resolution
-        caches. This method is automatically called after each serialization.
+        Clears internal write buffers and reference tracking state. This method
+        is automatically called after each serialization.
         """
         self.write_context.reset()
-        self.type_resolver.reset_write()
 
     def reset_read(self):
         """
         Reset read state after deserialization.
 
-        Clears internal read buffers, reference tracking state, and type resolution
-        caches. This method is automatically called after each deserialization.
+        Clears internal read buffers and reference tracking state. This method
+        is automatically called after each deserialization.
         """
         self.read_context.reset()
-        self.type_resolver.reset_read()
 
     def reset(self):
         """
         Reset both write and read state.
 
-        Clears all internal state including buffers, reference tracking, and type
-        resolution caches. Use this to ensure a clean state before reusing a Fory
-        instance.
+        Clears all per-operation state including buffers and reference tracking.
+        Use this to ensure a clean state before reusing a Fory instance.
         """
         self.reset_write()
         self.reset_read()

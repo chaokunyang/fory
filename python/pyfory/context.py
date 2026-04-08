@@ -139,6 +139,8 @@ class MetaStringReader:
         header = buffer.read_var_uint32()
         length = header >> 1
         if (header & 0b1) != 0:
+            if length <= 0:
+                raise ValueError("Invalid dynamic metastring id 0")
             return self._dynamic_id_to_encoded_meta_strings[length - 1]
         if length <= SMALL_STRING_THRESHOLD:
             encoded_meta_string = self._read_small_meta_string(buffer, length)
@@ -207,8 +209,15 @@ class MetaShareReadContext:
 
 class WriteContext:
     __slots__ = (
-        "config",
         "type_resolver",
+        "xlang",
+        "track_ref",
+        "strict",
+        "compatible",
+        "field_nullable",
+        "policy",
+        "max_collection_size",
+        "max_binary_size",
         "ref_writer",
         "meta_string_writer",
         "meta_share_context",
@@ -220,9 +229,16 @@ class WriteContext:
     )
 
     def __init__(self, config: Config, type_resolver):
-        self.config = config
         self.type_resolver = type_resolver
-        self.ref_writer = MapRefWriter() if config.track_ref else NoRefWriter()
+        self.xlang = config.xlang
+        self.track_ref = config.track_ref
+        self.strict = config.strict
+        self.compatible = config.compatible
+        self.field_nullable = config.field_nullable
+        self.policy = config.policy
+        self.max_collection_size = config.max_collection_size
+        self.max_binary_size = config.max_binary_size
+        self.ref_writer = MapRefWriter() if self.track_ref else NoRefWriter()
         self.meta_string_writer = MetaStringWriter()
         self.meta_share_context = MetaShareWriteContext() if config.scoped_meta_share_enabled else None
         self.buffer = None
@@ -376,38 +392,6 @@ class WriteContext:
         if output_stream is not None:
             output_stream.force_flush()
 
-    @property
-    def track_ref(self):
-        return self.config.track_ref
-
-    @property
-    def xlang(self):
-        return self.config.xlang
-
-    @property
-    def compatible(self):
-        return self.config.compatible
-
-    @property
-    def strict(self):
-        return self.config.strict
-
-    @property
-    def field_nullable(self):
-        return self.config.field_nullable
-
-    @property
-    def policy(self):
-        return self.config.policy
-
-    @property
-    def max_collection_size(self):
-        return self.config.max_collection_size
-
-    @property
-    def max_binary_size(self):
-        return self.config.max_binary_size
-
     def write_bool(self, value):
         self.buffer.write_bool(value)
 
@@ -468,8 +452,16 @@ class WriteContext:
 
 class ReadContext:
     __slots__ = (
-        "config",
         "type_resolver",
+        "xlang",
+        "track_ref",
+        "strict",
+        "compatible",
+        "field_nullable",
+        "policy",
+        "max_collection_size",
+        "max_binary_size",
+        "max_depth",
         "ref_reader",
         "meta_string_reader",
         "meta_share_context",
@@ -482,9 +474,17 @@ class ReadContext:
     )
 
     def __init__(self, config: Config, type_resolver):
-        self.config = config
         self.type_resolver = type_resolver
-        self.ref_reader = MapRefReader() if config.track_ref else NoRefReader()
+        self.xlang = config.xlang
+        self.track_ref = config.track_ref
+        self.strict = config.strict
+        self.compatible = config.compatible
+        self.field_nullable = config.field_nullable
+        self.policy = config.policy
+        self.max_collection_size = config.max_collection_size
+        self.max_binary_size = config.max_binary_size
+        self.max_depth = config.max_depth
+        self.ref_reader = MapRefReader() if self.track_ref else NoRefReader()
         self.meta_string_reader = MetaStringReader(type_resolver.shared_registry)
         self.meta_share_context = MetaShareReadContext() if config.scoped_meta_share_enabled else None
         self.buffer = None
@@ -536,14 +536,19 @@ class ReadContext:
         return self.context_objects.get(id(key), default)
 
     def increase_depth(self, diff=1):
+        # Depth accounting is paired on the successful path only.
+        # If a nested read raises, the top-level deserialize/reset path clears
+        # `depth`, so nested readers must not add local try/finally wrappers
+        # around increase/decrease pairs.
         self.depth += diff
-        if self.depth > self.config.max_depth:
+        if self.depth > self.max_depth:
             raise Exception(
                 f"Read depth exceed max depth: {self.depth}, the deserialization data may be malicious. If it's not malicious, "
                 "please increase max read depth by Fory(..., max_depth=...)"
             )
 
     def decrease_depth(self, diff=1):
+        # Only call this after the matching nested read completed successfully.
         self.depth -= diff
 
     def read_ref_or_null(self):
@@ -584,7 +589,7 @@ class ReadContext:
         return self.read_non_ref(serializer=serializer)
 
     def read_non_ref(self, serializer=None):
-        if self.config.track_ref:
+        if self.track_ref and (serializer is None or serializer.need_to_write_ref):
             self.ref_reader.preserve_ref_id(-1)
         return self._read_non_ref_internal(serializer)
 
@@ -638,38 +643,6 @@ class ReadContext:
     def handle_unsupported_read(self):
         assert self.unsupported_objects is not None
         return next(self.unsupported_objects)
-
-    @property
-    def track_ref(self):
-        return self.config.track_ref
-
-    @property
-    def xlang(self):
-        return self.config.xlang
-
-    @property
-    def compatible(self):
-        return self.config.compatible
-
-    @property
-    def strict(self):
-        return self.config.strict
-
-    @property
-    def field_nullable(self):
-        return self.config.field_nullable
-
-    @property
-    def policy(self):
-        return self.config.policy
-
-    @property
-    def max_collection_size(self):
-        return self.config.max_collection_size
-
-    @property
-    def max_binary_size(self):
-        return self.config.max_binary_size
 
     def read_bool(self):
         return self.buffer.read_bool()

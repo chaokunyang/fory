@@ -174,12 +174,15 @@ cdef class TypeResolver:
     """
 
     cdef object resolver
-    cdef readonly Config config
     cdef readonly object shared_registry
+    cdef readonly bint xlang
     cdef readonly bint track_ref
     cdef readonly bint strict
     cdef readonly bint compatible
     cdef readonly bint field_nullable
+    cdef readonly object policy
+    cdef readonly int32_t max_collection_size
+    cdef readonly int32_t max_binary_size
     cdef readonly bint meta_share
     cdef readonly dict _types_info
     cdef readonly dict _type_id_to_type_info
@@ -200,12 +203,15 @@ cdef class TypeResolver:
                 registration state and non-hotpath resolver behavior.
         """
         self.resolver = resolver
-        self.config = <Config>resolver.config
         self.shared_registry = resolver.shared_registry
+        self.xlang = resolver.xlang
         self.track_ref = resolver.track_ref
-        self.strict = self.config.strict
-        self.compatible = self.config.compatible
-        self.field_nullable = self.config.field_nullable
+        self.strict = resolver.strict
+        self.compatible = resolver.compatible
+        self.field_nullable = resolver.field_nullable
+        self.policy = resolver.policy
+        self.max_collection_size = resolver.max_collection_size
+        self.max_binary_size = resolver.max_binary_size
         self.meta_share = resolver.meta_share
         self._types_info = resolver._types_info
         self._type_id_to_type_info = resolver._type_id_to_type_info
@@ -254,12 +260,6 @@ cdef class TypeResolver:
 
     def register_serializer(self, cls, serializer):
         return self.resolver.register_serializer(cls, serializer)
-
-    def reset_write(self):
-        return self.resolver.reset_write()
-
-    def reset_read(self):
-        return self.resolver.reset_read()
 
     cpdef TypeInfo get_type_info(self, cls, create=True):
         cdef PyObject * typeinfo_ptr = self._c_types_info[<uintptr_t> <PyObject *> cls]
@@ -661,10 +661,13 @@ cdef class Fory:
             max_collection_size=max_collection_size,
             max_binary_size=max_binary_size,
         )
-        from pyfory.registry import TypeResolver as PyTypeResolver
+        from pyfory.registry import SharedRegistry, TypeResolver as PyTypeResolver
+
+        shared_registry = SharedRegistry()
 
         self.type_resolver = PyTypeResolver(
-            self,
+            self.config,
+            shared_registry=shared_registry,
             meta_share=compatible,
             meta_compressor=meta_compressor,
         )
@@ -828,11 +831,9 @@ cdef class Fory:
 
     cpdef reset_write(self):
         self.write_context.reset()
-        self.type_resolver.reset_write()
 
     cpdef reset_read(self):
         self.read_context.reset()
-        self.type_resolver.reset_read()
 
     cpdef reset(self):
         self.reset_write()

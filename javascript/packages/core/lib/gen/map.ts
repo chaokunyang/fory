@@ -265,8 +265,8 @@ class MapAnySerializer {
       let keySerializer = this.keySerializer;
       let valueSerializer = this.valueSerializer;
 
-        if (!(keyHeader & MapFlags.HAS_NULL) && !(valueHeader & MapFlags.HAS_NULL)) {
-          if (!(keyHeader & MapFlags.DECL_ELEMENT_TYPE)) {
+      if (!(keyHeader & MapFlags.HAS_NULL) && !(valueHeader & MapFlags.HAS_NULL)) {
+        if (!(keyHeader & MapFlags.DECL_ELEMENT_TYPE)) {
           keySerializer = AnyHelper.detectSerializer(this.readContext);
         }
 

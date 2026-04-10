@@ -259,34 +259,117 @@ export class WriteContext {
     this.metaStringWriter.writeBytes(this.writer, bytes);
   }
 
-  writeBool(value: boolean) { this.writer.bool(value); }
-  writeUint8(value: number) { this.writer.writeUint8(value); }
-  writeInt8(value: number) { this.writer.writeInt8(value); }
-  writeUint16(value: number) { this.writer.writeUint16(value); }
-  writeInt16(value: number) { this.writer.writeInt16(value); }
-  writeUint32(value: number) { this.writer.writeUint32(value); }
-  writeInt32(value: number) { this.writer.writeInt32(value); }
-  writeUint64(value: bigint) { this.writer.writeUint64(value); }
-  writeInt64(value: bigint) { this.writer.writeInt64(value); }
-  writeVarUInt32(value: number) { this.writer.writeVarUInt32(value); }
-  writeVarUint32Small7(value: number) { this.writer.writeVarUint32Small7(value); }
-  writeVarInt32(value: number) { this.writer.writeVarInt32(value); }
-  writeVarUInt64(value: bigint | number) { this.writer.writeVarUInt64(value); }
-  writeVarInt64(value: bigint) { this.writer.writeVarInt64(value); }
-  writeTaggedUInt64(value: bigint | number) { return this.writer.writeTaggedUInt64(value); }
-  writeTaggedInt64(value: bigint | number) { return this.writer.writeTaggedInt64(value); }
-  writeSliInt64(value: bigint | number) { this.writer.writeSliInt64(value); }
-  writeFloat16(value: number) { this.writer.writeFloat16(value); }
-  writeBfloat16(value: number) { this.writer.writeBfloat16(value); }
-  writeFloat32(value: number) { this.writer.writeFloat32(value); }
-  writeFloat64(value: number) { this.writer.writeFloat64(value); }
-  writeString(value: string) { this.writer.stringWithHeader(value); }
-  writeBuffer(value: ArrayLike<number>) { this.writer.buffer(value); }
-  reserve(length: number) { this.writer.reserve(length); }
-  writeGetCursor() { return this.writer.writeGetCursor(); }
-  setUint8Position(offset: number, value: number) { this.writer.setUint8Position(offset, value); }
-  setUint16Position(offset: number, value: number) { this.writer.setUint16Position(offset, value); }
-  setUint32Position(offset: number, value: number) { this.writer.setUint32Position(offset, value); }
+  writeBool(value: boolean) {
+    this.writer.bool(value);
+  }
+
+  writeUint8(value: number) {
+    this.writer.writeUint8(value);
+  }
+
+  writeInt8(value: number) {
+    this.writer.writeInt8(value);
+  }
+
+  writeUint16(value: number) {
+    this.writer.writeUint16(value);
+  }
+
+  writeInt16(value: number) {
+    this.writer.writeInt16(value);
+  }
+
+  writeUint32(value: number) {
+    this.writer.writeUint32(value);
+  }
+
+  writeInt32(value: number) {
+    this.writer.writeInt32(value);
+  }
+
+  writeUint64(value: bigint) {
+    this.writer.writeUint64(value);
+  }
+
+  writeInt64(value: bigint) {
+    this.writer.writeInt64(value);
+  }
+
+  writeVarUInt32(value: number) {
+    this.writer.writeVarUInt32(value);
+  }
+
+  writeVarUint32Small7(value: number) {
+    this.writer.writeVarUint32Small7(value);
+  }
+
+  writeVarInt32(value: number) {
+    this.writer.writeVarInt32(value);
+  }
+
+  writeVarUInt64(value: bigint | number) {
+    this.writer.writeVarUInt64(value);
+  }
+
+  writeVarInt64(value: bigint) {
+    this.writer.writeVarInt64(value);
+  }
+
+  writeTaggedUInt64(value: bigint | number) {
+    return this.writer.writeTaggedUInt64(value);
+  }
+
+  writeTaggedInt64(value: bigint | number) {
+    return this.writer.writeTaggedInt64(value);
+  }
+
+  writeSliInt64(value: bigint | number) {
+    this.writer.writeSliInt64(value);
+  }
+
+  writeFloat16(value: number) {
+    this.writer.writeFloat16(value);
+  }
+
+  writeBfloat16(value: number) {
+    this.writer.writeBfloat16(value);
+  }
+
+  writeFloat32(value: number) {
+    this.writer.writeFloat32(value);
+  }
+
+  writeFloat64(value: number) {
+    this.writer.writeFloat64(value);
+  }
+
+  writeString(value: string) {
+    this.writer.stringWithHeader(value);
+  }
+
+  writeBuffer(value: ArrayLike<number>) {
+    this.writer.buffer(value);
+  }
+
+  reserve(length: number) {
+    this.writer.reserve(length);
+  }
+
+  writeGetCursor() {
+    return this.writer.writeGetCursor();
+  }
+
+  setUint8Position(offset: number, value: number) {
+    this.writer.setUint8Position(offset, value);
+  }
+
+  setUint16Position(offset: number, value: number) {
+    this.writer.setUint16Position(offset, value);
+  }
+
+  setUint32Position(offset: number, value: number) {
+    this.writer.setUint32Position(offset, value);
+  }
 
   get maxBinarySize() {
     return this._maxBinarySize;
@@ -442,32 +525,109 @@ export class ReadContext {
     return this.metaStringReader.readTypeName(this.reader);
   }
 
-  readBool() { return this.reader.readUint8() === 1; }
-  readUint8() { return this.reader.readUint8(); }
-  readInt8() { return this.reader.readInt8(); }
-  readUint16() { return this.reader.readUint16(); }
-  readInt16() { return this.reader.readInt16(); }
-  readUint32() { return this.reader.readUint32(); }
-  readInt32() { return this.reader.readInt32(); }
-  readUint64() { return this.reader.readUint64(); }
-  readInt64() { return this.reader.readInt64(); }
-  readVarUInt32() { return this.reader.readVarUInt32(); }
-  readVarUint32Small7() { return this.reader.readVarUint32Small7(); }
-  readVarInt32() { return this.reader.readVarInt32(); }
-  readVarUInt64() { return this.reader.readVarUInt64(); }
-  readVarInt64() { return this.reader.readVarInt64(); }
-  readTaggedUInt64() { return this.reader.readTaggedUInt64(); }
-  readTaggedInt64() { return this.reader.readTaggedInt64(); }
-  readSliInt64() { return this.reader.readSliInt64(); }
-  readFloat16() { return this.reader.readFloat16(); }
-  readBfloat16() { return this.reader.readBfloat16(); }
-  readFloat32() { return this.reader.readFloat32(); }
-  readFloat64() { return this.reader.readFloat64(); }
-  readString() { return this.reader.stringWithHeader(); }
-  readBuffer(length: number) { return this.reader.buffer(length); }
-  readBufferRef(length: number) { return this.reader.bufferRef(length); }
-  readGetCursor() { return this.reader.readGetCursor(); }
-  readSetCursor(value: number) { this.reader.readSetCursor(value); }
+  readBool() {
+    return this.reader.readUint8() === 1;
+  }
+
+  readUint8() {
+    return this.reader.readUint8();
+  }
+
+  readInt8() {
+    return this.reader.readInt8();
+  }
+
+  readUint16() {
+    return this.reader.readUint16();
+  }
+
+  readInt16() {
+    return this.reader.readInt16();
+  }
+
+  readUint32() {
+    return this.reader.readUint32();
+  }
+
+  readInt32() {
+    return this.reader.readInt32();
+  }
+
+  readUint64() {
+    return this.reader.readUint64();
+  }
+
+  readInt64() {
+    return this.reader.readInt64();
+  }
+
+  readVarUInt32() {
+    return this.reader.readVarUInt32();
+  }
+
+  readVarUint32Small7() {
+    return this.reader.readVarUint32Small7();
+  }
+
+  readVarInt32() {
+    return this.reader.readVarInt32();
+  }
+
+  readVarUInt64() {
+    return this.reader.readVarUInt64();
+  }
+
+  readVarInt64() {
+    return this.reader.readVarInt64();
+  }
+
+  readTaggedUInt64() {
+    return this.reader.readTaggedUInt64();
+  }
+
+  readTaggedInt64() {
+    return this.reader.readTaggedInt64();
+  }
+
+  readSliInt64() {
+    return this.reader.readSliInt64();
+  }
+
+  readFloat16() {
+    return this.reader.readFloat16();
+  }
+
+  readBfloat16() {
+    return this.reader.readBfloat16();
+  }
+
+  readFloat32() {
+    return this.reader.readFloat32();
+  }
+
+  readFloat64() {
+    return this.reader.readFloat64();
+  }
+
+  readString() {
+    return this.reader.stringWithHeader();
+  }
+
+  readBuffer(length: number) {
+    return this.reader.buffer(length);
+  }
+
+  readBufferRef(length: number) {
+    return this.reader.bufferRef(length);
+  }
+
+  readGetCursor() {
+    return this.reader.readGetCursor();
+  }
+
+  readSetCursor(value: number) {
+    this.reader.readSetCursor(value);
+  }
 
   get depth() {
     return this._depth;

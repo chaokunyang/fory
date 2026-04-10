@@ -299,30 +299,6 @@ public abstract class TypeResolver {
   public abstract void registerInternalSerializer(Class<?> type, Serializer<?> serializer);
 
   /**
-   * Registers a serializer class for an internal type identified by name.
-   *
-   * <p>Resolvers that support lazy registration can override this to reserve the mapping without
-   * loading the target class or creating the serializer up front.
-   */
-  public void registerInternalSerializer(
-      String type, Class<? extends Serializer> serializerClass) {
-    throw new UnsupportedOperationException(
-        getClass().getName()
-            + " doesn't support lazy internal serializer registration for "
-            + type
-            + ".");
-  }
-
-  public void registerInternalSerializer(
-      String type, Class<? extends Serializer> serializerClass, boolean needToWriteRef) {
-    throw new UnsupportedOperationException(
-        getClass().getName()
-            + " doesn't support lazy internal serializer registration for "
-            + type
-            + ".");
-  }
-
-  /**
    * Freezes the mutable registration phase and switches this resolver to the shared read-only
    * registration maps.
    *
@@ -390,7 +366,8 @@ public abstract class TypeResolver {
 
     TypeInfo typeInfo = classInfoMap.get(cls);
     if (typeInfo == null || typeInfo.serializer == null) {
-      Boolean registeredNeedToWriteRef = getRegisteredSerializerNeedToWriteRef(cls);
+      Boolean registeredNeedToWriteRef =
+          sharedRegistry.getRegisteredSerializerNeedToWriteRef(cls.getName());
       if (registeredNeedToWriteRef != null) {
         return registeredNeedToWriteRef;
       }
@@ -399,10 +376,6 @@ public abstract class TypeResolver {
     } else {
       return typeInfo.serializer.needToWriteRef();
     }
-  }
-
-  protected Boolean getRegisteredSerializerNeedToWriteRef(Class<?> cls) {
-    return null;
   }
 
   public final boolean needToWriteTypeDef(Serializer serializer) {
@@ -561,9 +534,7 @@ public abstract class TypeResolver {
       case Types.STRUCT:
       case Types.EXT:
       case Types.TYPED_UNION:
-        typeInfo =
-            Objects.requireNonNull(
-                getOrResolveRegisteredTypeInfo(typeId, buffer.readVarUint32()));
+        typeInfo = Objects.requireNonNull(userTypeIdToTypeInfo.get(buffer.readVarUint32()));
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
@@ -586,7 +557,7 @@ public abstract class TypeResolver {
         typeInfo = readTimestampTypeInfo(readContext);
         break;
       default:
-        typeInfo = Objects.requireNonNull(getOrResolveRegisteredTypeInfo(typeId, -1));
+        typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
     }
     if (typeInfo.serializer == null) {
       typeInfo = ensureSerializerForTypeInfo(typeInfo);
@@ -608,9 +579,7 @@ public abstract class TypeResolver {
       case Types.STRUCT:
       case Types.EXT:
       case Types.TYPED_UNION:
-        typeInfo =
-            Objects.requireNonNull(
-                getOrResolveRegisteredTypeInfo(typeId, buffer.readVarUint32()));
+        typeInfo = Objects.requireNonNull(userTypeIdToTypeInfo.get(buffer.readVarUint32()));
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
@@ -633,7 +602,7 @@ public abstract class TypeResolver {
         typeInfo = readTimestampTypeInfo(readContext);
         break;
       default:
-        typeInfo = Objects.requireNonNull(getOrResolveRegisteredTypeInfo(typeId, -1));
+        typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
     }
     if (typeInfo.serializer == null) {
       typeInfo = ensureSerializerForTypeInfo(typeInfo);
@@ -660,9 +629,7 @@ public abstract class TypeResolver {
       case Types.STRUCT:
       case Types.EXT:
       case Types.TYPED_UNION:
-        typeInfo =
-            Objects.requireNonNull(
-                getOrResolveRegisteredTypeInfo(typeId, buffer.readVarUint32()));
+        typeInfo = Objects.requireNonNull(userTypeIdToTypeInfo.get(buffer.readVarUint32()));
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
@@ -685,7 +652,7 @@ public abstract class TypeResolver {
         typeInfo = readTimestampTypeInfo(readContext);
         break;
       default:
-        typeInfo = Objects.requireNonNull(getOrResolveRegisteredTypeInfo(typeId, -1));
+        typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
     }
     if (typeInfo.serializer == null) {
       typeInfo = ensureSerializerForTypeInfo(typeInfo);
@@ -711,9 +678,7 @@ public abstract class TypeResolver {
       case Types.STRUCT:
       case Types.EXT:
       case Types.TYPED_UNION:
-        typeInfo =
-            Objects.requireNonNull(
-                getOrResolveRegisteredTypeInfo(typeId, buffer.readVarUint32()));
+        typeInfo = Objects.requireNonNull(userTypeIdToTypeInfo.get(buffer.readVarUint32()));
         break;
       case Types.COMPATIBLE_STRUCT:
       case Types.NAMED_COMPATIBLE_STRUCT:
@@ -737,7 +702,7 @@ public abstract class TypeResolver {
         typeInfo = readTimestampTypeInfo(readContext);
         break;
       default:
-        typeInfo = Objects.requireNonNull(getOrResolveRegisteredTypeInfo(typeId, -1));
+        typeInfo = Objects.requireNonNull(getInternalTypeInfoByTypeId(typeId));
     }
     if (typeInfo.serializer == null) {
       typeInfo = ensureSerializerForTypeInfo(typeInfo);
@@ -911,28 +876,11 @@ public abstract class TypeResolver {
     return getInternalTypeInfoByTypeId(Types.TIMESTAMP);
   }
 
-  protected final TypeInfo getInternalTypeInfoByTypeId(int typeId) {
+  protected TypeInfo getInternalTypeInfoByTypeId(int typeId) {
     if (typeId < 0 || typeId >= typeIdToTypeInfo.length) {
       return null;
     }
     return typeIdToTypeInfo[typeId];
-  }
-
-  protected TypeInfo getOrResolveRegisteredTypeInfo(int typeId, int userTypeId) {
-    TypeInfo typeInfo;
-    if (userTypeId != INVALID_USER_TYPE_ID) {
-      typeInfo = userTypeIdToTypeInfo.get(userTypeId);
-    } else {
-      typeInfo = getInternalTypeInfoByTypeId(typeId);
-    }
-    if (typeInfo == null) {
-      typeInfo = resolveMissingRegisteredTypeInfo(typeId, userTypeId);
-    }
-    return typeInfo;
-  }
-
-  protected TypeInfo resolveMissingRegisteredTypeInfo(int typeId, int userTypeId) {
-    return null;
   }
 
   protected void updateTypeInfo(Class<?> cls, TypeInfo typeInfo) {
@@ -1186,7 +1134,7 @@ public abstract class TypeResolver {
       throw new IllegalArgumentException(
           "User type id must be provided to resolve user-defined type " + typeId);
     }
-    return getOrResolveRegisteredTypeInfo(typeId, INVALID_USER_TYPE_ID);
+    return getInternalTypeInfoByTypeId(typeId);
   }
 
   public final Serializer<?> getSerializerByTypeId(int typeId) {
@@ -1817,9 +1765,8 @@ public abstract class TypeResolver {
     IdentityHashMap<Class<?>, Integer> registeredClassIdMap =
         new IdentityHashMap<>(isCrossLanguage() ? 4 : 200);
     BiMap<String, Class<?>> registeredClasses = HashBiMap.create(isCrossLanguage() ? 4 : 200);
-    final Map<String, Integer> lazyRegisteredClassIdMap = new HashMap<>();
+    final Map<String, Integer> lazyRegisteredInternalClassIdMap = new HashMap<>();
     final Map<Integer, String> lazyRegisteredInternalClassNames = new HashMap<>();
-    final Map<Integer, String> lazyRegisteredUserClassNames = new HashMap<>();
     final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef;
     // TODO(chaokunyang) Better to  use soft reference, see ObjectStreamClass.
     final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>

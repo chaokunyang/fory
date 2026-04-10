@@ -79,7 +79,7 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
-  final ConcurrentHashMap<String, Class<? extends Serializer>> registeredSerializerClassesByName =
+  final ConcurrentHashMap<String, String> registeredSerializerClassesByName =
       new ConcurrentHashMap<>();
   final ConcurrentHashMap<String, Boolean> registeredSerializerRefTrackingByName =
       new ConcurrentHashMap<>();
@@ -124,7 +124,7 @@ public final class SharedRegistry {
     return existing;
   }
 
-  Class<? extends Serializer> getRegisteredSerializerClass(String className) {
+  String getRegisteredSerializerClassName(String className) {
     return registeredSerializerClassesByName.get(className);
   }
 
@@ -132,18 +132,16 @@ public final class SharedRegistry {
     return registeredSerializerRefTrackingByName.get(className);
   }
 
-  Class<? extends Serializer> cacheRegisteredSerializerClass(
-      String className, Class<? extends Serializer> serializerClass) {
-    Class<? extends Serializer> existing =
-        registeredSerializerClassesByName.putIfAbsent(className, serializerClass);
+  String cacheRegisteredSerializerClassName(String className, String serializerClassName) {
+    String existing = registeredSerializerClassesByName.putIfAbsent(className, serializerClassName);
     if (existing == null) {
-      return serializerClass;
+      return serializerClassName;
     }
-    if (existing != serializerClass) {
+    if (!existing.equals(serializerClassName)) {
       throw new IllegalArgumentException(
           String.format(
               "Conflicting serializer class registration for %s. Existing=%s, new=%s",
-              className, existing.getName(), serializerClass.getName()));
+              className, existing, serializerClassName));
     }
     return existing;
   }

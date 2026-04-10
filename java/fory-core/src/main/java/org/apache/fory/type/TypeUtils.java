@@ -86,7 +86,6 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeParameter;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.UnknownClass;
-import org.apache.fory.util.OptionalSqlTimeSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordUtils;
@@ -94,6 +93,10 @@ import org.apache.fory.util.record.RecordUtils;
 /** Type utils for common type inference and extraction. */
 @SuppressWarnings({"UnstableApiUsage", "unchecked"})
 public class TypeUtils {
+  private static final String SQL_DATE_CLASS_NAME = "java.sql.Date";
+  private static final String SQL_TIME_CLASS_NAME = "java.sql.Time";
+  private static final String SQL_TIMESTAMP_CLASS_NAME = "java.sql.Timestamp";
+
   public static final String JAVA_BOOLEAN = "boolean";
   public static final String JAVA_BYTE = "byte";
   public static final String JAVA_SHORT = "short";
@@ -122,11 +125,9 @@ public class TypeUtils {
   public static final TypeRef<?> STRING_TYPE = TypeRef.of(String.class);
   public static final TypeRef<?> BIG_DECIMAL_TYPE = TypeRef.of(BigDecimal.class);
   public static final TypeRef<?> BIG_INTEGER_TYPE = TypeRef.of(BigInteger.class);
-  public static final TypeRef<?> DATE_TYPE =
-      optionalTypeRef(OptionalSqlTimeSupport.SQL_DATE_CLASS_NAME);
+  public static final TypeRef<?> DATE_TYPE = optionalTypeRef(SQL_DATE_CLASS_NAME);
   public static final TypeRef<?> LOCAL_DATE_TYPE = TypeRef.of(LocalDate.class);
-  public static final TypeRef<?> TIMESTAMP_TYPE =
-      optionalTypeRef(OptionalSqlTimeSupport.SQL_TIMESTAMP_CLASS_NAME);
+  public static final TypeRef<?> TIMESTAMP_TYPE = optionalTypeRef(SQL_TIMESTAMP_CLASS_NAME);
   public static final TypeRef<?> INSTANT_TYPE = TypeRef.of(Instant.class);
   public static final TypeRef<?> BINARY_TYPE = TypeRef.of(byte[].class);
   public static final TypeRef<?> ITERABLE_TYPE = TypeRef.of(Iterable.class);
@@ -1009,9 +1010,9 @@ public class TypeUtils {
             Calendar.class,
             GregorianCalendar.class,
             TimeZone.class));
-    addOptionalLeafType(OptionalSqlTimeSupport.SQL_DATE_CLASS_NAME);
-    addOptionalLeafType(OptionalSqlTimeSupport.SQL_TIME_CLASS_NAME);
-    addOptionalLeafType(OptionalSqlTimeSupport.SQL_TIMESTAMP_CLASS_NAME);
+    addOptionalLeafType(SQL_DATE_CLASS_NAME);
+    addOptionalLeafType(SQL_TIME_CLASS_NAME);
+    addOptionalLeafType(SQL_TIMESTAMP_CLASS_NAME);
   }
 
   private static void addOptionalLeafType(String className) {

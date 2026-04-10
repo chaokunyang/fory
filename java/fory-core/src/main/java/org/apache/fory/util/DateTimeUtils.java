@@ -25,11 +25,12 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.Date;
 import java.util.TimeZone;
 
 public class DateTimeUtils {
@@ -58,7 +59,7 @@ public class DateTimeUtils {
     return (int) Math.floorDiv(millisLocal, MILLIS_PER_DAY);
   }
 
-  public static long fromJavaTimestamp(Date t) {
+  public static long fromJavaTimestamp(Timestamp t) {
     return instantToMicros(t.toInstant());
   }
 
@@ -113,9 +114,8 @@ public class DateTimeUtils {
   }
 
   /** Returns a java.sql.Date from number of days since epoch. */
-  @SuppressWarnings("unchecked")
-  public static <T extends Date> T toJavaDate(int daysSinceEpoch) {
-    return (T) OptionalSqlTimeSupport.newSqlDate(daysToMillis(daysSinceEpoch));
+  public static Date toJavaDate(int daysSinceEpoch) {
+    return new Date(daysToMillis(daysSinceEpoch));
   }
 
   public static Instant microsToInstant(long us) {
@@ -124,8 +124,7 @@ public class DateTimeUtils {
     return Instant.ofEpochSecond(secs, mos * NANOS_PER_MICROS);
   }
 
-  @SuppressWarnings("unchecked")
-  public static <T extends Date> T toJavaTimestamp(long us) {
-    return (T) OptionalSqlTimeSupport.sqlTimestampFrom(microsToInstant(us));
+  public static Timestamp toJavaTimestamp(long us) {
+    return Timestamp.from(microsToInstant(us));
   }
 }

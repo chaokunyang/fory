@@ -47,18 +47,6 @@ import org.apache.fory.util.DateTimeUtils;
 
 /** Serializers for all time related types. */
 public class TimeSerializers {
-  private static final String SQL_DATE_CLASS_NAME = "java.sql.Date";
-  private static final String SQL_TIME_CLASS_NAME = "java.sql.Time";
-  private static final String SQL_TIMESTAMP_CLASS_NAME = "java.sql.Timestamp";
-  private static final String SQL_TIME_SERIALIZER_PREFIX =
-      "org.apache.fory.serializer.SqlTimeSerializers$";
-  private static final String SQL_DATE_SERIALIZER_CLASS_NAME =
-      SQL_TIME_SERIALIZER_PREFIX + "SqlDateSerializer";
-  private static final String SQL_TIME_SERIALIZER_CLASS_NAME =
-      SQL_TIME_SERIALIZER_PREFIX + "SqlTimeSerializer";
-  private static final String SQL_TIMESTAMP_SERIALIZER_CLASS_NAME =
-      SQL_TIME_SERIALIZER_PREFIX + "TimestampSerializer";
-
   public abstract static class TimeSerializer<T> extends Serializer<T> {
     protected final Config config;
 
@@ -648,20 +636,9 @@ public class TimeSerializers {
     }
   }
 
-  public static void registerCommonUsedClasses(ClassResolver resolver) {
-    resolver.registerInternal(Date.class, LocalDateTime.class, Instant.class);
-    resolver.registerInternal(SQL_TIMESTAMP_CLASS_NAME);
-  }
-
   public static void registerDefaultSerializers(ClassResolver resolver) {
     Config config = resolver.getConfig();
     resolver.registerInternalSerializer(Date.class, new DateSerializer(config));
-    resolver.registerInternalSerializer(
-        SQL_DATE_CLASS_NAME, SQL_DATE_SERIALIZER_CLASS_NAME, !config.isTimeRefIgnored());
-    resolver.registerInternalSerializer(
-        SQL_TIME_CLASS_NAME, SQL_TIME_SERIALIZER_CLASS_NAME, !config.isTimeRefIgnored());
-    resolver.registerInternalSerializer(
-        SQL_TIMESTAMP_CLASS_NAME, SQL_TIMESTAMP_SERIALIZER_CLASS_NAME, !config.isTimeRefIgnored());
     resolver.registerInternalSerializer(LocalDate.class, new LocalDateSerializer(config));
     resolver.registerInternalSerializer(LocalTime.class, new LocalTimeSerializer(config));
     resolver.registerInternalSerializer(LocalDateTime.class, new LocalDateTimeSerializer(config));

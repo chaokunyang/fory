@@ -27,10 +27,29 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.ClassResolver;
 
 /** Optional SQL time serializers loaded only when {@code java.sql} types are actually used. */
 public final class SqlTimeSerializers {
+  private static final String SQL_DATE_CLASS_NAME = "java.sql.Date";
+  private static final String SQL_TIME_CLASS_NAME = "java.sql.Time";
+  private static final String SQL_TIMESTAMP_CLASS_NAME = "java.sql.Timestamp";
+  private static final String SQL_SERIALIZER_PREFIX =
+      "org.apache.fory.serializer.SqlTimeSerializers$";
+  private static final String SQL_DATE_SERIALIZER_CLASS_NAME =
+      SQL_SERIALIZER_PREFIX + "SqlDateSerializer";
+  private static final String SQL_TIME_SERIALIZER_CLASS_NAME =
+      SQL_SERIALIZER_PREFIX + "SqlTimeSerializer";
+  private static final String SQL_TIMESTAMP_SERIALIZER_CLASS_NAME =
+      SQL_SERIALIZER_PREFIX + "TimestampSerializer";
+
   private SqlTimeSerializers() {}
+
+  public static void registerDefaultSerializers(ClassResolver resolver) {
+    resolver.registerSerializer(SQL_DATE_CLASS_NAME, SQL_DATE_SERIALIZER_CLASS_NAME);
+    resolver.registerSerializer(SQL_TIME_CLASS_NAME, SQL_TIME_SERIALIZER_CLASS_NAME);
+    resolver.registerSerializer(SQL_TIMESTAMP_CLASS_NAME, SQL_TIMESTAMP_SERIALIZER_CLASS_NAME);
+  }
 
   public static final class SqlDateSerializer
       extends TimeSerializers.BaseDateSerializer<java.sql.Date> {

@@ -366,11 +366,6 @@ public abstract class TypeResolver {
 
     TypeInfo typeInfo = classInfoMap.get(cls);
     if (typeInfo == null || typeInfo.serializer == null) {
-      Boolean registeredNeedToWriteRef =
-          sharedRegistry.getRegisteredSerializerNeedToWriteRef(cls.getName());
-      if (registeredNeedToWriteRef != null) {
-        return registeredNeedToWriteRef;
-      }
       // TODO group related logic together for extendability and consistency.
       return !cls.isEnum();
     } else {
@@ -876,7 +871,7 @@ public abstract class TypeResolver {
     return getInternalTypeInfoByTypeId(Types.TIMESTAMP);
   }
 
-  protected TypeInfo getInternalTypeInfoByTypeId(int typeId) {
+  protected final TypeInfo getInternalTypeInfoByTypeId(int typeId) {
     if (typeId < 0 || typeId >= typeIdToTypeInfo.length) {
       return null;
     }
@@ -1138,11 +1133,7 @@ public abstract class TypeResolver {
   }
 
   public final Serializer<?> getSerializerByTypeId(int typeId) {
-    TypeInfo typeInfo = getTypeInfoByTypeId(typeId);
-    if (typeInfo.serializer == null) {
-      typeInfo = ensureSerializerForTypeInfo(typeInfo);
-    }
-    return typeInfo.getSerializer();
+    return getTypeInfoByTypeId(typeId).getSerializer();
   }
 
   public final TypeInfo nilTypeInfo() {
@@ -1765,8 +1756,6 @@ public abstract class TypeResolver {
     IdentityHashMap<Class<?>, Integer> registeredClassIdMap =
         new IdentityHashMap<>(isCrossLanguage() ? 4 : 200);
     BiMap<String, Class<?>> registeredClasses = HashBiMap.create(isCrossLanguage() ? 4 : 200);
-    final Map<String, Integer> lazyRegisteredInternalClassIdMap = new HashMap<>();
-    final Map<Integer, String> lazyRegisteredInternalClassNames = new HashMap<>();
     final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef;
     // TODO(chaokunyang) Better to  use soft reference, see ObjectStreamClass.
     final ConcurrentHashMap<Tuple2<Class<?>, Boolean>, SortedMap<Member, Descriptor>>

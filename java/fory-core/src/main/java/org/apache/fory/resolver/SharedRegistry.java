@@ -79,9 +79,7 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
-  final ConcurrentHashMap<String, String> registeredSerializerClassesByName =
-      new ConcurrentHashMap<>();
-  final ConcurrentHashMap<String, Boolean> registeredSerializerRefTrackingByName =
+  final ConcurrentHashMap<String, Tuple2<Integer, String>> registeredSerializerInfosByName =
       new ConcurrentHashMap<>();
   private final Object metaStringCacheLock = new Object();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
@@ -124,38 +122,24 @@ public final class SharedRegistry {
     return existing;
   }
 
-  String getRegisteredSerializerClassName(String className) {
-    return registeredSerializerClassesByName.get(className);
+  Tuple2<Integer, String> getRegisteredSerializerInfo(String className) {
+    return registeredSerializerInfosByName.get(className);
   }
 
-  Boolean getRegisteredSerializerNeedToWriteRef(String className) {
-    return registeredSerializerRefTrackingByName.get(className);
-  }
-
-  String cacheRegisteredSerializerClassName(String className, String serializerClassName) {
-    String existing = registeredSerializerClassesByName.putIfAbsent(className, serializerClassName);
+  Tuple2<Integer, String> cacheRegisteredSerializerInfo(
+      String className, int classId, String serializerClassName) {
+    Tuple2<Integer, String> candidate = Tuple2.of(classId, serializerClassName);
+    Tuple2<Integer, String> existing =
+        registeredSerializerInfosByName.putIfAbsent(className, candidate);
     if (existing == null) {
-      return serializerClassName;
+      return candidate;
     }
-    if (!existing.equals(serializerClassName)) {
+    if (!Objects.equals(existing.f0, classId)
+        || !Objects.equals(existing.f1, serializerClassName)) {
       throw new IllegalArgumentException(
           String.format(
-              "Conflicting serializer class registration for %s. Existing=%s, new=%s",
-              className, existing, serializerClassName));
-    }
-    return existing;
-  }
-
-  boolean cacheRegisteredSerializerNeedToWriteRef(String className, boolean needToWriteRef) {
-    Boolean existing = registeredSerializerRefTrackingByName.putIfAbsent(className, needToWriteRef);
-    if (existing == null) {
-      return needToWriteRef;
-    }
-    if (existing != needToWriteRef) {
-      throw new IllegalArgumentException(
-          String.format(
-              "Conflicting serializer ref-tracking registration for %s. Existing=%s, new=%s",
-              className, existing, needToWriteRef));
+              "Conflicting serializer registration for %s. Existing=%s, new=%s",
+              className, existing, candidate));
     }
     return existing;
   }

@@ -47,7 +47,7 @@ This page documents all configuration options available through `ForyBuilder`.
 | `asyncCompilationEnabled`           | If enabled, serialization uses interpreter mode first and switches to JIT serialization after async serializer JIT for a class is finished.                                                                                                                                                                                                                                                                                                                                                                                                   | `false`                                                        |
 | `scalaOptimizationEnabled`          | Enables or disables Scala-specific serialization optimization.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `false`                                                        |
 | `copyRef`                           | When disabled, the copy performance will be better. But fory deep copy will ignore circular and shared reference. Same reference of an object graph will be copied into different objects in one `Fory#copy`.                                                                                                                                                                                                                                                                                                                                 | `false`                                                        |
-| `serializeEnumByName`               | When enabled, Fory serializes enum names instead of numeric enum tags. Without this option, Fory writes declaration ordinals by default, or explicit stable ids when the enum is configured with `@ForyEnumId`.                                                                                                                                                                                                                                                                                                                             | `false`                                                        |
+| `serializeEnumByName`               | When enabled, Fory serializes enum names instead of numeric enum tags. Without this option, Fory writes declaration ordinals by default, or explicit stable ids when the enum is configured with `@ForyEnumId`.                                                                                                                                                                                                                                                                                                                               | `false`                                                        |
 
 ## Example Configuration
 
@@ -100,6 +100,27 @@ enum Status {
 
 Java also supports annotating one enum instance field with `@ForyEnumId`, or annotating every enum
 constant directly such as `@ForyEnumId(10) Unknown`.
+
+### `@ForyEnumId` Rules
+
+`@ForyEnumId` supports exactly three configuration styles:
+
+1. Annotate one enum instance field and store the numeric id there.
+2. Annotate one zero-argument public instance method such as `getId()`.
+3. Annotate every enum constant directly with an explicit value such as `@ForyEnumId(10) Unknown`.
+
+Validation rules:
+
+1. Use exactly one of those three styles for a given enum.
+2. Field and method annotations must leave `value()` at its default `-1`.
+3. Enum-constant annotations must appear on every constant once any constant uses `@ForyEnumId`.
+4. All ids must be non-negative, unique, and fit in Java `int`.
+
+Lookup behavior:
+
+1. Without `@ForyEnumId`, Fory writes the declaration ordinal.
+2. With `@ForyEnumId`, Fory writes the configured stable numeric tag instead.
+3. Small dense tags use an array lookup internally; sparse larger tags fall back to a map.
 
 ## Related Topics
 

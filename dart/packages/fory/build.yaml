@@ -16,10 +16,10 @@
 # under the License.
 
 builders:
-  fory_obj_builder:
-    import: "package:fory/src/codegen/generate/builders.dart"
-    builder_factories: ["foryObjSpecBuilder"]
-    build_extensions: {".dart": ["fory_meta.g.part"]}  # Process .dart files and generate .g.part files
+  fory_builder:
+    import: "package:fory/src/codegen/fory_builder.dart"
+    builder_factories: ["foryBuilder"]
+    build_extensions: {".dart": [".fory.g.part"]}
     auto_apply: dependents
     build_to: cache
-    applies_builders: ["source_gen|combining_builder"]  # Ensure execution after source_gen
+    applies_builders: ["source_gen|combining_builder"]

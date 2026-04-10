@@ -19,239 +19,227 @@ license: |
   limitations under the License.
 ---
 
-## Implementation guidelines
+## Overview
 
-### How to reduce memory read/write code
+This guide describes the current xlang runtime shape used by the Dart rewrite and
+the ownership model other runtimes should mirror when they implement the same
+protocol behavior.
 
-- Try to merge multiple bytes into an int/long write before writing to reduce memory IO and bound check cost.
-- Read multiple bytes as an int/long, then split into multiple bytes to reduce memory IO and bound check cost.
-- Try to use one varint/long to write flags and length together to save one byte cost and reduce memory io.
-- Condition branches are less expensive compared to memory IO cost unless there are too many branches.
+When this guide conflicts with the wire-format specification, follow
+`docs/specification/xlang_serialization_spec.md`. When it conflicts with a
+runtime-specific implementation detail, follow the current runtime code for that
+language.
 
-### Fast deserialization for static languages without runtime codegen support
+## Source Of Truth
 
-For type evolution, the serializer will encode the type meta into the serialized data. The deserializer will compare
-this meta with class meta in the current process, and use the diff to determine how to deserialize the data.
+Use these sources in this order:
 
-For java/javascript/python, we can use the diff to generate serializer code at runtime and load it as class/function for
-deserialization. In this way, the type evolution will be as fast as type consist mode.
+1. `docs/specification/xlang_serialization_spec.md`
+2. The current runtime implementation for the language
+3. Cross-language tests under `integration_tests/`
 
-For C++/Rust, we can't generate the serializer code at runtime. So we need to generate the code at compile-time using
-meta programming. But at that time, we don't know the type schema in other processes, so we can't generate the
-serializer code for such inconsistent types. We may need to generate the code which has a loop and compare field name
-one by one to decide whether to deserialize and assign the field or skip the field value.
+For Dart, the runtime shape is centered on:
 
-One fast way is that we can optimize the string comparison into `jump` instructions:
+- `Fory`
+- `WriteContext`
+- `ReadContext`
+- `RefWriter`
+- `RefReader`
+- `TypeResolver`
 
-- Assume the current type has `n` fields, and the peer type has `n1` fields.
-- Generate an auto growing `field id` from `0` for every sorted field in the current type at the compile time.
-- Compare the received type meta with current type, generate same id if the field name is same, otherwise generate an
-  auto growing id starting from `n`, cache this meta at runtime.
-- Iterate the fields of received type meta, use a `switch` to compare the `field id` to deserialize data
-  and `assign/skip` field value. **Continuous** field id will be optimized into `jump` in `switch` block, so it will
-  very fast.
+## Runtime Ownership
 
-Here is an example, suppose process A has a class `Foo` with version 1 defined as `Foo1`, process B has a class `Foo`
-with version 2 defined as `Foo2`:
+`Fory` is the root operation facade. It owns exactly four runtime members:
 
-```c++
-// class Foo with version 1
-class Foo1 {
-  int32_t v1; // id 0
-  std::string v2; // id 1
-};
-// class Foo with version 2
-class Foo2 {
-  // id 0, but will have id 2 in process A
-  bool v0;
-  // id 1, but will have id 0 in process A
-  int32_t v1;
-  // id 2, but will have id 3 in process A
-  int64_t long_value;
-  // id 3, but will have id 1 in process A
-  std::string v2;
-  // id 4, but will have id 4 in process A
-  std::vector<std::string> list;
-};
+- `Buffer`
+- `WriteContext`
+- `ReadContext`
+- `TypeResolver`
+
+`Fory` is responsible for:
+
+- preparing the shared buffer for root operations
+- writing and reading the root xlang header
+- delegating value encoding to `WriteContext`
+- delegating value decoding to `ReadContext`
+- owning type registration through `TypeResolver`
+
+`Fory` must not accumulate serializer-specific mutable state beyond those four
+runtime members.
+
+## Public Dart API
+
+The Dart package exports only the user-facing API:
+
+- `Fory`
+- `Config`
+- `Buffer`
+- `WriteContext`
+- `ReadContext`
+- `Serializer`
+- `ForyObject`
+- `ForyField`
+- built-in wrapper/value types such as `Int32`, `Float32`, `LocalDate`, and `Timestamp`
+
+Important public API rules:
+
+- `Config` contains only `compatible`, `checkStructVersion`, `maxDepth`,
+  `maxCollectionSize`, and `maxBinarySize`.
+- `compatible` is the only public schema-mode switch.
+- field-level reference tracking is controlled by `@ForyField(ref: true)`.
+- root graph reference tracking is controlled only by
+  `serialize(..., trackRef: true)` and `serializeTo(..., trackRef: true)`.
+- `ForyField.dynamic` is `bool?`, where `null` means auto, `false` means use
+  the declared type, and `true` means write runtime type metadata.
+
+## Context Responsibilities
+
+### WriteContext
+
+`WriteContext` owns all write-side per-operation state:
+
+- current `Buffer`
+- `RefWriter`
+- shared TypeDef write state
+- meta-string write cache
+- root `trackRef` mode
+- recursion depth and limits
+
+It exposes one-shot primitive helpers such as:
+
+- `writeBool`
+- `writeInt32`
+- `writeVarUint32`
+
+These helpers are convenience methods. Serializers that perform repeated
+primitive IO should cache `final buffer = context.buffer;` and call buffer
+methods directly.
+
+### ReadContext
+
+`ReadContext` owns all read-side per-operation state:
+
+- current `Buffer`
+- `RefReader`
+- shared TypeDef read state
+- meta-string read cache
+- compatible-struct field mapping state
+- recursion depth and limits
+
+It exposes the matching one-shot primitive helpers such as:
+
+- `readBool`
+- `readInt32`
+- `readVarUint32`
+
+Generated struct serializers call `context.reference(value)` immediately after
+constructing the target instance so later ref slots can resolve to that object.
+
+## RefWriter And RefReader
+
+`RefWriter` and `RefReader` are internal collaborators owned by the contexts.
+They implement xlang ref flags:
+
+- `NULL (-3)`
+- `REF (-2)`
+- `NOT_NULL (-1)`
+- `REF_VALUE (0)`
+
+Key behavior:
+
+- basic values never use ref tracking
+- field metadata controls ref behavior inside generated structs
+- root `trackRef` is only for top-level graphs and container roots with no field
+  metadata
+- generated struct reads and writes must preserve the current object so annotated
+  self-references can resolve correctly
+
+## TypeResolver
+
+`TypeResolver` is the internal registry and type-dispatch owner. It is
+responsible for:
+
+- built-in type resolution
+- registration by numeric id or by `namespace + typeName`
+- serializer lookup
+- struct metadata lookup
+- wire type decisions for struct, compatible struct, enum, ext, and union forms
+
+Generator-only metadata should stay off the public `Serializer` API. The Dart
+runtime keeps those details in internal generated serializer base classes.
+
+## Root Wire Flow
+
+Root operations follow this framing:
+
+1. write or read the root header bitmap
+2. write or read root ref metadata
+3. write or read type metadata
+4. write or read the value payload
+
+For non-null xlang values the root header must set the xlang bit. Null roots use
+the null bit and stop there.
+
+## Compatible Structs
+
+When `Config.compatible` is enabled and the struct is marked evolving:
+
+- the wire type uses the compatible struct form
+- the runtime writes shared TypeDef metadata
+- reads map incoming fields by identifier and skip unknown fields
+
+When `compatible` is disabled and `checkStructVersion` is enabled:
+
+- the runtime writes the schema hash for struct payloads
+- the read side checks that hash before reading fields
+
+## Code Generation
+
+The normal Dart integration path is:
+
+1. annotate structs with `@ForyObject`
+2. annotate field overrides with `@ForyField`
+3. run `build_runner`
+4. call the generated registration helper for that library
+
+Generated code should emit:
+
+- private serializer classes
+- private metadata constants
+- one generated registration helper per annotated library
+
+Generated code should not create a public global registry or a second public API
+family.
+
+## Directory Layout
+
+Under each Dart package `lib/` tree, only one nested source layer is allowed.
+
+Allowed:
+
+- `lib/fory.dart`
+- `lib/src/<file>.dart`
+- `lib/src/<area>/<file>.dart`
+
+Not allowed:
+
+- `lib/src/<area>/<subarea>/<file>.dart`
+
+## Validation
+
+For Dart runtime changes, run at minimum:
+
+```bash
+cd dart
+dart run build_runner build --delete-conflicting-outputs
+dart analyze
+dart test
 ```
 
-When process A received serialized `Foo2` from process B, here is how it deserialize the data:
+For generated consumer coverage, also run:
 
-```c++
-Foo1 foo1 = ...;
-const std::vector<fory::FieldInfo> &field_infos = type_meta.field_infos;
-for (const auto &field_info : field_infos) {
-  switch (field_info.field_id) {
-    case 0:
-      foo1.v1 = buffer.read_varint32();
-      break;
-    case 1:
-      foo1.v2 = fory.read_string();
-      break;
-    default:
-      fory.skip_data(field_info);
-  }
-}
+```bash
+cd dart/packages/fory-test
+dart run build_runner build --delete-conflicting-outputs
+dart test
 ```
-
-## Implementation Checklist for New Languages
-
-This section provides a step-by-step guide for implementing Fory xlang serialization in a new language.
-
-### Phase 1: Core Infrastructure
-
-1. **Buffer Implementation**
-   - [ ] Create a byte buffer with read/write cursor tracking
-   - [ ] Implement little-endian byte order for all multi-byte writes
-   - [ ] Implement `write_int8`, `write_int16`, `write_int32`, `write_int64`
-   - [ ] Implement `write_float32`, `write_float64`
-   - [ ] Implement `read_*` counterparts for all write methods
-   - [ ] Implement buffer growth strategy (e.g., doubling)
-
-2. **Varint Encoding**
-   - [ ] Implement `write_varuint32` / `read_varuint32`
-   - [ ] Implement `write_varint32` / `read_varint32` (with ZigZag)
-   - [ ] Implement `write_varuint64` / `read_varuint64`
-   - [ ] Implement `write_varint64` / `read_varint64` (with ZigZag)
-   - [ ] Implement `write_varuint36_small` / `read_varuint36_small` (for strings)
-   - [ ] Optionally implement Hybrid encoding (TAGGED_INT64/TAGGED_UINT64) for int64
-
-3. **Header Handling**
-   - [ ] Write/read bitmap flags (null, xlang, oob)
-
-### Phase 2: Basic Type Serializers
-
-4. **Primitive Types**
-   - [ ] bool (1 byte: 0 or 1)
-   - [ ] int8, int16, int32, int64 (little endian)
-   - [ ] float32, float64 (IEEE 754, little endian)
-
-5. **String Serialization**
-   - [ ] Implement string header: `(byte_length << 2) | encoding`
-   - [ ] Support UTF-8 encoding (required for xlang)
-   - [ ] Optionally support LATIN1 and UTF-16
-
-6. **Temporal Types**
-   - [ ] Duration (seconds + nanoseconds)
-   - [ ] Timestamp (seconds + nanoseconds since epoch)
-   - [ ] Date (days since epoch)
-
-7. **Reference Tracking**
-   - [ ] Implement write-side object tracking (object → ref_id map)
-   - [ ] Implement read-side object tracking (ref_id → object list)
-   - [ ] Handle all four reference flags: NULL(-3), REF(-2), NOT_NULL(-1), REF_VALUE(0)
-   - [ ] Support disabling reference tracking per-type or globally
-
-### Phase 3: Collection Types
-
-8. **List/Array Serialization**
-   - [ ] Write length as varuint32
-   - [ ] Write elements header byte
-   - [ ] Handle homogeneous vs heterogeneous elements
-   - [ ] Handle null elements
-
-9. **Map Serialization**
-   - [ ] Write total size as varuint32
-   - [ ] Implement chunk-based format (max 255 pairs per chunk)
-   - [ ] Write KV header byte per chunk
-   - [ ] Handle key and value type variations
-
-10. **Set Serialization**
-    - [ ] Same format as List (reuse implementation)
-
-### Phase 4: Meta String Encoding
-
-Meta strings are required for enum and struct serialization (encoding field names, type names, namespaces).
-
-11. **Meta String Compression**
-    - [ ] Implement LOWER_SPECIAL encoding (5 bits/char)
-    - [ ] Implement LOWER_UPPER_DIGIT_SPECIAL encoding (6 bits/char)
-    - [ ] Implement FIRST_TO_LOWER_SPECIAL encoding
-    - [ ] Implement ALL_TO_LOWER_SPECIAL encoding
-    - [ ] Implement encoding selection algorithm
-    - [ ] Implement meta string deduplication
-
-### Phase 5: Enum Serialization
-
-12. **Enum Serialization**
-    - [ ] Write ordinal as varuint32
-    - [ ] Support named enum (namespace + type name)
-
-### Phase 6: Struct Serialization
-
-13. **Type Registration**
-    - [ ] Support registration by numeric ID
-    - [ ] Support registration by namespace + type name
-    - [ ] Maintain type → serializer mapping
-    - [ ] Generate type IDs: write internal type ID, then `user_type_id` as varuint32
-
-14. **Field Ordering**
-    - [ ] Implement the spec-defined grouping and ordering (primitive/boxed/built-in, collections/maps, other)
-    - [ ] Use a stable comparator within each group (type ID and name)
-    - [ ] Use tag ID or snake_case field name as field identifier for fingerprints
-
-15. **Schema Consistent Mode**
-    - [ ] If class-version check is enabled, compute schema hash from field identifiers
-    - [ ] Write 4-byte schema hash before fields
-    - [ ] Serialize fields in Fory order
-
-16. **Compatible/Meta Share Mode**
-    - [ ] Implement shared TypeDef stream (inline new TypeDefs, index references)
-    - [ ] Map fields by name or tag ID, skip unknown fields
-    - [ ] Apply nullable/ref flags from TypeDef metadata
-
-### Phase 7: Other types
-
-17. **Binary/Array Types**
-
-- [ ] Primitive arrays (direct buffer copy)
-- [ ] Multi-dimensional arrays as nested lists (no tensor encoding)
-
-### Testing Strategy
-
-18. **Cross-Language Compatibility Tests**
-    - [ ] Serialize in new language, deserialize in Java/Python
-    - [ ] Serialize in Java/Python, deserialize in new language
-    - [ ] Test all primitive types
-    - [ ] Test strings with various encodings
-    - [ ] Test collections (empty, single, multiple elements)
-    - [ ] Test maps with various key/value types
-    - [ ] Test nested structs
-    - [ ] Test circular references (if supported)
-
-## Language-Specific Implementation Notes
-
-### Java
-
-- Uses runtime code generation (JIT) for maximum performance
-- Supports all reference tracking modes
-- Uses internal String coder for encoding selection
-- Thread-safe via `ThreadSafeFory` wrapper
-
-### Python
-
-- Two modes: Pure Python (debugging) and Cython (performance)
-- Uses `id(obj)` for reference tracking
-- Latin1/UTF-16/UTF-8 encoding for all strings in xlang mode
-- `dataclass` support via code generation
-
-### C++
-
-- Compile-time reflection via macros (`FORY_STRUCT`)
-- Template meta programming for type dispatch and serializer selection
-- Uses `std::shared_ptr` for reference tracking
-- Compile-time field ordering
-- No runtime code generation
-
-### Rust
-
-- Derive macros for automatic serialization (`#[derive(ForyObject)]`)
-- Uses `Rc<T>` / `Arc<T>` for reference tracking
-- Thread-local context caching for performance
-- Compile-time field ordering
-
-### Go
-
-- Reflection-based and codegen-based modes
-- Struct tags for field annotations
-- Interface types for polymorphism

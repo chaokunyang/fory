@@ -19,8 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import java.sql.Time;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -44,8 +42,10 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.DateTimeUtils;
+import org.apache.fory.util.OptionalSqlTimeSupport;
 
 /** Serializers for all time related types. */
 public class TimeSerializers {
@@ -119,88 +119,113 @@ public class TimeSerializers {
     }
   }
 
-  public static final class SqlDateSerializer extends BaseDateSerializer<java.sql.Date> {
+  public static final class SqlDateSerializer extends BaseDateSerializer<Date> {
     public SqlDateSerializer(Config config) {
-      super(config, java.sql.Date.class);
+      this(config, OptionalSqlTimeSupport.getSqlDateClass());
     }
 
     public SqlDateSerializer(Config config, boolean needToWriteRef) {
-      super(config, java.sql.Date.class, needToWriteRef);
+      this(config, OptionalSqlTimeSupport.getSqlDateClass(), needToWriteRef);
+    }
+
+    public SqlDateSerializer(Config config, Class<Date> type) {
+      super(config, type);
+    }
+
+    public SqlDateSerializer(Config config, Class<Date> type, boolean needToWriteRef) {
+      super(config, type, needToWriteRef);
     }
 
     @Override
-    protected java.sql.Date newInstance(long time) {
-      return new java.sql.Date(time);
+    protected Date newInstance(long time) {
+      return OptionalSqlTimeSupport.newSqlDate(time);
     }
 
     @Override
-    public java.sql.Date copy(CopyContext copyContext, java.sql.Date value) {
+    public Date copy(CopyContext copyContext, Date value) {
       return newInstance(value.getTime());
     }
   }
 
-  public static final class SqlTimeSerializer extends BaseDateSerializer<Time> {
+  public static final class SqlTimeSerializer extends BaseDateSerializer<Date> {
 
     public SqlTimeSerializer(Config config) {
-      super(config, Time.class);
+      this(config, OptionalSqlTimeSupport.getSqlTimeClass());
     }
 
     public SqlTimeSerializer(Config config, boolean needToWriteRef) {
-      super(config, Time.class, needToWriteRef);
+      this(config, OptionalSqlTimeSupport.getSqlTimeClass(), needToWriteRef);
+    }
+
+    public SqlTimeSerializer(Config config, Class<Date> type) {
+      super(config, type);
+    }
+
+    public SqlTimeSerializer(Config config, Class<Date> type, boolean needToWriteRef) {
+      super(config, type, needToWriteRef);
     }
 
     @Override
-    protected Time newInstance(long time) {
-      return new Time(time);
+    protected Date newInstance(long time) {
+      return OptionalSqlTimeSupport.newSqlTime(time);
     }
 
     @Override
-    public Time copy(CopyContext copyContext, Time value) {
+    public Date copy(CopyContext copyContext, Date value) {
       return newInstance(value.getTime());
     }
   }
 
-  public static final class TimestampSerializer extends TimeSerializer<Timestamp> {
+  public static final class TimestampSerializer extends TimeSerializer<Date> {
 
     public TimestampSerializer(Config config) {
-      // conflict with instant
-      super(config, Timestamp.class);
+      this(config, OptionalSqlTimeSupport.getSqlTimestampClass());
     }
 
     public TimestampSerializer(Config config, boolean needToWriteRef) {
-      super(config, Timestamp.class, needToWriteRef);
+      this(config, OptionalSqlTimeSupport.getSqlTimestampClass(), needToWriteRef);
+    }
+
+    public TimestampSerializer(Config config, Class<Date> type) {
+      // conflict with instant
+      super(config, type);
+    }
+
+    public TimestampSerializer(Config config, Class<Date> type, boolean needToWriteRef) {
+      super(config, type, needToWriteRef);
     }
 
     @Override
-    public void write(WriteContext writeContext, Timestamp value) {
+    public void write(WriteContext writeContext, Date value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       if (config.isXlang()) {
-        Instant instant = value.toInstant();
+        Instant instant = OptionalSqlTimeSupport.sqlTimestampToInstant(value);
         buffer.writeInt64(instant.getEpochSecond());
         buffer.writeInt32(instant.getNano());
       } else {
-        long time = value.getTime() - (value.getNanos() / 1_000_000);
+        int nanos = OptionalSqlTimeSupport.getSqlTimestampNanos(value);
+        long time = value.getTime() - (nanos / 1_000_000);
         buffer.writeInt64(time);
-        buffer.writeInt32(value.getNanos());
+        buffer.writeInt32(nanos);
       }
     }
 
     @Override
-    public Timestamp read(ReadContext readContext) {
+    public Date read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (config.isXlang()) {
         long seconds = buffer.readInt64();
         int nanos = buffer.readInt32();
-        return Timestamp.from(Instant.ofEpochSecond(seconds, nanos));
+        return OptionalSqlTimeSupport.sqlTimestampFrom(Instant.ofEpochSecond(seconds, nanos));
       }
-      Timestamp t = new Timestamp(buffer.readInt64());
-      t.setNanos(buffer.readInt32());
-      return t;
+      Date timestamp = OptionalSqlTimeSupport.newSqlTimestamp(buffer.readInt64());
+      OptionalSqlTimeSupport.setSqlTimestampNanos(timestamp, buffer.readInt32());
+      return timestamp;
     }
 
     @Override
-    public Timestamp copy(CopyContext copyContext, Timestamp value) {
-      return new Timestamp(value.getTime());
+    public Date copy(CopyContext copyContext, Date value) {
+      return OptionalSqlTimeSupport.newSqlTimestamp(value.getTime());
     }
   }
 
@@ -723,12 +748,26 @@ public class TimeSerializers {
     }
   }
 
+  public static void registerCommonUsedClasses(ClassResolver resolver) {
+    resolver.registerInternal(Date.class, LocalDateTime.class, Instant.class);
+    resolver.registerInternal(OptionalSqlTimeSupport.SQL_TIMESTAMP_CLASS_NAME);
+  }
+
   public static void registerDefaultSerializers(TypeResolver resolver) {
     Config config = resolver.getConfig();
     resolver.registerInternalSerializer(Date.class, new DateSerializer(config));
-    resolver.registerInternalSerializer(java.sql.Date.class, new SqlDateSerializer(config));
-    resolver.registerInternalSerializer(Time.class, new SqlTimeSerializer(config));
-    resolver.registerInternalSerializer(Timestamp.class, new TimestampSerializer(config));
+    resolver.registerInternalSerializer(
+        OptionalSqlTimeSupport.SQL_DATE_CLASS_NAME,
+        SqlDateSerializer.class,
+        !config.isTimeRefIgnored());
+    resolver.registerInternalSerializer(
+        OptionalSqlTimeSupport.SQL_TIME_CLASS_NAME,
+        SqlTimeSerializer.class,
+        !config.isTimeRefIgnored());
+    resolver.registerInternalSerializer(
+        OptionalSqlTimeSupport.SQL_TIMESTAMP_CLASS_NAME,
+        TimestampSerializer.class,
+        !config.isTimeRefIgnored());
     resolver.registerInternalSerializer(LocalDate.class, new LocalDateSerializer(config));
     resolver.registerInternalSerializer(LocalTime.class, new LocalTimeSerializer(config));
     resolver.registerInternalSerializer(LocalDateTime.class, new LocalDateTimeSerializer(config));

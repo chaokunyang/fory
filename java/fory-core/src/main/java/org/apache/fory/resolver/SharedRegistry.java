@@ -79,6 +79,10 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
+  final ConcurrentHashMap<String, Class<? extends Serializer>> registeredSerializerClassesByName =
+      new ConcurrentHashMap<>();
+  final ConcurrentHashMap<String, Boolean> registeredSerializerRefTrackingByName =
+      new ConcurrentHashMap<>();
   private final Object metaStringCacheLock = new Object();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
@@ -116,6 +120,44 @@ public final class SharedRegistry {
           String.format(
               "Conflicting shareable serializer registration for %s. Existing=%s, new=%s",
               type.getName(), existing, serializer));
+    }
+    return existing;
+  }
+
+  Class<? extends Serializer> getRegisteredSerializerClass(String className) {
+    return registeredSerializerClassesByName.get(className);
+  }
+
+  Boolean getRegisteredSerializerNeedToWriteRef(String className) {
+    return registeredSerializerRefTrackingByName.get(className);
+  }
+
+  Class<? extends Serializer> cacheRegisteredSerializerClass(
+      String className, Class<? extends Serializer> serializerClass) {
+    Class<? extends Serializer> existing =
+        registeredSerializerClassesByName.putIfAbsent(className, serializerClass);
+    if (existing == null) {
+      return serializerClass;
+    }
+    if (existing != serializerClass) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Conflicting serializer class registration for %s. Existing=%s, new=%s",
+              className, existing.getName(), serializerClass.getName()));
+    }
+    return existing;
+  }
+
+  boolean cacheRegisteredSerializerNeedToWriteRef(String className, boolean needToWriteRef) {
+    Boolean existing = registeredSerializerRefTrackingByName.putIfAbsent(className, needToWriteRef);
+    if (existing == null) {
+      return needToWriteRef;
+    }
+    if (existing != needToWriteRef) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Conflicting serializer ref-tracking registration for %s. Existing=%s, new=%s",
+              className, existing, needToWriteRef));
     }
     return existing;
   }

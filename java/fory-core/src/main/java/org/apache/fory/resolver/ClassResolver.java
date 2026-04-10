@@ -35,7 +35,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -374,7 +373,7 @@ public class ClassResolver extends TypeResolver {
   private void registerCommonUsedClasses() {
     registerInternal(LinkedList.class, TreeSet.class);
     registerInternal(LinkedHashMap.class, TreeMap.class);
-    registerInternal(Date.class, Timestamp.class, LocalDateTime.class, Instant.class);
+    TimeSerializers.registerCommonUsedClasses(this);
     registerInternal(BigInteger.class, BigDecimal.class);
     registerInternal(Optional.class, OptionalInt.class);
     registerInternal(Boolean[].class, Byte[].class, Short[].class, Character[].class);
@@ -426,8 +425,8 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public void register(Class<?> cls) {
-    if (!extRegistry.registeredClassIdMap.containsKey(cls)) {
-      while (containsUserTypeId(extRegistry.userIdGenerator)) {
+    if (!isRegistered(cls)) {
+      while (containsRegisteredOrReservedUserTypeId(extRegistry.userIdGenerator)) {
         extRegistry.userIdGenerator++;
       }
       register(cls, extRegistry.userIdGenerator);
@@ -442,7 +441,12 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public void register(String className) {
-    register(loadClass(className, false, 0, false));
+    if (!isRegisteredByName(className)) {
+      while (containsRegisteredOrReservedUserTypeId(extRegistry.userIdGenerator)) {
+        extRegistry.userIdGenerator++;
+      }
+      registerLazyClass(className, extRegistry.userIdGenerator, false);
+    }
   }
 
   /**
@@ -454,7 +458,7 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public void register(String className, long classId) {
-    register(loadClass(className, false, 0, false), classId);
+    registerLazyClass(className, toUserTypeId(classId), false);
   }
 
   /**
@@ -563,6 +567,12 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
+  public void registerInternal(String... classNames) {
+    for (String className : classNames) {
+      registerInternal(className);
+    }
+  }
+
   /**
    * Registers a class for internal use with an auto-assigned internal ID.
    *
@@ -572,13 +582,13 @@ public class ClassResolver extends TypeResolver {
    * @param cls the class to register
    */
   public void registerInternal(Class<?> cls) {
-    if (!extRegistry.registeredClassIdMap.containsKey(cls)) {
+    if (!isRegisteredById(cls)) {
       Preconditions.checkArgument(
           extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
           "Internal type id overflow: %s",
           extRegistry.classIdGenerator);
       while (extRegistry.classIdGenerator < typeIdToTypeInfo.length
-          && typeIdToTypeInfo[extRegistry.classIdGenerator] != null) {
+          && isInternalTypeIdReserved(extRegistry.classIdGenerator)) {
         extRegistry.classIdGenerator++;
       }
       Preconditions.checkArgument(
@@ -604,6 +614,29 @@ public class ClassResolver extends TypeResolver {
   public void registerInternal(Class<?> cls, int classId) {
     Preconditions.checkArgument(classId >= 0 && classId < INTERNAL_NATIVE_ID_LIMIT);
     registerInternalImpl(cls, classId);
+  }
+
+  public void registerInternal(String className) {
+    if (!isRegisteredByName(className)) {
+      Preconditions.checkArgument(
+          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
+          "Internal type id overflow: %s",
+          extRegistry.classIdGenerator);
+      while (extRegistry.classIdGenerator < typeIdToTypeInfo.length
+          && isInternalTypeIdReserved(extRegistry.classIdGenerator)) {
+        extRegistry.classIdGenerator++;
+      }
+      Preconditions.checkArgument(
+          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
+          "Internal type id overflow: %s",
+          extRegistry.classIdGenerator);
+      registerInternal(className, extRegistry.classIdGenerator);
+    }
+  }
+
+  public void registerInternal(String className, int classId) {
+    Preconditions.checkArgument(classId >= 0 && classId < INTERNAL_NATIVE_ID_LIMIT);
+    registerLazyClass(className, classId, true);
   }
 
   private void registerInternalImpl(Class<?> cls, int typeId) {
@@ -639,6 +672,76 @@ public class ClassResolver extends TypeResolver {
     registerGraalvmClass(cls);
   }
 
+  private void registerLazyClass(String className, int classId, boolean internal) {
+    checkRegisterAllowed();
+    Preconditions.checkArgument(classId != -1, "User type id 0xffffffff is reserved");
+    checkLazyRegistration(className, classId, internal);
+    extRegistry.lazyRegisteredClassIdMap.put(className, classId);
+    if (internal) {
+      extRegistry.lazyRegisteredInternalClassNames.put(classId, className);
+    } else {
+      extRegistry.lazyRegisteredUserClassNames.put(classId, className);
+    }
+  }
+
+  private void checkLazyRegistration(String className, int classId, boolean internal) {
+    Integer existingClassId = extRegistry.lazyRegisteredClassIdMap.get(className);
+    if (existingClassId != null && existingClassId != classId) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Class %s already registered with id %s.",
+              className, existingClassId));
+    }
+    if (extRegistry.registeredClasses.containsKey(className)) {
+      Class<?> existingClass = extRegistry.registeredClasses.get(className);
+      Integer loadedClassId = extRegistry.registeredClassIdMap.get(existingClass);
+      if (loadedClassId != null && loadedClassId != classId) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Class %s with id %s has been registered, registering class %s with same id are"
+                    + " not allowed.",
+                existingClass.getName(), loadedClassId, className));
+      }
+    }
+    if (internal) {
+      String reservedName = extRegistry.lazyRegisteredInternalClassNames.get(classId);
+      if (reservedName != null && !reservedName.equals(className)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Class %s with id %s has been registered, registering class %s with same id are"
+                    + " not allowed.",
+                reservedName, classId, className));
+      }
+      if (classId < typeIdToTypeInfo.length) {
+        TypeInfo typeInfo = typeIdToTypeInfo[classId];
+        if (typeInfo != null) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Class %s with id %s has been registered, registering class %s with same id are"
+                      + " not allowed.",
+                  typeInfo.getType(), classId, className));
+        }
+      }
+    } else {
+      String reservedName = extRegistry.lazyRegisteredUserClassNames.get(classId);
+      if (reservedName != null && !reservedName.equals(className)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Class %s with id %s has been registered, registering class %s with same id are"
+                    + " not allowed.",
+                reservedName, classId, className));
+      }
+      TypeInfo typeInfo = userTypeIdToTypeInfo.get(classId);
+      if (typeInfo != null) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Class %s with id %s has been registered, registering class %s with same id are"
+                    + " not allowed.",
+                typeInfo.getType(), classId, className));
+      }
+    }
+  }
+
   private int buildUserTypeId(Class<?> cls, Serializer<?> serializer) {
     if (cls.isEnum()) {
       return Types.ENUM;
@@ -666,8 +769,23 @@ public class ClassResolver extends TypeResolver {
               "Class %s already registered with id %s.",
               cls, extRegistry.registeredClassIdMap.get(cls)));
     }
+    Integer reservedClassId = extRegistry.lazyRegisteredClassIdMap.get(name);
+    if (reservedClassId != null
+        && reservedClassId != classId
+        && !(name.equals(cls.getName()) && classId == -1)) {
+      throw new IllegalArgumentException(
+          String.format("Class %s already registered with id %s.", name, reservedClassId));
+    }
     if (classId != -1) {
       if (internal) {
+        String reservedClassName = extRegistry.lazyRegisteredInternalClassNames.get(classId);
+        if (reservedClassName != null && !reservedClassName.equals(name)) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Class %s with id %s has been registered, registering class %s with same id are"
+                      + " not allowed.",
+                  reservedClassName, classId, cls.getName()));
+        }
         if (classId < typeIdToTypeInfo.length && typeIdToTypeInfo[classId] != null) {
           throw new IllegalArgumentException(
               String.format(
@@ -676,6 +794,14 @@ public class ClassResolver extends TypeResolver {
                   typeIdToTypeInfo[classId].getType(), classId, cls.getName()));
         }
       } else {
+        String reservedClassName = extRegistry.lazyRegisteredUserClassNames.get(classId);
+        if (reservedClassName != null && !reservedClassName.equals(name)) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Class %s with id %s has been registered, registering class %s with same id are"
+                      + " not allowed.",
+                  reservedClassName, classId, cls.getName()));
+        }
         TypeInfo existingInfo = userTypeIdToTypeInfo.get(classId);
         if (existingInfo != null) {
           throw new IllegalArgumentException(
@@ -694,6 +820,13 @@ public class ClassResolver extends TypeResolver {
                   + " not allowed.",
               extRegistry.registeredClasses.get(name), name, cls));
     }
+    if (extRegistry.lazyRegisteredClassIdMap.containsKey(name) && !name.equals(cls.getName())) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Class %s with name %s has been registered, registering class %s with same name are"
+                  + " not allowed.",
+              name, name, cls));
+    }
   }
 
   private boolean isInternalRegisteredClassId(Class<?> cls, int classId) {
@@ -704,27 +837,100 @@ public class ClassResolver extends TypeResolver {
     return typeInfo != null && typeInfo.type == cls;
   }
 
+  private boolean isInternalTypeIdReserved(int classId) {
+    return (classId < typeIdToTypeInfo.length && typeIdToTypeInfo[classId] != null)
+        || extRegistry.lazyRegisteredInternalClassNames.containsKey(classId);
+  }
+
+  private boolean containsRegisteredOrReservedUserTypeId(int userTypeId) {
+    return containsUserTypeId(userTypeId)
+        || extRegistry.lazyRegisteredUserClassNames.containsKey(userTypeId);
+  }
+
+  private Integer getRegisteredOrReservedClassId(Class<?> cls) {
+    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    if (classId != null) {
+      return classId;
+    }
+    return extRegistry.lazyRegisteredClassIdMap.get(cls.getName());
+  }
+
+  private Class<? extends Serializer> getReservedSerializerClass(Class<?> cls) {
+    return sharedRegistry.getRegisteredSerializerClass(cls.getName());
+  }
+
+  private Boolean getReservedSerializerNeedToWriteRef(Class<?> cls) {
+    return sharedRegistry.getRegisteredSerializerNeedToWriteRef(cls.getName());
+  }
+
+  @Override
+  protected Boolean getRegisteredSerializerNeedToWriteRef(Class<?> cls) {
+    return getReservedSerializerNeedToWriteRef(cls);
+  }
+
+  @Override
+  protected TypeInfo resolveMissingRegisteredTypeInfo(int typeId, int userTypeId) {
+    String className;
+    if (userTypeId != INVALID_USER_TYPE_ID) {
+      className = extRegistry.lazyRegisteredUserClassNames.get(userTypeId);
+      if (className == null || !isUserTypeRegisteredById(typeId)) {
+        return null;
+      }
+    } else {
+      className = extRegistry.lazyRegisteredInternalClassNames.get(typeId);
+      if (className == null) {
+        return null;
+      }
+    }
+    Class<?> cls = loadClass(className, false, -1, false);
+    TypeInfo typeInfo = classInfoMap.get(cls);
+    if (typeInfo != null) {
+      int expectedTypeId = userTypeId != INVALID_USER_TYPE_ID ? buildUserTypeId(cls, null) : typeId;
+      int expectedUserTypeId = userTypeId != INVALID_USER_TYPE_ID ? userTypeId : INVALID_USER_TYPE_ID;
+      if (typeInfo.typeId == expectedTypeId && typeInfo.userTypeId == expectedUserTypeId) {
+        return typeInfo;
+      }
+      typeInfo = typeInfo.copy(expectedTypeId, expectedUserTypeId);
+    } else {
+      typeInfo =
+          new TypeInfo(
+              this,
+              cls,
+              null,
+              userTypeId != INVALID_USER_TYPE_ID ? buildUserTypeId(cls, null) : typeId,
+              userTypeId != INVALID_USER_TYPE_ID ? userTypeId : INVALID_USER_TYPE_ID);
+    }
+    updateTypeInfo(cls, typeInfo);
+    return typeInfo;
+  }
+
   @Override
   public boolean isRegistered(Class<?> cls) {
-    return extRegistry.registeredClassIdMap.get(cls) != null
+    return getRegisteredOrReservedClassId(cls) != null
         || extRegistry.registeredClasses.inverse().get(cls) != null;
   }
 
   public boolean isRegisteredByName(String name) {
-    return extRegistry.registeredClasses.get(name) != null;
+    return extRegistry.registeredClasses.get(name) != null
+        || extRegistry.lazyRegisteredClassIdMap.containsKey(name);
   }
 
   @Override
   public boolean isRegisteredByName(Class<?> cls) {
-    return extRegistry.registeredClasses.inverse().get(cls) != null;
+    return extRegistry.registeredClasses.inverse().get(cls) != null
+        || extRegistry.lazyRegisteredClassIdMap.containsKey(cls.getName());
   }
 
   public String getRegisteredName(Class<?> cls) {
-    return extRegistry.registeredClasses.inverse().get(cls);
+    String name = extRegistry.registeredClasses.inverse().get(cls);
+    if (name != null) {
+      return name;
+    }
+    return extRegistry.lazyRegisteredClassIdMap.containsKey(cls.getName()) ? cls.getName() : null;
   }
 
   public Tuple2<String, String> getRegisteredNameTuple(Class<?> cls) {
-    String name = extRegistry.registeredClasses.inverse().get(cls);
+    String name = getRegisteredName(cls);
     Preconditions.checkNotNull(name);
     int index = name.lastIndexOf(".");
     if (index != -1) {
@@ -736,19 +942,17 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   public boolean isRegisteredById(Class<?> cls) {
-    return extRegistry.registeredClassIdMap.get(cls) != null;
+    return getRegisteredOrReservedClassId(cls) != null;
   }
 
   public Integer getRegisteredClassId(Class<?> cls) {
-    return extRegistry.registeredClassIdMap.get(cls);
+    return getRegisteredOrReservedClassId(cls);
   }
 
   public Class<?> getRegisteredClass(short id) {
-    if (id < typeIdToTypeInfo.length) {
-      TypeInfo typeInfo = typeIdToTypeInfo[id];
-      if (typeInfo != null) {
-        return typeInfo.type;
-      }
+    TypeInfo typeInfo = getOrResolveRegisteredTypeInfo(id, INVALID_USER_TYPE_ID);
+    if (typeInfo != null) {
+      return typeInfo.type;
     }
     return null;
   }
@@ -771,23 +975,14 @@ public class ClassResolver extends TypeResolver {
     if (Types.isNamedType(typeId)) {
       return null;
     }
-    if (isUserTypeRegisteredById(typeId)) {
-      if (userTypeId == -1) {
-        return null;
-      }
-      TypeInfo typeInfo = userTypeIdToTypeInfo.get(userTypeId);
-      if (typeInfo == null) {
-        return null;
-      }
-      if (typeInfo.typeId != typeId) {
-        return null;
-      }
-      return typeInfo;
-    }
-    if (typeId < 0 || typeId >= typeIdToTypeInfo.length) {
+    TypeInfo typeInfo = getOrResolveRegisteredTypeInfo(typeId, userTypeId);
+    if (typeInfo == null) {
       return null;
     }
-    return typeIdToTypeInfo[typeId];
+    if (isUserTypeRegisteredById(typeId)) {
+      return typeInfo.typeId == typeId ? typeInfo : null;
+    }
+    return typeInfo;
   }
 
   public List<Class<?>> getRegisteredClasses() {
@@ -797,7 +992,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   public String getTypeAlias(Class<?> cls) {
-    Integer id = extRegistry.registeredClassIdMap.get(cls);
+    Integer id = getRegisteredOrReservedClassId(cls);
     if (id != null) {
       return Integer.toUnsignedString(id);
     }
@@ -817,9 +1012,12 @@ public class ClassResolver extends TypeResolver {
     if (typeInfo != null) {
       return typeInfo.typeId;
     }
-    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    Integer classId = getRegisteredOrReservedClassId(cls);
     if (classId != null) {
       typeInfo = classInfoMap.get(cls);
+      if (typeInfo == null) {
+        typeInfo = resolveMissingRegisteredTypeInfo(classId, INVALID_USER_TYPE_ID);
+      }
       if (typeInfo == null) {
         typeInfo = getTypeInfo(cls);
       }
@@ -845,7 +1043,7 @@ public class ClassResolver extends TypeResolver {
     if (typeInfo != null) {
       return typeInfo.userTypeId;
     }
-    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    Integer classId = getRegisteredOrReservedClassId(cls);
     if (classId != null && !isInternalRegisteredClassId(cls, classId)) {
       return classId;
     }
@@ -1000,7 +1198,7 @@ public class ClassResolver extends TypeResolver {
    */
   @Override
   public void registerInternalSerializer(Class<?> type, Serializer<?> serializer) {
-    Integer classId = extRegistry.registeredClassIdMap.get(type);
+    Integer classId = getRegisteredOrReservedClassId(type);
     if (classId != null && !isInternalRegisteredClassId(type, classId)) {
       throw new IllegalArgumentException(
           String.format(
@@ -1017,6 +1215,20 @@ public class ClassResolver extends TypeResolver {
       registerInternal(type);
     }
     registerSerializerImpl(type, serializer);
+  }
+
+  @Override
+  public void registerInternalSerializer(String type, Class<? extends Serializer> serializerClass) {
+    registerInternalSerializer(type, serializerClass, true);
+  }
+
+  @Override
+  public void registerInternalSerializer(
+      String type, Class<? extends Serializer> serializerClass, boolean needToWriteRef) {
+    checkRegisterAllowed();
+    registerInternal(type);
+    sharedRegistry.cacheRegisteredSerializerClass(type, serializerClass);
+    sharedRegistry.cacheRegisteredSerializerNeedToWriteRef(type, needToWriteRef);
   }
 
   private void registerSerializerImpl(Class<?> type, Serializer<?> serializer) {
@@ -1103,7 +1315,7 @@ public class ClassResolver extends TypeResolver {
   /** Set serializer for class whose name is {@code className}. */
   public void setSerializer(String className, Class<? extends Serializer> serializer) {
     for (Map.Entry<Class<?>, TypeInfo> entry : classInfoMap.iterable()) {
-      if (extRegistry.registeredClasses.get(className) != null) {
+      if (isRegisteredByName(className)) {
         LOG.warn("Skip clear serializer for registered class {}", className);
         return;
       }
@@ -1122,7 +1334,7 @@ public class ClassResolver extends TypeResolver {
     for (Map.Entry<Class<?>, TypeInfo> entry : classInfoMap.iterable()) {
       Class<?> cls = entry.getKey();
       String className = cls.getName();
-      if (extRegistry.registeredClasses.get(className) != null) {
+      if (isRegisteredByName(className)) {
         continue;
       }
       if (className.startsWith(classNamePrefix)) {
@@ -1159,7 +1371,7 @@ public class ClassResolver extends TypeResolver {
   public void addSerializer(Class<?> type, Serializer<?> serializer) {
     Preconditions.checkNotNull(serializer);
     TypeInfo typeInfo;
-    Integer classId = extRegistry.registeredClassIdMap.get(type);
+    Integer classId = getRegisteredOrReservedClassId(type);
     boolean registered = classId != null;
     if (registered) {
       int id = classId;
@@ -1230,6 +1442,11 @@ public class ClassResolver extends TypeResolver {
   }
 
   public Class<? extends Serializer> getSerializerClass(Class<?> cls, boolean codegen) {
+    Class<? extends Serializer> serializerClass = getReservedSerializerClass(cls);
+    if (serializerClass != null) {
+      checkSerializerRegistration(cls, serializerClass);
+      return serializerClass;
+    }
     if (!cls.isEnum() && (ReflectionUtils.isAbstract(cls) || cls.isInterface())) {
       throw new UnsupportedOperationException(
           String.format("Class %s doesn't support serialization.", cls));
@@ -1240,7 +1457,7 @@ public class ClassResolver extends TypeResolver {
     if (Throwable.class.isAssignableFrom(cls)) {
       return ExceptionSerializers.ExceptionSerializer.class;
     }
-    Class<? extends Serializer> serializerClass = getSerializerClassFromGraalvmRegistry(cls);
+    serializerClass = getSerializerClassFromGraalvmRegistry(cls);
     if (serializerClass != null) {
       return serializerClass;
     }
@@ -1505,7 +1722,7 @@ public class ClassResolver extends TypeResolver {
 
   private TypeInfo getOrUpdateTypeInfo(short classId) {
     TypeInfo typeInfo = typeInfoCache;
-    TypeInfo internalInfo = classId < typeIdToTypeInfo.length ? typeIdToTypeInfo[classId] : null;
+    TypeInfo internalInfo = getOrResolveRegisteredTypeInfo(classId, INVALID_USER_TYPE_ID);
     Preconditions.checkArgument(
         internalInfo != null, "Internal class id %s is not registered", classId);
     if (typeInfo != internalInfo) {
@@ -1548,8 +1765,8 @@ public class ClassResolver extends TypeResolver {
       if (!config.suppressClassRegistrationWarnings()
           && !Functions.isLambda(cls)
           && !ReflectionUtils.isJdkProxy(cls)
-          && extRegistry.registeredClassIdMap.get(cls) == null
-          && extRegistry.registeredClasses.inverse().get(cls) == null
+          && getRegisteredOrReservedClassId(cls) == null
+          && !isRegisteredByName(cls)
           && !hasGraalvmSerializerClass(cls)
           && !shimDispatcher.contains(cls)
           && !extRegistry.isTypeCheckerSet()) {
@@ -1699,7 +1916,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   private boolean isSecure(Class<?> cls) {
-    if (extRegistry.registeredClasses.inverse().get(cls) != null
+    if (isRegisteredByName(cls)
         || hasGraalvmSerializerClass(cls)
         || shimDispatcher.contains(cls)) {
       return true;
@@ -1718,7 +1935,7 @@ public class ClassResolver extends TypeResolver {
     if (config.requireClassRegistration()) {
       return Functions.isLambda(cls)
           || ReflectionUtils.isJdkProxy(cls)
-          || extRegistry.registeredClassIdMap.get(cls) != null
+          || getRegisteredOrReservedClassId(cls) != null
           || shimDispatcher.contains(cls);
     } else {
       return extRegistry.typeChecker.checkType(this, cls.getName());
@@ -1819,17 +2036,19 @@ public class ClassResolver extends TypeResolver {
 
   private TypeInfo buildClassInfo(Class<?> cls) {
     TypeInfo typeInfo;
-    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    Integer classId = getRegisteredOrReservedClassId(cls);
     // Don't create serializer in case the object for class is non-serializable,
     // Or class is abstract or interface.
     int typeId;
+    int userTypeId = INVALID_USER_TYPE_ID;
     if (classId == null) {
       typeId = buildUnregisteredTypeId(cls, null);
     } else {
       boolean internal = isInternalRegisteredClassId(cls, classId);
       typeId = internal ? classId : buildUserTypeId(cls, null);
+      userTypeId = internal ? INVALID_USER_TYPE_ID : classId;
     }
-    typeInfo = new TypeInfo(this, cls, null, typeId, INVALID_USER_TYPE_ID);
+    typeInfo = new TypeInfo(this, cls, null, typeId, userTypeId);
     classInfoMap.put(cls, typeInfo);
     return typeInfo;
   }
@@ -1859,19 +2078,15 @@ public class ClassResolver extends TypeResolver {
       case Types.TYPED_UNION:
         return getTypeInfoByTypeIdForReadClassInternal(typeId, buffer.readVarUint32()).type;
       default:
-        TypeInfo internalTypeInfoByTypeId = getInternalTypeInfoByTypeId(typeId);
+        TypeInfo internalTypeInfoByTypeId =
+            getOrResolveRegisteredTypeInfo(typeId, INVALID_USER_TYPE_ID);
         Preconditions.checkNotNull(internalTypeInfoByTypeId);
         return internalTypeInfoByTypeId.type;
     }
   }
 
   private TypeInfo getTypeInfoByTypeIdForReadClassInternal(int typeId, int userTypeId) {
-    TypeInfo typeInfo;
-    if (userTypeId != INVALID_USER_TYPE_ID) {
-      typeInfo = userTypeIdToTypeInfo.get(userTypeId);
-    } else {
-      typeInfo = getInternalTypeInfoByTypeId(typeId);
-    }
+    TypeInfo typeInfo = getOrResolveRegisteredTypeInfo(typeId, userTypeId);
     Preconditions.checkArgument(typeInfo != null, "Type id %s not registered", typeId);
     return typeInfo;
   }
@@ -1918,9 +2133,15 @@ public class ClassResolver extends TypeResolver {
     String className = simpleClassNameBytes.decode(TYPE_NAME_DECODER);
     ClassSpec classSpec = Encoders.decodePkgAndClass(packageName, className);
     Class<?> cls = loadClass(classSpec.entireClassName, classSpec.isEnum, classSpec.dimension);
-    int typeId = buildUnregisteredTypeId(cls, null);
+    TypeInfo registeredTypeInfo = buildClassInfo(cls);
     TypeInfo typeInfo =
-        new TypeInfo(cls, packageBytes, simpleClassNameBytes, null, typeId, INVALID_USER_TYPE_ID);
+        new TypeInfo(
+            cls,
+            packageBytes,
+            simpleClassNameBytes,
+            null,
+            registeredTypeInfo.typeId,
+            registeredTypeInfo.userTypeId);
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       typeInfo.serializer =
           UnknownClassSerializers.getSerializer(this, classSpec.entireClassName, cls);

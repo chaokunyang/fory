@@ -32,9 +32,6 @@ import java.lang.reflect.WildcardType;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.sql.Date;
-import java.sql.Time;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -89,6 +86,7 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeParameter;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.UnknownClass;
+import org.apache.fory.util.OptionalSqlTimeSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordUtils;
@@ -124,9 +122,11 @@ public class TypeUtils {
   public static final TypeRef<?> STRING_TYPE = TypeRef.of(String.class);
   public static final TypeRef<?> BIG_DECIMAL_TYPE = TypeRef.of(BigDecimal.class);
   public static final TypeRef<?> BIG_INTEGER_TYPE = TypeRef.of(BigInteger.class);
-  public static final TypeRef<?> DATE_TYPE = TypeRef.of(Date.class);
+  public static final TypeRef<?> DATE_TYPE =
+      optionalTypeRef(OptionalSqlTimeSupport.SQL_DATE_CLASS_NAME);
   public static final TypeRef<?> LOCAL_DATE_TYPE = TypeRef.of(LocalDate.class);
-  public static final TypeRef<?> TIMESTAMP_TYPE = TypeRef.of(Timestamp.class);
+  public static final TypeRef<?> TIMESTAMP_TYPE =
+      optionalTypeRef(OptionalSqlTimeSupport.SQL_TIMESTAMP_CLASS_NAME);
   public static final TypeRef<?> INSTANT_TYPE = TypeRef.of(Instant.class);
   public static final TypeRef<?> BINARY_TYPE = TypeRef.of(byte[].class);
   public static final TypeRef<?> ITERABLE_TYPE = TypeRef.of(Iterable.class);
@@ -194,9 +194,9 @@ public class TypeUtils {
     SUPPORTED_TYPES.add(STRING_TYPE);
     SUPPORTED_TYPES.add(BIG_DECIMAL_TYPE);
     // SUPPORTED_TYPES.add(BIG_INTEGER_TYPE);
-    SUPPORTED_TYPES.add(DATE_TYPE);
+    addIfNotNull(SUPPORTED_TYPES, DATE_TYPE);
     SUPPORTED_TYPES.add(LOCAL_DATE_TYPE);
-    SUPPORTED_TYPES.add(TIMESTAMP_TYPE);
+    addIfNotNull(SUPPORTED_TYPES, TIMESTAMP_TYPE);
     SUPPORTED_TYPES.add(INSTANT_TYPE);
     SUPPORTED_TYPES.add(OPTIONAL_TYPE);
     SUPPORTED_TYPES.add(OPTIONAL_INT_TYPE);
@@ -261,6 +261,33 @@ public class TypeUtils {
       Class<?> value) {
     forward.put(key, value);
     backward.put(value, key);
+  }
+
+  private static void addIfNotNull(Set<TypeRef<?>> set, TypeRef<?> typeRef) {
+    if (typeRef != null) {
+      set.add(typeRef);
+    }
+  }
+
+  private static TypeRef<?> optionalTypeRef(String className) {
+    Class<?> cls = loadOptionalClass(className);
+    return cls == null ? null : TypeRef.of(cls);
+  }
+
+  private static Class<?> loadOptionalClass(String className) {
+    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+    if (contextClassLoader != null) {
+      try {
+        return Class.forName(className, false, contextClassLoader);
+      } catch (ClassNotFoundException ignored) {
+        // Fall through to the defining class loader.
+      }
+    }
+    try {
+      return Class.forName(className, false, TypeUtils.class.getClassLoader());
+    } catch (ClassNotFoundException ignored) {
+      return null;
+    }
   }
 
   public static boolean isNullable(Class<?> clz) {
@@ -965,9 +992,6 @@ public class TypeUtils {
     leafTypes.addAll(
         Arrays.asList(
             java.util.Date.class,
-            java.sql.Date.class,
-            Time.class,
-            Timestamp.class,
             LocalDate.class,
             LocalTime.class,
             LocalDateTime.class,
@@ -985,6 +1009,16 @@ public class TypeUtils {
             Calendar.class,
             GregorianCalendar.class,
             TimeZone.class));
+    addOptionalLeafType(OptionalSqlTimeSupport.SQL_DATE_CLASS_NAME);
+    addOptionalLeafType(OptionalSqlTimeSupport.SQL_TIME_CLASS_NAME);
+    addOptionalLeafType(OptionalSqlTimeSupport.SQL_TIMESTAMP_CLASS_NAME);
+  }
+
+  private static void addOptionalLeafType(String className) {
+    Class<?> cls = loadOptionalClass(className);
+    if (cls != null) {
+      leafTypes.add(cls);
+    }
   }
 
   private static final WeakHashMap<Class<?>, Boolean> hasExpandableLeafsCache = new WeakHashMap<>();

@@ -47,7 +47,7 @@ This page documents all configuration options available through `ForyBuilder`.
 | `asyncCompilationEnabled`           | If enabled, serialization uses interpreter mode first and switches to JIT serialization after async serializer JIT for a class is finished.                                                                                                                                                                                                                                                                                                                                                                                                   | `false`                                                        |
 | `scalaOptimizationEnabled`          | Enables or disables Scala-specific serialization optimization.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `false`                                                        |
 | `copyRef`                           | When disabled, the copy performance will be better. But fory deep copy will ignore circular and shared reference. Same reference of an object graph will be copied into different objects in one `Fory#copy`.                                                                                                                                                                                                                                                                                                                                 | `false`                                                        |
-| `serializeEnumByName`               | When Enabled, fory serialize enum by name instead of ordinal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `false`                                                        |
+| `serializeEnumByName`               | When enabled, Fory serializes enum names instead of numeric enum tags. Without this option, Fory writes declaration ordinals by default, or explicit stable ids when the enum is configured with `@ForyEnumId`.                                                                                                                                                                                                                                                                                                                             | `false`                                                        |
 
 ## Example Configuration
 
@@ -69,6 +69,37 @@ Fory fory = Fory.builder()
   .withAsyncCompilation(true)
   .build();
 ```
+
+## Stable Enum IDs
+
+Without `serializeEnumByName(true)`, Java enums are serialized by numeric tag. The default tag is
+the declaration ordinal. When an enum needs stable ids that do not depend on declaration order,
+annotate exactly one id source with `@ForyEnumId`, or annotate every enum constant with explicit
+tag values.
+
+```java
+import org.apache.fory.annotation.ForyEnumId;
+
+enum Status {
+  Unknown(10),
+  Running(20),
+  Finished(30);
+
+  private final int id;
+
+  Status(int id) {
+    this.id = id;
+  }
+
+  @ForyEnumId
+  public int getId() {
+    return id;
+  }
+}
+```
+
+Java also supports annotating one enum instance field with `@ForyEnumId`, or annotating every enum
+constant directly such as `@ForyEnumId(10) Unknown`.
 
 ## Related Topics
 

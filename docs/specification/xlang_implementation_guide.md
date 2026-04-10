@@ -174,7 +174,7 @@ Meta strings are required for enum and struct serialization (encoding field name
 ### Phase 5: Enum Serialization
 
 12. **Enum Serialization**
-    - [ ] Write ordinal as varuint32
+    - [ ] Write enum tag as varuint32 (ordinal by default, explicit id when configured)
     - [ ] Support named enum (namespace + type name)
 
 ### Phase 6: Struct Serialization

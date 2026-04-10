@@ -246,6 +246,15 @@ public class Serializers {
     if (serializerClass == ChildContainerSerializers.ChildMapSerializer.class) {
       return new ChildContainerSerializers.ChildMapSerializer(typeResolver, type);
     }
+    if (serializerClass == ChildContainerSerializers.ChildSortedSetSerializer.class) {
+      return new ChildContainerSerializers.ChildSortedSetSerializer(typeResolver, type);
+    }
+    if (serializerClass == ChildContainerSerializers.ChildPriorityQueueSerializer.class) {
+      return new ChildContainerSerializers.ChildPriorityQueueSerializer(typeResolver, type);
+    }
+    if (serializerClass == ChildContainerSerializers.ChildSortedMapSerializer.class) {
+      return new ChildContainerSerializers.ChildSortedMapSerializer(typeResolver, type);
+    }
     if (serializerClass == SingletonCollectionSerializer.class) {
       return new SingletonCollectionSerializer(typeResolver, type);
     }

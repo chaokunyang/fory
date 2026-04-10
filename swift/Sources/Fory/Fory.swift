@@ -17,7 +17,7 @@
 
 import Foundation
 
-public struct ForyConfig {
+public struct Config {
     public var xlang: Bool
     public var trackRef: Bool
     public var compatible: Bool
@@ -30,39 +30,19 @@ public struct ForyConfig {
         xlang: Bool = true,
         trackRef: Bool = false,
         compatible: Bool = false,
-        checkClassVersion: Bool = true,
-        maxCollectionSize: Int = 1_000_000,
-        maxBinarySize: Int = 64 * 1024 * 1024,
-        maxDepth: Int = 5
-    ) {
-        self.xlang = xlang
-        self.trackRef = trackRef
-        self.compatible = compatible
-        self.checkClassVersion = checkClassVersion
-        self.maxCollectionSize = maxCollectionSize
-        self.maxBinarySize = maxBinarySize
-        self.maxDepth = maxDepth
-    }
-
-    static func resolved(
-        xlang: Bool = true,
-        trackRef: Bool = false,
-        compatible: Bool = false,
         checkClassVersion: Bool? = nil,
         maxCollectionSize: Int = 1_000_000,
         maxBinarySize: Int = 64 * 1024 * 1024,
         maxDepth: Int = 5
-    ) -> ForyConfig {
+    ) {
         let effectiveCheckClassVersion = checkClassVersion ?? (xlang && !compatible)
-        return ForyConfig(
-            xlang: xlang,
-            trackRef: trackRef,
-            compatible: compatible,
-            checkClassVersion: effectiveCheckClassVersion,
-            maxCollectionSize: maxCollectionSize,
-            maxBinarySize: maxBinarySize,
-            maxDepth: maxDepth
-        )
+        self.xlang = xlang
+        self.trackRef = trackRef
+        self.compatible = compatible
+        self.checkClassVersion = effectiveCheckClassVersion
+        self.maxCollectionSize = maxCollectionSize
+        self.maxBinarySize = maxBinarySize
+        self.maxDepth = maxDepth
     }
 }
 
@@ -72,12 +52,12 @@ public struct ForyConfig {
 /// reusable read/write context pair and must not be used concurrently from
 /// multiple threads.
 public final class Fory {
-    public let config: ForyConfig
+    public let config: Config
     let typeResolver: TypeResolver
     private let writeContext: WriteContext
     private let readContext: ReadContext
 
-    public init(
+    public convenience init(
         xlang: Bool = true,
         trackRef: Bool = false,
         compatible: Bool = false,
@@ -86,7 +66,7 @@ public final class Fory {
         maxBinarySize: Int = 64 * 1024 * 1024,
         maxDepth: Int = 5
     ) {
-        self.config = ForyConfig.resolved(
+        self.init(config: Config(
             xlang: xlang,
             trackRef: trackRef,
             compatible: compatible,
@@ -94,7 +74,11 @@ public final class Fory {
             maxCollectionSize: maxCollectionSize,
             maxBinarySize: maxBinarySize,
             maxDepth: maxDepth
-        )
+        ))
+    }
+
+    public init(config: Config) {
+        self.config = config
         self.typeResolver = TypeResolver(trackRef: self.config.trackRef)
         self.writeContext = WriteContext(
             buffer: ByteBuffer(),
@@ -117,18 +101,6 @@ public final class Fory {
         )
     }
 
-    public convenience init(config: ForyConfig) {
-        self.init(
-            xlang: config.xlang,
-            trackRef: config.trackRef,
-            compatible: config.compatible,
-            checkClassVersion: config.checkClassVersion,
-            maxCollectionSize: config.maxCollectionSize,
-            maxBinarySize: config.maxBinarySize,
-            maxDepth: config.maxDepth
-        )
-    }
-
     public func register<T: Serializer>(_ type: T.Type, id: UInt32) {
         typeResolver.register(type, id: id)
     }
@@ -142,44 +114,24 @@ public final class Fory {
     }
 
     public func serialize<T: Serializer>(_ value: T) throws -> Data {
-        let context = writeContext
-        context.buffer.clear()
-        defer {
-            context.reset()
-        }
-
-        writeHead(buffer: context.buffer, isNone: value.foryIsNone)
-        if !value.foryIsNone {
+        try serializeRoot(isNone: value.foryIsNone) { context in
             try writeRootTypedValue(value, context: context)
         }
-        return context.buffer.copyToData()
     }
 
     public func deserialize<T: Serializer>(_ data: Data, as _: T.Type = T.self) throws -> T {
-        try withReusableReadContext(data: data) { context in
-            if try readHead(buffer: context.buffer) {
-                return T.foryDefault()
-            }
-            let value: T = try readRootTypedValue(context: context)
-            if context.buffer.remaining != 0 {
-                throw ForyError.invalidData("unexpected trailing bytes at root: \(context.buffer.remaining)")
-            }
-            return value
+        try deserializeRoot(
+            data: data,
+            nilValue: T.foryDefault()
+        ) { context in
+            try readRootTypedValue(context: context)
         }
     }
 
     public func serialize<T: Serializer>(_ value: T, to buffer: inout Data) throws {
-        let context = writeContext
-        context.buffer.clear()
-        defer {
-            context.reset()
-        }
-
-        writeHead(buffer: context.buffer, isNone: value.foryIsNone)
-        if !value.foryIsNone {
+        try appendSerializedRoot(to: &buffer, isNone: value.foryIsNone) { context in
             try writeRootTypedValue(value, context: context)
         }
-        buffer.append(contentsOf: context.buffer.storage.prefix(context.buffer.count))
     }
 
     public func deserialize<T: Serializer>(from buffer: ByteBuffer, as _: T.Type = T.self) throws -> T {
@@ -521,6 +473,7 @@ public final class Fory {
         isNone: Bool,
         _ body: (WriteContext) throws -> Void
     ) throws -> Data {
+        typeResolver.finishRegistration()
         let context = writeContext
         context.buffer.clear()
         defer {
@@ -539,6 +492,7 @@ public final class Fory {
         isNone: Bool,
         _ body: (WriteContext) throws -> Void
     ) throws {
+        typeResolver.finishRegistration()
         let context = writeContext
         context.buffer.clear()
         defer {
@@ -557,7 +511,8 @@ public final class Fory {
         nilValue: @autoclosure () -> R,
         _ body: (ReadContext) throws -> R
     ) throws -> R {
-        try withReusableReadContext(data: data) { context in
+        typeResolver.finishRegistration()
+        return try withReusableReadContext(data: data) { context in
             if try readHead(buffer: context.buffer) {
                 return nilValue()
             }
@@ -575,6 +530,7 @@ public final class Fory {
         nilValue: @autoclosure () -> R,
         _ body: (ReadContext) throws -> R
     ) throws -> R {
+        typeResolver.finishRegistration()
         readContext.buffer.swapState(with: buffer)
         defer {
             readContext.buffer.swapState(with: buffer)

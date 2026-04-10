@@ -1580,7 +1580,10 @@ public abstract class TypeResolver {
   }
 
   public void setTypeChecker(TypeChecker typeChecker) {
-    extRegistry.typeChecker = typeChecker;
+    extRegistry.typeChecker = typeChecker == null ? DEFAULT_TYPE_CHECKER : typeChecker;
+    if (extRegistry.typeChecker instanceof AllowListChecker && this instanceof ClassResolver) {
+      ((AllowListChecker) extRegistry.typeChecker).addListener((ClassResolver) this);
+    }
   }
 
   public void setSerializerFactory(SerializerFactory serializerFactory) {

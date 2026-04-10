@@ -206,7 +206,7 @@ public final class Fory {
     @_disfavoredOverload
     public func serialize(_ value: [Any]) throws -> Data {
         try serializeRoot(isNone: false) { context in
-            try context.writeAnyList(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
+            try context.writeListOfAny(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
         }
     }
 
@@ -216,14 +216,14 @@ public final class Fory {
             data: data,
             nilValue: []
         ) { context in
-            try context.readAnyList(refMode: refMode, readTypeInfo: true) ?? []
+            try context.readListOfAny(refMode: refMode, readTypeInfo: true) ?? []
         }
     }
 
     @_disfavoredOverload
     public func serialize(_ value: [String: Any]) throws -> Data {
         try serializeRoot(isNone: false) { context in
-            try context.writeStringAnyMap(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
+            try context.writeMapStringToAny(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
         }
     }
 
@@ -233,14 +233,14 @@ public final class Fory {
             data: data,
             nilValue: [:]
         ) { context in
-            try context.readStringAnyMap(refMode: refMode, readTypeInfo: true) ?? [:]
+            try context.readMapStringToAny(refMode: refMode, readTypeInfo: true) ?? [:]
         }
     }
 
     @_disfavoredOverload
     public func serialize(_ value: [Int32: Any]) throws -> Data {
         try serializeRoot(isNone: false) { context in
-            try context.writeInt32AnyMap(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
+            try context.writeMapInt32ToAny(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
         }
     }
 
@@ -250,14 +250,14 @@ public final class Fory {
             data: data,
             nilValue: [:]
         ) { context in
-            try context.readInt32AnyMap(refMode: refMode, readTypeInfo: true) ?? [:]
+            try context.readMapInt32ToAny(refMode: refMode, readTypeInfo: true) ?? [:]
         }
     }
 
     @_disfavoredOverload
     public func serialize(_ value: [AnyHashable: Any]) throws -> Data {
         try serializeRoot(isNone: false) { context in
-            try context.writeAnyHashableAnyMap(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
+            try context.writeMapAnyHashableToAny(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
         }
     }
 
@@ -267,14 +267,14 @@ public final class Fory {
             data: data,
             nilValue: [:]
         ) { context in
-            try context.readAnyHashableAnyMap(refMode: refMode, readTypeInfo: true) ?? [:]
+            try context.readMapAnyHashableToAny(refMode: refMode, readTypeInfo: true) ?? [:]
         }
     }
 
     @_disfavoredOverload
     public func serialize(_ value: [Any], to buffer: inout Data) throws {
         try appendSerializedRoot(to: &buffer, isNone: false) { context in
-            try context.writeAnyList(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
+            try context.writeListOfAny(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
         }
     }
 
@@ -347,14 +347,14 @@ public final class Fory {
             from: buffer,
             nilValue: []
         ) { context in
-            try context.readAnyList(refMode: refMode, readTypeInfo: true) ?? []
+            try context.readListOfAny(refMode: refMode, readTypeInfo: true) ?? []
         }
     }
 
     @_disfavoredOverload
     public func serialize(_ value: [String: Any], to buffer: inout Data) throws {
         try appendSerializedRoot(to: &buffer, isNone: false) { context in
-            try context.writeStringAnyMap(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
+            try context.writeMapStringToAny(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
         }
     }
 
@@ -364,21 +364,21 @@ public final class Fory {
             from: buffer,
             nilValue: [:]
         ) { context in
-            try context.readStringAnyMap(refMode: refMode, readTypeInfo: true) ?? [:]
+            try context.readMapStringToAny(refMode: refMode, readTypeInfo: true) ?? [:]
         }
     }
 
     @_disfavoredOverload
     public func serialize(_ value: [Int32: Any], to buffer: inout Data) throws {
         try appendSerializedRoot(to: &buffer, isNone: false) { context in
-            try context.writeInt32AnyMap(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
+            try context.writeMapInt32ToAny(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
         }
     }
 
     @_disfavoredOverload
     public func serialize(_ value: [AnyHashable: Any], to buffer: inout Data) throws {
         try appendSerializedRoot(to: &buffer, isNone: false) { context in
-            try context.writeAnyHashableAnyMap(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
+            try context.writeMapAnyHashableToAny(value, refMode: refMode, writeTypeInfo: true, hasGenerics: false)
         }
     }
 
@@ -388,7 +388,7 @@ public final class Fory {
             from: buffer,
             nilValue: [:]
         ) { context in
-            try context.readInt32AnyMap(refMode: refMode, readTypeInfo: true) ?? [:]
+            try context.readMapInt32ToAny(refMode: refMode, readTypeInfo: true) ?? [:]
         }
     }
 
@@ -398,7 +398,7 @@ public final class Fory {
             from: buffer,
             nilValue: [:]
         ) { context in
-            try context.readAnyHashableAnyMap(refMode: refMode, readTypeInfo: true) ?? [:]
+            try context.readMapAnyHashableToAny(refMode: refMode, readTypeInfo: true) ?? [:]
         }
     }
 

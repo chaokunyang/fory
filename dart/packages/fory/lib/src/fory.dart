@@ -15,15 +15,15 @@ import 'package:fory/src/serializer/serializer.dart';
 ///
 /// Typical usage is:
 /// 1. create a [Fory] instance
-/// 2. register generated structs or enums, or register manual serializers
+/// 2. register generated types or register manual serializers
 /// 3. call [serialize] and [deserialize]
 ///
 /// The Dart runtime only supports xlang payloads.
 final class Fory {
   static const int _nullHeaderFlag = 0x01;
   static const int _xlangHeaderFlag = 0x02;
-  static final Map<Type, _GeneratedRegistrationBinding> _generatedBindings =
-      <Type, _GeneratedRegistrationBinding>{};
+  static final Map<Type, Serializer<Object?> Function()>
+      _generatedSerializerFactories = <Type, Serializer<Object?> Function()>{};
 
   late final Buffer _buffer;
   late final WriteContext _writeContext;
@@ -100,77 +100,36 @@ final class Fory {
     );
   }
 
-  /// Binds a generated struct serializer factory for [type].
+  /// Binds a generated serializer factory for [type].
   ///
-  /// Generated part files call this before they invoke [registerStruct]. Normal
+  /// Generated part files call this before they invoke [register]. Normal
   /// application code should use the generated registration helper instead of
   /// calling this method directly.
   @internal
-  static void bindGeneratedStructFactory(
+  static void bindGeneratedSerializerFactory(
     Type type,
     Serializer Function() serializerFactory,
   ) {
-    _generatedBindings[type] = _GeneratedRegistrationBinding.struct(
-      () => serializerFactory() as Serializer<Object?>,
-    );
+    _generatedSerializerFactories[type] =
+        () => serializerFactory() as Serializer<Object?>;
   }
 
-  /// Binds a generated enum serializer factory for [type].
-  ///
-  /// Generated part files call this before they invoke [registerEnum]. Normal
-  /// application code should use the generated registration helper instead of
-  /// calling this method directly.
-  @internal
-  static void bindGeneratedEnumFactory(
-    Type type,
-    Serializer Function() serializerFactory,
-  ) {
-    _generatedBindings[type] = _GeneratedRegistrationBinding.enumType(
-      () => serializerFactory() as Serializer<Object?>,
-    );
-  }
-
-  /// Registers a generated struct type.
+  /// Registers a generated type.
   ///
   /// Exactly one registration mode is required:
   /// - pass [id] for id-based registration, or
   /// - pass both [namespace] and [typeName] for name-based registration.
   ///
   /// Normal application code reaches this through a generated registration
-  /// helper. For manual custom serializers, use [registerSerializer].
-  void registerStruct(
+  /// helper. For manual serializers, including unions, use
+  /// [registerSerializer].
+  void register(
     Type type, {
     int? id,
     String? namespace,
     String? typeName,
   }) {
-    final serializerFactory = _generatedSerializerFactory(type,
-        expectedKind: _GeneratedBindingKind.struct);
-    _typeResolver.register(
-      type,
-      serializerFactory(),
-      id: id,
-      namespace: namespace,
-      typeName: typeName,
-    );
-  }
-
-  /// Registers a generated enum type.
-  ///
-  /// Exactly one registration mode is required:
-  /// - pass [id] for id-based registration, or
-  /// - pass both [namespace] and [typeName] for name-based registration.
-  ///
-  /// Normal application code reaches this through a generated registration
-  /// helper. For manual custom serializers, use [registerSerializer].
-  void registerEnum(
-    Type type, {
-    int? id,
-    String? namespace,
-    String? typeName,
-  }) {
-    final serializerFactory = _generatedSerializerFactory(type,
-        expectedKind: _GeneratedBindingKind.enumType);
+    final serializerFactory = _generatedSerializerFactory(type);
     _typeResolver.register(
       type,
       serializerFactory(),
@@ -186,8 +145,8 @@ final class Fory {
   /// - pass [id] for id-based registration, or
   /// - pass both [namespace] and [typeName] for name-based registration.
   ///
-  /// This is the advanced escape hatch for external types or custom wire
-  /// behavior. Prefer generated registration for annotated structs and enums.
+  /// This is the advanced escape hatch for external types, manual unions, or
+  /// custom wire behavior. Prefer [register] for generated types.
   void registerSerializer(
     Type type,
     Serializer serializer, {
@@ -204,72 +163,13 @@ final class Fory {
     );
   }
 
-  /// Registers a manual union serializer for [type].
-  ///
-  /// Exactly one registration mode is required:
-  /// - pass [id] for id-based registration, or
-  /// - pass both [namespace] and [typeName] for name-based registration.
-  ///
-  /// Use this only for manual union implementations. Generated struct and enum
-  /// code should use [registerStruct] and [registerEnum].
-  void registerUnion(
-    Type type,
-    Serializer serializer, {
-    int? id,
-    String? namespace,
-    String? typeName,
-  }) {
-    _typeResolver.registerUnion(
-      type,
-      serializer,
-      id: id,
-      namespace: namespace,
-      typeName: typeName,
-    );
-  }
-
-  Serializer<Object?> Function() _generatedSerializerFactory(
-    Type type, {
-    required _GeneratedBindingKind expectedKind,
-  }) {
-    final binding = _generatedBindings[type];
-    if (binding == null) {
+  Serializer<Object?> Function() _generatedSerializerFactory(Type type) {
+    final serializerFactory = _generatedSerializerFactories[type];
+    if (serializerFactory == null) {
       throw StateError(
-        'Type $type has no generated serializer binding. Call the generated registration helper for this library or use registerSerializer/registerUnion for manual serializers.',
+        'Type $type has no generated serializer binding. Call the generated registration helper for this library or use registerSerializer for manual serializers.',
       );
     }
-    if (binding.kind != expectedKind) {
-      throw StateError(
-        'Type $type is bound as ${binding.kind.name}, not ${expectedKind.name}. Use the matching generated registration API.',
-      );
-    }
-    return binding.serializerFactory;
-  }
-}
-
-enum _GeneratedBindingKind { struct, enumType }
-
-final class _GeneratedRegistrationBinding {
-  final _GeneratedBindingKind kind;
-  final Serializer<Object?> Function() serializerFactory;
-
-  const _GeneratedRegistrationBinding._(this.kind, this.serializerFactory);
-
-  factory _GeneratedRegistrationBinding.struct(
-    Serializer<Object?> Function() serializerFactory,
-  ) {
-    return _GeneratedRegistrationBinding._(
-      _GeneratedBindingKind.struct,
-      serializerFactory,
-    );
-  }
-
-  factory _GeneratedRegistrationBinding.enumType(
-    Serializer<Object?> Function() serializerFactory,
-  ) {
-    return _GeneratedRegistrationBinding._(
-      _GeneratedBindingKind.enumType,
-      serializerFactory,
-    );
+    return serializerFactory;
   }
 }

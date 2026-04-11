@@ -454,12 +454,12 @@ void _installGeneratedForyBindings() {
     return;
   }
   _generatedForyBindingsInstalled = true;
-  Fory.bindGeneratedEnumFactory(Color, _ColorForySerializer.new);
-  Fory.bindGeneratedStructFactory(Person, _PersonForySerializer.new);
-  Fory.bindGeneratedStructFactory(RefNode, _RefNodeForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(Color, _ColorForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(Person, _PersonForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(RefNode, _RefNodeForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(
       EvolvingPayload, _EvolvingPayloadForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       FixedPayload, _FixedPayloadForySerializer.new);
 }
 
@@ -467,23 +467,23 @@ void _registerPersonForyType(Fory fory, Type type,
     {int? id, String? namespace, String? typeName}) {
   _installGeneratedForyBindings();
   if (type == Color) {
-    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == Person) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == RefNode) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == EvolvingPayload) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == FixedPayload) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   throw ArgumentError.value(
@@ -492,14 +492,13 @@ void _registerPersonForyType(Fory fory, Type type,
 
 void _registerPersonForyTypes(Fory fory) {
   _installGeneratedForyBindings();
-  fory.registerEnum(Color,
-      namespace: 'fory_test/model/person', typeName: 'Color');
-  fory.registerStruct(Person,
+  fory.register(Color, namespace: 'fory_test/model/person', typeName: 'Color');
+  fory.register(Person,
       namespace: 'fory_test/model/person', typeName: 'Person');
-  fory.registerStruct(RefNode,
+  fory.register(RefNode,
       namespace: 'fory_test/model/person', typeName: 'RefNode');
-  fory.registerStruct(EvolvingPayload,
+  fory.register(EvolvingPayload,
       namespace: 'fory_test/model/person', typeName: 'EvolvingPayload');
-  fory.registerStruct(FixedPayload,
+  fory.register(FixedPayload,
       namespace: 'fory_test/model/person', typeName: 'FixedPayload');
 }

@@ -417,12 +417,12 @@ final class ForyGenerator extends Generator {
 
     for (final enumSpec in enumSpecs) {
       output.writeln(
-        '  Fory.bindGeneratedEnumFactory(${enumSpec.name}, _${enumSpec.name}ForySerializer.new);',
+        '  Fory.bindGeneratedSerializerFactory(${enumSpec.name}, _${enumSpec.name}ForySerializer.new);',
       );
     }
     for (final structSpec in structSpecs) {
       output.writeln(
-        '  Fory.bindGeneratedStructFactory(${structSpec.name}, _${structSpec.name}ForySerializer.new);',
+        '  Fory.bindGeneratedSerializerFactory(${structSpec.name}, _${structSpec.name}ForySerializer.new);',
       );
     }
 
@@ -437,7 +437,7 @@ final class ForyGenerator extends Generator {
     for (final enumSpec in enumSpecs) {
       output.writeln('  if (type == ${enumSpec.name}) {');
       output.writeln(
-        '    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);',
+        '    fory.register(type, id: id, namespace: namespace, typeName: typeName);',
       );
       output.writeln('    return;');
       output.writeln('  }');
@@ -445,7 +445,7 @@ final class ForyGenerator extends Generator {
     for (final structSpec in structSpecs) {
       output.writeln('  if (type == ${structSpec.name}) {');
       output.writeln(
-        '    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);',
+        '    fory.register(type, id: id, namespace: namespace, typeName: typeName);',
       );
       output.writeln('    return;');
       output.writeln('  }');
@@ -462,12 +462,12 @@ final class ForyGenerator extends Generator {
 
     for (final enumSpec in enumSpecs) {
       output.writeln(
-        "  fory.registerEnum(${enumSpec.name}, namespace: '$namespace', typeName: '${enumSpec.name}');",
+        "  fory.register(${enumSpec.name}, namespace: '$namespace', typeName: '${enumSpec.name}');",
       );
     }
     for (final structSpec in structSpecs) {
       output.writeln(
-        "  fory.registerStruct(${structSpec.name}, namespace: '$namespace', typeName: '${structSpec.name}');",
+        "  fory.register(${structSpec.name}, namespace: '$namespace', typeName: '${structSpec.name}');",
       );
     }
     output

@@ -296,33 +296,6 @@ final class TypeResolver {
     }
   }
 
-  void registerUnion(
-    Type type,
-    Serializer serializer, {
-    int? id,
-    String? namespace,
-    String? typeName,
-  }) {
-    _validateRegistrationMode(id: id, namespace: namespace, typeName: typeName);
-    final resolved = ResolvedTypeInternal(
-      type: type,
-      kind: RegistrationKindInternal.union,
-      typeId: TypeIds.union,
-      serializer: serializer as Serializer<Object?>,
-      userTypeId: id,
-      namespace: namespace,
-      typeName: typeName,
-      structMetadata: null,
-      remoteStructMetadata: null,
-    );
-    _registeredByType[type] = resolved;
-    if (id != null) {
-      _registeredById[id] = resolved;
-    } else {
-      _registeredByName[_nameKey(namespace!, typeName!)] = resolved;
-    }
-  }
-
   ResolvedTypeInternal resolveValue(Object value) {
     if (value is bool) {
       return _builtin(bool, TypeIds.boolType);

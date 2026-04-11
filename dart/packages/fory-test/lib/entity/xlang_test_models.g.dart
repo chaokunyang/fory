@@ -5442,66 +5442,67 @@ void _installGeneratedForyBindings() {
     return;
   }
   _generatedForyBindingsInstalled = true;
-  Fory.bindGeneratedEnumFactory(Color, _ColorForySerializer.new);
-  Fory.bindGeneratedEnumFactory(TestEnum, _TestEnumForySerializer.new);
-  Fory.bindGeneratedStructFactory(TwoEnumFieldStructEvolution,
+  Fory.bindGeneratedSerializerFactory(Color, _ColorForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(TestEnum, _TestEnumForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(TwoEnumFieldStructEvolution,
       _TwoEnumFieldStructEvolutionForySerializer.new);
-  Fory.bindGeneratedStructFactory(Item, _ItemForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(Item, _ItemForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(
       SimpleStruct, _SimpleStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       EvolvingOverrideStruct, _EvolvingOverrideStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       FixedOverrideStruct, _FixedOverrideStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(Item1, _Item1ForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(Item1, _Item1ForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(
       StructWithUnion2, _StructWithUnion2ForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       StructWithList, _StructWithListForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       StructWithMap, _StructWithMapForySerializer.new);
-  Fory.bindGeneratedStructFactory(MyStruct, _MyStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(MyWrapper, _MyWrapperForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(MyStruct, _MyStructForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(MyWrapper, _MyWrapperForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(
       EmptyWrapper, _EmptyWrapperForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       VersionCheckStruct, _VersionCheckStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(Dog, _DogForySerializer.new);
-  Fory.bindGeneratedStructFactory(Cat, _CatForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(Dog, _DogForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(Cat, _CatForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(
       AnimalListHolder, _AnimalListHolderForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       AnimalMapHolder, _AnimalMapHolderForySerializer.new);
-  Fory.bindGeneratedStructFactory(EmptyStruct, _EmptyStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
+      EmptyStruct, _EmptyStructForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(
       OneStringFieldStruct, _OneStringFieldStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       TwoStringFieldStruct, _TwoStringFieldStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       OneEnumFieldStruct, _OneEnumFieldStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       TwoEnumFieldStruct, _TwoEnumFieldStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(NullableComprehensiveSchemaConsistent,
+  Fory.bindGeneratedSerializerFactory(NullableComprehensiveSchemaConsistent,
       _NullableComprehensiveSchemaConsistentForySerializer.new);
-  Fory.bindGeneratedStructFactory(NullableComprehensiveCompatible,
+  Fory.bindGeneratedSerializerFactory(NullableComprehensiveCompatible,
       _NullableComprehensiveCompatibleForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       RefInnerSchemaConsistent, _RefInnerSchemaConsistentForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       RefOuterSchemaConsistent, _RefOuterSchemaConsistentForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       RefInnerCompatible, _RefInnerCompatibleForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       RefOuterCompatible, _RefOuterCompatibleForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       RefOverrideElement, _RefOverrideElementForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       CircularRefStruct, _CircularRefStructForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       UnsignedSchemaConsistent, _UnsignedSchemaConsistentForySerializer.new);
-  Fory.bindGeneratedStructFactory(UnsignedSchemaConsistentSimple,
+  Fory.bindGeneratedSerializerFactory(UnsignedSchemaConsistentSimple,
       _UnsignedSchemaConsistentSimpleForySerializer.new);
-  Fory.bindGeneratedStructFactory(
+  Fory.bindGeneratedSerializerFactory(
       UnsignedSchemaCompatible, _UnsignedSchemaCompatibleForySerializer.new);
 }
 
@@ -5509,143 +5510,143 @@ void _registerXlangTestModelsForyType(Fory fory, Type type,
     {int? id, String? namespace, String? typeName}) {
   _installGeneratedForyBindings();
   if (type == Color) {
-    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == TestEnum) {
-    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == TwoEnumFieldStructEvolution) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == Item) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == SimpleStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == EvolvingOverrideStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == FixedOverrideStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == Item1) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == StructWithUnion2) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == StructWithList) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == StructWithMap) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == MyStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == MyWrapper) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == EmptyWrapper) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == VersionCheckStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == Dog) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == Cat) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == AnimalListHolder) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == AnimalMapHolder) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == EmptyStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == OneStringFieldStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == TwoStringFieldStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == OneEnumFieldStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == TwoEnumFieldStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == NullableComprehensiveSchemaConsistent) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == NullableComprehensiveCompatible) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == RefInnerSchemaConsistent) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == RefOuterSchemaConsistent) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == RefInnerCompatible) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == RefOuterCompatible) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == RefOverrideElement) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == CircularRefStruct) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == UnsignedSchemaConsistent) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == UnsignedSchemaConsistentSimple) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == UnsignedSchemaCompatible) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   throw ArgumentError.value(
@@ -5654,100 +5655,100 @@ void _registerXlangTestModelsForyType(Fory fory, Type type,
 
 void _registerXlangTestModelsForyTypes(Fory fory) {
   _installGeneratedForyBindings();
-  fory.registerEnum(Color,
+  fory.register(Color,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Color');
-  fory.registerEnum(TestEnum,
+  fory.register(TestEnum,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'TestEnum');
-  fory.registerStruct(TwoEnumFieldStructEvolution,
+  fory.register(TwoEnumFieldStructEvolution,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'TwoEnumFieldStructEvolution');
-  fory.registerStruct(Item,
+  fory.register(Item,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Item');
-  fory.registerStruct(SimpleStruct,
+  fory.register(SimpleStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'SimpleStruct');
-  fory.registerStruct(EvolvingOverrideStruct,
+  fory.register(EvolvingOverrideStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'EvolvingOverrideStruct');
-  fory.registerStruct(FixedOverrideStruct,
+  fory.register(FixedOverrideStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'FixedOverrideStruct');
-  fory.registerStruct(Item1,
+  fory.register(Item1,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Item1');
-  fory.registerStruct(StructWithUnion2,
+  fory.register(StructWithUnion2,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'StructWithUnion2');
-  fory.registerStruct(StructWithList,
+  fory.register(StructWithList,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'StructWithList');
-  fory.registerStruct(StructWithMap,
+  fory.register(StructWithMap,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'StructWithMap');
-  fory.registerStruct(MyStruct,
+  fory.register(MyStruct,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'MyStruct');
-  fory.registerStruct(MyWrapper,
+  fory.register(MyWrapper,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'MyWrapper');
-  fory.registerStruct(EmptyWrapper,
+  fory.register(EmptyWrapper,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'EmptyWrapper');
-  fory.registerStruct(VersionCheckStruct,
+  fory.register(VersionCheckStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'VersionCheckStruct');
-  fory.registerStruct(Dog,
+  fory.register(Dog,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Dog');
-  fory.registerStruct(Cat,
+  fory.register(Cat,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Cat');
-  fory.registerStruct(AnimalListHolder,
+  fory.register(AnimalListHolder,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'AnimalListHolder');
-  fory.registerStruct(AnimalMapHolder,
+  fory.register(AnimalMapHolder,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'AnimalMapHolder');
-  fory.registerStruct(EmptyStruct,
+  fory.register(EmptyStruct,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'EmptyStruct');
-  fory.registerStruct(OneStringFieldStruct,
+  fory.register(OneStringFieldStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'OneStringFieldStruct');
-  fory.registerStruct(TwoStringFieldStruct,
+  fory.register(TwoStringFieldStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'TwoStringFieldStruct');
-  fory.registerStruct(OneEnumFieldStruct,
+  fory.register(OneEnumFieldStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'OneEnumFieldStruct');
-  fory.registerStruct(TwoEnumFieldStruct,
+  fory.register(TwoEnumFieldStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'TwoEnumFieldStruct');
-  fory.registerStruct(NullableComprehensiveSchemaConsistent,
+  fory.register(NullableComprehensiveSchemaConsistent,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'NullableComprehensiveSchemaConsistent');
-  fory.registerStruct(NullableComprehensiveCompatible,
+  fory.register(NullableComprehensiveCompatible,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'NullableComprehensiveCompatible');
-  fory.registerStruct(RefInnerSchemaConsistent,
+  fory.register(RefInnerSchemaConsistent,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefInnerSchemaConsistent');
-  fory.registerStruct(RefOuterSchemaConsistent,
+  fory.register(RefOuterSchemaConsistent,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefOuterSchemaConsistent');
-  fory.registerStruct(RefInnerCompatible,
+  fory.register(RefInnerCompatible,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefInnerCompatible');
-  fory.registerStruct(RefOuterCompatible,
+  fory.register(RefOuterCompatible,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefOuterCompatible');
-  fory.registerStruct(RefOverrideElement,
+  fory.register(RefOverrideElement,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefOverrideElement');
-  fory.registerStruct(CircularRefStruct,
+  fory.register(CircularRefStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'CircularRefStruct');
-  fory.registerStruct(UnsignedSchemaConsistent,
+  fory.register(UnsignedSchemaConsistent,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'UnsignedSchemaConsistent');
-  fory.registerStruct(UnsignedSchemaConsistentSimple,
+  fory.register(UnsignedSchemaConsistentSimple,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'UnsignedSchemaConsistentSimple');
-  fory.registerStruct(UnsignedSchemaCompatible,
+  fory.register(UnsignedSchemaCompatible,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'UnsignedSchemaCompatible');
 }

@@ -51,7 +51,7 @@ void registerXlangType(
     return;
   }
   if (type == Union2) {
-    fory.registerUnion(
+    fory.registerSerializer(
       Union2,
       const _Union2Serializer(),
       id: id,

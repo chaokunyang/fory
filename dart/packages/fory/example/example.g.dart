@@ -186,19 +186,19 @@ void _installGeneratedForyBindings() {
     return;
   }
   _generatedForyBindingsInstalled = true;
-  Fory.bindGeneratedEnumFactory(Color, _ColorForySerializer.new);
-  Fory.bindGeneratedStructFactory(Person, _PersonForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(Color, _ColorForySerializer.new);
+  Fory.bindGeneratedSerializerFactory(Person, _PersonForySerializer.new);
 }
 
 void _registerExampleForyType(Fory fory, Type type,
     {int? id, String? namespace, String? typeName}) {
   _installGeneratedForyBindings();
   if (type == Color) {
-    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   if (type == Person) {
-    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    fory.register(type, id: id, namespace: namespace, typeName: typeName);
     return;
   }
   throw ArgumentError.value(
@@ -207,8 +207,6 @@ void _registerExampleForyType(Fory fory, Type type,
 
 void _registerExampleForyTypes(Fory fory) {
   _installGeneratedForyBindings();
-  fory.registerEnum(Color,
-      namespace: 'fory/example/example', typeName: 'Color');
-  fory.registerStruct(Person,
-      namespace: 'fory/example/example', typeName: 'Person');
+  fory.register(Color, namespace: 'fory/example/example', typeName: 'Color');
+  fory.register(Person, namespace: 'fory/example/example', typeName: 'Person');
 }

@@ -41,7 +41,7 @@ void registerXlangType(
   String? typeName,
 }) {
   if (type == MyExt) {
-    fory.register(
+    fory.registerSerializer(
       MyExt,
       const _MyExtSerializer(),
       id: id,
@@ -61,7 +61,7 @@ void registerXlangType(
     return;
   }
   if (type == StructWithUnion2) {
-    fory.register(
+    fory.registerSerializer(
       StructWithUnion2,
       const _StructWithUnion2Serializer(),
       id: id,
@@ -71,7 +71,7 @@ void registerXlangType(
     return;
   }
   if (type == RefOverrideContainer) {
-    fory.register(
+    fory.registerSerializer(
       RefOverrideContainer,
       const _RefOverrideContainerSerializer(),
       id: id,
@@ -81,7 +81,7 @@ void registerXlangType(
     return;
   }
   if (type == MyWrapper) {
-    fory.register(
+    fory.registerSerializer(
       MyWrapper,
       const _MyWrapperSerializer(),
       id: id,

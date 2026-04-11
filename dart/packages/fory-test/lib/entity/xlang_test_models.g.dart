@@ -23,8 +23,6 @@ final class _ColorForySerializer extends Serializer<Color> {
   }
 }
 
-const _ColorForySerializer _colorForySerializer = _ColorForySerializer();
-
 final class _TestEnumForySerializer extends Serializer<TestEnum> {
   const _TestEnumForySerializer();
   @override
@@ -39,9 +37,6 @@ final class _TestEnumForySerializer extends Serializer<TestEnum> {
     return TestEnum.values[context.readVarUint32()];
   }
 }
-
-const _TestEnumForySerializer _testEnumForySerializer =
-    _TestEnumForySerializer();
 
 const List<Map<String, Object?>> _twoEnumFieldStructEvolutionForyFields =
     <Map<String, Object?>>[
@@ -122,10 +117,6 @@ final class _TwoEnumFieldStructEvolutionForySerializer
   }
 }
 
-const _TwoEnumFieldStructEvolutionForySerializer
-    _twoEnumFieldStructEvolutionForySerializer =
-    _TwoEnumFieldStructEvolutionForySerializer();
-
 TestEnum _readTwoEnumFieldStructEvolutionF1(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -193,8 +184,6 @@ final class _ItemForySerializer extends Serializer<Item> {
     return value;
   }
 }
-
-const _ItemForySerializer _itemForySerializer = _ItemForySerializer();
 
 String _readItemName(Object? value, [Object? fallback]) {
   return value == null
@@ -445,9 +434,6 @@ final class _SimpleStructForySerializer extends Serializer<SimpleStruct> {
   }
 }
 
-const _SimpleStructForySerializer _simpleStructForySerializer =
-    _SimpleStructForySerializer();
-
 Int32 _readSimpleStructF2(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -589,10 +575,6 @@ final class _EvolvingOverrideStructForySerializer
   }
 }
 
-const _EvolvingOverrideStructForySerializer
-    _evolvingOverrideStructForySerializer =
-    _EvolvingOverrideStructForySerializer();
-
 String _readEvolvingOverrideStructF1(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -656,9 +638,6 @@ final class _FixedOverrideStructForySerializer
     return value;
   }
 }
-
-const _FixedOverrideStructForySerializer _fixedOverrideStructForySerializer =
-    _FixedOverrideStructForySerializer();
 
 String _readFixedOverrideStructF1(Object? value, [Object? fallback]) {
   return value == null
@@ -815,8 +794,6 @@ final class _Item1ForySerializer extends Serializer<Item1> {
   }
 }
 
-const _Item1ForySerializer _item1ForySerializer = _Item1ForySerializer();
-
 Int32 _readItem1F1(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -921,9 +898,6 @@ final class _StructWithUnion2ForySerializer
   }
 }
 
-const _StructWithUnion2ForySerializer _structWithUnion2ForySerializer =
-    _StructWithUnion2ForySerializer();
-
 Union2 _readStructWithUnion2Union(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -995,9 +969,6 @@ final class _StructWithListForySerializer extends Serializer<StructWithList> {
     return value;
   }
 }
-
-const _StructWithListForySerializer _structWithListForySerializer =
-    _StructWithListForySerializer();
 
 List<String?> _readStructWithListItems(Object? value, [Object? fallback]) {
   return value == null
@@ -1083,9 +1054,6 @@ final class _StructWithMapForySerializer extends Serializer<StructWithMap> {
   }
 }
 
-const _StructWithMapForySerializer _structWithMapForySerializer =
-    _StructWithMapForySerializer();
-
 Map<String?, String?> _readStructWithMapData(Object? value,
     [Object? fallback]) {
   return value == null
@@ -1156,9 +1124,6 @@ final class _MyStructForySerializer extends Serializer<MyStruct> {
     return value;
   }
 }
-
-const _MyStructForySerializer _myStructForySerializer =
-    _MyStructForySerializer();
 
 int _readMyStructId(Object? value, [Object? fallback]) {
   return value == null
@@ -1261,9 +1226,6 @@ final class _MyWrapperForySerializer extends Serializer<MyWrapper> {
   }
 }
 
-const _MyWrapperForySerializer _myWrapperForySerializer =
-    _MyWrapperForySerializer();
-
 Color _readMyWrapperColor(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -1322,9 +1284,6 @@ final class _EmptyWrapperForySerializer extends Serializer<EmptyWrapper> {
     return value;
   }
 }
-
-const _EmptyWrapperForySerializer _emptyWrapperForySerializer =
-    _EmptyWrapperForySerializer();
 
 const List<Map<String, Object?>> _versionCheckStructForyFields =
     <Map<String, Object?>>[
@@ -1422,9 +1381,6 @@ final class _VersionCheckStructForySerializer
   }
 }
 
-const _VersionCheckStructForySerializer _versionCheckStructForySerializer =
-    _VersionCheckStructForySerializer();
-
 double _readVersionCheckStructF3(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -1520,8 +1476,6 @@ final class _DogForySerializer extends Serializer<Dog> {
   }
 }
 
-const _DogForySerializer _dogForySerializer = _DogForySerializer();
-
 int _readDogAge(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -1610,8 +1564,6 @@ final class _CatForySerializer extends Serializer<Cat> {
   }
 }
 
-const _CatForySerializer _catForySerializer = _CatForySerializer();
-
 int _readCatAge(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -1693,9 +1645,6 @@ final class _AnimalListHolderForySerializer
     return value;
   }
 }
-
-const _AnimalListHolderForySerializer _animalListHolderForySerializer =
-    _AnimalListHolderForySerializer();
 
 List<Animal> _readAnimalListHolderAnimals(Object? value, [Object? fallback]) {
   return value == null
@@ -1780,9 +1729,6 @@ final class _AnimalMapHolderForySerializer extends Serializer<AnimalMapHolder> {
   }
 }
 
-const _AnimalMapHolderForySerializer _animalMapHolderForySerializer =
-    _AnimalMapHolderForySerializer();
-
 Map<String, Animal> _readAnimalMapHolderAnimalMap(Object? value,
     [Object? fallback]) {
   return value == null
@@ -1832,9 +1778,6 @@ final class _EmptyStructForySerializer extends Serializer<EmptyStruct> {
     return value;
   }
 }
-
-const _EmptyStructForySerializer _emptyStructForySerializer =
-    _EmptyStructForySerializer();
 
 const List<Map<String, Object?>> _oneStringFieldStructForyFields =
     <Map<String, Object?>>[
@@ -1892,9 +1835,6 @@ final class _OneStringFieldStructForySerializer
     return value;
   }
 }
-
-const _OneStringFieldStructForySerializer _oneStringFieldStructForySerializer =
-    _OneStringFieldStructForySerializer();
 
 String? _readOneStringFieldStructF1(Object? value, [Object? fallback]) {
   return value == null
@@ -1982,9 +1922,6 @@ final class _TwoStringFieldStructForySerializer
   }
 }
 
-const _TwoStringFieldStructForySerializer _twoStringFieldStructForySerializer =
-    _TwoStringFieldStructForySerializer();
-
 String _readTwoStringFieldStructF1(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -2056,9 +1993,6 @@ final class _OneEnumFieldStructForySerializer
     return value;
   }
 }
-
-const _OneEnumFieldStructForySerializer _oneEnumFieldStructForySerializer =
-    _OneEnumFieldStructForySerializer();
 
 TestEnum _readOneEnumFieldStructF1(Object? value, [Object? fallback]) {
   return value == null
@@ -2143,9 +2077,6 @@ final class _TwoEnumFieldStructForySerializer
     return value;
   }
 }
-
-const _TwoEnumFieldStructForySerializer _twoEnumFieldStructForySerializer =
-    _TwoEnumFieldStructForySerializer();
 
 TestEnum _readTwoEnumFieldStructF1(Object? value, [Object? fallback]) {
   return value == null
@@ -2733,10 +2664,6 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
     return value;
   }
 }
-
-const _NullableComprehensiveSchemaConsistentForySerializer
-    _nullableComprehensiveSchemaConsistentForySerializer =
-    _NullableComprehensiveSchemaConsistentForySerializer();
 
 double _readNullableComprehensiveSchemaConsistentDoubleField(Object? value,
     [Object? fallback]) {
@@ -3619,10 +3546,6 @@ final class _NullableComprehensiveCompatibleForySerializer
   }
 }
 
-const _NullableComprehensiveCompatibleForySerializer
-    _nullableComprehensiveCompatibleForySerializer =
-    _NullableComprehensiveCompatibleForySerializer();
-
 double _readNullableComprehensiveCompatibleBoxedDouble(Object? value,
     [Object? fallback]) {
   return value == null
@@ -3972,10 +3895,6 @@ final class _RefInnerSchemaConsistentForySerializer
   }
 }
 
-const _RefInnerSchemaConsistentForySerializer
-    _refInnerSchemaConsistentForySerializer =
-    _RefInnerSchemaConsistentForySerializer();
-
 int _readRefInnerSchemaConsistentId(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -4069,10 +3988,6 @@ final class _RefOuterSchemaConsistentForySerializer
     return value;
   }
 }
-
-const _RefOuterSchemaConsistentForySerializer
-    _refOuterSchemaConsistentForySerializer =
-    _RefOuterSchemaConsistentForySerializer();
 
 RefInnerSchemaConsistent? _readRefOuterSchemaConsistentInner1(Object? value,
     [Object? fallback]) {
@@ -4169,9 +4084,6 @@ final class _RefInnerCompatibleForySerializer
   }
 }
 
-const _RefInnerCompatibleForySerializer _refInnerCompatibleForySerializer =
-    _RefInnerCompatibleForySerializer();
-
 int _readRefInnerCompatibleId(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -4265,9 +4177,6 @@ final class _RefOuterCompatibleForySerializer
     return value;
   }
 }
-
-const _RefOuterCompatibleForySerializer _refOuterCompatibleForySerializer =
-    _RefOuterCompatibleForySerializer();
 
 RefInnerCompatible? _readRefOuterCompatibleInner1(Object? value,
     [Object? fallback]) {
@@ -4364,9 +4273,6 @@ final class _RefOverrideElementForySerializer
   }
 }
 
-const _RefOverrideElementForySerializer _refOverrideElementForySerializer =
-    _RefOverrideElementForySerializer();
-
 Int32 _readRefOverrideElementId(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -4459,9 +4365,6 @@ final class _CircularRefStructForySerializer
     return value;
   }
 }
-
-const _CircularRefStructForySerializer _circularRefStructForySerializer =
-    _CircularRefStructForySerializer();
 
 String _readCircularRefStructName(Object? value, [Object? fallback]) {
   return value == null
@@ -4827,10 +4730,6 @@ final class _UnsignedSchemaConsistentForySerializer
   }
 }
 
-const _UnsignedSchemaConsistentForySerializer
-    _unsignedSchemaConsistentForySerializer =
-    _UnsignedSchemaConsistentForySerializer();
-
 int _readUnsignedSchemaConsistentU64FixedField(Object? value,
     [Object? fallback]) {
   return value == null
@@ -5044,10 +4943,6 @@ final class _UnsignedSchemaConsistentSimpleForySerializer
     return value;
   }
 }
-
-const _UnsignedSchemaConsistentSimpleForySerializer
-    _unsignedSchemaConsistentSimpleForySerializer =
-    _UnsignedSchemaConsistentSimpleForySerializer();
 
 int _readUnsignedSchemaConsistentSimpleU64Tagged(Object? value,
     [Object? fallback]) {
@@ -5408,10 +5303,6 @@ final class _UnsignedSchemaCompatibleForySerializer
   }
 }
 
-const _UnsignedSchemaCompatibleForySerializer
-    _unsignedSchemaCompatibleForySerializer =
-    _UnsignedSchemaCompatibleForySerializer();
-
 int _readUnsignedSchemaCompatibleU64FixedField2(Object? value,
     [Object? fallback]) {
   return value == null
@@ -5544,164 +5435,319 @@ UInt32? _readUnsignedSchemaCompatibleU32VarField1(Object? value,
           : value as UInt32;
 }
 
-Serializer _serializerForGeneratedType(Type type) {
-  if (type == Color) return _colorForySerializer;
-  if (type == TestEnum) return _testEnumForySerializer;
-  if (type == TwoEnumFieldStructEvolution)
-    return _twoEnumFieldStructEvolutionForySerializer;
-  if (type == Item) return _itemForySerializer;
-  if (type == SimpleStruct) return _simpleStructForySerializer;
-  if (type == EvolvingOverrideStruct)
-    return _evolvingOverrideStructForySerializer;
-  if (type == FixedOverrideStruct) return _fixedOverrideStructForySerializer;
-  if (type == Item1) return _item1ForySerializer;
-  if (type == StructWithUnion2) return _structWithUnion2ForySerializer;
-  if (type == StructWithList) return _structWithListForySerializer;
-  if (type == StructWithMap) return _structWithMapForySerializer;
-  if (type == MyStruct) return _myStructForySerializer;
-  if (type == MyWrapper) return _myWrapperForySerializer;
-  if (type == EmptyWrapper) return _emptyWrapperForySerializer;
-  if (type == VersionCheckStruct) return _versionCheckStructForySerializer;
-  if (type == Dog) return _dogForySerializer;
-  if (type == Cat) return _catForySerializer;
-  if (type == AnimalListHolder) return _animalListHolderForySerializer;
-  if (type == AnimalMapHolder) return _animalMapHolderForySerializer;
-  if (type == EmptyStruct) return _emptyStructForySerializer;
-  if (type == OneStringFieldStruct) return _oneStringFieldStructForySerializer;
-  if (type == TwoStringFieldStruct) return _twoStringFieldStructForySerializer;
-  if (type == OneEnumFieldStruct) return _oneEnumFieldStructForySerializer;
-  if (type == TwoEnumFieldStruct) return _twoEnumFieldStructForySerializer;
-  if (type == NullableComprehensiveSchemaConsistent)
-    return _nullableComprehensiveSchemaConsistentForySerializer;
-  if (type == NullableComprehensiveCompatible)
-    return _nullableComprehensiveCompatibleForySerializer;
-  if (type == RefInnerSchemaConsistent)
-    return _refInnerSchemaConsistentForySerializer;
-  if (type == RefOuterSchemaConsistent)
-    return _refOuterSchemaConsistentForySerializer;
-  if (type == RefInnerCompatible) return _refInnerCompatibleForySerializer;
-  if (type == RefOuterCompatible) return _refOuterCompatibleForySerializer;
-  if (type == RefOverrideElement) return _refOverrideElementForySerializer;
-  if (type == CircularRefStruct) return _circularRefStructForySerializer;
-  if (type == UnsignedSchemaConsistent)
-    return _unsignedSchemaConsistentForySerializer;
-  if (type == UnsignedSchemaConsistentSimple)
-    return _unsignedSchemaConsistentSimpleForySerializer;
-  if (type == UnsignedSchemaCompatible)
-    return _unsignedSchemaCompatibleForySerializer;
-  throw ArgumentError.value(
-      type, 'type', 'No generated serializer for this library.');
+bool _generatedForyBindingsInstalled = false;
+
+void _installGeneratedForyBindings() {
+  if (_generatedForyBindingsInstalled) {
+    return;
+  }
+  _generatedForyBindingsInstalled = true;
+  Fory.bindGeneratedEnumFactory(Color, _ColorForySerializer.new);
+  Fory.bindGeneratedEnumFactory(TestEnum, _TestEnumForySerializer.new);
+  Fory.bindGeneratedStructFactory(TwoEnumFieldStructEvolution,
+      _TwoEnumFieldStructEvolutionForySerializer.new);
+  Fory.bindGeneratedStructFactory(Item, _ItemForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      SimpleStruct, _SimpleStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      EvolvingOverrideStruct, _EvolvingOverrideStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      FixedOverrideStruct, _FixedOverrideStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(Item1, _Item1ForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      StructWithUnion2, _StructWithUnion2ForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      StructWithList, _StructWithListForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      StructWithMap, _StructWithMapForySerializer.new);
+  Fory.bindGeneratedStructFactory(MyStruct, _MyStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(MyWrapper, _MyWrapperForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      EmptyWrapper, _EmptyWrapperForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      VersionCheckStruct, _VersionCheckStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(Dog, _DogForySerializer.new);
+  Fory.bindGeneratedStructFactory(Cat, _CatForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      AnimalListHolder, _AnimalListHolderForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      AnimalMapHolder, _AnimalMapHolderForySerializer.new);
+  Fory.bindGeneratedStructFactory(EmptyStruct, _EmptyStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      OneStringFieldStruct, _OneStringFieldStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      TwoStringFieldStruct, _TwoStringFieldStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      OneEnumFieldStruct, _OneEnumFieldStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      TwoEnumFieldStruct, _TwoEnumFieldStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(NullableComprehensiveSchemaConsistent,
+      _NullableComprehensiveSchemaConsistentForySerializer.new);
+  Fory.bindGeneratedStructFactory(NullableComprehensiveCompatible,
+      _NullableComprehensiveCompatibleForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      RefInnerSchemaConsistent, _RefInnerSchemaConsistentForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      RefOuterSchemaConsistent, _RefOuterSchemaConsistentForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      RefInnerCompatible, _RefInnerCompatibleForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      RefOuterCompatible, _RefOuterCompatibleForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      RefOverrideElement, _RefOverrideElementForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      CircularRefStruct, _CircularRefStructForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      UnsignedSchemaConsistent, _UnsignedSchemaConsistentForySerializer.new);
+  Fory.bindGeneratedStructFactory(UnsignedSchemaConsistentSimple,
+      _UnsignedSchemaConsistentSimpleForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      UnsignedSchemaCompatible, _UnsignedSchemaCompatibleForySerializer.new);
 }
 
 void _registerXlangTestModelsForyType(Fory fory, Type type,
     {int? id, String? namespace, String? typeName}) {
-  fory.register(type, _serializerForGeneratedType(type),
-      id: id, namespace: namespace, typeName: typeName);
+  _installGeneratedForyBindings();
+  if (type == Color) {
+    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == TestEnum) {
+    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == TwoEnumFieldStructEvolution) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == Item) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == SimpleStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == EvolvingOverrideStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == FixedOverrideStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == Item1) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == StructWithUnion2) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == StructWithList) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == StructWithMap) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == MyStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == MyWrapper) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == EmptyWrapper) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == VersionCheckStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == Dog) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == Cat) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == AnimalListHolder) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == AnimalMapHolder) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == EmptyStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == OneStringFieldStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == TwoStringFieldStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == OneEnumFieldStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == TwoEnumFieldStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == NullableComprehensiveSchemaConsistent) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == NullableComprehensiveCompatible) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == RefInnerSchemaConsistent) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == RefOuterSchemaConsistent) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == RefInnerCompatible) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == RefOuterCompatible) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == RefOverrideElement) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == CircularRefStruct) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == UnsignedSchemaConsistent) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == UnsignedSchemaConsistentSimple) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == UnsignedSchemaCompatible) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  throw ArgumentError.value(
+      type, 'type', 'No generated registration for this library.');
 }
 
 void _registerXlangTestModelsForyTypes(Fory fory) {
-  fory.register(Color, _colorForySerializer,
+  _installGeneratedForyBindings();
+  fory.registerEnum(Color,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Color');
-  fory.register(TestEnum, _testEnumForySerializer,
+  fory.registerEnum(TestEnum,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'TestEnum');
-  fory.register(
-      TwoEnumFieldStructEvolution, _twoEnumFieldStructEvolutionForySerializer,
+  fory.registerStruct(TwoEnumFieldStructEvolution,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'TwoEnumFieldStructEvolution');
-  fory.register(Item, _itemForySerializer,
+  fory.registerStruct(Item,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Item');
-  fory.register(SimpleStruct, _simpleStructForySerializer,
+  fory.registerStruct(SimpleStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'SimpleStruct');
-  fory.register(EvolvingOverrideStruct, _evolvingOverrideStructForySerializer,
+  fory.registerStruct(EvolvingOverrideStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'EvolvingOverrideStruct');
-  fory.register(FixedOverrideStruct, _fixedOverrideStructForySerializer,
+  fory.registerStruct(FixedOverrideStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'FixedOverrideStruct');
-  fory.register(Item1, _item1ForySerializer,
+  fory.registerStruct(Item1,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Item1');
-  fory.register(StructWithUnion2, _structWithUnion2ForySerializer,
+  fory.registerStruct(StructWithUnion2,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'StructWithUnion2');
-  fory.register(StructWithList, _structWithListForySerializer,
+  fory.registerStruct(StructWithList,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'StructWithList');
-  fory.register(StructWithMap, _structWithMapForySerializer,
+  fory.registerStruct(StructWithMap,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'StructWithMap');
-  fory.register(MyStruct, _myStructForySerializer,
+  fory.registerStruct(MyStruct,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'MyStruct');
-  fory.register(MyWrapper, _myWrapperForySerializer,
+  fory.registerStruct(MyWrapper,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'MyWrapper');
-  fory.register(EmptyWrapper, _emptyWrapperForySerializer,
+  fory.registerStruct(EmptyWrapper,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'EmptyWrapper');
-  fory.register(VersionCheckStruct, _versionCheckStructForySerializer,
+  fory.registerStruct(VersionCheckStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'VersionCheckStruct');
-  fory.register(Dog, _dogForySerializer,
+  fory.registerStruct(Dog,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Dog');
-  fory.register(Cat, _catForySerializer,
+  fory.registerStruct(Cat,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'Cat');
-  fory.register(AnimalListHolder, _animalListHolderForySerializer,
+  fory.registerStruct(AnimalListHolder,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'AnimalListHolder');
-  fory.register(AnimalMapHolder, _animalMapHolderForySerializer,
+  fory.registerStruct(AnimalMapHolder,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'AnimalMapHolder');
-  fory.register(EmptyStruct, _emptyStructForySerializer,
+  fory.registerStruct(EmptyStruct,
       namespace: 'fory_test/entity/xlang_test_models', typeName: 'EmptyStruct');
-  fory.register(OneStringFieldStruct, _oneStringFieldStructForySerializer,
+  fory.registerStruct(OneStringFieldStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'OneStringFieldStruct');
-  fory.register(TwoStringFieldStruct, _twoStringFieldStructForySerializer,
+  fory.registerStruct(TwoStringFieldStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'TwoStringFieldStruct');
-  fory.register(OneEnumFieldStruct, _oneEnumFieldStructForySerializer,
+  fory.registerStruct(OneEnumFieldStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'OneEnumFieldStruct');
-  fory.register(TwoEnumFieldStruct, _twoEnumFieldStructForySerializer,
+  fory.registerStruct(TwoEnumFieldStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'TwoEnumFieldStruct');
-  fory.register(NullableComprehensiveSchemaConsistent,
-      _nullableComprehensiveSchemaConsistentForySerializer,
+  fory.registerStruct(NullableComprehensiveSchemaConsistent,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'NullableComprehensiveSchemaConsistent');
-  fory.register(NullableComprehensiveCompatible,
-      _nullableComprehensiveCompatibleForySerializer,
+  fory.registerStruct(NullableComprehensiveCompatible,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'NullableComprehensiveCompatible');
-  fory.register(
-      RefInnerSchemaConsistent, _refInnerSchemaConsistentForySerializer,
+  fory.registerStruct(RefInnerSchemaConsistent,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefInnerSchemaConsistent');
-  fory.register(
-      RefOuterSchemaConsistent, _refOuterSchemaConsistentForySerializer,
+  fory.registerStruct(RefOuterSchemaConsistent,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefOuterSchemaConsistent');
-  fory.register(RefInnerCompatible, _refInnerCompatibleForySerializer,
+  fory.registerStruct(RefInnerCompatible,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefInnerCompatible');
-  fory.register(RefOuterCompatible, _refOuterCompatibleForySerializer,
+  fory.registerStruct(RefOuterCompatible,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefOuterCompatible');
-  fory.register(RefOverrideElement, _refOverrideElementForySerializer,
+  fory.registerStruct(RefOverrideElement,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'RefOverrideElement');
-  fory.register(CircularRefStruct, _circularRefStructForySerializer,
+  fory.registerStruct(CircularRefStruct,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'CircularRefStruct');
-  fory.register(
-      UnsignedSchemaConsistent, _unsignedSchemaConsistentForySerializer,
+  fory.registerStruct(UnsignedSchemaConsistent,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'UnsignedSchemaConsistent');
-  fory.register(UnsignedSchemaConsistentSimple,
-      _unsignedSchemaConsistentSimpleForySerializer,
+  fory.registerStruct(UnsignedSchemaConsistentSimple,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'UnsignedSchemaConsistentSimple');
-  fory.register(
-      UnsignedSchemaCompatible, _unsignedSchemaCompatibleForySerializer,
+  fory.registerStruct(UnsignedSchemaCompatible,
       namespace: 'fory_test/entity/xlang_test_models',
       typeName: 'UnsignedSchemaCompatible');
 }

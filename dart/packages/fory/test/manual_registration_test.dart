@@ -26,9 +26,9 @@ final class ManualValueSerializer extends Serializer<ManualValue> {
 }
 
 void main() {
-  test('registers custom serializer through public register api', () {
+  test('registers custom serializer through public registerSerializer api', () {
     final fory = Fory();
-    fory.register(
+    fory.registerSerializer(
       ManualValue,
       const ManualValueSerializer(),
       namespace: 'manual',

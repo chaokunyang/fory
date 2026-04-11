@@ -267,8 +267,6 @@ final class ForyGenerator extends Generator {
 
   void _writeEnum(StringBuffer output, _GeneratedEnumSpec enumSpec) {
     final serializerClassName = '_${enumSpec.name}ForySerializer';
-    final serializerVariableName =
-        '_${_toCamelCase(enumSpec.name)}ForySerializer';
     output
       ..writeln(
         'final class $serializerClassName extends Serializer<${enumSpec.name}> {',
@@ -286,16 +284,11 @@ final class ForyGenerator extends Generator {
       ..writeln('    return ${enumSpec.name}.values[context.readVarUint32()];')
       ..writeln('  }')
       ..writeln('}')
-      ..writeln(
-        'const $serializerClassName $serializerVariableName = $serializerClassName();',
-      )
       ..writeln();
   }
 
   void _writeStruct(StringBuffer output, _GeneratedStructSpec structSpec) {
     final serializerClassName = '_${structSpec.name}ForySerializer';
-    final serializerVariableName =
-        '_${_toCamelCase(structSpec.name)}ForySerializer';
     final metadataListName = '_${_toCamelCase(structSpec.name)}ForyFields';
 
     output.writeln(
@@ -389,9 +382,6 @@ final class ForyGenerator extends Generator {
     output
       ..writeln('  }')
       ..writeln('}')
-      ..writeln(
-        'const $serializerClassName $serializerVariableName = $serializerClassName();',
-      )
       ..writeln();
 
     for (final field in structSpec.fields) {
@@ -416,43 +406,68 @@ final class ForyGenerator extends Generator {
     required String registrationHelperName,
     required String registrationByTypeHelperName,
   }) {
-    output.writeln(
-      'Serializer _serializerForGeneratedType(Type type) {',
-    );
+    output
+      ..writeln('bool _generatedForyBindingsInstalled = false;')
+      ..writeln()
+      ..writeln('void _installGeneratedForyBindings() {')
+      ..writeln('  if (_generatedForyBindingsInstalled) {')
+      ..writeln('    return;')
+      ..writeln('  }')
+      ..writeln('  _generatedForyBindingsInstalled = true;');
+
     for (final enumSpec in enumSpecs) {
       output.writeln(
-        '  if (type == ${enumSpec.name}) return _${_toCamelCase(enumSpec.name)}ForySerializer;',
+        '  Fory.bindGeneratedEnumFactory(${enumSpec.name}, _${enumSpec.name}ForySerializer.new);',
       );
     }
     for (final structSpec in structSpecs) {
       output.writeln(
-        '  if (type == ${structSpec.name}) return _${_toCamelCase(structSpec.name)}ForySerializer;',
+        '  Fory.bindGeneratedStructFactory(${structSpec.name}, _${structSpec.name}ForySerializer.new);',
       );
     }
+
     output
-      ..writeln(
-        "  throw ArgumentError.value(type, 'type', 'No generated serializer for this library.');",
-      )
       ..writeln('}')
       ..writeln()
       ..writeln(
         'void $registrationByTypeHelperName(Fory fory, Type type, {int? id, String? namespace, String? typeName}) {',
       )
+      ..writeln('  _installGeneratedForyBindings();');
+
+    for (final enumSpec in enumSpecs) {
+      output.writeln('  if (type == ${enumSpec.name}) {');
+      output.writeln(
+        '    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);',
+      );
+      output.writeln('    return;');
+      output.writeln('  }');
+    }
+    for (final structSpec in structSpecs) {
+      output.writeln('  if (type == ${structSpec.name}) {');
+      output.writeln(
+        '    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);',
+      );
+      output.writeln('    return;');
+      output.writeln('  }');
+    }
+
+    output
       ..writeln(
-        '  fory.register(type, _serializerForGeneratedType(type), id: id, namespace: namespace, typeName: typeName);',
+        "  throw ArgumentError.value(type, 'type', 'No generated registration for this library.');",
       )
       ..writeln('}')
       ..writeln()
-      ..writeln('void $registrationHelperName(Fory fory) {');
+      ..writeln('void $registrationHelperName(Fory fory) {')
+      ..writeln('  _installGeneratedForyBindings();');
 
     for (final enumSpec in enumSpecs) {
       output.writeln(
-        "  fory.register(${enumSpec.name}, _${_toCamelCase(enumSpec.name)}ForySerializer, namespace: '$namespace', typeName: '${enumSpec.name}');",
+        "  fory.registerEnum(${enumSpec.name}, namespace: '$namespace', typeName: '${enumSpec.name}');",
       );
     }
     for (final structSpec in structSpecs) {
       output.writeln(
-        "  fory.register(${structSpec.name}, _${_toCamelCase(structSpec.name)}ForySerializer, namespace: '$namespace', typeName: '${structSpec.name}');",
+        "  fory.registerStruct(${structSpec.name}, namespace: '$namespace', typeName: '${structSpec.name}');",
       );
     }
     output

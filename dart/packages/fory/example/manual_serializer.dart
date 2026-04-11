@@ -26,7 +26,7 @@ final class PersonSerializer extends Serializer<Person> {
 
 void main() {
   final fory = Fory();
-  fory.register(
+  fory.registerSerializer(
     Person,
     const PersonSerializer(),
     namespace: 'example',

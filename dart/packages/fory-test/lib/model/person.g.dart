@@ -23,8 +23,6 @@ final class _ColorForySerializer extends Serializer<Color> {
   }
 }
 
-const _ColorForySerializer _colorForySerializer = _ColorForySerializer();
-
 const List<Map<String, Object?>> _personForyFields = <Map<String, Object?>>[
   <String, Object?>{
     'name': 'age',
@@ -183,8 +181,6 @@ final class _PersonForySerializer extends Serializer<Person> {
   }
 }
 
-const _PersonForySerializer _personForySerializer = _PersonForySerializer();
-
 Int32 _readPersonAge(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -309,8 +305,6 @@ final class _RefNodeForySerializer extends Serializer<RefNode> {
   }
 }
 
-const _RefNodeForySerializer _refNodeForySerializer = _RefNodeForySerializer();
-
 String _readRefNodeName(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -382,9 +376,6 @@ final class _EvolvingPayloadForySerializer extends Serializer<EvolvingPayload> {
   }
 }
 
-const _EvolvingPayloadForySerializer _evolvingPayloadForySerializer =
-    _EvolvingPayloadForySerializer();
-
 String _readEvolvingPayloadValue(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -448,9 +439,6 @@ final class _FixedPayloadForySerializer extends Serializer<FixedPayload> {
   }
 }
 
-const _FixedPayloadForySerializer _fixedPayloadForySerializer =
-    _FixedPayloadForySerializer();
-
 String _readFixedPayloadValue(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -459,31 +447,59 @@ String _readFixedPayloadValue(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-Serializer _serializerForGeneratedType(Type type) {
-  if (type == Color) return _colorForySerializer;
-  if (type == Person) return _personForySerializer;
-  if (type == RefNode) return _refNodeForySerializer;
-  if (type == EvolvingPayload) return _evolvingPayloadForySerializer;
-  if (type == FixedPayload) return _fixedPayloadForySerializer;
-  throw ArgumentError.value(
-      type, 'type', 'No generated serializer for this library.');
+bool _generatedForyBindingsInstalled = false;
+
+void _installGeneratedForyBindings() {
+  if (_generatedForyBindingsInstalled) {
+    return;
+  }
+  _generatedForyBindingsInstalled = true;
+  Fory.bindGeneratedEnumFactory(Color, _ColorForySerializer.new);
+  Fory.bindGeneratedStructFactory(Person, _PersonForySerializer.new);
+  Fory.bindGeneratedStructFactory(RefNode, _RefNodeForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      EvolvingPayload, _EvolvingPayloadForySerializer.new);
+  Fory.bindGeneratedStructFactory(
+      FixedPayload, _FixedPayloadForySerializer.new);
 }
 
 void _registerPersonForyType(Fory fory, Type type,
     {int? id, String? namespace, String? typeName}) {
-  fory.register(type, _serializerForGeneratedType(type),
-      id: id, namespace: namespace, typeName: typeName);
+  _installGeneratedForyBindings();
+  if (type == Color) {
+    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == Person) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == RefNode) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == EvolvingPayload) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == FixedPayload) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  throw ArgumentError.value(
+      type, 'type', 'No generated registration for this library.');
 }
 
 void _registerPersonForyTypes(Fory fory) {
-  fory.register(Color, _colorForySerializer,
+  _installGeneratedForyBindings();
+  fory.registerEnum(Color,
       namespace: 'fory_test/model/person', typeName: 'Color');
-  fory.register(Person, _personForySerializer,
+  fory.registerStruct(Person,
       namespace: 'fory_test/model/person', typeName: 'Person');
-  fory.register(RefNode, _refNodeForySerializer,
+  fory.registerStruct(RefNode,
       namespace: 'fory_test/model/person', typeName: 'RefNode');
-  fory.register(EvolvingPayload, _evolvingPayloadForySerializer,
+  fory.registerStruct(EvolvingPayload,
       namespace: 'fory_test/model/person', typeName: 'EvolvingPayload');
-  fory.register(FixedPayload, _fixedPayloadForySerializer,
+  fory.registerStruct(FixedPayload,
       namespace: 'fory_test/model/person', typeName: 'FixedPayload');
 }

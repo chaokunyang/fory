@@ -3,8 +3,11 @@
 This package provides the Dart runtime for Apache Fory xlang serialization.
 
 For normal application code, use annotated objects plus generated registration
-helpers. Manual `Serializer` implementations are the advanced escape hatch for
-external types or custom wire behavior.
+helpers. Generated structs and enums register through `Fory.registerStruct(...)`
+and `Fory.registerEnum(...)`. Manual `Serializer` implementations are the
+advanced escape hatch for external types, custom wire behavior, or manual union
+implementations through `Fory.registerSerializer(...)` and
+`Fory.registerUnion(...)`.
 
 The runtime is built around a small public surface:
 
@@ -22,7 +25,7 @@ structs and enums.
 
 ## Public API
 
-- `Fory`: root facade for xlang serialization, deserialization, and advanced manual registration.
+- `Fory`: root facade for xlang serialization, deserialization, generated struct/enum registration, and advanced manual serializer registration.
 - `Config`: immutable runtime options for compatible mode and safety limits.
 - `Buffer`: reusable byte buffer with explicit reader and writer indices.
 - `WriteContext` and `ReadContext`: advanced context APIs used by generated and manual serializers.

@@ -215,6 +215,9 @@ Generated code should emit:
 - private serializer classes
 - private metadata constants
 - one generated registration helper per annotated library
+- generated binding installation that keeps serializer factories as generated
+  implementation detail rather than exposing them through the normal
+  `Fory.registerStruct(...)` / `Fory.registerEnum(...)` API
 
 Generated code should not create a public global registry or a second public API
 family.

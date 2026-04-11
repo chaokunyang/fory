@@ -23,8 +23,6 @@ final class _ColorForySerializer extends Serializer<Color> {
   }
 }
 
-const _ColorForySerializer _colorForySerializer = _ColorForySerializer();
-
 const List<Map<String, Object?>> _personForyFields = <Map<String, Object?>>[
   <String, Object?>{
     'name': 'age',
@@ -146,8 +144,6 @@ final class _PersonForySerializer extends Serializer<Person> {
   }
 }
 
-const _PersonForySerializer _personForySerializer = _PersonForySerializer();
-
 Int32 _readPersonAge(Object? value, [Object? fallback]) {
   return value == null
       ? (fallback != null
@@ -183,22 +179,36 @@ Color _readPersonFavoriteColor(Object? value, [Object? fallback]) {
       : value as Color;
 }
 
-Serializer _serializerForGeneratedType(Type type) {
-  if (type == Color) return _colorForySerializer;
-  if (type == Person) return _personForySerializer;
-  throw ArgumentError.value(
-      type, 'type', 'No generated serializer for this library.');
+bool _generatedForyBindingsInstalled = false;
+
+void _installGeneratedForyBindings() {
+  if (_generatedForyBindingsInstalled) {
+    return;
+  }
+  _generatedForyBindingsInstalled = true;
+  Fory.bindGeneratedEnumFactory(Color, _ColorForySerializer.new);
+  Fory.bindGeneratedStructFactory(Person, _PersonForySerializer.new);
 }
 
 void _registerExampleForyType(Fory fory, Type type,
     {int? id, String? namespace, String? typeName}) {
-  fory.register(type, _serializerForGeneratedType(type),
-      id: id, namespace: namespace, typeName: typeName);
+  _installGeneratedForyBindings();
+  if (type == Color) {
+    fory.registerEnum(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  if (type == Person) {
+    fory.registerStruct(type, id: id, namespace: namespace, typeName: typeName);
+    return;
+  }
+  throw ArgumentError.value(
+      type, 'type', 'No generated registration for this library.');
 }
 
 void _registerExampleForyTypes(Fory fory) {
-  fory.register(Color, _colorForySerializer,
+  _installGeneratedForyBindings();
+  fory.registerEnum(Color,
       namespace: 'fory/example/example', typeName: 'Color');
-  fory.register(Person, _personForySerializer,
+  fory.registerStruct(Person,
       namespace: 'fory/example/example', typeName: 'Person');
 }

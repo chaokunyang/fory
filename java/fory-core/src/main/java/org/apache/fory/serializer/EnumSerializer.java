@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.fory.annotation.ForyEnumId;
+import org.apache.fory.collection.LongMap;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -41,7 +42,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> implements Shareab
   private final Map<String, Enum> stringToEnum;
   private final int[] tagByOrdinal;
   private final Enum[] enumConstantByTagArray;
-  private final Map<Integer, Enum> enumConstantByTagMap;
+  private final LongMap<Enum> enumConstantByTagMap;
 
   public EnumSerializer(Config config, Class<Enum> cls) {
     super(config, cls, false);
@@ -142,12 +143,10 @@ public class EnumSerializer extends ImmutableSerializer<Enum> implements Shareab
   private static final class EnumTagCodec {
     private final int[] tagByOrdinal;
     private final Enum[] enumConstantByTagArray;
-    private final Map<Integer, Enum> enumConstantByTagMap;
+    private final LongMap<Enum> enumConstantByTagMap;
 
     private EnumTagCodec(
-        int[] tagByOrdinal,
-        Enum[] enumConstantByTagArray,
-        Map<Integer, Enum> enumConstantByTagMap) {
+        int[] tagByOrdinal, Enum[] enumConstantByTagArray, LongMap<Enum> enumConstantByTagMap) {
       this.tagByOrdinal = tagByOrdinal;
       this.enumConstantByTagArray = enumConstantByTagArray;
       this.enumConstantByTagMap = enumConstantByTagMap;
@@ -168,7 +167,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> implements Shareab
     private static EnumTagCodec buildExplicitCodec(
         Class<Enum> enumClass, Enum[] enumConstants, EnumIdAccessor accessor) {
       int[] tagByOrdinal = new int[enumConstants.length];
-      Map<Integer, Enum> enumConstantByTag = new HashMap<>();
+      LongMap<Enum> enumConstantByTag = new LongMap<>(enumConstants.length);
       int maxTag = 0;
       for (Enum enumConstant : enumConstants) {
         int tag = accessor.getId(enumConstant);
@@ -186,9 +185,7 @@ public class EnumSerializer extends ImmutableSerializer<Enum> implements Shareab
       }
       if (maxTag < MAX_ENUM_ID_ARRAY_SIZE) {
         Enum[] enumConstantByTagArray = new Enum[maxTag + 1];
-        for (Map.Entry<Integer, Enum> entry : enumConstantByTag.entrySet()) {
-          enumConstantByTagArray[entry.getKey()] = entry.getValue();
-        }
+        enumConstantByTag.forEach((tag, value) -> enumConstantByTagArray[tag.intValue()] = value);
         return new EnumTagCodec(tagByOrdinal, enumConstantByTagArray, null);
       }
       return new EnumTagCodec(tagByOrdinal, null, enumConstantByTag);

@@ -31,6 +31,8 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -612,32 +614,6 @@ public class ClassResolver extends TypeResolver {
     registerInternalImpl(cls, classId);
   }
 
-  public void registerSerializer(String className, String serializerClassName) {
-    checkRegisterAllowed();
-    Tuple2<Integer, String> serializerInfo = sharedRegistry.getRegisteredSerializerInfo(className);
-    if (serializerInfo != null) {
-      sharedRegistry.cacheRegisteredSerializerInfo(
-          className, serializerInfo.f0, serializerClassName);
-      return;
-    }
-    Preconditions.checkArgument(
-        extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
-        "Internal type id overflow: %s",
-        extRegistry.classIdGenerator);
-    while (extRegistry.classIdGenerator < typeIdToTypeInfo.length
-        && typeIdToTypeInfo[extRegistry.classIdGenerator] != null) {
-      extRegistry.classIdGenerator++;
-    }
-    Preconditions.checkArgument(
-        extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
-        "Internal type id overflow: %s",
-        extRegistry.classIdGenerator);
-    int classId = extRegistry.classIdGenerator;
-    sharedRegistry.cacheRegisteredSerializerInfo(className, classId, serializerClassName);
-    putInternalTypeInfo(
-        classId, new TypeInfo(null, null, null, null, classId, INVALID_USER_TYPE_ID));
-  }
-
   private void registerInternalImpl(Class<?> cls, int typeId) {
     checkRegisterAllowed();
     Preconditions.checkArgument(typeId >= 0 && typeId < INTERNAL_NATIVE_ID_LIMIT);
@@ -1032,6 +1008,32 @@ public class ClassResolver extends TypeResolver {
     checkRegisterAllowed();
     checkSerializerRegistration(type, serializerClass);
     registerSerializerImpl(type, Serializers.newSerializer(this, type, serializerClass));
+  }
+
+  public void registerSerializer(String className, String serializerClassName) {
+    checkRegisterAllowed();
+    Tuple2<Integer, String> serializerInfo = sharedRegistry.getRegisteredSerializerInfo(className);
+    if (serializerInfo != null) {
+      sharedRegistry.cacheRegisteredSerializerInfo(
+          className, serializerInfo.f0, serializerClassName);
+      return;
+    }
+    Preconditions.checkArgument(
+        extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
+        "Internal type id overflow: %s",
+        extRegistry.classIdGenerator);
+    while (extRegistry.classIdGenerator < typeIdToTypeInfo.length
+        && typeIdToTypeInfo[extRegistry.classIdGenerator] != null) {
+      extRegistry.classIdGenerator++;
+    }
+    Preconditions.checkArgument(
+        extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
+        "Internal type id overflow: %s",
+        extRegistry.classIdGenerator);
+    int classId = extRegistry.classIdGenerator;
+    sharedRegistry.cacheRegisteredSerializerInfo(className, classId, serializerClassName);
+    putInternalTypeInfo(
+        classId, new TypeInfo(null, null, null, null, classId, INVALID_USER_TYPE_ID));
   }
 
   @Override
@@ -1995,8 +1997,11 @@ public class ClassResolver extends TypeResolver {
     if (sharedRegistry.registeredSerializerInfosByName.isEmpty()) {
       return;
     }
-    for (Descriptor descriptor : Descriptor.getDescriptors(cls)) {
-      Class<?> rawType = descriptor.getRawType();
+    for (Field field : ReflectionUtils.getFields(cls, true)) {
+      if (Modifier.isStatic(field.getModifiers())) {
+        continue;
+      }
+      Class<?> rawType = field.getType();
       if (rawType == null || getRegisteredSerializerInfo(rawType) == null) {
         continue;
       }

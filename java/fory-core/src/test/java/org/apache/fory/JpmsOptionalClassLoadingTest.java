@@ -27,11 +27,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import org.apache.fory.memory.Platform;
+import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 public class JpmsOptionalClassLoadingTest {
   @Test
   public void testBuildWithoutJavaSqlModule() throws Exception {
+    if (Platform.JAVA_VERSION < 9) {
+      throw new SkipException("Skip on jdk" + Platform.JAVA_VERSION);
+    }
     String javaBin =
         System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
     Process process =

@@ -9,7 +9,7 @@ enum Color {
   blue,
 }
 
-@ForyObject()
+@ForyStruct()
 class Person {
   Person();
 
@@ -20,7 +20,7 @@ class Person {
   Map<String, Int32> scores = <String, Int32>{};
 }
 
-@ForyObject()
+@ForyStruct()
 class RefNode {
   RefNode();
 
@@ -30,14 +30,14 @@ class RefNode {
   RefNode? self;
 }
 
-@ForyObject()
+@ForyStruct()
 class EvolvingPayload {
   EvolvingPayload();
 
   String value = '';
 }
 
-@ForyObject(evolving: false)
+@ForyStruct(evolving: false)
 class FixedPayload {
   FixedPayload();
 

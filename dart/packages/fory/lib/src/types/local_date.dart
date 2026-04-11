@@ -1,10 +1,18 @@
+/// Calendar date without time-of-day or time-zone information.
 final class LocalDate implements Comparable<LocalDate> {
+  /// Year component.
   final int year;
+
+  /// Month component in the range `1..12`.
   final int month;
+
+  /// Day-of-month component.
   final int day;
 
+  /// Creates a date from explicit calendar components.
   const LocalDate(this.year, this.month, this.day);
 
+  /// Creates a date from the xlang epoch-day representation.
   factory LocalDate.fromEpochDay(int epochDay) {
     final instant = DateTime.fromMillisecondsSinceEpoch(
       epochDay * Duration.millisecondsPerDay,
@@ -13,8 +21,9 @@ final class LocalDate implements Comparable<LocalDate> {
     return LocalDate(instant.year, instant.month, instant.day);
   }
 
-  int toEpochDay() => DateTime.utc(year, month, day)
-      .millisecondsSinceEpoch ~/
+  /// Converts this date to xlang epoch-day form.
+  int toEpochDay() =>
+      DateTime.utc(year, month, day).millisecondsSinceEpoch ~/
       Duration.millisecondsPerDay;
 
   @override

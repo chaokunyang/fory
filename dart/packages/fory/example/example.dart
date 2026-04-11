@@ -1,39 +1,55 @@
 import 'package:fory/fory.dart';
 
-final class Person {
-  Person(this.name, this.age);
+part 'example.g.dart';
 
-  final String name;
-  final int age;
+enum Color {
+  red,
+  blue,
 }
 
-final class PersonSerializer extends Serializer<Person> {
-  const PersonSerializer();
+@ForyStruct()
+class Person {
+  Person();
 
-  @override
-  void write(WriteContext context, Person value) {
-    final buffer = context.buffer;
-    buffer.writeUtf8(value.name);
-    buffer.writeInt64(value.age);
-  }
+  String name = '';
+  Int32 age = Int32(0);
+  Color favoriteColor = Color.red;
+  List<String> tags = <String>[];
+}
 
-  @override
-  Person read(ReadContext context) {
-    final buffer = context.buffer;
-    return Person(buffer.readUtf8(), buffer.readInt64());
-  }
+void registerExampleTypes(Fory fory) {
+  _registerExampleForyTypes(fory);
+}
+
+void registerExampleType(
+  Fory fory,
+  Type type, {
+  int? id,
+  String? namespace,
+  String? typeName,
+}) {
+  _registerExampleForyType(
+    fory,
+    type,
+    id: id,
+    namespace: namespace,
+    typeName: typeName,
+  );
 }
 
 void main() {
   final fory = Fory();
-  fory.register(
-    Person,
-    const PersonSerializer(),
-    namespace: 'example',
-    typeName: 'Person',
-  );
-  final person = Person('Ada', 36);
+  registerExampleTypes(fory);
+
+  final person = Person()
+    ..name = 'Ada'
+    ..age = Int32(36)
+    ..favoriteColor = Color.blue
+    ..tags = <String>['engineer', 'mathematician'];
+
   final bytes = fory.serialize(person);
   final roundTrip = fory.deserialize<Person>(bytes);
-  print(roundTrip.name);
+
+  print('${roundTrip.name} ${roundTrip.age} ${roundTrip.favoriteColor}');
+  print(roundTrip.tags);
 }

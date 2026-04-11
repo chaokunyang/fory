@@ -99,7 +99,7 @@ void registerXlangType(
   );
 }
 
-@ForyObject()
+@ForyStruct()
 enum Color {
   green,
   red,
@@ -107,14 +107,14 @@ enum Color {
   white,
 }
 
-@ForyObject()
+@ForyStruct()
 enum TestEnum {
   valueA,
   valueB,
   valueC,
 }
 
-@ForyObject()
+@ForyStruct()
 class TwoEnumFieldStructEvolution {
   TwoEnumFieldStructEvolution();
 
@@ -122,14 +122,14 @@ class TwoEnumFieldStructEvolution {
   TestEnum f2 = TestEnum.valueA;
 }
 
-@ForyObject()
+@ForyStruct()
 class Item {
   Item();
 
   String name = '';
 }
 
-@ForyObject()
+@ForyStruct()
 class SimpleStruct {
   SimpleStruct();
 
@@ -144,21 +144,21 @@ class SimpleStruct {
   Int32 last = Int32(0);
 }
 
-@ForyObject()
+@ForyStruct()
 class EvolvingOverrideStruct {
   EvolvingOverrideStruct();
 
   String f1 = '';
 }
 
-@ForyObject(evolving: false)
+@ForyStruct(evolving: false)
 class FixedOverrideStruct {
   FixedOverrideStruct();
 
   String f1 = '';
 }
 
-@ForyObject()
+@ForyStruct()
 class Item1 {
   Item1();
 
@@ -195,28 +195,28 @@ final class Union2 {
   int get hashCode => Object.hash(index, value);
 }
 
-@ForyObject()
+@ForyStruct()
 class StructWithUnion2 {
   StructWithUnion2();
 
   Union2 union = Union2.ofString('');
 }
 
-@ForyObject()
+@ForyStruct()
 class StructWithList {
   StructWithList();
 
   List<String?> items = <String?>[];
 }
 
-@ForyObject()
+@ForyStruct()
 class StructWithMap {
   StructWithMap();
 
   Map<String?, String?> data = <String?, String?>{};
 }
 
-@ForyObject()
+@ForyStruct()
 class MyStruct {
   MyStruct();
 
@@ -237,7 +237,7 @@ final class MyExt {
   int get hashCode => id.hashCode;
 }
 
-@ForyObject()
+@ForyStruct()
 class MyWrapper {
   MyWrapper();
 
@@ -246,12 +246,12 @@ class MyWrapper {
   MyStruct myStruct = MyStruct();
 }
 
-@ForyObject()
+@ForyStruct()
 class EmptyWrapper {
   EmptyWrapper();
 }
 
-@ForyObject()
+@ForyStruct()
 class VersionCheckStruct {
   VersionCheckStruct();
 
@@ -268,7 +268,7 @@ abstract interface class Animal {
   int get age;
 }
 
-@ForyObject()
+@ForyStruct()
 class Dog implements Animal {
   Dog();
 
@@ -280,7 +280,7 @@ class Dog implements Animal {
   String? name;
 }
 
-@ForyObject()
+@ForyStruct()
 class Cat implements Animal {
   Cat();
 
@@ -292,26 +292,26 @@ class Cat implements Animal {
   int lives = 0;
 }
 
-@ForyObject()
+@ForyStruct()
 class AnimalListHolder {
   AnimalListHolder();
 
   List<Animal> animals = <Animal>[];
 }
 
-@ForyObject()
+@ForyStruct()
 class AnimalMapHolder {
   AnimalMapHolder();
 
   Map<String, Animal> animalMap = <String, Animal>{};
 }
 
-@ForyObject()
+@ForyStruct()
 class EmptyStruct {
   EmptyStruct();
 }
 
-@ForyObject()
+@ForyStruct()
 class OneStringFieldStruct {
   OneStringFieldStruct();
 
@@ -319,7 +319,7 @@ class OneStringFieldStruct {
   String? f1;
 }
 
-@ForyObject()
+@ForyStruct()
 class TwoStringFieldStruct {
   TwoStringFieldStruct();
 
@@ -327,14 +327,14 @@ class TwoStringFieldStruct {
   String f2 = '';
 }
 
-@ForyObject()
+@ForyStruct()
 class OneEnumFieldStruct {
   OneEnumFieldStruct();
 
   TestEnum f1 = TestEnum.valueA;
 }
 
-@ForyObject()
+@ForyStruct()
 class TwoEnumFieldStruct {
   TwoEnumFieldStruct();
 
@@ -342,7 +342,7 @@ class TwoEnumFieldStruct {
   TestEnum f2 = TestEnum.valueA;
 }
 
-@ForyObject()
+@ForyStruct()
 class NullableComprehensiveSchemaConsistent {
   NullableComprehensiveSchemaConsistent();
 
@@ -386,7 +386,7 @@ class NullableComprehensiveSchemaConsistent {
   Map<String, String>? nullableMap;
 }
 
-@ForyObject()
+@ForyStruct()
 class NullableComprehensiveCompatible {
   NullableComprehensiveCompatible();
 
@@ -420,7 +420,7 @@ class NullableComprehensiveCompatible {
   Map<String, String> nullableMap2 = <String, String>{};
 }
 
-@ForyObject()
+@ForyStruct()
 class RefInnerSchemaConsistent {
   RefInnerSchemaConsistent();
 
@@ -429,7 +429,7 @@ class RefInnerSchemaConsistent {
   String name = '';
 }
 
-@ForyObject()
+@ForyStruct()
 class RefOuterSchemaConsistent {
   RefOuterSchemaConsistent();
 
@@ -440,7 +440,7 @@ class RefOuterSchemaConsistent {
   RefInnerSchemaConsistent? inner2;
 }
 
-@ForyObject()
+@ForyStruct()
 class RefInnerCompatible {
   RefInnerCompatible();
 
@@ -449,7 +449,7 @@ class RefInnerCompatible {
   String name = '';
 }
 
-@ForyObject()
+@ForyStruct()
 class RefOuterCompatible {
   RefOuterCompatible();
 
@@ -460,7 +460,7 @@ class RefOuterCompatible {
   RefInnerCompatible? inner2;
 }
 
-@ForyObject()
+@ForyStruct()
 class RefOverrideElement {
   RefOverrideElement();
 
@@ -475,7 +475,7 @@ class RefOverrideContainer {
   Map<String, RefOverrideElement> mapField = <String, RefOverrideElement>{};
 }
 
-@ForyObject()
+@ForyStruct()
 class CircularRefStruct {
   CircularRefStruct();
 
@@ -485,7 +485,7 @@ class CircularRefStruct {
   CircularRefStruct? selfRef;
 }
 
-@ForyObject()
+@ForyStruct()
 class UnsignedSchemaConsistent {
   UnsignedSchemaConsistent();
 
@@ -534,7 +534,7 @@ class UnsignedSchemaConsistent {
   int? u64TaggedNullableField;
 }
 
-@ForyObject()
+@ForyStruct()
 class UnsignedSchemaConsistentSimple {
   UnsignedSchemaConsistentSimple();
 
@@ -546,7 +546,7 @@ class UnsignedSchemaConsistentSimple {
   int? u64TaggedNullable;
 }
 
-@ForyObject()
+@ForyStruct()
 class UnsignedSchemaCompatible {
   UnsignedSchemaCompatible();
 

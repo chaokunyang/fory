@@ -9,8 +9,8 @@ import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:source_gen/source_gen.dart';
 
 final class ForyGenerator extends Generator {
-  static final TypeChecker _foryObjectChecker =
-      TypeChecker.fromRuntime(ForyObject);
+  static final TypeChecker _foryStructChecker =
+      TypeChecker.fromRuntime(ForyStruct);
   static final TypeChecker _foryFieldChecker =
       TypeChecker.fromRuntime(ForyField);
   static final TypeChecker _int32Checker = TypeChecker.fromRuntime(Int32Type);
@@ -23,7 +23,7 @@ final class ForyGenerator extends Generator {
   @override
   FutureOr<String> generate(LibraryReader library, BuildStep buildStep) {
     final annotatedClasses = library.classes
-        .where((element) => _foryObjectChecker.hasAnnotationOf(element))
+        .where((element) => _foryStructChecker.hasAnnotationOf(element))
         .toList(growable: false);
     final enumElements = library.enums.toList(growable: false);
     if (annotatedClasses.isEmpty && enumElements.isEmpty) {
@@ -66,7 +66,7 @@ final class ForyGenerator extends Generator {
   }
 
   _GeneratedStructSpec _analyzeStruct(ClassElement element) {
-    final objectAnnotation = _foryObjectChecker.firstAnnotationOf(element);
+    final objectAnnotation = _foryStructChecker.firstAnnotationOf(element);
     final objectReader = ConstantReader(objectAnnotation);
     final evolving = objectReader.peek('evolving')?.boolValue ?? true;
 
@@ -274,6 +274,7 @@ final class ForyGenerator extends Generator {
         'final class $serializerClassName extends Serializer<${enumSpec.name}> {',
       )
       ..writeln('  const $serializerClassName();')
+      ..writeln('  @override')
       ..writeln('  bool get isEnum => true;')
       ..writeln('  @override')
       ..writeln('  void write(WriteContext context, ${enumSpec.name} value) {')
@@ -295,7 +296,7 @@ final class ForyGenerator extends Generator {
     final serializerClassName = '_${structSpec.name}ForySerializer';
     final serializerVariableName =
         '_${_toCamelCase(structSpec.name)}ForySerializer';
-    final metadataListName = '_${structSpec.name}ForyFields';
+    final metadataListName = '_${_toCamelCase(structSpec.name)}ForyFields';
 
     output.writeln(
       'const List<Map<String, Object?>> $metadataListName = <Map<String, Object?>>[',
@@ -310,6 +311,7 @@ final class ForyGenerator extends Generator {
         'final class $serializerClassName extends Serializer<${structSpec.name}> {',
       )
       ..writeln('  const $serializerClassName();')
+      ..writeln('  @override')
       ..writeln('  bool get isStruct => true;')
       ..writeln('  @override')
       ..writeln('  bool get evolving => ${structSpec.evolving};')
@@ -497,7 +499,7 @@ final class ForyGenerator extends Generator {
 
   String _shapeLiteral(_GeneratedShapeSpec shape) {
     final argumentsLiteral = shape.arguments.isEmpty
-        ? 'const <Object?>[]'
+        ? '<Object?>[]'
         : '<Object?>[\n${shape.arguments.map(_shapeLiteral).join(',\n')}\n      ]';
     final dynamicLiteral = switch (shape.dynamic) {
       true => 'true',

@@ -2,6 +2,10 @@ import 'package:fory/fory.dart';
 import 'package:fory_test/model/person.dart';
 import 'package:test/test.dart';
 
+// Consumer-side integration coverage for build_runner output. These tests prove
+// that generated registration helpers from another package work against the
+// public package:fory API; the Java-driven xlang harness covers cross-runtime
+// wire compatibility separately.
 void main() {
   group('generated registration', () {
     test('round-trips struct and enum data', () {
@@ -33,6 +37,8 @@ void main() {
       final fory = Fory();
       registerPersonTypes(fory);
 
+      // `trackRef` is the root-level escape hatch for graphs without field
+      // metadata, so this top-level list verifies shared identity at the root.
       final node = RefNode()..name = 'root';
       final bytes = fory.serialize(<Object?>[node, node], trackRef: true);
       final roundTrip = fory.deserialize<Object?>(bytes) as List<Object?>;
@@ -55,7 +61,8 @@ void main() {
       expect(identical(roundTrip, roundTrip.self), isTrue);
     });
 
-    test('fixed payload stays smaller than evolving payload in compatible mode', () {
+    test('fixed payload stays smaller than evolving payload in compatible mode',
+        () {
       final fory = Fory(config: const Config(compatible: true));
       registerPersonTypes(fory);
 
@@ -66,8 +73,10 @@ void main() {
       final fixedBytes = fory.serialize(fixed);
 
       expect(fixedBytes.length, lessThan(evolvingBytes.length));
-      expect(fory.deserialize<EvolvingPayload>(evolvingBytes).value, equals('payload'));
-      expect(fory.deserialize<FixedPayload>(fixedBytes).value, equals('payload'));
+      expect(fory.deserialize<EvolvingPayload>(evolvingBytes).value,
+          equals('payload'));
+      expect(
+          fory.deserialize<FixedPayload>(fixedBytes).value, equals('payload'));
     });
   });
 }

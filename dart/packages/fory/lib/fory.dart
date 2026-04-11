@@ -1,7 +1,12 @@
+/// Public API for the Apache Fory Dart xlang runtime.
+///
+/// Most applications only need [Fory], [Config], [ForyStruct], and [ForyField].
+/// [Buffer], [WriteContext], [ReadContext], and [Serializer] are advanced APIs
+/// used by generated code, custom serializers, and low-level integrations.
 library;
 
 export 'src/annotation/fory_field.dart';
-export 'src/annotation/fory_object.dart';
+export 'src/annotation/fory_struct.dart';
 export 'src/annotation/numeric_types.dart';
 export 'src/buffer.dart';
 export 'src/config.dart';

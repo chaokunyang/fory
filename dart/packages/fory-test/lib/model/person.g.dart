@@ -10,6 +10,7 @@ part of 'person.dart';
 
 final class _ColorForySerializer extends Serializer<Color> {
   const _ColorForySerializer();
+  @override
   bool get isEnum => true;
   @override
   void write(WriteContext context, Color value) {
@@ -24,7 +25,7 @@ final class _ColorForySerializer extends Serializer<Color> {
 
 const _ColorForySerializer _colorForySerializer = _ColorForySerializer();
 
-const List<Map<String, Object?>> _PersonForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _personForyFields = <Map<String, Object?>>[
   <String, Object?>{
     'name': 'age',
     'identifier': 'age',
@@ -35,7 +36,7 @@ const List<Map<String, Object?>> _PersonForyFields = <Map<String, Object?>>[
       'nullable': false,
       'ref': false,
       'dynamic': null,
-      'arguments': const <Object?>[],
+      'arguments': <Object?>[],
     },
   },
   <String, Object?>{
@@ -48,7 +49,7 @@ const List<Map<String, Object?>> _PersonForyFields = <Map<String, Object?>>[
       'nullable': false,
       'ref': false,
       'dynamic': null,
-      'arguments': const <Object?>[],
+      'arguments': <Object?>[],
     },
   },
   <String, Object?>{
@@ -68,7 +69,7 @@ const List<Map<String, Object?>> _PersonForyFields = <Map<String, Object?>>[
           'nullable': true,
           'ref': false,
           'dynamic': null,
-          'arguments': const <Object?>[],
+          'arguments': <Object?>[],
         }
       ],
     },
@@ -90,7 +91,7 @@ const List<Map<String, Object?>> _PersonForyFields = <Map<String, Object?>>[
           'nullable': true,
           'ref': false,
           'dynamic': null,
-          'arguments': const <Object?>[],
+          'arguments': <Object?>[],
         },
         <String, Object?>{
           'type': Int32,
@@ -98,7 +99,7 @@ const List<Map<String, Object?>> _PersonForyFields = <Map<String, Object?>>[
           'nullable': true,
           'ref': false,
           'dynamic': null,
-          'arguments': const <Object?>[],
+          'arguments': <Object?>[],
         }
       ],
     },
@@ -113,21 +114,22 @@ const List<Map<String, Object?>> _PersonForyFields = <Map<String, Object?>>[
       'nullable': false,
       'ref': false,
       'dynamic': null,
-      'arguments': const <Object?>[],
+      'arguments': <Object?>[],
     },
   },
 ];
 
 final class _PersonForySerializer extends Serializer<Person> {
   const _PersonForySerializer();
+  @override
   bool get isStruct => true;
   @override
   bool get evolving => true;
   @override
-  List<Map<String, Object?>> get fields => _PersonForyFields;
+  List<Map<String, Object?>> get fields => _personForyFields;
   @override
   void write(WriteContext context, Person value) {
-    final compatibleFields = context.compatibleFieldOrder(_PersonForyFields);
+    final compatibleFields = context.compatibleFieldOrder(_personForyFields);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
         switch (field['identifier'] as String) {
@@ -152,11 +154,11 @@ final class _PersonForySerializer extends Serializer<Person> {
       }
       return;
     }
-    context.writeField(_PersonForyFields[0], value.age);
-    context.writeField(_PersonForyFields[1], value.name);
-    context.writeField(_PersonForyFields[2], value.tags);
-    context.writeField(_PersonForyFields[3], value.scores);
-    context.writeField(_PersonForyFields[4], value.favoriteColor);
+    context.writeField(_personForyFields[0], value.age);
+    context.writeField(_personForyFields[1], value.name);
+    context.writeField(_personForyFields[2], value.tags);
+    context.writeField(_personForyFields[3], value.scores);
+    context.writeField(_personForyFields[4], value.favoriteColor);
   }
 
   @override
@@ -164,18 +166,18 @@ final class _PersonForySerializer extends Serializer<Person> {
     final value = Person();
     context.reference(value);
     value.age = _readPersonAge(
-        context.readField<Object?>(_PersonForyFields[0], value.age), value.age);
+        context.readField<Object?>(_personForyFields[0], value.age), value.age);
     value.name = _readPersonName(
-        context.readField<Object?>(_PersonForyFields[1], value.name),
+        context.readField<Object?>(_personForyFields[1], value.name),
         value.name);
     value.tags = _readPersonTags(
-        context.readField<Object?>(_PersonForyFields[2], value.tags),
+        context.readField<Object?>(_personForyFields[2], value.tags),
         value.tags);
     value.scores = _readPersonScores(
-        context.readField<Object?>(_PersonForyFields[3], value.scores),
+        context.readField<Object?>(_personForyFields[3], value.scores),
         value.scores);
     value.favoriteColor = _readPersonFavoriteColor(
-        context.readField<Object?>(_PersonForyFields[4], value.favoriteColor),
+        context.readField<Object?>(_personForyFields[4], value.favoriteColor),
         value.favoriteColor);
     return value;
   }
@@ -234,7 +236,7 @@ Color _readPersonFavoriteColor(Object? value, [Object? fallback]) {
       : value as Color;
 }
 
-const List<Map<String, Object?>> _RefNodeForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _refNodeForyFields = <Map<String, Object?>>[
   <String, Object?>{
     'name': 'name',
     'identifier': 'name',
@@ -245,7 +247,7 @@ const List<Map<String, Object?>> _RefNodeForyFields = <Map<String, Object?>>[
       'nullable': false,
       'ref': false,
       'dynamic': null,
-      'arguments': const <Object?>[],
+      'arguments': <Object?>[],
     },
   },
   <String, Object?>{
@@ -258,21 +260,22 @@ const List<Map<String, Object?>> _RefNodeForyFields = <Map<String, Object?>>[
       'nullable': true,
       'ref': true,
       'dynamic': null,
-      'arguments': const <Object?>[],
+      'arguments': <Object?>[],
     },
   },
 ];
 
 final class _RefNodeForySerializer extends Serializer<RefNode> {
   const _RefNodeForySerializer();
+  @override
   bool get isStruct => true;
   @override
   bool get evolving => true;
   @override
-  List<Map<String, Object?>> get fields => _RefNodeForyFields;
+  List<Map<String, Object?>> get fields => _refNodeForyFields;
   @override
   void write(WriteContext context, RefNode value) {
-    final compatibleFields = context.compatibleFieldOrder(_RefNodeForyFields);
+    final compatibleFields = context.compatibleFieldOrder(_refNodeForyFields);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
         switch (field['identifier'] as String) {
@@ -288,8 +291,8 @@ final class _RefNodeForySerializer extends Serializer<RefNode> {
       }
       return;
     }
-    context.writeField(_RefNodeForyFields[0], value.name);
-    context.writeField(_RefNodeForyFields[1], value.self);
+    context.writeField(_refNodeForyFields[0], value.name);
+    context.writeField(_refNodeForyFields[1], value.self);
   }
 
   @override
@@ -297,10 +300,10 @@ final class _RefNodeForySerializer extends Serializer<RefNode> {
     final value = RefNode();
     context.reference(value);
     value.name = _readRefNodeName(
-        context.readField<Object?>(_RefNodeForyFields[0], value.name),
+        context.readField<Object?>(_refNodeForyFields[0], value.name),
         value.name);
     value.self = _readRefNodeSelf(
-        context.readField<Object?>(_RefNodeForyFields[1], value.self),
+        context.readField<Object?>(_refNodeForyFields[1], value.self),
         value.self);
     return value;
   }
@@ -324,7 +327,7 @@ RefNode? _readRefNodeSelf(Object? value, [Object? fallback]) {
           : value as RefNode;
 }
 
-const List<Map<String, Object?>> _EvolvingPayloadForyFields =
+const List<Map<String, Object?>> _evolvingPayloadForyFields =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'value',
@@ -336,22 +339,23 @@ const List<Map<String, Object?>> _EvolvingPayloadForyFields =
       'nullable': false,
       'ref': false,
       'dynamic': null,
-      'arguments': const <Object?>[],
+      'arguments': <Object?>[],
     },
   },
 ];
 
 final class _EvolvingPayloadForySerializer extends Serializer<EvolvingPayload> {
   const _EvolvingPayloadForySerializer();
+  @override
   bool get isStruct => true;
   @override
   bool get evolving => true;
   @override
-  List<Map<String, Object?>> get fields => _EvolvingPayloadForyFields;
+  List<Map<String, Object?>> get fields => _evolvingPayloadForyFields;
   @override
   void write(WriteContext context, EvolvingPayload value) {
     final compatibleFields =
-        context.compatibleFieldOrder(_EvolvingPayloadForyFields);
+        context.compatibleFieldOrder(_evolvingPayloadForyFields);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
         switch (field['identifier'] as String) {
@@ -364,7 +368,7 @@ final class _EvolvingPayloadForySerializer extends Serializer<EvolvingPayload> {
       }
       return;
     }
-    context.writeField(_EvolvingPayloadForyFields[0], value.value);
+    context.writeField(_evolvingPayloadForyFields[0], value.value);
   }
 
   @override
@@ -372,7 +376,7 @@ final class _EvolvingPayloadForySerializer extends Serializer<EvolvingPayload> {
     final value = EvolvingPayload();
     context.reference(value);
     value.value = _readEvolvingPayloadValue(
-        context.readField<Object?>(_EvolvingPayloadForyFields[0], value.value),
+        context.readField<Object?>(_evolvingPayloadForyFields[0], value.value),
         value.value);
     return value;
   }
@@ -389,7 +393,7 @@ String _readEvolvingPayloadValue(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<Map<String, Object?>> _FixedPayloadForyFields =
+const List<Map<String, Object?>> _fixedPayloadForyFields =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'value',
@@ -401,22 +405,23 @@ const List<Map<String, Object?>> _FixedPayloadForyFields =
       'nullable': false,
       'ref': false,
       'dynamic': null,
-      'arguments': const <Object?>[],
+      'arguments': <Object?>[],
     },
   },
 ];
 
 final class _FixedPayloadForySerializer extends Serializer<FixedPayload> {
   const _FixedPayloadForySerializer();
+  @override
   bool get isStruct => true;
   @override
   bool get evolving => false;
   @override
-  List<Map<String, Object?>> get fields => _FixedPayloadForyFields;
+  List<Map<String, Object?>> get fields => _fixedPayloadForyFields;
   @override
   void write(WriteContext context, FixedPayload value) {
     final compatibleFields =
-        context.compatibleFieldOrder(_FixedPayloadForyFields);
+        context.compatibleFieldOrder(_fixedPayloadForyFields);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
         switch (field['identifier'] as String) {
@@ -429,7 +434,7 @@ final class _FixedPayloadForySerializer extends Serializer<FixedPayload> {
       }
       return;
     }
-    context.writeField(_FixedPayloadForyFields[0], value.value);
+    context.writeField(_fixedPayloadForyFields[0], value.value);
   }
 
   @override
@@ -437,7 +442,7 @@ final class _FixedPayloadForySerializer extends Serializer<FixedPayload> {
     final value = FixedPayload();
     context.reference(value);
     value.value = _readFixedPayloadValue(
-        context.readField<Object?>(_FixedPayloadForyFields[0], value.value),
+        context.readField<Object?>(_fixedPayloadForyFields[0], value.value),
         value.value);
     return value;
   }

@@ -1,12 +1,16 @@
 import 'dart:typed_data';
 
+/// Half-precision floating-point wrapper used by the xlang type system.
 final class Float16 implements Comparable<Float16> {
   final int _bits;
 
+  /// Creates a value directly from IEEE 754 binary16 bits.
   const Float16.fromBits(int bits) : _bits = bits & 0xffff;
 
+  /// Converts [value] to the closest representable binary16 value.
   factory Float16(num value) => Float16.fromDouble(value.toDouble());
 
+  /// Converts [value] to the closest representable binary16 value.
   factory Float16.fromDouble(double value) {
     if (value.isNaN) {
       return const Float16.fromBits(0x7e00);
@@ -48,8 +52,10 @@ final class Float16 implements Comparable<Float16> {
     );
   }
 
+  /// Returns the raw IEEE 754 binary16 bits for this value.
   int toBits() => _bits;
 
+  /// Expands this binary16 value to a Dart [double].
   double toDouble() {
     final sign = (_bits >> 15) & 0x1;
     final exponent = (_bits >> 10) & 0x1f;
@@ -66,15 +72,13 @@ final class Float16 implements Comparable<Float16> {
           ? (sign == 0 ? double.infinity : double.negativeInfinity)
           : double.nan;
     }
-    final value =
-        (1.0 + mantissa / 1024.0) * (1 << (exponent - 15)).toDouble();
+    final value = (1.0 + mantissa / 1024.0) * (1 << (exponent - 15)).toDouble();
     return sign == 0 ? value : -value;
   }
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Float16 && other._bits == _bits;
+      identical(this, other) || other is Float16 && other._bits == _bits;
 
   @override
   int get hashCode => _bits.hashCode;

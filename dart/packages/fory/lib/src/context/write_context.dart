@@ -14,7 +14,13 @@ import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/string_codec.dart';
 import 'package:fory/src/util/hash_util.dart';
 
+/// Write-side runtime state for a single Fory operation.
+///
+/// Generated and manual serializers receive this object from [Serializer.write].
+/// Application code normally interacts with [Fory] instead of constructing or
+/// preparing contexts directly.
 final class WriteContext {
+  /// Effective runtime configuration for the active operation.
   final Config config;
   final TypeResolver _typeResolver;
   final RefWriter _refWriter;
@@ -32,6 +38,9 @@ final class WriteContext {
   @internal
   WriteContext(this.config, this._typeResolver, this._refWriter);
 
+  /// Prepares the context to write into [buffer].
+  ///
+  /// This resets all per-operation caches, meta-string tables, and Ref state.
   void prepare(Buffer buffer, {required bool trackRef}) {
     _buffer = buffer;
     _rootTrackRef = trackRef;
@@ -44,10 +53,13 @@ final class WriteContext {
     _depth = 0;
   }
 
+  /// The active output buffer for the current operation.
   Buffer get buffer => _buffer;
 
+  /// Whether the current root operation requested root-level Ref tracking.
   bool get rootTrackRef => _rootTrackRef;
 
+  /// Records entry into one more nested write frame.
   void increaseDepth() {
     _depth += 1;
     if (_depth > config.maxDepth) {
@@ -55,40 +67,60 @@ final class WriteContext {
     }
   }
 
+  /// Records exit from a nested write frame.
   void decreaseDepth() {
     _depth -= 1;
   }
 
+  /// Writes a boolean value.
   void writeBool(bool value) => _buffer.writeBool(value);
 
+  /// Writes a signed 8-bit integer.
   void writeByte(int value) => _buffer.writeByte(value);
 
+  /// Writes an unsigned 8-bit integer.
   void writeUint8(int value) => _buffer.writeUint8(value);
 
+  /// Writes a signed little-endian 16-bit integer.
   void writeInt16(int value) => _buffer.writeInt16(value);
 
+  /// Writes a signed little-endian 32-bit integer.
   void writeInt32(int value) => _buffer.writeInt32(value);
 
+  /// Writes a signed little-endian 64-bit integer.
   void writeInt64(int value) => _buffer.writeInt64(value);
 
+  /// Writes a half-precision floating-point value.
   void writeFloat16(Float16 value) => _buffer.writeFloat16(value);
 
+  /// Writes a single-precision floating-point value.
   void writeFloat32(double value) => _buffer.writeFloat32(value);
 
+  /// Writes a double-precision floating-point value.
   void writeFloat64(double value) => _buffer.writeFloat64(value);
 
+  /// Writes a zig-zag encoded signed 32-bit varint.
   void writeVarInt32(int value) => _buffer.writeVarInt32(value);
 
+  /// Writes an unsigned 32-bit varint.
   void writeVarUint32(int value) => _buffer.writeVarUint32(value);
 
+  /// Writes a zig-zag encoded signed 64-bit varint.
   void writeVarInt64(int value) => _buffer.writeVarInt64(value);
 
+  /// Writes a tagged signed 64-bit integer.
   void writeTaggedInt64(int value) => _buffer.writeTaggedInt64(value);
 
+  /// Writes an unsigned 64-bit varint.
   void writeVarUint64(int value) => _buffer.writeVarUint64(value);
 
+  /// Writes a tagged unsigned 64-bit integer.
   void writeTaggedUint64(int value) => _buffer.writeTaggedUint64(value);
 
+  /// Writes [value] together with the type metadata needed to read it back.
+  ///
+  /// Use [trackRef] only when the value is a root graph or other shape that
+  /// does not already carry field-level Ref metadata.
   void writeAny(Object? value, {bool trackRef = false}) {
     final resolved = value == null ? null : _typeResolver.resolveValue(value);
     final effectiveTrackRef =
@@ -104,12 +136,14 @@ final class WriteContext {
     _writeResolvedValue(resolved, value, null);
   }
 
+  /// Writes a non-null [value] together with its type metadata.
   void writeValue(Object value) {
     final resolved = _typeResolver.resolveValue(value);
     writeTypeMeta(resolved);
     _writeResolvedValue(resolved, value, null);
   }
 
+  /// Writes a nullable value using the standard Fory nullable framing.
   void writeNullable(Object? value) {
     if (value == null) {
       _buffer.writeByte(RefWriter.nullFlag);
@@ -119,6 +153,9 @@ final class WriteContext {
     writeValue(value);
   }
 
+  /// Writes one annotated struct field described by [metadata].
+  ///
+  /// This is primarily for generated and manual struct serializers.
   void writeField(Map<String, Object?> metadata, Object? value) {
     final field = FieldMetadataInternal.fromMetadata(metadata);
     final effectiveField = _effectiveFieldMetadata(field);
@@ -167,6 +204,11 @@ final class WriteContext {
   }
 
   @internal
+
+  /// Returns the field order to use when writing a compatible struct.
+  ///
+  /// Generated struct serializers use this to honor remote field order first
+  /// and then append local-only fields.
   List<Map<String, Object?>>? compatibleFieldOrder(
     List<Map<String, Object?>> localFields,
   ) {
@@ -199,6 +241,10 @@ final class WriteContext {
     return orderedFields.map(_fieldMetadataMap).toList(growable: false);
   }
 
+  /// Writes the wire-level type metadata for [resolved].
+  ///
+  /// This is exposed for generated and low-level integrations that need exact
+  /// control over the emitted wire shape.
   void writeTypeMeta(ResolvedTypeInternal resolved) {
     final wireTypeId = resolved.wireTypeId(config);
     _buffer.writeVarUint32Small7(wireTypeId);
@@ -229,10 +275,13 @@ final class WriteContext {
     }
   }
 
+  /// Writes a package-name meta string using the session-local meta-string
+  /// table.
   void writePackageMetaString(String value) {
     _writeMetaStringEncoded(encodePackageMetaStringInternal(value));
   }
 
+  /// Writes a type-name meta string using the session-local meta-string table.
   void writeTypeNameMetaString(String value) {
     _writeMetaStringEncoded(encodeTypeNameMetaStringInternal(value));
   }
@@ -257,6 +306,7 @@ final class WriteContext {
     _buffer.writeBytes(bytes);
   }
 
+  /// Writes a generic meta string using package-style encoding rules.
   void writeMetaString(String value) {
     _writeMetaStringEncoded(encodePackageMetaStringInternal(value));
   }
@@ -317,6 +367,9 @@ final class WriteContext {
     return buffer.toBytes();
   }
 
+  /// Writes [value] as a stand-alone meta string to [target].
+  ///
+  /// Unlike [writeMetaString], this does not use the session-local dedup table.
   void writeMetaStringTo(Buffer target, String value) {
     final encoded = encodePackageMetaStringInternal(value);
     final bytes = encoded.bytes;

@@ -77,7 +77,7 @@ The Dart package exports only the user-facing API:
 - `WriteContext`
 - `ReadContext`
 - `Serializer`
-- `ForyObject`
+- `ForyStruct`
 - `ForyField`
 - built-in wrapper/value types such as `Int32`, `Float32`, `LocalDate`, and `Timestamp`
 
@@ -197,7 +197,7 @@ When `compatible` is disabled and `checkStructVersion` is enabled:
 
 The normal Dart integration path is:
 
-1. annotate structs with `@ForyObject`
+1. annotate structs with `@ForyStruct`
 2. annotate field overrides with `@ForyField`
 3. run `build_runner`
 4. call the generated registration helper for that library

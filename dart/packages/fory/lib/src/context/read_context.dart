@@ -15,7 +15,13 @@ import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/string_codec.dart';
 import 'package:fory/src/util/hash_util.dart';
 
+/// Read-side runtime state for a single Fory operation.
+///
+/// Generated and manual serializers receive this object from [Serializer.read].
+/// Application code normally interacts with [Fory] instead of preparing
+/// contexts directly.
 final class ReadContext {
+  /// Effective runtime configuration for the active operation.
   final Config config;
   final TypeResolver _typeResolver;
   final RefReader _refReader;
@@ -30,6 +36,9 @@ final class ReadContext {
   @internal
   ReadContext(this.config, this._typeResolver, this._refReader);
 
+  /// Prepares the context to read from [buffer].
+  ///
+  /// This resets all per-operation caches, shared TypeDef state, and Ref state.
   void prepare(Buffer buffer) {
     _buffer = buffer;
     _metaStrings.clear();
@@ -39,8 +48,10 @@ final class ReadContext {
     _depth = 0;
   }
 
+  /// The active input buffer for the current operation.
   Buffer get buffer => _buffer;
 
+  /// Records entry into one more nested read frame.
   void increaseDepth() {
     _depth += 1;
     if (_depth > config.maxDepth) {
@@ -48,44 +59,65 @@ final class ReadContext {
     }
   }
 
+  /// Records exit from a nested read frame.
   void decreaseDepth() {
     _depth -= 1;
   }
 
+  /// Reads a boolean value.
   bool readBool() => _buffer.readBool();
 
+  /// Reads a signed 8-bit integer.
   int readByte() => _buffer.readByte();
 
+  /// Reads an unsigned 8-bit integer.
   int readUint8() => _buffer.readUint8();
 
+  /// Reads a signed little-endian 16-bit integer.
   int readInt16() => _buffer.readInt16();
 
+  /// Reads a signed little-endian 32-bit integer.
   int readInt32() => _buffer.readInt32();
 
+  /// Reads a signed little-endian 64-bit integer.
   int readInt64() => _buffer.readInt64();
 
+  /// Reads a half-precision floating-point value.
   Float16 readFloat16() => _buffer.readFloat16();
 
+  /// Reads a single-precision floating-point value.
   double readFloat32() => _buffer.readFloat32();
 
+  /// Reads a double-precision floating-point value.
   double readFloat64() => _buffer.readFloat64();
 
+  /// Reads a zig-zag encoded signed 32-bit varint.
   int readVarInt32() => _buffer.readVarInt32();
 
+  /// Reads an unsigned 32-bit varint.
   int readVarUint32() => _buffer.readVarUint32();
 
+  /// Reads a zig-zag encoded signed 64-bit varint.
   int readVarInt64() => _buffer.readVarInt64();
 
+  /// Reads a tagged signed 64-bit integer.
   int readTaggedInt64() => _buffer.readTaggedInt64();
 
+  /// Reads an unsigned 64-bit varint.
   int readVarUint64() => _buffer.readVarUint64();
 
+  /// Reads a tagged unsigned 64-bit integer.
   int readTaggedUint64() => _buffer.readTaggedUint64();
 
+  /// Binds [value] to the most recently preserved Ref slot.
+  ///
+  /// Manual serializers call this when they need to publish a newly created
+  /// object before reading its recursive fields.
   void reference(Object? value) {
     _refReader.reference(value);
   }
 
+  /// Reads a value using the type metadata stored in the payload.
   Object? readAny() {
     final flag = _refReader.readRefHeader(_buffer);
     final preservedRefId =
@@ -106,11 +138,13 @@ final class ReadContext {
     return value;
   }
 
+  /// Reads a non-null value using the type metadata stored in the payload.
   Object readValue() {
     final resolved = _readTypeMeta();
     return _readResolvedValue(resolved, null) as Object;
   }
 
+  /// Reads a nullable value using the standard Fory nullable framing.
   Object? readNullable() {
     final flag = _buffer.readByte();
     if (flag == RefWriter.nullFlag) {
@@ -122,6 +156,10 @@ final class ReadContext {
     return readValue();
   }
 
+  /// Reads one annotated struct field described by [metadata].
+  ///
+  /// [fallback] is returned when compatible mode omits the field from the
+  /// incoming payload.
   T readField<T>(Map<String, Object?> metadata, [T? fallback]) {
     final compatibleFields =
         _compatibleFieldStack.isEmpty ? null : _compatibleFieldStack.last;
@@ -174,6 +212,7 @@ final class ReadContext {
     return _readResolvedValue(resolved, shape) as T;
   }
 
+  /// Reads a meta string using package-style decoding rules.
   String readMetaString() =>
       _readMetaStringFrom(_buffer, decoder: decodePackageMetaStringInternal);
 

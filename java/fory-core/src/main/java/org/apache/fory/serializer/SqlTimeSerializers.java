@@ -34,21 +34,36 @@ public final class SqlTimeSerializers {
   private static final String SQL_DATE_CLASS_NAME = "java.sql.Date";
   private static final String SQL_TIME_CLASS_NAME = "java.sql.Time";
   private static final String SQL_TIMESTAMP_CLASS_NAME = "java.sql.Timestamp";
-  private static final String SQL_SERIALIZER_PREFIX =
-      "org.apache.fory.serializer.SqlTimeSerializers$";
-  private static final String SQL_DATE_SERIALIZER_CLASS_NAME =
-      SQL_SERIALIZER_PREFIX + "SqlDateSerializer";
-  private static final String SQL_TIME_SERIALIZER_CLASS_NAME =
-      SQL_SERIALIZER_PREFIX + "SqlTimeSerializer";
-  private static final String SQL_TIMESTAMP_SERIALIZER_CLASS_NAME =
-      SQL_SERIALIZER_PREFIX + "TimestampSerializer";
+  private static final int NUM_RESERVED_TYPE_IDS = 3;
+  private static final boolean SQL_MODULE_AVAILABLE =
+      isClassAvailable(SQL_DATE_CLASS_NAME)
+          && isClassAvailable(SQL_TIME_CLASS_NAME)
+          && isClassAvailable(SQL_TIMESTAMP_CLASS_NAME);
 
   private SqlTimeSerializers() {}
 
+  public static boolean isSqlModuleAvailable() {
+    return SQL_MODULE_AVAILABLE;
+  }
+
+  public static int getNumReservedTypeIds() {
+    return NUM_RESERVED_TYPE_IDS;
+  }
+
   public static void registerDefaultSerializers(ClassResolver resolver) {
-    resolver.registerSerializer(SQL_DATE_CLASS_NAME, SQL_DATE_SERIALIZER_CLASS_NAME);
-    resolver.registerSerializer(SQL_TIME_CLASS_NAME, SQL_TIME_SERIALIZER_CLASS_NAME);
-    resolver.registerSerializer(SQL_TIMESTAMP_CLASS_NAME, SQL_TIMESTAMP_SERIALIZER_CLASS_NAME);
+    Config config = resolver.getConfig();
+    resolver.registerInternalSerializer(java.sql.Date.class, new SqlDateSerializer(config));
+    resolver.registerInternalSerializer(Time.class, new SqlTimeSerializer(config));
+    resolver.registerInternalSerializer(Timestamp.class, new TimestampSerializer(config));
+  }
+
+  private static boolean isClassAvailable(String className) {
+    try {
+      Class.forName(className, false, SqlTimeSerializers.class.getClassLoader());
+      return true;
+    } catch (ClassNotFoundException e) {
+      return false;
+    }
   }
 
   public static final class SqlDateSerializer

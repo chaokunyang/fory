@@ -27,7 +27,6 @@ import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 
 /** Util for JIT Serialization. */
@@ -53,10 +52,6 @@ public final class CodegenSerializer {
   @SuppressWarnings("unchecked")
   public static <T> Class<Serializer<T>> loadCodegenSerializer(Fory fory, Class<T> cls) {
     try {
-      TypeResolver typeResolver = fory.getTypeResolver();
-      if (typeResolver instanceof ClassResolver) {
-        ((ClassResolver) typeResolver).getSerializerClass(cls, false);
-      }
       return (Class<Serializer<T>>) CodecUtils.loadOrGenObjectCodecClass(cls, fory);
     } catch (Exception e) {
       String msg = String.format("Create sequential serializer failed, \nclass: %s", cls);

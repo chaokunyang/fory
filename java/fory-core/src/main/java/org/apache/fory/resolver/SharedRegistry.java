@@ -79,8 +79,6 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
-  final ConcurrentHashMap<String, Tuple2<Integer, String>> registeredSerializerInfosByName =
-      new ConcurrentHashMap<>();
   private final Object metaStringCacheLock = new Object();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
@@ -118,28 +116,6 @@ public final class SharedRegistry {
           String.format(
               "Conflicting shareable serializer registration for %s. Existing=%s, new=%s",
               type.getName(), existing, serializer));
-    }
-    return existing;
-  }
-
-  Tuple2<Integer, String> getRegisteredSerializerInfo(String className) {
-    return registeredSerializerInfosByName.get(className);
-  }
-
-  Tuple2<Integer, String> cacheRegisteredSerializerInfo(
-      String className, int classId, String serializerClassName) {
-    Tuple2<Integer, String> candidate = Tuple2.of(classId, serializerClassName);
-    Tuple2<Integer, String> existing =
-        registeredSerializerInfosByName.putIfAbsent(className, candidate);
-    if (existing == null) {
-      return candidate;
-    }
-    if (!Objects.equals(existing.f0, classId)
-        || !Objects.equals(existing.f1, serializerClassName)) {
-      throw new IllegalArgumentException(
-          String.format(
-              "Conflicting serializer registration for %s. Existing=%s, new=%s",
-              className, existing, candidate));
     }
     return existing;
   }

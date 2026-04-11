@@ -5,13 +5,17 @@ final class RefReader {
   final List<Object?> _refs = <Object?>[];
   final List<int> _preservedIds = <int>[];
   Object? _resolved;
+  int? _resolvedId;
 
   int readRefHeader(Buffer buffer) {
     final flag = buffer.readByte();
     if (flag == RefWriter.refFlag) {
-      _resolved = _refs[buffer.readVarUint32()];
+      final id = buffer.readVarUint32();
+      _resolvedId = id;
+      _resolved = _refs[id];
       return flag;
     }
+    _resolvedId = null;
     if (flag == RefWriter.refValueFlag) {
       preserveRefId();
     } else {
@@ -33,6 +37,8 @@ final class RefReader {
 
   Object? get readRef => _resolved;
 
+  int? get readRefId => _resolvedId;
+
   Object? readRefAt(int id) => _refs[id];
 
   void reference(Object? value) {
@@ -52,5 +58,6 @@ final class RefReader {
     _refs.clear();
     _preservedIds.clear();
     _resolved = null;
+    _resolvedId = null;
   }
 }

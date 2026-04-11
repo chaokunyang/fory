@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
@@ -11,18 +10,20 @@ import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
+import 'package:fory/src/meta/meta_string.dart';
+import 'package:fory/src/string_codec.dart';
 import 'package:fory/src/util/hash_util.dart';
 
 final class WriteContext {
-  static const int _typeDefHasFieldsMeta = 1 << 8;
-
   final Config config;
   final TypeResolver _typeResolver;
   final RefWriter _refWriter;
 
   late Buffer _buffer;
-  final Map<String, int> _metaStringIds = <String, int>{};
+  final Map<_MetaStringKey, int> _metaStringIds = <_MetaStringKey, int>{};
   final Map<String, int> _typeDefIds = <String, int>{};
+  final List<_CompatibleWriteState?> _compatibleWriteStack =
+      <_CompatibleWriteState?>[];
   int _nextMetaStringId = 0;
   int _nextTypeDefId = 0;
   bool _rootTrackRef = false;
@@ -38,6 +39,7 @@ final class WriteContext {
     _nextTypeDefId = 0;
     _metaStringIds.clear();
     _typeDefIds.clear();
+    _compatibleWriteStack.clear();
     _refWriter.reset();
     _depth = 0;
   }
@@ -81,13 +83,18 @@ final class WriteContext {
 
   void writeVarInt64(int value) => _buffer.writeVarInt64(value);
 
+  void writeTaggedInt64(int value) => _buffer.writeTaggedInt64(value);
+
   void writeVarUint64(int value) => _buffer.writeVarUint64(value);
+
+  void writeTaggedUint64(int value) => _buffer.writeTaggedUint64(value);
 
   void writeAny(Object? value, {bool trackRef = false}) {
     final resolved = value == null ? null : _typeResolver.resolveValue(value);
     final effectiveTrackRef =
-        trackRef && value != null && !resolved!.isBasicValue;
-    if (_refWriter.writeRefOrNull(_buffer, value, trackRef: effectiveTrackRef)) {
+        trackRef && value != null && resolved!.supportsRef;
+    if (_refWriter.writeRefOrNull(_buffer, value,
+        trackRef: effectiveTrackRef)) {
       return;
     }
     if (value == null) {
@@ -114,33 +121,82 @@ final class WriteContext {
 
   void writeField(Map<String, Object?> metadata, Object? value) {
     final field = FieldMetadataInternal.fromMetadata(metadata);
-    final shape = field.shape;
+    final effectiveField = _effectiveFieldMetadata(field);
+    final shape = effectiveField.shape;
     if (shape.isDynamic) {
       writeAny(value, trackRef: shape.ref || _rootTrackRef);
       return;
     }
     if (shape.isPrimitive && !shape.nullable) {
       if (value == null) {
-        throw StateError('Field ${field.name} is not nullable.');
+        throw StateError('Field ${effectiveField.name} is not nullable.');
       }
       _writePrimitive(shape.typeId, value);
+      return;
+    }
+    final resolved = _typeResolver.resolveShape(shape);
+    if (!_usesDeclaredTypeInfo(shape, resolved)) {
+      if (shape.ref) {
+        writeAny(value, trackRef: true);
+        return;
+      }
+      if (shape.nullable) {
+        writeNullable(value);
+        return;
+      }
+      if (value == null) {
+        throw StateError('Field ${effectiveField.name} is not nullable.');
+      }
+      writeValue(value);
       return;
     }
     if (shape.nullable || shape.ref) {
       final handled = _refWriter.writeRefOrNull(
         _buffer,
         value,
-        trackRef: shape.ref && !TypeIds.isBasicValue(shape.typeId),
+        trackRef: shape.ref && TypeIds.supportsRef(shape.typeId),
       );
       if (handled) {
         return;
       }
     }
     if (value == null) {
-      throw StateError('Field ${field.name} is not nullable.');
+      throw StateError('Field ${effectiveField.name} is not nullable.');
     }
-    final resolved = _typeResolver.resolveShape(shape);
     _writeResolvedValue(resolved, value, shape);
+  }
+
+  @internal
+  List<Map<String, Object?>>? compatibleFieldOrder(
+    List<Map<String, Object?>> localFields,
+  ) {
+    final state =
+        _compatibleWriteStack.isEmpty ? null : _compatibleWriteStack.last;
+    if (state == null) {
+      return null;
+    }
+    final localByIdentifier = <String, FieldMetadataInternal>{
+      for (final metadata in localFields)
+        metadata['identifier'] as String:
+            FieldMetadataInternal.fromMetadata(metadata),
+    };
+    final orderedFields = <FieldMetadataInternal>[];
+    final usedIdentifiers = <String>{};
+    for (final remoteField in state.orderedFields) {
+      final localField = localByIdentifier[remoteField.identifier];
+      if (localField == null) {
+        continue;
+      }
+      orderedFields.add(_mergeCompatibleWriteField(localField, remoteField));
+      usedIdentifiers.add(remoteField.identifier);
+    }
+    for (final metadata in localFields) {
+      final localField = FieldMetadataInternal.fromMetadata(metadata);
+      if (usedIdentifiers.add(localField.identifier)) {
+        orderedFields.add(localField);
+      }
+    }
+    return orderedFields.map(_fieldMetadataMap).toList(growable: false);
   }
 
   void writeTypeMeta(ResolvedTypeInternal resolved) {
@@ -157,8 +213,12 @@ final class WriteContext {
       case TypeIds.namedStruct:
       case TypeIds.namedExt:
       case TypeIds.namedUnion:
-        writeMetaString(resolved.namespace!);
-        writeMetaString(resolved.typeName!);
+        if (config.compatible) {
+          _writeSharedTypeDef(resolved);
+        } else {
+          writePackageMetaString(resolved.namespace!);
+          writeTypeNameMetaString(resolved.typeName!);
+        }
         return;
       case TypeIds.compatibleStruct:
       case TypeIds.namedCompatibleStruct:
@@ -169,21 +229,36 @@ final class WriteContext {
     }
   }
 
-  void writeMetaString(String value) {
-    final existing = _metaStringIds[value];
+  void writePackageMetaString(String value) {
+    _writeMetaStringEncoded(encodePackageMetaStringInternal(value));
+  }
+
+  void writeTypeNameMetaString(String value) {
+    _writeMetaStringEncoded(encodeTypeNameMetaStringInternal(value));
+  }
+
+  void _writeMetaStringEncoded(EncodedMetaStringInternal encoded) {
+    final key = _MetaStringKey(encoded.encoding, encoded.bytes);
+    final existing = _metaStringIds[key];
     if (existing != null) {
       _buffer.writeVarUint32Small7(((existing + 1) << 1) | 1);
       return;
     }
-    _metaStringIds[value] = _nextMetaStringId++;
-    final bytes = utf8.encode(value);
+    _metaStringIds[key] = _nextMetaStringId++;
+    final bytes = encoded.bytes;
     _buffer.writeVarUint32Small7(bytes.length << 1);
-    if (bytes.isNotEmpty && bytes.length <= 16) {
-      _buffer.writeByte(0);
-    } else if (bytes.length > 16) {
-      _buffer.writeInt64(stableHash64Internal(bytes));
+    if (bytes.isNotEmpty && bytes.length <= metaStringSmallThreshold) {
+      _buffer.writeByte(encoded.encoding);
+    } else if (bytes.length > metaStringSmallThreshold) {
+      _buffer.writeInt64(
+        metaStringHashInternal(bytes, encoding: encoded.encoding),
+      );
     }
     _buffer.writeBytes(bytes);
+  }
+
+  void writeMetaString(String value) {
+    _writeMetaStringEncoded(encodePackageMetaStringInternal(value));
   }
 
   void _writeSharedTypeDef(ResolvedTypeInternal resolved) {
@@ -204,28 +279,37 @@ final class WriteContext {
 
   Uint8List _encodeTypeDef(ResolvedTypeInternal resolved) {
     final metaBuffer = Buffer();
-    final fields = resolved.structMetadata!.fields;
-    var metaHeader = fields.length & 0x1f;
-    if (resolved.isNamed) {
-      metaHeader |= 1 << 5;
+    final fields = (_compatibleTypeDefFields(resolved) ??
+            resolved.structMetadata?.fields) ??
+        const <FieldMetadataInternal>[];
+    var classHeader = fields.length;
+    metaBuffer.writeByte(0xff);
+    if (fields.length >= typeDefSmallFieldCountThreshold) {
+      classHeader = typeDefSmallFieldCountThreshold;
+      metaBuffer.writeVarUint32Small7(
+          fields.length - typeDefSmallFieldCountThreshold);
     }
-    metaBuffer.writeByte(metaHeader);
     if (resolved.isNamed) {
-      writeMetaStringTo(metaBuffer, resolved.namespace!);
-      writeMetaStringTo(metaBuffer, resolved.typeName!);
-    } else {
+      classHeader |= typeDefRegisterByNameFlag;
+      _writePackageNameTo(metaBuffer, resolved.namespace!);
+      _writeTypeNameTo(metaBuffer, resolved.typeName!);
+    }
+    if (!resolved.isNamed) {
+      metaBuffer.writeUint8(_typeDefTypeId(resolved));
       metaBuffer.writeVarUint32(resolved.userTypeId!);
     }
+    metaBuffer.toBytes()[0] = classHeader;
     for (final field in fields) {
       _writeTypeDefField(metaBuffer, field);
     }
     final body = metaBuffer.toBytes();
-    final headerValue =
-        (body.length & 0xff) |
-        _typeDefHasFieldsMeta |
-        (stableHash64Internal(body) << 14);
     final buffer = Buffer();
-    buffer.writeUint64(headerValue);
+    buffer.writeInt64(
+      typeDefHeaderInternal(
+        body,
+        hasFieldsMeta: fields.isNotEmpty,
+      ),
+    );
     if (body.length >= 0xff) {
       buffer.writeVarUint32(body.length - 0xff);
     }
@@ -234,12 +318,15 @@ final class WriteContext {
   }
 
   void writeMetaStringTo(Buffer target, String value) {
-    final bytes = utf8.encode(value);
+    final encoded = encodePackageMetaStringInternal(value);
+    final bytes = encoded.bytes;
     target.writeVarUint32Small7(bytes.length << 1);
-    if (bytes.isNotEmpty && bytes.length <= 16) {
-      target.writeByte(0);
-    } else if (bytes.length > 16) {
-      target.writeInt64(stableHash64Internal(bytes));
+    if (bytes.isNotEmpty && bytes.length <= metaStringSmallThreshold) {
+      target.writeByte(encoded.encoding);
+    } else if (bytes.length > metaStringSmallThreshold) {
+      target.writeInt64(
+        metaStringHashInternal(bytes, encoding: encoded.encoding),
+      );
     }
     target.writeBytes(bytes);
   }
@@ -247,38 +334,167 @@ final class WriteContext {
   void _writeTypeDefField(Buffer target, FieldMetadataInternal field) {
     final shape = field.shape;
     final usesTag = field.id != null;
-    var size = usesTag ? field.id! : utf8.encode(field.identifier).length - 1;
+    final encodedName =
+        usesTag ? null : encodeFieldNameMetaStringInternal(field.identifier);
+    var size = usesTag ? field.id! : encodedName!.bytes.length - 1;
     var header = shape.ref ? 1 : 0;
     if (shape.nullable) {
       header |= 1 << 1;
     }
-    header |= ((size > 15 ? 15 : size) << 2);
-    header |= ((usesTag ? 3 : 0) << 6);
+    header |= ((size >= typeDefBigFieldNameThreshold
+            ? typeDefBigFieldNameThreshold
+            : size) <<
+        2);
+    header |= ((usesTag
+            ? 3
+            : fieldNameCompactEncodingInternal(encodedName!.encoding)) <<
+        6);
     target.writeByte(header);
-    if (size > 15) {
-      target.writeVarUint32(size - 15);
+    if (size >= typeDefBigFieldNameThreshold) {
+      target.writeVarUint32Small7(size - typeDefBigFieldNameThreshold);
     }
-    target.writeVarUint32(shape.typeId);
-    if (shape.typeId == TypeIds.list || shape.typeId == TypeIds.set) {
-      _writeNestedFieldType(target, shape.arguments.single);
-    } else if (shape.typeId == TypeIds.map) {
-      _writeNestedFieldType(target, shape.arguments[0]);
-      _writeNestedFieldType(target, shape.arguments[1]);
-    }
+    _writeTypeDefShape(target, shape, writeFlags: false);
     if (!usesTag) {
-      writeMetaStringTo(target, field.identifier);
+      target.writeBytes(encodedName!.bytes);
     }
   }
 
-  void _writeNestedFieldType(Buffer target, TypeShapeInternal shape) {
-    var encoded = shape.typeId << 2;
-    if (shape.nullable) {
-      encoded |= 1 << 1;
+  int _typeDefTypeId(ResolvedTypeInternal resolved) {
+    switch (resolved.kind) {
+      case RegistrationKindInternal.struct:
+        return TypeIds.struct;
+      case RegistrationKindInternal.enumType:
+        return TypeIds.enumById;
+      case RegistrationKindInternal.ext:
+        return TypeIds.ext;
+      case RegistrationKindInternal.union:
+        return TypeIds.typedUnion;
+      case RegistrationKindInternal.builtin:
+        return resolved.typeId;
     }
-    if (shape.ref) {
-      encoded |= 1;
+  }
+
+  void _writePackageNameTo(Buffer target, String value) {
+    final encoded = encodePackageMetaStringInternal(value);
+    _writeTypeDefName(
+      target,
+      encoded.bytes,
+      encoding: packageNameCompactEncodingInternal(encoded.encoding),
+    );
+  }
+
+  void _writeTypeNameTo(Buffer target, String value) {
+    final encoded = encodeTypeNameMetaStringInternal(value);
+    _writeTypeDefName(
+      target,
+      encoded.bytes,
+      encoding: typeNameCompactEncodingInternal(encoded.encoding),
+    );
+  }
+
+  void _writeTypeDefName(
+    Buffer target,
+    List<int> bytes, {
+    required int encoding,
+  }) {
+    if (bytes.length >= typeDefBigNameThreshold) {
+      target.writeByte((typeDefBigNameThreshold << 2) | encoding);
+      target.writeVarUint32Small7(bytes.length - typeDefBigNameThreshold);
+    } else {
+      target.writeByte((bytes.length << 2) | encoding);
     }
-    target.writeVarUint32(encoded);
+    target.writeBytes(bytes);
+  }
+
+  void _writeTypeDefShape(
+    Buffer target,
+    TypeShapeInternal shape, {
+    required bool writeFlags,
+  }) {
+    final typeId = _typeDefFieldTypeId(shape);
+    if (writeFlags) {
+      var encoded = typeId << 2;
+      if (shape.nullable) {
+        encoded |= 1 << 1;
+      }
+      if (shape.ref) {
+        encoded |= 1;
+      }
+      target.writeVarUint32Small7(encoded);
+    } else {
+      target.writeUint8(typeId);
+    }
+    if (typeId == TypeIds.list || typeId == TypeIds.set) {
+      _writeTypeDefShape(target, shape.arguments.single, writeFlags: true);
+    } else if (typeId == TypeIds.map) {
+      _writeTypeDefShape(target, shape.arguments[0], writeFlags: true);
+      _writeTypeDefShape(target, shape.arguments[1], writeFlags: true);
+    }
+  }
+
+  bool _usesDeclaredTypeInfo(
+    TypeShapeInternal shape,
+    ResolvedTypeInternal resolved,
+  ) {
+    if (shape.isDynamic) {
+      return false;
+    }
+    if (!config.compatible) {
+      return true;
+    }
+    switch (resolved.kind) {
+      case RegistrationKindInternal.builtin:
+      case RegistrationKindInternal.enumType:
+      case RegistrationKindInternal.union:
+        return true;
+      case RegistrationKindInternal.struct:
+      case RegistrationKindInternal.ext:
+        return false;
+    }
+  }
+
+  int _typeDefFieldTypeId(TypeShapeInternal shape) {
+    if (TypeIds.isPrimitive(shape.typeId) ||
+        TypeIds.isContainer(shape.typeId) ||
+        shape.typeId == TypeIds.unknown ||
+        shape.typeId == TypeIds.string ||
+        shape.typeId == TypeIds.binary ||
+        shape.typeId == TypeIds.date ||
+        shape.typeId == TypeIds.timestamp ||
+        shape.typeId == TypeIds.boolArray ||
+        shape.typeId == TypeIds.int8Array ||
+        shape.typeId == TypeIds.int16Array ||
+        shape.typeId == TypeIds.int32Array ||
+        shape.typeId == TypeIds.int64Array ||
+        shape.typeId == TypeIds.uint8Array ||
+        shape.typeId == TypeIds.uint16Array ||
+        shape.typeId == TypeIds.uint32Array ||
+        shape.typeId == TypeIds.uint64Array ||
+        shape.typeId == TypeIds.float16Array ||
+        shape.typeId == TypeIds.float32Array ||
+        shape.typeId == TypeIds.float64Array ||
+        shape.typeId == TypeIds.enumById ||
+        shape.typeId == TypeIds.union) {
+      return shape.typeId;
+    }
+    final resolved = _typeResolver.resolveShape(shape);
+    switch (resolved.kind) {
+      case RegistrationKindInternal.builtin:
+        return resolved.typeId;
+      case RegistrationKindInternal.enumType:
+        return TypeIds.enumById;
+      case RegistrationKindInternal.union:
+        return TypeIds.union;
+      case RegistrationKindInternal.ext:
+        return resolved.isNamed ? TypeIds.namedExt : TypeIds.ext;
+      case RegistrationKindInternal.struct:
+        if (config.compatible && resolved.structMetadata!.evolving) {
+          return resolved.isNamed
+              ? TypeIds.namedCompatibleStruct
+              : TypeIds.compatibleStruct;
+        }
+        return resolved.isNamed ? TypeIds.namedStruct : TypeIds.struct;
+    }
   }
 
   void _writeResolvedValue(
@@ -291,24 +507,30 @@ final class WriteContext {
       case TypeIds.int8:
       case TypeIds.int16:
       case TypeIds.int32:
+      case TypeIds.varInt32:
+      case TypeIds.varInt64:
+      case TypeIds.taggedInt64:
       case TypeIds.int64:
       case TypeIds.uint8:
       case TypeIds.uint16:
       case TypeIds.uint32:
+      case TypeIds.varUint32:
+      case TypeIds.uint64:
+      case TypeIds.varUint64:
+      case TypeIds.taggedUint64:
       case TypeIds.float16:
       case TypeIds.float32:
       case TypeIds.float64:
         _writePrimitive(resolved.typeId, value);
         return;
       case TypeIds.string:
-        final bytes = utf8.encode(value as String);
-        _buffer.writeVarUint36Small((bytes.length << 2));
-        _buffer.writeBytes(bytes);
+        _writeStringPayload(value as String);
         return;
       case TypeIds.binary:
         final bytes = value as Uint8List;
         if (bytes.length > config.maxBinarySize) {
-          throw StateError('Binary payload exceeds ${config.maxBinarySize} bytes.');
+          throw StateError(
+              'Binary payload exceeds ${config.maxBinarySize} bytes.');
         }
         _buffer.writeVarUint32(bytes.length);
         _buffer.writeBytes(bytes);
@@ -339,6 +561,9 @@ final class WriteContext {
         return;
       case TypeIds.uint32Array:
         _writeFixedArray(value as Uint32List, 4);
+        return;
+      case TypeIds.uint64Array:
+        _writeFixedArray(value as Uint64List, 8);
         return;
       case TypeIds.float32Array:
         _writeFixedArray(value as Float32List, 4);
@@ -381,7 +606,7 @@ final class WriteContext {
         if (serializer == null) {
           throw StateError('No serializer available for ${resolved.type}.');
         }
-        if (!resolved.isBasicValue) {
+        if (resolved.supportsRef) {
           _refWriter.reference(value);
         }
         if (resolved.kind == RegistrationKindInternal.struct &&
@@ -390,7 +615,17 @@ final class WriteContext {
             resolved.structMetadata != null) {
           _buffer.writeUint32(schemaHashInternal(resolved.structMetadata!));
         }
-        serializer.write(this, value);
+        final compatibleFields = _compatibleWriteMetadata(resolved);
+        _compatibleWriteStack.add(
+          compatibleFields == null
+              ? null
+              : _CompatibleWriteState.fromFields(compatibleFields.fields),
+        );
+        try {
+          serializer.write(this, value);
+        } finally {
+          _compatibleWriteStack.removeLast();
+        }
     }
   }
 
@@ -408,17 +643,38 @@ final class WriteContext {
       case TypeIds.int32:
         _buffer.writeInt32((value as Int32).value);
         return;
+      case TypeIds.varInt32:
+        _buffer.writeVarInt32(value is Int32 ? value.value : value as int);
+        return;
       case TypeIds.int64:
         _buffer.writeInt64(value as int);
         return;
+      case TypeIds.varInt64:
+        _buffer.writeVarInt64(value as int);
+        return;
+      case TypeIds.taggedInt64:
+        _buffer.writeTaggedInt64(value as int);
+        return;
       case TypeIds.uint8:
-        _buffer.writeUint8((value as UInt8).value);
+        _buffer.writeUint8(value is UInt8 ? value.value : value as int);
         return;
       case TypeIds.uint16:
-        _buffer.writeUint16((value as UInt16).value);
+        _buffer.writeUint16(value is UInt16 ? value.value : value as int);
         return;
       case TypeIds.uint32:
-        _buffer.writeUint32((value as UInt32).value);
+        _buffer.writeUint32(value is UInt32 ? value.value : value as int);
+        return;
+      case TypeIds.varUint32:
+        _buffer.writeVarUint32(value is UInt32 ? value.value : value as int);
+        return;
+      case TypeIds.uint64:
+        _buffer.writeUint64(value as int);
+        return;
+      case TypeIds.varUint64:
+        _buffer.writeVarUint64(value as int);
+        return;
+      case TypeIds.taggedUint64:
+        _buffer.writeTaggedUint64(value as int);
         return;
       case TypeIds.float16:
         _buffer.writeFloat16(value as Float16);
@@ -434,8 +690,14 @@ final class WriteContext {
     }
   }
 
+  void _writeStringPayload(String value) {
+    final encoded = encodeStringInternal(value);
+    _buffer.writeVarUint36Small((encoded.bytes.length << 2) | encoded.encoding);
+    _buffer.writeBytes(encoded.bytes);
+  }
+
   void _writeFixedArray(TypedData values, int elementSize) {
-    _buffer.writeVarUint32(values.lengthInBytes ~/ elementSize);
+    _buffer.writeVarUint32(values.lengthInBytes);
     _buffer.writeBytes(
       values.buffer.asUint8List(values.offsetInBytes, values.lengthInBytes),
     );
@@ -452,22 +714,28 @@ final class WriteContext {
       );
     }
     _buffer.writeVarUint32(values.length);
+    if (values.isEmpty) {
+      return;
+    }
     final hasNull = values.any((value) => value == null);
     final declaredType = elementShape != null &&
         !elementShape.isDynamic &&
         elementShape.typeId != TypeIds.unknown;
-    final nonNull = values.where((value) => value != null).toList(growable: false);
+    final nonNull =
+        values.where((value) => value != null).toList(growable: false);
     final sameResolved = nonNull.isEmpty
         ? null
         : _typeResolver.resolveValue(nonNull.first as Object);
     final sameType = sameResolved == null
         ? true
         : nonNull.every(
-            (value) =>
-                _typeResolver.resolveValue(value as Object).wireTypeId(config) ==
-                sameResolved.wireTypeId(config),
+            (value) => _sameResolvedType(
+              _typeResolver.resolveValue(value as Object),
+              sameResolved,
+            ),
           );
-    final elementTrackRef = (elementShape?.ref ?? false) || (elementShape == null && trackRef);
+    final elementTrackRef =
+        (elementShape?.ref ?? false) || (elementShape == null && trackRef);
     var header = 0;
     if (elementTrackRef) {
       header |= 0x01;
@@ -487,31 +755,31 @@ final class WriteContext {
     }
     for (final value in values) {
       if (declaredType) {
-        if (elementTrackRef || hasNull || elementShape.nullable) {
+        Map<String, Object?> shapeMetadata(
+          TypeShapeInternal value, {
+          required bool isRoot,
+        }) {
+          return <String, Object?>{
+            'type': value.type,
+            'typeId': value.typeId,
+            'nullable': isRoot ? hasNull : value.nullable,
+            'ref': isRoot ? elementTrackRef : value.ref,
+            'dynamic': value.dynamic,
+            'arguments': value.arguments
+                .map(
+                  (argument) => shapeMetadata(argument, isRoot: false),
+                )
+                .toList(growable: false),
+          };
+        }
+
+        if (elementTrackRef || hasNull) {
           writeField(
             <String, Object?>{
               'name': 'item',
               'identifier': 'item',
               'id': null,
-              'shape': <String, Object?>{
-                'type': elementShape.type,
-                'typeId': elementShape.typeId,
-                'nullable': elementShape.nullable || hasNull,
-                'ref': elementTrackRef,
-                'dynamic': elementShape.dynamic,
-                'arguments': elementShape.arguments
-                    .map(
-                      (argument) => <String, Object?>{
-                        'type': argument.type,
-                        'typeId': argument.typeId,
-                        'nullable': argument.nullable,
-                        'ref': argument.ref,
-                        'dynamic': argument.dynamic,
-                        'arguments': const <Object?>[],
-                      },
-                    )
-                    .toList(growable: false),
-              },
+              'shape': shapeMetadata(elementShape, isRoot: true),
             },
             value,
           );
@@ -528,7 +796,7 @@ final class WriteContext {
           final handled = _refWriter.writeRefOrNull(
             _buffer,
             value,
-            trackRef: !sameResolved.isBasicValue,
+            trackRef: sameResolved.supportsRef,
           );
           if (!handled) {
             _writeResolvedValue(sameResolved, value as Object, null);
@@ -558,90 +826,366 @@ final class WriteContext {
     required bool trackRef,
   }) {
     if (values.length > config.maxCollectionSize) {
-      throw StateError('Map size ${values.length} exceeds ${config.maxCollectionSize}.');
+      throw StateError(
+          'Map size ${values.length} exceeds ${config.maxCollectionSize}.');
     }
     _buffer.writeVarUint32(values.length);
-    final keyTrackRef = (keyShape?.ref ?? false) || (keyShape == null && trackRef);
-    final valueTrackRef = (valueShape?.ref ?? false) || (valueShape == null && trackRef);
     for (final entry in values.entries) {
+      final key = entry.key;
+      final value = entry.value;
+      final keyDeclared = keyShape != null && !keyShape.isDynamic;
+      final valueDeclared = valueShape != null && !valueShape.isDynamic;
+      final keyRequestedRef =
+          (keyShape?.ref ?? false) || (keyShape == null && trackRef);
+      final valueRequestedRef =
+          (valueShape?.ref ?? false) || (valueShape == null && trackRef);
+      final keyTrackRef = keyRequestedRef &&
+          (keyDeclared
+              ? TypeIds.supportsRef(keyShape.typeId)
+              : (key == null ||
+                  _typeResolver.resolveValue(key as Object).supportsRef));
+      final valueTrackRef = valueRequestedRef &&
+          (valueDeclared
+              ? TypeIds.supportsRef(valueShape.typeId)
+              : (value == null ||
+                  _typeResolver.resolveValue(value as Object).supportsRef));
+      if (key == null || value == null) {
+        _writeNullMapChunk(
+          key,
+          value,
+          keyShape,
+          valueShape,
+          keyDeclared: keyDeclared,
+          valueDeclared: valueDeclared,
+          keyTrackRef: keyTrackRef,
+          valueTrackRef: valueTrackRef,
+        );
+        continue;
+      }
       var header = 0;
-      final keyHasNull = entry.key == null;
-      final valueHasNull = entry.value == null;
       if (keyTrackRef) {
         header |= 0x01;
       }
-      if (keyHasNull) {
-        header |= 0x02;
-      }
-      if (keyShape != null && !keyShape.isDynamic) {
+      if (keyDeclared) {
         header |= 0x04;
       }
       if (valueTrackRef) {
         header |= 0x08;
       }
-      if (valueHasNull) {
-        header |= 0x10;
-      }
-      if (valueShape != null && !valueShape.isDynamic) {
+      if (valueDeclared) {
         header |= 0x20;
       }
       _buffer.writeUint8(header);
-      if (!keyHasNull && !valueHasNull) {
-        _buffer.writeUint8(1);
+      _buffer.writeUint8(1);
+      ResolvedTypeInternal? keyResolved;
+      if (!keyDeclared) {
+        keyResolved = _typeResolver.resolveValue(key as Object);
+        writeTypeMeta(keyResolved);
       }
-      _writeMapEntryValue(entry.key, keyShape, keyTrackRef, keyHasNull);
-      _writeMapEntryValue(entry.value, valueShape, valueTrackRef, valueHasNull);
+      ResolvedTypeInternal? valueResolved;
+      if (!valueDeclared) {
+        valueResolved = _typeResolver.resolveValue(value as Object);
+        writeTypeMeta(valueResolved);
+      }
+      if (keyDeclared) {
+        writeField(
+            _mapFieldMetadataForWrite(keyShape, trackRef: keyTrackRef), key);
+      } else {
+        _writeResolvedMapValue(key, keyResolved!, trackRef: keyTrackRef);
+      }
+      if (valueDeclared) {
+        writeField(
+          _mapFieldMetadataForWrite(valueShape, trackRef: valueTrackRef),
+          value,
+        );
+      } else {
+        _writeResolvedMapValue(value, valueResolved!, trackRef: valueTrackRef);
+      }
     }
   }
 
-  void _writeMapEntryValue(
+  void _writeNullMapChunk(
+    Object? key,
     Object? value,
-    TypeShapeInternal? shape,
-    bool trackRef,
-    bool hasNull,
-  ) {
-    if (shape != null && !shape.isDynamic) {
-      writeField(
-        <String, Object?>{
-          'name': 'entry',
-          'identifier': 'entry',
-          'id': null,
-          'shape': <String, Object?>{
-            'type': shape.type,
-            'typeId': shape.typeId,
-            'nullable': hasNull || shape.nullable,
-            'ref': trackRef,
-            'dynamic': shape.dynamic,
-            'arguments': shape.arguments
-                .map(
-                  (argument) => <String, Object?>{
-                    'type': argument.type,
-                    'typeId': argument.typeId,
-                    'nullable': argument.nullable,
-                    'ref': argument.ref,
-                    'dynamic': argument.dynamic,
-                    'arguments': const <Object?>[],
-                  },
-                )
-                .toList(growable: false),
-          },
-        },
-        value,
-      );
-      return;
+    TypeShapeInternal? keyShape,
+    TypeShapeInternal? valueShape, {
+    required bool keyDeclared,
+    required bool valueDeclared,
+    required bool keyTrackRef,
+    required bool valueTrackRef,
+  }) {
+    var header = 0;
+    if (key == null) {
+      header |= 0x02;
+    } else if (keyDeclared) {
+      header |= 0x04;
     }
-    if (trackRef) {
-      writeAny(value, trackRef: true);
-    } else if (hasNull) {
-      writeNullable(value);
-    } else {
-      writeValue(value as Object);
+    if (keyTrackRef) {
+      header |= 0x01;
+    }
+    if (value == null) {
+      header |= 0x10;
+    } else if (valueDeclared) {
+      header |= 0x20;
+    }
+    if (valueTrackRef) {
+      header |= 0x08;
+    }
+    _buffer.writeUint8(header);
+    if (key != null) {
+      if (keyDeclared) {
+        final declaredKeyShape = keyShape!;
+        writeField(
+          _mapFieldMetadataForWrite(declaredKeyShape, trackRef: keyTrackRef),
+          key,
+        );
+      } else if (keyTrackRef) {
+        writeAny(key, trackRef: true);
+      } else {
+        writeValue(key);
+      }
+    }
+    if (value != null) {
+      if (valueDeclared) {
+        final declaredValueShape = valueShape!;
+        writeField(
+          _mapFieldMetadataForWrite(
+            declaredValueShape,
+            trackRef: valueTrackRef,
+          ),
+          value,
+        );
+      } else if (valueTrackRef) {
+        writeAny(value, trackRef: true);
+      } else {
+        writeValue(value);
+      }
     }
   }
+
+  void _writeResolvedMapValue(
+    Object value,
+    ResolvedTypeInternal resolved, {
+    required bool trackRef,
+  }) {
+    if (trackRef) {
+      final handled = _refWriter.writeRefOrNull(
+        _buffer,
+        value,
+        trackRef: resolved.supportsRef,
+      );
+      if (handled) {
+        return;
+      }
+    }
+    _writeResolvedValue(resolved, value, null);
+  }
+
+  bool _sameResolvedType(
+    ResolvedTypeInternal left,
+    ResolvedTypeInternal right,
+  ) {
+    if (left.kind != right.kind || left.typeId != right.typeId) {
+      return false;
+    }
+    if (left.userTypeId != null || right.userTypeId != null) {
+      return left.userTypeId == right.userTypeId;
+    }
+    if (left.namespace != null || right.namespace != null) {
+      return left.namespace == right.namespace &&
+          left.typeName == right.typeName;
+    }
+    return true;
+  }
+
+  StructMetadataInternal? _compatibleWriteMetadata(
+      ResolvedTypeInternal resolved) {
+    if (!config.compatible ||
+        resolved.kind != RegistrationKindInternal.struct ||
+        resolved.structMetadata == null ||
+        !resolved.structMetadata!.evolving) {
+      return null;
+    }
+    return _typeResolver.remoteStructMetadataFor(resolved);
+  }
+
+  List<FieldMetadataInternal>? _compatibleTypeDefFields(
+    ResolvedTypeInternal resolved,
+  ) {
+    final remoteMetadata = _compatibleWriteMetadata(resolved);
+    final localFields = resolved.structMetadata?.fields;
+    if (remoteMetadata == null || localFields == null) {
+      return null;
+    }
+    final localByIdentifier = <String, FieldMetadataInternal>{
+      for (final field in localFields) field.identifier: field,
+    };
+    final orderedFields = <FieldMetadataInternal>[];
+    final usedIdentifiers = <String>{};
+    for (final remoteField in remoteMetadata.fields) {
+      final localField = localByIdentifier[remoteField.identifier];
+      if (localField == null) {
+        continue;
+      }
+      orderedFields.add(_mergeCompatibleWriteField(localField, remoteField));
+      usedIdentifiers.add(remoteField.identifier);
+    }
+    for (final localField in localFields) {
+      if (usedIdentifiers.add(localField.identifier)) {
+        orderedFields.add(localField);
+      }
+    }
+    return orderedFields;
+  }
+
+  FieldMetadataInternal _effectiveFieldMetadata(FieldMetadataInternal field) {
+    final state =
+        _compatibleWriteStack.isEmpty ? null : _compatibleWriteStack.last;
+    final remoteField = state?.byIdentifier[field.identifier];
+    if (remoteField == null) {
+      return field;
+    }
+    return _mergeCompatibleWriteField(field, remoteField);
+  }
+
+  Map<String, Object?> _mapFieldMetadataForWrite(
+    TypeShapeInternal shape, {
+    required bool trackRef,
+  }) {
+    Map<String, Object?> shapeMetadata(
+      TypeShapeInternal value, {
+      required bool isRoot,
+    }) {
+      return <String, Object?>{
+        'type': value.type,
+        'typeId': value.typeId,
+        'nullable': isRoot ? false : value.nullable,
+        'ref': isRoot ? trackRef : value.ref,
+        'dynamic': value.dynamic,
+        'arguments': value.arguments
+            .map(
+              (argument) => shapeMetadata(argument, isRoot: false),
+            )
+            .toList(growable: false),
+      };
+    }
+
+    return <String, Object?>{
+      'name': 'entry',
+      'identifier': 'entry',
+      'id': null,
+      'shape': shapeMetadata(shape, isRoot: true),
+    };
+  }
+}
+
+FieldMetadataInternal _mergeCompatibleWriteField(
+  FieldMetadataInternal localField,
+  FieldMetadataInternal remoteField,
+) {
+  TypeShapeInternal mergeShape(
+    TypeShapeInternal local,
+    TypeShapeInternal remote,
+  ) {
+    final mergedArguments = <TypeShapeInternal>[];
+    final argumentCount = remote.arguments.length;
+    for (var index = 0; index < argumentCount; index += 1) {
+      final remoteArgument = remote.arguments[index];
+      final localArgument = index < local.arguments.length
+          ? local.arguments[index]
+          : remoteArgument;
+      mergedArguments.add(mergeShape(localArgument, remoteArgument));
+    }
+    return TypeShapeInternal(
+      type: local.type,
+      typeId: remote.typeId,
+      nullable: remote.nullable,
+      ref: remote.ref,
+      dynamic: local.dynamic ?? remote.dynamic,
+      arguments: mergedArguments,
+    );
+  }
+
+  return FieldMetadataInternal(
+    name: localField.name,
+    identifier: localField.identifier,
+    id: localField.id,
+    shape: mergeShape(localField.shape, remoteField.shape),
+  );
 }
 
 TypeShapeInternal? _firstOrNull(List<TypeShapeInternal>? values) =>
     values == null || values.isEmpty ? null : values.first;
 
-TypeShapeInternal? _elementAtOrNull(List<TypeShapeInternal>? values, int index) =>
+TypeShapeInternal? _elementAtOrNull(
+        List<TypeShapeInternal>? values, int index) =>
     values == null || values.length <= index ? null : values[index];
+
+final class _CompatibleWriteState {
+  final List<FieldMetadataInternal> orderedFields;
+  final Map<String, FieldMetadataInternal> byIdentifier;
+
+  _CompatibleWriteState._(this.orderedFields, this.byIdentifier);
+
+  factory _CompatibleWriteState.fromFields(List<FieldMetadataInternal> fields) {
+    return _CompatibleWriteState._(
+      fields,
+      <String, FieldMetadataInternal>{
+        for (final field in fields) field.identifier: field,
+      },
+    );
+  }
+}
+
+Map<String, Object?> _fieldMetadataMap(FieldMetadataInternal field) =>
+    <String, Object?>{
+      'name': field.name,
+      'identifier': field.identifier,
+      'id': field.id,
+      'shape': _shapeMetadata(field.shape),
+    };
+
+Map<String, Object?> _shapeMetadata(TypeShapeInternal shape) =>
+    <String, Object?>{
+      'type': shape.type,
+      'typeId': shape.typeId,
+      'nullable': shape.nullable,
+      'ref': shape.ref,
+      'dynamic': shape.dynamic,
+      'arguments': shape.arguments.map(_shapeMetadata).toList(growable: false),
+    };
+
+final class _MetaStringKey {
+  final int encoding;
+  final Uint8List bytes;
+
+  const _MetaStringKey(this.encoding, this.bytes);
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is _MetaStringKey &&
+        encoding == other.encoding &&
+        _bytesEqual(bytes, other.bytes);
+  }
+
+  @override
+  int get hashCode => Object.hash(encoding, Object.hashAll(bytes));
+}
+
+bool _bytesEqual(Uint8List left, Uint8List right) {
+  if (identical(left, right)) {
+    return true;
+  }
+  if (left.length != right.length) {
+    return false;
+  }
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) {
+      return false;
+    }
+  }
+  return true;
+}

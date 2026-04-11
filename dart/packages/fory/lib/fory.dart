@@ -2,6 +2,7 @@ library;
 
 export 'src/annotation/fory_field.dart';
 export 'src/annotation/fory_object.dart';
+export 'src/annotation/numeric_types.dart';
 export 'src/buffer.dart';
 export 'src/config.dart';
 export 'src/context/read_context.dart';

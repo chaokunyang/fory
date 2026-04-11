@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
@@ -12,6 +11,8 @@ import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
+import 'package:fory/src/meta/meta_string.dart';
+import 'package:fory/src/string_codec.dart';
 import 'package:fory/src/util/hash_util.dart';
 
 final class ReadContext {
@@ -20,9 +21,10 @@ final class ReadContext {
   final RefReader _refReader;
 
   late Buffer _buffer;
-  final List<String> _metaStrings = <String>[];
+  final List<_MetaStringEntry> _metaStrings = <_MetaStringEntry>[];
   final List<ResolvedTypeInternal> _sharedTypes = <ResolvedTypeInternal>[];
-  final List<Map<String, Object?>> _compatibleFieldStack = <Map<String, Object?>>[];
+  final List<Map<String, Object?>> _compatibleFieldStack =
+      <Map<String, Object?>>[];
   int _depth = 0;
 
   @internal
@@ -74,7 +76,11 @@ final class ReadContext {
 
   int readVarInt64() => _buffer.readVarInt64();
 
+  int readTaggedInt64() => _buffer.readTaggedInt64();
+
   int readVarUint64() => _buffer.readVarUint64();
+
+  int readTaggedUint64() => _buffer.readTaggedUint64();
 
   void reference(Object? value) {
     _refReader.reference(value);
@@ -82,9 +88,8 @@ final class ReadContext {
 
   Object? readAny() {
     final flag = _refReader.readRefHeader(_buffer);
-    final preservedRefId = flag == RefWriter.refValueFlag
-        ? _refReader.lastPreservedRefId
-        : null;
+    final preservedRefId =
+        flag == RefWriter.refValueFlag ? _refReader.lastPreservedRefId : null;
     if (flag == RefWriter.nullFlag) {
       return null;
     }
@@ -94,7 +99,7 @@ final class ReadContext {
     final resolved = _readTypeMeta();
     final value = _readResolvedValue(resolved, null);
     if (preservedRefId != null &&
-        !resolved.isBasicValue &&
+        resolved.supportsRef &&
         _refReader.readRefAt(preservedRefId) == null) {
       _refReader.setReadRef(preservedRefId, value);
     }
@@ -125,7 +130,11 @@ final class ReadContext {
       if (!compatibleFields.containsKey(field.identifier)) {
         return fallback as T;
       }
-      return compatibleFields[field.identifier] as T;
+      final value = compatibleFields[field.identifier];
+      if (value is _DeferredReadRef) {
+        return _refReader.readRefAt(value.id) as T;
+      }
+      return value as T;
     }
     final shape = field.shape;
     if (shape.isDynamic) {
@@ -134,45 +143,39 @@ final class ReadContext {
     if (shape.isPrimitive && !shape.nullable) {
       return _readPrimitive(shape.typeId) as T;
     }
+    final resolved = _typeResolver.resolveShape(shape);
+    if (!_usesDeclaredTypeInfo(shape, resolved)) {
+      if (shape.ref) {
+        return readAny() as T;
+      }
+      if (shape.nullable) {
+        return readNullable() as T;
+      }
+      return readValue() as T;
+    }
     if (shape.nullable || shape.ref) {
       final flag = _refReader.readRefHeader(_buffer);
-      final preservedRefId = flag == RefWriter.refValueFlag
-          ? _refReader.lastPreservedRefId
-          : null;
+      final preservedRefId =
+          flag == RefWriter.refValueFlag ? _refReader.lastPreservedRefId : null;
       if (flag == RefWriter.nullFlag) {
         return fallback as T;
       }
       if (flag == RefWriter.refFlag) {
         return _refReader.readRef as T;
       }
-      final resolved = _typeResolver.resolveShape(shape);
       final value = _readResolvedValue(resolved, shape);
       if (preservedRefId != null &&
-          !resolved.isBasicValue &&
+          resolved.supportsRef &&
           _refReader.readRefAt(preservedRefId) == null) {
         _refReader.setReadRef(preservedRefId, value);
       }
       return value as T;
     }
-    final resolved = _typeResolver.resolveShape(shape);
     return _readResolvedValue(resolved, shape) as T;
   }
 
-  String readMetaString() {
-    final header = _buffer.readVarUint32Small7();
-    final len = header >>> 1;
-    if ((header & 1) == 1) {
-      return _metaStrings[len - 1];
-    }
-    if (len > 16) {
-      _buffer.readInt64();
-    } else if (len > 0) {
-      _buffer.readByte();
-    }
-    final value = utf8.decode(_buffer.readBytes(len));
-    _metaStrings.add(value);
-    return value;
-  }
+  String readMetaString() =>
+      _readMetaStringFrom(_buffer, decoder: decodePackageMetaStringInternal);
 
   ResolvedTypeInternal _readTypeMeta() {
     final wireTypeId = _buffer.readVarUint32Small7();
@@ -181,10 +184,17 @@ final class ReadContext {
       case TypeIds.int8:
       case TypeIds.int16:
       case TypeIds.int32:
+      case TypeIds.varInt32:
       case TypeIds.int64:
+      case TypeIds.varInt64:
+      case TypeIds.taggedInt64:
       case TypeIds.uint8:
       case TypeIds.uint16:
       case TypeIds.uint32:
+      case TypeIds.varUint32:
+      case TypeIds.uint64:
+      case TypeIds.varUint64:
+      case TypeIds.taggedUint64:
       case TypeIds.float16:
       case TypeIds.float32:
       case TypeIds.float64:
@@ -203,6 +213,7 @@ final class ReadContext {
       case TypeIds.uint8Array:
       case TypeIds.uint16Array:
       case TypeIds.uint32Array:
+      case TypeIds.uint64Array:
       case TypeIds.float16Array:
       case TypeIds.float32Array:
       case TypeIds.float64Array:
@@ -225,7 +236,13 @@ final class ReadContext {
       case TypeIds.namedStruct:
       case TypeIds.namedExt:
       case TypeIds.namedUnion:
-        return _typeResolver.resolveUserByName(readMetaString(), readMetaString());
+        if (config.compatible) {
+          return _readSharedTypeDef();
+        }
+        return _typeResolver.resolveUserByName(
+          _readPackageMetaString(),
+          _readTypeNameMetaString(),
+        );
       case TypeIds.compatibleStruct:
       case TypeIds.namedCompatibleStruct:
         return _readSharedTypeDef();
@@ -235,7 +252,7 @@ final class ReadContext {
   }
 
   ResolvedTypeInternal _readSharedTypeDef() {
-    final marker = _buffer.readVarUint32();
+    final marker = _buffer.readVarUint32Small14();
     final isRef = (marker & 1) == 1;
     final index = marker >>> 1;
     if (isRef) {
@@ -251,19 +268,28 @@ final class ReadContext {
   }
 
   (ResolvedTypeInternal, ResolvedTypeInternal?) _readTypeDef() {
-    final header = _buffer.readUint64();
+    final header = _buffer.readInt64();
     final metaSizeLowBits = header & 0xff;
     final metaSize = metaSizeLowBits == 0xff
-        ? 0xff + _buffer.readVarUint32()
+        ? 0xff + _buffer.readVarUint32Small14()
         : metaSizeLowBits.toInt();
     final typeDefBytes = Buffer.wrap(_buffer.readBytes(metaSize));
-    final metaHeader = typeDefBytes.readByte();
-    final byName = (metaHeader & (1 << 5)) != 0;
-    final namespace = byName ? _readMetaStringFrom(typeDefBytes) : null;
-    final typeName = byName ? _readMetaStringFrom(typeDefBytes) : null;
-    final userTypeId = byName ? null : typeDefBytes.readVarUint32();
+    final classHeader = typeDefBytes.readUint8();
+    var fieldCount = classHeader & typeDefSmallFieldCountThreshold;
+    if (fieldCount == typeDefSmallFieldCountThreshold) {
+      fieldCount += typeDefBytes.readVarUint32Small7();
+    }
+    final byName = (classHeader & typeDefRegisterByNameFlag) != 0;
+    final namespace = byName ? _readPackageNameFromTypeDef(typeDefBytes) : null;
+    final typeName = byName ? _readTypeNameFromTypeDef(typeDefBytes) : null;
+    int? userTypeId;
+    if (byName) {
+      userTypeId = null;
+    } else {
+      typeDefBytes.readUint8();
+      userTypeId = typeDefBytes.readVarUint32();
+    }
     final fields = <FieldMetadataInternal>[];
-    final fieldCount = metaHeader & 0x1f;
     for (var i = 0; i < fieldCount; i += 1) {
       fields.add(_readTypeDefField(typeDefBytes));
     }
@@ -278,40 +304,106 @@ final class ReadContext {
       userTypeId: resolved.userTypeId,
       namespace: resolved.namespace,
       typeName: resolved.typeName,
-      structMetadata: StructMetadataInternal(
-        evolving: true,
-        fields: fields,
-      ),
+      structMetadata: resolved.structMetadata,
+      remoteStructMetadata:
+          StructMetadataInternal(evolving: true, fields: fields),
     );
+    if (remoteResolved.remoteStructMetadata != null) {
+      _typeResolver.rememberRemoteStructMetadata(
+        resolved,
+        remoteResolved.remoteStructMetadata!,
+      );
+    }
     return (remoteResolved, remoteResolved);
   }
 
-  String _readMetaStringFrom(Buffer source) {
+  String _readPackageMetaString() =>
+      _readMetaStringFrom(_buffer, decoder: decodePackageMetaStringInternal);
+
+  String _readTypeNameMetaString() =>
+      _readMetaStringFrom(_buffer, decoder: decodeTypeNameMetaStringInternal);
+
+  String _readPackageNameFromTypeDef(Buffer source) =>
+      _readTypeDefName(source, decoder: decodePackageNameInternal);
+
+  String _readTypeNameFromTypeDef(Buffer source) =>
+      _readTypeDefName(source, decoder: decodeTypeNameInternal);
+
+  String _readMetaStringFrom(
+    Buffer source, {
+    required String Function(List<int> bytes, int encoding) decoder,
+  }) {
     final header = source.readVarUint32Small7();
     final len = header >>> 1;
     if ((header & 1) == 1) {
-      return _metaStrings[len - 1];
+      final entry = _metaStrings[len - 1];
+      return decoder(entry.bytes, entry.encoding);
     }
-    if (len > 16) {
-      source.readInt64();
+    var encoding = metaStringUtf8Encoding;
+    if (len > metaStringSmallThreshold) {
+      encoding = source.readInt64() & 0xff;
     } else if (len > 0) {
-      source.readByte();
+      encoding = source.readByte() & 0xff;
     }
-    final value = utf8.decode(source.readBytes(len));
-    _metaStrings.add(value);
-    return value;
+    final bytes = source.readBytes(len);
+    _metaStrings.add(_MetaStringEntry(bytes, encoding));
+    try {
+      return decoder(bytes, encoding);
+    } catch (error) {
+      throw StateError(
+        'Failed to decode meta string: header=$header len=$len encoding=$encoding bytes=$bytes error=$error',
+      );
+    }
+  }
+
+  String _readTypeDefName(
+    Buffer source, {
+    required String Function(List<int> bytes, int encoding) decoder,
+  }) {
+    final header = source.readUint8();
+    final encoding = header & 0x03;
+    var size = header >>> 2;
+    if (size == typeDefBigNameThreshold) {
+      size += source.readVarUint32Small7();
+    }
+    return decoder(source.readBytes(size), encoding);
   }
 
   FieldMetadataInternal _readTypeDefField(Buffer source) {
     final fieldHeader = source.readByte();
+    final encoding = (fieldHeader >>> 6) & 0x03;
     final fieldRef = (fieldHeader & 1) == 1;
     final fieldNullable = (fieldHeader & (1 << 1)) != 0;
     var size = (fieldHeader >> 2) & 0x0f;
-    if (size == 15) {
-      size += source.readVarUint32();
+    if (size == typeDefBigFieldNameThreshold) {
+      size += source.readVarUint32Small7();
     }
-    final isTag = ((fieldHeader >> 6) & 0x03) == 3;
-    final typeId = source.readVarUint32();
+    size += 1;
+    final isTag = encoding == 3;
+    final tagId = isTag ? size - 1 : null;
+    final shape = _readTypeDefShape(
+      source,
+      typeId: source.readUint8(),
+      nullable: fieldNullable,
+      ref: fieldRef,
+    );
+    final identifier = isTag
+        ? tagId.toString()
+        : decodeFieldNameInternal(source.readBytes(size), encoding);
+    return FieldMetadataInternal(
+      name: identifier,
+      identifier: identifier,
+      id: tagId,
+      shape: shape,
+    );
+  }
+
+  TypeShapeInternal _readTypeDefShape(
+    Buffer source, {
+    required int typeId,
+    required bool nullable,
+    required bool ref,
+  }) {
     final arguments = <TypeShapeInternal>[];
     if (typeId == TypeIds.list || typeId == TypeIds.set) {
       arguments.add(_readNestedTypeShape(source));
@@ -319,31 +411,23 @@ final class ReadContext {
       arguments.add(_readNestedTypeShape(source));
       arguments.add(_readNestedTypeShape(source));
     }
-    final identifier = isTag ? size.toString() : _readMetaStringFrom(source);
-    return FieldMetadataInternal(
-      name: identifier,
-      identifier: identifier,
-      id: isTag ? size : null,
-      shape: TypeShapeInternal(
-        type: Object,
-        typeId: typeId,
-        nullable: fieldNullable,
-        ref: fieldRef,
-        dynamic: false,
-        arguments: arguments,
-      ),
+    return TypeShapeInternal(
+      type: Object,
+      typeId: typeId,
+      nullable: nullable,
+      ref: ref,
+      dynamic: typeId == TypeIds.unknown ? true : false,
+      arguments: arguments,
     );
   }
 
   TypeShapeInternal _readNestedTypeShape(Buffer source) {
-    final encoded = source.readVarUint32();
-    return TypeShapeInternal(
-      type: Object,
-      typeId: encoded >> 2,
+    final encoded = source.readVarUint32Small7();
+    return _readTypeDefShape(
+      source,
+      typeId: encoded >>> 2,
       nullable: ((encoded >> 1) & 1) == 1,
       ref: (encoded & 1) == 1,
-      dynamic: false,
-      arguments: const <TypeShapeInternal>[],
     );
   }
 
@@ -351,49 +435,50 @@ final class ReadContext {
     ResolvedTypeInternal resolved,
     TypeShapeInternal? declaredShape,
   ) {
+    if (TypeIds.isPrimitive(resolved.typeId)) {
+      return _readPrimitive(resolved.typeId);
+    }
     switch (resolved.typeId) {
-      case TypeIds.boolType:
-      case TypeIds.int8:
-      case TypeIds.int16:
-      case TypeIds.int32:
-      case TypeIds.int64:
-      case TypeIds.uint8:
-      case TypeIds.uint16:
-      case TypeIds.uint32:
-      case TypeIds.float16:
-      case TypeIds.float32:
-      case TypeIds.float64:
-        return _readPrimitive(resolved.typeId);
       case TypeIds.string:
-        final header = _buffer.readVarUint36Small();
-        final byteLength = header >> 2;
-        return utf8.decode(_buffer.readBytes(byteLength));
+        return _readStringPayload();
       case TypeIds.binary:
         final size = _buffer.readVarUint32();
         if (size > config.maxBinarySize) {
-          throw StateError('Binary payload exceeds ${config.maxBinarySize} bytes.');
+          throw StateError(
+              'Binary payload exceeds ${config.maxBinarySize} bytes.');
         }
         return _buffer.copyBytes(size);
       case TypeIds.boolArray:
         final size = _buffer.readVarUint32();
-        return List<bool>.generate(size, (_) => _buffer.readBool(), growable: false);
+        return List<bool>.generate(size, (_) => _buffer.readBool(),
+            growable: false);
       case TypeIds.int8Array:
         final size = _buffer.readVarUint32();
         return Int8List.fromList(_buffer.readBytes(size));
       case TypeIds.int16Array:
-        return _readTypedArray<Int16List>(2, (bytes) => bytes.buffer.asInt16List());
+        return _readTypedArray<Int16List>(
+            2, (bytes) => bytes.buffer.asInt16List());
       case TypeIds.int32Array:
-        return _readTypedArray<Int32List>(4, (bytes) => bytes.buffer.asInt32List());
+        return _readTypedArray<Int32List>(
+            4, (bytes) => bytes.buffer.asInt32List());
       case TypeIds.int64Array:
-        return _readTypedArray<Int64List>(8, (bytes) => bytes.buffer.asInt64List());
+        return _readTypedArray<Int64List>(
+            8, (bytes) => bytes.buffer.asInt64List());
       case TypeIds.uint16Array:
-        return _readTypedArray<Uint16List>(2, (bytes) => bytes.buffer.asUint16List());
+        return _readTypedArray<Uint16List>(
+            2, (bytes) => bytes.buffer.asUint16List());
       case TypeIds.uint32Array:
-        return _readTypedArray<Uint32List>(4, (bytes) => bytes.buffer.asUint32List());
+        return _readTypedArray<Uint32List>(
+            4, (bytes) => bytes.buffer.asUint32List());
+      case TypeIds.uint64Array:
+        return _readTypedArray<Uint64List>(
+            8, (bytes) => bytes.buffer.asUint64List());
       case TypeIds.float32Array:
-        return _readTypedArray<Float32List>(4, (bytes) => bytes.buffer.asFloat32List());
+        return _readTypedArray<Float32List>(
+            4, (bytes) => bytes.buffer.asFloat32List());
       case TypeIds.float64Array:
-        return _readTypedArray<Float64List>(8, (bytes) => bytes.buffer.asFloat64List());
+        return _readTypedArray<Float64List>(
+            8, (bytes) => bytes.buffer.asFloat64List());
       case TypeIds.list:
         return _readList(
           _firstOrNull(declaredShape?.arguments),
@@ -432,9 +517,22 @@ final class ReadContext {
             config.compatible &&
             resolved.structMetadata != null &&
             resolved.isCompatibleStruct) {
+          final remoteFields = resolved.remoteStructMetadata?.fields ??
+              resolved.structMetadata!.fields;
+          final localFields = <String, FieldMetadataInternal>{
+            for (final field in resolved.structMetadata!.fields)
+              field.identifier: field,
+          };
           final compatibleFields = <String, Object?>{};
-          for (final field in resolved.structMetadata!.fields) {
-            compatibleFields[field.identifier] = _readCompatibleField(field);
+          for (final remoteField in remoteFields) {
+            final localField = localFields[remoteField.identifier];
+            if (localField == null) {
+              _readCompatibleField(remoteField);
+              continue;
+            }
+            compatibleFields[remoteField.identifier] = _readCompatibleField(
+              _mergeCompatibleField(localField, remoteField),
+            );
           }
           _compatibleFieldStack.add(compatibleFields);
           try {
@@ -451,8 +549,13 @@ final class ReadContext {
     int elementSize,
     T Function(Uint8List bytes) viewBuilder,
   ) {
-    final size = _buffer.readVarUint32();
-    final bytes = Uint8List.fromList(_buffer.readBytes(size * elementSize));
+    final byteSize = _buffer.readVarUint32();
+    if (byteSize % elementSize != 0) {
+      throw StateError(
+        'Typed array byte size $byteSize is not aligned to element size $elementSize.',
+      );
+    }
+    final bytes = Uint8List.fromList(_buffer.readBytes(byteSize));
     return viewBuilder(bytes);
   }
 
@@ -464,27 +567,48 @@ final class ReadContext {
     if (shape.isPrimitive && !shape.nullable) {
       return _readPrimitive(shape.typeId);
     }
+    final resolved = _typeResolver.resolveShape(shape);
+    if (!_usesDeclaredTypeInfo(shape, resolved)) {
+      if (shape.ref) {
+        return _readRefValueWithTypeMeta(shape);
+      }
+      if (shape.nullable) {
+        final flag = _buffer.readByte();
+        if (flag == RefWriter.nullFlag) {
+          return null;
+        }
+        if (flag != RefWriter.notNullValueFlag) {
+          throw StateError('Unexpected nullable flag $flag.');
+        }
+      }
+      return _readResolvedValue(_readTypeMeta(), shape);
+    }
     if (shape.nullable || shape.ref) {
       final flag = _refReader.readRefHeader(_buffer);
-      final preservedRefId = flag == RefWriter.refValueFlag
-          ? _refReader.lastPreservedRefId
-          : null;
+      final preservedRefId =
+          flag == RefWriter.refValueFlag ? _refReader.lastPreservedRefId : null;
       if (flag == RefWriter.nullFlag) {
         return null;
       }
       if (flag == RefWriter.refFlag) {
-        return _refReader.readRef;
+        final value = _refReader.readRef;
+        if (value != null) {
+          return value;
+        }
+        final refId = _refReader.readRefId;
+        if (refId != null) {
+          return _DeferredReadRef(refId);
+        }
+        return null;
       }
-      final resolved = _typeResolver.resolveShape(shape);
       final value = _readResolvedValue(resolved, shape);
       if (preservedRefId != null &&
-          !resolved.isBasicValue &&
+          resolved.supportsRef &&
           _refReader.readRefAt(preservedRefId) == null) {
         _refReader.setReadRef(preservedRefId, value);
       }
       return value;
     }
-    final resolved = _typeResolver.resolveShape(shape);
     return _readResolvedValue(resolved, shape);
   }
 
@@ -498,14 +622,28 @@ final class ReadContext {
         return Int16(_buffer.readInt16());
       case TypeIds.int32:
         return Int32(_buffer.readInt32());
+      case TypeIds.varInt32:
+        return Int32(_buffer.readVarInt32());
       case TypeIds.int64:
         return _buffer.readInt64();
+      case TypeIds.varInt64:
+        return _buffer.readVarInt64();
+      case TypeIds.taggedInt64:
+        return _buffer.readTaggedInt64();
       case TypeIds.uint8:
         return UInt8(_buffer.readUint8());
       case TypeIds.uint16:
         return UInt16(_buffer.readUint16());
       case TypeIds.uint32:
         return UInt32(_buffer.readUint32());
+      case TypeIds.varUint32:
+        return UInt32(_buffer.readVarUint32());
+      case TypeIds.uint64:
+        return _buffer.readUint64();
+      case TypeIds.varUint64:
+        return _buffer.readVarUint64();
+      case TypeIds.taggedUint64:
+        return _buffer.readTaggedUint64();
       case TypeIds.float16:
         return _buffer.readFloat16();
       case TypeIds.float32:
@@ -517,10 +655,21 @@ final class ReadContext {
     }
   }
 
+  String _readStringPayload() {
+    final header = _buffer.readVarUint36Small();
+    final encoding = header & 0x03;
+    final byteLength = header >>> 2;
+    return decodeStringInternal(_buffer.readBytes(byteLength), encoding);
+  }
+
   List<Object?> _readList(TypeShapeInternal? elementShape) {
     final size = _buffer.readVarUint32();
     if (size > config.maxCollectionSize) {
-      throw StateError('Collection size $size exceeds ${config.maxCollectionSize}.');
+      throw StateError(
+          'Collection size $size exceeds ${config.maxCollectionSize}.');
+    }
+    if (size == 0) {
+      return <Object?>[];
     }
     final header = _buffer.readUint8();
     final trackRef = (header & 0x01) == 1;
@@ -532,20 +681,31 @@ final class ReadContext {
         (!declaredType && sameType && size > 0) ? _readTypeMeta() : null;
     for (var index = 0; index < size; index += 1) {
       if (declaredType && elementShape != null) {
+        Map<String, Object?> shapeMetadata(
+          TypeShapeInternal value, {
+          required bool isRoot,
+        }) {
+          return <String, Object?>{
+            'type': value.type,
+            'typeId': value.typeId,
+            'nullable': isRoot ? hasNull : value.nullable,
+            'ref': isRoot ? trackRef : value.ref,
+            'dynamic': value.dynamic,
+            'arguments': value.arguments
+                .map(
+                  (argument) => shapeMetadata(argument, isRoot: false),
+                )
+                .toList(growable: false),
+          };
+        }
+
         result.add(
           readField<Object?>(
             <String, Object?>{
               'name': 'item',
               'identifier': 'item',
               'id': null,
-              'shape': <String, Object?>{
-                'type': elementShape.type,
-                'typeId': elementShape.typeId,
-                'nullable': elementShape.nullable || hasNull,
-                'ref': trackRef,
-                'dynamic': elementShape.dynamic,
-                'arguments': const <Object?>[],
-              },
+              'shape': shapeMetadata(elementShape, isRoot: true),
             },
           ),
         );
@@ -567,7 +727,7 @@ final class ReadContext {
           }
           final value = _readResolvedValue(sameResolved, null);
           if (preservedRefId != null &&
-              !sameResolved.isBasicValue &&
+              sameResolved.supportsRef &&
               _refReader.readRefAt(preservedRefId) == null) {
             _refReader.setReadRef(preservedRefId, value);
           }
@@ -592,74 +752,246 @@ final class ReadContext {
     TypeShapeInternal? keyShape,
     TypeShapeInternal? valueShape,
   ) {
-    final totalSize = _buffer.readVarUint32();
-    if (totalSize > config.maxCollectionSize) {
-      throw StateError('Map size $totalSize exceeds ${config.maxCollectionSize}.');
+    var remaining = _buffer.readVarUint32();
+    if (remaining > config.maxCollectionSize) {
+      throw StateError(
+          'Map size $remaining exceeds ${config.maxCollectionSize}.');
     }
     final result = <Object?, Object?>{};
-    while (result.length < totalSize) {
+    while (remaining > 0) {
       final header = _buffer.readUint8();
-      final keyTrackRef = (header & 0x01) == 1;
       final keyHasNull = (header & 0x02) != 0;
-      final keyDeclared = (header & 0x04) != 0;
-      final valueTrackRef = (header & 0x08) != 0;
       final valueHasNull = (header & 0x10) != 0;
-      final valueDeclared = (header & 0x20) != 0;
-      final pairCount = keyHasNull || valueHasNull ? 1 : _buffer.readUint8();
-      for (var i = 0; i < pairCount; i += 1) {
-        final key = _readMapEntryValue(
-          keyShape,
-          keyTrackRef,
-          keyHasNull,
-          keyDeclared,
-        );
-        final value = _readMapEntryValue(
+      if (keyHasNull || valueHasNull) {
+        result[_readNullChunkKey(header, keyShape)] = _readNullChunkValue(
+          header,
           valueShape,
-          valueTrackRef,
-          valueHasNull,
-          valueDeclared,
         );
+        remaining -= 1;
+        continue;
+      }
+      final keyTrackRef = (header & 0x01) != 0;
+      final valueTrackRef = (header & 0x08) != 0;
+      final keyDeclared = (header & 0x04) != 0;
+      final valueDeclared = (header & 0x20) != 0;
+      final chunkSize = _buffer.readUint8();
+      final keyResolved = keyDeclared ? null : _readTypeMeta();
+      final valueResolved = valueDeclared ? null : _readTypeMeta();
+      for (var index = 0; index < chunkSize; index += 1) {
+        final key = keyDeclared
+            ? _readDeclaredMapValue(keyShape!, trackRef: keyTrackRef)
+            : _readResolvedMapValue(keyResolved!, trackRef: keyTrackRef);
+        final value = valueDeclared
+            ? _readDeclaredMapValue(valueShape!, trackRef: valueTrackRef)
+            : _readResolvedMapValue(valueResolved!, trackRef: valueTrackRef);
         result[key] = value;
       }
+      remaining -= chunkSize;
     }
     return result;
   }
 
-  Object? _readMapEntryValue(
-    TypeShapeInternal? shape,
-    bool trackRef,
-    bool hasNull,
-    bool declared,
-  ) {
-    if (declared && shape != null) {
-      return readField<Object?>(
-        <String, Object?>{
-          'name': 'entry',
-          'identifier': 'entry',
-          'id': null,
-          'shape': <String, Object?>{
-            'type': shape.type,
-            'typeId': shape.typeId,
-            'nullable': hasNull || shape.nullable,
-            'ref': trackRef,
-            'dynamic': shape.dynamic,
-            'arguments': const <Object?>[],
-          },
-        },
-      );
+  Object? _readNullChunkKey(int header, TypeShapeInternal? keyShape) {
+    final keyHasNull = (header & 0x02) != 0;
+    if (keyHasNull) {
+      return null;
     }
-    if (trackRef) {
-      return readAny();
+    final trackRef = (header & 0x01) != 0;
+    final declared = (header & 0x04) != 0;
+    if (declared && keyShape != null) {
+      return _readDeclaredMapValue(keyShape, trackRef: trackRef);
     }
-    if (hasNull) {
-      return readNullable();
-    }
-    return readValue();
+    return trackRef ? readAny() : readValue();
   }
+
+  Object? _readNullChunkValue(int header, TypeShapeInternal? valueShape) {
+    final valueHasNull = (header & 0x10) != 0;
+    if (valueHasNull) {
+      return null;
+    }
+    final trackRef = (header & 0x08) != 0;
+    final declared = (header & 0x20) != 0;
+    if (declared && valueShape != null) {
+      return _readDeclaredMapValue(valueShape, trackRef: trackRef);
+    }
+    return trackRef ? readAny() : readValue();
+  }
+
+  Object? _readDeclaredMapValue(
+    TypeShapeInternal shape, {
+    required bool trackRef,
+  }) {
+    return readField<Object?>(
+      _mapFieldMetadata(
+        shape,
+        trackRef: trackRef,
+      ),
+    );
+  }
+
+  Object? _readResolvedMapValue(
+    ResolvedTypeInternal resolved, {
+    required bool trackRef,
+  }) {
+    if (!trackRef) {
+      return _readResolvedValue(resolved, null);
+    }
+    final flag = _refReader.readRefHeader(_buffer);
+    final preservedRefId =
+        flag == RefWriter.refValueFlag ? _refReader.lastPreservedRefId : null;
+    if (flag == RefWriter.refFlag) {
+      return _refReader.readRef;
+    }
+    final value = _readResolvedValue(resolved, null);
+    if (preservedRefId != null &&
+        resolved.supportsRef &&
+        _refReader.readRefAt(preservedRefId) == null) {
+      _refReader.setReadRef(preservedRefId, value);
+    }
+    return value;
+  }
+}
+
+FieldMetadataInternal _mergeCompatibleField(
+  FieldMetadataInternal localField,
+  FieldMetadataInternal remoteField,
+) {
+  TypeShapeInternal mergeShape(
+      TypeShapeInternal local, TypeShapeInternal remote) {
+    final mergedArguments = <TypeShapeInternal>[];
+    final argumentCount = remote.arguments.length;
+    for (var index = 0; index < argumentCount; index += 1) {
+      final remoteArgument = remote.arguments[index];
+      final localArgument = index < local.arguments.length
+          ? local.arguments[index]
+          : remoteArgument;
+      mergedArguments.add(mergeShape(localArgument, remoteArgument));
+    }
+    return TypeShapeInternal(
+      type: local.type,
+      typeId: remote.typeId,
+      nullable: remote.nullable,
+      ref: remote.ref,
+      dynamic: local.dynamic ?? remote.dynamic,
+      arguments: mergedArguments,
+    );
+  }
+
+  return FieldMetadataInternal(
+    name: localField.name,
+    identifier: localField.identifier,
+    id: localField.id,
+    shape: mergeShape(localField.shape, remoteField.shape),
+  );
+}
+
+extension on ReadContext {
+  bool _usesDeclaredTypeInfo(
+    TypeShapeInternal shape,
+    ResolvedTypeInternal resolved,
+  ) {
+    if (shape.isDynamic) {
+      return false;
+    }
+    if (!config.compatible) {
+      return true;
+    }
+    switch (resolved.kind) {
+      case RegistrationKindInternal.builtin:
+      case RegistrationKindInternal.enumType:
+      case RegistrationKindInternal.union:
+        return true;
+      case RegistrationKindInternal.struct:
+      case RegistrationKindInternal.ext:
+        return false;
+    }
+  }
+
+  Object? _readRefValueWithTypeMeta(TypeShapeInternal declaredShape) {
+    final flag = _refReader.readRefHeader(_buffer);
+    final preservedRefId =
+        flag == RefWriter.refValueFlag ? _refReader.lastPreservedRefId : null;
+    if (flag == RefWriter.nullFlag) {
+      return null;
+    }
+    if (flag == RefWriter.refFlag) {
+      final value = _refReader.readRef;
+      if (value != null) {
+        return value;
+      }
+      final refId = _refReader.readRefId;
+      if (refId != null) {
+        return _DeferredReadRef(refId);
+      }
+      return null;
+    }
+    final resolved = _readTypeMeta();
+    final value = _readResolvedValue(resolved, declaredShape);
+    if (preservedRefId != null &&
+        resolved.supportsRef &&
+        _refReader.readRefAt(preservedRefId) == null) {
+      _refReader.setReadRef(preservedRefId, value);
+    }
+    return value;
+  }
+}
+
+Map<String, Object?> _mapFieldMetadata(
+  TypeShapeInternal shape, {
+  required bool trackRef,
+}) {
+  Map<String, Object?> shapeMetadata(
+    TypeShapeInternal value, {
+    required bool isRoot,
+  }) {
+    return <String, Object?>{
+      'type': value.type,
+      'typeId': value.typeId,
+      'nullable': isRoot ? false : value.nullable,
+      'ref': isRoot ? trackRef : value.ref,
+      'dynamic': value.dynamic,
+      'arguments': value.arguments
+          .map(
+            _shapeMetadata,
+          )
+          .toList(growable: false),
+    };
+  }
+
+  return <String, Object?>{
+    'name': 'entry',
+    'identifier': 'entry',
+    'id': null,
+    'shape': shapeMetadata(shape, isRoot: true),
+  };
 }
 
 TypeShapeInternal? _firstOrNull(List<TypeShapeInternal>? values) =>
     values == null || values.isEmpty ? null : values.first;
 
-TypeShapeInternal? _elementAtOrNull(List<TypeShapeInternal>? values, int index) =>
+TypeShapeInternal? _elementAtOrNull(
+        List<TypeShapeInternal>? values, int index) =>
     values == null || values.length <= index ? null : values[index];
+
+class _DeferredReadRef {
+  final int id;
+
+  const _DeferredReadRef(this.id);
+}
+
+final class _MetaStringEntry {
+  final Uint8List bytes;
+  final int encoding;
+
+  const _MetaStringEntry(this.bytes, this.encoding);
+}
+
+Map<String, Object?> _shapeMetadata(TypeShapeInternal shape) =>
+    <String, Object?>{
+      'type': shape.type,
+      'typeId': shape.typeId,
+      'nullable': shape.nullable,
+      'ref': shape.ref,
+      'dynamic': shape.dynamic,
+      'arguments': shape.arguments.map(_shapeMetadata).toList(growable: false),
+    };

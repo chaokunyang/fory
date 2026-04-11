@@ -14,10 +14,17 @@ abstract final class TypeIds {
   static const int int8 = 2;
   static const int int16 = 3;
   static const int int32 = 4;
+  static const int varInt32 = 5;
   static const int int64 = 6;
+  static const int varInt64 = 7;
+  static const int taggedInt64 = 8;
   static const int uint8 = 9;
   static const int uint16 = 10;
   static const int uint32 = 11;
+  static const int varUint32 = 12;
+  static const int uint64 = 13;
+  static const int varUint64 = 14;
+  static const int taggedUint64 = 15;
   static const int float16 = 17;
   static const int float32 = 19;
   static const int float64 = 20;
@@ -48,6 +55,7 @@ abstract final class TypeIds {
   static const int uint8Array = 48;
   static const int uint16Array = 49;
   static const int uint32Array = 50;
+  static const int uint64Array = 51;
   static const int float16Array = 53;
   static const int float32Array = 55;
   static const int float64Array = 56;
@@ -57,10 +65,17 @@ abstract final class TypeIds {
       typeId == int8 ||
       typeId == int16 ||
       typeId == int32 ||
+      typeId == varInt32 ||
       typeId == int64 ||
+      typeId == varInt64 ||
+      typeId == taggedInt64 ||
       typeId == uint8 ||
       typeId == uint16 ||
       typeId == uint32 ||
+      typeId == varUint32 ||
+      typeId == uint64 ||
+      typeId == varUint64 ||
+      typeId == taggedUint64 ||
       typeId == float16 ||
       typeId == float32 ||
       typeId == float64;
@@ -95,9 +110,36 @@ abstract final class TypeIds {
       typeId == uint8Array ||
       typeId == uint16Array ||
       typeId == uint32Array ||
+      typeId == uint64Array ||
       typeId == float16Array ||
       typeId == float32Array ||
       typeId == float64Array;
+
+  static bool supportsRef(int typeId) {
+    if (typeId == unknown) {
+      return true;
+    }
+    if (isPrimitive(typeId) || typeId == binary) {
+      return false;
+    }
+    switch (typeId) {
+      case boolArray:
+      case int8Array:
+      case int16Array:
+      case int32Array:
+      case int64Array:
+      case uint8Array:
+      case uint16Array:
+      case uint32Array:
+      case uint64Array:
+      case float16Array:
+      case float32Array:
+      case float64Array:
+        return false;
+      default:
+        return true;
+    }
+  }
 }
 
 enum RegistrationKindInternal { builtin, struct, enumType, ext, union }
@@ -183,6 +225,7 @@ final class ResolvedTypeInternal {
   final String? namespace;
   final String? typeName;
   final StructMetadataInternal? structMetadata;
+  final StructMetadataInternal? remoteStructMetadata;
 
   const ResolvedTypeInternal({
     required this.type,
@@ -193,14 +236,18 @@ final class ResolvedTypeInternal {
     required this.namespace,
     required this.typeName,
     required this.structMetadata,
+    required this.remoteStructMetadata,
   });
 
-  bool get isNamed => userTypeId == null && namespace != null && typeName != null;
+  bool get isNamed =>
+      userTypeId == null && namespace != null && typeName != null;
 
   bool get isCompatibleStruct =>
       kind == RegistrationKindInternal.struct && structMetadata!.evolving;
 
   bool get isBasicValue => TypeIds.isBasicValue(typeId);
+
+  bool get supportsRef => TypeIds.supportsRef(typeId);
 
   int wireTypeId(Config config) {
     switch (kind) {
@@ -218,7 +265,9 @@ final class ResolvedTypeInternal {
       case RegistrationKindInternal.struct:
         final compatible = config.compatible && structMetadata!.evolving;
         if (compatible) {
-          return isNamed ? TypeIds.namedCompatibleStruct : TypeIds.compatibleStruct;
+          return isNamed
+              ? TypeIds.namedCompatibleStruct
+              : TypeIds.compatibleStruct;
         }
         return isNamed ? TypeIds.namedStruct : TypeIds.struct;
     }
@@ -233,6 +282,8 @@ final class TypeResolver {
       <int, ResolvedTypeInternal>{};
   final Map<String, ResolvedTypeInternal> _registeredByName =
       <String, ResolvedTypeInternal>{};
+  final Map<Object, StructMetadataInternal> _remoteStructMetadata =
+      <Object, StructMetadataInternal>{};
 
   TypeResolver(this.config);
 
@@ -256,6 +307,7 @@ final class TypeResolver {
       structMetadata: registrationKind == RegistrationKindInternal.struct
           ? _parseStructMetadata(serializer)
           : null,
+      remoteStructMetadata: null,
     );
     _registeredByType[type] = resolved;
     if (id != null) {
@@ -282,6 +334,7 @@ final class TypeResolver {
       namespace: namespace,
       typeName: typeName,
       structMetadata: null,
+      remoteStructMetadata: null,
     );
     _registeredByType[type] = resolved;
     if (id != null) {
@@ -302,10 +355,10 @@ final class TypeResolver {
       return _builtin(Int16, TypeIds.int16);
     }
     if (value is Int32) {
-      return _builtin(Int32, TypeIds.int32);
+      return _builtin(Int32, TypeIds.varInt32);
     }
     if (value is int) {
-      return _builtin(int, TypeIds.int64);
+      return _builtin(int, TypeIds.varInt64);
     }
     if (value is UInt8) {
       return _builtin(UInt8, TypeIds.uint8);
@@ -328,15 +381,6 @@ final class TypeResolver {
     if (value is String) {
       return _builtin(String, TypeIds.string);
     }
-    if (value is List) {
-      return _builtin(List, TypeIds.list);
-    }
-    if (value is Set) {
-      return _builtin(Set, TypeIds.set);
-    }
-    if (value is Map) {
-      return _builtin(Map, TypeIds.map);
-    }
     if (value is Uint8List) {
       return _builtin(Uint8List, TypeIds.binary);
     }
@@ -358,11 +402,26 @@ final class TypeResolver {
     if (value is Uint32List) {
       return _builtin(Uint32List, TypeIds.uint32Array);
     }
+    if (value is Uint64List) {
+      return _builtin(Uint64List, TypeIds.uint64Array);
+    }
     if (value is Float32List) {
       return _builtin(Float32List, TypeIds.float32Array);
     }
     if (value is Float64List) {
       return _builtin(Float64List, TypeIds.float64Array);
+    }
+    if (value is List<bool>) {
+      return _builtin(List<bool>, TypeIds.boolArray);
+    }
+    if (value is List) {
+      return _builtin(List, TypeIds.list);
+    }
+    if (value is Set) {
+      return _builtin(Set, TypeIds.set);
+    }
+    if (value is Map) {
+      return _builtin(Map, TypeIds.map);
     }
     if (value is LocalDate) {
       return _builtin(LocalDate, TypeIds.date);
@@ -386,10 +445,17 @@ final class TypeResolver {
       case TypeIds.int8:
       case TypeIds.int16:
       case TypeIds.int32:
+      case TypeIds.varInt32:
       case TypeIds.int64:
+      case TypeIds.varInt64:
+      case TypeIds.taggedInt64:
       case TypeIds.uint8:
       case TypeIds.uint16:
       case TypeIds.uint32:
+      case TypeIds.varUint32:
+      case TypeIds.uint64:
+      case TypeIds.varUint64:
+      case TypeIds.taggedUint64:
       case TypeIds.float16:
       case TypeIds.float32:
       case TypeIds.float64:
@@ -408,6 +474,7 @@ final class TypeResolver {
       case TypeIds.uint8Array:
       case TypeIds.uint16Array:
       case TypeIds.uint32Array:
+      case TypeIds.uint64Array:
       case TypeIds.float16Array:
       case TypeIds.float32Array:
       case TypeIds.float64Array:
@@ -437,6 +504,24 @@ final class TypeResolver {
     return resolved;
   }
 
+  void rememberRemoteStructMetadata(
+    ResolvedTypeInternal resolved,
+    StructMetadataInternal metadata,
+  ) {
+    if (resolved.kind != RegistrationKindInternal.struct) {
+      return;
+    }
+    _remoteStructMetadata[_remoteStructKey(resolved)] = metadata;
+  }
+
+  StructMetadataInternal? remoteStructMetadataFor(
+      ResolvedTypeInternal resolved) {
+    if (resolved.kind != RegistrationKindInternal.struct) {
+      return null;
+    }
+    return _remoteStructMetadata[_remoteStructKey(resolved)];
+  }
+
   ResolvedTypeInternal _builtin(Type type, int typeId) {
     return ResolvedTypeInternal(
       type: type,
@@ -447,17 +532,18 @@ final class TypeResolver {
       namespace: null,
       typeName: null,
       structMetadata: null,
+      remoteStructMetadata: null,
     );
   }
 
   RegistrationKindInternal _inferKind(Serializer serializer) {
-    if (_readGeneratedFlag(serializer, (value) => value.isStruct)) {
+    if (serializer.isStruct) {
       return RegistrationKindInternal.struct;
     }
-    if (_readGeneratedFlag(serializer, (value) => value.isEnum)) {
+    if (serializer.isEnum) {
       return RegistrationKindInternal.enumType;
     }
-    if (_readGeneratedFlag(serializer, (value) => value.isUnion)) {
+    if (serializer.isUnion) {
       return RegistrationKindInternal.union;
     }
     return RegistrationKindInternal.ext;
@@ -474,10 +560,10 @@ final class TypeResolver {
       return TypeIds.int16;
     }
     if (type == Int32) {
-      return TypeIds.int32;
+      return TypeIds.varInt32;
     }
     if (type == int) {
-      return TypeIds.int64;
+      return TypeIds.varInt64;
     }
     if (type == UInt8) {
       return TypeIds.uint8;
@@ -487,6 +573,9 @@ final class TypeResolver {
     }
     if (type == UInt32) {
       return TypeIds.uint32;
+    }
+    if (type == Uint64List) {
+      return TypeIds.uint64Array;
     }
     if (type == Float16) {
       return TypeIds.float16;
@@ -522,27 +611,13 @@ final class TypeResolver {
   }
 
   StructMetadataInternal _parseStructMetadata(Serializer serializer) {
-    final dynamic generated = serializer;
-    final rawFields = generated.fields as List<Object?>? ?? const <Object?>[];
     return StructMetadataInternal(
-      evolving: generated.evolving as bool? ?? true,
-      fields: rawFields
+      evolving: serializer.evolving,
+      fields: serializer.fields
           .cast<Map<String, Object?>>()
           .map(FieldMetadataInternal.fromMetadata)
           .toList(growable: false),
     );
-  }
-
-  bool _readGeneratedFlag(
-    Serializer serializer,
-    bool Function(dynamic serializer) selector,
-  ) {
-    try {
-      final dynamic generated = serializer;
-      return selector(generated) == true;
-    } on NoSuchMethodError {
-      return false;
-    }
   }
 
   void _validateRegistrationMode({
@@ -566,4 +641,14 @@ final class TypeResolver {
 
   static String _nameKey(String namespace, String typeName) =>
       '$namespace::$typeName';
+
+  Object _remoteStructKey(ResolvedTypeInternal resolved) {
+    if (resolved.userTypeId != null) {
+      return resolved.userTypeId!;
+    }
+    if (resolved.namespace != null && resolved.typeName != null) {
+      return _nameKey(resolved.namespace!, resolved.typeName!);
+    }
+    return resolved.type;
+  }
 }

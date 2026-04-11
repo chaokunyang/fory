@@ -3,6 +3,10 @@ import 'dart:typed_data';
 
 import 'package:fory/src/types/float16.dart';
 
+final BigInt _mask64Big = (BigInt.one << 64) - BigInt.one;
+final BigInt _sevenBitMaskBig = BigInt.from(0x7f);
+final BigInt _byteMaskBig = BigInt.from(0xff);
+
 final class Buffer {
   Uint8List _bytes;
   late ByteData _view;
@@ -10,17 +14,17 @@ final class Buffer {
   int _writerIndex;
 
   Buffer([int initialCapacity = 256])
-    : _bytes = Uint8List(initialCapacity),
-      _readerIndex = 0,
-      _writerIndex = 0 {
+      : _bytes = Uint8List(initialCapacity),
+        _readerIndex = 0,
+        _writerIndex = 0 {
     _view = ByteData.sublistView(_bytes);
   }
 
   Buffer.wrap(Uint8List bytes)
-    : _bytes = bytes,
-      _view = ByteData.sublistView(bytes),
-      _readerIndex = 0,
-      _writerIndex = bytes.length;
+      : _bytes = bytes,
+        _view = ByteData.sublistView(bytes),
+        _readerIndex = 0,
+        _writerIndex = bytes.length;
 
   int get readableBytes => _writerIndex - _readerIndex;
 
@@ -233,8 +237,7 @@ final class Buffer {
     }
   }
 
-  void writeVarInt32(int value) =>
-      writeVarUint32((value << 1) ^ (value >> 31));
+  void writeVarInt32(int value) => writeVarUint32((value << 1) ^ (value >> 31));
 
   int readVarInt32() {
     final value = readVarUint32();
@@ -242,33 +245,67 @@ final class Buffer {
   }
 
   void writeVarUint64(int value) {
-    var remaining = value;
-    while (remaining >= 0x80) {
-      writeUint8((remaining & 0x7f) | 0x80);
-      remaining >>>= 7;
-    }
-    writeUint8(remaining);
+    _writeVarUint64BigInt(BigInt.from(value) & _mask64Big);
   }
 
-  int readVarUint64() {
-    var shift = 0;
-    var result = 0;
-    while (true) {
-      final byte = readUint8();
-      result |= (byte & 0x7f) << shift;
-      if ((byte & 0x80) == 0) {
-        return result;
-      }
-      shift += 7;
-    }
-  }
+  int readVarUint64() => _readVarUint64BigInt().toInt();
 
-  void writeVarInt64(int value) =>
-      writeVarUint64((value << 1) ^ (value >> 63));
+  void writeVarInt64(int value) {
+    final signed = BigInt.from(value);
+    final zigZag = ((signed << 1) ^ BigInt.from(value >> 63)) & _mask64Big;
+    _writeVarUint64BigInt(zigZag);
+  }
 
   int readVarInt64() {
-    final value = readVarUint64();
-    return (value >>> 1) ^ -(value & 1);
+    final encoded = _readVarUint64BigInt();
+    final magnitude = (encoded >> 1).toInt();
+    if ((encoded & BigInt.one) == BigInt.zero) {
+      return magnitude;
+    }
+    return -magnitude - 1;
+  }
+
+  void writeTaggedInt64(int value) {
+    if (value >= -0x40000000 && value <= 0x3fffffff) {
+      writeInt32(value << 1);
+      return;
+    }
+    writeUint8(0x01);
+    writeInt64(value);
+  }
+
+  int readTaggedInt64() {
+    final readIndex = _readerIndex;
+    final first = _view.getInt32(readIndex, Endian.little);
+    if ((first & 1) == 0) {
+      _readerIndex = readIndex + 4;
+      return first >> 1;
+    }
+    final value = _view.getInt64(readIndex + 1, Endian.little);
+    _readerIndex = readIndex + 9;
+    return value;
+  }
+
+  void writeTaggedUint64(int value) {
+    final unsigned = _toUnsigned64(value);
+    if (unsigned <= 0x7fffffff) {
+      writeInt32((unsigned << 1) & 0xffffffff);
+      return;
+    }
+    writeUint8(0x01);
+    writeUint64(unsigned);
+  }
+
+  int readTaggedUint64() {
+    final readIndex = _readerIndex;
+    final first = _view.getInt32(readIndex, Endian.little);
+    if ((first & 1) == 0) {
+      _readerIndex = readIndex + 4;
+      return first >>> 1;
+    }
+    final value = _view.getUint64(readIndex + 1, Endian.little);
+    _readerIndex = readIndex + 9;
+    return value;
   }
 
   void writeVarUint32Small7(int value) => writeVarUint32(value);
@@ -282,4 +319,36 @@ final class Buffer {
   void writeVarUint36Small(int value) => writeVarUint64(value);
 
   int readVarUint36Small() => readVarUint64();
+}
+
+int _toUnsigned64(int value) => (BigInt.from(value) & _mask64Big).toInt();
+
+extension on Buffer {
+  void _writeVarUint64BigInt(BigInt value) {
+    var remaining = value & _mask64Big;
+    for (var index = 0; index < 8; index += 1) {
+      final chunk = (remaining & _sevenBitMaskBig).toInt();
+      remaining >>= 7;
+      if (remaining == BigInt.zero) {
+        writeUint8(chunk);
+        return;
+      }
+      writeUint8(chunk | 0x80);
+    }
+    writeUint8((remaining & _byteMaskBig).toInt());
+  }
+
+  BigInt _readVarUint64BigInt() {
+    var shift = 0;
+    var result = BigInt.zero;
+    while (shift < 56) {
+      final byte = readUint8();
+      result |= BigInt.from(byte & 0x7f) << shift;
+      if ((byte & 0x80) == 0) {
+        return result;
+      }
+      shift += 7;
+    }
+    return result | ((BigInt.from(readUint8()) & _byteMaskBig) << 56);
+  }
 }

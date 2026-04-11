@@ -164,6 +164,14 @@ responsible for:
 - serializer lookup
 - struct metadata lookup
 - wire type decisions for struct, compatible struct, enum, ext, and union forms
+- owning the stateless `TypeMetaEncoder` and `TypeMetaDecoder` helpers used by
+  `WriteContext` and `ReadContext`
+
+`TypeMeta` is the internal wire-shape result for one value. It keeps the
+resolved runtime type together with the emitted wire type id and whether the
+type goes through shared TypeDef metadata. `WriteContext` and `ReadContext`
+still own all session state for shared TypeDef tables and meta-string tables;
+the encoder and decoder only handle the wire-level type-meta switch logic.
 
 Generator-only metadata should stay off the public `Serializer` API. The Dart
 runtime keeps those details in internal generated serializer base classes.

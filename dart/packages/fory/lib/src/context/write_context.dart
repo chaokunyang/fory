@@ -11,6 +11,7 @@ import 'package:fory/src/types/float32.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
 import 'package:fory/src/meta/meta_string.dart';
+import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/string_codec.dart';
 import 'package:fory/src/util/hash_util.dart';
 
@@ -246,33 +247,14 @@ final class WriteContext {
   /// This is exposed for generated and low-level integrations that need exact
   /// control over the emitted wire shape.
   void writeTypeMeta(ResolvedTypeInternal resolved) {
-    final wireTypeId = resolved.wireTypeId(config);
-    _buffer.writeVarUint32Small7(wireTypeId);
-    switch (wireTypeId) {
-      case TypeIds.enumById:
-      case TypeIds.struct:
-      case TypeIds.ext:
-      case TypeIds.typedUnion:
-        _buffer.writeVarUint32(resolved.userTypeId!);
-        return;
-      case TypeIds.namedEnum:
-      case TypeIds.namedStruct:
-      case TypeIds.namedExt:
-      case TypeIds.namedUnion:
-        if (config.compatible) {
-          _writeSharedTypeDef(resolved);
-        } else {
-          writePackageMetaString(resolved.namespace!);
-          writeTypeNameMetaString(resolved.typeName!);
-        }
-        return;
-      case TypeIds.compatibleStruct:
-      case TypeIds.namedCompatibleStruct:
-        _writeSharedTypeDef(resolved);
-        return;
-      default:
-        return;
-    }
+    final typeMeta = _typeResolver.typeMetaForResolved(resolved);
+    _typeResolver.typeMetaEncoder.write(
+      _buffer,
+      typeMeta,
+      writeSharedTypeDef: _writeSharedTypeDef,
+      writePackageMetaString: writePackageMetaString,
+      writeTypeNameMetaString: writeTypeNameMetaString,
+    );
   }
 
   /// Writes a package-name meta string using the session-local meta-string
@@ -311,7 +293,8 @@ final class WriteContext {
     _writeMetaStringEncoded(encodePackageMetaStringInternal(value));
   }
 
-  void _writeSharedTypeDef(ResolvedTypeInternal resolved) {
+  void _writeSharedTypeDef(TypeMeta typeMeta) {
+    final resolved = typeMeta.resolvedType;
     final identity = resolved.userTypeId != null
         ? 'id:${resolved.userTypeId}'
         : 'name:${resolved.namespace}:${resolved.typeName}';

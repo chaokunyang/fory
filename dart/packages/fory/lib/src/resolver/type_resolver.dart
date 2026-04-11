@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:fory/src/config.dart';
+import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/types/fixed_ints.dart';
 import 'package:fory/src/types/float16.dart';
@@ -248,34 +249,12 @@ final class ResolvedTypeInternal {
   bool get isBasicValue => TypeIds.isBasicValue(typeId);
 
   bool get supportsRef => TypeIds.supportsRef(typeId);
-
-  int wireTypeId(Config config) {
-    switch (kind) {
-      case RegistrationKindInternal.builtin:
-        return typeId;
-      case RegistrationKindInternal.enumType:
-        return isNamed ? TypeIds.namedEnum : TypeIds.enumById;
-      case RegistrationKindInternal.ext:
-        return isNamed ? TypeIds.namedExt : TypeIds.ext;
-      case RegistrationKindInternal.union:
-        if (userTypeId != null) {
-          return TypeIds.typedUnion;
-        }
-        return isNamed ? TypeIds.namedUnion : TypeIds.union;
-      case RegistrationKindInternal.struct:
-        final compatible = config.compatible && structMetadata!.evolving;
-        if (compatible) {
-          return isNamed
-              ? TypeIds.namedCompatibleStruct
-              : TypeIds.compatibleStruct;
-        }
-        return isNamed ? TypeIds.namedStruct : TypeIds.struct;
-    }
-  }
 }
 
 final class TypeResolver {
   final Config config;
+  final TypeMetaEncoder typeMetaEncoder = const TypeMetaEncoder();
+  final TypeMetaDecoder typeMetaDecoder = const TypeMetaDecoder();
   final Map<Type, ResolvedTypeInternal> _registeredByType =
       <Type, ResolvedTypeInternal>{};
   final Map<int, ResolvedTypeInternal> _registeredById =
@@ -520,6 +499,91 @@ final class TypeResolver {
       return null;
     }
     return _remoteStructMetadata[_remoteStructKey(resolved)];
+  }
+
+  TypeMeta typeMetaForResolved(ResolvedTypeInternal resolved) {
+    return typeMetaEncoder.typeMetaFor(config, resolved);
+  }
+
+  ResolvedTypeInternal resolveBuiltinWireType(int wireTypeId) {
+    switch (wireTypeId) {
+      case TypeIds.boolType:
+        return _builtin(bool, TypeIds.boolType);
+      case TypeIds.int8:
+        return _builtin(Int8, TypeIds.int8);
+      case TypeIds.int16:
+        return _builtin(Int16, TypeIds.int16);
+      case TypeIds.int32:
+        return _builtin(Int32, TypeIds.int32);
+      case TypeIds.varInt32:
+        return _builtin(Int32, TypeIds.varInt32);
+      case TypeIds.int64:
+        return _builtin(int, TypeIds.int64);
+      case TypeIds.varInt64:
+        return _builtin(int, TypeIds.varInt64);
+      case TypeIds.taggedInt64:
+        return _builtin(int, TypeIds.taggedInt64);
+      case TypeIds.uint8:
+        return _builtin(UInt8, TypeIds.uint8);
+      case TypeIds.uint16:
+        return _builtin(UInt16, TypeIds.uint16);
+      case TypeIds.uint32:
+        return _builtin(UInt32, TypeIds.uint32);
+      case TypeIds.varUint32:
+        return _builtin(UInt32, TypeIds.varUint32);
+      case TypeIds.uint64:
+        return _builtin(int, TypeIds.uint64);
+      case TypeIds.varUint64:
+        return _builtin(int, TypeIds.varUint64);
+      case TypeIds.taggedUint64:
+        return _builtin(int, TypeIds.taggedUint64);
+      case TypeIds.float16:
+        return _builtin(Float16, TypeIds.float16);
+      case TypeIds.float32:
+        return _builtin(Float32, TypeIds.float32);
+      case TypeIds.float64:
+        return _builtin(double, TypeIds.float64);
+      case TypeIds.string:
+        return _builtin(String, TypeIds.string);
+      case TypeIds.list:
+        return _builtin(List, TypeIds.list);
+      case TypeIds.set:
+        return _builtin(Set, TypeIds.set);
+      case TypeIds.map:
+        return _builtin(Map, TypeIds.map);
+      case TypeIds.binary:
+        return _builtin(Uint8List, TypeIds.binary);
+      case TypeIds.date:
+        return _builtin(LocalDate, TypeIds.date);
+      case TypeIds.timestamp:
+        return _builtin(Timestamp, TypeIds.timestamp);
+      case TypeIds.boolArray:
+        return _builtin(List<bool>, TypeIds.boolArray);
+      case TypeIds.int8Array:
+        return _builtin(Int8List, TypeIds.int8Array);
+      case TypeIds.int16Array:
+        return _builtin(Int16List, TypeIds.int16Array);
+      case TypeIds.int32Array:
+        return _builtin(Int32List, TypeIds.int32Array);
+      case TypeIds.int64Array:
+        return _builtin(Int64List, TypeIds.int64Array);
+      case TypeIds.uint8Array:
+        return _builtin(Uint8List, TypeIds.uint8Array);
+      case TypeIds.uint16Array:
+        return _builtin(Uint16List, TypeIds.uint16Array);
+      case TypeIds.uint32Array:
+        return _builtin(Uint32List, TypeIds.uint32Array);
+      case TypeIds.uint64Array:
+        return _builtin(Uint64List, TypeIds.uint64Array);
+      case TypeIds.float16Array:
+        return _builtin(Uint16List, TypeIds.float16Array);
+      case TypeIds.float32Array:
+        return _builtin(Float32List, TypeIds.float32Array);
+      case TypeIds.float64Array:
+        return _builtin(Float64List, TypeIds.float64Array);
+      default:
+        throw StateError('Unsupported builtin wire type id $wireTypeId.');
+    }
   }
 
   ResolvedTypeInternal _builtin(Type type, int typeId) {

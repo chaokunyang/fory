@@ -12,6 +12,7 @@ import 'package:fory/src/types/float32.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
 import 'package:fory/src/meta/meta_string.dart';
+import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/string_codec.dart';
 import 'package:fory/src/util/hash_util.dart';
 
@@ -217,93 +218,30 @@ final class ReadContext {
       _readMetaStringFrom(_buffer, decoder: decodePackageMetaStringInternal);
 
   ResolvedTypeInternal _readTypeMeta() {
-    final wireTypeId = _buffer.readVarUint32Small7();
-    switch (wireTypeId) {
-      case TypeIds.boolType:
-      case TypeIds.int8:
-      case TypeIds.int16:
-      case TypeIds.int32:
-      case TypeIds.varInt32:
-      case TypeIds.int64:
-      case TypeIds.varInt64:
-      case TypeIds.taggedInt64:
-      case TypeIds.uint8:
-      case TypeIds.uint16:
-      case TypeIds.uint32:
-      case TypeIds.varUint32:
-      case TypeIds.uint64:
-      case TypeIds.varUint64:
-      case TypeIds.taggedUint64:
-      case TypeIds.float16:
-      case TypeIds.float32:
-      case TypeIds.float64:
-      case TypeIds.string:
-      case TypeIds.list:
-      case TypeIds.set:
-      case TypeIds.map:
-      case TypeIds.binary:
-      case TypeIds.date:
-      case TypeIds.timestamp:
-      case TypeIds.boolArray:
-      case TypeIds.int8Array:
-      case TypeIds.int16Array:
-      case TypeIds.int32Array:
-      case TypeIds.int64Array:
-      case TypeIds.uint8Array:
-      case TypeIds.uint16Array:
-      case TypeIds.uint32Array:
-      case TypeIds.uint64Array:
-      case TypeIds.float16Array:
-      case TypeIds.float32Array:
-      case TypeIds.float64Array:
-        return _typeResolver.resolveShape(
-          TypeShapeInternal(
-            type: Object,
-            typeId: wireTypeId,
-            nullable: false,
-            ref: false,
-            dynamic: false,
-            arguments: const <TypeShapeInternal>[],
-          ),
-        );
-      case TypeIds.enumById:
-      case TypeIds.struct:
-      case TypeIds.ext:
-      case TypeIds.typedUnion:
-        return _typeResolver.resolveUserById(_buffer.readVarUint32());
-      case TypeIds.namedEnum:
-      case TypeIds.namedStruct:
-      case TypeIds.namedExt:
-      case TypeIds.namedUnion:
-        if (config.compatible) {
-          return _readSharedTypeDef();
-        }
-        return _typeResolver.resolveUserByName(
-          _readPackageMetaString(),
-          _readTypeNameMetaString(),
-        );
-      case TypeIds.compatibleStruct:
-      case TypeIds.namedCompatibleStruct:
-        return _readSharedTypeDef();
-      default:
-        throw StateError('Unsupported wire type id $wireTypeId.');
-    }
+    final typeMeta = _typeResolver.typeMetaDecoder.read(
+      _buffer,
+      config: config,
+      resolveBuiltinWireType: _typeResolver.resolveBuiltinWireType,
+      resolveUserById: _typeResolver.resolveUserById,
+      resolveUserByName: _typeResolver.resolveUserByName,
+      readSharedTypeDef: _readSharedTypeDef,
+      readPackageMetaString: _readPackageMetaString,
+      readTypeNameMetaString: _readTypeNameMetaString,
+    );
+    return typeMeta.resolvedType;
   }
 
-  ResolvedTypeInternal _readSharedTypeDef() {
+  TypeMeta _readSharedTypeDef() {
     final marker = _buffer.readVarUint32Small14();
     final isRef = (marker & 1) == 1;
     final index = marker >>> 1;
     if (isRef) {
-      return _sharedTypes[index];
+      return _typeResolver.typeMetaForResolved(_sharedTypes[index]);
     }
     final typeDef = _readTypeDef();
     final resolved = typeDef.$1;
     _sharedTypes.add(typeDef.$2 ?? resolved);
-    if (typeDef.$2 != null) {
-      return typeDef.$2!;
-    }
-    return resolved;
+    return _typeResolver.typeMetaForResolved(typeDef.$2 ?? resolved);
   }
 
   (ResolvedTypeInternal, ResolvedTypeInternal?) _readTypeDef() {

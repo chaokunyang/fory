@@ -21,12 +21,4 @@ targets:
       fory|fory_builder:
         enabled: true
         generate_for:
-          - example/**.dart
-
-builders:
-  fory_builder:
-    import: "package:fory/src/codegen/fory_builder.dart"
-    builder_factories: ["foryBuilder"]
-    build_extensions: {".dart": [".fory.dart"]}
-    auto_apply: dependents
-    build_to: source
+          - lib/**.dart

@@ -1,11 +1,16 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:meta/meta.dart';
+
 import 'package:fory/src/types/float16.dart';
 
 final BigInt _mask64Big = (BigInt.one << 64) - BigInt.one;
 final BigInt _sevenBitMaskBig = BigInt.from(0x7f);
 final BigInt _byteMaskBig = BigInt.from(0xff);
+const bool _useBigIntVarint64 =
+    bool.fromEnvironment('dart.library.js_interop') ||
+        bool.fromEnvironment('dart.library.js_util');
 
 /// A reusable byte buffer with explicit reader and writer indices.
 ///
@@ -297,14 +302,47 @@ final class Buffer {
 
   /// Writes an unsigned 64-bit varint.
   void writeVarUint64(int value) {
+    if (!_useBigIntVarint64) {
+      var remaining = value;
+      for (var index = 0; index < 8; index += 1) {
+        final chunk = remaining & 0x7f;
+        remaining = remaining >>> 7;
+        if (remaining == 0) {
+          writeUint8(chunk);
+          return;
+        }
+        writeUint8(chunk | 0x80);
+      }
+      writeUint8(remaining & 0xff);
+      return;
+    }
     _writeVarUint64BigInt(BigInt.from(value) & _mask64Big);
   }
 
   /// Reads an unsigned 64-bit varint.
-  int readVarUint64() => _readVarUint64BigInt().toInt();
+  int readVarUint64() {
+    if (!_useBigIntVarint64) {
+      var shift = 0;
+      var result = 0;
+      while (shift < 56) {
+        final byte = readUint8();
+        result |= (byte & 0x7f) << shift;
+        if ((byte & 0x80) == 0) {
+          return result;
+        }
+        shift += 7;
+      }
+      return result | (readUint8() << 56);
+    }
+    return _readVarUint64BigInt().toInt();
+  }
 
   /// Writes a zig-zag encoded signed 64-bit varint.
   void writeVarInt64(int value) {
+    if (!_useBigIntVarint64) {
+      writeVarUint64((value << 1) ^ (value >> 63));
+      return;
+    }
     final signed = BigInt.from(value);
     final zigZag = ((signed << 1) ^ BigInt.from(value >> 63)) & _mask64Big;
     _writeVarUint64BigInt(zigZag);
@@ -312,6 +350,10 @@ final class Buffer {
 
   /// Reads a zig-zag encoded signed 64-bit varint.
   int readVarInt64() {
+    if (!_useBigIntVarint64) {
+      final encoded = readVarUint64();
+      return (encoded >>> 1) ^ -(encoded & 1);
+    }
     final encoded = _readVarUint64BigInt();
     final magnitude = (encoded >> 1).toInt();
     if ((encoded & BigInt.one) == BigInt.zero) {
@@ -389,6 +431,105 @@ final class Buffer {
 
   /// Reads a small unsigned integer written by [writeVarUint36Small].
   int readVarUint36Small() => readVarUint64();
+}
+
+@internal
+int bufferWriterIndexInternal(Buffer buffer) => buffer._writerIndex;
+
+@internal
+int bufferReaderIndexInternal(Buffer buffer) => buffer._readerIndex;
+
+@internal
+void bufferSetWriterIndexInternal(Buffer buffer, int index) {
+  buffer._writerIndex = index;
+}
+
+@internal
+void bufferSetReaderIndexInternal(Buffer buffer, int index) {
+  buffer._readerIndex = index;
+}
+
+@internal
+void bufferWriteUint8AtInternal(Buffer buffer, int index, int value) {
+  buffer._view.setUint8(index, value);
+}
+
+@internal
+int bufferReserveBytesInternal(Buffer buffer, int length) {
+  buffer.ensureWritable(length);
+  final start = buffer._writerIndex;
+  buffer._writerIndex += length;
+  return start;
+}
+
+@internal
+Uint8List bufferBytesInternal(Buffer buffer) => buffer._bytes;
+
+@internal
+ByteData bufferByteDataInternal(Buffer buffer) => buffer._view;
+
+@internal
+PackedBytesInternal bufferReadPackedBytesInternal(Buffer buffer, int length) {
+  final start = buffer._readerIndex;
+  buffer._readerIndex += length;
+  var word0 = 0;
+  var word1 = 0;
+  var word2 = 0;
+  var word3 = 0;
+  for (var index = 0; index < length; index += 1) {
+    final byte = buffer._bytes[start + index] & 0xff;
+    final shift = (index & 0x03) << 3;
+    switch (index >> 2) {
+      case 0:
+        word0 |= byte << shift;
+        break;
+      case 1:
+        word1 |= byte << shift;
+        break;
+      case 2:
+        word2 |= byte << shift;
+        break;
+      default:
+        word3 |= byte << shift;
+        break;
+    }
+  }
+  return PackedBytesInternal(length, word0, word1, word2, word3);
+}
+
+@internal
+Uint8List bufferMaterializePackedBytesInternal(PackedBytesInternal packed) {
+  final bytes = Uint8List(packed.length);
+
+  void unpackWord(int word, int offset) {
+    final end = offset + 4;
+    for (var index = offset; index < packed.length && index < end; index += 1) {
+      bytes[index] = (word >> ((index - offset) << 3)) & 0xff;
+    }
+  }
+
+  unpackWord(packed.word0, 0);
+  unpackWord(packed.word1, 4);
+  unpackWord(packed.word2, 8);
+  unpackWord(packed.word3, 12);
+  return bytes;
+}
+
+@internal
+final class PackedBytesInternal {
+  final int length;
+  final int word0;
+  final int word1;
+  final int word2;
+  final int word3;
+
+  const PackedBytesInternal(
+    this.length,
+    this.word0,
+    this.word1,
+    this.word2,
+    this.word3,
+  );
 }
 
 int _toUnsigned64(int value) => (BigInt.from(value) & _mask64Big).toInt();

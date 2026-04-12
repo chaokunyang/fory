@@ -1,4 +1,5 @@
 import 'package:meta/meta.dart';
+
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/context/compatible_struct_metadata_store.dart';
@@ -7,16 +8,15 @@ import 'package:fory/src/context/ref_reader.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/payload_codec.dart';
-import 'package:fory/src/serializer/struct_session.dart';
 import 'package:fory/src/serializer/serializer.dart';
+import 'package:fory/src/serializer/struct_session.dart';
 import 'package:fory/src/types/float16.dart';
-import 'package:fory/src/meta/meta_string.dart';
 
-/// Read-side runtime state for a single Fory operation.
+/// Read-side serializer context.
 ///
-/// Generated and manual serializers receive this object from [Serializer.read].
-/// Application code normally interacts with [Fory] instead of preparing
-/// contexts directly.
+/// Generated and manual serializers receive this during a single
+/// deserialization operation. Application code normally interacts with [Fory]
+/// instead of preparing contexts directly.
 final class ReadContext {
   /// Effective runtime configuration for the active operation.
   final Config config;
@@ -39,9 +39,7 @@ final class ReadContext {
     this._compatibleStructMetadata,
   );
 
-  /// Prepares the context to read from [buffer].
-  ///
-  /// This resets all per-operation caches, shared TypeDef state, and Ref state.
+  @internal
   void prepare(Buffer buffer) {
     _buffer = buffer;
     _sharedTypes.clear();
@@ -61,7 +59,30 @@ final class ReadContext {
   RefReader get refReader => _refReader;
 
   @internal
-  StructReadSession? get structReadSession => _structReadSession;
+  T? localStateAs<T>(Object key) {
+    if (!identical(key, structReadSessionKey)) {
+      throw StateError('Unknown read local state key: $key.');
+    }
+    return _structReadSession as T?;
+  }
+
+  @internal
+  Object? replaceLocalState(Object key, Object? next) {
+    if (!identical(key, structReadSessionKey)) {
+      throw StateError('Unknown read local state key: $key.');
+    }
+    final previous = _structReadSession;
+    _structReadSession = next as StructReadSession?;
+    return previous;
+  }
+
+  @internal
+  void restoreLocalState(Object key, Object? previous) {
+    if (!identical(key, structReadSessionKey)) {
+      throw StateError('Unknown read local state key: $key.');
+    }
+    _structReadSession = previous as StructReadSession?;
+  }
 
   @internal
   void rememberCompatibleStructMetadata(
@@ -72,24 +93,29 @@ final class ReadContext {
   }
 
   @internal
-  ResolvedTypeInternal readTypeMetaValue() => _readTypeMeta();
+  ResolvedTypeInternal readTypeMetaValue([
+    ResolvedTypeInternal? expectedNamedType,
+  ]) =>
+      _readTypeMeta(expectedNamedType);
 
   @internal
   Object readSerializerPayload(
-    Serializer<Object?> serializer,
-    ResolvedTypeInternal resolved,
-  ) {
-    final needsSentinel = resolved.supportsRef && !_refReader.hasPreservedRefId;
+      Serializer<Object?> serializer, ResolvedTypeInternal resolved,
+      {required bool hasCurrentPreservedRef}) {
+    final int? sentinelId;
+    final needsSentinel = resolved.supportsRef && !hasCurrentPreservedRef;
     if (needsSentinel) {
-      _refReader.preserveRefId(-1);
+      sentinelId = _refReader.preserveSentinel();
+    } else {
+      sentinelId = null;
     }
     try {
       return serializer.read(this) as Object;
     } finally {
       if (needsSentinel &&
           _refReader.hasPreservedRefId &&
-          _refReader.lastPreservedRefId == -1) {
-        _refReader.discardPreservedRefId(-1);
+          _refReader.lastPreservedRefId == sentinelId) {
+        _refReader.discardPreservedRefId(sentinelId!);
       }
     }
   }
@@ -153,23 +179,8 @@ final class ReadContext {
   int readTaggedUint64() => _buffer.readTaggedUint64();
 
   /// Binds [value] to the most recently preserved Ref slot.
-  ///
-  /// Manual serializers call this when they need to publish a newly created
-  /// object before reading its recursive fields.
   void reference(Object? value) {
     _refReader.reference(value);
-  }
-
-  @internal
-  StructReadSession? swapStructReadSession(StructReadSession? session) {
-    final previous = _structReadSession;
-    _structReadSession = session;
-    return previous;
-  }
-
-  @internal
-  void restoreStructReadSession(StructReadSession? previous) {
-    _structReadSession = previous;
   }
 
   /// Reads a non-null string payload without ref/null handling.
@@ -213,7 +224,11 @@ final class ReadContext {
             resolved.supportsRef
         ? _refReader.preserveRefId()
         : null;
-    final value = readResolvedValue(resolved, null);
+    final value = readResolvedValue(
+      resolved,
+      null,
+      hasPreservedRef: preservedRefId != null || rootPreservedRefId != null,
+    );
     if (preservedRefId != null &&
         resolved.supportsRef &&
         _refReader.readRefAt(preservedRefId) == null) {
@@ -249,25 +264,52 @@ final class ReadContext {
 
   @internal
   Object? readResolvedValue(
-    ResolvedTypeInternal resolved,
-    TypeShapeInternal? declaredShape,
-  ) {
-    return readPayloadValue(this, resolved, declaredShape);
+      ResolvedTypeInternal resolved, TypeShapeInternal? declaredShape,
+      {bool hasPreservedRef = false}) {
+    if (!_tracksDepth(resolved)) {
+      return readPayloadValue(
+        this,
+        resolved,
+        declaredShape,
+        hasPreservedRef: hasPreservedRef,
+      );
+    }
+    increaseDepth();
+    try {
+      return readPayloadValue(
+        this,
+        resolved,
+        declaredShape,
+        hasPreservedRef: hasPreservedRef,
+      );
+    } finally {
+      decreaseDepth();
+    }
   }
 
-  ResolvedTypeInternal _readTypeMeta() {
+  ResolvedTypeInternal _readTypeMeta([
+    ResolvedTypeInternal? expectedNamedType,
+  ]) {
     return _typeResolver.readTypeMeta(
       _buffer,
-      sharedTypeAt: (index) => _sharedTypes[index],
-      addSharedType: (resolved) => _sharedTypes.add(resolved),
-      readPackageMetaString: _readPackageMetaStringEncoded,
-      readTypeNameMetaString: _readTypeNameMetaStringEncoded,
+      expectedNamedType: expectedNamedType,
+      sharedTypes: _sharedTypes,
+      metaStringReader: _metaStringReader,
     );
   }
 
-  EncodedMetaStringInternal _readPackageMetaStringEncoded() =>
-      _metaStringReader.readMetaString(_buffer);
-
-  EncodedMetaStringInternal _readTypeNameMetaStringEncoded() =>
-      _metaStringReader.readMetaString(_buffer);
+  bool _tracksDepth(ResolvedTypeInternal resolved) {
+    if (TypeIds.isContainer(resolved.typeId)) {
+      return true;
+    }
+    switch (resolved.kind) {
+      case RegistrationKindInternal.builtin:
+      case RegistrationKindInternal.enumType:
+        return false;
+      case RegistrationKindInternal.struct:
+      case RegistrationKindInternal.ext:
+      case RegistrationKindInternal.union:
+        return true;
+    }
+  }
 }

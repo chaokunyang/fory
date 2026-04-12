@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:fory/src/util/hash_util.dart';
+
 const int metaStringUtf8Encoding = 0;
 const int metaStringLowerSpecialEncoding = 1;
 const int metaStringLowerUpperDigitSpecialEncoding = 2;
@@ -33,11 +35,41 @@ const List<int> _fieldNameCompactEncodings = <int>[
 final class EncodedMetaStringInternal {
   final Uint8List bytes;
   final int encoding;
+  final int hash;
+  final int firstWord0;
+  final int firstWord1;
+  final int secondWord0;
+  final int secondWord1;
 
   static final EncodedMetaStringInternal empty =
       EncodedMetaStringInternal(Uint8List(0), metaStringUtf8Encoding);
 
-  EncodedMetaStringInternal(this.bytes, this.encoding);
+  EncodedMetaStringInternal(this.bytes, this.encoding)
+      : hash = metaStringHashInternal(bytes, encoding: encoding),
+        firstWord0 = _packLittleEndian32(bytes, 0),
+        firstWord1 = _packLittleEndian32(bytes, 4),
+        secondWord0 = _packLittleEndian32(bytes, 8),
+        secondWord1 = _packLittleEndian32(bytes, 12);
+
+  int get length => bytes.length;
+
+  bool get isSmall => bytes.length <= metaStringSmallThreshold;
+
+  bool matchesPacked(
+    int packedEncoding,
+    int packedLength,
+    int packedWord0,
+    int packedWord1,
+    int packedWord2,
+    int packedWord3,
+  ) {
+    return encoding == packedEncoding &&
+        bytes.length == packedLength &&
+        firstWord0 == packedWord0 &&
+        firstWord1 == packedWord1 &&
+        secondWord0 == packedWord2 &&
+        secondWord1 == packedWord3;
+  }
 }
 
 EncodedMetaStringInternal encodePackageMetaStringInternal(String value) =>
@@ -164,6 +196,18 @@ String decodeMetaStringInternal(
     default:
       throw StateError('Unsupported meta-string encoding $encoding.');
   }
+}
+
+int _packLittleEndian32(List<int> bytes, int offset) {
+  if (offset >= bytes.length) {
+    return 0;
+  }
+  final end = offset + 4;
+  var value = 0;
+  for (var index = offset; index < bytes.length && index < end; index += 1) {
+    value |= (bytes[index] & 0xff) << ((index - offset) * 8);
+  }
+  return value;
 }
 
 EncodedMetaStringInternal _encodeMetaStringInternal(

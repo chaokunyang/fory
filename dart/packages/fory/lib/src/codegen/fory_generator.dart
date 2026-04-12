@@ -31,26 +31,38 @@ final class ForyGenerator extends Generator {
     }
 
     final namespace = _buildNamespace(buildStep.inputId);
+    final sourceFileName = buildStep.inputId.pathSegments.last;
     final helperBaseName = _toPascalCase(
       buildStep.inputId.pathSegments.last.split('.').first,
     );
-    final registrationHelperName = '_register${helperBaseName}ForyTypes';
-    final registrationByTypeHelperName = '_register${helperBaseName}ForyType';
+    final registrationHelperName = 'register${helperBaseName}ForyTypes';
+    final registrationByTypeHelperName = 'register${helperBaseName}ForyType';
 
     final enumSpecs = enumElements
         .map((element) => _GeneratedEnumSpec(name: element.name))
         .toList(growable: false);
     final structSpecs =
         annotatedClasses.map(_analyzeStruct).toList(growable: false);
+    final needsTypedDataImport = structSpecs.any(
+      (structSpec) => structSpec.fields.any(
+        (field) => _usesTypedDataType(field.type),
+      ),
+    );
 
     final output = StringBuffer()
       ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND')
-      ..writeln('// ignore_for_file: invalid_use_of_internal_member')
+      ..writeln(
+          '// ignore_for_file: implementation_imports, invalid_use_of_internal_member')
+      ..writeln()
+      ..write(
+        needsTypedDataImport ? "import 'dart:typed_data';\n" : '',
+      )
+      ..writeln("import 'package:fory/fory.dart';")
+      ..writeln("import 'package:fory/src/codegen/generated_support.dart';")
+      ..writeln("import 'package:fory/src/serializer/serializer_support.dart';")
+      ..writeln("import '$sourceFileName';")
       ..writeln();
 
-    if (structSpecs.isNotEmpty) {
-      _writeGeneratedStructBase(output);
-    }
     for (final enumSpec in enumSpecs) {
       _writeEnum(output, enumSpec);
     }
@@ -289,24 +301,34 @@ final class ForyGenerator extends Generator {
       ..writeln();
   }
 
-  void _writeGeneratedStructBase(StringBuffer output) {
-    output
-      ..writeln(
-        'abstract base class _GeneratedStructSerializer<T> extends Serializer<T> {',
-      )
-      ..writeln('  const _GeneratedStructSerializer();')
-      ..writeln('}')
-      ..writeln();
-  }
-
   void _writeStruct(StringBuffer output, _GeneratedStructSpec structSpec) {
     final serializerClassName = '_${structSpec.name}ForySerializer';
     final metadataListName =
         '_${_toCamelCase(structSpec.name)}ForyFieldMetadata';
-    final fieldListName = '_${_toCamelCase(structSpec.name)}ForyFields';
+    final registrationName =
+        '_${_toCamelCase(structSpec.name)}ForyRegistration';
+    final hasDirectPrimitiveFastPath = structSpec.fields.any(
+      _usesDirectGeneratedPrimitiveFastPath,
+    );
+    final hasRuntimeFastPath = structSpec.fields.any(
+      (field) => !_usesDirectGeneratedBasicFastPath(field),
+    );
+    final directCursorRuns =
+        _directGeneratedWriteReservationRuns(structSpec.fields);
+    final directCursorRunByStart = <int, _DirectGeneratedWriteReservationRun>{
+      for (final run in directCursorRuns) run.start: run,
+    };
+    final directCursorRunByEnd = <int, _DirectGeneratedWriteReservationRun>{
+      for (final run in directCursorRuns) run.end: run,
+    };
+    final directCursorStartByIndex = <int, int>{
+      for (final run in directCursorRuns)
+        for (var index = run.start; index <= run.end; index += 1)
+          index: run.start,
+    };
 
     output.writeln(
-      'const List<Map<String, Object?>> $metadataListName = <Map<String, Object?>>[',
+      'const List<GeneratedFieldMetadata> $metadataListName = <GeneratedFieldMetadata>[',
     );
     for (final field in structSpec.fields) {
       output.writeln(_fieldMetadataLiteral(field));
@@ -314,54 +336,154 @@ final class ForyGenerator extends Generator {
     output
       ..writeln('];')
       ..writeln()
-      ..writeln('final List<Object> $fieldListName = List<Object>.unmodifiable(')
-      ..writeln('  <Object>[');
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      output.writeln(
-        '    generatedField($index, $metadataListName[$index]),',
+      ..writeln(
+        'typedef _${structSpec.name}SessionWriter = GeneratedStructFieldWriter<${structSpec.name}>;',
       );
+    if (structSpec.constructorPlan.mode == _ConstructorMode.mutable) {
+      output.writeln(
+        'typedef _${structSpec.name}SessionReader = GeneratedStructFieldReader<${structSpec.name}>;',
+      );
+    }
+    output.writeln();
+    for (var index = 0; index < structSpec.fields.length; index += 1) {
+      final field = structSpec.fields[index];
+      output
+        ..writeln(
+          'void _write${structSpec.name}SessionField$index(WriteContext context, GeneratedStructField field, ${structSpec.name} value) {',
+        )
+        ..writeln(
+          '  writeGeneratedStructRuntimeValue(context, field, value.${field.name});',
+        )
+        ..writeln('}')
+        ..writeln();
+    }
+    if (structSpec.constructorPlan.mode == _ConstructorMode.mutable) {
+      for (var index = 0; index < structSpec.fields.length; index += 1) {
+        final field = structSpec.fields[index];
+        final readerFunctionName = field.readerFunctionName(structSpec.name);
+        output
+          ..writeln(
+            'void _read${structSpec.name}SessionField$index(ReadContext context, ${structSpec.name} value, Object? rawValue) {',
+          )
+          ..writeln(
+            '  value.${field.name} = $readerFunctionName(${_sessionResolvedRawExpression('rawValue')}, value.${field.name});',
+          )
+          ..writeln('}')
+          ..writeln();
+      }
+    }
+    output
+      ..writeln(
+        'final GeneratedStructRegistration<${structSpec.name}> $registrationName = GeneratedStructRegistration<${structSpec.name}>(',
+      )
+      ..writeln(
+        '  sessionWritersBySlot: <_${structSpec.name}SessionWriter>[',
+      );
+    for (var index = 0; index < structSpec.fields.length; index += 1) {
+      output.writeln('    _write${structSpec.name}SessionField$index,');
     }
     output
       ..writeln('  ],')
+      ..writeln(
+        structSpec.constructorPlan.mode == _ConstructorMode.mutable
+            ? '  compatibleFactory: ${structSpec.name}.new,'
+            : '  compatibleFactory: null,',
+      );
+    if (structSpec.constructorPlan.mode == _ConstructorMode.mutable) {
+      output.writeln(
+        '  compatibleReadersBySlot: <_${structSpec.name}SessionReader>[',
+      );
+      for (var index = 0; index < structSpec.fields.length; index += 1) {
+        output.writeln('    _read${structSpec.name}SessionField$index,');
+      }
+      output.writeln('  ],');
+    } else {
+      output.writeln('  compatibleReadersBySlot: null,');
+    }
+    output
+      ..writeln('  type: ${structSpec.name},')
+      ..writeln(
+        '  serializerFactory: _${structSpec.name}ForySerializer.new,',
+      )
+      ..writeln('  evolving: ${structSpec.evolving},')
+      ..writeln('  fields: $metadataListName,')
       ..writeln(');')
       ..writeln()
       ..writeln(
-        'final class $serializerClassName extends _GeneratedStructSerializer<${structSpec.name}> {',
+        'final class $serializerClassName extends Serializer<${structSpec.name}> {',
       )
-      ..writeln('  const $serializerClassName();')
+      ..writeln('  List<GeneratedStructField>? _generatedFields;')
+      ..writeln()
+      ..writeln('  $serializerClassName();')
+      ..writeln()
+      ..writeln(
+        '  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {',
+      )
+      ..writeln(
+        '    return _generatedFields ??= buildGeneratedStructRuntimeFields(',
+      )
+      ..writeln('      context.typeResolver,')
+      ..writeln('      $registrationName,')
+      ..writeln('    );')
+      ..writeln('  }')
+      ..writeln()
+      ..writeln(
+        '  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {',
+      )
+      ..writeln(
+        '    return _generatedFields ??= buildGeneratedStructRuntimeFields(',
+      )
+      ..writeln('      context.typeResolver,')
+      ..writeln('      $registrationName,')
+      ..writeln('    );')
+      ..writeln('  }')
       ..writeln('  @override')
       ..writeln(
         '  void write(WriteContext context, ${structSpec.name} value) {',
       )
-      ..writeln(
-        '    final compatibleFields = generatedCompatibleWriteFields(context);',
-      )
-      ..writeln('    if (compatibleFields != null) {')
-      ..writeln('      for (final field in compatibleFields) {')
-      ..writeln('        switch (generatedFieldSlot(field)) {');
+      ..writeln('    final session = generatedStructWriteSession(context);')
+      ..writeln('    if (session == null) {');
+    if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
+      output.writeln('      final buffer = context.buffer;');
+    }
+    if (hasRuntimeFastPath) {
+      output.writeln('      final fields = _writeRuntimeFields(context);');
+    }
     for (var index = 0; index < structSpec.fields.length; index += 1) {
       final field = structSpec.fields[index];
-      output
-        ..writeln('          case $index:')
-        ..writeln(
-          '            writeGeneratedField(context, field, value.${field.name});',
-        )
-        ..writeln('            break;');
+      final directCursorRun = directCursorRunByStart[index];
+      if (directCursorRun != null) {
+        output.writeln(
+          '      final cursor$index = GeneratedWriteCursor.reserve(buffer, ${directCursorRun.bytes});',
+        );
+      }
+      if (_usesReservedGeneratedFastPath(field)) {
+        output.writeln(
+          '      ${_directGeneratedCursorWriteStatement(field, 'cursor${directCursorStartByIndex[index]}', 'value.${field.name}')};',
+        );
+      } else if (_usesDirectGeneratedBasicFastPath(field)) {
+        output.writeln(
+          '      ${_directGeneratedWriteStatement(field, 'value.${field.name}')};',
+        );
+      } else {
+        output.writeln(
+          '      writeGeneratedStructRuntimeValue(context, fields[$index], value.${field.name});',
+        );
+      }
+      final directCursorEndRun = directCursorRunByEnd[index];
+      if (directCursorEndRun != null) {
+        output.writeln('      cursor${directCursorEndRun.start}.finish();');
+      }
     }
     output
-      ..writeln('          default:')
-      ..writeln('            break;')
-      ..writeln('        }')
-      ..writeln('      }')
       ..writeln('      return;')
-      ..writeln('    }');
-    for (var index = 0; index < structSpec.fields.length; index += 1) {
-      final field = structSpec.fields[index];
-      output.writeln(
-        '    writeGeneratedField(context, $fieldListName[$index], value.${field.name});',
-      );
-    }
-    output
+      ..writeln('    }')
+      ..writeln('    final writers = $registrationName.sessionWritersBySlot;')
+      ..writeln(
+        '    for (final field in session.orderedFields) {',
+      )
+      ..writeln('      writers[field.slot](context, field, value);')
+      ..writeln('    }')
       ..writeln('  }')
       ..writeln()
       ..writeln('  @override')
@@ -370,24 +492,133 @@ final class ForyGenerator extends Generator {
     switch (structSpec.constructorPlan.mode) {
       case _ConstructorMode.mutable:
         output
+          ..writeln('    final session = generatedStructReadSession(context);')
           ..writeln('    final value = ${structSpec.name}();')
-          ..writeln('    context.reference(value);');
+          ..writeln('    context.reference(value);')
+          ..writeln('    if (session == null) {');
+        if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
+          output.writeln('      final buffer = context.buffer;');
+        }
+        if (hasRuntimeFastPath) {
+          output.writeln('      final fields = _readRuntimeFields(context);');
+        }
         for (var index = 0; index < structSpec.fields.length; index += 1) {
           final field = structSpec.fields[index];
           final readerFunctionName = field.readerFunctionName(structSpec.name);
+          final directCursorRun = directCursorRunByStart[index];
+          if (directCursorRun != null) {
+            output.writeln(
+              '      final cursor$index = GeneratedReadCursor.start(buffer);',
+            );
+          }
+          if (_usesReservedGeneratedFastPath(field)) {
+            output.writeln(
+              '      value.${field.name} = ${_directGeneratedCursorReadExpression(field, 'cursor${directCursorStartByIndex[index]}')};',
+            );
+          } else if (_usesDirectGeneratedBasicFastPath(field)) {
+            output.writeln(
+              '      value.${field.name} = ${_directGeneratedReadExpression(field)};',
+            );
+          } else if (_usesDirectGeneratedTypedContainerReadFastPath(field)) {
+            output.writeln(
+              '      value.${field.name} = ${_directGeneratedTypedContainerReadExpression(structSpec.name, field, 'fields[$index]')};',
+            );
+          } else {
+            output.writeln(
+              '      value.${field.name} = $readerFunctionName(readGeneratedStructRuntimeValue(context, fields[$index], value.${field.name}), value.${field.name});',
+            );
+          }
+          final directCursorEndRun = directCursorRunByEnd[index];
+          if (directCursorEndRun != null) {
+            output.writeln('      cursor${directCursorEndRun.start}.finish();');
+          }
+        }
+        output.writeln('      return value;');
+        output.writeln('    }');
+        for (var index = 0; index < structSpec.fields.length; index += 1) {
+          final field = structSpec.fields[index];
+          final readerFunctionName = field.readerFunctionName(structSpec.name);
+          final rawValueName = 'raw${structSpec.name}$index';
           output.writeln(
-            '    value.${field.name} = $readerFunctionName(readGeneratedField<Object?>(context, $fieldListName[$index], value.${field.name}), value.${field.name});',
+            '    if (session.containsSlot($index)) {',
           );
+          output.writeln(
+            '      final $rawValueName = session.valueForSlot($index);',
+          );
+          output.writeln(
+            '      value.${field.name} = $readerFunctionName(${_sessionResolvedRawExpression(rawValueName)}, value.${field.name});',
+          );
+          output.writeln('    }');
         }
         output.writeln('    return value;');
       case _ConstructorMode.constructor:
+        output.writeln(
+            '    final session = generatedStructReadSession(context);');
+        for (var index = 0; index < structSpec.fields.length; index += 1) {
+          final field = structSpec.fields[index];
+          output.writeln(
+            '    late final ${field.displayType} ${field.localName};',
+          );
+        }
+        output.writeln('    if (session == null) {');
+        if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
+          output.writeln('      final buffer = context.buffer;');
+        }
+        if (hasRuntimeFastPath) {
+          output.writeln('      final fields = _readRuntimeFields(context);');
+        }
         for (var index = 0; index < structSpec.fields.length; index += 1) {
           final field = structSpec.fields[index];
           final readerFunctionName = field.readerFunctionName(structSpec.name);
-          output.writeln(
-            '    final ${field.localName} = $readerFunctionName(readGeneratedField<Object?>(context, $fieldListName[$index]));',
-          );
+          final directCursorRun = directCursorRunByStart[index];
+          if (directCursorRun != null) {
+            output.writeln(
+              '      final cursor$index = GeneratedReadCursor.start(buffer);',
+            );
+          }
+          if (_usesReservedGeneratedFastPath(field)) {
+            output.writeln(
+              '      ${field.localName} = ${_directGeneratedCursorReadExpression(field, 'cursor${directCursorStartByIndex[index]}')};',
+            );
+          } else if (_usesDirectGeneratedBasicFastPath(field)) {
+            output.writeln(
+              '      ${field.localName} = ${_directGeneratedReadExpression(field)};',
+            );
+          } else if (_usesDirectGeneratedTypedContainerReadFastPath(field)) {
+            output.writeln(
+              '      ${field.localName} = ${_directGeneratedTypedContainerReadExpression(structSpec.name, field, 'fields[$index]')};',
+            );
+          } else {
+            output.writeln(
+              '      ${field.localName} = $readerFunctionName(readGeneratedStructRuntimeValue(context, fields[$index]));',
+            );
+          }
+          final directCursorEndRun = directCursorRunByEnd[index];
+          if (directCursorEndRun != null) {
+            output.writeln('      cursor${directCursorEndRun.start}.finish();');
+          }
         }
+        output.writeln('    } else {');
+        for (var index = 0; index < structSpec.fields.length; index += 1) {
+          final field = structSpec.fields[index];
+          final readerFunctionName = field.readerFunctionName(structSpec.name);
+          final rawValueName = 'raw${structSpec.name}$index';
+          output.writeln(
+            '      if (session.containsSlot($index)) {',
+          );
+          output.writeln(
+            '        final $rawValueName = session.valueForSlot($index);',
+          );
+          output.writeln(
+            '        ${field.localName} = $readerFunctionName(${_sessionResolvedRawExpression(rawValueName)});',
+          );
+          output.writeln('      } else {');
+          output.writeln(
+            '        ${field.localName} = $readerFunctionName(null);',
+          );
+          output.writeln('      }');
+        }
+        output.writeln('    }');
         final constructorInvocation = _constructorInvocation(structSpec);
         output
           ..writeln('    final value = $constructorInvocation;')
@@ -407,6 +638,9 @@ final class ForyGenerator extends Generator {
       ..writeln();
 
     for (final field in structSpec.fields) {
+      if (_usesDirectGeneratedTypedContainerReadFastPath(field)) {
+        _writeDirectContainerReaderHelpers(output, structSpec.name, field);
+      }
       final readerFunctionName = field.readerFunctionName(structSpec.name);
       output
         ..writeln(
@@ -428,46 +662,42 @@ final class ForyGenerator extends Generator {
     required String registrationHelperName,
     required String registrationByTypeHelperName,
   }) {
-    output
-      ..writeln('bool _generatedForyBindingsInstalled = false;')
-      ..writeln()
-      ..writeln('void _installGeneratedForyBindings() {')
-      ..writeln('  if (_generatedForyBindingsInstalled) {')
-      ..writeln('    return;')
-      ..writeln('  }')
-      ..writeln('  _generatedForyBindingsInstalled = true;');
-
     for (final enumSpec in enumSpecs) {
-      output.writeln(
-        '  Fory.bindGeneratedEnumFactory(${enumSpec.name}, _${enumSpec.name}ForySerializer.new);',
-      );
+      final registrationName =
+          '_${_toCamelCase(enumSpec.name)}ForyRegistration';
+      output
+        ..writeln(
+          'final GeneratedEnumRegistration $registrationName = GeneratedEnumRegistration(',
+        )
+        ..writeln('  type: ${enumSpec.name},')
+        ..writeln('  serializerFactory: _${enumSpec.name}ForySerializer.new,')
+        ..writeln(');')
+        ..writeln();
     }
-    for (final structSpec in structSpecs) {
-      output.writeln(
-        '  Fory.bindGeneratedStructFactory(${structSpec.name}, _${structSpec.name}ForySerializer.new, evolving: ${structSpec.evolving}, fields: ${'_${_toCamelCase(structSpec.name)}ForyFieldMetadata'});',
-      );
+    if (enumSpecs.isNotEmpty && structSpecs.isNotEmpty) {
+      output.writeln();
     }
 
-    output
-      ..writeln('}')
-      ..writeln()
-      ..writeln(
-        'void $registrationByTypeHelperName(Fory fory, Type type, {int? id, String? namespace, String? typeName}) {',
-      )
-      ..writeln('  _installGeneratedForyBindings();');
+    output.writeln(
+      'void $registrationByTypeHelperName(Fory fory, Type type, {int? id, String? namespace, String? typeName}) {',
+    );
 
     for (final enumSpec in enumSpecs) {
+      final registrationName =
+          '_${_toCamelCase(enumSpec.name)}ForyRegistration';
       output.writeln('  if (type == ${enumSpec.name}) {');
       output.writeln(
-        '    fory.register(type, id: id, namespace: namespace, typeName: typeName);',
+        '    registerGeneratedEnum(fory, $registrationName, id: id, namespace: namespace, typeName: typeName);',
       );
       output.writeln('    return;');
       output.writeln('  }');
     }
     for (final structSpec in structSpecs) {
+      final registrationName =
+          '_${_toCamelCase(structSpec.name)}ForyRegistration';
       output.writeln('  if (type == ${structSpec.name}) {');
       output.writeln(
-        '    fory.register(type, id: id, namespace: namespace, typeName: typeName);',
+        '    registerGeneratedStruct(fory, $registrationName, id: id, namespace: namespace, typeName: typeName);',
       );
       output.writeln('    return;');
       output.writeln('  }');
@@ -479,17 +709,20 @@ final class ForyGenerator extends Generator {
       )
       ..writeln('}')
       ..writeln()
-      ..writeln('void $registrationHelperName(Fory fory) {')
-      ..writeln('  _installGeneratedForyBindings();');
+      ..writeln('void $registrationHelperName(Fory fory) {');
 
     for (final enumSpec in enumSpecs) {
+      final registrationName =
+          '_${_toCamelCase(enumSpec.name)}ForyRegistration';
       output.writeln(
-        "  fory.register(${enumSpec.name}, namespace: '$namespace', typeName: '${enumSpec.name}');",
+        "  registerGeneratedEnum(fory, $registrationName, namespace: '$namespace', typeName: '${enumSpec.name}');",
       );
     }
     for (final structSpec in structSpecs) {
+      final registrationName =
+          '_${_toCamelCase(structSpec.name)}ForyRegistration';
       output.writeln(
-        "  fory.register(${structSpec.name}, namespace: '$namespace', typeName: '${structSpec.name}');",
+        "  registerGeneratedStruct(fory, $registrationName, namespace: '$namespace', typeName: '${structSpec.name}');",
       );
     }
     output
@@ -515,6 +748,12 @@ final class ForyGenerator extends Generator {
     return '${structSpec.name}($arguments)';
   }
 
+  String _sessionResolvedRawExpression(String rawValueExpression) {
+    return '$rawValueExpression is DeferredReadRef '
+        '? context.getReadRef($rawValueExpression.id) '
+        ': $rawValueExpression';
+  }
+
   bool _isSkipped(FieldElement field) {
     final annotation = _foryFieldChecker.firstAnnotationOf(field);
     if (annotation == null) {
@@ -526,32 +765,32 @@ final class ForyGenerator extends Generator {
   String _fieldMetadataLiteral(_GeneratedFieldSpec field) {
     final idLiteral = field.id == null ? 'null' : '${field.id}';
     return '''
-  <String, Object?>{
-    'name': '${field.name}',
-    'identifier': '${field.identifier}',
-    'id': $idLiteral,
-    'shape': ${_shapeLiteral(field.shape)},
-  },''';
+  GeneratedFieldMetadata(
+    name: '${field.name}',
+    identifier: '${field.identifier}',
+    id: $idLiteral,
+    shape: ${_shapeLiteral(field.shape)},
+  ),''';
   }
 
   String _shapeLiteral(_GeneratedShapeSpec shape) {
     final argumentsLiteral = shape.arguments.isEmpty
-        ? '<Object?>[]'
-        : '<Object?>[\n${shape.arguments.map(_shapeLiteral).join(',\n')}\n      ]';
+        ? '<GeneratedTypeShape>[]'
+        : '<GeneratedTypeShape>[\n${shape.arguments.map(_shapeLiteral).join(',\n')}\n      ]';
     final dynamicLiteral = switch (shape.dynamic) {
       true => 'true',
       false => 'false',
       null => 'null',
     };
     return '''
-<String, Object?>{
-      'type': ${shape.typeLiteral},
-      'typeId': ${shape.typeId},
-      'nullable': ${shape.nullable},
-      'ref': ${shape.ref},
-      'dynamic': $dynamicLiteral,
-      'arguments': $argumentsLiteral,
-    }''';
+GeneratedTypeShape(
+      type: ${shape.typeLiteral},
+      typeId: ${shape.typeId},
+      nullable: ${shape.nullable},
+      ref: ${shape.ref},
+      dynamic: $dynamicLiteral,
+      arguments: $argumentsLiteral,
+    )''';
   }
 
   String _conversionExpression(
@@ -607,6 +846,9 @@ final class ForyGenerator extends Generator {
     if (_isList(type)) {
       final elementType = (type as InterfaceType).typeArguments.single;
       final elementShape = shape.arguments.single;
+      if (_supportsDirectContainerCast(elementType, elementShape)) {
+        return 'List.castFrom<dynamic, ${elementType.getDisplayString()}>($valueExpression as List)';
+      }
       final convertedElement = _conversionExpressionForType(
         elementType,
         elementShape,
@@ -621,6 +863,9 @@ final class ForyGenerator extends Generator {
     if (_isSet(type)) {
       final elementType = (type as InterfaceType).typeArguments.single;
       final elementShape = shape.arguments.single;
+      if (_supportsDirectContainerCast(elementType, elementShape)) {
+        return 'Set.castFrom<dynamic, ${elementType.getDisplayString()}>($valueExpression as Set)';
+      }
       final convertedElement = _conversionExpressionForType(
         elementType,
         elementShape,
@@ -638,6 +883,10 @@ final class ForyGenerator extends Generator {
       final valueType = arguments[1];
       final keyShape = shape.arguments[0];
       final valueShape = shape.arguments[1];
+      if (_supportsDirectContainerCast(keyType, keyShape) &&
+          _supportsDirectContainerCast(valueType, valueShape)) {
+        return 'Map.castFrom<dynamic, dynamic, ${keyType.getDisplayString()}, ${valueType.getDisplayString()}>($valueExpression as Map)';
+      }
       final convertedKey = _conversionExpressionForType(
         keyType,
         keyShape,
@@ -676,6 +925,453 @@ final class ForyGenerator extends Generator {
     return '$valueExpression as ${type.getDisplayString()}';
   }
 
+  bool _supportsDirectContainerCast(
+    DartType type,
+    _GeneratedShapeSpec shape,
+  ) {
+    if (_isNullable(type)) {
+      return _supportsDirectContainerCast(
+        _withoutNullability(type),
+        _nonNullableShape(shape),
+      );
+    }
+    if (_isList(type) || _isSet(type) || _isMap(type)) {
+      return false;
+    }
+    if (type.isDartCoreInt) {
+      return shape.typeId != TypeIds.int32 && shape.typeId != TypeIds.varInt32;
+    }
+    return true;
+  }
+
+  bool _usesDirectGeneratedBasicFastPath(_GeneratedFieldSpec field) {
+    if (field.shape.nullable ||
+        field.shape.ref ||
+        field.shape.dynamic == true) {
+      return false;
+    }
+    return _isPrimitiveTypeId(field.shape.typeId) ||
+        field.shape.typeId == TypeIds.string ||
+        _isBuiltInTypeId(field.shape.typeId) ||
+        field.shape.typeId == TypeIds.enumById;
+  }
+
+  bool _usesDirectGeneratedTypedContainerReadFastPath(
+    _GeneratedFieldSpec field,
+  ) {
+    if (field.shape.nullable ||
+        field.shape.ref ||
+        field.shape.dynamic == true) {
+      return false;
+    }
+    return field.shape.typeId == TypeIds.list ||
+        field.shape.typeId == TypeIds.set ||
+        field.shape.typeId == TypeIds.map;
+  }
+
+  bool _usesDirectGeneratedPrimitiveFastPath(_GeneratedFieldSpec field) {
+    return _isPrimitiveTypeId(field.shape.typeId);
+  }
+
+  List<_DirectGeneratedWriteReservationRun>
+      _directGeneratedWriteReservationRuns(
+    List<_GeneratedFieldSpec> fields,
+  ) {
+    final runs = <_DirectGeneratedWriteReservationRun>[];
+    int? start;
+    var bytes = 0;
+    for (var index = 0; index < fields.length; index += 1) {
+      final fieldBytes = _directGeneratedWriteReservationBytes(fields[index]);
+      if (fieldBytes == null) {
+        if (start != null) {
+          runs.add(
+            _DirectGeneratedWriteReservationRun(start, index - 1, bytes),
+          );
+          start = null;
+          bytes = 0;
+        }
+        continue;
+      }
+      start ??= index;
+      bytes += fieldBytes;
+    }
+    if (start != null) {
+      runs.add(
+        _DirectGeneratedWriteReservationRun(start, fields.length - 1, bytes),
+      );
+    }
+    return runs;
+  }
+
+  bool _usesReservedGeneratedFastPath(_GeneratedFieldSpec field) {
+    return _directGeneratedWriteReservationBytes(field) != null;
+  }
+
+  int? _directGeneratedWriteReservationBytes(_GeneratedFieldSpec field) {
+    if (!_usesDirectGeneratedBasicFastPath(field)) {
+      return null;
+    }
+    switch (field.shape.typeId) {
+      case TypeIds.boolType:
+      case TypeIds.int8:
+      case TypeIds.uint8:
+        return 1;
+      case TypeIds.int16:
+      case TypeIds.uint16:
+      case TypeIds.float16:
+        return 2;
+      case TypeIds.int32:
+      case TypeIds.uint32:
+      case TypeIds.float32:
+      case TypeIds.date:
+        return 4;
+      case TypeIds.int64:
+      case TypeIds.uint64:
+      case TypeIds.float64:
+        return 8;
+      case TypeIds.timestamp:
+        return 12;
+      case TypeIds.varInt32:
+      case TypeIds.varUint32:
+      case TypeIds.enumById:
+        return 5;
+      case TypeIds.varInt64:
+      case TypeIds.taggedInt64:
+      case TypeIds.varUint64:
+      case TypeIds.taggedUint64:
+        return 10;
+      default:
+        return null;
+    }
+  }
+
+  String _directGeneratedWriteStatement(
+    _GeneratedFieldSpec field,
+    String valueExpression,
+  ) {
+    switch (field.shape.typeId) {
+      case TypeIds.boolType:
+        return 'buffer.writeBool($valueExpression)';
+      case TypeIds.int8:
+        return 'buffer.writeByte(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.int16:
+        return 'buffer.writeInt16(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.int32:
+        return 'buffer.writeInt32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.varInt32:
+        return 'buffer.writeVarInt32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.int64:
+        return 'buffer.writeInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.varInt64:
+        return 'buffer.writeVarInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.taggedInt64:
+        return 'buffer.writeTaggedInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.uint8:
+        return 'buffer.writeUint8(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.uint16:
+        return 'buffer.writeUint16(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.uint32:
+        return 'buffer.writeUint32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.varUint32:
+        return 'buffer.writeVarUint32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.uint64:
+        return 'buffer.writeUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.varUint64:
+        return 'buffer.writeVarUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.taggedUint64:
+        return 'buffer.writeTaggedUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.float16:
+        return 'buffer.writeFloat16($valueExpression)';
+      case TypeIds.float32:
+        return 'buffer.writeFloat32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.float64:
+        return 'buffer.writeFloat64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.string:
+        return 'context.writeString($valueExpression)';
+      case TypeIds.binary:
+        return 'writeGeneratedBinaryValue(context, $valueExpression)';
+      case TypeIds.date:
+        return 'writeGeneratedLocalDateValue(context, $valueExpression)';
+      case TypeIds.timestamp:
+        return 'writeGeneratedTimestampValue(context, $valueExpression)';
+      case TypeIds.boolArray:
+        return 'writeGeneratedBoolArrayValue(context, $valueExpression)';
+      case TypeIds.int8Array:
+      case TypeIds.int16Array:
+      case TypeIds.int32Array:
+      case TypeIds.int64Array:
+      case TypeIds.uint8Array:
+      case TypeIds.uint16Array:
+      case TypeIds.uint32Array:
+      case TypeIds.uint64Array:
+      case TypeIds.float16Array:
+      case TypeIds.float32Array:
+      case TypeIds.float64Array:
+        return 'writeGeneratedFixedArrayValue(context, $valueExpression)';
+      case TypeIds.enumById:
+        return 'buffer.writeVarUint32($valueExpression.index)';
+      default:
+        throw StateError(
+          'Unsupported generated direct write fast path for ${field.name}.',
+        );
+    }
+  }
+
+  String _directGeneratedCursorWriteStatement(
+    _GeneratedFieldSpec field,
+    String cursorExpression,
+    String valueExpression,
+  ) {
+    switch (field.shape.typeId) {
+      case TypeIds.boolType:
+        return '$cursorExpression.writeBool($valueExpression)';
+      case TypeIds.int8:
+        return '$cursorExpression.writeByte(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.int16:
+        return '$cursorExpression.writeInt16(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.int32:
+        return '$cursorExpression.writeInt32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.varInt32:
+        return '$cursorExpression.writeVarInt32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.int64:
+        return '$cursorExpression.writeInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.varInt64:
+        return '$cursorExpression.writeVarInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.taggedInt64:
+        return '$cursorExpression.writeTaggedInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.uint8:
+        return '$cursorExpression.writeUint8(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.uint16:
+        return '$cursorExpression.writeUint16(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.uint32:
+        return '$cursorExpression.writeUint32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.varUint32:
+        return '$cursorExpression.writeVarUint32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.uint64:
+        return '$cursorExpression.writeUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.varUint64:
+        return '$cursorExpression.writeVarUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.taggedUint64:
+        return '$cursorExpression.writeTaggedUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.float16:
+        return '$cursorExpression.writeFloat16($valueExpression)';
+      case TypeIds.float32:
+        return '$cursorExpression.writeFloat32(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.float64:
+        return '$cursorExpression.writeFloat64(${_directGeneratedScalarExpression(field, valueExpression)})';
+      case TypeIds.date:
+        return '$cursorExpression.writeInt32($valueExpression.toEpochDay())';
+      case TypeIds.timestamp:
+        return '$cursorExpression.writeInt64($valueExpression.seconds); $cursorExpression.writeUint32($valueExpression.nanoseconds)';
+      case TypeIds.enumById:
+        return '$cursorExpression.writeVarUint32($valueExpression.index)';
+      default:
+        throw StateError(
+          'Unsupported generated direct cursor write fast path for ${field.name}.',
+        );
+    }
+  }
+
+  String _directGeneratedReadExpression(_GeneratedFieldSpec field) {
+    switch (field.shape.typeId) {
+      case TypeIds.boolType:
+        return 'buffer.readBool()';
+      case TypeIds.int8:
+        return 'Int8(buffer.readByte())';
+      case TypeIds.int16:
+        return 'Int16(buffer.readInt16())';
+      case TypeIds.int32:
+        return field.type.isDartCoreInt
+            ? 'buffer.readInt32()'
+            : 'Int32(buffer.readInt32())';
+      case TypeIds.varInt32:
+        return field.type.isDartCoreInt
+            ? 'buffer.readVarInt32()'
+            : 'Int32(buffer.readVarInt32())';
+      case TypeIds.int64:
+        return 'buffer.readInt64()';
+      case TypeIds.varInt64:
+        return 'buffer.readVarInt64()';
+      case TypeIds.taggedInt64:
+        return 'buffer.readTaggedInt64()';
+      case TypeIds.uint8:
+        return field.type.isDartCoreInt
+            ? 'buffer.readUint8()'
+            : 'UInt8(buffer.readUint8())';
+      case TypeIds.uint16:
+        return field.type.isDartCoreInt
+            ? 'buffer.readUint16()'
+            : 'UInt16(buffer.readUint16())';
+      case TypeIds.uint32:
+        return field.type.isDartCoreInt
+            ? 'buffer.readUint32()'
+            : 'UInt32(buffer.readUint32())';
+      case TypeIds.varUint32:
+        return field.type.isDartCoreInt
+            ? 'buffer.readVarUint32()'
+            : 'UInt32(buffer.readVarUint32())';
+      case TypeIds.uint64:
+        return 'buffer.readUint64()';
+      case TypeIds.varUint64:
+        return 'buffer.readVarUint64()';
+      case TypeIds.taggedUint64:
+        return 'buffer.readTaggedUint64()';
+      case TypeIds.float16:
+        return 'buffer.readFloat16()';
+      case TypeIds.float32:
+        return field.type.isDartCoreDouble
+            ? 'buffer.readFloat32()'
+            : 'Float32(buffer.readFloat32())';
+      case TypeIds.float64:
+        return 'buffer.readFloat64()';
+      case TypeIds.string:
+        return 'context.readString()';
+      case TypeIds.binary:
+        return 'readGeneratedBinaryValue(context)';
+      case TypeIds.date:
+        return 'readGeneratedLocalDateValue(context)';
+      case TypeIds.timestamp:
+        return 'readGeneratedTimestampValue(context)';
+      case TypeIds.boolArray:
+        return 'readGeneratedBoolArrayValue(context)';
+      case TypeIds.int8Array:
+        return 'readGeneratedTypedArrayValue<Int8List>(context, 1, (bytes) => bytes.buffer.asInt8List(bytes.offsetInBytes, bytes.lengthInBytes))';
+      case TypeIds.int16Array:
+        return 'readGeneratedTypedArrayValue<Int16List>(context, 2, (bytes) => bytes.buffer.asInt16List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 2))';
+      case TypeIds.int32Array:
+        return 'readGeneratedTypedArrayValue<Int32List>(context, 4, (bytes) => bytes.buffer.asInt32List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 4))';
+      case TypeIds.int64Array:
+        return 'readGeneratedTypedArrayValue<Int64List>(context, 8, (bytes) => bytes.buffer.asInt64List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 8))';
+      case TypeIds.uint8Array:
+        return 'readGeneratedBinaryValue(context)';
+      case TypeIds.uint16Array:
+      case TypeIds.float16Array:
+        return 'readGeneratedTypedArrayValue<Uint16List>(context, 2, (bytes) => bytes.buffer.asUint16List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 2))';
+      case TypeIds.uint32Array:
+        return 'readGeneratedTypedArrayValue<Uint32List>(context, 4, (bytes) => bytes.buffer.asUint32List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 4))';
+      case TypeIds.uint64Array:
+        return 'readGeneratedTypedArrayValue<Uint64List>(context, 8, (bytes) => bytes.buffer.asUint64List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 8))';
+      case TypeIds.float32Array:
+        return 'readGeneratedTypedArrayValue<Float32List>(context, 4, (bytes) => bytes.buffer.asFloat32List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 4))';
+      case TypeIds.float64Array:
+        return 'readGeneratedTypedArrayValue<Float64List>(context, 8, (bytes) => bytes.buffer.asFloat64List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 8))';
+      case TypeIds.enumById:
+        return '${field.type.getDisplayString()}.values[context.readVarUint32()]';
+      default:
+        throw StateError(
+          'Unsupported generated direct read fast path for ${field.name}.',
+        );
+    }
+  }
+
+  String _directGeneratedCursorReadExpression(
+    _GeneratedFieldSpec field,
+    String cursorExpression,
+  ) {
+    switch (field.shape.typeId) {
+      case TypeIds.boolType:
+        return '$cursorExpression.readBool()';
+      case TypeIds.int8:
+        return 'Int8($cursorExpression.readByte())';
+      case TypeIds.int16:
+        return 'Int16($cursorExpression.readInt16())';
+      case TypeIds.int32:
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readInt32()'
+            : 'Int32($cursorExpression.readInt32())';
+      case TypeIds.varInt32:
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readVarInt32()'
+            : 'Int32($cursorExpression.readVarInt32())';
+      case TypeIds.int64:
+        return '$cursorExpression.readInt64()';
+      case TypeIds.varInt64:
+        return '$cursorExpression.readVarInt64()';
+      case TypeIds.taggedInt64:
+        return '$cursorExpression.readTaggedInt64()';
+      case TypeIds.uint8:
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readUint8()'
+            : 'UInt8($cursorExpression.readUint8())';
+      case TypeIds.uint16:
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readUint16()'
+            : 'UInt16($cursorExpression.readUint16())';
+      case TypeIds.uint32:
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readUint32()'
+            : 'UInt32($cursorExpression.readUint32())';
+      case TypeIds.varUint32:
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readVarUint32()'
+            : 'UInt32($cursorExpression.readVarUint32())';
+      case TypeIds.uint64:
+        return '$cursorExpression.readUint64()';
+      case TypeIds.varUint64:
+        return '$cursorExpression.readVarUint64()';
+      case TypeIds.taggedUint64:
+        return '$cursorExpression.readTaggedUint64()';
+      case TypeIds.float16:
+        return '$cursorExpression.readFloat16()';
+      case TypeIds.float32:
+        return field.type.isDartCoreDouble
+            ? '$cursorExpression.readFloat32()'
+            : 'Float32($cursorExpression.readFloat32())';
+      case TypeIds.float64:
+        return '$cursorExpression.readFloat64()';
+      case TypeIds.date:
+        return 'LocalDate.fromEpochDay($cursorExpression.readInt32())';
+      case TypeIds.timestamp:
+        return 'Timestamp($cursorExpression.readInt64(), $cursorExpression.readUint32())';
+      case TypeIds.enumById:
+        return '${field.type.getDisplayString()}.values[$cursorExpression.readVarUint32()]';
+      default:
+        throw StateError(
+          'Unsupported generated direct cursor read fast path for ${field.name}.',
+        );
+    }
+  }
+
+  String _directGeneratedTypedContainerReadExpression(
+    String structName,
+    _GeneratedFieldSpec field,
+    String fieldRuntimeExpression,
+  ) {
+    if (_isList(field.type)) {
+      final elementType = (field.type as InterfaceType).typeArguments.single;
+      return 'readGeneratedDirectListValue<${elementType.getDisplayString()}>(context, $fieldRuntimeExpression, ${_containerElementReaderFunctionName(structName, field)})';
+    }
+    if (_isSet(field.type)) {
+      final elementType = (field.type as InterfaceType).typeArguments.single;
+      return 'readGeneratedDirectSetValue<${elementType.getDisplayString()}>(context, $fieldRuntimeExpression, ${_containerElementReaderFunctionName(structName, field)})';
+    }
+    if (_isMap(field.type)) {
+      final arguments = (field.type as InterfaceType).typeArguments;
+      return 'readGeneratedDirectMapValue<${arguments[0].getDisplayString()}, ${arguments[1].getDisplayString()}>(context, $fieldRuntimeExpression, ${_containerKeyReaderFunctionName(structName, field)}, ${_containerValueReaderFunctionName(structName, field)})';
+    }
+    throw StateError(
+      'Unsupported generated typed container read fast path for ${field.name}.',
+    );
+  }
+
+  String _directGeneratedScalarExpression(
+    _GeneratedFieldSpec field,
+    String valueExpression,
+  ) {
+    if (field.type.isDartCoreInt ||
+        field.type.isDartCoreDouble ||
+        field.type.isDartCoreBool ||
+        field.type.isDartCoreString) {
+      return valueExpression;
+    }
+    switch (field.shape.typeId) {
+      case TypeIds.float16:
+        return valueExpression;
+      default:
+        return '$valueExpression.value';
+    }
+  }
+
   String _nullExpression(
     DartType type, {
     required String errorTarget,
@@ -703,6 +1399,94 @@ final class ForyGenerator extends Generator {
       dynamic: shape.dynamic,
       arguments: shape.arguments,
     );
+  }
+
+  void _writeDirectContainerReaderHelpers(
+    StringBuffer output,
+    String structName,
+    _GeneratedFieldSpec field,
+  ) {
+    if (_isList(field.type) || _isSet(field.type)) {
+      final elementType = (field.type as InterfaceType).typeArguments.single;
+      final elementShape = field.shape.arguments.single;
+      final functionName = _containerElementReaderFunctionName(
+        structName,
+        field,
+      );
+      output
+        ..writeln(
+          '${elementType.getDisplayString()} $functionName(Object? value) {',
+        )
+        ..writeln(
+          '  return ${_conversionExpressionForType(elementType, elementShape, 'value', nullExpression: _nullExpression(elementType, errorTarget: '${field.name} item'))};',
+        )
+        ..writeln('}')
+        ..writeln();
+      return;
+    }
+    if (_isMap(field.type)) {
+      final arguments = (field.type as InterfaceType).typeArguments;
+      final keyType = arguments[0];
+      final valueType = arguments[1];
+      final keyShape = field.shape.arguments[0];
+      final valueShape = field.shape.arguments[1];
+      final keyFunctionName = _containerKeyReaderFunctionName(
+        structName,
+        field,
+      );
+      final valueFunctionName = _containerValueReaderFunctionName(
+        structName,
+        field,
+      );
+      output
+        ..writeln(
+          '${keyType.getDisplayString()} $keyFunctionName(Object? value) {',
+        )
+        ..writeln(
+          '  return ${_conversionExpressionForType(keyType, keyShape, 'value', nullExpression: _nullExpression(keyType, errorTarget: '${field.name} map key'))};',
+        )
+        ..writeln('}')
+        ..writeln()
+        ..writeln(
+          '${valueType.getDisplayString()} $valueFunctionName(Object? value) {',
+        )
+        ..writeln(
+          '  return ${_conversionExpressionForType(valueType, valueShape, 'value', nullExpression: _nullExpression(valueType, errorTarget: '${field.name} map value'))};',
+        )
+        ..writeln('}')
+        ..writeln();
+      return;
+    }
+    throw StateError(
+      'Unsupported generated direct container reader helpers for ${field.name}.',
+    );
+  }
+
+  String _containerElementReaderFunctionName(
+    String structName,
+    _GeneratedFieldSpec field,
+  ) {
+    final fieldName =
+        '${field.name[0].toUpperCase()}${field.name.substring(1)}';
+    return '_read$structName${fieldName}Element';
+  }
+
+  String _containerKeyReaderFunctionName(
+    String structName,
+    _GeneratedFieldSpec field,
+  ) {
+    final fieldName =
+        '${field.name[0].toUpperCase()}${field.name.substring(1)}';
+    return '_read$structName${fieldName}Key';
+  }
+
+  String _containerValueReaderFunctionName(
+    String structName,
+    _GeneratedFieldSpec field,
+  ) {
+    final fieldName =
+        '${field.name[0].toUpperCase()}${field.name.substring(1)}';
+    return '_read$structName${fieldName}Value';
   }
 
   List<_GeneratedFieldSpec> _sortFields(List<_GeneratedFieldSpec> fields) {
@@ -974,37 +1758,8 @@ final class ForyGenerator extends Generator {
     if (nonNullable.isDartCoreString) {
       return TypeIds.string;
     }
-    if (_isList(nonNullable)) {
-      return TypeIds.list;
-    }
-    if (_isSet(nonNullable)) {
-      return TypeIds.set;
-    }
-    if (_isMap(nonNullable)) {
-      return TypeIds.map;
-    }
-    final display = _typeLiteral(nonNullable);
+    final display = nonNullable.getDisplayString().replaceAll('?', '');
     switch (display) {
-      case 'Int8':
-        return TypeIds.int8;
-      case 'Int16':
-        return TypeIds.int16;
-      case 'Int32':
-        return TypeIds.varInt32;
-      case 'UInt8':
-        return TypeIds.uint8;
-      case 'UInt16':
-        return TypeIds.uint16;
-      case 'UInt32':
-        return TypeIds.uint32;
-      case 'Float16':
-        return TypeIds.float16;
-      case 'Float32':
-        return TypeIds.float32;
-      case 'Timestamp':
-        return TypeIds.timestamp;
-      case 'LocalDate':
-        return TypeIds.date;
       case 'Uint8List':
         return TypeIds.binary;
       case 'List<bool>':
@@ -1027,6 +1782,38 @@ final class ForyGenerator extends Generator {
         return TypeIds.float32Array;
       case 'Float64List':
         return TypeIds.float64Array;
+    }
+    if (_isList(nonNullable)) {
+      return TypeIds.list;
+    }
+    if (_isSet(nonNullable)) {
+      return TypeIds.set;
+    }
+    if (_isMap(nonNullable)) {
+      return TypeIds.map;
+    }
+    final typeLiteral = _typeLiteral(nonNullable);
+    switch (typeLiteral) {
+      case 'Int8':
+        return TypeIds.int8;
+      case 'Int16':
+        return TypeIds.int16;
+      case 'Int32':
+        return TypeIds.varInt32;
+      case 'UInt8':
+        return TypeIds.uint8;
+      case 'UInt16':
+        return TypeIds.uint16;
+      case 'UInt32':
+        return TypeIds.uint32;
+      case 'Float16':
+        return TypeIds.float16;
+      case 'Float32':
+        return TypeIds.float32;
+      case 'Timestamp':
+        return TypeIds.timestamp;
+      case 'LocalDate':
+        return TypeIds.date;
       case 'Object':
         return TypeIds.unknown;
       default:
@@ -1092,6 +1879,25 @@ final class ForyGenerator extends Generator {
       type is InterfaceType && type.element.name == 'Set';
 
   bool _isMap(DartType type) => type.isDartCoreMap;
+
+  bool _usesTypedDataType(DartType type) {
+    final display = _typeLiteral(_withoutNullability(type));
+    switch (display) {
+      case 'Uint8List':
+      case 'Int8List':
+      case 'Int16List':
+      case 'Int32List':
+      case 'Int64List':
+      case 'Uint16List':
+      case 'Uint32List':
+      case 'Uint64List':
+      case 'Float32List':
+      case 'Float64List':
+        return true;
+      default:
+        return false;
+    }
+  }
 
   String _typeLiteral(DartType type) {
     if (type is DynamicType || type is InvalidType) {
@@ -1189,6 +1995,14 @@ final class _GeneratedFieldSpec {
   }
 
   String get localName => '_${name}Value';
+}
+
+final class _DirectGeneratedWriteReservationRun {
+  final int start;
+  final int end;
+  final int bytes;
+
+  const _DirectGeneratedWriteReservationRun(this.start, this.end, this.bytes);
 }
 
 final class _GeneratedShapeSpec {

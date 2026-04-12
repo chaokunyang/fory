@@ -1,4 +1,7 @@
+import 'dart:collection';
+
 import 'package:meta/meta.dart';
+
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/context/compatible_struct_metadata_store.dart';
@@ -7,14 +10,13 @@ import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/payload_codec.dart';
 import 'package:fory/src/serializer/struct_session.dart';
-import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/types/float16.dart';
 
-/// Write-side runtime state for a single Fory operation.
+/// Write-side serializer context.
 ///
-/// Generated and manual serializers receive this object from [Serializer.write].
-/// Application code normally interacts with [Fory] instead of constructing or
-/// preparing contexts directly.
+/// Generated and manual serializers receive this during a single serialization
+/// operation. Application code normally interacts with [Fory] instead of
+/// constructing contexts directly.
 final class WriteContext {
   /// Effective runtime configuration for the active operation.
   final Config config;
@@ -24,9 +26,9 @@ final class WriteContext {
   final CompatibleStructMetadataStore _compatibleStructMetadata;
 
   late Buffer _buffer;
-  final Map<String, int> _typeDefIds = <String, int>{};
+  final LinkedHashMap<SharedTypeDefInternal, int> _typeDefIds =
+      LinkedHashMap<SharedTypeDefInternal, int>.identity();
   StructWriteSession? _structWriteSession;
-  int _nextTypeDefId = 0;
   bool _rootTrackRef = false;
   int _depth = 0;
 
@@ -39,13 +41,10 @@ final class WriteContext {
     this._compatibleStructMetadata,
   );
 
-  /// Prepares the context to write into [buffer].
-  ///
-  /// This resets all per-operation caches, meta-string tables, and Ref state.
+  @internal
   void prepare(Buffer buffer, {required bool trackRef}) {
     _buffer = buffer;
     _rootTrackRef = trackRef;
-    _nextTypeDefId = 0;
     _typeDefIds.clear();
     _refWriter.reset();
     _metaStringWriter.reset();
@@ -63,10 +62,33 @@ final class WriteContext {
   RefWriter get refWriter => _refWriter;
 
   @internal
-  StructWriteSession? get structWriteSession => _structWriteSession;
+  bool get rootTrackRef => _rootTrackRef;
 
   @internal
-  bool get rootTrackRef => _rootTrackRef;
+  T? localStateAs<T>(Object key) {
+    if (!identical(key, structWriteSessionKey)) {
+      throw StateError('Unknown write local state key: $key.');
+    }
+    return _structWriteSession as T?;
+  }
+
+  @internal
+  Object? replaceLocalState(Object key, Object? next) {
+    if (!identical(key, structWriteSessionKey)) {
+      throw StateError('Unknown write local state key: $key.');
+    }
+    final previous = _structWriteSession;
+    _structWriteSession = next as StructWriteSession?;
+    return previous;
+  }
+
+  @internal
+  void restoreLocalState(Object key, Object? previous) {
+    if (!identical(key, structWriteSessionKey)) {
+      throw StateError('Unknown write local state key: $key.');
+    }
+    _structWriteSession = previous as StructWriteSession?;
+  }
 
   @internal
   StructMetadataInternal? compatibleStructMetadataFor(Object value) {
@@ -134,18 +156,6 @@ final class WriteContext {
   /// Writes a non-null string payload without adding type metadata.
   void writeString(String value) => writeStringPayload(this, value);
 
-  @internal
-  StructWriteSession? swapStructWriteSession(StructWriteSession? session) {
-    final previous = _structWriteSession;
-    _structWriteSession = session;
-    return previous;
-  }
-
-  @internal
-  void restoreStructWriteSession(StructWriteSession? previous) {
-    _structWriteSession = previous;
-  }
-
   /// Writes a nullable value with Ref tracking and type metadata.
   void writeRef(Object? value) {
     _writeRef(value, trackRef: true);
@@ -164,9 +174,6 @@ final class WriteContext {
   }
 
   /// Writes the fresh-value or back-reference header for non-null [value].
-  ///
-  /// Returns `true` when the caller should continue writing payload bytes for
-  /// [value], or `false` when an existing back-reference fully handled it.
   bool writeRefValueFlag(Object value) {
     return _refWriter.writeRefValueFlag(_buffer, value);
   }
@@ -199,8 +206,11 @@ final class WriteContext {
     final resolved = value == null ? null : _typeResolver.resolveValue(value);
     final effectiveTrackRef =
         trackRef && value != null && resolved!.supportsRef;
-    if (_refWriter.writeRefOrNull(_buffer, value,
-        trackRef: effectiveTrackRef)) {
+    if (_refWriter.writeRefOrNull(
+      _buffer,
+      value,
+      trackRef: effectiveTrackRef,
+    )) {
       return;
     }
     if (value == null) {
@@ -220,32 +230,49 @@ final class WriteContext {
     Object value,
     TypeShapeInternal? declaredShape,
   ) {
-    writePayloadValue(this, resolved, value, declaredShape);
+    if (!_tracksDepth(resolved)) {
+      writePayloadValue(this, resolved, value, declaredShape);
+      return;
+    }
+    increaseDepth();
+    try {
+      writePayloadValue(this, resolved, value, declaredShape);
+    } finally {
+      decreaseDepth();
+    }
   }
 
   void _writeTypeMeta(ResolvedTypeInternal resolved, Object value) {
     _typeResolver.writeTypeMeta(
       _buffer,
       resolved,
-      sharedTypeDefFields:
-          resolved.structRuntime?.sharedTypeDefFieldsForWrite(this, value),
-      lookupSharedTypeDefId: (identity) => _typeDefIds[identity],
-      reserveSharedTypeDefId: (identity) {
-        final newIndex = _nextTypeDefId++;
-        _typeDefIds[identity] = newIndex;
-        return newIndex;
-      },
-      writePackageMetaString: _writeEncodedMetaString,
-      writeTypeNameMetaString: _writeEncodedMetaString,
+      sharedTypeDef: resolved.structRuntime?.sharedTypeDefForWrite(
+        this,
+        resolved,
+        value,
+      ),
+      sharedTypeDefIds: _typeDefIds,
+      metaStringWriter: _metaStringWriter,
     );
-  }
-
-  void _writeEncodedMetaString(EncodedMetaStringInternal encoded) {
-    _metaStringWriter.writeMetaString(_buffer, encoded);
   }
 
   @internal
   void writeTypeMetaValue(ResolvedTypeInternal resolved, Object value) {
     _writeTypeMeta(resolved, value);
+  }
+
+  bool _tracksDepth(ResolvedTypeInternal resolved) {
+    if (TypeIds.isContainer(resolved.typeId)) {
+      return true;
+    }
+    switch (resolved.kind) {
+      case RegistrationKindInternal.builtin:
+      case RegistrationKindInternal.enumType:
+        return false;
+      case RegistrationKindInternal.struct:
+      case RegistrationKindInternal.ext:
+      case RegistrationKindInternal.union:
+        return true;
+    }
   }
 }

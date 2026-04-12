@@ -13,6 +13,7 @@ import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/serializer.dart';
+import 'package:fory/src/serializer/struct_runtime.dart';
 
 /// Root facade for Apache Fory xlang serialization in Dart.
 ///
@@ -25,8 +26,6 @@ import 'package:fory/src/serializer/serializer.dart';
 final class Fory {
   static const int _nullHeaderFlag = 0x01;
   static const int _xlangHeaderFlag = 0x02;
-  static final Map<Type, _GeneratedBinding> _generatedBindings =
-      <Type, _GeneratedBinding>{};
 
   late final Buffer _buffer;
   late final WriteContext _writeContext;
@@ -88,8 +87,8 @@ final class Fory {
   /// The payload is decoded from its wire metadata first. `T` is used as a
   /// post-read type check, not as an alternate schema.
   T deserialize<T>(Uint8List bytes) {
-    final buffer = Buffer.wrap(bytes);
-    return deserializeFrom<T>(buffer);
+    _buffer.wrap(bytes);
+    return deserializeFrom<T>(_buffer);
   }
 
   /// Deserializes a value from [buffer] and checks that it is assignable to
@@ -117,41 +116,6 @@ final class Fory {
     );
   }
 
-  /// Binds a generated serializer factory for [type].
-  ///
-  /// Generated part files call this before they invoke [register]. Normal
-  /// application code should use the generated registration helper instead of
-  /// calling this method directly.
-  @internal
-  static void bindGeneratedEnumFactory(
-    Type type,
-    Serializer<Object?> Function() serializerFactory,
-  ) {
-    _generatedBindings[type] = _GeneratedBinding(
-      kind: RegistrationKindInternal.enumType,
-      serializerFactory: serializerFactory,
-    );
-  }
-
-  /// Binds a generated struct serializer factory for [type].
-  ///
-  /// Generated part files and package-internal handwritten generated-style
-  /// serializers call this before they invoke [register].
-  @internal
-  static void bindGeneratedStructFactory(
-    Type type,
-    Serializer<Object?> Function() serializerFactory, {
-    required bool evolving,
-    required List<Map<String, Object?>> fields,
-  }) {
-    _generatedBindings[type] = _GeneratedBinding(
-      kind: RegistrationKindInternal.struct,
-      serializerFactory: serializerFactory,
-      evolving: evolving,
-      fieldMetadata: List<Map<String, Object?>>.unmodifiable(fields),
-    );
-  }
-
   /// Registers a generated type.
   ///
   /// Exactly one registration mode is required:
@@ -167,16 +131,8 @@ final class Fory {
     String? namespace,
     String? typeName,
   }) {
-    final binding = _generatedBinding(type);
-    final serializer = binding.serializerFactory();
     _typeResolver.registerGenerated(
       type,
-      serializer,
-      kind: binding.kind,
-      evolving: binding.evolving,
-      fields: binding.fieldMetadata
-          .map(FieldMetadataInternal.fromMetadata)
-          .toList(growable: false),
       id: id,
       namespace: namespace,
       typeName: typeName,
@@ -206,28 +162,37 @@ final class Fory {
       typeName: typeName,
     );
   }
-
-  _GeneratedBinding _generatedBinding(Type type) {
-    final binding = _generatedBindings[type];
-    if (binding == null) {
-      throw StateError(
-        'Type $type has no generated serializer binding. Call the generated registration helper for this library or use registerSerializer for manual serializers.',
-      );
-    }
-    return binding;
-  }
 }
 
-final class _GeneratedBinding {
-  final RegistrationKindInternal kind;
-  final Serializer<Object?> Function() serializerFactory;
-  final bool evolving;
-  final List<Map<String, Object?>> fieldMetadata;
+@internal
+void bindGeneratedEnum(
+  Fory fory,
+  Type type,
+  Serializer<Object?> Function() serializerFactory,
+) {
+  fory._typeResolver.bindGeneratedEnum(
+    type,
+    serializerFactory,
+  );
+}
 
-  const _GeneratedBinding({
-    required this.kind,
-    required this.serializerFactory,
-    this.evolving = true,
-    this.fieldMetadata = const <Map<String, Object?>>[],
-  });
+@internal
+void bindGeneratedStruct(
+  Fory fory,
+  Type type,
+  Serializer<Object?> Function() serializerFactory, {
+  required bool evolving,
+  required List<FieldMetadataInternal> fields,
+  GeneratedStructCompatibleFactory<Object>? compatibleFactory,
+  List<GeneratedStructCompatibleFieldReader<Object>>?
+      compatibleReadersBySlot,
+}) {
+  fory._typeResolver.bindGeneratedStruct(
+    type,
+    serializerFactory,
+    evolving: evolving,
+    fields: fields,
+    compatibleFactory: compatibleFactory,
+    compatibleReadersBySlot: compatibleReadersBySlot,
+  );
 }

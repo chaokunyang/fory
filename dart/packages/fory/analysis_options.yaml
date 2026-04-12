@@ -20,5 +20,6 @@ include: package:lints/recommended.yaml
 analyzer:
   exclude:
     - .dart_tool/**
+    - example/**/*.fory.dart
   errors:
     unintended_html_in_doc_comment: ignore

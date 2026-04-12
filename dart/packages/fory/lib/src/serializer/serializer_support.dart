@@ -2,6 +2,8 @@ import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
+ReadContext _readImpl(ReadContext context) => context;
+
 final class DeferredReadRef {
   final int id;
 
@@ -12,17 +14,28 @@ Object? readCompatibleField(
   ReadContext context,
   FieldMetadataInternal field,
 ) {
-  final shape = field.shape;
+  return readCompatibleFieldRuntime(
+    context,
+    _readImpl(context).typeResolver.declaredFieldRuntime(field),
+  );
+}
+
+Object? readCompatibleFieldRuntime(
+  ReadContext context,
+  DeclaredValueRuntimeInternal runtime,
+) {
+  final shape = runtime.shape;
+  final internal = _readImpl(context);
   if (shape.isDynamic) {
     return context.readRef();
   }
   if (shape.isPrimitive && !shape.nullable) {
-    return context.readPrimitiveValue(shape.typeId);
+    return internal.readPrimitiveValue(shape.typeId);
   }
-  final resolved = context.typeResolver.resolveShape(shape);
-  if (!_usesDeclaredTypeInfo(context.config.compatible, shape, resolved)) {
+  final resolved = runtime.resolved!;
+  if (!runtime.usesDeclaredType) {
     if (shape.ref) {
-      return _readCompatibleRefValueWithTypeMeta(context, shape);
+      return _readCompatibleRefValueWithTypeMetaRuntime(context, runtime);
     }
     if (shape.nullable) {
       final flag = context.buffer.readByte();
@@ -33,34 +46,41 @@ Object? readCompatibleField(
         throw StateError('Unexpected nullable flag $flag.');
       }
     }
-    return context.readResolvedValue(context.readTypeMetaValue(), shape);
+    return internal.readResolvedValue(
+      internal.readTypeMetaValue(resolved.isNamed ? resolved : null),
+      shape,
+    );
   }
   if (shape.nullable || shape.ref) {
-    final flag = context.refReader.tryPreserveRefId(context.buffer);
+    final flag = internal.refReader.tryPreserveRefId(context.buffer);
     final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
     if (flag == RefWriter.nullFlag) {
       return null;
     }
     if (flag == RefWriter.refFlag) {
-      final value = context.refReader.getReadRef();
+      final value = internal.refReader.getReadRef();
       if (value != null) {
         return value;
       }
-      final refId = context.refReader.readRefId;
+      final refId = internal.refReader.readRefId;
       if (refId != null) {
         return DeferredReadRef(refId);
       }
       return null;
     }
-    final value = context.readResolvedValue(resolved, shape);
+    final value = internal.readResolvedValue(
+      resolved,
+      shape,
+      hasPreservedRef: preservedRefId != null,
+    );
     if (preservedRefId != null &&
         resolved.supportsRef &&
-        context.refReader.readRefAt(preservedRefId) == null) {
-      context.refReader.setReadRef(preservedRefId, value);
+        internal.refReader.readRefAt(preservedRefId) == null) {
+      internal.refReader.setReadRef(preservedRefId, value);
     }
     return value;
   }
-  return context.readResolvedValue(resolved, shape);
+  return internal.readResolvedValue(resolved, shape);
 }
 
 FieldMetadataInternal mergeCompatibleWriteField(
@@ -133,54 +153,41 @@ FieldMetadataInternal mergeCompatibleReadField(
   );
 }
 
-bool _usesDeclaredTypeInfo(
-  bool compatible,
-  TypeShapeInternal shape,
-  ResolvedTypeInternal resolved,
-) {
-  if (shape.isDynamic) {
-    return false;
-  }
-  if (!compatible) {
-    return true;
-  }
-  switch (resolved.kind) {
-    case RegistrationKindInternal.builtin:
-    case RegistrationKindInternal.enumType:
-    case RegistrationKindInternal.union:
-      return true;
-    case RegistrationKindInternal.struct:
-    case RegistrationKindInternal.ext:
-      return false;
-  }
-}
-
-Object? _readCompatibleRefValueWithTypeMeta(
+Object? _readCompatibleRefValueWithTypeMetaRuntime(
   ReadContext context,
-  TypeShapeInternal declaredShape,
+  DeclaredValueRuntimeInternal runtime,
 ) {
-  final flag = context.refReader.tryPreserveRefId(context.buffer);
+  final internal = _readImpl(context);
+  final flag = internal.refReader.tryPreserveRefId(context.buffer);
   final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
   if (flag == RefWriter.nullFlag) {
     return null;
   }
   if (flag == RefWriter.refFlag) {
-    final value = context.refReader.getReadRef();
+    final value = internal.refReader.getReadRef();
     if (value != null) {
       return value;
     }
-    final refId = context.refReader.readRefId;
+    final refId = internal.refReader.readRefId;
     if (refId != null) {
       return DeferredReadRef(refId);
     }
     return null;
   }
-  final resolved = context.readTypeMetaValue();
-  final value = context.readResolvedValue(resolved, declaredShape);
+  final declaredShape = runtime.shape;
+  final expectedResolved = runtime.resolved!;
+  final resolved = internal.readTypeMetaValue(
+    expectedResolved.isNamed ? expectedResolved : null,
+  );
+  final value = internal.readResolvedValue(
+    resolved,
+    declaredShape,
+    hasPreservedRef: preservedRefId != null,
+  );
   if (preservedRefId != null &&
       resolved.supportsRef &&
-      context.refReader.readRefAt(preservedRefId) == null) {
-    context.refReader.setReadRef(preservedRefId, value);
+      internal.refReader.readRefAt(preservedRefId) == null) {
+    internal.refReader.setReadRef(preservedRefId, value);
   }
   return value;
 }

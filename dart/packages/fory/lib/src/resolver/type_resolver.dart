@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
+import 'package:fory/src/context/meta_string_codec.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/serializer/serializer.dart';
@@ -173,19 +174,20 @@ final class TypeShapeInternal {
 
   bool get isContainer => TypeIds.isContainer(typeId);
 
-  static TypeShapeInternal fromMetadata(Map<String, Object?> metadata) {
-    final rawArguments =
-        metadata['arguments'] as List<Object?>? ?? const <Object?>[];
+  TypeShapeInternal withRootOverrides({
+    required bool nullable,
+    required bool ref,
+  }) {
+    if (this.nullable == nullable && this.ref == ref) {
+      return this;
+    }
     return TypeShapeInternal(
-      type: metadata['type'] as Type,
-      typeId: metadata['typeId'] as int,
-      nullable: metadata['nullable'] as bool? ?? false,
-      ref: metadata['ref'] as bool? ?? false,
-      dynamic: metadata['dynamic'] as bool?,
-      arguments: rawArguments
-          .cast<Map<String, Object?>>()
-          .map(TypeShapeInternal.fromMetadata)
-          .toList(growable: false),
+      type: type,
+      typeId: typeId,
+      nullable: nullable,
+      ref: ref,
+      dynamic: dynamic,
+      arguments: arguments,
     );
   }
 }
@@ -202,17 +204,6 @@ final class FieldMetadataInternal {
     required this.id,
     required this.shape,
   });
-
-  static FieldMetadataInternal fromMetadata(Map<String, Object?> metadata) {
-    return FieldMetadataInternal(
-      name: metadata['name'] as String,
-      identifier: metadata['identifier'] as String,
-      id: metadata['id'] as int?,
-      shape: TypeShapeInternal.fromMetadata(
-        metadata['shape'] as Map<String, Object?>,
-      ),
-    );
-  }
 }
 
 final class StructMetadataInternal {
@@ -220,6 +211,16 @@ final class StructMetadataInternal {
   final List<FieldMetadataInternal> fields;
 
   const StructMetadataInternal({required this.evolving, required this.fields});
+}
+
+final class SharedTypeDefInternal {
+  final int header;
+  final Uint8List encoded;
+
+  const SharedTypeDefInternal({
+    required this.header,
+    required this.encoded,
+  });
 }
 
 final class ResolvedTypeInternal {
@@ -236,6 +237,7 @@ final class ResolvedTypeInternal {
   final EncodedMetaStringInternal? encodedTypeName;
   final StructMetadataInternal? structMetadata;
   final StructMetadataInternal? remoteStructMetadata;
+  final SharedTypeDefInternal? sharedTypeDef;
 
   const ResolvedTypeInternal({
     required this.type,
@@ -251,6 +253,7 @@ final class ResolvedTypeInternal {
     required this.encodedTypeName,
     required this.structMetadata,
     required this.remoteStructMetadata,
+    required this.sharedTypeDef,
   });
 
   bool get isNamed =>
@@ -262,10 +265,55 @@ final class ResolvedTypeInternal {
   bool get isBasicValue => TypeIds.isBasicValue(typeId);
 }
 
+final class DeclaredValueRuntimeInternal {
+  final FieldMetadataInternal metadata;
+  final TypeShapeInternal shape;
+  final ResolvedTypeInternal? resolved;
+  final bool usesDeclaredType;
+
+  const DeclaredValueRuntimeInternal({
+    required this.metadata,
+    required this.shape,
+    required this.resolved,
+    required this.usesDeclaredType,
+  });
+}
+
+bool usesDeclaredTypeInfo(
+  bool compatible,
+  TypeShapeInternal shape,
+  ResolvedTypeInternal resolved,
+) {
+  if (shape.isDynamic) {
+    return false;
+  }
+  if (!compatible) {
+    return true;
+  }
+  switch (resolved.kind) {
+    case RegistrationKindInternal.builtin:
+    case RegistrationKindInternal.enumType:
+    case RegistrationKindInternal.union:
+      return true;
+    case RegistrationKindInternal.struct:
+    case RegistrationKindInternal.ext:
+      return false;
+  }
+}
+
 final class TypeResolver {
   final Config config;
   final TypeMetaEncoder _typeMetaEncoder = const TypeMetaEncoder();
   final TypeMetaDecoder _typeMetaDecoder = const TypeMetaDecoder();
+  final ParsedTypeMetaCache _parsedTypeMetaCache = ParsedTypeMetaCache();
+  final List<ResolvedTypeInternal?> _lastNamedTypeByWireType =
+      List<ResolvedTypeInternal?>.filled(64, null);
+  final List<ResolvedTypeInternal?> _builtinByTypeId =
+      List<ResolvedTypeInternal?>.filled(64, null);
+  final List<_NamedTypeReadCacheEntry?> _namedTypeLookupCache =
+      List<_NamedTypeReadCacheEntry?>.filled(128, null);
+  final Map<Type, ResolvedTypeInternal> _runtimeTypeValueCache =
+      <Type, ResolvedTypeInternal>{};
   final Map<Type, ResolvedTypeInternal> _registeredByType =
       <Type, ResolvedTypeInternal>{};
   final Map<int, ResolvedTypeInternal> _registeredById =
@@ -285,52 +333,69 @@ final class TypeResolver {
   final Map<_EncodedMetaStringKey, EncodedMetaStringInternal>
       _internedEncodedMetaStrings =
       <_EncodedMetaStringKey, EncodedMetaStringInternal>{};
+  final Map<FieldMetadataInternal, DeclaredValueRuntimeInternal>
+      _declaredFieldRuntimeCache = LinkedHashMap<FieldMetadataInternal,
+          DeclaredValueRuntimeInternal>.identity();
+  final Map<_DeclaredShapeRuntimeCacheKey, DeclaredValueRuntimeInternal>
+      _declaredShapeRuntimeCache =
+      <_DeclaredShapeRuntimeCacheKey, DeclaredValueRuntimeInternal>{};
+  final Map<Type, _GeneratedBindingInternal> _generatedByType =
+      <Type, _GeneratedBindingInternal>{};
 
   TypeResolver(this.config);
 
-  void registerGenerated(
+  void bindGeneratedEnum(
     Type type,
-    Serializer serializer, {
-    required RegistrationKindInternal kind,
-    bool evolving = true,
-    List<FieldMetadataInternal> fields = const <FieldMetadataInternal>[],
+    Serializer<Object?> Function() serializerFactory,
+  ) {
+    _generatedByType[type] = _GeneratedBindingInternal(
+      kind: RegistrationKindInternal.enumType,
+      serializerFactory: serializerFactory,
+    );
+  }
+
+  void bindGeneratedStruct(
+    Type type,
+    Serializer<Object?> Function() serializerFactory, {
+    required bool evolving,
+    required List<FieldMetadataInternal> fields,
+    GeneratedStructCompatibleFactory<Object>? compatibleFactory,
+    List<GeneratedStructCompatibleFieldReader<Object>>? compatibleReadersBySlot,
+  }) {
+    _generatedByType[type] = _GeneratedBindingInternal(
+      kind: RegistrationKindInternal.struct,
+      serializerFactory: serializerFactory,
+      evolving: evolving,
+      fields: fields,
+      compatibleFactory: compatibleFactory,
+      compatibleReadersBySlot: compatibleReadersBySlot,
+    );
+  }
+
+  void registerGenerated(
+    Type type, {
     int? id,
     String? namespace,
     String? typeName,
   }) {
-    _validateRegistrationMode(id: id, namespace: namespace, typeName: typeName);
-    final encodedNamespace =
-        namespace == null ? null : packageMetaString(namespace);
-    final encodedTypeName =
-        typeName == null ? null : typeNameMetaString(typeName);
-    final payloadSerializer = serializer as Serializer<Object?>;
-    final structMetadata = kind == RegistrationKindInternal.struct
-        ? StructMetadataInternal(
-            evolving: evolving,
-            fields: List<FieldMetadataInternal>.unmodifiable(fields),
-          )
-        : null;
-    final resolved = ResolvedTypeInternal(
-      type: type,
-      kind: kind,
-      typeId: _defaultTypeIdForType(type),
-      supportsRef: serializer.supportsRef,
-      serializer: payloadSerializer,
-      structRuntime: structMetadata == null
-          ? null
-          : StructRuntime(
-              payloadSerializer,
-              structMetadata,
-            ),
-      userTypeId: id,
+    final binding = _generatedByType[type];
+    if (binding == null) {
+      throw StateError(
+        'Type $type has no generated registration binding. Call the generated registration helper for this library first.',
+      );
+    }
+    _registerResolvedSerializer(
+      type,
+      binding.serializerFactory(),
+      binding.kind,
+      evolving: binding.evolving,
+      fields: binding.fields,
+      compatibleFactory: binding.compatibleFactory,
+      compatibleReadersBySlot: binding.compatibleReadersBySlot,
+      id: id,
       namespace: namespace,
       typeName: typeName,
-      encodedNamespace: encodedNamespace,
-      encodedTypeName: encodedTypeName,
-      structMetadata: structMetadata,
-      remoteStructMetadata: null,
     );
-    _storeResolved(type, resolved, id: id, namespace: namespace, typeName: typeName);
   }
 
   void registerSerializer(
@@ -340,28 +405,74 @@ final class TypeResolver {
     String? namespace,
     String? typeName,
   }) {
-    _validateRegistrationMode(id: id, namespace: namespace, typeName: typeName);
     final registrationKind = _inferKind(serializer);
+    _registerResolvedSerializer(
+      type,
+      serializer as Serializer<Object?>,
+      registrationKind,
+      id: id,
+      namespace: namespace,
+      typeName: typeName,
+    );
+  }
+
+  void _registerResolvedSerializer(
+    Type type,
+    Serializer<Object?> payloadSerializer,
+    RegistrationKindInternal registrationKind, {
+    bool evolving = true,
+    List<FieldMetadataInternal> fields = const <FieldMetadataInternal>[],
+    GeneratedStructCompatibleFactory<Object>? compatibleFactory,
+    List<GeneratedStructCompatibleFieldReader<Object>>? compatibleReadersBySlot,
+    int? id,
+    String? namespace,
+    String? typeName,
+  }) {
+    _validateRegistrationMode(id: id, namespace: namespace, typeName: typeName);
     final encodedNamespace =
         namespace == null ? null : packageMetaString(namespace);
     final encodedTypeName =
         typeName == null ? null : typeNameMetaString(typeName);
+    final structMetadata = registrationKind == RegistrationKindInternal.struct
+        ? StructMetadataInternal(
+            evolving: evolving,
+            fields: List<FieldMetadataInternal>.unmodifiable(fields),
+          )
+        : null;
+    final sharedTypeDef = _buildSharedTypeDef(
+      kind: registrationKind,
+      userTypeId: id,
+      encodedNamespace: encodedNamespace,
+      encodedTypeName: encodedTypeName,
+      fields: structMetadata?.fields ?? const <FieldMetadataInternal>[],
+    );
     final resolved = ResolvedTypeInternal(
       type: type,
       kind: registrationKind,
       typeId: _defaultTypeIdForType(type),
-      supportsRef: serializer.supportsRef,
-      serializer: serializer as Serializer<Object?>,
-      structRuntime: null,
+      supportsRef: payloadSerializer.supportsRef,
+      serializer: payloadSerializer,
+      structRuntime: structMetadata == null
+          ? null
+          : StructRuntime(
+              payloadSerializer,
+              structMetadata,
+              this,
+              compatibleFactory: compatibleFactory,
+              compatibleReadersBySlot: compatibleReadersBySlot,
+            ),
       userTypeId: id,
       namespace: namespace,
       typeName: typeName,
       encodedNamespace: encodedNamespace,
       encodedTypeName: encodedTypeName,
-      structMetadata: null,
+      structMetadata: structMetadata,
       remoteStructMetadata: null,
+      sharedTypeDef: sharedTypeDef,
     );
-    _storeResolved(type, resolved, id: id, namespace: namespace, typeName: typeName);
+    _parsedTypeMetaCache.remember(TypeHeader(sharedTypeDef.header), resolved);
+    _storeResolved(type, resolved,
+        id: id, namespace: namespace, typeName: typeName);
   }
 
   EncodedMetaStringInternal packageMetaString(String value) {
@@ -403,6 +514,21 @@ final class TypeResolver {
   }
 
   ResolvedTypeInternal resolveValue(Object value) {
+    final runtimeType = value.runtimeType;
+    final cached = _runtimeTypeValueCache[runtimeType];
+    if (cached != null) {
+      return cached;
+    }
+    final resolved = _resolveValueSlow(value, runtimeType);
+    _runtimeTypeValueCache[runtimeType] = resolved;
+    return resolved;
+  }
+
+  ResolvedTypeInternal _resolveValueSlow(Object value, Type runtimeType) {
+    final registered = _registeredByType[runtimeType];
+    if (registered != null) {
+      return registered;
+    }
     if (value is bool) {
       return _builtin(bool, TypeIds.boolType);
     }
@@ -487,12 +613,8 @@ final class TypeResolver {
     if (value is Timestamp) {
       return _builtin(Timestamp, TypeIds.timestamp);
     }
-    final resolved = _registeredByType[value.runtimeType];
-    if (resolved != null) {
-      return resolved;
-    }
     throw StateError(
-      'Type ${value.runtimeType} is not registered. Call the generated registration helper or register a serializer explicitly.',
+      'Type $runtimeType is not registered. Call the generated registration helper or register a serializer explicitly.',
     );
   }
 
@@ -562,6 +684,14 @@ final class TypeResolver {
     return resolved;
   }
 
+  ResolvedTypeInternal resolvedRegisteredType(Type type) {
+    final resolved = _registeredByType[type];
+    if (resolved == null) {
+      throw StateError('Type $type is not registered.');
+    }
+    return resolved;
+  }
+
   ResolvedTypeInternal resolveUserByEncodedName(
     EncodedMetaStringInternal namespace,
     EncodedMetaStringInternal typeName,
@@ -576,88 +706,225 @@ final class TypeResolver {
     return resolved;
   }
 
+  ResolvedTypeInternal resolveUserByEncodedNameCached(
+    int wireTypeId,
+    EncodedMetaStringInternal namespace,
+    EncodedMetaStringInternal typeName,
+  ) {
+    final slot = _namedTypeLookupCacheIndex(wireTypeId, namespace, typeName) &
+        (_namedTypeLookupCache.length - 1);
+    final cached = _namedTypeLookupCache[slot];
+    if (cached != null &&
+        cached.wireTypeId == wireTypeId &&
+        identical(cached.namespace, namespace) &&
+        identical(cached.typeName, typeName)) {
+      return cached.resolved;
+    }
+    final resolved = resolveUserByEncodedName(namespace, typeName);
+    _namedTypeLookupCache[slot] = _NamedTypeReadCacheEntry(
+      wireTypeId,
+      namespace,
+      typeName,
+      resolved,
+    );
+    if (wireTypeId < _lastNamedTypeByWireType.length) {
+      _lastNamedTypeByWireType[wireTypeId] = resolved;
+    }
+    return resolved;
+  }
+
+  DeclaredValueRuntimeInternal declaredFieldRuntime(
+    FieldMetadataInternal field,
+  ) {
+    final cached = _declaredFieldRuntimeCache[field];
+    if (cached != null) {
+      return cached;
+    }
+    final runtime = createDeclaredFieldRuntime(field);
+    _declaredFieldRuntimeCache[field] = runtime;
+    return runtime;
+  }
+
+  DeclaredValueRuntimeInternal createDeclaredFieldRuntime(
+    FieldMetadataInternal field,
+  ) {
+    final shape = field.shape;
+    if (shape.isDynamic || (shape.isPrimitive && !shape.nullable)) {
+      return DeclaredValueRuntimeInternal(
+        metadata: field,
+        shape: shape,
+        resolved: null,
+        usesDeclaredType: false,
+      );
+    }
+    final resolved = resolveShape(shape);
+    return DeclaredValueRuntimeInternal(
+      metadata: field,
+      shape: shape,
+      resolved: resolved,
+      usesDeclaredType: usesDeclaredTypeInfo(
+        config.compatible,
+        shape,
+        resolved,
+      ),
+    );
+  }
+
+  DeclaredValueRuntimeInternal declaredValueRuntimeForShape(
+    TypeShapeInternal shape, {
+    required String identifier,
+    bool nullable = false,
+    bool ref = false,
+  }) {
+    final key = _DeclaredShapeRuntimeCacheKey(
+      shape,
+      identifier,
+      nullable,
+      ref,
+    );
+    final cached = _declaredShapeRuntimeCache[key];
+    if (cached != null) {
+      return cached;
+    }
+    final runtime = createDeclaredFieldRuntime(
+      FieldMetadataInternal(
+        name: identifier,
+        identifier: identifier,
+        id: null,
+        shape: shape.withRootOverrides(
+          nullable: nullable,
+          ref: ref,
+        ),
+      ),
+    );
+    _declaredShapeRuntimeCache[key] = runtime;
+    return runtime;
+  }
+
   TypeMeta typeMetaForResolved(ResolvedTypeInternal resolved) {
     return _typeMetaEncoder.typeMetaFor(config, resolved);
+  }
+
+  SharedTypeDefInternal sharedTypeDefForResolved(
+    ResolvedTypeInternal resolved, {
+    List<FieldMetadataInternal>? fields,
+  }) {
+    final resolvedFields = resolved.structMetadata?.fields;
+    if (fields == null || identical(fields, resolvedFields)) {
+      return resolved.sharedTypeDef!;
+    }
+    return _buildSharedTypeDef(
+      kind: resolved.kind,
+      userTypeId: resolved.userTypeId,
+      encodedNamespace: resolved.encodedNamespace,
+      encodedTypeName: resolved.encodedTypeName,
+      fields: fields,
+    );
   }
 
   void writeTypeMeta(
     Buffer buffer,
     ResolvedTypeInternal resolved, {
-    required List<FieldMetadataInternal>? sharedTypeDefFields,
-    required int? Function(String identity) lookupSharedTypeDefId,
-    required int Function(String identity) reserveSharedTypeDefId,
-    required void Function(EncodedMetaStringInternal value)
-        writePackageMetaString,
-    required void Function(EncodedMetaStringInternal value)
-        writeTypeNameMetaString,
+    required SharedTypeDefInternal? sharedTypeDef,
+    required LinkedHashMap<SharedTypeDefInternal, int> sharedTypeDefIds,
+    required MetaStringWriteSink metaStringWriter,
   }) {
     _typeMetaEncoder.write(
       buffer,
       typeMetaForResolved(resolved),
       writeSharedTypeDef: (typeMeta) => _writeSharedTypeDef(
         buffer,
-        typeMeta,
-        sharedTypeDefFields:
-            sharedTypeDefFields ??
-            resolved.structMetadata?.fields ??
-            const <FieldMetadataInternal>[],
-        lookupSharedTypeDefId: lookupSharedTypeDefId,
-        reserveSharedTypeDefId: reserveSharedTypeDefId,
+        sharedTypeDef ?? typeMeta.resolvedType.sharedTypeDef!,
+        sharedTypeDefIds: sharedTypeDefIds,
       ),
-      writePackageMetaString: writePackageMetaString,
-      writeTypeNameMetaString: writeTypeNameMetaString,
+      writePackageMetaString: (value) => metaStringWriter.writeMetaString(
+        buffer,
+        value,
+      ),
+      writeTypeNameMetaString: (value) => metaStringWriter.writeMetaString(
+        buffer,
+        value,
+      ),
     );
   }
 
   ResolvedTypeInternal readTypeMeta(
     Buffer buffer, {
-    required ResolvedTypeInternal Function(int index) sharedTypeAt,
-    required void Function(ResolvedTypeInternal resolved) addSharedType,
-    required EncodedMetaStringInternal Function() readPackageMetaString,
-    required EncodedMetaStringInternal Function() readTypeNameMetaString,
+    ResolvedTypeInternal? expectedNamedType,
+    required List<ResolvedTypeInternal> sharedTypes,
+    required MetaStringReadSource metaStringReader,
   }) {
     final typeMeta = _typeMetaDecoder.read(
       buffer,
       config: config,
       resolveBuiltinWireType: resolveBuiltinWireType,
       resolveUserById: resolveUserById,
-      resolveUserByEncodedName: resolveUserByEncodedName,
+      resolveUserByEncodedNameCached: resolveUserByEncodedNameCached,
+      expectedNamedType: (wireTypeId) {
+        final expected = expectedNamedType;
+        if (expected != null && _matchesNamedWireType(expected, wireTypeId)) {
+          return expected;
+        }
+        return wireTypeId < _lastNamedTypeByWireType.length
+            ? _lastNamedTypeByWireType[wireTypeId]
+            : null;
+      },
       readSharedTypeDef: () => _readSharedTypeDef(
         buffer,
-        sharedTypeAt: sharedTypeAt,
-        addSharedType: addSharedType,
+        sharedTypes: sharedTypes,
       ),
-      readPackageMetaString: readPackageMetaString,
-      readTypeNameMetaString: readTypeNameMetaString,
+      readPackageMetaString: ([expected]) =>
+          metaStringReader.readMetaString(buffer, expected),
+      readTypeNameMetaString: ([expected]) =>
+          metaStringReader.readMetaString(buffer, expected),
     );
+    if (typeMeta.writesNamedType) {
+      _rememberNamedType(typeMeta.wireTypeId, typeMeta.resolvedType);
+    }
     return typeMeta.resolvedType;
   }
 
   void _writeSharedTypeDef(
     Buffer buffer,
-    TypeMeta typeMeta, {
-    required List<FieldMetadataInternal> sharedTypeDefFields,
-    required int? Function(String identity) lookupSharedTypeDefId,
-    required int Function(String identity) reserveSharedTypeDefId,
+    SharedTypeDefInternal sharedTypeDef, {
+    required LinkedHashMap<SharedTypeDefInternal, int> sharedTypeDefIds,
   }) {
-    final resolved = typeMeta.resolvedType;
-    final identity = resolved.userTypeId != null
-        ? 'id:${resolved.userTypeId}'
-        : 'name:${resolved.namespace}:${resolved.typeName}';
-    final index = lookupSharedTypeDefId(identity);
+    final index = sharedTypeDefIds[sharedTypeDef];
     if (index != null) {
       buffer.writeVarUint32((index << 1) | 1);
       return;
     }
-    final newIndex = reserveSharedTypeDefId(identity);
+    final newIndex = sharedTypeDefIds.length;
+    sharedTypeDefIds[sharedTypeDef] = newIndex;
     buffer.writeVarUint32(newIndex << 1);
-    buffer.writeBytes(_encodeTypeDef(resolved, sharedTypeDefFields));
+    buffer.writeBytes(sharedTypeDef.encoded);
   }
 
-  Uint8List _encodeTypeDef(
-    ResolvedTypeInternal resolved,
-    List<FieldMetadataInternal> fields,
-  ) {
+  SharedTypeDefInternal _buildSharedTypeDef({
+    required RegistrationKindInternal kind,
+    required int? userTypeId,
+    required EncodedMetaStringInternal? encodedNamespace,
+    required EncodedMetaStringInternal? encodedTypeName,
+    required List<FieldMetadataInternal> fields,
+  }) {
+    final encoded = _encodeTypeDef(
+      kind: kind,
+      userTypeId: userTypeId,
+      encodedNamespace: encodedNamespace,
+      encodedTypeName: encodedTypeName,
+      fields: fields,
+    );
+    final header = Buffer.wrap(encoded).readInt64();
+    return SharedTypeDefInternal(header: header, encoded: encoded);
+  }
+
+  Uint8List _encodeTypeDef({
+    required RegistrationKindInternal kind,
+    required int? userTypeId,
+    required EncodedMetaStringInternal? encodedNamespace,
+    required EncodedMetaStringInternal? encodedTypeName,
+    required List<FieldMetadataInternal> fields,
+  }) {
     final metaBuffer = Buffer();
     var classHeader = fields.length;
     metaBuffer.writeByte(0xff);
@@ -667,25 +934,27 @@ final class TypeResolver {
         fields.length - typeDefSmallFieldCountThreshold,
       );
     }
-    if (resolved.isNamed) {
+    if (userTypeId == null &&
+        encodedNamespace != null &&
+        encodedTypeName != null) {
       classHeader |= typeDefRegisterByNameFlag;
       _writeTypeDefName(
         metaBuffer,
-        resolved.encodedNamespace!.bytes,
+        encodedNamespace.bytes,
         encoding: packageNameCompactEncodingInternal(
-          resolved.encodedNamespace!.encoding,
+          encodedNamespace.encoding,
         ),
       );
       _writeTypeDefName(
         metaBuffer,
-        resolved.encodedTypeName!.bytes,
+        encodedTypeName.bytes,
         encoding: typeNameCompactEncodingInternal(
-          resolved.encodedTypeName!.encoding,
+          encodedTypeName.encoding,
         ),
       );
     } else {
-      metaBuffer.writeUint8(_typeDefTypeId(resolved));
-      metaBuffer.writeVarUint32(resolved.userTypeId!);
+      metaBuffer.writeUint8(_typeDefTypeId(kind));
+      metaBuffer.writeVarUint32(userTypeId!);
     }
     metaBuffer.toBytes()[0] = classHeader;
     for (final field in fields) {
@@ -770,8 +1039,8 @@ final class TypeResolver {
     target.writeBytes(bytes);
   }
 
-  int _typeDefTypeId(ResolvedTypeInternal resolved) {
-    switch (resolved.kind) {
+  int _typeDefTypeId(RegistrationKindInternal kind) {
+    switch (kind) {
       case RegistrationKindInternal.struct:
         return TypeIds.struct;
       case RegistrationKindInternal.enumType:
@@ -781,7 +1050,8 @@ final class TypeResolver {
       case RegistrationKindInternal.union:
         return TypeIds.typedUnion;
       case RegistrationKindInternal.builtin:
-        return resolved.typeId;
+        throw StateError(
+            'Built-in types do not write shared TypeDef metadata.');
     }
   }
 
@@ -799,26 +1069,30 @@ final class TypeResolver {
 
   TypeMeta _readSharedTypeDef(
     Buffer buffer, {
-    required ResolvedTypeInternal Function(int index) sharedTypeAt,
-    required void Function(ResolvedTypeInternal resolved) addSharedType,
+    required List<ResolvedTypeInternal> sharedTypes,
   }) {
     final marker = buffer.readVarUint32Small14();
     final isRef = (marker & 1) == 1;
     final index = marker >>> 1;
     if (isRef) {
-      return typeMetaForResolved(sharedTypeAt(index));
+      return typeMetaForResolved(sharedTypes[index]);
     }
-    final resolved = _readTypeDef(buffer);
-    addSharedType(resolved);
+    final header = TypeHeader(buffer.readInt64());
+    final cached = _parsedTypeMetaCache.lookup(header);
+    if (cached != null) {
+      header.skipRemaining(buffer);
+      sharedTypes.add(cached);
+      return typeMetaForResolved(cached);
+    }
+    final resolved = _readTypeDefWithHeader(buffer, header);
+    _parsedTypeMetaCache.remember(header, resolved);
+    sharedTypes.add(resolved);
     return typeMetaForResolved(resolved);
   }
 
-  ResolvedTypeInternal _readTypeDef(Buffer buffer) {
-    final header = buffer.readInt64();
-    final metaSizeLowBits = header & 0xff;
-    final metaSize = metaSizeLowBits == 0xff
-        ? 0xff + buffer.readVarUint32Small14()
-        : metaSizeLowBits.toInt();
+  ResolvedTypeInternal _readTypeDefWithHeader(
+      Buffer buffer, TypeHeader header) {
+    final metaSize = header.readMetaSize(buffer);
     final typeDefBytes = Buffer.wrap(buffer.readBytes(metaSize));
     final classHeader = typeDefBytes.readUint8();
     var fieldCount = classHeader & typeDefSmallFieldCountThreshold;
@@ -847,6 +1121,18 @@ final class TypeResolver {
             encodedNamespace!,
             encodedTypeName!,
           );
+    if (resolved.kind != RegistrationKindInternal.struct) {
+      return resolved;
+    }
+    final remoteMetadata = StructMetadataInternal(
+      evolving: true,
+      fields: fields,
+    );
+    final localMetadata = resolved.structMetadata;
+    if (localMetadata != null &&
+        _sameStructMetadata(localMetadata, remoteMetadata)) {
+      return resolved;
+    }
     return ResolvedTypeInternal(
       type: resolved.type,
       kind: resolved.kind,
@@ -860,10 +1146,8 @@ final class TypeResolver {
       encodedNamespace: resolved.encodedNamespace,
       encodedTypeName: resolved.encodedTypeName,
       structMetadata: resolved.structMetadata,
-      remoteStructMetadata: StructMetadataInternal(
-        evolving: true,
-        fields: fields,
-      ),
+      remoteStructMetadata: remoteMetadata,
+      sharedTypeDef: resolved.sharedTypeDef,
     );
   }
 
@@ -1027,7 +1311,11 @@ final class TypeResolver {
   }
 
   ResolvedTypeInternal _builtin(Type type, int typeId) {
-    return ResolvedTypeInternal(
+    final cached = _builtinByTypeId[typeId];
+    if (cached != null) {
+      return cached;
+    }
+    final resolved = ResolvedTypeInternal(
       type: type,
       kind: RegistrationKindInternal.builtin,
       typeId: typeId,
@@ -1041,7 +1329,10 @@ final class TypeResolver {
       encodedTypeName: null,
       structMetadata: null,
       remoteStructMetadata: null,
+      sharedTypeDef: null,
     );
+    _builtinByTypeId[typeId] = resolved;
+    return resolved;
   }
 
   RegistrationKindInternal _inferKind(Serializer serializer) {
@@ -1163,6 +1454,119 @@ final class TypeResolver {
       encoding: encoded.encoding,
     );
   }
+
+  void _rememberNamedType(int wireTypeId, ResolvedTypeInternal resolved) {
+    if (wireTypeId < _lastNamedTypeByWireType.length) {
+      _lastNamedTypeByWireType[wireTypeId] = resolved;
+    }
+    final namespace = resolved.encodedNamespace;
+    final typeName = resolved.encodedTypeName;
+    if (namespace == null || typeName == null) {
+      return;
+    }
+    final slot = _namedTypeLookupCacheIndex(wireTypeId, namespace, typeName) &
+        (_namedTypeLookupCache.length - 1);
+    _namedTypeLookupCache[slot] = _NamedTypeReadCacheEntry(
+      wireTypeId,
+      namespace,
+      typeName,
+      resolved,
+    );
+  }
+
+  int _namedTypeLookupCacheIndex(
+    int wireTypeId,
+    EncodedMetaStringInternal namespace,
+    EncodedMetaStringInternal typeName,
+  ) {
+    return Object.hash(wireTypeId, namespace.hash, typeName.hash);
+  }
+
+  bool _sameStructMetadata(
+    StructMetadataInternal left,
+    StructMetadataInternal right,
+  ) {
+    if (left.fields.length != right.fields.length) {
+      return false;
+    }
+    for (var index = 0; index < left.fields.length; index += 1) {
+      final leftField = left.fields[index];
+      final rightField = right.fields[index];
+      if (leftField.identifier != rightField.identifier ||
+          leftField.id != rightField.id ||
+          !_sameTypeShape(leftField.shape, rightField.shape)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _sameTypeShape(TypeShapeInternal left, TypeShapeInternal right) {
+    if (left.typeId != right.typeId ||
+        left.nullable != right.nullable ||
+        left.ref != right.ref ||
+        left.dynamic != right.dynamic ||
+        left.arguments.length != right.arguments.length) {
+      return false;
+    }
+    for (var index = 0; index < left.arguments.length; index += 1) {
+      if (!_sameTypeShape(left.arguments[index], right.arguments[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _matchesNamedWireType(ResolvedTypeInternal resolved, int wireTypeId) {
+    if (!resolved.isNamed) {
+      return false;
+    }
+    switch (resolved.kind) {
+      case RegistrationKindInternal.enumType:
+        return wireTypeId == TypeIds.namedEnum;
+      case RegistrationKindInternal.struct:
+        return wireTypeId == TypeIds.namedStruct;
+      case RegistrationKindInternal.ext:
+        return wireTypeId == TypeIds.namedExt;
+      case RegistrationKindInternal.union:
+        return wireTypeId == TypeIds.namedUnion;
+      case RegistrationKindInternal.builtin:
+        return false;
+    }
+  }
+}
+
+final class _GeneratedBindingInternal {
+  final RegistrationKindInternal kind;
+  final Serializer<Object?> Function() serializerFactory;
+  final bool evolving;
+  final List<FieldMetadataInternal> fields;
+  final GeneratedStructCompatibleFactory<Object>? compatibleFactory;
+  final List<GeneratedStructCompatibleFieldReader<Object>>?
+      compatibleReadersBySlot;
+
+  const _GeneratedBindingInternal({
+    required this.kind,
+    required this.serializerFactory,
+    this.evolving = true,
+    this.fields = const <FieldMetadataInternal>[],
+    this.compatibleFactory,
+    this.compatibleReadersBySlot,
+  });
+}
+
+final class _NamedTypeReadCacheEntry {
+  final int wireTypeId;
+  final EncodedMetaStringInternal namespace;
+  final EncodedMetaStringInternal typeName;
+  final ResolvedTypeInternal resolved;
+
+  const _NamedTypeReadCacheEntry(
+    this.wireTypeId,
+    this.namespace,
+    this.typeName,
+    this.resolved,
+  );
 }
 
 final class _EncodedMetaStringKey {
@@ -1194,4 +1598,35 @@ final class _EncodedMetaStringKey {
     }
     return true;
   }
+}
+
+final class _DeclaredShapeRuntimeCacheKey {
+  final TypeShapeInternal shape;
+  final String identifier;
+  final bool nullable;
+  final bool ref;
+
+  const _DeclaredShapeRuntimeCacheKey(
+    this.shape,
+    this.identifier,
+    this.nullable,
+    this.ref,
+  );
+
+  @override
+  bool operator ==(Object other) {
+    return other is _DeclaredShapeRuntimeCacheKey &&
+        identical(shape, other.shape) &&
+        identifier == other.identifier &&
+        nullable == other.nullable &&
+        ref == other.ref;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        identityHashCode(shape),
+        identifier,
+        nullable,
+        ref,
+      );
 }

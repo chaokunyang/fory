@@ -1,6 +1,6 @@
-import 'package:fory/codegen.dart';
+import 'package:fory/fory.dart';
 
-part 'example.g.dart';
+import 'example.fory.dart' as generated;
 
 enum Color {
   red,
@@ -18,7 +18,7 @@ class Person {
 }
 
 void registerExampleTypes(Fory fory) {
-  _registerExampleForyTypes(fory);
+  generated.registerExampleForyTypes(fory);
 }
 
 void registerExampleType(
@@ -28,7 +28,7 @@ void registerExampleType(
   String? namespace,
   String? typeName,
 }) {
-  _registerExampleForyType(
+  generated.registerExampleForyType(
     fory,
     type,
     id: id,

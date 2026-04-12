@@ -15,18 +15,23 @@
 # specific language governing permissions and limitations
 # under the License.
 
-targets:
-  $default:
-    builders:
-      fory|fory_builder:
-        enabled: true
-        generate_for:
-          - example/**.dart
+name: fory_dart_benchmark
+publish_to: none
+description: Apache Fory Dart serialization benchmarks
+version: 0.0.1
 
-builders:
-  fory_builder:
-    import: "package:fory/src/codegen/fory_builder.dart"
-    builder_factories: ["foryBuilder"]
-    build_extensions: {".dart": [".fory.dart"]}
-    auto_apply: dependents
-    build_to: source
+environment:
+  sdk: ^3.6.1
+
+dependencies:
+  args: ^2.7.0
+  fixnum: ^1.1.1
+  fory:
+    path: ../../dart/packages/fory
+  protobuf: ^6.0.0
+
+dev_dependencies:
+  build_runner: ^2.4.13
+  lints: ^5.0.0
+  protoc_plugin: ^25.0.0
+  test: ^1.25.8

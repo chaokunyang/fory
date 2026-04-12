@@ -3,12 +3,26 @@ import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
+WriteContext _writeImpl(WriteContext context) => context;
+
+ReadContext _readImpl(ReadContext context) => context;
+
 void writeDeclaredValue(
   WriteContext context,
   FieldMetadataInternal field,
   Object? value,
 ) {
-  final shape = field.shape;
+  final runtime = _writeImpl(context).typeResolver.declaredFieldRuntime(field);
+  writeDeclaredValueRuntime(context, runtime, value);
+}
+
+void writeDeclaredValueRuntime(
+  WriteContext context,
+  DeclaredValueRuntimeInternal runtime,
+  Object? value,
+) {
+  final shape = runtime.shape;
+  final internal = _writeImpl(context);
   if (shape.isDynamic) {
     if (shape.ref) {
       context.writeRef(value);
@@ -23,13 +37,13 @@ void writeDeclaredValue(
   }
   if (shape.isPrimitive && !shape.nullable) {
     if (value == null) {
-      throw StateError('Field ${field.name} is not nullable.');
+      throw StateError('Field ${runtime.metadata.name} is not nullable.');
     }
-    context.writePrimitiveValue(shape.typeId, value);
+    internal.writePrimitiveValue(shape.typeId, value);
     return;
   }
-  final resolved = context.typeResolver.resolveShape(shape);
-  if (!_usesDeclaredTypeInfo(context.config.compatible, shape, resolved)) {
+  final resolved = runtime.resolved!;
+  if (!runtime.usesDeclaredType) {
     if (shape.ref) {
       context.writeRef(value);
       return;
@@ -40,13 +54,13 @@ void writeDeclaredValue(
       }
       context.buffer.writeByte(RefWriter.notNullValueFlag);
     } else if (value == null) {
-      throw StateError('Field ${field.name} is not nullable.');
+      throw StateError('Field ${runtime.metadata.name} is not nullable.');
     }
     context.writeNonRef(value as Object);
     return;
   }
   if (shape.nullable || shape.ref) {
-    final handled = context.refWriter.writeRefOrNull(
+    final handled = internal.refWriter.writeRefOrNull(
       context.buffer,
       value,
       trackRef: shape.ref && resolved.supportsRef,
@@ -56,9 +70,9 @@ void writeDeclaredValue(
     }
   }
   if (value == null) {
-    throw StateError('Field ${field.name} is not nullable.');
+    throw StateError('Field ${runtime.metadata.name} is not nullable.');
   }
-  context.writeResolvedValue(resolved, value, shape);
+  internal.writeResolvedValue(resolved, value, shape);
 }
 
 T readDeclaredValue<T>(
@@ -66,15 +80,25 @@ T readDeclaredValue<T>(
   FieldMetadataInternal field, [
   T? fallback,
 ]) {
-  final shape = field.shape;
+  final runtime = _readImpl(context).typeResolver.declaredFieldRuntime(field);
+  return readDeclaredValueRuntime(context, runtime, fallback);
+}
+
+T readDeclaredValueRuntime<T>(
+  ReadContext context,
+  DeclaredValueRuntimeInternal runtime, [
+  T? fallback,
+]) {
+  final shape = runtime.shape;
+  final internal = _readImpl(context);
   if (shape.isDynamic) {
     return context.readRef() as T;
   }
   if (shape.isPrimitive && !shape.nullable) {
-    return context.readPrimitiveValue(shape.typeId) as T;
+    return internal.readPrimitiveValue(shape.typeId) as T;
   }
-  final resolved = context.typeResolver.resolveShape(shape);
-  if (!_usesDeclaredTypeInfo(context.config.compatible, shape, resolved)) {
+  final resolved = runtime.resolved!;
+  if (!runtime.usesDeclaredType) {
     if (shape.ref) {
       return context.readRef() as T;
     }
@@ -84,23 +108,27 @@ T readDeclaredValue<T>(
     return context.readNonRef() as T;
   }
   if (shape.nullable || shape.ref) {
-    final flag = context.refReader.tryPreserveRefId(context.buffer);
+    final flag = internal.refReader.tryPreserveRefId(context.buffer);
     final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
     if (flag == RefWriter.nullFlag) {
       return fallback as T;
     }
     if (flag == RefWriter.refFlag) {
-      return context.refReader.getReadRef() as T;
+      return internal.refReader.getReadRef() as T;
     }
-    final value = context.readResolvedValue(resolved, shape);
+    final value = internal.readResolvedValue(
+      resolved,
+      shape,
+      hasPreservedRef: preservedRefId != null,
+    );
     if (preservedRefId != null &&
         resolved.supportsRef &&
-        context.refReader.readRefAt(preservedRefId) == null) {
-      context.refReader.setReadRef(preservedRefId, value);
+        internal.refReader.readRefAt(preservedRefId) == null) {
+      internal.refReader.setReadRef(preservedRefId, value);
     }
     return value as T;
   }
-  return context.readResolvedValue(resolved, shape) as T;
+  return internal.readResolvedValue(resolved, shape) as T;
 }
 
 FieldMetadataInternal fieldMetadata(
@@ -122,38 +150,27 @@ FieldMetadataInternal fieldMetadata(
       ),
     );
 
+FieldMetadataInternal declaredValueFieldMetadata(
+  TypeShapeInternal shape, {
+  required String identifier,
+  bool nullable = false,
+  bool ref = false,
+}) =>
+    FieldMetadataInternal(
+      name: identifier,
+      identifier: identifier,
+      id: null,
+      shape: shapeWithRootOverrides(
+        shape,
+        nullable: nullable,
+        ref: ref,
+      ),
+    );
+
 TypeShapeInternal shapeWithRootOverrides(
   TypeShapeInternal shape, {
   required bool nullable,
   required bool ref,
-}) =>
-    TypeShapeInternal(
-      type: shape.type,
-      typeId: shape.typeId,
-      nullable: nullable,
-      ref: ref,
-      dynamic: shape.dynamic,
-      arguments: List<TypeShapeInternal>.unmodifiable(shape.arguments),
-    );
-
-bool _usesDeclaredTypeInfo(
-  bool compatible,
-  TypeShapeInternal shape,
-  ResolvedTypeInternal resolved,
-) {
-  if (shape.isDynamic) {
-    return false;
-  }
-  if (!compatible) {
-    return true;
-  }
-  switch (resolved.kind) {
-    case RegistrationKindInternal.builtin:
-    case RegistrationKindInternal.enumType:
-    case RegistrationKindInternal.union:
-      return true;
-    case RegistrationKindInternal.struct:
-    case RegistrationKindInternal.ext:
-      return false;
-  }
+}) {
+  return shape.withRootOverrides(nullable: nullable, ref: ref);
 }

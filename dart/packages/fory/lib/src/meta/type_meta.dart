@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/meta/meta_string.dart';
@@ -27,6 +29,54 @@ final class TypeMeta {
           wireTypeId == TypeIds.namedStruct ||
           wireTypeId == TypeIds.namedExt ||
           wireTypeId == TypeIds.namedUnion);
+}
+
+final class TypeHeader {
+  final int value;
+
+  const TypeHeader(this.value);
+
+  int readMetaSize(Buffer buffer) {
+    final lowBits = value & 0xff;
+    if (lowBits == 0xff) {
+      return 0xff + buffer.readVarUint32Small14();
+    }
+    return lowBits;
+  }
+
+  void skipRemaining(Buffer buffer) {
+    buffer.skip(readMetaSize(buffer));
+  }
+}
+
+final class ParsedTypeMetaCache {
+  static const int maxEntries = 8192;
+
+  final LinkedHashMap<int, ResolvedTypeInternal> _entries =
+      LinkedHashMap<int, ResolvedTypeInternal>();
+  int? _lastHeader;
+  ResolvedTypeInternal? _lastResolved;
+
+  ResolvedTypeInternal? lookup(TypeHeader header) {
+    if (_lastHeader == header.value) {
+      return _lastResolved;
+    }
+    final resolved = _entries[header.value];
+    if (resolved != null) {
+      _lastHeader = header.value;
+      _lastResolved = resolved;
+    }
+    return resolved;
+  }
+
+  void remember(TypeHeader header, ResolvedTypeInternal resolved) {
+    if (!_entries.containsKey(header.value) && _entries.length >= maxEntries) {
+      _entries.remove(_entries.keys.first);
+    }
+    _entries[header.value] = resolved;
+    _lastHeader = header.value;
+    _lastResolved = resolved;
+  }
 }
 
 /// Encodes type metadata into the xlang wire format.
@@ -110,12 +160,18 @@ final class TypeMetaDecoder {
         resolveBuiltinWireType,
     required ResolvedTypeInternal Function(int id) resolveUserById,
     required ResolvedTypeInternal Function(
+      int wireTypeId,
       EncodedMetaStringInternal namespace,
       EncodedMetaStringInternal typeName,
-    ) resolveUserByEncodedName,
+    ) resolveUserByEncodedNameCached,
+    required ResolvedTypeInternal? Function(int wireTypeId) expectedNamedType,
     required TypeMeta Function() readSharedTypeDef,
-    required EncodedMetaStringInternal Function() readPackageMetaString,
-    required EncodedMetaStringInternal Function() readTypeNameMetaString,
+    required EncodedMetaStringInternal Function([
+      EncodedMetaStringInternal? expected,
+    ]) readPackageMetaString,
+    required EncodedMetaStringInternal Function([
+      EncodedMetaStringInternal? expected,
+    ]) readTypeNameMetaString,
   }) {
     final wireTypeId = buffer.readVarUint32Small7();
     if (_isBuiltinWireType(wireTypeId)) {
@@ -142,9 +198,24 @@ final class TypeMetaDecoder {
         if (config.compatible) {
           return readSharedTypeDef();
         }
+        final expected = expectedNamedType(wireTypeId);
+        final namespace = readPackageMetaString(expected?.encodedNamespace);
+        final typeName = readTypeNameMetaString(expected?.encodedTypeName);
+        if (expected != null &&
+            identical(namespace, expected.encodedNamespace) &&
+            identical(typeName, expected.encodedTypeName)) {
+          return TypeMeta(
+            resolvedType: expected,
+            wireTypeId: wireTypeId,
+            sharedTypeDef: false,
+          );
+        }
         return TypeMeta(
-          resolvedType: resolveUserByEncodedName(
-              readPackageMetaString(), readTypeNameMetaString()),
+          resolvedType: resolveUserByEncodedNameCached(
+            wireTypeId,
+            namespace,
+            typeName,
+          ),
           wireTypeId: wireTypeId,
           sharedTypeDef: false,
         );

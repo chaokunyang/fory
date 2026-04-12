@@ -6,6 +6,7 @@ final class RefReader {
   final List<int> _preservedIds = <int>[];
   Object? _resolved;
   int? _resolvedId;
+  int _nextSentinelId = -1;
 
   int readRefOrNull(Buffer buffer) {
     final flag = buffer.readByte();
@@ -35,6 +36,13 @@ final class RefReader {
     }
     _preservedIds.add(preservedId);
     return preservedId;
+  }
+
+  int preserveSentinel() {
+    final sentinelId = _nextSentinelId;
+    _nextSentinelId -= 1;
+    _preservedIds.add(sentinelId);
+    return sentinelId;
   }
 
   bool get hasPreservedRefId => _preservedIds.isNotEmpty;
@@ -81,5 +89,6 @@ final class RefReader {
     _preservedIds.clear();
     _resolved = null;
     _resolvedId = null;
+    _nextSentinelId = -1;
   }
 }

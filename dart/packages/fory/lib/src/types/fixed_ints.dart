@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 abstract class _FixedInt implements Comparable<_FixedInt> {
   final int value;
 
@@ -29,10 +27,7 @@ final class Int8 extends _FixedInt {
   /// Creates a normalized signed 8-bit value.
   Int8(int value) : super(_normalize(value));
 
-  static int _normalize(int value) {
-    final list = Int8List(1)..[0] = value;
-    return list[0];
-  }
+  static int _normalize(int value) => value.toSigned(8);
 }
 
 /// Signed 16-bit integer wrapper used by the xlang type system.
@@ -42,10 +37,7 @@ final class Int16 extends _FixedInt {
   /// Creates a normalized signed 16-bit value.
   Int16(int value) : super(_normalize(value));
 
-  static int _normalize(int value) {
-    final list = Int16List(1)..[0] = value;
-    return list[0];
-  }
+  static int _normalize(int value) => value.toSigned(16);
 }
 
 /// Signed 32-bit integer wrapper used by the xlang type system.
@@ -55,26 +47,23 @@ final class Int32 extends _FixedInt {
   /// Creates a normalized signed 32-bit value.
   Int32(int value) : super(_normalize(value));
 
-  static int _normalize(int value) {
-    final list = Int32List(1)..[0] = value;
-    return list[0];
-  }
+  static int _normalize(int value) => value.toSigned(32);
 }
 
 /// Unsigned 8-bit integer wrapper used by the xlang type system.
 final class UInt8 extends _FixedInt {
   /// Creates a normalized unsigned 8-bit value.
-  UInt8(int value) : super(value & 0xff);
+  UInt8(int value) : super(value.toUnsigned(8));
 }
 
 /// Unsigned 16-bit integer wrapper used by the xlang type system.
 final class UInt16 extends _FixedInt {
   /// Creates a normalized unsigned 16-bit value.
-  UInt16(int value) : super(value & 0xffff);
+  UInt16(int value) : super(value.toUnsigned(16));
 }
 
 /// Unsigned 32-bit integer wrapper used by the xlang type system.
 final class UInt32 extends _FixedInt {
   /// Creates a normalized unsigned 32-bit value.
-  UInt32(int value) : super(value & 0xffffffff);
+  UInt32(int value) : super(value.toUnsigned(32));
 }

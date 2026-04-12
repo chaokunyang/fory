@@ -1,8 +1,8 @@
 library;
 
-import 'package:fory/codegen.dart';
+import 'package:fory/fory.dart';
 
-part 'person.g.dart';
+import 'person.fory.dart' as generated;
 
 enum Color {
   red,
@@ -45,5 +45,21 @@ class FixedPayload {
 }
 
 void registerPersonTypes(Fory fory) {
-  _registerPersonForyTypes(fory);
+  generated.registerPersonForyTypes(fory);
+}
+
+void registerPersonType(
+  Fory fory,
+  Type type, {
+  int? id,
+  String? namespace,
+  String? typeName,
+}) {
+  generated.registerPersonForyType(
+    fory,
+    type,
+    id: id,
+    namespace: namespace,
+    typeName: typeName,
+  );
 }

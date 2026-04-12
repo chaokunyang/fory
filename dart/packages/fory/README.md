@@ -38,7 +38,7 @@ Refer to the Dart doc comments on each exported symbol for the precise contract 
 
 The primary example uses generated serializers:
 
-1. Generate the example part file:
+1. Generate the example companion file:
    `dart run build_runner build --delete-conflicting-outputs`
 2. Run the example:
    `dart run example/example.dart`

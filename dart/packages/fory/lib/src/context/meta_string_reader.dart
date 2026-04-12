@@ -1,18 +1,17 @@
-import 'dart:typed_data';
-
 import 'package:fory/src/buffer.dart';
+import 'package:fory/src/context/meta_string_codec.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
 /// Read-side state for meta-string references in one deserialization stream.
-final class MetaStringReader {
+final class MetaStringReader implements MetaStringReadSource {
   final TypeResolver _typeResolver;
   final List<EncodedMetaStringInternal> _dynamicReadMetaStrings =
       <EncodedMetaStringInternal>[];
   final Map<int, EncodedMetaStringInternal> _bigMetaStrings =
       <int, EncodedMetaStringInternal>{};
-  final Map<_SmallMetaStringKey, EncodedMetaStringInternal> _smallMetaStrings =
-      <_SmallMetaStringKey, EncodedMetaStringInternal>{};
+  final Map<int, List<EncodedMetaStringInternal>> _smallMetaStrings =
+      <int, List<EncodedMetaStringInternal>>{};
 
   MetaStringReader(this._typeResolver);
 
@@ -22,76 +21,116 @@ final class MetaStringReader {
   }
 
   /// Reads one meta string, resolving dynamic references when present.
-  EncodedMetaStringInternal readMetaString(Buffer buffer) {
+  ///
+  /// Callers with a likely expected value may pass [expected] to avoid an
+  /// additional map lookup in the common exact-match case.
+  @override
+  EncodedMetaStringInternal readMetaString(
+    Buffer buffer, [
+    EncodedMetaStringInternal? expected,
+  ]) {
     final header = buffer.readVarUint32Small7();
     final length = header >>> 1;
     if ((header & 1) == 1) {
       return _dynamicReadMetaStrings[length - 1];
     }
     final encoded = length > metaStringSmallThreshold
-        ? _readBigMetaString(buffer, length)
-        : _readSmallMetaString(buffer, length);
+        ? _readBigMetaString(buffer, length, expected)
+        : _readSmallMetaString(buffer, length, expected);
     _dynamicReadMetaStrings.add(encoded);
     return encoded;
   }
 
-  EncodedMetaStringInternal _readBigMetaString(Buffer buffer, int length) {
+  EncodedMetaStringInternal _readBigMetaString(
+    Buffer buffer,
+    int length,
+    EncodedMetaStringInternal? expected,
+  ) {
     final hash = buffer.readInt64();
+    if (expected != null && expected.hash == hash) {
+      buffer.skip(length);
+      return expected;
+    }
     final cached = _bigMetaStrings[hash];
     if (cached != null) {
       buffer.skip(length);
       return cached;
     }
     final encoded = _typeResolver.internEncodedMetaString(
-      Uint8List.fromList(buffer.readBytes(length)),
+      buffer.copyBytes(length),
       encoding: hash & 0xff,
     );
     _bigMetaStrings[hash] = encoded;
     return encoded;
   }
 
-  EncodedMetaStringInternal _readSmallMetaString(Buffer buffer, int length) {
+  EncodedMetaStringInternal _readSmallMetaString(
+    Buffer buffer,
+    int length,
+    EncodedMetaStringInternal? expected,
+  ) {
     if (length == 0) {
       return EncodedMetaStringInternal.empty;
     }
     final encoding = buffer.readByte() & 0xff;
-    final bytes = Uint8List.fromList(buffer.readBytes(length));
-    final key = _SmallMetaStringKey(encoding, bytes);
-    final cached = _smallMetaStrings[key];
-    if (cached != null) {
-      return cached;
+    final packed = bufferReadPackedBytesInternal(buffer, length);
+    final word0 = packed.word0;
+    final word1 = packed.word1;
+    final word2 = packed.word2;
+    final word3 = packed.word3;
+    if (expected != null &&
+        expected.matchesPacked(
+          encoding,
+          length,
+          word0,
+          word1,
+          word2,
+          word3,
+        )) {
+      return expected;
+    }
+    final hash = _smallMetaStringHash(
+      encoding,
+      length,
+      word0,
+      word1,
+      word2,
+      word3,
+    );
+    final bucket = _smallMetaStrings[hash];
+    if (bucket != null) {
+      for (final cached in bucket) {
+        if (cached.matchesPacked(
+            encoding, length, word0, word1, word2, word3)) {
+          return cached;
+        }
+      }
     }
     final encoded = _typeResolver.internEncodedMetaString(
-      bytes,
+      bufferMaterializePackedBytesInternal(packed),
       encoding: encoding,
     );
-    _smallMetaStrings[key] = encoded;
+    (bucket ?? (_smallMetaStrings[hash] = <EncodedMetaStringInternal>[])).add(
+      encoded,
+    );
     return encoded;
   }
 }
 
-final class _SmallMetaStringKey {
-  final int encoding;
-  final Uint8List bytes;
-
-  const _SmallMetaStringKey(this.encoding, this.bytes);
-
-  @override
-  int get hashCode => Object.hash(encoding, Object.hashAll(bytes));
-
-  @override
-  bool operator ==(Object other) {
-    if (other is! _SmallMetaStringKey || other.encoding != encoding) {
-      return false;
-    }
-    if (other.bytes.length != bytes.length) {
-      return false;
-    }
-    for (var index = 0; index < bytes.length; index += 1) {
-      if (other.bytes[index] != bytes[index]) {
-        return false;
-      }
-    }
-    return true;
-  }
+int _smallMetaStringHash(
+  int encoding,
+  int length,
+  int word0,
+  int word1,
+  int word2,
+  int word3,
+) {
+  var hash = 0x811c9dc5;
+  hash = (hash ^ encoding) * 0x01000193;
+  hash = (hash ^ length) * 0x01000193;
+  hash = (hash ^ word0) * 0x01000193;
+  hash = (hash ^ word1) * 0x01000193;
+  hash = (hash ^ word2) * 0x01000193;
+  hash = (hash ^ word3) * 0x01000193;
+  return hash;
 }

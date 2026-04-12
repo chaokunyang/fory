@@ -202,10 +202,10 @@ itself, not by serializers.
 
 Current xlang root bits:
 
-| Bit | Meaning                   |
-| --- | ------------------------- |
-| `0` | null root payload         |
-| `1` | xlang payload             |
+| Bit | Meaning                    |
+| --- | -------------------------- |
+| `0` | null root payload          |
+| `1` | xlang payload              |
 | `2` | out-of-band buffers in use |
 
 Keep the root bitmap separate from per-object ref markers:

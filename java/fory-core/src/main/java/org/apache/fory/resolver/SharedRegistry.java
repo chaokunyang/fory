@@ -19,7 +19,6 @@
 
 package org.apache.fory.resolver;
 
-import com.google.common.collect.BiMap;
 import java.lang.reflect.Member;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -81,11 +80,11 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   private final Object metaStringCacheLock = new Object();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
-  volatile BiMap<String, Class<?>> registeredClasses;
+  volatile TwoWayClassMap registeredClasses;
 
   synchronized void setRegistrationIfAbsent(
       IdentityHashMap<Class<?>, Integer> candidateRegisteredClassIdMap,
-      BiMap<String, Class<?>> candidateRegisteredClasses) {
+      TwoWayClassMap candidateRegisteredClasses) {
     Objects.requireNonNull(candidateRegisteredClassIdMap);
     Objects.requireNonNull(candidateRegisteredClasses);
     if (registeredClassIdMap == null) {
@@ -98,7 +97,7 @@ public final class SharedRegistry {
     return Objects.requireNonNull(registeredClassIdMap);
   }
 
-  synchronized BiMap<String, Class<?>> getRegisteredClasses() {
+  synchronized TwoWayClassMap getRegisteredClasses() {
     return Objects.requireNonNull(registeredClasses);
   }
 

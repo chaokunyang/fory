@@ -332,12 +332,7 @@ public class ClassResolver extends TypeResolver {
     if (SqlTimeSerializers.isSqlModuleAvailable()) {
       SqlTimeSerializers.registerDefaultSerializers(this);
     } else {
-      Preconditions.checkArgument(
-          extRegistry.classIdGenerator + SqlTimeSerializers.getNumReservedTypeIds()
-              <= INTERNAL_NATIVE_ID_LIMIT,
-          "Internal type id overflow: %s",
-          extRegistry.classIdGenerator + SqlTimeSerializers.getNumReservedTypeIds());
-      extRegistry.classIdGenerator += SqlTimeSerializers.getNumReservedTypeIds();
+      reserveInternalTypeIds(SqlTimeSerializers.getNumReservedTypeIds());
     }
     OptionalSerializers.registerDefaultSerializers(this);
     CollectionSerializers.registerDefaultSerializers(this);
@@ -362,7 +357,11 @@ public class ClassResolver extends TypeResolver {
     ImmutableCollectionSerializers.registerSerializers(this);
     SubListSerializers.registerSerializers(this, true);
     if (config.registerGuavaTypes()) {
-      GuavaCollectionSerializers.registerDefaultSerializers(this);
+      if (GuavaCollectionSerializers.isGuavaAvailable()) {
+        GuavaCollectionSerializers.registerDefaultSerializers(this);
+      } else {
+        reserveInternalTypeIds(GuavaCollectionSerializers.getNumReservedTypeIds());
+      }
     }
     if (config.deserializeUnknownClass()) {
       if (metaContextShareEnabled) {
@@ -378,6 +377,25 @@ public class ClassResolver extends TypeResolver {
   private void addDefaultSerializer(Class type, Serializer serializer) {
     registerInternalSerializer(type, serializer);
     registerInternal(type);
+  }
+
+  private void reserveInternalTypeIds(int numTypeIds) {
+    Preconditions.checkArgument(numTypeIds >= 0, "numTypeIds must be non-negative");
+    for (int i = 0; i < numTypeIds; i++) {
+      Preconditions.checkArgument(
+          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
+          "Internal type id overflow: %s",
+          extRegistry.classIdGenerator);
+      while (extRegistry.classIdGenerator < typeIdToTypeInfo.length
+          && typeIdToTypeInfo[extRegistry.classIdGenerator] != null) {
+        extRegistry.classIdGenerator++;
+      }
+      Preconditions.checkArgument(
+          extRegistry.classIdGenerator < INTERNAL_NATIVE_ID_LIMIT,
+          "Internal type id overflow: %s",
+          extRegistry.classIdGenerator);
+      extRegistry.classIdGenerator++;
+    }
   }
 
   /** Register common class ahead to get smaller class id for serialization. */

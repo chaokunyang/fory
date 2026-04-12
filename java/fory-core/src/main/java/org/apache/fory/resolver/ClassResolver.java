@@ -35,7 +35,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -127,6 +126,7 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.Shareable;
+import org.apache.fory.serializer.SqlTimeSerializers;
 import org.apache.fory.serializer.TimeSerializers;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
@@ -329,6 +329,16 @@ public class ClassResolver extends TypeResolver {
     ArraySerializers.registerDefaultSerializers(this);
     PrimitiveListSerializers.registerDefaultSerializers(this);
     TimeSerializers.registerDefaultSerializers(this);
+    if (SqlTimeSerializers.isSqlModuleAvailable()) {
+      SqlTimeSerializers.registerDefaultSerializers(this);
+    } else {
+      Preconditions.checkArgument(
+          extRegistry.classIdGenerator + SqlTimeSerializers.getNumReservedTypeIds()
+              <= INTERNAL_NATIVE_ID_LIMIT,
+          "Internal type id overflow: %s",
+          extRegistry.classIdGenerator + SqlTimeSerializers.getNumReservedTypeIds());
+      extRegistry.classIdGenerator += SqlTimeSerializers.getNumReservedTypeIds();
+    }
     OptionalSerializers.registerDefaultSerializers(this);
     CollectionSerializers.registerDefaultSerializers(this);
     MapSerializers.registerDefaultSerializers(this);
@@ -374,7 +384,7 @@ public class ClassResolver extends TypeResolver {
   private void registerCommonUsedClasses() {
     registerInternal(LinkedList.class, TreeSet.class);
     registerInternal(LinkedHashMap.class, TreeMap.class);
-    registerInternal(Date.class, Timestamp.class, LocalDateTime.class, Instant.class);
+    registerInternal(Date.class, LocalDateTime.class, Instant.class);
     registerInternal(BigInteger.class, BigDecimal.class);
     registerInternal(Optional.class, OptionalInt.class);
     registerInternal(Boolean[].class, Byte[].class, Short[].class, Character[].class);

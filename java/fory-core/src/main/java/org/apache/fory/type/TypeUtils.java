@@ -125,7 +125,7 @@ public class TypeUtils {
   public static final TypeRef<?> STRING_TYPE = TypeRef.of(String.class);
   public static final TypeRef<?> BIG_DECIMAL_TYPE = TypeRef.of(BigDecimal.class);
   public static final TypeRef<?> BIG_INTEGER_TYPE = TypeRef.of(BigInteger.class);
-  public static final TypeRef<?> DATE_TYPE = optionalTypeRef(SQL_DATE_CLASS_NAME);
+  public static final TypeRef<?> SQL_DATE_TYPE = optionalTypeRef(SQL_DATE_CLASS_NAME);
   public static final TypeRef<?> LOCAL_DATE_TYPE = TypeRef.of(LocalDate.class);
   public static final TypeRef<?> TIMESTAMP_TYPE = optionalTypeRef(SQL_TIMESTAMP_CLASS_NAME);
   public static final TypeRef<?> INSTANT_TYPE = TypeRef.of(Instant.class);
@@ -195,7 +195,7 @@ public class TypeUtils {
     SUPPORTED_TYPES.add(STRING_TYPE);
     SUPPORTED_TYPES.add(BIG_DECIMAL_TYPE);
     // SUPPORTED_TYPES.add(BIG_INTEGER_TYPE);
-    addIfNotNull(SUPPORTED_TYPES, DATE_TYPE);
+    addIfNotNull(SUPPORTED_TYPES, SQL_DATE_TYPE);
     SUPPORTED_TYPES.add(LOCAL_DATE_TYPE);
     addIfNotNull(SUPPORTED_TYPES, TIMESTAMP_TYPE);
     SUPPORTED_TYPES.add(INSTANT_TYPE);

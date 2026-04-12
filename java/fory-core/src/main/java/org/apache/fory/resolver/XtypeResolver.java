@@ -86,6 +86,7 @@ import org.apache.fory.serializer.SerializationUtils;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.Shareable;
+import org.apache.fory.serializer.SqlTimeSerializers;
 import org.apache.fory.serializer.TimeSerializers;
 import org.apache.fory.serializer.UnionSerializer;
 import org.apache.fory.serializer.UnknownClass;
@@ -942,6 +943,16 @@ public class XtypeResolver extends TypeResolver {
     registerType(Types.DURATION, Duration.class, new TimeSerializers.DurationSerializer(config));
     registerType(Types.TIMESTAMP, Instant.class, new TimeSerializers.InstantSerializer(config));
     registerType(Types.TIMESTAMP, Date.class, new TimeSerializers.DateSerializer(config));
+    if (SqlTimeSerializers.isSqlModuleAvailable()) {
+      registerType(
+          Types.TIMESTAMP,
+          TypeUtils.SQL_DATE_TYPE.getRawType(),
+          SqlTimeSerializers.newSqlDateSerializer(config));
+      registerType(
+          Types.TIMESTAMP,
+          TypeUtils.TIMESTAMP_TYPE.getRawType(),
+          SqlTimeSerializers.newTimestampSerializer(config));
+    }
     registerType(
         Types.TIMESTAMP, LocalDateTime.class, new TimeSerializers.LocalDateTimeSerializer(config));
     registerType(Types.DATE, LocalDate.class, new TimeSerializers.LocalDateSerializer(config));

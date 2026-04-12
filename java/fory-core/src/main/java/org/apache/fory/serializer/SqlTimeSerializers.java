@@ -50,11 +50,19 @@ public final class SqlTimeSerializers {
     return NUM_RESERVED_TYPE_IDS;
   }
 
+  public static Serializer<?> newSqlDateSerializer(Config config) {
+    return new SqlDateSerializer(config);
+  }
+
+  public static Serializer<?> newTimestampSerializer(Config config) {
+    return new TimestampSerializer(config);
+  }
+
   public static void registerDefaultSerializers(ClassResolver resolver) {
     Config config = resolver.getConfig();
-    resolver.registerInternalSerializer(java.sql.Date.class, new SqlDateSerializer(config));
+    resolver.registerInternalSerializer(java.sql.Date.class, newSqlDateSerializer(config));
     resolver.registerInternalSerializer(Time.class, new SqlTimeSerializer(config));
-    resolver.registerInternalSerializer(Timestamp.class, new TimestampSerializer(config));
+    resolver.registerInternalSerializer(Timestamp.class, newTimestampSerializer(config));
   }
 
   private static boolean isClassAvailable(String className) {

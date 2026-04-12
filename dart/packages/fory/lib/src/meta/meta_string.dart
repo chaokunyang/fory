@@ -34,7 +34,10 @@ final class EncodedMetaStringInternal {
   final Uint8List bytes;
   final int encoding;
 
-  const EncodedMetaStringInternal(this.bytes, this.encoding);
+  static final EncodedMetaStringInternal empty =
+      EncodedMetaStringInternal(Uint8List(0), metaStringUtf8Encoding);
+
+  EncodedMetaStringInternal(this.bytes, this.encoding);
 }
 
 EncodedMetaStringInternal encodePackageMetaStringInternal(String value) =>
@@ -69,6 +72,18 @@ int typeNameCompactEncodingInternal(int encoding) =>
 
 int fieldNameCompactEncodingInternal(int encoding) =>
     _compactEncodingIndex(encoding, _fieldNameCompactEncodings, 'field name');
+
+int packageNameEncodingInternal(int compactEncoding) => _compactEncodingValue(
+      compactEncoding,
+      _packageNameCompactEncodings,
+      'package',
+    );
+
+int typeNameEncodingInternal(int compactEncoding) => _compactEncodingValue(
+      compactEncoding,
+      _typeNameCompactEncodings,
+      'type name',
+    );
 
 String decodePackageMetaStringInternal(List<int> bytes, int encoding) =>
     decodeMetaStringInternal(
@@ -158,7 +173,7 @@ EncodedMetaStringInternal _encodeMetaStringInternal(
   required List<int> allowedEncodings,
 }) {
   if (value.isEmpty) {
-    return EncodedMetaStringInternal(Uint8List(0), metaStringUtf8Encoding);
+    return EncodedMetaStringInternal.empty;
   }
   for (final codeUnit in value.codeUnits) {
     if (codeUnit > 0x7f) {

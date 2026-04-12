@@ -1,6 +1,6 @@
 library;
 
-import 'package:fory/fory.dart';
+import 'package:fory/codegen.dart';
 
 part 'person.g.dart';
 

@@ -7,11 +7,14 @@ part of 'xlang_test_models.dart';
 // **************************************************************************
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: invalid_use_of_internal_member
 
-final class _ColorForySerializer extends Serializer<Color> {
+abstract base class _GeneratedStructSerializer<T> extends Serializer<T> {
+  const _GeneratedStructSerializer();
+}
+
+final class _ColorForySerializer extends EnumSerializer<Color> {
   const _ColorForySerializer();
-  @override
-  bool get isEnum => true;
   @override
   void write(WriteContext context, Color value) {
     context.writeVarUint32(value.index);
@@ -23,10 +26,8 @@ final class _ColorForySerializer extends Serializer<Color> {
   }
 }
 
-final class _TestEnumForySerializer extends Serializer<TestEnum> {
+final class _TestEnumForySerializer extends EnumSerializer<TestEnum> {
   const _TestEnumForySerializer();
-  @override
-  bool get isEnum => true;
   @override
   void write(WriteContext context, TestEnum value) {
     context.writeVarUint32(value.index);
@@ -38,7 +39,7 @@ final class _TestEnumForySerializer extends Serializer<TestEnum> {
   }
 }
 
-const List<Map<String, Object?>> _twoEnumFieldStructEvolutionForyFields =
+const List<Map<String, Object?>> _twoEnumFieldStructEvolutionForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f1',
@@ -68,28 +69,28 @@ const List<Map<String, Object?>> _twoEnumFieldStructEvolutionForyFields =
   },
 ];
 
+final List<Object> _twoEnumFieldStructEvolutionForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _twoEnumFieldStructEvolutionForyFieldMetadata[0]),
+    generatedField(1, _twoEnumFieldStructEvolutionForyFieldMetadata[1]),
+  ],
+);
+
 final class _TwoEnumFieldStructEvolutionForySerializer
-    extends Serializer<TwoEnumFieldStructEvolution> {
+    extends _GeneratedStructSerializer<TwoEnumFieldStructEvolution> {
   const _TwoEnumFieldStructEvolutionForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields =>
-      _twoEnumFieldStructEvolutionForyFields;
-  @override
   void write(WriteContext context, TwoEnumFieldStructEvolution value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_twoEnumFieldStructEvolutionForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f1':
-            context.writeField(field, value.f1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f1);
             break;
-          case 'f2':
-            context.writeField(field, value.f2);
+          case 1:
+            writeGeneratedField(context, field, value.f2);
             break;
           default:
             break;
@@ -97,8 +98,10 @@ final class _TwoEnumFieldStructEvolutionForySerializer
       }
       return;
     }
-    context.writeField(_twoEnumFieldStructEvolutionForyFields[0], value.f1);
-    context.writeField(_twoEnumFieldStructEvolutionForyFields[1], value.f2);
+    writeGeneratedField(
+        context, _twoEnumFieldStructEvolutionForyFields[0], value.f1);
+    writeGeneratedField(
+        context, _twoEnumFieldStructEvolutionForyFields[1], value.f2);
   }
 
   @override
@@ -106,12 +109,12 @@ final class _TwoEnumFieldStructEvolutionForySerializer
     final value = TwoEnumFieldStructEvolution();
     context.reference(value);
     value.f1 = _readTwoEnumFieldStructEvolutionF1(
-        context.readField<Object?>(
-            _twoEnumFieldStructEvolutionForyFields[0], value.f1),
+        readGeneratedField<Object?>(
+            context, _twoEnumFieldStructEvolutionForyFields[0], value.f1),
         value.f1);
     value.f2 = _readTwoEnumFieldStructEvolutionF2(
-        context.readField<Object?>(
-            _twoEnumFieldStructEvolutionForyFields[1], value.f2),
+        readGeneratedField<Object?>(
+            context, _twoEnumFieldStructEvolutionForyFields[1], value.f2),
         value.f2);
     return value;
   }
@@ -133,7 +136,8 @@ TestEnum _readTwoEnumFieldStructEvolutionF2(Object? value, [Object? fallback]) {
       : value as TestEnum;
 }
 
-const List<Map<String, Object?>> _itemForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _itemForyFieldMetadata =
+    <Map<String, Object?>>[
   <String, Object?>{
     'name': 'name',
     'identifier': 'name',
@@ -149,22 +153,22 @@ const List<Map<String, Object?>> _itemForyFields = <Map<String, Object?>>[
   },
 ];
 
-final class _ItemForySerializer extends Serializer<Item> {
+final List<Object> _itemForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _itemForyFieldMetadata[0]),
+  ],
+);
+
+final class _ItemForySerializer extends _GeneratedStructSerializer<Item> {
   const _ItemForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _itemForyFields;
-  @override
   void write(WriteContext context, Item value) {
-    final compatibleFields = context.compatibleFieldOrder(_itemForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'name':
-            context.writeField(field, value.name);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.name);
             break;
           default:
             break;
@@ -172,7 +176,7 @@ final class _ItemForySerializer extends Serializer<Item> {
       }
       return;
     }
-    context.writeField(_itemForyFields[0], value.name);
+    writeGeneratedField(context, _itemForyFields[0], value.name);
   }
 
   @override
@@ -180,7 +184,8 @@ final class _ItemForySerializer extends Serializer<Item> {
     final value = Item();
     context.reference(value);
     value.name = _readItemName(
-        context.readField<Object?>(_itemForyFields[0], value.name), value.name);
+        readGeneratedField<Object?>(context, _itemForyFields[0], value.name),
+        value.name);
     return value;
   }
 }
@@ -193,7 +198,7 @@ String _readItemName(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<Map<String, Object?>> _simpleStructForyFields =
+const List<Map<String, Object?>> _simpleStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f2',
@@ -340,47 +345,55 @@ const List<Map<String, Object?>> _simpleStructForyFields =
   },
 ];
 
-final class _SimpleStructForySerializer extends Serializer<SimpleStruct> {
+final List<Object> _simpleStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _simpleStructForyFieldMetadata[0]),
+    generatedField(1, _simpleStructForyFieldMetadata[1]),
+    generatedField(2, _simpleStructForyFieldMetadata[2]),
+    generatedField(3, _simpleStructForyFieldMetadata[3]),
+    generatedField(4, _simpleStructForyFieldMetadata[4]),
+    generatedField(5, _simpleStructForyFieldMetadata[5]),
+    generatedField(6, _simpleStructForyFieldMetadata[6]),
+    generatedField(7, _simpleStructForyFieldMetadata[7]),
+    generatedField(8, _simpleStructForyFieldMetadata[8]),
+  ],
+);
+
+final class _SimpleStructForySerializer
+    extends _GeneratedStructSerializer<SimpleStruct> {
   const _SimpleStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _simpleStructForyFields;
-  @override
   void write(WriteContext context, SimpleStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_simpleStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f2':
-            context.writeField(field, value.f2);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f2);
             break;
-          case 'f7':
-            context.writeField(field, value.f7);
+          case 1:
+            writeGeneratedField(context, field, value.f7);
             break;
-          case 'f8':
-            context.writeField(field, value.f8);
+          case 2:
+            writeGeneratedField(context, field, value.f8);
             break;
-          case 'last':
-            context.writeField(field, value.last);
+          case 3:
+            writeGeneratedField(context, field, value.last);
             break;
-          case 'f4':
-            context.writeField(field, value.f4);
+          case 4:
+            writeGeneratedField(context, field, value.f4);
             break;
-          case 'f6':
-            context.writeField(field, value.f6);
+          case 5:
+            writeGeneratedField(context, field, value.f6);
             break;
-          case 'f1':
-            context.writeField(field, value.f1);
+          case 6:
+            writeGeneratedField(context, field, value.f1);
             break;
-          case 'f3':
-            context.writeField(field, value.f3);
+          case 7:
+            writeGeneratedField(context, field, value.f3);
             break;
-          case 'f5':
-            context.writeField(field, value.f5);
+          case 8:
+            writeGeneratedField(context, field, value.f5);
             break;
           default:
             break;
@@ -388,15 +401,15 @@ final class _SimpleStructForySerializer extends Serializer<SimpleStruct> {
       }
       return;
     }
-    context.writeField(_simpleStructForyFields[0], value.f2);
-    context.writeField(_simpleStructForyFields[1], value.f7);
-    context.writeField(_simpleStructForyFields[2], value.f8);
-    context.writeField(_simpleStructForyFields[3], value.last);
-    context.writeField(_simpleStructForyFields[4], value.f4);
-    context.writeField(_simpleStructForyFields[5], value.f6);
-    context.writeField(_simpleStructForyFields[6], value.f1);
-    context.writeField(_simpleStructForyFields[7], value.f3);
-    context.writeField(_simpleStructForyFields[8], value.f5);
+    writeGeneratedField(context, _simpleStructForyFields[0], value.f2);
+    writeGeneratedField(context, _simpleStructForyFields[1], value.f7);
+    writeGeneratedField(context, _simpleStructForyFields[2], value.f8);
+    writeGeneratedField(context, _simpleStructForyFields[3], value.last);
+    writeGeneratedField(context, _simpleStructForyFields[4], value.f4);
+    writeGeneratedField(context, _simpleStructForyFields[5], value.f6);
+    writeGeneratedField(context, _simpleStructForyFields[6], value.f1);
+    writeGeneratedField(context, _simpleStructForyFields[7], value.f3);
+    writeGeneratedField(context, _simpleStructForyFields[8], value.f5);
   }
 
   @override
@@ -404,31 +417,40 @@ final class _SimpleStructForySerializer extends Serializer<SimpleStruct> {
     final value = SimpleStruct();
     context.reference(value);
     value.f2 = _readSimpleStructF2(
-        context.readField<Object?>(_simpleStructForyFields[0], value.f2),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[0], value.f2),
         value.f2);
     value.f7 = _readSimpleStructF7(
-        context.readField<Object?>(_simpleStructForyFields[1], value.f7),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[1], value.f7),
         value.f7);
     value.f8 = _readSimpleStructF8(
-        context.readField<Object?>(_simpleStructForyFields[2], value.f8),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[2], value.f8),
         value.f8);
     value.last = _readSimpleStructLast(
-        context.readField<Object?>(_simpleStructForyFields[3], value.last),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[3], value.last),
         value.last);
     value.f4 = _readSimpleStructF4(
-        context.readField<Object?>(_simpleStructForyFields[4], value.f4),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[4], value.f4),
         value.f4);
     value.f6 = _readSimpleStructF6(
-        context.readField<Object?>(_simpleStructForyFields[5], value.f6),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[5], value.f6),
         value.f6);
     value.f1 = _readSimpleStructF1(
-        context.readField<Object?>(_simpleStructForyFields[6], value.f1),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[6], value.f1),
         value.f1);
     value.f3 = _readSimpleStructF3(
-        context.readField<Object?>(_simpleStructForyFields[7], value.f3),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[7], value.f3),
         value.f3);
     value.f5 = _readSimpleStructF5(
-        context.readField<Object?>(_simpleStructForyFields[8], value.f5),
+        readGeneratedField<Object?>(
+            context, _simpleStructForyFields[8], value.f5),
         value.f5);
     return value;
   }
@@ -518,7 +540,7 @@ Color _readSimpleStructF5(Object? value, [Object? fallback]) {
       : value as Color;
 }
 
-const List<Map<String, Object?>> _evolvingOverrideStructForyFields =
+const List<Map<String, Object?>> _evolvingOverrideStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f1',
@@ -535,24 +557,24 @@ const List<Map<String, Object?>> _evolvingOverrideStructForyFields =
   },
 ];
 
+final List<Object> _evolvingOverrideStructForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _evolvingOverrideStructForyFieldMetadata[0]),
+  ],
+);
+
 final class _EvolvingOverrideStructForySerializer
-    extends Serializer<EvolvingOverrideStruct> {
+    extends _GeneratedStructSerializer<EvolvingOverrideStruct> {
   const _EvolvingOverrideStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _evolvingOverrideStructForyFields;
-  @override
   void write(WriteContext context, EvolvingOverrideStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_evolvingOverrideStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f1':
-            context.writeField(field, value.f1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f1);
             break;
           default:
             break;
@@ -560,7 +582,8 @@ final class _EvolvingOverrideStructForySerializer
       }
       return;
     }
-    context.writeField(_evolvingOverrideStructForyFields[0], value.f1);
+    writeGeneratedField(
+        context, _evolvingOverrideStructForyFields[0], value.f1);
   }
 
   @override
@@ -568,8 +591,8 @@ final class _EvolvingOverrideStructForySerializer
     final value = EvolvingOverrideStruct();
     context.reference(value);
     value.f1 = _readEvolvingOverrideStructF1(
-        context.readField<Object?>(
-            _evolvingOverrideStructForyFields[0], value.f1),
+        readGeneratedField<Object?>(
+            context, _evolvingOverrideStructForyFields[0], value.f1),
         value.f1);
     return value;
   }
@@ -583,7 +606,7 @@ String _readEvolvingOverrideStructF1(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<Map<String, Object?>> _fixedOverrideStructForyFields =
+const List<Map<String, Object?>> _fixedOverrideStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f1',
@@ -600,24 +623,23 @@ const List<Map<String, Object?>> _fixedOverrideStructForyFields =
   },
 ];
 
+final List<Object> _fixedOverrideStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _fixedOverrideStructForyFieldMetadata[0]),
+  ],
+);
+
 final class _FixedOverrideStructForySerializer
-    extends Serializer<FixedOverrideStruct> {
+    extends _GeneratedStructSerializer<FixedOverrideStruct> {
   const _FixedOverrideStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => false;
-  @override
-  List<Map<String, Object?>> get fields => _fixedOverrideStructForyFields;
-  @override
   void write(WriteContext context, FixedOverrideStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_fixedOverrideStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f1':
-            context.writeField(field, value.f1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f1);
             break;
           default:
             break;
@@ -625,7 +647,7 @@ final class _FixedOverrideStructForySerializer
       }
       return;
     }
-    context.writeField(_fixedOverrideStructForyFields[0], value.f1);
+    writeGeneratedField(context, _fixedOverrideStructForyFields[0], value.f1);
   }
 
   @override
@@ -633,7 +655,8 @@ final class _FixedOverrideStructForySerializer
     final value = FixedOverrideStruct();
     context.reference(value);
     value.f1 = _readFixedOverrideStructF1(
-        context.readField<Object?>(_fixedOverrideStructForyFields[0], value.f1),
+        readGeneratedField<Object?>(
+            context, _fixedOverrideStructForyFields[0], value.f1),
         value.f1);
     return value;
   }
@@ -647,7 +670,8 @@ String _readFixedOverrideStructF1(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<Map<String, Object?>> _item1ForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _item1ForyFieldMetadata =
+    <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f1',
     'identifier': 'f1',
@@ -728,37 +752,42 @@ const List<Map<String, Object?>> _item1ForyFields = <Map<String, Object?>>[
   },
 ];
 
-final class _Item1ForySerializer extends Serializer<Item1> {
+final List<Object> _item1ForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _item1ForyFieldMetadata[0]),
+    generatedField(1, _item1ForyFieldMetadata[1]),
+    generatedField(2, _item1ForyFieldMetadata[2]),
+    generatedField(3, _item1ForyFieldMetadata[3]),
+    generatedField(4, _item1ForyFieldMetadata[4]),
+    generatedField(5, _item1ForyFieldMetadata[5]),
+  ],
+);
+
+final class _Item1ForySerializer extends _GeneratedStructSerializer<Item1> {
   const _Item1ForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _item1ForyFields;
-  @override
   void write(WriteContext context, Item1 value) {
-    final compatibleFields = context.compatibleFieldOrder(_item1ForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f1':
-            context.writeField(field, value.f1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f1);
             break;
-          case 'f2':
-            context.writeField(field, value.f2);
+          case 1:
+            writeGeneratedField(context, field, value.f2);
             break;
-          case 'f3':
-            context.writeField(field, value.f3);
+          case 2:
+            writeGeneratedField(context, field, value.f3);
             break;
-          case 'f4':
-            context.writeField(field, value.f4);
+          case 3:
+            writeGeneratedField(context, field, value.f4);
             break;
-          case 'f5':
-            context.writeField(field, value.f5);
+          case 4:
+            writeGeneratedField(context, field, value.f5);
             break;
-          case 'f6':
-            context.writeField(field, value.f6);
+          case 5:
+            writeGeneratedField(context, field, value.f6);
             break;
           default:
             break;
@@ -766,12 +795,12 @@ final class _Item1ForySerializer extends Serializer<Item1> {
       }
       return;
     }
-    context.writeField(_item1ForyFields[0], value.f1);
-    context.writeField(_item1ForyFields[1], value.f2);
-    context.writeField(_item1ForyFields[2], value.f3);
-    context.writeField(_item1ForyFields[3], value.f4);
-    context.writeField(_item1ForyFields[4], value.f5);
-    context.writeField(_item1ForyFields[5], value.f6);
+    writeGeneratedField(context, _item1ForyFields[0], value.f1);
+    writeGeneratedField(context, _item1ForyFields[1], value.f2);
+    writeGeneratedField(context, _item1ForyFields[2], value.f3);
+    writeGeneratedField(context, _item1ForyFields[3], value.f4);
+    writeGeneratedField(context, _item1ForyFields[4], value.f5);
+    writeGeneratedField(context, _item1ForyFields[5], value.f6);
   }
 
   @override
@@ -779,17 +808,23 @@ final class _Item1ForySerializer extends Serializer<Item1> {
     final value = Item1();
     context.reference(value);
     value.f1 = _readItem1F1(
-        context.readField<Object?>(_item1ForyFields[0], value.f1), value.f1);
+        readGeneratedField<Object?>(context, _item1ForyFields[0], value.f1),
+        value.f1);
     value.f2 = _readItem1F2(
-        context.readField<Object?>(_item1ForyFields[1], value.f2), value.f2);
+        readGeneratedField<Object?>(context, _item1ForyFields[1], value.f2),
+        value.f2);
     value.f3 = _readItem1F3(
-        context.readField<Object?>(_item1ForyFields[2], value.f3), value.f3);
+        readGeneratedField<Object?>(context, _item1ForyFields[2], value.f3),
+        value.f3);
     value.f4 = _readItem1F4(
-        context.readField<Object?>(_item1ForyFields[3], value.f4), value.f4);
+        readGeneratedField<Object?>(context, _item1ForyFields[3], value.f4),
+        value.f4);
     value.f5 = _readItem1F5(
-        context.readField<Object?>(_item1ForyFields[4], value.f5), value.f5);
+        readGeneratedField<Object?>(context, _item1ForyFields[4], value.f5),
+        value.f5);
     value.f6 = _readItem1F6(
-        context.readField<Object?>(_item1ForyFields[5], value.f6), value.f6);
+        readGeneratedField<Object?>(context, _item1ForyFields[5], value.f6),
+        value.f6);
     return value;
   }
 }
@@ -842,7 +877,7 @@ Int32 _readItem1F6(Object? value, [Object? fallback]) {
       : value as Int32;
 }
 
-const List<Map<String, Object?>> _structWithUnion2ForyFields =
+const List<Map<String, Object?>> _structWithUnion2ForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'union',
@@ -859,24 +894,23 @@ const List<Map<String, Object?>> _structWithUnion2ForyFields =
   },
 ];
 
+final List<Object> _structWithUnion2ForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _structWithUnion2ForyFieldMetadata[0]),
+  ],
+);
+
 final class _StructWithUnion2ForySerializer
-    extends Serializer<StructWithUnion2> {
+    extends _GeneratedStructSerializer<StructWithUnion2> {
   const _StructWithUnion2ForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _structWithUnion2ForyFields;
-  @override
   void write(WriteContext context, StructWithUnion2 value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_structWithUnion2ForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'union':
-            context.writeField(field, value.union);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.union);
             break;
           default:
             break;
@@ -884,7 +918,7 @@ final class _StructWithUnion2ForySerializer
       }
       return;
     }
-    context.writeField(_structWithUnion2ForyFields[0], value.union);
+    writeGeneratedField(context, _structWithUnion2ForyFields[0], value.union);
   }
 
   @override
@@ -892,7 +926,8 @@ final class _StructWithUnion2ForySerializer
     final value = StructWithUnion2();
     context.reference(value);
     value.union = _readStructWithUnion2Union(
-        context.readField<Object?>(_structWithUnion2ForyFields[0], value.union),
+        readGeneratedField<Object?>(
+            context, _structWithUnion2ForyFields[0], value.union),
         value.union);
     return value;
   }
@@ -906,7 +941,7 @@ Union2 _readStructWithUnion2Union(Object? value, [Object? fallback]) {
       : value as Union2;
 }
 
-const List<Map<String, Object?>> _structWithListForyFields =
+const List<Map<String, Object?>> _structWithListForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'items',
@@ -932,23 +967,23 @@ const List<Map<String, Object?>> _structWithListForyFields =
   },
 ];
 
-final class _StructWithListForySerializer extends Serializer<StructWithList> {
+final List<Object> _structWithListForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _structWithListForyFieldMetadata[0]),
+  ],
+);
+
+final class _StructWithListForySerializer
+    extends _GeneratedStructSerializer<StructWithList> {
   const _StructWithListForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _structWithListForyFields;
-  @override
   void write(WriteContext context, StructWithList value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_structWithListForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'items':
-            context.writeField(field, value.items);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.items);
             break;
           default:
             break;
@@ -956,7 +991,7 @@ final class _StructWithListForySerializer extends Serializer<StructWithList> {
       }
       return;
     }
-    context.writeField(_structWithListForyFields[0], value.items);
+    writeGeneratedField(context, _structWithListForyFields[0], value.items);
   }
 
   @override
@@ -964,7 +999,8 @@ final class _StructWithListForySerializer extends Serializer<StructWithList> {
     final value = StructWithList();
     context.reference(value);
     value.items = _readStructWithListItems(
-        context.readField<Object?>(_structWithListForyFields[0], value.items),
+        readGeneratedField<Object?>(
+            context, _structWithListForyFields[0], value.items),
         value.items);
     return value;
   }
@@ -982,7 +1018,7 @@ List<String?> _readStructWithListItems(Object? value, [Object? fallback]) {
               : item as String));
 }
 
-const List<Map<String, Object?>> _structWithMapForyFields =
+const List<Map<String, Object?>> _structWithMapForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'data',
@@ -1016,23 +1052,23 @@ const List<Map<String, Object?>> _structWithMapForyFields =
   },
 ];
 
-final class _StructWithMapForySerializer extends Serializer<StructWithMap> {
+final List<Object> _structWithMapForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _structWithMapForyFieldMetadata[0]),
+  ],
+);
+
+final class _StructWithMapForySerializer
+    extends _GeneratedStructSerializer<StructWithMap> {
   const _StructWithMapForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _structWithMapForyFields;
-  @override
   void write(WriteContext context, StructWithMap value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_structWithMapForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'data':
-            context.writeField(field, value.data);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.data);
             break;
           default:
             break;
@@ -1040,7 +1076,7 @@ final class _StructWithMapForySerializer extends Serializer<StructWithMap> {
       }
       return;
     }
-    context.writeField(_structWithMapForyFields[0], value.data);
+    writeGeneratedField(context, _structWithMapForyFields[0], value.data);
   }
 
   @override
@@ -1048,7 +1084,8 @@ final class _StructWithMapForySerializer extends Serializer<StructWithMap> {
     final value = StructWithMap();
     context.reference(value);
     value.data = _readStructWithMapData(
-        context.readField<Object?>(_structWithMapForyFields[0], value.data),
+        readGeneratedField<Object?>(
+            context, _structWithMapForyFields[0], value.data),
         value.data);
     return value;
   }
@@ -1073,7 +1110,8 @@ Map<String?, String?> _readStructWithMapData(Object? value,
                   : value as String)));
 }
 
-const List<Map<String, Object?>> _myStructForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _myStructForyFieldMetadata =
+    <Map<String, Object?>>[
   <String, Object?>{
     'name': 'id',
     'identifier': 'id',
@@ -1089,22 +1127,23 @@ const List<Map<String, Object?>> _myStructForyFields = <Map<String, Object?>>[
   },
 ];
 
-final class _MyStructForySerializer extends Serializer<MyStruct> {
+final List<Object> _myStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _myStructForyFieldMetadata[0]),
+  ],
+);
+
+final class _MyStructForySerializer
+    extends _GeneratedStructSerializer<MyStruct> {
   const _MyStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _myStructForyFields;
-  @override
   void write(WriteContext context, MyStruct value) {
-    final compatibleFields = context.compatibleFieldOrder(_myStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'id':
-            context.writeField(field, value.id);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.id);
             break;
           default:
             break;
@@ -1112,7 +1151,7 @@ final class _MyStructForySerializer extends Serializer<MyStruct> {
       }
       return;
     }
-    context.writeField(_myStructForyFields[0], value.id);
+    writeGeneratedField(context, _myStructForyFields[0], value.id);
   }
 
   @override
@@ -1120,7 +1159,8 @@ final class _MyStructForySerializer extends Serializer<MyStruct> {
     final value = MyStruct();
     context.reference(value);
     value.id = _readMyStructId(
-        context.readField<Object?>(_myStructForyFields[0], value.id), value.id);
+        readGeneratedField<Object?>(context, _myStructForyFields[0], value.id),
+        value.id);
     return value;
   }
 }
@@ -1133,7 +1173,8 @@ int _readMyStructId(Object? value, [Object? fallback]) {
       : (value as Int32).value;
 }
 
-const List<Map<String, Object?>> _myWrapperForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _myWrapperForyFieldMetadata =
+    <Map<String, Object?>>[
   <String, Object?>{
     'name': 'color',
     'identifier': 'color',
@@ -1175,28 +1216,31 @@ const List<Map<String, Object?>> _myWrapperForyFields = <Map<String, Object?>>[
   },
 ];
 
-final class _MyWrapperForySerializer extends Serializer<MyWrapper> {
+final List<Object> _myWrapperForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _myWrapperForyFieldMetadata[0]),
+    generatedField(1, _myWrapperForyFieldMetadata[1]),
+    generatedField(2, _myWrapperForyFieldMetadata[2]),
+  ],
+);
+
+final class _MyWrapperForySerializer
+    extends _GeneratedStructSerializer<MyWrapper> {
   const _MyWrapperForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _myWrapperForyFields;
-  @override
   void write(WriteContext context, MyWrapper value) {
-    final compatibleFields = context.compatibleFieldOrder(_myWrapperForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'color':
-            context.writeField(field, value.color);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.color);
             break;
-          case 'my_ext':
-            context.writeField(field, value.myExt);
+          case 1:
+            writeGeneratedField(context, field, value.myExt);
             break;
-          case 'my_struct':
-            context.writeField(field, value.myStruct);
+          case 2:
+            writeGeneratedField(context, field, value.myStruct);
             break;
           default:
             break;
@@ -1204,9 +1248,9 @@ final class _MyWrapperForySerializer extends Serializer<MyWrapper> {
       }
       return;
     }
-    context.writeField(_myWrapperForyFields[0], value.color);
-    context.writeField(_myWrapperForyFields[1], value.myExt);
-    context.writeField(_myWrapperForyFields[2], value.myStruct);
+    writeGeneratedField(context, _myWrapperForyFields[0], value.color);
+    writeGeneratedField(context, _myWrapperForyFields[1], value.myExt);
+    writeGeneratedField(context, _myWrapperForyFields[2], value.myStruct);
   }
 
   @override
@@ -1214,13 +1258,16 @@ final class _MyWrapperForySerializer extends Serializer<MyWrapper> {
     final value = MyWrapper();
     context.reference(value);
     value.color = _readMyWrapperColor(
-        context.readField<Object?>(_myWrapperForyFields[0], value.color),
+        readGeneratedField<Object?>(
+            context, _myWrapperForyFields[0], value.color),
         value.color);
     value.myExt = _readMyWrapperMyExt(
-        context.readField<Object?>(_myWrapperForyFields[1], value.myExt),
+        readGeneratedField<Object?>(
+            context, _myWrapperForyFields[1], value.myExt),
         value.myExt);
     value.myStruct = _readMyWrapperMyStruct(
-        context.readField<Object?>(_myWrapperForyFields[2], value.myStruct),
+        readGeneratedField<Object?>(
+            context, _myWrapperForyFields[2], value.myStruct),
         value.myStruct);
     return value;
   }
@@ -1251,24 +1298,22 @@ MyStruct _readMyWrapperMyStruct(Object? value, [Object? fallback]) {
       : value as MyStruct;
 }
 
-const List<Map<String, Object?>> _emptyWrapperForyFields =
+const List<Map<String, Object?>> _emptyWrapperForyFieldMetadata =
     <Map<String, Object?>>[];
 
-final class _EmptyWrapperForySerializer extends Serializer<EmptyWrapper> {
+final List<Object> _emptyWrapperForyFields = List<Object>.unmodifiable(
+  <Object>[],
+);
+
+final class _EmptyWrapperForySerializer
+    extends _GeneratedStructSerializer<EmptyWrapper> {
   const _EmptyWrapperForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _emptyWrapperForyFields;
-  @override
   void write(WriteContext context, EmptyWrapper value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_emptyWrapperForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
+        switch (generatedFieldSlot(field)) {
           default:
             break;
         }
@@ -1285,7 +1330,7 @@ final class _EmptyWrapperForySerializer extends Serializer<EmptyWrapper> {
   }
 }
 
-const List<Map<String, Object?>> _versionCheckStructForyFields =
+const List<Map<String, Object?>> _versionCheckStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f3',
@@ -1328,30 +1373,31 @@ const List<Map<String, Object?>> _versionCheckStructForyFields =
   },
 ];
 
+final List<Object> _versionCheckStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _versionCheckStructForyFieldMetadata[0]),
+    generatedField(1, _versionCheckStructForyFieldMetadata[1]),
+    generatedField(2, _versionCheckStructForyFieldMetadata[2]),
+  ],
+);
+
 final class _VersionCheckStructForySerializer
-    extends Serializer<VersionCheckStruct> {
+    extends _GeneratedStructSerializer<VersionCheckStruct> {
   const _VersionCheckStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _versionCheckStructForyFields;
-  @override
   void write(WriteContext context, VersionCheckStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_versionCheckStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f3':
-            context.writeField(field, value.f3);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f3);
             break;
-          case 'f1':
-            context.writeField(field, value.f1);
+          case 1:
+            writeGeneratedField(context, field, value.f1);
             break;
-          case 'f2':
-            context.writeField(field, value.f2);
+          case 2:
+            writeGeneratedField(context, field, value.f2);
             break;
           default:
             break;
@@ -1359,9 +1405,9 @@ final class _VersionCheckStructForySerializer
       }
       return;
     }
-    context.writeField(_versionCheckStructForyFields[0], value.f3);
-    context.writeField(_versionCheckStructForyFields[1], value.f1);
-    context.writeField(_versionCheckStructForyFields[2], value.f2);
+    writeGeneratedField(context, _versionCheckStructForyFields[0], value.f3);
+    writeGeneratedField(context, _versionCheckStructForyFields[1], value.f1);
+    writeGeneratedField(context, _versionCheckStructForyFields[2], value.f2);
   }
 
   @override
@@ -1369,13 +1415,16 @@ final class _VersionCheckStructForySerializer
     final value = VersionCheckStruct();
     context.reference(value);
     value.f3 = _readVersionCheckStructF3(
-        context.readField<Object?>(_versionCheckStructForyFields[0], value.f3),
+        readGeneratedField<Object?>(
+            context, _versionCheckStructForyFields[0], value.f3),
         value.f3);
     value.f1 = _readVersionCheckStructF1(
-        context.readField<Object?>(_versionCheckStructForyFields[1], value.f1),
+        readGeneratedField<Object?>(
+            context, _versionCheckStructForyFields[1], value.f1),
         value.f1);
     value.f2 = _readVersionCheckStructF2(
-        context.readField<Object?>(_versionCheckStructForyFields[2], value.f2),
+        readGeneratedField<Object?>(
+            context, _versionCheckStructForyFields[2], value.f2),
         value.f2);
     return value;
   }
@@ -1405,7 +1454,7 @@ String? _readVersionCheckStructF2(Object? value, [Object? fallback]) {
           : value as String;
 }
 
-const List<Map<String, Object?>> _dogForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _dogForyFieldMetadata = <Map<String, Object?>>[
   <String, Object?>{
     'name': 'age',
     'identifier': 'age',
@@ -1434,25 +1483,26 @@ const List<Map<String, Object?>> _dogForyFields = <Map<String, Object?>>[
   },
 ];
 
-final class _DogForySerializer extends Serializer<Dog> {
+final List<Object> _dogForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _dogForyFieldMetadata[0]),
+    generatedField(1, _dogForyFieldMetadata[1]),
+  ],
+);
+
+final class _DogForySerializer extends _GeneratedStructSerializer<Dog> {
   const _DogForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _dogForyFields;
-  @override
   void write(WriteContext context, Dog value) {
-    final compatibleFields = context.compatibleFieldOrder(_dogForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'age':
-            context.writeField(field, value.age);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.age);
             break;
-          case 'name':
-            context.writeField(field, value.name);
+          case 1:
+            writeGeneratedField(context, field, value.name);
             break;
           default:
             break;
@@ -1460,8 +1510,8 @@ final class _DogForySerializer extends Serializer<Dog> {
       }
       return;
     }
-    context.writeField(_dogForyFields[0], value.age);
-    context.writeField(_dogForyFields[1], value.name);
+    writeGeneratedField(context, _dogForyFields[0], value.age);
+    writeGeneratedField(context, _dogForyFields[1], value.name);
   }
 
   @override
@@ -1469,9 +1519,11 @@ final class _DogForySerializer extends Serializer<Dog> {
     final value = Dog();
     context.reference(value);
     value.age = _readDogAge(
-        context.readField<Object?>(_dogForyFields[0], value.age), value.age);
+        readGeneratedField<Object?>(context, _dogForyFields[0], value.age),
+        value.age);
     value.name = _readDogName(
-        context.readField<Object?>(_dogForyFields[1], value.name), value.name);
+        readGeneratedField<Object?>(context, _dogForyFields[1], value.name),
+        value.name);
     return value;
   }
 }
@@ -1492,7 +1544,7 @@ String? _readDogName(Object? value, [Object? fallback]) {
           : value as String;
 }
 
-const List<Map<String, Object?>> _catForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _catForyFieldMetadata = <Map<String, Object?>>[
   <String, Object?>{
     'name': 'age',
     'identifier': 'age',
@@ -1521,25 +1573,26 @@ const List<Map<String, Object?>> _catForyFields = <Map<String, Object?>>[
   },
 ];
 
-final class _CatForySerializer extends Serializer<Cat> {
+final List<Object> _catForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _catForyFieldMetadata[0]),
+    generatedField(1, _catForyFieldMetadata[1]),
+  ],
+);
+
+final class _CatForySerializer extends _GeneratedStructSerializer<Cat> {
   const _CatForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _catForyFields;
-  @override
   void write(WriteContext context, Cat value) {
-    final compatibleFields = context.compatibleFieldOrder(_catForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'age':
-            context.writeField(field, value.age);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.age);
             break;
-          case 'lives':
-            context.writeField(field, value.lives);
+          case 1:
+            writeGeneratedField(context, field, value.lives);
             break;
           default:
             break;
@@ -1547,8 +1600,8 @@ final class _CatForySerializer extends Serializer<Cat> {
       }
       return;
     }
-    context.writeField(_catForyFields[0], value.age);
-    context.writeField(_catForyFields[1], value.lives);
+    writeGeneratedField(context, _catForyFields[0], value.age);
+    writeGeneratedField(context, _catForyFields[1], value.lives);
   }
 
   @override
@@ -1556,9 +1609,10 @@ final class _CatForySerializer extends Serializer<Cat> {
     final value = Cat();
     context.reference(value);
     value.age = _readCatAge(
-        context.readField<Object?>(_catForyFields[0], value.age), value.age);
+        readGeneratedField<Object?>(context, _catForyFields[0], value.age),
+        value.age);
     value.lives = _readCatLives(
-        context.readField<Object?>(_catForyFields[1], value.lives),
+        readGeneratedField<Object?>(context, _catForyFields[1], value.lives),
         value.lives);
     return value;
   }
@@ -1580,7 +1634,7 @@ int _readCatLives(Object? value, [Object? fallback]) {
       : (value as Int32).value;
 }
 
-const List<Map<String, Object?>> _animalListHolderForyFields =
+const List<Map<String, Object?>> _animalListHolderForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'animals',
@@ -1606,24 +1660,23 @@ const List<Map<String, Object?>> _animalListHolderForyFields =
   },
 ];
 
+final List<Object> _animalListHolderForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _animalListHolderForyFieldMetadata[0]),
+  ],
+);
+
 final class _AnimalListHolderForySerializer
-    extends Serializer<AnimalListHolder> {
+    extends _GeneratedStructSerializer<AnimalListHolder> {
   const _AnimalListHolderForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _animalListHolderForyFields;
-  @override
   void write(WriteContext context, AnimalListHolder value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_animalListHolderForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'animals':
-            context.writeField(field, value.animals);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.animals);
             break;
           default:
             break;
@@ -1631,7 +1684,7 @@ final class _AnimalListHolderForySerializer
       }
       return;
     }
-    context.writeField(_animalListHolderForyFields[0], value.animals);
+    writeGeneratedField(context, _animalListHolderForyFields[0], value.animals);
   }
 
   @override
@@ -1639,8 +1692,8 @@ final class _AnimalListHolderForySerializer
     final value = AnimalListHolder();
     context.reference(value);
     value.animals = _readAnimalListHolderAnimals(
-        context.readField<Object?>(
-            _animalListHolderForyFields[0], value.animals),
+        readGeneratedField<Object?>(
+            context, _animalListHolderForyFields[0], value.animals),
         value.animals);
     return value;
   }
@@ -1656,7 +1709,7 @@ List<Animal> _readAnimalListHolderAnimals(Object? value, [Object? fallback]) {
           : item as Animal));
 }
 
-const List<Map<String, Object?>> _animalMapHolderForyFields =
+const List<Map<String, Object?>> _animalMapHolderForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'animalMap',
@@ -1690,23 +1743,23 @@ const List<Map<String, Object?>> _animalMapHolderForyFields =
   },
 ];
 
-final class _AnimalMapHolderForySerializer extends Serializer<AnimalMapHolder> {
+final List<Object> _animalMapHolderForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _animalMapHolderForyFieldMetadata[0]),
+  ],
+);
+
+final class _AnimalMapHolderForySerializer
+    extends _GeneratedStructSerializer<AnimalMapHolder> {
   const _AnimalMapHolderForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _animalMapHolderForyFields;
-  @override
   void write(WriteContext context, AnimalMapHolder value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_animalMapHolderForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'animal_map':
-            context.writeField(field, value.animalMap);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.animalMap);
             break;
           default:
             break;
@@ -1714,7 +1767,8 @@ final class _AnimalMapHolderForySerializer extends Serializer<AnimalMapHolder> {
       }
       return;
     }
-    context.writeField(_animalMapHolderForyFields[0], value.animalMap);
+    writeGeneratedField(
+        context, _animalMapHolderForyFields[0], value.animalMap);
   }
 
   @override
@@ -1722,8 +1776,8 @@ final class _AnimalMapHolderForySerializer extends Serializer<AnimalMapHolder> {
     final value = AnimalMapHolder();
     context.reference(value);
     value.animalMap = _readAnimalMapHolderAnimalMap(
-        context.readField<Object?>(
-            _animalMapHolderForyFields[0], value.animalMap),
+        readGeneratedField<Object?>(
+            context, _animalMapHolderForyFields[0], value.animalMap),
         value.animalMap);
     return value;
   }
@@ -1745,24 +1799,22 @@ Map<String, Animal> _readAnimalMapHolderAnimalMap(Object? value,
               : value as Animal)));
 }
 
-const List<Map<String, Object?>> _emptyStructForyFields =
+const List<Map<String, Object?>> _emptyStructForyFieldMetadata =
     <Map<String, Object?>>[];
 
-final class _EmptyStructForySerializer extends Serializer<EmptyStruct> {
+final List<Object> _emptyStructForyFields = List<Object>.unmodifiable(
+  <Object>[],
+);
+
+final class _EmptyStructForySerializer
+    extends _GeneratedStructSerializer<EmptyStruct> {
   const _EmptyStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _emptyStructForyFields;
-  @override
   void write(WriteContext context, EmptyStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_emptyStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
+        switch (generatedFieldSlot(field)) {
           default:
             break;
         }
@@ -1779,7 +1831,7 @@ final class _EmptyStructForySerializer extends Serializer<EmptyStruct> {
   }
 }
 
-const List<Map<String, Object?>> _oneStringFieldStructForyFields =
+const List<Map<String, Object?>> _oneStringFieldStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f1',
@@ -1796,24 +1848,23 @@ const List<Map<String, Object?>> _oneStringFieldStructForyFields =
   },
 ];
 
+final List<Object> _oneStringFieldStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _oneStringFieldStructForyFieldMetadata[0]),
+  ],
+);
+
 final class _OneStringFieldStructForySerializer
-    extends Serializer<OneStringFieldStruct> {
+    extends _GeneratedStructSerializer<OneStringFieldStruct> {
   const _OneStringFieldStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _oneStringFieldStructForyFields;
-  @override
   void write(WriteContext context, OneStringFieldStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_oneStringFieldStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f1':
-            context.writeField(field, value.f1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f1);
             break;
           default:
             break;
@@ -1821,7 +1872,7 @@ final class _OneStringFieldStructForySerializer
       }
       return;
     }
-    context.writeField(_oneStringFieldStructForyFields[0], value.f1);
+    writeGeneratedField(context, _oneStringFieldStructForyFields[0], value.f1);
   }
 
   @override
@@ -1829,8 +1880,8 @@ final class _OneStringFieldStructForySerializer
     final value = OneStringFieldStruct();
     context.reference(value);
     value.f1 = _readOneStringFieldStructF1(
-        context.readField<Object?>(
-            _oneStringFieldStructForyFields[0], value.f1),
+        readGeneratedField<Object?>(
+            context, _oneStringFieldStructForyFields[0], value.f1),
         value.f1);
     return value;
   }
@@ -1844,7 +1895,7 @@ String? _readOneStringFieldStructF1(Object? value, [Object? fallback]) {
           : value as String;
 }
 
-const List<Map<String, Object?>> _twoStringFieldStructForyFields =
+const List<Map<String, Object?>> _twoStringFieldStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f1',
@@ -1874,27 +1925,27 @@ const List<Map<String, Object?>> _twoStringFieldStructForyFields =
   },
 ];
 
+final List<Object> _twoStringFieldStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _twoStringFieldStructForyFieldMetadata[0]),
+    generatedField(1, _twoStringFieldStructForyFieldMetadata[1]),
+  ],
+);
+
 final class _TwoStringFieldStructForySerializer
-    extends Serializer<TwoStringFieldStruct> {
+    extends _GeneratedStructSerializer<TwoStringFieldStruct> {
   const _TwoStringFieldStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _twoStringFieldStructForyFields;
-  @override
   void write(WriteContext context, TwoStringFieldStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_twoStringFieldStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f1':
-            context.writeField(field, value.f1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f1);
             break;
-          case 'f2':
-            context.writeField(field, value.f2);
+          case 1:
+            writeGeneratedField(context, field, value.f2);
             break;
           default:
             break;
@@ -1902,8 +1953,8 @@ final class _TwoStringFieldStructForySerializer
       }
       return;
     }
-    context.writeField(_twoStringFieldStructForyFields[0], value.f1);
-    context.writeField(_twoStringFieldStructForyFields[1], value.f2);
+    writeGeneratedField(context, _twoStringFieldStructForyFields[0], value.f1);
+    writeGeneratedField(context, _twoStringFieldStructForyFields[1], value.f2);
   }
 
   @override
@@ -1911,12 +1962,12 @@ final class _TwoStringFieldStructForySerializer
     final value = TwoStringFieldStruct();
     context.reference(value);
     value.f1 = _readTwoStringFieldStructF1(
-        context.readField<Object?>(
-            _twoStringFieldStructForyFields[0], value.f1),
+        readGeneratedField<Object?>(
+            context, _twoStringFieldStructForyFields[0], value.f1),
         value.f1);
     value.f2 = _readTwoStringFieldStructF2(
-        context.readField<Object?>(
-            _twoStringFieldStructForyFields[1], value.f2),
+        readGeneratedField<Object?>(
+            context, _twoStringFieldStructForyFields[1], value.f2),
         value.f2);
     return value;
   }
@@ -1938,7 +1989,7 @@ String _readTwoStringFieldStructF2(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<Map<String, Object?>> _oneEnumFieldStructForyFields =
+const List<Map<String, Object?>> _oneEnumFieldStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f1',
@@ -1955,24 +2006,23 @@ const List<Map<String, Object?>> _oneEnumFieldStructForyFields =
   },
 ];
 
+final List<Object> _oneEnumFieldStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _oneEnumFieldStructForyFieldMetadata[0]),
+  ],
+);
+
 final class _OneEnumFieldStructForySerializer
-    extends Serializer<OneEnumFieldStruct> {
+    extends _GeneratedStructSerializer<OneEnumFieldStruct> {
   const _OneEnumFieldStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _oneEnumFieldStructForyFields;
-  @override
   void write(WriteContext context, OneEnumFieldStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_oneEnumFieldStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f1':
-            context.writeField(field, value.f1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f1);
             break;
           default:
             break;
@@ -1980,7 +2030,7 @@ final class _OneEnumFieldStructForySerializer
       }
       return;
     }
-    context.writeField(_oneEnumFieldStructForyFields[0], value.f1);
+    writeGeneratedField(context, _oneEnumFieldStructForyFields[0], value.f1);
   }
 
   @override
@@ -1988,7 +2038,8 @@ final class _OneEnumFieldStructForySerializer
     final value = OneEnumFieldStruct();
     context.reference(value);
     value.f1 = _readOneEnumFieldStructF1(
-        context.readField<Object?>(_oneEnumFieldStructForyFields[0], value.f1),
+        readGeneratedField<Object?>(
+            context, _oneEnumFieldStructForyFields[0], value.f1),
         value.f1);
     return value;
   }
@@ -2002,7 +2053,7 @@ TestEnum _readOneEnumFieldStructF1(Object? value, [Object? fallback]) {
       : value as TestEnum;
 }
 
-const List<Map<String, Object?>> _twoEnumFieldStructForyFields =
+const List<Map<String, Object?>> _twoEnumFieldStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'f1',
@@ -2032,27 +2083,27 @@ const List<Map<String, Object?>> _twoEnumFieldStructForyFields =
   },
 ];
 
+final List<Object> _twoEnumFieldStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _twoEnumFieldStructForyFieldMetadata[0]),
+    generatedField(1, _twoEnumFieldStructForyFieldMetadata[1]),
+  ],
+);
+
 final class _TwoEnumFieldStructForySerializer
-    extends Serializer<TwoEnumFieldStruct> {
+    extends _GeneratedStructSerializer<TwoEnumFieldStruct> {
   const _TwoEnumFieldStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _twoEnumFieldStructForyFields;
-  @override
   void write(WriteContext context, TwoEnumFieldStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_twoEnumFieldStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'f1':
-            context.writeField(field, value.f1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.f1);
             break;
-          case 'f2':
-            context.writeField(field, value.f2);
+          case 1:
+            writeGeneratedField(context, field, value.f2);
             break;
           default:
             break;
@@ -2060,8 +2111,8 @@ final class _TwoEnumFieldStructForySerializer
       }
       return;
     }
-    context.writeField(_twoEnumFieldStructForyFields[0], value.f1);
-    context.writeField(_twoEnumFieldStructForyFields[1], value.f2);
+    writeGeneratedField(context, _twoEnumFieldStructForyFields[0], value.f1);
+    writeGeneratedField(context, _twoEnumFieldStructForyFields[1], value.f2);
   }
 
   @override
@@ -2069,10 +2120,12 @@ final class _TwoEnumFieldStructForySerializer
     final value = TwoEnumFieldStruct();
     context.reference(value);
     value.f1 = _readTwoEnumFieldStructF1(
-        context.readField<Object?>(_twoEnumFieldStructForyFields[0], value.f1),
+        readGeneratedField<Object?>(
+            context, _twoEnumFieldStructForyFields[0], value.f1),
         value.f1);
     value.f2 = _readTwoEnumFieldStructF2(
-        context.readField<Object?>(_twoEnumFieldStructForyFields[1], value.f2),
+        readGeneratedField<Object?>(
+            context, _twoEnumFieldStructForyFields[1], value.f2),
         value.f2);
     return value;
   }
@@ -2095,7 +2148,8 @@ TestEnum _readTwoEnumFieldStructF2(Object? value, [Object? fallback]) {
 }
 
 const List<Map<String, Object?>>
-    _nullableComprehensiveSchemaConsistentForyFields = <Map<String, Object?>>[
+    _nullableComprehensiveSchemaConsistentForyFieldMetadata =
+    <Map<String, Object?>>[
   <String, Object?>{
     'name': 'doubleField',
     'identifier': 'double_field',
@@ -2428,83 +2482,121 @@ const List<Map<String, Object?>>
   },
 ];
 
+final List<Object> _nullableComprehensiveSchemaConsistentForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(
+        0, _nullableComprehensiveSchemaConsistentForyFieldMetadata[0]),
+    generatedField(
+        1, _nullableComprehensiveSchemaConsistentForyFieldMetadata[1]),
+    generatedField(
+        2, _nullableComprehensiveSchemaConsistentForyFieldMetadata[2]),
+    generatedField(
+        3, _nullableComprehensiveSchemaConsistentForyFieldMetadata[3]),
+    generatedField(
+        4, _nullableComprehensiveSchemaConsistentForyFieldMetadata[4]),
+    generatedField(
+        5, _nullableComprehensiveSchemaConsistentForyFieldMetadata[5]),
+    generatedField(
+        6, _nullableComprehensiveSchemaConsistentForyFieldMetadata[6]),
+    generatedField(
+        7, _nullableComprehensiveSchemaConsistentForyFieldMetadata[7]),
+    generatedField(
+        8, _nullableComprehensiveSchemaConsistentForyFieldMetadata[8]),
+    generatedField(
+        9, _nullableComprehensiveSchemaConsistentForyFieldMetadata[9]),
+    generatedField(
+        10, _nullableComprehensiveSchemaConsistentForyFieldMetadata[10]),
+    generatedField(
+        11, _nullableComprehensiveSchemaConsistentForyFieldMetadata[11]),
+    generatedField(
+        12, _nullableComprehensiveSchemaConsistentForyFieldMetadata[12]),
+    generatedField(
+        13, _nullableComprehensiveSchemaConsistentForyFieldMetadata[13]),
+    generatedField(
+        14, _nullableComprehensiveSchemaConsistentForyFieldMetadata[14]),
+    generatedField(
+        15, _nullableComprehensiveSchemaConsistentForyFieldMetadata[15]),
+    generatedField(
+        16, _nullableComprehensiveSchemaConsistentForyFieldMetadata[16]),
+    generatedField(
+        17, _nullableComprehensiveSchemaConsistentForyFieldMetadata[17]),
+    generatedField(
+        18, _nullableComprehensiveSchemaConsistentForyFieldMetadata[18]),
+    generatedField(
+        19, _nullableComprehensiveSchemaConsistentForyFieldMetadata[19]),
+  ],
+);
+
 final class _NullableComprehensiveSchemaConsistentForySerializer
-    extends Serializer<NullableComprehensiveSchemaConsistent> {
+    extends _GeneratedStructSerializer<NullableComprehensiveSchemaConsistent> {
   const _NullableComprehensiveSchemaConsistentForySerializer();
-  @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields =>
-      _nullableComprehensiveSchemaConsistentForyFields;
   @override
   void write(
       WriteContext context, NullableComprehensiveSchemaConsistent value) {
-    final compatibleFields = context
-        .compatibleFieldOrder(_nullableComprehensiveSchemaConsistentForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'double_field':
-            context.writeField(field, value.doubleField);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.doubleField);
             break;
-          case 'float_field':
-            context.writeField(field, value.floatField);
+          case 1:
+            writeGeneratedField(context, field, value.floatField);
             break;
-          case 'short_field':
-            context.writeField(field, value.shortField);
+          case 2:
+            writeGeneratedField(context, field, value.shortField);
             break;
-          case 'byte_field':
-            context.writeField(field, value.byteField);
+          case 3:
+            writeGeneratedField(context, field, value.byteField);
             break;
-          case 'bool_field':
-            context.writeField(field, value.boolField);
+          case 4:
+            writeGeneratedField(context, field, value.boolField);
             break;
-          case 'long_field':
-            context.writeField(field, value.longField);
+          case 5:
+            writeGeneratedField(context, field, value.longField);
             break;
-          case 'int_field':
-            context.writeField(field, value.intField);
+          case 6:
+            writeGeneratedField(context, field, value.intField);
             break;
-          case 'nullable_double':
-            context.writeField(field, value.nullableDouble);
+          case 7:
+            writeGeneratedField(context, field, value.nullableDouble);
             break;
-          case 'nullable_float':
-            context.writeField(field, value.nullableFloat);
+          case 8:
+            writeGeneratedField(context, field, value.nullableFloat);
             break;
-          case 'nullable_bool':
-            context.writeField(field, value.nullableBool);
+          case 9:
+            writeGeneratedField(context, field, value.nullableBool);
             break;
-          case 'nullable_long':
-            context.writeField(field, value.nullableLong);
+          case 10:
+            writeGeneratedField(context, field, value.nullableLong);
             break;
-          case 'nullable_int':
-            context.writeField(field, value.nullableInt);
+          case 11:
+            writeGeneratedField(context, field, value.nullableInt);
             break;
-          case 'nullable_string':
-            context.writeField(field, value.nullableString);
+          case 12:
+            writeGeneratedField(context, field, value.nullableString);
             break;
-          case 'string_field':
-            context.writeField(field, value.stringField);
+          case 13:
+            writeGeneratedField(context, field, value.stringField);
             break;
-          case 'list_field':
-            context.writeField(field, value.listField);
+          case 14:
+            writeGeneratedField(context, field, value.listField);
             break;
-          case 'nullable_list':
-            context.writeField(field, value.nullableList);
+          case 15:
+            writeGeneratedField(context, field, value.nullableList);
             break;
-          case 'nullable_set':
-            context.writeField(field, value.nullableSet);
+          case 16:
+            writeGeneratedField(context, field, value.nullableSet);
             break;
-          case 'set_field':
-            context.writeField(field, value.setField);
+          case 17:
+            writeGeneratedField(context, field, value.setField);
             break;
-          case 'map_field':
-            context.writeField(field, value.mapField);
+          case 18:
+            writeGeneratedField(context, field, value.mapField);
             break;
-          case 'nullable_map':
-            context.writeField(field, value.nullableMap);
+          case 19:
+            writeGeneratedField(context, field, value.nullableMap);
             break;
           default:
             break;
@@ -2512,45 +2604,65 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
       }
       return;
     }
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[0], value.doubleField);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[1], value.floatField);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[2], value.shortField);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[3], value.byteField);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[4], value.boolField);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[5], value.longField);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[6], value.intField);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[7],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[7],
         value.nullableDouble);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[8],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[8],
         value.nullableFloat);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[9],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[9],
         value.nullableBool);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[10],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[10],
         value.nullableLong);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[11],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[11],
         value.nullableInt);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[12],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[12],
         value.nullableString);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[13],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[13],
         value.stringField);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[14], value.listField);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[15],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[15],
         value.nullableList);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[16],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[16],
         value.nullableSet);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[17], value.setField);
-    context.writeField(
+    writeGeneratedField(context,
         _nullableComprehensiveSchemaConsistentForyFields[18], value.mapField);
-    context.writeField(_nullableComprehensiveSchemaConsistentForyFields[19],
+    writeGeneratedField(
+        context,
+        _nullableComprehensiveSchemaConsistentForyFields[19],
         value.nullableMap);
   }
 
@@ -2559,105 +2671,125 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
     final value = NullableComprehensiveSchemaConsistent();
     context.reference(value);
     value.doubleField = _readNullableComprehensiveSchemaConsistentDoubleField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[0],
             value.doubleField),
         value.doubleField);
     value.floatField = _readNullableComprehensiveSchemaConsistentFloatField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[1],
             value.floatField),
         value.floatField);
     value.shortField = _readNullableComprehensiveSchemaConsistentShortField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[2],
             value.shortField),
         value.shortField);
     value.byteField = _readNullableComprehensiveSchemaConsistentByteField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[3],
             value.byteField),
         value.byteField);
     value.boolField = _readNullableComprehensiveSchemaConsistentBoolField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[4],
             value.boolField),
         value.boolField);
     value.longField = _readNullableComprehensiveSchemaConsistentLongField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[5],
             value.longField),
         value.longField);
     value.intField = _readNullableComprehensiveSchemaConsistentIntField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[6],
             value.intField),
         value.intField);
     value.nullableDouble =
         _readNullableComprehensiveSchemaConsistentNullableDouble(
-            context.readField<Object?>(
+            readGeneratedField<Object?>(
+                context,
                 _nullableComprehensiveSchemaConsistentForyFields[7],
                 value.nullableDouble),
             value.nullableDouble);
     value.nullableFloat =
         _readNullableComprehensiveSchemaConsistentNullableFloat(
-            context.readField<Object?>(
+            readGeneratedField<Object?>(
+                context,
                 _nullableComprehensiveSchemaConsistentForyFields[8],
                 value.nullableFloat),
             value.nullableFloat);
     value.nullableBool = _readNullableComprehensiveSchemaConsistentNullableBool(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[9],
             value.nullableBool),
         value.nullableBool);
     value.nullableLong = _readNullableComprehensiveSchemaConsistentNullableLong(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[10],
             value.nullableLong),
         value.nullableLong);
     value.nullableInt = _readNullableComprehensiveSchemaConsistentNullableInt(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[11],
             value.nullableInt),
         value.nullableInt);
     value.nullableString =
         _readNullableComprehensiveSchemaConsistentNullableString(
-            context.readField<Object?>(
+            readGeneratedField<Object?>(
+                context,
                 _nullableComprehensiveSchemaConsistentForyFields[12],
                 value.nullableString),
             value.nullableString);
     value.stringField = _readNullableComprehensiveSchemaConsistentStringField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[13],
             value.stringField),
         value.stringField);
     value.listField = _readNullableComprehensiveSchemaConsistentListField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[14],
             value.listField),
         value.listField);
     value.nullableList = _readNullableComprehensiveSchemaConsistentNullableList(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[15],
             value.nullableList),
         value.nullableList);
     value.nullableSet = _readNullableComprehensiveSchemaConsistentNullableSet(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[16],
             value.nullableSet),
         value.nullableSet);
     value.setField = _readNullableComprehensiveSchemaConsistentSetField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[17],
             value.setField),
         value.setField);
     value.mapField = _readNullableComprehensiveSchemaConsistentMapField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[18],
             value.mapField),
         value.mapField);
     value.nullableMap = _readNullableComprehensiveSchemaConsistentNullableMap(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveSchemaConsistentForyFields[19],
             value.nullableMap),
         value.nullableMap);
@@ -2883,8 +3015,8 @@ Map<String, String>? _readNullableComprehensiveSchemaConsistentNullableMap(
                       : value as String)));
 }
 
-const List<Map<String, Object?>> _nullableComprehensiveCompatibleForyFields =
-    <Map<String, Object?>>[
+const List<Map<String, Object?>>
+    _nullableComprehensiveCompatibleForyFieldMetadata = <Map<String, Object?>>[
   <String, Object?>{
     'name': 'boxedDouble',
     'identifier': 'boxed_double',
@@ -3282,97 +3414,120 @@ const List<Map<String, Object?>> _nullableComprehensiveCompatibleForyFields =
   },
 ];
 
+final List<Object> _nullableComprehensiveCompatibleForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _nullableComprehensiveCompatibleForyFieldMetadata[0]),
+    generatedField(1, _nullableComprehensiveCompatibleForyFieldMetadata[1]),
+    generatedField(2, _nullableComprehensiveCompatibleForyFieldMetadata[2]),
+    generatedField(3, _nullableComprehensiveCompatibleForyFieldMetadata[3]),
+    generatedField(4, _nullableComprehensiveCompatibleForyFieldMetadata[4]),
+    generatedField(5, _nullableComprehensiveCompatibleForyFieldMetadata[5]),
+    generatedField(6, _nullableComprehensiveCompatibleForyFieldMetadata[6]),
+    generatedField(7, _nullableComprehensiveCompatibleForyFieldMetadata[7]),
+    generatedField(8, _nullableComprehensiveCompatibleForyFieldMetadata[8]),
+    generatedField(9, _nullableComprehensiveCompatibleForyFieldMetadata[9]),
+    generatedField(10, _nullableComprehensiveCompatibleForyFieldMetadata[10]),
+    generatedField(11, _nullableComprehensiveCompatibleForyFieldMetadata[11]),
+    generatedField(12, _nullableComprehensiveCompatibleForyFieldMetadata[12]),
+    generatedField(13, _nullableComprehensiveCompatibleForyFieldMetadata[13]),
+    generatedField(14, _nullableComprehensiveCompatibleForyFieldMetadata[14]),
+    generatedField(15, _nullableComprehensiveCompatibleForyFieldMetadata[15]),
+    generatedField(16, _nullableComprehensiveCompatibleForyFieldMetadata[16]),
+    generatedField(17, _nullableComprehensiveCompatibleForyFieldMetadata[17]),
+    generatedField(18, _nullableComprehensiveCompatibleForyFieldMetadata[18]),
+    generatedField(19, _nullableComprehensiveCompatibleForyFieldMetadata[19]),
+    generatedField(20, _nullableComprehensiveCompatibleForyFieldMetadata[20]),
+    generatedField(21, _nullableComprehensiveCompatibleForyFieldMetadata[21]),
+    generatedField(22, _nullableComprehensiveCompatibleForyFieldMetadata[22]),
+    generatedField(23, _nullableComprehensiveCompatibleForyFieldMetadata[23]),
+    generatedField(24, _nullableComprehensiveCompatibleForyFieldMetadata[24]),
+  ],
+);
+
 final class _NullableComprehensiveCompatibleForySerializer
-    extends Serializer<NullableComprehensiveCompatible> {
+    extends _GeneratedStructSerializer<NullableComprehensiveCompatible> {
   const _NullableComprehensiveCompatibleForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields =>
-      _nullableComprehensiveCompatibleForyFields;
-  @override
   void write(WriteContext context, NullableComprehensiveCompatible value) {
-    final compatibleFields = context
-        .compatibleFieldOrder(_nullableComprehensiveCompatibleForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'boxed_double':
-            context.writeField(field, value.boxedDouble);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.boxedDouble);
             break;
-          case 'double_field':
-            context.writeField(field, value.doubleField);
+          case 1:
+            writeGeneratedField(context, field, value.doubleField);
             break;
-          case 'nullable_double1':
-            context.writeField(field, value.nullableDouble1);
+          case 2:
+            writeGeneratedField(context, field, value.nullableDouble1);
             break;
-          case 'boxed_float':
-            context.writeField(field, value.boxedFloat);
+          case 3:
+            writeGeneratedField(context, field, value.boxedFloat);
             break;
-          case 'float_field':
-            context.writeField(field, value.floatField);
+          case 4:
+            writeGeneratedField(context, field, value.floatField);
             break;
-          case 'nullable_float1':
-            context.writeField(field, value.nullableFloat1);
+          case 5:
+            writeGeneratedField(context, field, value.nullableFloat1);
             break;
-          case 'short_field':
-            context.writeField(field, value.shortField);
+          case 6:
+            writeGeneratedField(context, field, value.shortField);
             break;
-          case 'byte_field':
-            context.writeField(field, value.byteField);
+          case 7:
+            writeGeneratedField(context, field, value.byteField);
             break;
-          case 'bool_field':
-            context.writeField(field, value.boolField);
+          case 8:
+            writeGeneratedField(context, field, value.boolField);
             break;
-          case 'boxed_bool':
-            context.writeField(field, value.boxedBool);
+          case 9:
+            writeGeneratedField(context, field, value.boxedBool);
             break;
-          case 'nullable_bool1':
-            context.writeField(field, value.nullableBool1);
+          case 10:
+            writeGeneratedField(context, field, value.nullableBool1);
             break;
-          case 'boxed_long':
-            context.writeField(field, value.boxedLong);
+          case 11:
+            writeGeneratedField(context, field, value.boxedLong);
             break;
-          case 'long_field':
-            context.writeField(field, value.longField);
+          case 12:
+            writeGeneratedField(context, field, value.longField);
             break;
-          case 'nullable_long1':
-            context.writeField(field, value.nullableLong1);
+          case 13:
+            writeGeneratedField(context, field, value.nullableLong1);
             break;
-          case 'boxed_int':
-            context.writeField(field, value.boxedInt);
+          case 14:
+            writeGeneratedField(context, field, value.boxedInt);
             break;
-          case 'int_field':
-            context.writeField(field, value.intField);
+          case 15:
+            writeGeneratedField(context, field, value.intField);
             break;
-          case 'nullable_int1':
-            context.writeField(field, value.nullableInt1);
+          case 16:
+            writeGeneratedField(context, field, value.nullableInt1);
             break;
-          case 'nullable_string2':
-            context.writeField(field, value.nullableString2);
+          case 17:
+            writeGeneratedField(context, field, value.nullableString2);
             break;
-          case 'string_field':
-            context.writeField(field, value.stringField);
+          case 18:
+            writeGeneratedField(context, field, value.stringField);
             break;
-          case 'list_field':
-            context.writeField(field, value.listField);
+          case 19:
+            writeGeneratedField(context, field, value.listField);
             break;
-          case 'nullable_list2':
-            context.writeField(field, value.nullableList2);
+          case 20:
+            writeGeneratedField(context, field, value.nullableList2);
             break;
-          case 'nullable_set2':
-            context.writeField(field, value.nullableSet2);
+          case 21:
+            writeGeneratedField(context, field, value.nullableSet2);
             break;
-          case 'set_field':
-            context.writeField(field, value.setField);
+          case 22:
+            writeGeneratedField(context, field, value.setField);
             break;
-          case 'map_field':
-            context.writeField(field, value.mapField);
+          case 23:
+            writeGeneratedField(context, field, value.mapField);
             break;
-          case 'nullable_map2':
-            context.writeField(field, value.nullableMap2);
+          case 24:
+            writeGeneratedField(context, field, value.nullableMap2);
             break;
           default:
             break;
@@ -3380,56 +3535,56 @@ final class _NullableComprehensiveCompatibleForySerializer
       }
       return;
     }
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[0], value.boxedDouble);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[1], value.doubleField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[2], value.nullableDouble1);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[3], value.boxedFloat);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[4], value.floatField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[5], value.nullableFloat1);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[6], value.shortField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[7], value.byteField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[8], value.boolField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[9], value.boxedBool);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[10], value.nullableBool1);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[11], value.boxedLong);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[12], value.longField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[13], value.nullableLong1);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[14], value.boxedInt);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[15], value.intField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[16], value.nullableInt1);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[17], value.nullableString2);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[18], value.stringField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[19], value.listField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[20], value.nullableList2);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[21], value.nullableSet2);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[22], value.setField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[23], value.mapField);
-    context.writeField(
-        _nullableComprehensiveCompatibleForyFields[24], value.nullableMap2);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[0],
+        value.boxedDouble);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[1],
+        value.doubleField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[2],
+        value.nullableDouble1);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[3],
+        value.boxedFloat);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[4],
+        value.floatField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[5],
+        value.nullableFloat1);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[6],
+        value.shortField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[7],
+        value.byteField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[8],
+        value.boolField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[9],
+        value.boxedBool);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[10],
+        value.nullableBool1);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[11],
+        value.boxedLong);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[12],
+        value.longField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[13],
+        value.nullableLong1);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[14],
+        value.boxedInt);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[15],
+        value.intField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[16],
+        value.nullableInt1);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[17],
+        value.nullableString2);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[18],
+        value.stringField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[19],
+        value.listField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[20],
+        value.nullableList2);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[21],
+        value.nullableSet2);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[22],
+        value.setField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[23],
+        value.mapField);
+    writeGeneratedField(context, _nullableComprehensiveCompatibleForyFields[24],
+        value.nullableMap2);
   }
 
   @override
@@ -3437,109 +3592,115 @@ final class _NullableComprehensiveCompatibleForySerializer
     final value = NullableComprehensiveCompatible();
     context.reference(value);
     value.boxedDouble = _readNullableComprehensiveCompatibleBoxedDouble(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[0], value.boxedDouble),
         value.boxedDouble);
     value.doubleField = _readNullableComprehensiveCompatibleDoubleField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[1], value.doubleField),
         value.doubleField);
     value.nullableDouble1 = _readNullableComprehensiveCompatibleNullableDouble1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveCompatibleForyFields[2],
             value.nullableDouble1),
         value.nullableDouble1);
     value.boxedFloat = _readNullableComprehensiveCompatibleBoxedFloat(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[3], value.boxedFloat),
         value.boxedFloat);
     value.floatField = _readNullableComprehensiveCompatibleFloatField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[4], value.floatField),
         value.floatField);
     value.nullableFloat1 = _readNullableComprehensiveCompatibleNullableFloat1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveCompatibleForyFields[5],
             value.nullableFloat1),
         value.nullableFloat1);
     value.shortField = _readNullableComprehensiveCompatibleShortField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[6], value.shortField),
         value.shortField);
     value.byteField = _readNullableComprehensiveCompatibleByteField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[7], value.byteField),
         value.byteField);
     value.boolField = _readNullableComprehensiveCompatibleBoolField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[8], value.boolField),
         value.boolField);
     value.boxedBool = _readNullableComprehensiveCompatibleBoxedBool(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[9], value.boxedBool),
         value.boxedBool);
     value.nullableBool1 = _readNullableComprehensiveCompatibleNullableBool1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveCompatibleForyFields[10],
             value.nullableBool1),
         value.nullableBool1);
     value.boxedLong = _readNullableComprehensiveCompatibleBoxedLong(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[11], value.boxedLong),
         value.boxedLong);
     value.longField = _readNullableComprehensiveCompatibleLongField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[12], value.longField),
         value.longField);
     value.nullableLong1 = _readNullableComprehensiveCompatibleNullableLong1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveCompatibleForyFields[13],
             value.nullableLong1),
         value.nullableLong1);
     value.boxedInt = _readNullableComprehensiveCompatibleBoxedInt(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[14], value.boxedInt),
         value.boxedInt);
     value.intField = _readNullableComprehensiveCompatibleIntField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[15], value.intField),
         value.intField);
     value.nullableInt1 = _readNullableComprehensiveCompatibleNullableInt1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[16], value.nullableInt1),
         value.nullableInt1);
     value.nullableString2 = _readNullableComprehensiveCompatibleNullableString2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveCompatibleForyFields[17],
             value.nullableString2),
         value.nullableString2);
     value.stringField = _readNullableComprehensiveCompatibleStringField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[18], value.stringField),
         value.stringField);
     value.listField = _readNullableComprehensiveCompatibleListField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[19], value.listField),
         value.listField);
     value.nullableList2 = _readNullableComprehensiveCompatibleNullableList2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(
+            context,
             _nullableComprehensiveCompatibleForyFields[20],
             value.nullableList2),
         value.nullableList2);
     value.nullableSet2 = _readNullableComprehensiveCompatibleNullableSet2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[21], value.nullableSet2),
         value.nullableSet2);
     value.setField = _readNullableComprehensiveCompatibleSetField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[22], value.setField),
         value.setField);
     value.mapField = _readNullableComprehensiveCompatibleMapField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[23], value.mapField),
         value.mapField);
     value.nullableMap2 = _readNullableComprehensiveCompatibleNullableMap2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _nullableComprehensiveCompatibleForyFields[24], value.nullableMap2),
         value.nullableMap2);
     return value;
@@ -3817,7 +3978,7 @@ Map<String, String> _readNullableComprehensiveCompatibleNullableMap2(
               : value as String)));
 }
 
-const List<Map<String, Object?>> _refInnerSchemaConsistentForyFields =
+const List<Map<String, Object?>> _refInnerSchemaConsistentForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'id',
@@ -3847,27 +4008,28 @@ const List<Map<String, Object?>> _refInnerSchemaConsistentForyFields =
   },
 ];
 
+final List<Object> _refInnerSchemaConsistentForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _refInnerSchemaConsistentForyFieldMetadata[0]),
+    generatedField(1, _refInnerSchemaConsistentForyFieldMetadata[1]),
+  ],
+);
+
 final class _RefInnerSchemaConsistentForySerializer
-    extends Serializer<RefInnerSchemaConsistent> {
+    extends _GeneratedStructSerializer<RefInnerSchemaConsistent> {
   const _RefInnerSchemaConsistentForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _refInnerSchemaConsistentForyFields;
-  @override
   void write(WriteContext context, RefInnerSchemaConsistent value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_refInnerSchemaConsistentForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'id':
-            context.writeField(field, value.id);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.id);
             break;
-          case 'name':
-            context.writeField(field, value.name);
+          case 1:
+            writeGeneratedField(context, field, value.name);
             break;
           default:
             break;
@@ -3875,8 +4037,10 @@ final class _RefInnerSchemaConsistentForySerializer
       }
       return;
     }
-    context.writeField(_refInnerSchemaConsistentForyFields[0], value.id);
-    context.writeField(_refInnerSchemaConsistentForyFields[1], value.name);
+    writeGeneratedField(
+        context, _refInnerSchemaConsistentForyFields[0], value.id);
+    writeGeneratedField(
+        context, _refInnerSchemaConsistentForyFields[1], value.name);
   }
 
   @override
@@ -3884,12 +4048,12 @@ final class _RefInnerSchemaConsistentForySerializer
     final value = RefInnerSchemaConsistent();
     context.reference(value);
     value.id = _readRefInnerSchemaConsistentId(
-        context.readField<Object?>(
-            _refInnerSchemaConsistentForyFields[0], value.id),
+        readGeneratedField<Object?>(
+            context, _refInnerSchemaConsistentForyFields[0], value.id),
         value.id);
     value.name = _readRefInnerSchemaConsistentName(
-        context.readField<Object?>(
-            _refInnerSchemaConsistentForyFields[1], value.name),
+        readGeneratedField<Object?>(
+            context, _refInnerSchemaConsistentForyFields[1], value.name),
         value.name);
     return value;
   }
@@ -3911,7 +4075,7 @@ String _readRefInnerSchemaConsistentName(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<Map<String, Object?>> _refOuterSchemaConsistentForyFields =
+const List<Map<String, Object?>> _refOuterSchemaConsistentForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'inner1',
@@ -3941,27 +4105,28 @@ const List<Map<String, Object?>> _refOuterSchemaConsistentForyFields =
   },
 ];
 
+final List<Object> _refOuterSchemaConsistentForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _refOuterSchemaConsistentForyFieldMetadata[0]),
+    generatedField(1, _refOuterSchemaConsistentForyFieldMetadata[1]),
+  ],
+);
+
 final class _RefOuterSchemaConsistentForySerializer
-    extends Serializer<RefOuterSchemaConsistent> {
+    extends _GeneratedStructSerializer<RefOuterSchemaConsistent> {
   const _RefOuterSchemaConsistentForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _refOuterSchemaConsistentForyFields;
-  @override
   void write(WriteContext context, RefOuterSchemaConsistent value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_refOuterSchemaConsistentForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'inner1':
-            context.writeField(field, value.inner1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.inner1);
             break;
-          case 'inner2':
-            context.writeField(field, value.inner2);
+          case 1:
+            writeGeneratedField(context, field, value.inner2);
             break;
           default:
             break;
@@ -3969,8 +4134,10 @@ final class _RefOuterSchemaConsistentForySerializer
       }
       return;
     }
-    context.writeField(_refOuterSchemaConsistentForyFields[0], value.inner1);
-    context.writeField(_refOuterSchemaConsistentForyFields[1], value.inner2);
+    writeGeneratedField(
+        context, _refOuterSchemaConsistentForyFields[0], value.inner1);
+    writeGeneratedField(
+        context, _refOuterSchemaConsistentForyFields[1], value.inner2);
   }
 
   @override
@@ -3978,12 +4145,12 @@ final class _RefOuterSchemaConsistentForySerializer
     final value = RefOuterSchemaConsistent();
     context.reference(value);
     value.inner1 = _readRefOuterSchemaConsistentInner1(
-        context.readField<Object?>(
-            _refOuterSchemaConsistentForyFields[0], value.inner1),
+        readGeneratedField<Object?>(
+            context, _refOuterSchemaConsistentForyFields[0], value.inner1),
         value.inner1);
     value.inner2 = _readRefOuterSchemaConsistentInner2(
-        context.readField<Object?>(
-            _refOuterSchemaConsistentForyFields[1], value.inner2),
+        readGeneratedField<Object?>(
+            context, _refOuterSchemaConsistentForyFields[1], value.inner2),
         value.inner2);
     return value;
   }
@@ -4007,7 +4174,7 @@ RefInnerSchemaConsistent? _readRefOuterSchemaConsistentInner2(Object? value,
           : value as RefInnerSchemaConsistent;
 }
 
-const List<Map<String, Object?>> _refInnerCompatibleForyFields =
+const List<Map<String, Object?>> _refInnerCompatibleForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'id',
@@ -4037,27 +4204,27 @@ const List<Map<String, Object?>> _refInnerCompatibleForyFields =
   },
 ];
 
+final List<Object> _refInnerCompatibleForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _refInnerCompatibleForyFieldMetadata[0]),
+    generatedField(1, _refInnerCompatibleForyFieldMetadata[1]),
+  ],
+);
+
 final class _RefInnerCompatibleForySerializer
-    extends Serializer<RefInnerCompatible> {
+    extends _GeneratedStructSerializer<RefInnerCompatible> {
   const _RefInnerCompatibleForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _refInnerCompatibleForyFields;
-  @override
   void write(WriteContext context, RefInnerCompatible value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_refInnerCompatibleForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'id':
-            context.writeField(field, value.id);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.id);
             break;
-          case 'name':
-            context.writeField(field, value.name);
+          case 1:
+            writeGeneratedField(context, field, value.name);
             break;
           default:
             break;
@@ -4065,8 +4232,8 @@ final class _RefInnerCompatibleForySerializer
       }
       return;
     }
-    context.writeField(_refInnerCompatibleForyFields[0], value.id);
-    context.writeField(_refInnerCompatibleForyFields[1], value.name);
+    writeGeneratedField(context, _refInnerCompatibleForyFields[0], value.id);
+    writeGeneratedField(context, _refInnerCompatibleForyFields[1], value.name);
   }
 
   @override
@@ -4074,11 +4241,12 @@ final class _RefInnerCompatibleForySerializer
     final value = RefInnerCompatible();
     context.reference(value);
     value.id = _readRefInnerCompatibleId(
-        context.readField<Object?>(_refInnerCompatibleForyFields[0], value.id),
+        readGeneratedField<Object?>(
+            context, _refInnerCompatibleForyFields[0], value.id),
         value.id);
     value.name = _readRefInnerCompatibleName(
-        context.readField<Object?>(
-            _refInnerCompatibleForyFields[1], value.name),
+        readGeneratedField<Object?>(
+            context, _refInnerCompatibleForyFields[1], value.name),
         value.name);
     return value;
   }
@@ -4100,7 +4268,7 @@ String _readRefInnerCompatibleName(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<Map<String, Object?>> _refOuterCompatibleForyFields =
+const List<Map<String, Object?>> _refOuterCompatibleForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'inner1',
@@ -4130,27 +4298,27 @@ const List<Map<String, Object?>> _refOuterCompatibleForyFields =
   },
 ];
 
+final List<Object> _refOuterCompatibleForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _refOuterCompatibleForyFieldMetadata[0]),
+    generatedField(1, _refOuterCompatibleForyFieldMetadata[1]),
+  ],
+);
+
 final class _RefOuterCompatibleForySerializer
-    extends Serializer<RefOuterCompatible> {
+    extends _GeneratedStructSerializer<RefOuterCompatible> {
   const _RefOuterCompatibleForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _refOuterCompatibleForyFields;
-  @override
   void write(WriteContext context, RefOuterCompatible value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_refOuterCompatibleForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'inner1':
-            context.writeField(field, value.inner1);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.inner1);
             break;
-          case 'inner2':
-            context.writeField(field, value.inner2);
+          case 1:
+            writeGeneratedField(context, field, value.inner2);
             break;
           default:
             break;
@@ -4158,8 +4326,10 @@ final class _RefOuterCompatibleForySerializer
       }
       return;
     }
-    context.writeField(_refOuterCompatibleForyFields[0], value.inner1);
-    context.writeField(_refOuterCompatibleForyFields[1], value.inner2);
+    writeGeneratedField(
+        context, _refOuterCompatibleForyFields[0], value.inner1);
+    writeGeneratedField(
+        context, _refOuterCompatibleForyFields[1], value.inner2);
   }
 
   @override
@@ -4167,12 +4337,12 @@ final class _RefOuterCompatibleForySerializer
     final value = RefOuterCompatible();
     context.reference(value);
     value.inner1 = _readRefOuterCompatibleInner1(
-        context.readField<Object?>(
-            _refOuterCompatibleForyFields[0], value.inner1),
+        readGeneratedField<Object?>(
+            context, _refOuterCompatibleForyFields[0], value.inner1),
         value.inner1);
     value.inner2 = _readRefOuterCompatibleInner2(
-        context.readField<Object?>(
-            _refOuterCompatibleForyFields[1], value.inner2),
+        readGeneratedField<Object?>(
+            context, _refOuterCompatibleForyFields[1], value.inner2),
         value.inner2);
     return value;
   }
@@ -4196,7 +4366,7 @@ RefInnerCompatible? _readRefOuterCompatibleInner2(Object? value,
           : value as RefInnerCompatible;
 }
 
-const List<Map<String, Object?>> _refOverrideElementForyFields =
+const List<Map<String, Object?>> _refOverrideElementForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'id',
@@ -4226,27 +4396,27 @@ const List<Map<String, Object?>> _refOverrideElementForyFields =
   },
 ];
 
+final List<Object> _refOverrideElementForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _refOverrideElementForyFieldMetadata[0]),
+    generatedField(1, _refOverrideElementForyFieldMetadata[1]),
+  ],
+);
+
 final class _RefOverrideElementForySerializer
-    extends Serializer<RefOverrideElement> {
+    extends _GeneratedStructSerializer<RefOverrideElement> {
   const _RefOverrideElementForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _refOverrideElementForyFields;
-  @override
   void write(WriteContext context, RefOverrideElement value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_refOverrideElementForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'id':
-            context.writeField(field, value.id);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.id);
             break;
-          case 'name':
-            context.writeField(field, value.name);
+          case 1:
+            writeGeneratedField(context, field, value.name);
             break;
           default:
             break;
@@ -4254,8 +4424,8 @@ final class _RefOverrideElementForySerializer
       }
       return;
     }
-    context.writeField(_refOverrideElementForyFields[0], value.id);
-    context.writeField(_refOverrideElementForyFields[1], value.name);
+    writeGeneratedField(context, _refOverrideElementForyFields[0], value.id);
+    writeGeneratedField(context, _refOverrideElementForyFields[1], value.name);
   }
 
   @override
@@ -4263,11 +4433,12 @@ final class _RefOverrideElementForySerializer
     final value = RefOverrideElement();
     context.reference(value);
     value.id = _readRefOverrideElementId(
-        context.readField<Object?>(_refOverrideElementForyFields[0], value.id),
+        readGeneratedField<Object?>(
+            context, _refOverrideElementForyFields[0], value.id),
         value.id);
     value.name = _readRefOverrideElementName(
-        context.readField<Object?>(
-            _refOverrideElementForyFields[1], value.name),
+        readGeneratedField<Object?>(
+            context, _refOverrideElementForyFields[1], value.name),
         value.name);
     return value;
   }
@@ -4289,7 +4460,7 @@ String _readRefOverrideElementName(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<Map<String, Object?>> _circularRefStructForyFields =
+const List<Map<String, Object?>> _circularRefStructForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'name',
@@ -4319,27 +4490,27 @@ const List<Map<String, Object?>> _circularRefStructForyFields =
   },
 ];
 
+final List<Object> _circularRefStructForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _circularRefStructForyFieldMetadata[0]),
+    generatedField(1, _circularRefStructForyFieldMetadata[1]),
+  ],
+);
+
 final class _CircularRefStructForySerializer
-    extends Serializer<CircularRefStruct> {
+    extends _GeneratedStructSerializer<CircularRefStruct> {
   const _CircularRefStructForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _circularRefStructForyFields;
-  @override
   void write(WriteContext context, CircularRefStruct value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_circularRefStructForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'name':
-            context.writeField(field, value.name);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.name);
             break;
-          case 'self_ref':
-            context.writeField(field, value.selfRef);
+          case 1:
+            writeGeneratedField(context, field, value.selfRef);
             break;
           default:
             break;
@@ -4347,8 +4518,9 @@ final class _CircularRefStructForySerializer
       }
       return;
     }
-    context.writeField(_circularRefStructForyFields[0], value.name);
-    context.writeField(_circularRefStructForyFields[1], value.selfRef);
+    writeGeneratedField(context, _circularRefStructForyFields[0], value.name);
+    writeGeneratedField(
+        context, _circularRefStructForyFields[1], value.selfRef);
   }
 
   @override
@@ -4356,11 +4528,12 @@ final class _CircularRefStructForySerializer
     final value = CircularRefStruct();
     context.reference(value);
     value.name = _readCircularRefStructName(
-        context.readField<Object?>(_circularRefStructForyFields[0], value.name),
+        readGeneratedField<Object?>(
+            context, _circularRefStructForyFields[0], value.name),
         value.name);
     value.selfRef = _readCircularRefStructSelfRef(
-        context.readField<Object?>(
-            _circularRefStructForyFields[1], value.selfRef),
+        readGeneratedField<Object?>(
+            context, _circularRefStructForyFields[1], value.selfRef),
         value.selfRef);
     return value;
   }
@@ -4383,7 +4556,7 @@ CircularRefStruct? _readCircularRefStructSelfRef(Object? value,
           : value as CircularRefStruct;
 }
 
-const List<Map<String, Object?>> _unsignedSchemaConsistentForyFields =
+const List<Map<String, Object?>> _unsignedSchemaConsistentForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'u64FixedField',
@@ -4569,63 +4742,76 @@ const List<Map<String, Object?>> _unsignedSchemaConsistentForyFields =
   },
 ];
 
+final List<Object> _unsignedSchemaConsistentForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _unsignedSchemaConsistentForyFieldMetadata[0]),
+    generatedField(1, _unsignedSchemaConsistentForyFieldMetadata[1]),
+    generatedField(2, _unsignedSchemaConsistentForyFieldMetadata[2]),
+    generatedField(3, _unsignedSchemaConsistentForyFieldMetadata[3]),
+    generatedField(4, _unsignedSchemaConsistentForyFieldMetadata[4]),
+    generatedField(5, _unsignedSchemaConsistentForyFieldMetadata[5]),
+    generatedField(6, _unsignedSchemaConsistentForyFieldMetadata[6]),
+    generatedField(7, _unsignedSchemaConsistentForyFieldMetadata[7]),
+    generatedField(8, _unsignedSchemaConsistentForyFieldMetadata[8]),
+    generatedField(9, _unsignedSchemaConsistentForyFieldMetadata[9]),
+    generatedField(10, _unsignedSchemaConsistentForyFieldMetadata[10]),
+    generatedField(11, _unsignedSchemaConsistentForyFieldMetadata[11]),
+    generatedField(12, _unsignedSchemaConsistentForyFieldMetadata[12]),
+    generatedField(13, _unsignedSchemaConsistentForyFieldMetadata[13]),
+  ],
+);
+
 final class _UnsignedSchemaConsistentForySerializer
-    extends Serializer<UnsignedSchemaConsistent> {
+    extends _GeneratedStructSerializer<UnsignedSchemaConsistent> {
   const _UnsignedSchemaConsistentForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _unsignedSchemaConsistentForyFields;
-  @override
   void write(WriteContext context, UnsignedSchemaConsistent value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_unsignedSchemaConsistentForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'u64_fixed_field':
-            context.writeField(field, value.u64FixedField);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.u64FixedField);
             break;
-          case 'u32_fixed_field':
-            context.writeField(field, value.u32FixedField);
+          case 1:
+            writeGeneratedField(context, field, value.u32FixedField);
             break;
-          case 'u16_field':
-            context.writeField(field, value.u16Field);
+          case 2:
+            writeGeneratedField(context, field, value.u16Field);
             break;
-          case 'u8_field':
-            context.writeField(field, value.u8Field);
+          case 3:
+            writeGeneratedField(context, field, value.u8Field);
             break;
-          case 'u64_tagged_field':
-            context.writeField(field, value.u64TaggedField);
+          case 4:
+            writeGeneratedField(context, field, value.u64TaggedField);
             break;
-          case 'u64_var_field':
-            context.writeField(field, value.u64VarField);
+          case 5:
+            writeGeneratedField(context, field, value.u64VarField);
             break;
-          case 'u32_var_field':
-            context.writeField(field, value.u32VarField);
+          case 6:
+            writeGeneratedField(context, field, value.u32VarField);
             break;
-          case 'u64_fixed_nullable_field':
-            context.writeField(field, value.u64FixedNullableField);
+          case 7:
+            writeGeneratedField(context, field, value.u64FixedNullableField);
             break;
-          case 'u32_fixed_nullable_field':
-            context.writeField(field, value.u32FixedNullableField);
+          case 8:
+            writeGeneratedField(context, field, value.u32FixedNullableField);
             break;
-          case 'u16_nullable_field':
-            context.writeField(field, value.u16NullableField);
+          case 9:
+            writeGeneratedField(context, field, value.u16NullableField);
             break;
-          case 'u8_nullable_field':
-            context.writeField(field, value.u8NullableField);
+          case 10:
+            writeGeneratedField(context, field, value.u8NullableField);
             break;
-          case 'u64_tagged_nullable_field':
-            context.writeField(field, value.u64TaggedNullableField);
+          case 11:
+            writeGeneratedField(context, field, value.u64TaggedNullableField);
             break;
-          case 'u64_var_nullable_field':
-            context.writeField(field, value.u64VarNullableField);
+          case 12:
+            writeGeneratedField(context, field, value.u64VarNullableField);
             break;
-          case 'u32_var_nullable_field':
-            context.writeField(field, value.u32VarNullableField);
+          case 13:
+            writeGeneratedField(context, field, value.u32VarNullableField);
             break;
           default:
             break;
@@ -4633,32 +4819,34 @@ final class _UnsignedSchemaConsistentForySerializer
       }
       return;
     }
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[0], value.u64FixedField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[1], value.u32FixedField);
-    context.writeField(_unsignedSchemaConsistentForyFields[2], value.u16Field);
-    context.writeField(_unsignedSchemaConsistentForyFields[3], value.u8Field);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[4], value.u64TaggedField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[5], value.u64VarField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[6], value.u32VarField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[7], value.u64FixedNullableField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[8], value.u32FixedNullableField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[9], value.u16NullableField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[10], value.u8NullableField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[11], value.u64TaggedNullableField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[12], value.u64VarNullableField);
-    context.writeField(
-        _unsignedSchemaConsistentForyFields[13], value.u32VarNullableField);
+    writeGeneratedField(
+        context, _unsignedSchemaConsistentForyFields[0], value.u64FixedField);
+    writeGeneratedField(
+        context, _unsignedSchemaConsistentForyFields[1], value.u32FixedField);
+    writeGeneratedField(
+        context, _unsignedSchemaConsistentForyFields[2], value.u16Field);
+    writeGeneratedField(
+        context, _unsignedSchemaConsistentForyFields[3], value.u8Field);
+    writeGeneratedField(
+        context, _unsignedSchemaConsistentForyFields[4], value.u64TaggedField);
+    writeGeneratedField(
+        context, _unsignedSchemaConsistentForyFields[5], value.u64VarField);
+    writeGeneratedField(
+        context, _unsignedSchemaConsistentForyFields[6], value.u32VarField);
+    writeGeneratedField(context, _unsignedSchemaConsistentForyFields[7],
+        value.u64FixedNullableField);
+    writeGeneratedField(context, _unsignedSchemaConsistentForyFields[8],
+        value.u32FixedNullableField);
+    writeGeneratedField(context, _unsignedSchemaConsistentForyFields[9],
+        value.u16NullableField);
+    writeGeneratedField(context, _unsignedSchemaConsistentForyFields[10],
+        value.u8NullableField);
+    writeGeneratedField(context, _unsignedSchemaConsistentForyFields[11],
+        value.u64TaggedNullableField);
+    writeGeneratedField(context, _unsignedSchemaConsistentForyFields[12],
+        value.u64VarNullableField);
+    writeGeneratedField(context, _unsignedSchemaConsistentForyFields[13],
+        value.u32VarNullableField);
   }
 
   @override
@@ -4666,64 +4854,74 @@ final class _UnsignedSchemaConsistentForySerializer
     final value = UnsignedSchemaConsistent();
     context.reference(value);
     value.u64FixedField = _readUnsignedSchemaConsistentU64FixedField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaConsistentForyFields[0], value.u64FixedField),
         value.u64FixedField);
     value.u32FixedField = _readUnsignedSchemaConsistentU32FixedField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaConsistentForyFields[1], value.u32FixedField),
         value.u32FixedField);
     value.u16Field = _readUnsignedSchemaConsistentU16Field(
-        context.readField<Object?>(
-            _unsignedSchemaConsistentForyFields[2], value.u16Field),
+        readGeneratedField<Object?>(
+            context, _unsignedSchemaConsistentForyFields[2], value.u16Field),
         value.u16Field);
     value.u8Field = _readUnsignedSchemaConsistentU8Field(
-        context.readField<Object?>(
-            _unsignedSchemaConsistentForyFields[3], value.u8Field),
+        readGeneratedField<Object?>(
+            context, _unsignedSchemaConsistentForyFields[3], value.u8Field),
         value.u8Field);
     value.u64TaggedField = _readUnsignedSchemaConsistentU64TaggedField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaConsistentForyFields[4], value.u64TaggedField),
         value.u64TaggedField);
     value.u64VarField = _readUnsignedSchemaConsistentU64VarField(
-        context.readField<Object?>(
-            _unsignedSchemaConsistentForyFields[5], value.u64VarField),
+        readGeneratedField<Object?>(
+            context, _unsignedSchemaConsistentForyFields[5], value.u64VarField),
         value.u64VarField);
     value.u32VarField = _readUnsignedSchemaConsistentU32VarField(
-        context.readField<Object?>(
-            _unsignedSchemaConsistentForyFields[6], value.u32VarField),
+        readGeneratedField<Object?>(
+            context, _unsignedSchemaConsistentForyFields[6], value.u32VarField),
         value.u32VarField);
     value.u64FixedNullableField =
         _readUnsignedSchemaConsistentU64FixedNullableField(
-            context.readField<Object?>(_unsignedSchemaConsistentForyFields[7],
+            readGeneratedField<Object?>(
+                context,
+                _unsignedSchemaConsistentForyFields[7],
                 value.u64FixedNullableField),
             value.u64FixedNullableField);
     value.u32FixedNullableField =
         _readUnsignedSchemaConsistentU32FixedNullableField(
-            context.readField<Object?>(_unsignedSchemaConsistentForyFields[8],
+            readGeneratedField<Object?>(
+                context,
+                _unsignedSchemaConsistentForyFields[8],
                 value.u32FixedNullableField),
             value.u32FixedNullableField);
     value.u16NullableField = _readUnsignedSchemaConsistentU16NullableField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaConsistentForyFields[9], value.u16NullableField),
         value.u16NullableField);
     value.u8NullableField = _readUnsignedSchemaConsistentU8NullableField(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaConsistentForyFields[10], value.u8NullableField),
         value.u8NullableField);
     value.u64TaggedNullableField =
         _readUnsignedSchemaConsistentU64TaggedNullableField(
-            context.readField<Object?>(_unsignedSchemaConsistentForyFields[11],
+            readGeneratedField<Object?>(
+                context,
+                _unsignedSchemaConsistentForyFields[11],
                 value.u64TaggedNullableField),
             value.u64TaggedNullableField);
     value.u64VarNullableField =
         _readUnsignedSchemaConsistentU64VarNullableField(
-            context.readField<Object?>(_unsignedSchemaConsistentForyFields[12],
+            readGeneratedField<Object?>(
+                context,
+                _unsignedSchemaConsistentForyFields[12],
                 value.u64VarNullableField),
             value.u64VarNullableField);
     value.u32VarNullableField =
         _readUnsignedSchemaConsistentU32VarNullableField(
-            context.readField<Object?>(_unsignedSchemaConsistentForyFields[13],
+            readGeneratedField<Object?>(
+                context,
+                _unsignedSchemaConsistentForyFields[13],
                 value.u32VarNullableField),
             value.u32VarNullableField);
     return value;
@@ -4861,8 +5059,8 @@ UInt32? _readUnsignedSchemaConsistentU32VarNullableField(Object? value,
           : value as UInt32;
 }
 
-const List<Map<String, Object?>> _unsignedSchemaConsistentSimpleForyFields =
-    <Map<String, Object?>>[
+const List<Map<String, Object?>>
+    _unsignedSchemaConsistentSimpleForyFieldMetadata = <Map<String, Object?>>[
   <String, Object?>{
     'name': 'u64Tagged',
     'identifier': 'u64_tagged',
@@ -4891,28 +5089,28 @@ const List<Map<String, Object?>> _unsignedSchemaConsistentSimpleForyFields =
   },
 ];
 
+final List<Object> _unsignedSchemaConsistentSimpleForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _unsignedSchemaConsistentSimpleForyFieldMetadata[0]),
+    generatedField(1, _unsignedSchemaConsistentSimpleForyFieldMetadata[1]),
+  ],
+);
+
 final class _UnsignedSchemaConsistentSimpleForySerializer
-    extends Serializer<UnsignedSchemaConsistentSimple> {
+    extends _GeneratedStructSerializer<UnsignedSchemaConsistentSimple> {
   const _UnsignedSchemaConsistentSimpleForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields =>
-      _unsignedSchemaConsistentSimpleForyFields;
-  @override
   void write(WriteContext context, UnsignedSchemaConsistentSimple value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_unsignedSchemaConsistentSimpleForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'u64_tagged':
-            context.writeField(field, value.u64Tagged);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.u64Tagged);
             break;
-          case 'u64_tagged_nullable':
-            context.writeField(field, value.u64TaggedNullable);
+          case 1:
+            writeGeneratedField(context, field, value.u64TaggedNullable);
             break;
           default:
             break;
@@ -4920,10 +5118,10 @@ final class _UnsignedSchemaConsistentSimpleForySerializer
       }
       return;
     }
-    context.writeField(
-        _unsignedSchemaConsistentSimpleForyFields[0], value.u64Tagged);
-    context.writeField(
-        _unsignedSchemaConsistentSimpleForyFields[1], value.u64TaggedNullable);
+    writeGeneratedField(
+        context, _unsignedSchemaConsistentSimpleForyFields[0], value.u64Tagged);
+    writeGeneratedField(context, _unsignedSchemaConsistentSimpleForyFields[1],
+        value.u64TaggedNullable);
   }
 
   @override
@@ -4931,12 +5129,13 @@ final class _UnsignedSchemaConsistentSimpleForySerializer
     final value = UnsignedSchemaConsistentSimple();
     context.reference(value);
     value.u64Tagged = _readUnsignedSchemaConsistentSimpleU64Tagged(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaConsistentSimpleForyFields[0], value.u64Tagged),
         value.u64Tagged);
     value.u64TaggedNullable =
         _readUnsignedSchemaConsistentSimpleU64TaggedNullable(
-            context.readField<Object?>(
+            readGeneratedField<Object?>(
+                context,
                 _unsignedSchemaConsistentSimpleForyFields[1],
                 value.u64TaggedNullable),
             value.u64TaggedNullable);
@@ -4963,7 +5162,7 @@ int? _readUnsignedSchemaConsistentSimpleU64TaggedNullable(Object? value,
           : value as int;
 }
 
-const List<Map<String, Object?>> _unsignedSchemaCompatibleForyFields =
+const List<Map<String, Object?>> _unsignedSchemaCompatibleForyFieldMetadata =
     <Map<String, Object?>>[
   <String, Object?>{
     'name': 'u64FixedField2',
@@ -5149,63 +5348,76 @@ const List<Map<String, Object?>> _unsignedSchemaCompatibleForyFields =
   },
 ];
 
+final List<Object> _unsignedSchemaCompatibleForyFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _unsignedSchemaCompatibleForyFieldMetadata[0]),
+    generatedField(1, _unsignedSchemaCompatibleForyFieldMetadata[1]),
+    generatedField(2, _unsignedSchemaCompatibleForyFieldMetadata[2]),
+    generatedField(3, _unsignedSchemaCompatibleForyFieldMetadata[3]),
+    generatedField(4, _unsignedSchemaCompatibleForyFieldMetadata[4]),
+    generatedField(5, _unsignedSchemaCompatibleForyFieldMetadata[5]),
+    generatedField(6, _unsignedSchemaCompatibleForyFieldMetadata[6]),
+    generatedField(7, _unsignedSchemaCompatibleForyFieldMetadata[7]),
+    generatedField(8, _unsignedSchemaCompatibleForyFieldMetadata[8]),
+    generatedField(9, _unsignedSchemaCompatibleForyFieldMetadata[9]),
+    generatedField(10, _unsignedSchemaCompatibleForyFieldMetadata[10]),
+    generatedField(11, _unsignedSchemaCompatibleForyFieldMetadata[11]),
+    generatedField(12, _unsignedSchemaCompatibleForyFieldMetadata[12]),
+    generatedField(13, _unsignedSchemaCompatibleForyFieldMetadata[13]),
+  ],
+);
+
 final class _UnsignedSchemaCompatibleForySerializer
-    extends Serializer<UnsignedSchemaCompatible> {
+    extends _GeneratedStructSerializer<UnsignedSchemaCompatible> {
   const _UnsignedSchemaCompatibleForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _unsignedSchemaCompatibleForyFields;
-  @override
   void write(WriteContext context, UnsignedSchemaCompatible value) {
-    final compatibleFields =
-        context.compatibleFieldOrder(_unsignedSchemaCompatibleForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'u64_fixed_field2':
-            context.writeField(field, value.u64FixedField2);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.u64FixedField2);
             break;
-          case 'u32_fixed_field2':
-            context.writeField(field, value.u32FixedField2);
+          case 1:
+            writeGeneratedField(context, field, value.u32FixedField2);
             break;
-          case 'u16_field2':
-            context.writeField(field, value.u16Field2);
+          case 2:
+            writeGeneratedField(context, field, value.u16Field2);
             break;
-          case 'u8_field2':
-            context.writeField(field, value.u8Field2);
+          case 3:
+            writeGeneratedField(context, field, value.u8Field2);
             break;
-          case 'u64_tagged_field2':
-            context.writeField(field, value.u64TaggedField2);
+          case 4:
+            writeGeneratedField(context, field, value.u64TaggedField2);
             break;
-          case 'u64_var_field2':
-            context.writeField(field, value.u64VarField2);
+          case 5:
+            writeGeneratedField(context, field, value.u64VarField2);
             break;
-          case 'u32_var_field2':
-            context.writeField(field, value.u32VarField2);
+          case 6:
+            writeGeneratedField(context, field, value.u32VarField2);
             break;
-          case 'u64_fixed_field1':
-            context.writeField(field, value.u64FixedField1);
+          case 7:
+            writeGeneratedField(context, field, value.u64FixedField1);
             break;
-          case 'u32_fixed_field1':
-            context.writeField(field, value.u32FixedField1);
+          case 8:
+            writeGeneratedField(context, field, value.u32FixedField1);
             break;
-          case 'u16_field1':
-            context.writeField(field, value.u16Field1);
+          case 9:
+            writeGeneratedField(context, field, value.u16Field1);
             break;
-          case 'u8_field1':
-            context.writeField(field, value.u8Field1);
+          case 10:
+            writeGeneratedField(context, field, value.u8Field1);
             break;
-          case 'u64_tagged_field1':
-            context.writeField(field, value.u64TaggedField1);
+          case 11:
+            writeGeneratedField(context, field, value.u64TaggedField1);
             break;
-          case 'u64_var_field1':
-            context.writeField(field, value.u64VarField1);
+          case 12:
+            writeGeneratedField(context, field, value.u64VarField1);
             break;
-          case 'u32_var_field1':
-            context.writeField(field, value.u32VarField1);
+          case 13:
+            writeGeneratedField(context, field, value.u32VarField1);
             break;
           default:
             break;
@@ -5213,30 +5425,34 @@ final class _UnsignedSchemaCompatibleForySerializer
       }
       return;
     }
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[0], value.u64FixedField2);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[1], value.u32FixedField2);
-    context.writeField(_unsignedSchemaCompatibleForyFields[2], value.u16Field2);
-    context.writeField(_unsignedSchemaCompatibleForyFields[3], value.u8Field2);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[4], value.u64TaggedField2);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[5], value.u64VarField2);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[6], value.u32VarField2);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[7], value.u64FixedField1);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[8], value.u32FixedField1);
-    context.writeField(_unsignedSchemaCompatibleForyFields[9], value.u16Field1);
-    context.writeField(_unsignedSchemaCompatibleForyFields[10], value.u8Field1);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[11], value.u64TaggedField1);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[12], value.u64VarField1);
-    context.writeField(
-        _unsignedSchemaCompatibleForyFields[13], value.u32VarField1);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[0], value.u64FixedField2);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[1], value.u32FixedField2);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[2], value.u16Field2);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[3], value.u8Field2);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[4], value.u64TaggedField2);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[5], value.u64VarField2);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[6], value.u32VarField2);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[7], value.u64FixedField1);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[8], value.u32FixedField1);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[9], value.u16Field1);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[10], value.u8Field1);
+    writeGeneratedField(context, _unsignedSchemaCompatibleForyFields[11],
+        value.u64TaggedField1);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[12], value.u64VarField1);
+    writeGeneratedField(
+        context, _unsignedSchemaCompatibleForyFields[13], value.u32VarField1);
   }
 
   @override
@@ -5244,59 +5460,59 @@ final class _UnsignedSchemaCompatibleForySerializer
     final value = UnsignedSchemaCompatible();
     context.reference(value);
     value.u64FixedField2 = _readUnsignedSchemaCompatibleU64FixedField2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[0], value.u64FixedField2),
         value.u64FixedField2);
     value.u32FixedField2 = _readUnsignedSchemaCompatibleU32FixedField2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[1], value.u32FixedField2),
         value.u32FixedField2);
     value.u16Field2 = _readUnsignedSchemaCompatibleU16Field2(
-        context.readField<Object?>(
-            _unsignedSchemaCompatibleForyFields[2], value.u16Field2),
+        readGeneratedField<Object?>(
+            context, _unsignedSchemaCompatibleForyFields[2], value.u16Field2),
         value.u16Field2);
     value.u8Field2 = _readUnsignedSchemaCompatibleU8Field2(
-        context.readField<Object?>(
-            _unsignedSchemaCompatibleForyFields[3], value.u8Field2),
+        readGeneratedField<Object?>(
+            context, _unsignedSchemaCompatibleForyFields[3], value.u8Field2),
         value.u8Field2);
     value.u64TaggedField2 = _readUnsignedSchemaCompatibleU64TaggedField2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[4], value.u64TaggedField2),
         value.u64TaggedField2);
     value.u64VarField2 = _readUnsignedSchemaCompatibleU64VarField2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[5], value.u64VarField2),
         value.u64VarField2);
     value.u32VarField2 = _readUnsignedSchemaCompatibleU32VarField2(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[6], value.u32VarField2),
         value.u32VarField2);
     value.u64FixedField1 = _readUnsignedSchemaCompatibleU64FixedField1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[7], value.u64FixedField1),
         value.u64FixedField1);
     value.u32FixedField1 = _readUnsignedSchemaCompatibleU32FixedField1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[8], value.u32FixedField1),
         value.u32FixedField1);
     value.u16Field1 = _readUnsignedSchemaCompatibleU16Field1(
-        context.readField<Object?>(
-            _unsignedSchemaCompatibleForyFields[9], value.u16Field1),
+        readGeneratedField<Object?>(
+            context, _unsignedSchemaCompatibleForyFields[9], value.u16Field1),
         value.u16Field1);
     value.u8Field1 = _readUnsignedSchemaCompatibleU8Field1(
-        context.readField<Object?>(
-            _unsignedSchemaCompatibleForyFields[10], value.u8Field1),
+        readGeneratedField<Object?>(
+            context, _unsignedSchemaCompatibleForyFields[10], value.u8Field1),
         value.u8Field1);
     value.u64TaggedField1 = _readUnsignedSchemaCompatibleU64TaggedField1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[11], value.u64TaggedField1),
         value.u64TaggedField1);
     value.u64VarField1 = _readUnsignedSchemaCompatibleU64VarField1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[12], value.u64VarField1),
         value.u64VarField1);
     value.u32VarField1 = _readUnsignedSchemaCompatibleU32VarField1(
-        context.readField<Object?>(
+        readGeneratedField<Object?>(context,
             _unsignedSchemaCompatibleForyFields[13], value.u32VarField1),
         value.u32VarField1);
     return value;
@@ -5442,68 +5658,100 @@ void _installGeneratedForyBindings() {
     return;
   }
   _generatedForyBindingsInstalled = true;
-  Fory.bindGeneratedSerializerFactory(Color, _ColorForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(TestEnum, _TestEnumForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(TwoEnumFieldStructEvolution,
-      _TwoEnumFieldStructEvolutionForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(Item, _ItemForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      SimpleStruct, _SimpleStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      EvolvingOverrideStruct, _EvolvingOverrideStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      FixedOverrideStruct, _FixedOverrideStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(Item1, _Item1ForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      StructWithUnion2, _StructWithUnion2ForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      StructWithList, _StructWithListForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      StructWithMap, _StructWithMapForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(MyStruct, _MyStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(MyWrapper, _MyWrapperForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      EmptyWrapper, _EmptyWrapperForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      VersionCheckStruct, _VersionCheckStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(Dog, _DogForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(Cat, _CatForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      AnimalListHolder, _AnimalListHolderForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      AnimalMapHolder, _AnimalMapHolderForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      EmptyStruct, _EmptyStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      OneStringFieldStruct, _OneStringFieldStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      TwoStringFieldStruct, _TwoStringFieldStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      OneEnumFieldStruct, _OneEnumFieldStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      TwoEnumFieldStruct, _TwoEnumFieldStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(NullableComprehensiveSchemaConsistent,
-      _NullableComprehensiveSchemaConsistentForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(NullableComprehensiveCompatible,
-      _NullableComprehensiveCompatibleForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      RefInnerSchemaConsistent, _RefInnerSchemaConsistentForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      RefOuterSchemaConsistent, _RefOuterSchemaConsistentForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      RefInnerCompatible, _RefInnerCompatibleForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      RefOuterCompatible, _RefOuterCompatibleForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      RefOverrideElement, _RefOverrideElementForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      CircularRefStruct, _CircularRefStructForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      UnsignedSchemaConsistent, _UnsignedSchemaConsistentForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(UnsignedSchemaConsistentSimple,
-      _UnsignedSchemaConsistentSimpleForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(
-      UnsignedSchemaCompatible, _UnsignedSchemaCompatibleForySerializer.new);
+  Fory.bindGeneratedEnumFactory(Color, _ColorForySerializer.new);
+  Fory.bindGeneratedEnumFactory(TestEnum, _TestEnumForySerializer.new);
+  Fory.bindGeneratedStructFactory(TwoEnumFieldStructEvolution,
+      _TwoEnumFieldStructEvolutionForySerializer.new,
+      evolving: true, fields: _twoEnumFieldStructEvolutionForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(Item, _ItemForySerializer.new,
+      evolving: true, fields: _itemForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(SimpleStruct, _SimpleStructForySerializer.new,
+      evolving: true, fields: _simpleStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      EvolvingOverrideStruct, _EvolvingOverrideStructForySerializer.new,
+      evolving: true, fields: _evolvingOverrideStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      FixedOverrideStruct, _FixedOverrideStructForySerializer.new,
+      evolving: false, fields: _fixedOverrideStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(Item1, _Item1ForySerializer.new,
+      evolving: true, fields: _item1ForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      StructWithUnion2, _StructWithUnion2ForySerializer.new,
+      evolving: true, fields: _structWithUnion2ForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      StructWithList, _StructWithListForySerializer.new,
+      evolving: true, fields: _structWithListForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      StructWithMap, _StructWithMapForySerializer.new,
+      evolving: true, fields: _structWithMapForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(MyStruct, _MyStructForySerializer.new,
+      evolving: true, fields: _myStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(MyWrapper, _MyWrapperForySerializer.new,
+      evolving: true, fields: _myWrapperForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(EmptyWrapper, _EmptyWrapperForySerializer.new,
+      evolving: true, fields: _emptyWrapperForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      VersionCheckStruct, _VersionCheckStructForySerializer.new,
+      evolving: true, fields: _versionCheckStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(Dog, _DogForySerializer.new,
+      evolving: true, fields: _dogForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(Cat, _CatForySerializer.new,
+      evolving: true, fields: _catForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      AnimalListHolder, _AnimalListHolderForySerializer.new,
+      evolving: true, fields: _animalListHolderForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      AnimalMapHolder, _AnimalMapHolderForySerializer.new,
+      evolving: true, fields: _animalMapHolderForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(EmptyStruct, _EmptyStructForySerializer.new,
+      evolving: true, fields: _emptyStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      OneStringFieldStruct, _OneStringFieldStructForySerializer.new,
+      evolving: true, fields: _oneStringFieldStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      TwoStringFieldStruct, _TwoStringFieldStructForySerializer.new,
+      evolving: true, fields: _twoStringFieldStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      OneEnumFieldStruct, _OneEnumFieldStructForySerializer.new,
+      evolving: true, fields: _oneEnumFieldStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      TwoEnumFieldStruct, _TwoEnumFieldStructForySerializer.new,
+      evolving: true, fields: _twoEnumFieldStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(NullableComprehensiveSchemaConsistent,
+      _NullableComprehensiveSchemaConsistentForySerializer.new,
+      evolving: true,
+      fields: _nullableComprehensiveSchemaConsistentForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(NullableComprehensiveCompatible,
+      _NullableComprehensiveCompatibleForySerializer.new,
+      evolving: true,
+      fields: _nullableComprehensiveCompatibleForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      RefInnerSchemaConsistent, _RefInnerSchemaConsistentForySerializer.new,
+      evolving: true, fields: _refInnerSchemaConsistentForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      RefOuterSchemaConsistent, _RefOuterSchemaConsistentForySerializer.new,
+      evolving: true, fields: _refOuterSchemaConsistentForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      RefInnerCompatible, _RefInnerCompatibleForySerializer.new,
+      evolving: true, fields: _refInnerCompatibleForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      RefOuterCompatible, _RefOuterCompatibleForySerializer.new,
+      evolving: true, fields: _refOuterCompatibleForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      RefOverrideElement, _RefOverrideElementForySerializer.new,
+      evolving: true, fields: _refOverrideElementForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      CircularRefStruct, _CircularRefStructForySerializer.new,
+      evolving: true, fields: _circularRefStructForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      UnsignedSchemaConsistent, _UnsignedSchemaConsistentForySerializer.new,
+      evolving: true, fields: _unsignedSchemaConsistentForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(UnsignedSchemaConsistentSimple,
+      _UnsignedSchemaConsistentSimpleForySerializer.new,
+      evolving: true, fields: _unsignedSchemaConsistentSimpleForyFieldMetadata);
+  Fory.bindGeneratedStructFactory(
+      UnsignedSchemaCompatible, _UnsignedSchemaCompatibleForySerializer.new,
+      evolving: true, fields: _unsignedSchemaCompatibleForyFieldMetadata);
 }
 
 void _registerXlangTestModelsForyType(Fory fory, Type type,

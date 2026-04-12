@@ -45,8 +45,12 @@ final class ForyGenerator extends Generator {
 
     final output = StringBuffer()
       ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND')
+      ..writeln('// ignore_for_file: invalid_use_of_internal_member')
       ..writeln();
 
+    if (structSpecs.isNotEmpty) {
+      _writeGeneratedStructBase(output);
+    }
     for (final enumSpec in enumSpecs) {
       _writeEnum(output, enumSpec);
     }
@@ -269,11 +273,9 @@ final class ForyGenerator extends Generator {
     final serializerClassName = '_${enumSpec.name}ForySerializer';
     output
       ..writeln(
-        'final class $serializerClassName extends Serializer<${enumSpec.name}> {',
+        'final class $serializerClassName extends EnumSerializer<${enumSpec.name}> {',
       )
       ..writeln('  const $serializerClassName();')
-      ..writeln('  @override')
-      ..writeln('  bool get isEnum => true;')
       ..writeln('  @override')
       ..writeln('  void write(WriteContext context, ${enumSpec.name} value) {')
       ..writeln('    context.writeVarUint32(value.index);')
@@ -287,9 +289,21 @@ final class ForyGenerator extends Generator {
       ..writeln();
   }
 
+  void _writeGeneratedStructBase(StringBuffer output) {
+    output
+      ..writeln(
+        'abstract base class _GeneratedStructSerializer<T> extends Serializer<T> {',
+      )
+      ..writeln('  const _GeneratedStructSerializer();')
+      ..writeln('}')
+      ..writeln();
+  }
+
   void _writeStruct(StringBuffer output, _GeneratedStructSpec structSpec) {
     final serializerClassName = '_${structSpec.name}ForySerializer';
-    final metadataListName = '_${_toCamelCase(structSpec.name)}ForyFields';
+    final metadataListName =
+        '_${_toCamelCase(structSpec.name)}ForyFieldMetadata';
+    final fieldListName = '_${_toCamelCase(structSpec.name)}ForyFields';
 
     output.writeln(
       'const List<Map<String, Object?>> $metadataListName = <Map<String, Object?>>[',
@@ -300,30 +314,38 @@ final class ForyGenerator extends Generator {
     output
       ..writeln('];')
       ..writeln()
+      ..writeln('final List<Object> $fieldListName = List<Object>.unmodifiable(')
+      ..writeln('  <Object>[');
+    for (var index = 0; index < structSpec.fields.length; index += 1) {
+      output.writeln(
+        '    generatedField($index, $metadataListName[$index]),',
+      );
+    }
+    output
+      ..writeln('  ],')
+      ..writeln(');')
+      ..writeln()
       ..writeln(
-        'final class $serializerClassName extends Serializer<${structSpec.name}> {',
+        'final class $serializerClassName extends _GeneratedStructSerializer<${structSpec.name}> {',
       )
       ..writeln('  const $serializerClassName();')
-      ..writeln('  @override')
-      ..writeln('  bool get isStruct => true;')
-      ..writeln('  @override')
-      ..writeln('  bool get evolving => ${structSpec.evolving};')
-      ..writeln('  @override')
-      ..writeln('  List<Map<String, Object?>> get fields => $metadataListName;')
       ..writeln('  @override')
       ..writeln(
         '  void write(WriteContext context, ${structSpec.name} value) {',
       )
       ..writeln(
-        '    final compatibleFields = context.compatibleFieldOrder($metadataListName);',
+        '    final compatibleFields = generatedCompatibleWriteFields(context);',
       )
       ..writeln('    if (compatibleFields != null) {')
       ..writeln('      for (final field in compatibleFields) {')
-      ..writeln("        switch (field['identifier'] as String) {");
-    for (final field in structSpec.fields) {
+      ..writeln('        switch (generatedFieldSlot(field)) {');
+    for (var index = 0; index < structSpec.fields.length; index += 1) {
+      final field = structSpec.fields[index];
       output
-        ..writeln("          case '${field.identifier}':")
-        ..writeln('            context.writeField(field, value.${field.name});')
+        ..writeln('          case $index:')
+        ..writeln(
+          '            writeGeneratedField(context, field, value.${field.name});',
+        )
         ..writeln('            break;');
     }
     output
@@ -336,7 +358,7 @@ final class ForyGenerator extends Generator {
     for (var index = 0; index < structSpec.fields.length; index += 1) {
       final field = structSpec.fields[index];
       output.writeln(
-        '    context.writeField($metadataListName[$index], value.${field.name});',
+        '    writeGeneratedField(context, $fieldListName[$index], value.${field.name});',
       );
     }
     output
@@ -354,7 +376,7 @@ final class ForyGenerator extends Generator {
           final field = structSpec.fields[index];
           final readerFunctionName = field.readerFunctionName(structSpec.name);
           output.writeln(
-            '    value.${field.name} = $readerFunctionName(context.readField<Object?>($metadataListName[$index], value.${field.name}), value.${field.name});',
+            '    value.${field.name} = $readerFunctionName(readGeneratedField<Object?>(context, $fieldListName[$index], value.${field.name}), value.${field.name});',
           );
         }
         output.writeln('    return value;');
@@ -363,7 +385,7 @@ final class ForyGenerator extends Generator {
           final field = structSpec.fields[index];
           final readerFunctionName = field.readerFunctionName(structSpec.name);
           output.writeln(
-            '    final ${field.localName} = $readerFunctionName(context.readField<Object?>($metadataListName[$index]));',
+            '    final ${field.localName} = $readerFunctionName(readGeneratedField<Object?>(context, $fieldListName[$index]));',
           );
         }
         final constructorInvocation = _constructorInvocation(structSpec);
@@ -417,12 +439,12 @@ final class ForyGenerator extends Generator {
 
     for (final enumSpec in enumSpecs) {
       output.writeln(
-        '  Fory.bindGeneratedSerializerFactory(${enumSpec.name}, _${enumSpec.name}ForySerializer.new);',
+        '  Fory.bindGeneratedEnumFactory(${enumSpec.name}, _${enumSpec.name}ForySerializer.new);',
       );
     }
     for (final structSpec in structSpecs) {
       output.writeln(
-        '  Fory.bindGeneratedSerializerFactory(${structSpec.name}, _${structSpec.name}ForySerializer.new);',
+        '  Fory.bindGeneratedStructFactory(${structSpec.name}, _${structSpec.name}ForySerializer.new, evolving: ${structSpec.evolving}, fields: ${'_${_toCamelCase(structSpec.name)}ForyFieldMetadata'});',
       );
     }
 

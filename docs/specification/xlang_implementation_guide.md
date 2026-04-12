@@ -100,8 +100,8 @@ Important public API rules:
 
 - current `Buffer`
 - `RefWriter`
+- `MetaStringWriter`
 - shared TypeDef write state
-- meta-string write cache
 - root `trackRef` mode
 - recursion depth and limits
 
@@ -121,8 +121,8 @@ methods directly.
 
 - current `Buffer`
 - `RefReader`
+- `MetaStringReader`
 - shared TypeDef read state
-- meta-string read cache
 - compatible-struct field mapping state
 - recursion depth and limits
 
@@ -154,6 +154,20 @@ Key behavior:
 - generated struct reads and writes must preserve the current object so annotated
   self-references can resolve correctly
 
+## MetaStringWriter And MetaStringReader
+
+`MetaStringWriter` and `MetaStringReader` are internal collaborators owned by
+the contexts.
+
+- `MetaStringWriter` owns only the per-operation dynamic meta-string ids used by
+  the xlang meta-string ref table.
+- `MetaStringReader` owns the matching dynamic read ids plus persistent local
+  decode caches for previously interned encoded meta strings.
+- `reset()` clears only the per-operation dynamic ids. Persistent decode caches
+  remain valid across operations.
+- Both helpers rely on resolver-owned canonical `EncodedMetaString` instances so
+  write-side identity dedup and read-side interning stay aligned with Java.
+
 ## TypeResolver
 
 `TypeResolver` is the internal registry and type-dispatch owner. It is
@@ -163,6 +177,8 @@ responsible for:
 - registration by numeric id or by `namespace + typeName`
 - serializer lookup
 - struct metadata lookup
+- canonical encoded meta strings for package names, type names, and field names
+- encoded-name lookup for named type resolution
 - wire type decisions for struct, compatible struct, enum, ext, and union forms
 - owning the stateless `TypeMetaEncoder` and `TypeMetaDecoder` helpers used by
   `WriteContext` and `ReadContext`
@@ -170,8 +186,9 @@ responsible for:
 `TypeMeta` is the internal wire-shape result for one value. It keeps the
 resolved runtime type together with the emitted wire type id and whether the
 type goes through shared TypeDef metadata. `WriteContext` and `ReadContext`
-still own all session state for shared TypeDef tables and meta-string tables;
-the encoder and decoder only handle the wire-level type-meta switch logic.
+still own the session state for shared TypeDef tables. Meta-string ref state is
+owned by `MetaStringWriter` and `MetaStringReader`, while canonical encoded
+names live in `TypeResolver`.
 
 Generator-only metadata should stay off the public `Serializer` API. The Dart
 runtime keeps those details in internal generated serializer base classes.

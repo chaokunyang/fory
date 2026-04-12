@@ -8,30 +8,28 @@ import 'package:fory/src/context/write_context.dart';
 abstract class Serializer<T> {
   const Serializer();
 
-  /// Whether this serializer represents a struct.
+  /// Whether values handled by this serializer may participate in Ref
+  /// tracking when the active field or root operation requests it.
   ///
-  /// Generated struct serializers override this to `true`.
-  bool get isStruct => false;
-
-  /// Whether this serializer represents an enum.
-  bool get isEnum => false;
-
-  /// Whether this serializer represents a union.
-  bool get isUnion => false;
-
-  /// Whether the struct metadata for this serializer is evolving.
-  ///
-  /// Only meaningful for struct serializers.
-  bool get evolving => true;
-
-  /// Declared field metadata for struct serializers.
-  ///
-  /// Non-struct serializers normally leave this empty.
-  List<Map<String, Object?>> get fields => const <Map<String, Object?>>[];
+  /// Immutable serializers such as enums should override this to `false`.
+  bool get supportsRef => true;
 
   /// Writes [value] to [context].
   void write(WriteContext context, T value);
 
   /// Reads a value of type [T] from [context].
   T read(ReadContext context);
+}
+
+/// Enum-specific serializer base used by generated enum serializers.
+abstract class EnumSerializer<T> extends Serializer<T> {
+  const EnumSerializer();
+
+  @override
+  bool get supportsRef => false;
+}
+
+/// Union-specific serializer base used by manual union serializers.
+abstract class UnionSerializer<T> extends Serializer<T> {
+  const UnionSerializer();
 }

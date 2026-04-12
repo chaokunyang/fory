@@ -7,11 +7,14 @@ part of 'example.dart';
 // **************************************************************************
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: invalid_use_of_internal_member
 
-final class _ColorForySerializer extends Serializer<Color> {
+abstract base class _GeneratedStructSerializer<T> extends Serializer<T> {
+  const _GeneratedStructSerializer();
+}
+
+final class _ColorForySerializer extends EnumSerializer<Color> {
   const _ColorForySerializer();
-  @override
-  bool get isEnum => true;
   @override
   void write(WriteContext context, Color value) {
     context.writeVarUint32(value.index);
@@ -23,7 +26,8 @@ final class _ColorForySerializer extends Serializer<Color> {
   }
 }
 
-const List<Map<String, Object?>> _personForyFields = <Map<String, Object?>>[
+const List<Map<String, Object?>> _personForyFieldMetadata =
+    <Map<String, Object?>>[
   <String, Object?>{
     'name': 'age',
     'identifier': 'age',
@@ -87,31 +91,34 @@ const List<Map<String, Object?>> _personForyFields = <Map<String, Object?>>[
   },
 ];
 
-final class _PersonForySerializer extends Serializer<Person> {
+final List<Object> _personForyFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _personForyFieldMetadata[0]),
+    generatedField(1, _personForyFieldMetadata[1]),
+    generatedField(2, _personForyFieldMetadata[2]),
+    generatedField(3, _personForyFieldMetadata[3]),
+  ],
+);
+
+final class _PersonForySerializer extends _GeneratedStructSerializer<Person> {
   const _PersonForySerializer();
   @override
-  bool get isStruct => true;
-  @override
-  bool get evolving => true;
-  @override
-  List<Map<String, Object?>> get fields => _personForyFields;
-  @override
   void write(WriteContext context, Person value) {
-    final compatibleFields = context.compatibleFieldOrder(_personForyFields);
+    final compatibleFields = generatedCompatibleWriteFields(context);
     if (compatibleFields != null) {
       for (final field in compatibleFields) {
-        switch (field['identifier'] as String) {
-          case 'age':
-            context.writeField(field, value.age);
+        switch (generatedFieldSlot(field)) {
+          case 0:
+            writeGeneratedField(context, field, value.age);
             break;
-          case 'name':
-            context.writeField(field, value.name);
+          case 1:
+            writeGeneratedField(context, field, value.name);
             break;
-          case 'tags':
-            context.writeField(field, value.tags);
+          case 2:
+            writeGeneratedField(context, field, value.tags);
             break;
-          case 'favorite_color':
-            context.writeField(field, value.favoriteColor);
+          case 3:
+            writeGeneratedField(context, field, value.favoriteColor);
             break;
           default:
             break;
@@ -119,10 +126,10 @@ final class _PersonForySerializer extends Serializer<Person> {
       }
       return;
     }
-    context.writeField(_personForyFields[0], value.age);
-    context.writeField(_personForyFields[1], value.name);
-    context.writeField(_personForyFields[2], value.tags);
-    context.writeField(_personForyFields[3], value.favoriteColor);
+    writeGeneratedField(context, _personForyFields[0], value.age);
+    writeGeneratedField(context, _personForyFields[1], value.name);
+    writeGeneratedField(context, _personForyFields[2], value.tags);
+    writeGeneratedField(context, _personForyFields[3], value.favoriteColor);
   }
 
   @override
@@ -130,15 +137,17 @@ final class _PersonForySerializer extends Serializer<Person> {
     final value = Person();
     context.reference(value);
     value.age = _readPersonAge(
-        context.readField<Object?>(_personForyFields[0], value.age), value.age);
+        readGeneratedField<Object?>(context, _personForyFields[0], value.age),
+        value.age);
     value.name = _readPersonName(
-        context.readField<Object?>(_personForyFields[1], value.name),
+        readGeneratedField<Object?>(context, _personForyFields[1], value.name),
         value.name);
     value.tags = _readPersonTags(
-        context.readField<Object?>(_personForyFields[2], value.tags),
+        readGeneratedField<Object?>(context, _personForyFields[2], value.tags),
         value.tags);
     value.favoriteColor = _readPersonFavoriteColor(
-        context.readField<Object?>(_personForyFields[3], value.favoriteColor),
+        readGeneratedField<Object?>(
+            context, _personForyFields[3], value.favoriteColor),
         value.favoriteColor);
     return value;
   }
@@ -186,8 +195,9 @@ void _installGeneratedForyBindings() {
     return;
   }
   _generatedForyBindingsInstalled = true;
-  Fory.bindGeneratedSerializerFactory(Color, _ColorForySerializer.new);
-  Fory.bindGeneratedSerializerFactory(Person, _PersonForySerializer.new);
+  Fory.bindGeneratedEnumFactory(Color, _ColorForySerializer.new);
+  Fory.bindGeneratedStructFactory(Person, _PersonForySerializer.new,
+      evolving: true, fields: _personForyFieldMetadata);
 }
 
 void _registerExampleForyType(Fory fory, Type type,

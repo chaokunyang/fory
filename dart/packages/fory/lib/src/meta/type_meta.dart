@@ -1,5 +1,6 @@
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
+import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
 /// Internal representation of the wire-level type metadata for one value.
@@ -52,8 +53,10 @@ final class TypeMetaEncoder {
     Buffer buffer,
     TypeMeta typeMeta, {
     required void Function(TypeMeta typeMeta) writeSharedTypeDef,
-    required void Function(String value) writePackageMetaString,
-    required void Function(String value) writeTypeNameMetaString,
+    required void Function(EncodedMetaStringInternal value)
+        writePackageMetaString,
+    required void Function(EncodedMetaStringInternal value)
+        writeTypeNameMetaString,
   }) {
     buffer.writeVarUint32Small7(typeMeta.wireTypeId);
     if (typeMeta.writesUserTypeId) {
@@ -65,8 +68,8 @@ final class TypeMetaEncoder {
       return;
     }
     if (typeMeta.writesNamedType) {
-      writePackageMetaString(typeMeta.resolvedType.namespace!);
-      writeTypeNameMetaString(typeMeta.resolvedType.typeName!);
+      writePackageMetaString(typeMeta.resolvedType.encodedNamespace!);
+      writeTypeNameMetaString(typeMeta.resolvedType.encodedTypeName!);
     }
   }
 
@@ -106,11 +109,13 @@ final class TypeMetaDecoder {
     required ResolvedTypeInternal Function(int wireTypeId)
         resolveBuiltinWireType,
     required ResolvedTypeInternal Function(int id) resolveUserById,
-    required ResolvedTypeInternal Function(String namespace, String typeName)
-        resolveUserByName,
+    required ResolvedTypeInternal Function(
+      EncodedMetaStringInternal namespace,
+      EncodedMetaStringInternal typeName,
+    ) resolveUserByEncodedName,
     required TypeMeta Function() readSharedTypeDef,
-    required String Function() readPackageMetaString,
-    required String Function() readTypeNameMetaString,
+    required EncodedMetaStringInternal Function() readPackageMetaString,
+    required EncodedMetaStringInternal Function() readTypeNameMetaString,
   }) {
     final wireTypeId = buffer.readVarUint32Small7();
     if (_isBuiltinWireType(wireTypeId)) {
@@ -138,7 +143,7 @@ final class TypeMetaDecoder {
           return readSharedTypeDef();
         }
         return TypeMeta(
-          resolvedType: resolveUserByName(
+          resolvedType: resolveUserByEncodedName(
               readPackageMetaString(), readTypeNameMetaString()),
           wireTypeId: wireTypeId,
           sharedTypeDef: false,

@@ -17,9 +17,11 @@
  * under the License.
  */
 
+// ignore_for_file: invalid_use_of_internal_member
+
 library;
 
-import 'package:fory/fory.dart';
+import 'package:fory/codegen.dart';
 
 part 'xlang_test_models.g.dart';
 
@@ -31,6 +33,33 @@ abstract final class _WireTypeIds {
   static const int compatibleStruct = 28;
   static const int ext = 31;
   static const int union = 33;
+}
+
+bool _manualStructBindingsInstalled = false;
+
+void _installManualStructBindings() {
+  if (_manualStructBindingsInstalled) {
+    return;
+  }
+  _manualStructBindingsInstalled = true;
+  Fory.bindGeneratedStructFactory(
+    StructWithUnion2,
+    _StructWithUnion2Serializer.new,
+    evolving: true,
+    fields: _structWithUnion2Fields,
+  );
+  Fory.bindGeneratedStructFactory(
+    RefOverrideContainer,
+    _RefOverrideContainerSerializer.new,
+    evolving: true,
+    fields: _refOverrideContainerFields,
+  );
+  Fory.bindGeneratedStructFactory(
+    MyWrapper,
+    _MyWrapperSerializer.new,
+    evolving: true,
+    fields: _myWrapperFields,
+  );
 }
 
 void registerXlangType(
@@ -61,9 +90,9 @@ void registerXlangType(
     return;
   }
   if (type == StructWithUnion2) {
-    fory.registerSerializer(
+    _installManualStructBindings();
+    fory.register(
       StructWithUnion2,
-      const _StructWithUnion2Serializer(),
       id: id,
       namespace: namespace,
       typeName: typeName,
@@ -71,9 +100,9 @@ void registerXlangType(
     return;
   }
   if (type == RefOverrideContainer) {
-    fory.registerSerializer(
+    _installManualStructBindings();
+    fory.register(
       RefOverrideContainer,
-      const _RefOverrideContainerSerializer(),
       id: id,
       namespace: namespace,
       typeName: typeName,
@@ -81,9 +110,9 @@ void registerXlangType(
     return;
   }
   if (type == MyWrapper) {
-    fory.registerSerializer(
+    _installManualStructBindings();
+    fory.register(
       MyWrapper,
-      const _MyWrapperSerializer(),
       id: id,
       namespace: namespace,
       typeName: typeName,
@@ -595,24 +624,21 @@ class UnsignedSchemaCompatible {
   int u64TaggedField2 = 0;
 }
 
-final class _Union2Serializer extends Serializer<Union2> {
+final class _Union2Serializer extends UnionSerializer<Union2> {
   const _Union2Serializer();
-
-  @override
-  bool get isUnion => true;
 
   @override
   void write(WriteContext context, Union2 value) {
     final buffer = context.buffer;
     buffer.writeVarUint32(value.index);
-    context.writeAny(value.value);
+    context.writeRef(value.value);
   }
 
   @override
   Union2 read(ReadContext context) {
     final buffer = context.buffer;
     final index = buffer.readVarUint32();
-    final value = context.readAny();
+    final value = context.readRef();
     if (index == 0 && value is String) {
       return Union2.ofString(value);
     }
@@ -654,28 +680,35 @@ const List<Map<String, Object?>> _structWithUnion2Fields =
   },
 ];
 
+final List<Object> _structWithUnion2GeneratedFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _structWithUnion2Fields[0]),
+  ],
+);
+
 final class _StructWithUnion2Serializer extends Serializer<StructWithUnion2> {
   const _StructWithUnion2Serializer();
 
   @override
-  bool get isStruct => true;
-
-  @override
-  List<Map<String, Object?>> get fields => _structWithUnion2Fields;
-
-  @override
   void write(WriteContext context, StructWithUnion2 value) {
-    context.writeField(_structWithUnion2Fields[0], value.union);
+    writeGeneratedField(
+      context,
+      _structWithUnion2GeneratedFields[0],
+      value.union,
+    );
   }
 
   @override
   StructWithUnion2 read(ReadContext context) {
     final value = StructWithUnion2();
     context.reference(value);
-    value.union = context.readField<Object?>(
-      _structWithUnion2Fields[0],
-      value.union,
-    ) as Union2;
+    value.union =
+        readGeneratedField<Object?>(
+          context,
+          _structWithUnion2GeneratedFields[0],
+          value.union,
+        )
+            as Union2;
     return value;
   }
 }
@@ -736,34 +769,46 @@ const List<Map<String, Object?>> _refOverrideContainerFields =
   },
 ];
 
+final List<Object> _refOverrideContainerGeneratedFields =
+    List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _refOverrideContainerFields[0]),
+    generatedField(1, _refOverrideContainerFields[1]),
+  ],
+);
+
 final class _RefOverrideContainerSerializer
     extends Serializer<RefOverrideContainer> {
   const _RefOverrideContainerSerializer();
 
   @override
-  bool get isStruct => true;
-
-  @override
-  List<Map<String, Object?>> get fields => _refOverrideContainerFields;
-
-  @override
   void write(WriteContext context, RefOverrideContainer value) {
-    context.writeField(_refOverrideContainerFields[0], value.listField);
-    context.writeField(_refOverrideContainerFields[1], value.mapField);
+    writeGeneratedField(
+      context,
+      _refOverrideContainerGeneratedFields[0],
+      value.listField,
+    );
+    writeGeneratedField(
+      context,
+      _refOverrideContainerGeneratedFields[1],
+      value.mapField,
+    );
   }
 
   @override
   RefOverrideContainer read(ReadContext context) {
     final value = RefOverrideContainer();
     context.reference(value);
-    final listValue = context.readField<Object?>(
-      _refOverrideContainerFields[0],
+    final listValue = readGeneratedField<Object?>(
+      context,
+      _refOverrideContainerGeneratedFields[0],
       value.listField,
     ) as List;
     value.listField =
         listValue.cast<RefOverrideElement>().toList(growable: false);
-    final mapValue = context.readField<Object?>(
-      _refOverrideContainerFields[1],
+    final mapValue = readGeneratedField<Object?>(
+      context,
+      _refOverrideContainerGeneratedFields[1],
       value.mapField,
     ) as Map;
     value.mapField = Map<String, RefOverrideElement>.from(
@@ -817,36 +862,41 @@ const List<Map<String, Object?>> _myWrapperFields = <Map<String, Object?>>[
   },
 ];
 
+final List<Object> _myWrapperGeneratedFields = List<Object>.unmodifiable(
+  <Object>[
+    generatedField(0, _myWrapperFields[0]),
+    generatedField(1, _myWrapperFields[1]),
+    generatedField(2, _myWrapperFields[2]),
+  ],
+);
+
 final class _MyWrapperSerializer extends Serializer<MyWrapper> {
   const _MyWrapperSerializer();
 
   @override
-  bool get isStruct => true;
-
-  @override
-  List<Map<String, Object?>> get fields => _myWrapperFields;
-
-  @override
   void write(WriteContext context, MyWrapper value) {
-    context.writeField(_myWrapperFields[0], value.color);
-    context.writeField(_myWrapperFields[1], value.myExt);
-    context.writeField(_myWrapperFields[2], value.myStruct);
+    writeGeneratedField(context, _myWrapperGeneratedFields[0], value.color);
+    writeGeneratedField(context, _myWrapperGeneratedFields[1], value.myExt);
+    writeGeneratedField(context, _myWrapperGeneratedFields[2], value.myStruct);
   }
 
   @override
   MyWrapper read(ReadContext context) {
     final value = MyWrapper();
     context.reference(value);
-    value.color = context.readField<Object?>(
-      _myWrapperFields[0],
+    value.color = readGeneratedField<Object?>(
+      context,
+      _myWrapperGeneratedFields[0],
       value.color,
     ) as Color;
-    value.myExt = context.readField<Object?>(
-      _myWrapperFields[1],
+    value.myExt = readGeneratedField<Object?>(
+      context,
+      _myWrapperGeneratedFields[1],
       value.myExt,
     ) as MyExt;
-    value.myStruct = context.readField<Object?>(
-      _myWrapperFields[2],
+    value.myStruct = readGeneratedField<Object?>(
+      context,
+      _myWrapperGeneratedFields[2],
       value.myStruct,
     ) as MyStruct;
     return value;

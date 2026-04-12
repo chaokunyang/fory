@@ -4,6 +4,9 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
+import 'package:fory/src/context/compatible_struct_metadata_store.dart';
+import 'package:fory/src/context/meta_string_reader.dart';
+import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/ref_reader.dart';
 import 'package:fory/src/context/ref_writer.dart';
@@ -22,8 +25,8 @@ import 'package:fory/src/serializer/serializer.dart';
 final class Fory {
   static const int _nullHeaderFlag = 0x01;
   static const int _xlangHeaderFlag = 0x02;
-  static final Map<Type, Serializer<Object?> Function()>
-      _generatedSerializerFactories = <Type, Serializer<Object?> Function()>{};
+  static final Map<Type, _GeneratedBinding> _generatedBindings =
+      <Type, _GeneratedBinding>{};
 
   late final Buffer _buffer;
   late final WriteContext _writeContext;
@@ -37,8 +40,21 @@ final class Fory {
   Fory({Config config = const Config()}) {
     _buffer = Buffer();
     _typeResolver = TypeResolver(config);
-    _writeContext = WriteContext(config, _typeResolver, RefWriter());
-    _readContext = ReadContext(config, _typeResolver, RefReader());
+    final compatibleStructMetadata = CompatibleStructMetadataStore();
+    _writeContext = WriteContext(
+      config,
+      _typeResolver,
+      RefWriter(),
+      MetaStringWriter(),
+      compatibleStructMetadata,
+    );
+    _readContext = ReadContext(
+      config,
+      _typeResolver,
+      RefReader(),
+      MetaStringReader(_typeResolver),
+      compatibleStructMetadata,
+    );
   }
 
   /// Serializes [value] into a new byte array.
@@ -64,7 +80,7 @@ final class Fory {
       return;
     }
     buffer.writeUint8(_xlangHeaderFlag);
-    _writeContext.writeAny(value, trackRef: trackRef);
+    _writeContext.writeRootValue(value, trackRef: trackRef);
   }
 
   /// Deserializes [bytes] and then checks that the result is assignable to [T].
@@ -89,9 +105,10 @@ final class Fory {
     }
     if ((header & _xlangHeaderFlag) == 0) {
       throw StateError(
-          'Only xlang payloads are supported by the Dart runtime.');
+        'Only xlang payloads are supported by the Dart runtime.',
+      );
     }
-    final value = _readContext.readAny();
+    final value = _readContext.readRef();
     if (value is T) {
       return value;
     }
@@ -106,12 +123,33 @@ final class Fory {
   /// application code should use the generated registration helper instead of
   /// calling this method directly.
   @internal
-  static void bindGeneratedSerializerFactory(
+  static void bindGeneratedEnumFactory(
     Type type,
-    Serializer Function() serializerFactory,
+    Serializer<Object?> Function() serializerFactory,
   ) {
-    _generatedSerializerFactories[type] =
-        () => serializerFactory() as Serializer<Object?>;
+    _generatedBindings[type] = _GeneratedBinding(
+      kind: RegistrationKindInternal.enumType,
+      serializerFactory: serializerFactory,
+    );
+  }
+
+  /// Binds a generated struct serializer factory for [type].
+  ///
+  /// Generated part files and package-internal handwritten generated-style
+  /// serializers call this before they invoke [register].
+  @internal
+  static void bindGeneratedStructFactory(
+    Type type,
+    Serializer<Object?> Function() serializerFactory, {
+    required bool evolving,
+    required List<Map<String, Object?>> fields,
+  }) {
+    _generatedBindings[type] = _GeneratedBinding(
+      kind: RegistrationKindInternal.struct,
+      serializerFactory: serializerFactory,
+      evolving: evolving,
+      fieldMetadata: List<Map<String, Object?>>.unmodifiable(fields),
+    );
   }
 
   /// Registers a generated type.
@@ -129,10 +167,16 @@ final class Fory {
     String? namespace,
     String? typeName,
   }) {
-    final serializerFactory = _generatedSerializerFactory(type);
-    _typeResolver.register(
+    final binding = _generatedBinding(type);
+    final serializer = binding.serializerFactory();
+    _typeResolver.registerGenerated(
       type,
-      serializerFactory(),
+      serializer,
+      kind: binding.kind,
+      evolving: binding.evolving,
+      fields: binding.fieldMetadata
+          .map(FieldMetadataInternal.fromMetadata)
+          .toList(growable: false),
       id: id,
       namespace: namespace,
       typeName: typeName,
@@ -154,7 +198,7 @@ final class Fory {
     String? namespace,
     String? typeName,
   }) {
-    _typeResolver.register(
+    _typeResolver.registerSerializer(
       type,
       serializer,
       id: id,
@@ -163,13 +207,27 @@ final class Fory {
     );
   }
 
-  Serializer<Object?> Function() _generatedSerializerFactory(Type type) {
-    final serializerFactory = _generatedSerializerFactories[type];
-    if (serializerFactory == null) {
+  _GeneratedBinding _generatedBinding(Type type) {
+    final binding = _generatedBindings[type];
+    if (binding == null) {
       throw StateError(
         'Type $type has no generated serializer binding. Call the generated registration helper for this library or use registerSerializer for manual serializers.',
       );
     }
-    return serializerFactory;
+    return binding;
   }
+}
+
+final class _GeneratedBinding {
+  final RegistrationKindInternal kind;
+  final Serializer<Object?> Function() serializerFactory;
+  final bool evolving;
+  final List<Map<String, Object?>> fieldMetadata;
+
+  const _GeneratedBinding({
+    required this.kind,
+    required this.serializerFactory,
+    this.evolving = true,
+    this.fieldMetadata = const <Map<String, Object?>>[],
+  });
 }

@@ -9,17 +9,17 @@ final Object structReadSlotsKey = Object();
 
 @internal
 final class StructWriteSlots {
-  final List<FieldInfoInternal> orderedFields;
-  final List<FieldInfoInternal?> _fieldsBySlot;
+  final List<FieldInfo> orderedFields;
+  final List<FieldInfo?> _fieldsBySlot;
 
   StructWriteSlots(this.orderedFields, int fieldCount)
-      : _fieldsBySlot = List<FieldInfoInternal?>.filled(fieldCount, null) {
+      : _fieldsBySlot = List<FieldInfo?>.filled(fieldCount, null) {
     for (final field in orderedFields) {
       _fieldsBySlot[field.slot] = field;
     }
   }
 
-  FieldInfoInternal? fieldForSlot(int slot) => _fieldsBySlot[slot];
+  FieldInfo? fieldForSlot(int slot) => _fieldsBySlot[slot];
 }
 
 @internal

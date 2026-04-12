@@ -190,7 +190,7 @@ void bindGeneratedStruct(
   Type type,
   Serializer<Object?> Function() serializerFactory, {
   required bool evolving,
-  required List<FieldInfoInternal> fields,
+  required List<FieldInfo> fields,
   GeneratedStructCompatibleFactory<Object>? compatibleFactory,
   List<GeneratedStructCompatibleFieldReader<Object>>? compatibleReadersBySlot,
 }) {

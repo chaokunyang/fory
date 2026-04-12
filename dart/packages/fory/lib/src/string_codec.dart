@@ -9,15 +9,15 @@ const int stringUtf8Encoding = 2;
 const Utf8Decoder _utf8Decoder = Utf8Decoder();
 const int _utf8ReplacementLength = 3;
 
-void writeStringInternal(Buffer buffer, String value) {
+void writeString(Buffer buffer, String value) {
   if (_firstNonLatin1Index(value) < 0) {
-    _writeLatin1Internal(buffer, value);
+    _writeLatin1(buffer, value);
   } else {
-    _writeUtf8Internal(buffer, value);
+    _writeUtf8(buffer, value);
   }
 }
 
-String decodeStringInternal(Uint8List bytes, int encoding) {
+String decodeString(Uint8List bytes, int encoding) {
   if (bytes.isEmpty) {
     return '';
   }
@@ -49,7 +49,7 @@ String decodeStringInternal(Uint8List bytes, int encoding) {
   }
 }
 
-String readStringFromBufferInternal(
+String readStringFromBuffer(
   Buffer buffer,
   int byteLength,
   int encoding,
@@ -57,9 +57,9 @@ String readStringFromBufferInternal(
   if (byteLength == 0) {
     return '';
   }
-  final start = bufferReaderIndexInternal(buffer);
+  final start = bufferReaderIndex(buffer);
   buffer.skip(byteLength);
-  final bytes = bufferBytesInternal(buffer);
+  final bytes = bufferBytes(buffer);
   switch (encoding) {
     case stringLatin1Encoding:
       return String.fromCharCodes(bytes, start, start + byteLength);
@@ -76,7 +76,7 @@ String readStringFromBufferInternal(
         );
       }
       final codeUnits = Uint16List(codeUnitCount);
-      final view = bufferByteDataInternal(buffer);
+      final view = bufferByteData(buffer);
       for (var index = 0; index < codeUnitCount; index += 1) {
         codeUnits[index] = view.getUint16(start + (index * 2), Endian.little);
       }
@@ -88,28 +88,28 @@ String readStringFromBufferInternal(
   }
 }
 
-void _writeLatin1Internal(Buffer buffer, String value) {
+void _writeLatin1(Buffer buffer, String value) {
   final length = value.length;
   final header = (length << 2) | stringLatin1Encoding;
   final headerLength = _varUint36SmallLength(header);
   buffer.ensureWritable(headerLength + length);
-  final bytes = bufferBytesInternal(buffer);
-  final start = bufferWriterIndexInternal(buffer);
+  final bytes = bufferBytes(buffer);
+  final start = bufferWriterIndex(buffer);
   var offset = start + _writeVarUint36Small(bytes, start, header);
   for (var index = 0; index < length; index += 1) {
     bytes[offset] = value.codeUnitAt(index);
     offset += 1;
   }
-  bufferSetWriterIndexInternal(buffer, offset);
+  bufferSetWriterIndex(buffer, offset);
 }
 
-void _writeUtf8Internal(Buffer buffer, String value) {
+void _writeUtf8(Buffer buffer, String value) {
   final maxUtf8Length = value.length * 3;
   final provisionalHeader = (maxUtf8Length << 2) | stringUtf8Encoding;
   final provisionalHeaderLength = _varUint36SmallLength(provisionalHeader);
   buffer.ensureWritable(provisionalHeaderLength + maxUtf8Length);
-  final bytes = bufferBytesInternal(buffer);
-  final start = bufferWriterIndexInternal(buffer);
+  final bytes = bufferBytes(buffer);
+  final start = bufferWriterIndex(buffer);
   final payloadStart = start + provisionalHeaderLength;
   final payloadEnd = _writeUtf8Bytes(bytes, payloadStart, value);
   final utf8Length = payloadEnd - payloadStart;
@@ -124,7 +124,7 @@ void _writeUtf8Internal(Buffer buffer, String value) {
       payloadStart,
     );
   }
-  bufferSetWriterIndexInternal(buffer, start + headerLength + utf8Length);
+  bufferSetWriterIndex(buffer, start + headerLength + utf8Length);
 }
 
 int _firstNonLatin1Index(String value) {

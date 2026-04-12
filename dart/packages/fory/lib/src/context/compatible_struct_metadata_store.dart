@@ -1,17 +1,16 @@
 import 'package:fory/src/resolver/type_resolver.dart';
 
 final class CompatibleStructMetadataStore {
-  Expando<StructMetadataInternal> _metadata =
-      Expando<StructMetadataInternal>('fory_compatible_struct_metadata');
+  Expando<StructMetadata> _metadata =
+      Expando<StructMetadata>('fory_compatible_struct_metadata');
 
-  void remember(Object value, StructMetadataInternal metadata) {
+  void remember(Object value, StructMetadata metadata) {
     _metadata[value] = metadata;
   }
 
-  StructMetadataInternal? metadataFor(Object value) => _metadata[value];
+  StructMetadata? metadataFor(Object value) => _metadata[value];
 
   void reset() {
-    _metadata =
-        Expando<StructMetadataInternal>('fory_compatible_struct_metadata');
+    _metadata = Expando<StructMetadata>('fory_compatible_struct_metadata');
   }
 }

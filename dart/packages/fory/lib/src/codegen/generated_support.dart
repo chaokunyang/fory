@@ -36,17 +36,17 @@ final class GeneratedWriteCursor {
   );
 
   factory GeneratedWriteCursor.reserve(Buffer buffer, int maxBytes) {
-    final start = bufferReserveBytesInternal(buffer, maxBytes);
+    final start = bufferReserveBytes(buffer, maxBytes);
     return GeneratedWriteCursor._(
       buffer,
-      bufferBytesInternal(buffer),
-      bufferByteDataInternal(buffer),
+      bufferBytes(buffer),
+      bufferByteData(buffer),
       start,
     );
   }
 
   void finish() {
-    bufferSetWriterIndexInternal(_buffer, _offset);
+    bufferSetWriterIndex(_buffer, _offset);
   }
 
   void writeBool(bool value) {
@@ -207,13 +207,13 @@ final class GeneratedReadCursor {
   factory GeneratedReadCursor.start(Buffer buffer) {
     return GeneratedReadCursor._(
       buffer,
-      bufferByteDataInternal(buffer),
-      bufferReaderIndexInternal(buffer),
+      bufferByteData(buffer),
+      bufferReaderIndex(buffer),
     );
   }
 
   void finish() {
-    bufferSetReaderIndexInternal(_buffer, _offset);
+    bufferSetReaderIndex(_buffer, _offset);
   }
 
   bool readBool() => readUint8() != 0;
@@ -386,15 +386,15 @@ final class GeneratedFieldType {
     required this.arguments,
   });
 
-  resolver.FieldTypeInternal toInternal() {
-    return resolver.FieldTypeInternal(
+  resolver.FieldType toFieldType() {
+    return resolver.FieldType(
       type: type,
       typeId: typeId,
       nullable: nullable,
       ref: ref,
       dynamic: dynamic,
       arguments: arguments
-          .map((argument) => argument.toInternal())
+          .map((argument) => argument.toFieldType())
           .toList(growable: false),
     );
   }
@@ -414,12 +414,12 @@ final class GeneratedFieldInfo {
     required this.fieldType,
   });
 
-  resolver.FieldInfoInternal toInternal() {
-    return resolver.FieldInfoInternal(
+  resolver.FieldInfo toFieldInfo() {
+    return resolver.FieldInfo(
       name: name,
       identifier: identifier,
       id: id,
-      fieldType: fieldType.toInternal(),
+      fieldType: fieldType.toFieldType(),
     );
   }
 }
@@ -436,7 +436,7 @@ final class GeneratedEnumRegistration {
 }
 
 @internal
-typedef GeneratedStructFieldInfo = resolver.FieldInfoInternal;
+typedef GeneratedStructFieldInfo = resolver.FieldInfo;
 
 @internal
 typedef GeneratedStructFieldInfoWriter<T> = void Function(
@@ -466,16 +466,16 @@ final class GeneratedStructRegistration<T> {
     required this.fields,
   });
 
-  late final List<resolver.FieldInfoInternal> internalFields =
-      List<resolver.FieldInfoInternal>.unmodifiable(
-    List<resolver.FieldInfoInternal>.generate(
+  late final List<resolver.FieldInfo> fieldInfos =
+      List<resolver.FieldInfo>.unmodifiable(
+    List<resolver.FieldInfo>.generate(
       fields.length,
-      (index) => fields[index].toInternal().copyWith(slot: index),
+      (index) => fields[index].toFieldInfo().copyWith(slot: index),
     ),
   );
 
   late final List<int> defaultSlots = List<int>.unmodifiable(
-    List<int>.generate(internalFields.length, (index) => index),
+    List<int>.generate(fieldInfos.length, (index) => index),
   );
 }
 
@@ -513,7 +513,7 @@ void registerGeneratedStruct<T>(
     registration.type,
     registration.serializerFactory,
     evolving: registration.evolving,
-    fields: registration.internalFields,
+    fields: registration.fieldInfos,
     compatibleFactory: registration.compatibleFactory == null
         ? null
         : () => registration.compatibleFactory!() as Object,
@@ -607,7 +607,7 @@ T readGeneratedTypedArrayValue<T>(
 }
 
 @internal
-List<resolver.FieldInfoInternal> buildGeneratedStructFieldInfos(
+List<resolver.FieldInfo> buildGeneratedStructFieldInfos(
   resolver.TypeResolver typeResolver,
   GeneratedStructRegistration registration,
 ) {
@@ -620,7 +620,7 @@ List<resolver.FieldInfoInternal> buildGeneratedStructFieldInfos(
 @internal
 void writeGeneratedStructFieldInfoValue(
   WriteContext context,
-  resolver.FieldInfoInternal field,
+  resolver.FieldInfo field,
   Object? value,
 ) {
   final fieldType = field.fieldType;
@@ -645,7 +645,7 @@ void writeGeneratedStructFieldInfoValue(
 @internal
 Object? readGeneratedStructFieldInfoValue(
   ReadContext context,
-  resolver.FieldInfoInternal field, [
+  resolver.FieldInfo field, [
   Object? fallback,
 ]) {
   final fieldType = field.fieldType;
@@ -671,7 +671,7 @@ Object? readGeneratedStructFieldInfoValue(
 @internal
 List<T> readGeneratedDirectListValue<T>(
   ReadContext context,
-  resolver.FieldInfoInternal field,
+  resolver.FieldInfo field,
   T Function(Object? value) convert,
 ) {
   final fieldType = field.fieldType;
@@ -691,7 +691,7 @@ List<T> readGeneratedDirectListValue<T>(
 @internal
 Set<T> readGeneratedDirectSetValue<T>(
   ReadContext context,
-  resolver.FieldInfoInternal field,
+  resolver.FieldInfo field,
   T Function(Object? value) convert,
 ) {
   final fieldType = field.fieldType;
@@ -711,7 +711,7 @@ Set<T> readGeneratedDirectSetValue<T>(
 @internal
 Map<K, V> readGeneratedDirectMapValue<K, V>(
   ReadContext context,
-  resolver.FieldInfoInternal field,
+  resolver.FieldInfo field,
   K Function(Object? value) convertKey,
   V Function(Object? value) convertValue,
 ) {

@@ -32,7 +32,7 @@ const List<int> _fieldNameCompactEncodings = <int>[
   metaStringLowerUpperDigitSpecialEncoding,
 ];
 
-final class EncodedMetaStringInternal {
+final class EncodedMetaString {
   final Uint8List bytes;
   final int encoding;
   final int hash;
@@ -41,11 +41,11 @@ final class EncodedMetaStringInternal {
   final int secondWord0;
   final int secondWord1;
 
-  static final EncodedMetaStringInternal empty =
-      EncodedMetaStringInternal(Uint8List(0), metaStringUtf8Encoding);
+  static final EncodedMetaString empty =
+      EncodedMetaString(Uint8List(0), metaStringUtf8Encoding);
 
-  EncodedMetaStringInternal(this.bytes, this.encoding)
-      : hash = metaStringHashInternal(bytes, encoding: encoding),
+  EncodedMetaString(this.bytes, this.encoding)
+      : hash = metaStringHash(bytes, encoding: encoding),
         firstWord0 = _packLittleEndian32(bytes, 0),
         firstWord1 = _packLittleEndian32(bytes, 4),
         secondWord0 = _packLittleEndian32(bytes, 8),
@@ -72,69 +72,66 @@ final class EncodedMetaStringInternal {
   }
 }
 
-EncodedMetaStringInternal encodePackageMetaStringInternal(String value) =>
-    _encodeMetaStringInternal(
+EncodedMetaString encodePackageMetaString(String value) => _encodeMetaString(
       value,
       specialChar1: '.',
       specialChar2: '_',
       allowedEncodings: _packageNameCompactEncodings,
     );
 
-EncodedMetaStringInternal encodeTypeNameMetaStringInternal(String value) =>
-    _encodeMetaStringInternal(
+EncodedMetaString encodeTypeNameMetaString(String value) => _encodeMetaString(
       value,
       specialChar1: r'$',
       specialChar2: '_',
       allowedEncodings: _typeNameCompactEncodings,
     );
 
-EncodedMetaStringInternal encodeFieldNameMetaStringInternal(String value) =>
-    _encodeMetaStringInternal(
+EncodedMetaString encodeFieldNameMetaString(String value) => _encodeMetaString(
       value,
       specialChar1: r'$',
       specialChar2: '_',
       allowedEncodings: _fieldNameCompactEncodings,
     );
 
-int packageNameCompactEncodingInternal(int encoding) =>
+int packageNameCompactEncoding(int encoding) =>
     _compactEncodingIndex(encoding, _packageNameCompactEncodings, 'package');
 
-int typeNameCompactEncodingInternal(int encoding) =>
+int typeNameCompactEncoding(int encoding) =>
     _compactEncodingIndex(encoding, _typeNameCompactEncodings, 'type name');
 
-int fieldNameCompactEncodingInternal(int encoding) =>
+int fieldNameCompactEncoding(int encoding) =>
     _compactEncodingIndex(encoding, _fieldNameCompactEncodings, 'field name');
 
-int packageNameEncodingInternal(int compactEncoding) => _compactEncodingValue(
+int packageNameEncoding(int compactEncoding) => _compactEncodingValue(
       compactEncoding,
       _packageNameCompactEncodings,
       'package',
     );
 
-int typeNameEncodingInternal(int compactEncoding) => _compactEncodingValue(
+int typeNameEncoding(int compactEncoding) => _compactEncodingValue(
       compactEncoding,
       _typeNameCompactEncodings,
       'type name',
     );
 
-String decodePackageMetaStringInternal(List<int> bytes, int encoding) =>
-    decodeMetaStringInternal(
+String decodePackageMetaString(List<int> bytes, int encoding) =>
+    decodeMetaString(
       bytes,
       encoding,
       specialChar1: '.',
       specialChar2: '_',
     );
 
-String decodeTypeNameMetaStringInternal(List<int> bytes, int encoding) =>
-    decodeMetaStringInternal(
+String decodeTypeNameMetaString(List<int> bytes, int encoding) =>
+    decodeMetaString(
       bytes,
       encoding,
       specialChar1: r'$',
       specialChar2: '_',
     );
 
-String decodePackageNameInternal(List<int> bytes, int compactEncoding) =>
-    decodePackageMetaStringInternal(
+String decodePackageName(List<int> bytes, int compactEncoding) =>
+    decodePackageMetaString(
       bytes,
       _compactEncodingValue(
         compactEncoding,
@@ -143,8 +140,8 @@ String decodePackageNameInternal(List<int> bytes, int compactEncoding) =>
       ),
     );
 
-String decodeTypeNameInternal(List<int> bytes, int compactEncoding) =>
-    decodeTypeNameMetaStringInternal(
+String decodeTypeName(List<int> bytes, int compactEncoding) =>
+    decodeTypeNameMetaString(
       bytes,
       _compactEncodingValue(
         compactEncoding,
@@ -153,8 +150,8 @@ String decodeTypeNameInternal(List<int> bytes, int compactEncoding) =>
       ),
     );
 
-String decodeFieldNameInternal(List<int> bytes, int compactEncoding) =>
-    decodeMetaStringInternal(
+String decodeFieldName(List<int> bytes, int compactEncoding) =>
+    decodeMetaString(
       bytes,
       _compactEncodingValue(
         compactEncoding,
@@ -165,7 +162,7 @@ String decodeFieldNameInternal(List<int> bytes, int compactEncoding) =>
       specialChar2: '_',
     );
 
-String decodeMetaStringInternal(
+String decodeMetaString(
   List<int> bytes,
   int encoding, {
   required String specialChar1,
@@ -210,18 +207,18 @@ int _packLittleEndian32(List<int> bytes, int offset) {
   return value;
 }
 
-EncodedMetaStringInternal _encodeMetaStringInternal(
+EncodedMetaString _encodeMetaString(
   String value, {
   required String specialChar1,
   required String specialChar2,
   required List<int> allowedEncodings,
 }) {
   if (value.isEmpty) {
-    return EncodedMetaStringInternal.empty;
+    return EncodedMetaString.empty;
   }
   for (final codeUnit in value.codeUnits) {
     if (codeUnit > 0x7f) {
-      return EncodedMetaStringInternal(
+      return EncodedMetaString(
         Uint8List.fromList(utf8.encode(value)),
         metaStringUtf8Encoding,
       );
@@ -235,12 +232,12 @@ EncodedMetaStringInternal _encodeMetaStringInternal(
   );
   switch (encoding) {
     case metaStringLowerSpecialEncoding:
-      return EncodedMetaStringInternal(
+      return EncodedMetaString(
         _encodeLowerSpecial(value.codeUnits),
         encoding,
       );
     case metaStringLowerUpperDigitSpecialEncoding:
-      return EncodedMetaStringInternal(
+      return EncodedMetaString(
         _encodeLowerUpperDigitSpecial(
           value.codeUnits,
           specialChar1: specialChar1,
@@ -251,17 +248,17 @@ EncodedMetaStringInternal _encodeMetaStringInternal(
     case metaStringFirstToLowerSpecialEncoding:
       final codeUnits = value.codeUnits.toList(growable: false);
       codeUnits[0] = _toLowerAscii(codeUnits.first);
-      return EncodedMetaStringInternal(
+      return EncodedMetaString(
         _encodeLowerSpecial(codeUnits),
         encoding,
       );
     case metaStringAllToLowerSpecialEncoding:
-      return EncodedMetaStringInternal(
+      return EncodedMetaString(
         _encodeAllToLowerSpecial(value.codeUnits),
         encoding,
       );
     case metaStringUtf8Encoding:
-      return EncodedMetaStringInternal(
+      return EncodedMetaString(
         Uint8List.fromList(utf8.encode(value)),
         encoding,
       );

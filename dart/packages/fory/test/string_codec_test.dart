@@ -8,14 +8,14 @@ void main() {
       const value = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789é';
       final buffer = Buffer();
 
-      writeStringInternal(buffer, value);
+      writeString(buffer, value);
 
       final header = buffer.readVarUint36Small();
       final encoding = header & 0x03;
       final byteLength = header >>> 2;
       expect(encoding, equals(stringLatin1Encoding));
       expect(
-        readStringFromBufferInternal(buffer, byteLength, encoding),
+        readStringFromBuffer(buffer, byteLength, encoding),
         equals(value),
       );
     });
@@ -24,14 +24,14 @@ void main() {
       const value = '你好，Fory🙂';
       final buffer = Buffer();
 
-      writeStringInternal(buffer, value);
+      writeString(buffer, value);
 
       final header = buffer.readVarUint36Small();
       final encoding = header & 0x03;
       final byteLength = header >>> 2;
       expect(encoding, equals(stringUtf8Encoding));
       expect(
-        readStringFromBufferInternal(buffer, byteLength, encoding),
+        readStringFromBuffer(buffer, byteLength, encoding),
         equals(value),
       );
     });
@@ -40,14 +40,14 @@ void main() {
       const value = '';
       final buffer = Buffer();
 
-      writeStringInternal(buffer, value);
+      writeString(buffer, value);
 
       final header = buffer.readVarUint36Small();
       final encoding = header & 0x03;
       final byteLength = header >>> 2;
       expect(byteLength, equals(0));
       expect(
-        readStringFromBufferInternal(buffer, byteLength, encoding),
+        readStringFromBuffer(buffer, byteLength, encoding),
         equals(value),
       );
     });

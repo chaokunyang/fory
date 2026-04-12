@@ -184,8 +184,8 @@ void _verifyVarBufferCase() {
 
 void _verifyMurmurCase() {
   final data = _readFile();
-  final shortHash = murmurHash3X64_128Internal(const <int>[1, 2, 8]);
-  final textHash = murmurHash3X64_128Internal(
+  final shortHash = murmurHash3X64_128(const <int>[1, 2, 8]);
+  final textHash = murmurHash3X64_128(
     utf8.encode('01234567890123456789'),
   );
   if (data.length == 32) {

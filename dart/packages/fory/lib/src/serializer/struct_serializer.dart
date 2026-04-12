@@ -16,19 +16,18 @@ typedef GeneratedStructCompatibleFieldReader<T> = void Function(
 
 final class StructSerializer extends Serializer<Object?> {
   final Serializer<Object?> _payloadSerializer;
-  final StructMetadataInternal _metadata;
+  final StructMetadata _metadata;
   final TypeResolver _typeResolver;
-  late final List<FieldInfoInternal> _localFields =
-      List<FieldInfoInternal>.unmodifiable(
-        List<FieldInfoInternal>.generate(
-          _metadata.fields.length,
-          (slot) => _typeResolver.fieldInfo(_metadata.fields[slot], slot: slot),
-        ),
-      );
-  late final Map<String, FieldInfoInternal>
-      _localFieldsByIdentifier = <String, FieldInfoInternal>{
-        for (final field in _localFields) field.identifier: field,
-      };
+  late final List<FieldInfo> _localFields = List<FieldInfo>.unmodifiable(
+    List<FieldInfo>.generate(
+      _metadata.fields.length,
+      (slot) => _typeResolver.fieldInfo(_metadata.fields[slot], slot: slot),
+    ),
+  );
+  late final Map<String, FieldInfo> _localFieldsByIdentifier =
+      <String, FieldInfo>{
+    for (final field in _localFields) field.identifier: field,
+  };
   final Expando<_CompatibleWriteLayout> _compatibleWriteLayouts =
       Expando<_CompatibleWriteLayout>('fory_compatible_write_layout');
   final Expando<_CompatibleReadLayout> _compatibleReadLayouts =
@@ -42,8 +41,7 @@ final class StructSerializer extends Serializer<Object?> {
     this._metadata,
     this._typeResolver, {
     GeneratedStructCompatibleFactory<Object>? compatibleFactory,
-    List<GeneratedStructCompatibleFieldReader<Object>>?
-        compatibleReadersBySlot,
+    List<GeneratedStructCompatibleFieldReader<Object>>? compatibleReadersBySlot,
   })  : _compatibleFactory = compatibleFactory,
         _compatibleReadersBySlot = compatibleReadersBySlot;
 
@@ -60,11 +58,11 @@ final class StructSerializer extends Serializer<Object?> {
     throw StateError('StructSerializer.read requires struct dispatch.');
   }
 
-  List<FieldInfoInternal> get localFields => _localFields;
+  List<FieldInfo> get localFields => _localFields;
 
-  SharedTypeDefInternal sharedTypeDefForWrite(
+  SharedTypeDef sharedTypeDefForWrite(
     WriteContext context,
-    TypeInfoInternal resolved,
+    TypeInfo resolved,
     Object value,
   ) {
     final layout = _compatibleWriteLayoutForValue(context, resolved, value);
@@ -76,12 +74,12 @@ final class StructSerializer extends Serializer<Object?> {
 
   void writeValue(
     WriteContext context,
-    TypeInfoInternal resolved,
+    TypeInfo resolved,
     Object value,
   ) {
     final internal = context;
     if (!context.config.compatible && context.config.checkStructVersion) {
-      context.buffer.writeUint32(schemaHashInternal(_metadata));
+      context.buffer.writeUint32(schemaHash(_metadata));
     }
     final previousCompatibleFields =
         _replaceWriteSlots(internal, resolved, value);
@@ -94,12 +92,12 @@ final class StructSerializer extends Serializer<Object?> {
 
   Object readValue(
     ReadContext context,
-    TypeInfoInternal resolved, {
+    TypeInfo resolved, {
     bool hasCurrentPreservedRef = false,
   }) {
     final internal = context;
     if (!context.config.compatible && context.config.checkStructVersion) {
-      final expected = schemaHashInternal(_metadata);
+      final expected = schemaHash(_metadata);
       final actual = context.buffer.readUint32();
       if (actual != expected) {
         throw StateError(
@@ -135,19 +133,21 @@ final class StructSerializer extends Serializer<Object?> {
 
   Object? _replaceWriteSlots(
     WriteContext context,
-    TypeInfoInternal resolved,
+    TypeInfo resolved,
     Object value,
   ) {
     final layout = _compatibleWriteLayoutForValue(context, resolved, value);
     return context.replaceContextObject(
       structWriteSlotsKey,
-      layout == null ? null : StructWriteSlots(layout.fields, _localFields.length),
+      layout == null
+          ? null
+          : StructWriteSlots(layout.fields, _localFields.length),
     );
   }
 
   _CompatibleWriteLayout? _compatibleWriteLayoutForValue(
     WriteContext context,
-    TypeInfoInternal resolved,
+    TypeInfo resolved,
     Object value,
   ) {
     if (!_metadata.evolving || !context.config.compatible) {
@@ -161,7 +161,7 @@ final class StructSerializer extends Serializer<Object?> {
     if (cached != null) {
       return cached;
     }
-    final orderedFields = <FieldInfoInternal>[];
+    final orderedFields = <FieldInfo>[];
     final usedIdentifiers = <String>{};
     for (final remoteField in remoteMetadata.fields) {
       final localField = _localFieldsByIdentifier[remoteField.identifier];
@@ -183,8 +183,7 @@ final class StructSerializer extends Serializer<Object?> {
         orderedFields.add(localField);
       }
     }
-    final fields =
-        List<FieldInfoInternal>.unmodifiable(orderedFields);
+    final fields = List<FieldInfo>.unmodifiable(orderedFields);
     final sharedTypeDef = context.typeResolver.sharedTypeDefForResolved(
       resolved,
       fields: fields,
@@ -196,7 +195,7 @@ final class StructSerializer extends Serializer<Object?> {
 
   Object _readCompatible(
     ReadContext context,
-    TypeInfoInternal resolved, {
+    TypeInfo resolved, {
     required bool hasCurrentPreservedRef,
   }) {
     final layout = _compatibleReadLayoutForResolved(resolved);
@@ -265,7 +264,7 @@ final class StructSerializer extends Serializer<Object?> {
   }
 
   _CompatibleReadLayout _compatibleReadLayoutForResolved(
-    TypeInfoInternal resolved,
+    TypeInfo resolved,
   ) {
     final remoteMetadata = resolved.remoteStructMetadata;
     if (remoteMetadata == null) {
@@ -275,7 +274,7 @@ final class StructSerializer extends Serializer<Object?> {
     if (cached != null) {
       return cached;
     }
-    final fields = <FieldInfoInternal?>[];
+    final fields = <FieldInfo?>[];
     for (final remoteField in remoteMetadata.fields) {
       final localField = _localFieldsByIdentifier[remoteField.identifier];
       if (localField == null) {
@@ -293,7 +292,7 @@ final class StructSerializer extends Serializer<Object?> {
     }
     final layout = _CompatibleReadLayout(
       remoteMetadata.fields,
-      List<FieldInfoInternal?>.unmodifiable(fields),
+      List<FieldInfo?>.unmodifiable(fields),
     );
     _compatibleReadLayouts[remoteMetadata] = layout;
     return layout;
@@ -301,7 +300,7 @@ final class StructSerializer extends Serializer<Object?> {
 
   void _rememberRemoteMetadata(
     ReadContext context,
-    TypeInfoInternal resolved,
+    TypeInfo resolved,
     Object value,
   ) {
     final remoteMetadata = resolved.remoteStructMetadata;
@@ -312,15 +311,15 @@ final class StructSerializer extends Serializer<Object?> {
 }
 
 final class _CompatibleWriteLayout {
-  final List<FieldInfoInternal> fields;
-  final SharedTypeDefInternal sharedTypeDef;
+  final List<FieldInfo> fields;
+  final SharedTypeDef sharedTypeDef;
 
   const _CompatibleWriteLayout(this.fields, this.sharedTypeDef);
 }
 
 final class _CompatibleReadLayout {
-  final List<FieldInfoInternal> remoteFields;
-  final List<FieldInfoInternal?> fields;
+  final List<FieldInfo> remoteFields;
+  final List<FieldInfo?> fields;
 
   const _CompatibleReadLayout(this.remoteFields, this.fields);
 }

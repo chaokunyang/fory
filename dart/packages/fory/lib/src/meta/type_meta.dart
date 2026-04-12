@@ -5,9 +5,9 @@ import 'package:fory/src/config.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
-/// Internal representation of the wire-level type metadata for one value.
+/// Wire-level type metadata for one value.
 final class TypeMeta {
-  final TypeInfoInternal resolvedType;
+  final TypeInfo resolvedType;
   final int wireTypeId;
   final bool sharedTypeDef;
 
@@ -52,12 +52,11 @@ final class TypeHeader {
 final class ParsedTypeMetaCache {
   static const int maxEntries = 8192;
 
-  final LinkedHashMap<int, TypeInfoInternal> _entries =
-      LinkedHashMap<int, TypeInfoInternal>();
+  final LinkedHashMap<int, TypeInfo> _entries = LinkedHashMap<int, TypeInfo>();
   int? _lastHeader;
-  TypeInfoInternal? _lastResolved;
+  TypeInfo? _lastResolved;
 
-  TypeInfoInternal? lookup(TypeHeader header) {
+  TypeInfo? lookup(TypeHeader header) {
     if (_lastHeader == header.value) {
       return _lastResolved;
     }
@@ -69,7 +68,7 @@ final class ParsedTypeMetaCache {
     return resolved;
   }
 
-  void remember(TypeHeader header, TypeInfoInternal resolved) {
+  void remember(TypeHeader header, TypeInfo resolved) {
     if (!_entries.containsKey(header.value) && _entries.length >= maxEntries) {
       _entries.remove(_entries.keys.first);
     }
@@ -83,7 +82,7 @@ final class ParsedTypeMetaCache {
 final class TypeMetaEncoder {
   const TypeMetaEncoder();
 
-  TypeMeta typeMetaFor(Config config, TypeInfoInternal resolvedType) {
+  TypeMeta typeMetaFor(Config config, TypeInfo resolvedType) {
     final wireTypeId = _wireTypeIdFor(config, resolvedType);
     final sharedTypeDef = wireTypeId == TypeIds.compatibleStruct ||
         wireTypeId == TypeIds.namedCompatibleStruct ||
@@ -103,10 +102,8 @@ final class TypeMetaEncoder {
     Buffer buffer,
     TypeMeta typeMeta, {
     required void Function(TypeMeta typeMeta) writeSharedTypeDef,
-    required void Function(EncodedMetaStringInternal value)
-        writePackageMetaString,
-    required void Function(EncodedMetaStringInternal value)
-        writeTypeNameMetaString,
+    required void Function(EncodedMetaString value) writePackageMetaString,
+    required void Function(EncodedMetaString value) writeTypeNameMetaString,
   }) {
     buffer.writeVarUint32Small7(typeMeta.wireTypeId);
     if (typeMeta.writesUserTypeId) {
@@ -123,20 +120,20 @@ final class TypeMetaEncoder {
     }
   }
 
-  int _wireTypeIdFor(Config config, TypeInfoInternal resolvedType) {
+  int _wireTypeIdFor(Config config, TypeInfo resolvedType) {
     switch (resolvedType.kind) {
-      case RegistrationKindInternal.builtin:
+      case RegistrationKind.builtin:
         return resolvedType.typeId;
-      case RegistrationKindInternal.enumType:
+      case RegistrationKind.enumType:
         return resolvedType.isNamed ? TypeIds.namedEnum : TypeIds.enumById;
-      case RegistrationKindInternal.ext:
+      case RegistrationKind.ext:
         return resolvedType.isNamed ? TypeIds.namedExt : TypeIds.ext;
-      case RegistrationKindInternal.union:
+      case RegistrationKind.union:
         if (resolvedType.userTypeId != null) {
           return TypeIds.typedUnion;
         }
         return resolvedType.isNamed ? TypeIds.namedUnion : TypeIds.union;
-      case RegistrationKindInternal.struct:
+      case RegistrationKind.struct:
         final compatible =
             config.compatible && resolvedType.structMetadata!.evolving;
         if (compatible) {
@@ -156,20 +153,20 @@ final class TypeMetaDecoder {
   TypeMeta read(
     Buffer buffer, {
     required Config config,
-    required TypeInfoInternal Function(int wireTypeId) resolveBuiltinWireType,
-    required TypeInfoInternal Function(int id) resolveUserById,
-    required TypeInfoInternal Function(
+    required TypeInfo Function(int wireTypeId) resolveBuiltinWireType,
+    required TypeInfo Function(int id) resolveUserById,
+    required TypeInfo Function(
       int wireTypeId,
-      EncodedMetaStringInternal namespace,
-      EncodedMetaStringInternal typeName,
+      EncodedMetaString namespace,
+      EncodedMetaString typeName,
     ) resolveUserByEncodedNameCached,
-    required TypeInfoInternal? Function(int wireTypeId) expectedNamedType,
+    required TypeInfo? Function(int wireTypeId) expectedNamedType,
     required TypeMeta Function() readSharedTypeDef,
-    required EncodedMetaStringInternal Function([
-      EncodedMetaStringInternal? expected,
+    required EncodedMetaString Function([
+      EncodedMetaString? expected,
     ]) readPackageMetaString,
-    required EncodedMetaStringInternal Function([
-      EncodedMetaStringInternal? expected,
+    required EncodedMetaString Function([
+      EncodedMetaString? expected,
     ]) readTypeNameMetaString,
   }) {
     final wireTypeId = buffer.readVarUint32Small7();

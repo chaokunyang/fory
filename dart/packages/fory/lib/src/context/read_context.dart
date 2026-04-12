@@ -29,7 +29,7 @@ final class ReadContext {
   final CompatibleStructMetadataStore _compatibleStructMetadata;
 
   late Buffer _buffer;
-  final List<TypeInfoInternal> _sharedTypes = <TypeInfoInternal>[];
+  final List<TypeInfo> _sharedTypes = <TypeInfo>[];
   final Map<Object, Object?> _contextObjects = <Object, Object?>{};
   int _depth = 0;
 
@@ -98,20 +98,20 @@ final class ReadContext {
   @internal
   void rememberCompatibleStructMetadata(
     Object value,
-    StructMetadataInternal metadata,
+    StructMetadata metadata,
   ) {
     _compatibleStructMetadata.remember(value, metadata);
   }
 
   @internal
-  TypeInfoInternal readTypeMetaValue([
-    TypeInfoInternal? expectedNamedType,
+  TypeInfo readTypeMetaValue([
+    TypeInfo? expectedNamedType,
   ]) =>
       _readTypeMeta(expectedNamedType);
 
   @internal
   Object readSerializerPayload(
-      Serializer<Object?> serializer, TypeInfoInternal resolved,
+      Serializer<Object?> serializer, TypeInfo resolved,
       {required bool hasCurrentPreservedRef}) {
     final int? sentinelId;
     final int? sentinelDepth;
@@ -277,8 +277,7 @@ final class ReadContext {
       PrimitiveSerializer.readPayload(this, typeId);
 
   @internal
-  Object? readResolvedValue(
-      TypeInfoInternal resolved, FieldTypeInternal? declaredFieldType,
+  Object? readResolvedValue(TypeInfo resolved, FieldType? declaredFieldType,
       {bool hasPreservedRef = false}) {
     if (!_tracksDepth(resolved)) {
       return _readPayloadValue(
@@ -298,8 +297,8 @@ final class ReadContext {
   }
 
   Object? _readPayloadValue(
-    TypeInfoInternal resolved,
-    FieldTypeInternal? declaredFieldType, {
+    TypeInfo resolved,
+    FieldType? declaredFieldType, {
     required bool hasPreservedRef,
   }) {
     if (TypeIds.isPrimitive(resolved.typeId)) {
@@ -359,7 +358,7 @@ final class ReadContext {
       case TypeIds.timestamp:
         return const TimestampSerializer().read(this);
       default:
-        if (resolved.kind == RegistrationKindInternal.struct) {
+        if (resolved.kind == RegistrationKind.struct) {
           return resolved.structSerializer!.readValue(
             this,
             resolved,
@@ -374,8 +373,8 @@ final class ReadContext {
     }
   }
 
-  TypeInfoInternal _readTypeMeta([
-    TypeInfoInternal? expectedNamedType,
+  TypeInfo _readTypeMeta([
+    TypeInfo? expectedNamedType,
   ]) {
     return _typeResolver.readTypeMeta(
       _buffer,
@@ -385,17 +384,17 @@ final class ReadContext {
     );
   }
 
-  bool _tracksDepth(TypeInfoInternal resolved) {
+  bool _tracksDepth(TypeInfo resolved) {
     if (TypeIds.isContainer(resolved.typeId)) {
       return true;
     }
     switch (resolved.kind) {
-      case RegistrationKindInternal.builtin:
-      case RegistrationKindInternal.enumType:
+      case RegistrationKind.builtin:
+      case RegistrationKind.enumType:
         return false;
-      case RegistrationKindInternal.struct:
-      case RegistrationKindInternal.ext:
-      case RegistrationKindInternal.union:
+      case RegistrationKind.struct:
+      case RegistrationKind.ext:
+      case RegistrationKind.union:
         return true;
     }
   }

@@ -9,9 +9,9 @@ final class DeferredReadRef {
   const DeferredReadRef(this.id);
 }
 
-TypeInfoInternal? fieldDeclaredTypeInfo(
+TypeInfo? fieldDeclaredTypeInfo(
   TypeResolver resolver,
-  FieldInfoInternal field,
+  FieldInfo field,
 ) {
   final declaredTypeInfo = field.declaredTypeInfo;
   if (declaredTypeInfo != null) {
@@ -26,7 +26,7 @@ TypeInfoInternal? fieldDeclaredTypeInfo(
 
 bool fieldUsesDeclaredType(
   TypeResolver resolver,
-  FieldInfoInternal field,
+  FieldInfo field,
 ) {
   if (field.declaredTypeInfo != null) {
     return field.usesDeclaredType;
@@ -45,7 +45,7 @@ bool fieldUsesDeclaredType(
 
 void writeFieldValue(
   WriteContext context,
-  FieldInfoInternal field,
+  FieldInfo field,
   Object? value,
 ) {
   final fieldType = field.fieldType;
@@ -105,7 +105,7 @@ void writeFieldValue(
 
 T readFieldValue<T>(
   ReadContext context,
-  FieldInfoInternal field, [
+  FieldInfo field, [
   T? fallback,
 ]) {
   final fieldType = field.fieldType;
@@ -153,20 +153,20 @@ T readFieldValue<T>(
 
 Object? readCompatibleField(
   ReadContext context,
-  FieldInfoInternal field,
+  FieldInfo field,
 ) {
   return readFieldValue<Object?>(context, field);
 }
 
-FieldInfoInternal mergeCompatibleWriteField(
-  FieldInfoInternal localField,
-  FieldInfoInternal remoteField,
+FieldInfo mergeCompatibleWriteField(
+  FieldInfo localField,
+  FieldInfo remoteField,
 ) {
-  FieldTypeInternal mergeFieldType(
-    FieldTypeInternal local,
-    FieldTypeInternal remote,
+  FieldType mergeFieldType(
+    FieldType local,
+    FieldType remote,
   ) {
-    final mergedArguments = <FieldTypeInternal>[];
+    final mergedArguments = <FieldType>[];
     final argumentCount = remote.arguments.length;
     for (var index = 0; index < argumentCount; index += 1) {
       final remoteArgument = remote.arguments[index];
@@ -175,7 +175,7 @@ FieldInfoInternal mergeCompatibleWriteField(
           : remoteArgument;
       mergedArguments.add(mergeFieldType(localArgument, remoteArgument));
     }
-    return FieldTypeInternal(
+    return FieldType(
       type: local.type,
       typeId: remote.typeId,
       nullable: remote.nullable,
@@ -185,7 +185,7 @@ FieldInfoInternal mergeCompatibleWriteField(
     );
   }
 
-  return FieldInfoInternal(
+  return FieldInfo(
     name: localField.name,
     identifier: localField.identifier,
     id: localField.id,
@@ -194,15 +194,15 @@ FieldInfoInternal mergeCompatibleWriteField(
   );
 }
 
-FieldInfoInternal mergeCompatibleReadField(
-  FieldInfoInternal localField,
-  FieldInfoInternal remoteField,
+FieldInfo mergeCompatibleReadField(
+  FieldInfo localField,
+  FieldInfo remoteField,
 ) {
-  FieldTypeInternal mergeFieldType(
-    FieldTypeInternal local,
-    FieldTypeInternal remote,
+  FieldType mergeFieldType(
+    FieldType local,
+    FieldType remote,
   ) {
-    final mergedArguments = <FieldTypeInternal>[];
+    final mergedArguments = <FieldType>[];
     final argumentCount = remote.arguments.length;
     for (var index = 0; index < argumentCount; index += 1) {
       final remoteArgument = remote.arguments[index];
@@ -211,7 +211,7 @@ FieldInfoInternal mergeCompatibleReadField(
           : remoteArgument;
       mergedArguments.add(mergeFieldType(localArgument, remoteArgument));
     }
-    return FieldTypeInternal(
+    return FieldType(
       type: local.type,
       typeId: remote.typeId,
       nullable: remote.nullable,
@@ -221,7 +221,7 @@ FieldInfoInternal mergeCompatibleReadField(
     );
   }
 
-  return FieldInfoInternal(
+  return FieldInfo(
     name: localField.name,
     identifier: localField.identifier,
     id: localField.id,

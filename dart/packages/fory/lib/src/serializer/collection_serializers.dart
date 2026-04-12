@@ -6,7 +6,7 @@ import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
 
-enum _PinnedTypeInfoPayloadKind {
+enum _FixedTypePayloadKind {
   primitive,
   string,
   struct,
@@ -14,81 +14,81 @@ enum _PinnedTypeInfoPayloadKind {
   generic,
 }
 
-final class PinnedTypeInfoPayloadInternal {
-  final TypeInfoInternal typeInfo;
-  final FieldTypeInternal? declaredFieldType;
+final class FixedTypePayload {
+  final TypeInfo typeInfo;
+  final FieldType? declaredFieldType;
   final Serializer<Object?>? serializer;
-  final _PinnedTypeInfoPayloadKind _kind;
+  final _FixedTypePayloadKind _kind;
 
-  const PinnedTypeInfoPayloadInternal._(
+  const FixedTypePayload._(
     this.typeInfo,
     this.declaredFieldType,
     this.serializer,
     this._kind,
   );
 
-  factory PinnedTypeInfoPayloadInternal(
-    TypeInfoInternal typeInfo, [
-    FieldTypeInternal? declaredFieldType,
+  factory FixedTypePayload(
+    TypeInfo typeInfo, [
+    FieldType? declaredFieldType,
   ]) {
     if (TypeIds.isPrimitive(typeInfo.typeId)) {
-      return PinnedTypeInfoPayloadInternal._(
+      return FixedTypePayload._(
         typeInfo,
         declaredFieldType,
         null,
-        _PinnedTypeInfoPayloadKind.primitive,
+        _FixedTypePayloadKind.primitive,
       );
     }
     if (typeInfo.typeId == TypeIds.string) {
-      return PinnedTypeInfoPayloadInternal._(
+      return FixedTypePayload._(
         typeInfo,
         declaredFieldType,
         null,
-        _PinnedTypeInfoPayloadKind.string,
+        _FixedTypePayloadKind.string,
       );
     }
-    if (typeInfo.kind == RegistrationKindInternal.struct) {
-      return PinnedTypeInfoPayloadInternal._(
+    if (typeInfo.kind == RegistrationKind.struct) {
+      return FixedTypePayload._(
         typeInfo,
         declaredFieldType,
         null,
-        _PinnedTypeInfoPayloadKind.struct,
+        _FixedTypePayloadKind.struct,
       );
     }
     if (typeInfo.typeId == TypeIds.list ||
         typeInfo.typeId == TypeIds.set ||
         typeInfo.typeId == TypeIds.map) {
-      return PinnedTypeInfoPayloadInternal._(
+      return FixedTypePayload._(
         typeInfo,
         declaredFieldType,
         null,
-        _PinnedTypeInfoPayloadKind.generic,
+        _FixedTypePayloadKind.generic,
       );
     }
-    return PinnedTypeInfoPayloadInternal._(
+    return FixedTypePayload._(
       typeInfo,
       declaredFieldType,
       typeInfo.serializer,
-      _PinnedTypeInfoPayloadKind.serializer,
+      _FixedTypePayloadKind.serializer,
     );
   }
 
   @pragma('vm:prefer-inline')
   void write(WriteContext context, Object value) {
     switch (_kind) {
-      case _PinnedTypeInfoPayloadKind.primitive:
+      case _FixedTypePayloadKind.primitive:
         PrimitiveSerializer.writePayload(context, typeInfo.typeId, value);
         return;
-      case _PinnedTypeInfoPayloadKind.string:
+      case _FixedTypePayloadKind.string:
         StringSerializer.writePayload(context, value as String);
         return;
-      case _PinnedTypeInfoPayloadKind.struct:
+      case _FixedTypePayloadKind.struct:
         typeInfo.structSerializer!.writeValue(context, typeInfo, value);
         return;
-      case _PinnedTypeInfoPayloadKind.serializer:
+      case _FixedTypePayloadKind.serializer:
         serializer!.write(context, value);
         return;
-      case _PinnedTypeInfoPayloadKind.generic:
+      case _FixedTypePayloadKind.generic:
         context.writeResolvedValue(typeInfo, value, declaredFieldType);
         return;
     }
@@ -97,23 +97,23 @@ final class PinnedTypeInfoPayloadInternal {
   @pragma('vm:prefer-inline')
   Object? read(ReadContext context, {bool hasPreservedRef = false}) {
     switch (_kind) {
-      case _PinnedTypeInfoPayloadKind.primitive:
+      case _FixedTypePayloadKind.primitive:
         return PrimitiveSerializer.readPayload(context, typeInfo.typeId);
-      case _PinnedTypeInfoPayloadKind.string:
+      case _FixedTypePayloadKind.string:
         return StringSerializer.readPayload(context);
-      case _PinnedTypeInfoPayloadKind.struct:
+      case _FixedTypePayloadKind.struct:
         return typeInfo.structSerializer!.readValue(
           context,
           typeInfo,
           hasCurrentPreservedRef: hasPreservedRef,
         );
-      case _PinnedTypeInfoPayloadKind.serializer:
+      case _FixedTypePayloadKind.serializer:
         return context.readSerializerPayload(
           serializer!,
           typeInfo,
           hasCurrentPreservedRef: hasPreservedRef,
         );
-      case _PinnedTypeInfoPayloadKind.generic:
+      case _FixedTypePayloadKind.generic:
         return context.readResolvedValue(
           typeInfo,
           declaredFieldType,
@@ -123,24 +123,24 @@ final class PinnedTypeInfoPayloadInternal {
   }
 }
 
-bool tracksNestedPayloadDepthInternal(TypeInfoInternal typeInfo) {
+bool tracksNestedPayloadDepth(TypeInfo typeInfo) {
   if (TypeIds.isContainer(typeInfo.typeId)) {
     return false;
   }
   switch (typeInfo.kind) {
-    case RegistrationKindInternal.builtin:
-    case RegistrationKindInternal.enumType:
+    case RegistrationKind.builtin:
+    case RegistrationKind.enumType:
       return false;
-    case RegistrationKindInternal.struct:
-    case RegistrationKindInternal.ext:
-    case RegistrationKindInternal.union:
+    case RegistrationKind.struct:
+    case RegistrationKind.ext:
+    case RegistrationKind.union:
       return true;
   }
 }
 
-bool sameTypeInfoInternal(
-  TypeInfoInternal left,
-  TypeInfoInternal right,
+bool sameTypeInfo(
+  TypeInfo left,
+  TypeInfo right,
 ) {
   if (left.kind != right.kind || left.typeId != right.typeId) {
     return false;
@@ -156,8 +156,8 @@ bool sameTypeInfoInternal(
 
 void writeFieldTypeValue(
   WriteContext context,
-  FieldTypeInternal fieldType,
-  TypeInfoInternal? declaredTypeInfo,
+  FieldType fieldType,
+  TypeInfo? declaredTypeInfo,
   bool usesDeclaredType,
   Object? value,
 ) {
@@ -215,8 +215,8 @@ void writeFieldTypeValue(
 
 T readFieldTypeValue<T>(
   ReadContext context,
-  FieldTypeInternal fieldType,
-  TypeInfoInternal? declaredTypeInfo,
+  FieldType fieldType,
+  TypeInfo? declaredTypeInfo,
   bool usesDeclaredType, [
   T? fallback,
 ]) {
@@ -281,7 +281,7 @@ final class ListSerializer extends Serializer<List> {
   static void writePayload(
     WriteContext context,
     Iterable values,
-    FieldTypeInternal? elementFieldType, {
+    FieldType? elementFieldType, {
     required bool trackRef,
   }) {
     final size = values.length;
@@ -310,8 +310,8 @@ final class ListSerializer extends Serializer<List> {
       values,
       usesDeclaredType: usesDeclaredType,
     );
-    final elementTrackRef =
-        (elementFieldType?.ref ?? false) || (elementFieldType == null && trackRef);
+    final elementTrackRef = (elementFieldType?.ref ?? false) ||
+        (elementFieldType == null && trackRef);
     var header = 0;
     if (elementTrackRef) {
       header |= 0x01;
@@ -328,15 +328,14 @@ final class ListSerializer extends Serializer<List> {
     context.buffer.writeUint8(header);
     final declaredPayload = declaredTypeInfo == null
         ? null
-        : PinnedTypeInfoPayloadInternal(
+        : FixedTypePayload(
             declaredTypeInfo,
             elementFieldType,
           );
     final sameTypeInfo =
         !usesDeclaredType && analysis.sameType ? analysis.sameTypeInfo : null;
-    final samePayload = sameTypeInfo == null
-        ? null
-        : PinnedTypeInfoPayloadInternal(sameTypeInfo);
+    final samePayload =
+        sameTypeInfo == null ? null : FixedTypePayload(sameTypeInfo);
     if (!usesDeclaredType &&
         sameTypeInfo != null &&
         analysis.firstNonNull != null) {
@@ -346,7 +345,7 @@ final class ListSerializer extends Serializer<List> {
       );
     }
     if (declaredPayload != null) {
-      final tracksDepth = tracksNestedPayloadDepthInternal(declaredTypeInfo!);
+      final tracksDepth = tracksNestedPayloadDepth(declaredTypeInfo!);
       if (tracksDepth) {
         context.increaseDepth();
       }
@@ -356,7 +355,7 @@ final class ListSerializer extends Serializer<List> {
           continue;
         }
         if (elementTrackRef) {
-          writePinnedValueInternal(
+          writeFixedTypeValue(
             context,
             declaredPayload,
             value as Object,
@@ -375,7 +374,7 @@ final class ListSerializer extends Serializer<List> {
       return;
     }
     if (samePayload != null) {
-      final tracksDepth = tracksNestedPayloadDepthInternal(sameTypeInfo!);
+      final tracksDepth = tracksNestedPayloadDepth(sameTypeInfo!);
       if (tracksDepth) {
         context.increaseDepth();
       }
@@ -383,7 +382,7 @@ final class ListSerializer extends Serializer<List> {
         if (value == null) {
           context.buffer.writeByte(RefWriter.nullFlag);
         } else if (elementTrackRef) {
-          writePinnedValueInternal(
+          writeFixedTypeValue(
             context,
             samePayload,
             value as Object,
@@ -451,7 +450,7 @@ final class ListSerializer extends Serializer<List> {
 
   static List<Object?> readPayload(
     ReadContext context,
-    FieldTypeInternal? elementFieldType,
+    FieldType? elementFieldType,
   ) {
     final state = _prepareListRead(context, elementFieldType);
     final result = List<Object?>.filled(state.size, null, growable: false);
@@ -491,9 +490,10 @@ final class SetSerializer extends Serializer<Set> {
 
   static Set<Object?> readPayload(
     ReadContext context,
-    FieldTypeInternal? elementFieldType,
+    FieldType? elementFieldType,
   ) {
-    return Set<Object?>.of(ListSerializer.readPayload(context, elementFieldType));
+    return Set<Object?>.of(
+        ListSerializer.readPayload(context, elementFieldType));
   }
 }
 
@@ -502,7 +502,7 @@ const SetSerializer setSerializer = SetSerializer();
 
 List<T> readTypedListPayload<T>(
   ReadContext context,
-  FieldTypeInternal? elementFieldType,
+  FieldType? elementFieldType,
   T Function(Object? value) convert,
 ) {
   final state = _prepareListRead(context, elementFieldType);
@@ -525,7 +525,7 @@ List<T> readTypedListPayload<T>(
 
 Set<T> readTypedSetPayload<T>(
   ReadContext context,
-  FieldTypeInternal? elementFieldType,
+  FieldType? elementFieldType,
   T Function(Object? value) convert,
 ) {
   return Set<T>.of(readTypedListPayload(context, elementFieldType, convert));
@@ -536,11 +536,11 @@ final class _PreparedListRead {
   final bool trackRef;
   final bool hasNull;
   final bool usesDeclaredType;
-  final FieldTypeInternal? elementFieldType;
-  final TypeInfoInternal? declaredTypeInfo;
-  final PinnedTypeInfoPayloadInternal? declaredPayload;
-  final TypeInfoInternal? sameTypeInfo;
-  final PinnedTypeInfoPayloadInternal? samePayload;
+  final FieldType? elementFieldType;
+  final TypeInfo? declaredTypeInfo;
+  final FixedTypePayload? declaredPayload;
+  final TypeInfo? sameTypeInfo;
+  final FixedTypePayload? samePayload;
   final bool tracksDepth;
 
   const _PreparedListRead({
@@ -559,7 +559,7 @@ final class _PreparedListRead {
 
 _PreparedListRead _prepareListRead(
   ReadContext context,
-  FieldTypeInternal? elementFieldType,
+  FieldType? elementFieldType,
 ) {
   final size = context.buffer.readVarUint32();
   if (size > context.config.maxCollectionSize) {
@@ -595,16 +595,15 @@ _PreparedListRead _prepareListRead(
       (!usesDeclaredType && sameType) ? context.readTypeMetaValue() : null;
   final declaredPayload = declaredTypeInfo == null
       ? null
-      : PinnedTypeInfoPayloadInternal(
+      : FixedTypePayload(
           declaredTypeInfo,
           elementFieldType,
         );
   final samePayload =
-      sameTypeInfo == null ? null : PinnedTypeInfoPayloadInternal(sameTypeInfo);
-  final tracksDepth =
-      (declaredPayload != null &&
-              tracksNestedPayloadDepthInternal(declaredTypeInfo!)) ||
-          (samePayload != null && tracksNestedPayloadDepthInternal(sameTypeInfo!));
+      sameTypeInfo == null ? null : FixedTypePayload(sameTypeInfo);
+  final tracksDepth = (declaredPayload != null &&
+          tracksNestedPayloadDepth(declaredTypeInfo!)) ||
+      (samePayload != null && tracksNestedPayloadDepth(sameTypeInfo!));
   return _PreparedListRead(
     size: size,
     trackRef: trackRef,
@@ -714,9 +713,9 @@ Object? _readPreparedListItem(
 }
 
 @pragma('vm:prefer-inline')
-void writePinnedValueInternal(
+void writeFixedTypeValue(
   WriteContext context,
-  PinnedTypeInfoPayloadInternal payload,
+  FixedTypePayload payload,
   Object value, {
   required bool trackRef,
 }) {
@@ -755,7 +754,7 @@ _ListHeaderAnalysis _analyzeListHeader(
     );
   }
   Object? firstNonNull;
-  TypeInfoInternal? sameTypeInfo;
+  TypeInfo? sameTypeInfo;
   Type? firstRuntimeType;
   var sameType = true;
   for (final value in values) {
@@ -787,7 +786,7 @@ _ListHeaderAnalysis _analyzeListHeader(
 final class _ListHeaderAnalysis {
   final bool hasNull;
   final bool sameType;
-  final TypeInfoInternal? sameTypeInfo;
+  final TypeInfo? sameTypeInfo;
   final Object? firstNonNull;
 
   const _ListHeaderAnalysis({

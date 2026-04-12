@@ -6,12 +6,11 @@ import 'package:fory/src/resolver/type_resolver.dart';
 /// Read-side state for meta-string references in one deserialization stream.
 final class MetaStringReader implements MetaStringReadSource {
   final TypeResolver _typeResolver;
-  final List<EncodedMetaStringInternal> _dynamicReadMetaStrings =
-      <EncodedMetaStringInternal>[];
-  final Map<int, EncodedMetaStringInternal> _bigMetaStrings =
-      <int, EncodedMetaStringInternal>{};
-  final Map<int, List<EncodedMetaStringInternal>> _smallMetaStrings =
-      <int, List<EncodedMetaStringInternal>>{};
+  final List<EncodedMetaString> _dynamicReadMetaStrings = <EncodedMetaString>[];
+  final Map<int, EncodedMetaString> _bigMetaStrings =
+      <int, EncodedMetaString>{};
+  final Map<int, List<EncodedMetaString>> _smallMetaStrings =
+      <int, List<EncodedMetaString>>{};
 
   MetaStringReader(this._typeResolver);
 
@@ -25,9 +24,9 @@ final class MetaStringReader implements MetaStringReadSource {
   /// Callers with a likely expected value may pass [expected] to avoid an
   /// additional map lookup in the common exact-match case.
   @override
-  EncodedMetaStringInternal readMetaString(
+  EncodedMetaString readMetaString(
     Buffer buffer, [
-    EncodedMetaStringInternal? expected,
+    EncodedMetaString? expected,
   ]) {
     final header = buffer.readVarUint32Small7();
     final length = header >>> 1;
@@ -41,10 +40,10 @@ final class MetaStringReader implements MetaStringReadSource {
     return encoded;
   }
 
-  EncodedMetaStringInternal _readBigMetaString(
+  EncodedMetaString _readBigMetaString(
     Buffer buffer,
     int length,
-    EncodedMetaStringInternal? expected,
+    EncodedMetaString? expected,
   ) {
     final hash = buffer.readInt64();
     if (expected != null && expected.hash == hash) {
@@ -64,16 +63,16 @@ final class MetaStringReader implements MetaStringReadSource {
     return encoded;
   }
 
-  EncodedMetaStringInternal _readSmallMetaString(
+  EncodedMetaString _readSmallMetaString(
     Buffer buffer,
     int length,
-    EncodedMetaStringInternal? expected,
+    EncodedMetaString? expected,
   ) {
     if (length == 0) {
-      return EncodedMetaStringInternal.empty;
+      return EncodedMetaString.empty;
     }
     final encoding = buffer.readByte() & 0xff;
-    final packed = bufferReadPackedBytesInternal(buffer, length);
+    final packed = bufferReadPackedBytes(buffer, length);
     final word0 = packed.word0;
     final word1 = packed.word1;
     final word2 = packed.word2;
@@ -107,10 +106,10 @@ final class MetaStringReader implements MetaStringReadSource {
       }
     }
     final encoded = _typeResolver.internEncodedMetaString(
-      bufferMaterializePackedBytesInternal(packed),
+      bufferMaterializePackedBytes(packed),
       encoding: encoding,
     );
-    (bucket ?? (_smallMetaStrings[hash] = <EncodedMetaStringInternal>[])).add(
+    (bucket ?? (_smallMetaStrings[hash] = <EncodedMetaString>[])).add(
       encoded,
     );
     return encoded;

@@ -434,28 +434,28 @@ final class Buffer {
 }
 
 @internal
-int bufferWriterIndexInternal(Buffer buffer) => buffer._writerIndex;
+int bufferWriterIndex(Buffer buffer) => buffer._writerIndex;
 
 @internal
-int bufferReaderIndexInternal(Buffer buffer) => buffer._readerIndex;
+int bufferReaderIndex(Buffer buffer) => buffer._readerIndex;
 
 @internal
-void bufferSetWriterIndexInternal(Buffer buffer, int index) {
+void bufferSetWriterIndex(Buffer buffer, int index) {
   buffer._writerIndex = index;
 }
 
 @internal
-void bufferSetReaderIndexInternal(Buffer buffer, int index) {
+void bufferSetReaderIndex(Buffer buffer, int index) {
   buffer._readerIndex = index;
 }
 
 @internal
-void bufferWriteUint8AtInternal(Buffer buffer, int index, int value) {
+void bufferWriteUint8At(Buffer buffer, int index, int value) {
   buffer._view.setUint8(index, value);
 }
 
 @internal
-int bufferReserveBytesInternal(Buffer buffer, int length) {
+int bufferReserveBytes(Buffer buffer, int length) {
   buffer.ensureWritable(length);
   final start = buffer._writerIndex;
   buffer._writerIndex += length;
@@ -463,13 +463,13 @@ int bufferReserveBytesInternal(Buffer buffer, int length) {
 }
 
 @internal
-Uint8List bufferBytesInternal(Buffer buffer) => buffer._bytes;
+Uint8List bufferBytes(Buffer buffer) => buffer._bytes;
 
 @internal
-ByteData bufferByteDataInternal(Buffer buffer) => buffer._view;
+ByteData bufferByteData(Buffer buffer) => buffer._view;
 
 @internal
-PackedBytesInternal bufferReadPackedBytesInternal(Buffer buffer, int length) {
+PackedBytes bufferReadPackedBytes(Buffer buffer, int length) {
   final start = buffer._readerIndex;
   buffer._readerIndex += length;
   var word0 = 0;
@@ -494,11 +494,11 @@ PackedBytesInternal bufferReadPackedBytesInternal(Buffer buffer, int length) {
         break;
     }
   }
-  return PackedBytesInternal(length, word0, word1, word2, word3);
+  return PackedBytes(length, word0, word1, word2, word3);
 }
 
 @internal
-Uint8List bufferMaterializePackedBytesInternal(PackedBytesInternal packed) {
+Uint8List bufferMaterializePackedBytes(PackedBytes packed) {
   final bytes = Uint8List(packed.length);
 
   void unpackWord(int word, int offset) {
@@ -516,14 +516,14 @@ Uint8List bufferMaterializePackedBytesInternal(PackedBytesInternal packed) {
 }
 
 @internal
-final class PackedBytesInternal {
+final class PackedBytes {
   final int length;
   final int word0;
   final int word1;
   final int word2;
   final int word3;
 
-  const PackedBytesInternal(
+  const PackedBytes(
     this.length,
     this.word0,
     this.word1,

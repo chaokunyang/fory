@@ -14,7 +14,7 @@ final BigInt _metaStringHashMaskBig =
 final BigInt _c1Big = BigInt.parse('87c37b91114253d5', radix: 16);
 final BigInt _c2Big = BigInt.parse('4cf5ad432745937f', radix: 16);
 
-(int, int) murmurHash3X64_128Internal(List<int> bytes, {int seed = 47}) {
+(int, int) murmurHash3X64_128(List<int> bytes, {int seed = 47}) {
   var h1 = seed & 0x00000000ffffffff;
   var h2 = seed & 0x00000000ffffffff;
 
@@ -115,8 +115,8 @@ final BigInt _c2Big = BigInt.parse('4cf5ad432745937f', radix: 16);
   return (h1, h2);
 }
 
-int metaStringHashInternal(List<int> bytes, {int encoding = 0}) {
-  var hash = _absSigned64(murmurHash3X64_128Internal(bytes).$1);
+int metaStringHash(List<int> bytes, {int encoding = 0}) {
+  var hash = _absSigned64(murmurHash3X64_128(bytes).$1);
   if (hash == 0) {
     hash += 0x100;
   }
@@ -124,13 +124,12 @@ int metaStringHashInternal(List<int> bytes, {int encoding = 0}) {
   return hash | (encoding & 0xff);
 }
 
-int typeDefHeaderInternal(
+int typeDefHeader(
   List<int> bytes, {
   required bool hasFieldsMeta,
   bool compressed = false,
 }) {
-  final hash =
-      _toSigned64(murmurHash3X64_128Internal(bytes).$1 << _typeDefHashShift);
+  final hash = _toSigned64(murmurHash3X64_128(bytes).$1 << _typeDefHashShift);
   var header = _absSigned64(hash);
   if (compressed) {
     header |= _typeDefCompressMetaFlag;
@@ -143,7 +142,7 @@ int typeDefHeaderInternal(
   return _toSigned64(header);
 }
 
-int schemaHashInternal(StructMetadataInternal metadata) {
+int schemaHash(StructMetadata metadata) {
   final parts = metadata.fields
       .map(
         (field) => StringBuffer()
@@ -159,11 +158,11 @@ int schemaHashInternal(StructMetadataInternal metadata) {
       .map((buffer) => buffer.toString())
       .toList(growable: false)
     ..sort();
-  final hash = murmurHash3X64_128Internal(utf8.encode(parts.join())).$1;
+  final hash = murmurHash3X64_128(utf8.encode(parts.join())).$1;
   return hash & 0xffffffff;
 }
 
-int _fingerprintTypeId(FieldInfoInternal field) {
+int _fingerprintTypeId(FieldInfo field) {
   final typeId = field.fieldType.typeId;
   if (field.fieldType.isDynamic || typeId == TypeIds.unknown) {
     return TypeIds.unknown;

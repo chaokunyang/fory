@@ -6,8 +6,8 @@ import 'package:fory/src/meta/meta_string.dart';
 
 /// Write-side state for meta-string references in one serialization stream.
 final class MetaStringWriter implements MetaStringWriteSink {
-  final Map<EncodedMetaStringInternal, int> _writtenMetaStrings =
-      LinkedHashMap<EncodedMetaStringInternal, int>.identity();
+  final Map<EncodedMetaString, int> _writtenMetaStrings =
+      LinkedHashMap<EncodedMetaString, int>.identity();
 
   /// Clears dynamic ids so the writer can be reused for a new operation.
   void reset() {
@@ -16,7 +16,7 @@ final class MetaStringWriter implements MetaStringWriteSink {
 
   /// Writes [encoded] using the stream-local meta-string table.
   @override
-  void writeMetaString(Buffer buffer, EncodedMetaStringInternal encoded) {
+  void writeMetaString(Buffer buffer, EncodedMetaString encoded) {
     final existing = _writtenMetaStrings[encoded];
     if (existing != null) {
       buffer.writeVarUint32Small7(((existing + 1) << 1) | 1);
@@ -29,12 +29,12 @@ final class MetaStringWriter implements MetaStringWriteSink {
   /// Writes [encoded] without using the stream-local meta-string table.
   void writeStandaloneMetaString(
     Buffer buffer,
-    EncodedMetaStringInternal encoded,
+    EncodedMetaString encoded,
   ) {
     _writeNewMetaString(buffer, encoded);
   }
 
-  void _writeNewMetaString(Buffer buffer, EncodedMetaStringInternal encoded) {
+  void _writeNewMetaString(Buffer buffer, EncodedMetaString encoded) {
     final bytes = encoded.bytes;
     buffer.writeVarUint32Small7(bytes.length << 1);
     if (bytes.isNotEmpty && bytes.length <= metaStringSmallThreshold) {

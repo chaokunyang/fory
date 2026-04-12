@@ -24,14 +24,14 @@ final class StringSerializer extends Serializer<String> {
   }
 
   static void writePayload(WriteContext context, String value) {
-    writeStringInternal(context.buffer, value);
+    writeString(context.buffer, value);
   }
 
   static String readPayload(ReadContext context) {
     final header = context.buffer.readVarUint36Small();
     final encoding = header & 0x03;
     final byteLength = header >>> 2;
-    return readStringFromBufferInternal(context.buffer, byteLength, encoding);
+    return readStringFromBuffer(context.buffer, byteLength, encoding);
   }
 }
 

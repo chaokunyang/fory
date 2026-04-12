@@ -33,8 +33,8 @@ final class WriteContext {
   final CompatibleStructMetadataStore _compatibleStructMetadata;
 
   late Buffer _buffer;
-  final LinkedHashMap<SharedTypeDefInternal, int> _typeDefIds =
-      LinkedHashMap<SharedTypeDefInternal, int>.identity();
+  final LinkedHashMap<SharedTypeDef, int> _typeDefIds =
+      LinkedHashMap<SharedTypeDef, int>.identity();
   final LinkedHashMap<Object, Object?> _contextObjects =
       LinkedHashMap<Object, Object?>.identity();
   bool _rootTrackRef = false;
@@ -108,7 +108,7 @@ final class WriteContext {
   }
 
   @internal
-  StructMetadataInternal? compatibleStructMetadataFor(Object value) {
+  StructMetadata? compatibleStructMetadataFor(Object value) {
     return _compatibleStructMetadata.metadataFor(value);
   }
 
@@ -243,9 +243,9 @@ final class WriteContext {
 
   @internal
   void writeResolvedValue(
-    TypeInfoInternal resolved,
+    TypeInfo resolved,
     Object value,
-    FieldTypeInternal? declaredFieldType,
+    FieldType? declaredFieldType,
   ) {
     if (!_tracksDepth(resolved)) {
       _writePayloadValue(resolved, value, declaredFieldType);
@@ -257,9 +257,9 @@ final class WriteContext {
   }
 
   void _writePayloadValue(
-    TypeInfoInternal resolved,
+    TypeInfo resolved,
     Object value,
-    FieldTypeInternal? declaredFieldType,
+    FieldType? declaredFieldType,
   ) {
     switch (resolved.typeId) {
       case TypeIds.boolType:
@@ -361,7 +361,7 @@ final class WriteContext {
         timestampSerializer.write(this, value as Timestamp);
         return;
       default:
-        if (resolved.kind == RegistrationKindInternal.struct) {
+        if (resolved.kind == RegistrationKind.struct) {
           resolved.structSerializer!.writeValue(this, resolved, value);
           return;
         }
@@ -369,7 +369,7 @@ final class WriteContext {
     }
   }
 
-  void _writeTypeMeta(TypeInfoInternal resolved, Object value) {
+  void _writeTypeMeta(TypeInfo resolved, Object value) {
     _typeResolver.writeTypeMeta(
       _buffer,
       resolved,
@@ -384,21 +384,21 @@ final class WriteContext {
   }
 
   @internal
-  void writeTypeMetaValue(TypeInfoInternal resolved, Object value) {
+  void writeTypeMetaValue(TypeInfo resolved, Object value) {
     _writeTypeMeta(resolved, value);
   }
 
-  bool _tracksDepth(TypeInfoInternal resolved) {
+  bool _tracksDepth(TypeInfo resolved) {
     if (TypeIds.isContainer(resolved.typeId)) {
       return true;
     }
     switch (resolved.kind) {
-      case RegistrationKindInternal.builtin:
-      case RegistrationKindInternal.enumType:
+      case RegistrationKind.builtin:
+      case RegistrationKind.enumType:
         return false;
-      case RegistrationKindInternal.struct:
-      case RegistrationKindInternal.ext:
-      case RegistrationKindInternal.union:
+      case RegistrationKind.struct:
+      case RegistrationKind.ext:
+      case RegistrationKind.union:
         return true;
     }
   }

@@ -28,8 +28,8 @@ final class MapSerializer extends Serializer<Map> {
   static void writePayload(
     WriteContext context,
     Map values,
-    FieldTypeInternal? keyFieldType,
-    FieldTypeInternal? valueFieldType, {
+    FieldType? keyFieldType,
+    FieldType? valueFieldType, {
     required bool trackRef,
   }) {
     if (values.length > context.config.maxCollectionSize) {
@@ -41,9 +41,10 @@ final class MapSerializer extends Serializer<Map> {
     final declaredKeyTypeInfo = keyFieldType == null || keyFieldType.isDynamic
         ? null
         : context.typeResolver.resolveFieldType(keyFieldType);
-    final declaredValueTypeInfo = valueFieldType == null || valueFieldType.isDynamic
-        ? null
-        : context.typeResolver.resolveFieldType(valueFieldType);
+    final declaredValueTypeInfo =
+        valueFieldType == null || valueFieldType.isDynamic
+            ? null
+            : context.typeResolver.resolveFieldType(valueFieldType);
     final keyDeclared = declaredKeyTypeInfo != null &&
         usesDeclaredTypeInfo(
           context.config.compatible,
@@ -61,10 +62,10 @@ final class MapSerializer extends Serializer<Map> {
     final valueRequestedRef =
         (valueFieldType?.ref ?? false) || (valueFieldType == null && trackRef);
     final declaredKeyPayload = keyDeclared
-        ? PinnedTypeInfoPayloadInternal(declaredKeyTypeInfo, keyFieldType)
+        ? FixedTypePayload(declaredKeyTypeInfo, keyFieldType)
         : null;
     final declaredValuePayload = valueDeclared
-        ? PinnedTypeInfoPayloadInternal(declaredValueTypeInfo, valueFieldType)
+        ? FixedTypePayload(declaredValueTypeInfo, valueFieldType)
         : null;
     final iterator = values.entries.iterator;
     MapEntry<dynamic, dynamic>? pendingEntry;
@@ -122,8 +123,7 @@ final class MapSerializer extends Serializer<Map> {
       final chunkValueTypeInfo = valueDeclared
           ? declaredValueTypeInfo
           : context.typeResolver.resolveValue(value as Object);
-      final chunkKeyTrackRef =
-          keyRequestedRef && chunkKeyTypeInfo.supportsRef;
+      final chunkKeyTrackRef = keyRequestedRef && chunkKeyTypeInfo.supportsRef;
       final chunkValueTrackRef =
           valueRequestedRef && chunkValueTypeInfo.supportsRef;
       context.buffer.writeUint8(
@@ -135,26 +135,25 @@ final class MapSerializer extends Serializer<Map> {
         ),
       );
       context.buffer.writeUint8(0);
-      final chunkLengthOffset = bufferWriterIndexInternal(context.buffer) - 1;
+      final chunkLengthOffset = bufferWriterIndex(context.buffer) - 1;
       if (!keyDeclared) {
         context.writeTypeMetaValue(chunkKeyTypeInfo, key);
       }
       if (!valueDeclared) {
         context.writeTypeMetaValue(chunkValueTypeInfo, value);
       }
-      final keyPayload = keyDeclared
-          ? declaredKeyPayload
-          : PinnedTypeInfoPayloadInternal(chunkKeyTypeInfo);
+      final keyPayload =
+          keyDeclared ? declaredKeyPayload : FixedTypePayload(chunkKeyTypeInfo);
       final valuePayload = valueDeclared
           ? declaredValuePayload
-          : PinnedTypeInfoPayloadInternal(chunkValueTypeInfo);
+          : FixedTypePayload(chunkValueTypeInfo);
       final chunkKeyPayload = keyPayload!;
       final chunkValuePayload = valuePayload!;
       var chunkLength = 1;
-      final tracksDepth = tracksNestedPayloadDepthInternal(
+      final tracksDepth = tracksNestedPayloadDepth(
             chunkKeyPayload.typeInfo,
           ) ||
-          tracksNestedPayloadDepthInternal(chunkValuePayload.typeInfo);
+          tracksNestedPayloadDepth(chunkValuePayload.typeInfo);
       if (tracksDepth) {
         context.increaseDepth();
       }
@@ -191,9 +190,9 @@ final class MapSerializer extends Serializer<Map> {
         if (nextKeyTrackRef != chunkKeyTrackRef ||
             nextValueTrackRef != chunkValueTrackRef ||
             (!keyDeclared &&
-                !sameTypeInfoInternal(chunkKeyTypeInfo, nextKeyTypeInfo)) ||
+                !sameTypeInfo(chunkKeyTypeInfo, nextKeyTypeInfo)) ||
             (!valueDeclared &&
-                !sameTypeInfoInternal(
+                !sameTypeInfo(
                   chunkValueTypeInfo,
                   nextValueTypeInfo,
                 ))) {
@@ -214,14 +213,14 @@ final class MapSerializer extends Serializer<Map> {
       if (tracksDepth) {
         context.decreaseDepth();
       }
-      bufferWriteUint8AtInternal(context.buffer, chunkLengthOffset, chunkLength);
+      bufferWriteUint8At(context.buffer, chunkLengthOffset, chunkLength);
     }
   }
 
   static Map<Object?, Object?> readPayload(
     ReadContext context,
-    FieldTypeInternal? keyFieldType,
-    FieldTypeInternal? valueFieldType,
+    FieldType? keyFieldType,
+    FieldType? valueFieldType,
   ) {
     return readTypedMapPayload<Object?, Object?>(
       context,
@@ -237,8 +236,8 @@ const MapSerializer mapSerializer = MapSerializer();
 
 Map<K, V> readTypedMapPayload<K, V>(
   ReadContext context,
-  FieldTypeInternal? keyFieldType,
-  FieldTypeInternal? valueFieldType,
+  FieldType? keyFieldType,
+  FieldType? valueFieldType,
   K Function(Object? value) convertKey,
   V Function(Object? value) convertValue,
 ) {
@@ -250,16 +249,17 @@ Map<K, V> readTypedMapPayload<K, V>(
   }
   final declaredKeyPayload = keyFieldType == null || keyFieldType.isDynamic
       ? null
-      : PinnedTypeInfoPayloadInternal(
+      : FixedTypePayload(
           context.typeResolver.resolveFieldType(keyFieldType),
           keyFieldType,
         );
-  final declaredValuePayload = valueFieldType == null || valueFieldType.isDynamic
-      ? null
-      : PinnedTypeInfoPayloadInternal(
-          context.typeResolver.resolveFieldType(valueFieldType),
-          valueFieldType,
-        );
+  final declaredValuePayload =
+      valueFieldType == null || valueFieldType.isDynamic
+          ? null
+          : FixedTypePayload(
+              context.typeResolver.resolveFieldType(valueFieldType),
+              valueFieldType,
+            );
   final result = <K, V>{};
   while (remaining > 0) {
     final header = context.buffer.readUint8();
@@ -295,16 +295,16 @@ Map<K, V> readTypedMapPayload<K, V>(
         ? declaredKeyPayload
         : keyTypeInfo == null
             ? null
-            : PinnedTypeInfoPayloadInternal(keyTypeInfo);
+            : FixedTypePayload(keyTypeInfo);
     final valuePayload = valueDeclared
         ? declaredValuePayload
         : valueTypeInfo == null
             ? null
-            : PinnedTypeInfoPayloadInternal(valueTypeInfo);
-    final tracksDepth = (keyPayload != null &&
-            tracksNestedPayloadDepthInternal(keyPayload.typeInfo)) ||
-        (valuePayload != null &&
-            tracksNestedPayloadDepthInternal(valuePayload.typeInfo));
+            : FixedTypePayload(valueTypeInfo);
+    final tracksDepth =
+        (keyPayload != null && tracksNestedPayloadDepth(keyPayload.typeInfo)) ||
+            (valuePayload != null &&
+                tracksNestedPayloadDepth(valuePayload.typeInfo));
     if (tracksDepth) {
       context.increaseDepth();
     }
@@ -349,12 +349,12 @@ void _writeNullChunk(
   Object? value, {
   required bool keyTrackRef,
   required bool valueTrackRef,
-  required PinnedTypeInfoPayloadInternal? keyPayload,
-  required PinnedTypeInfoPayloadInternal? valuePayload,
-  required FieldTypeInternal? keyFieldType,
-  required FieldTypeInternal? valueFieldType,
-  required TypeInfoInternal? declaredKeyTypeInfo,
-  required TypeInfoInternal? declaredValueTypeInfo,
+  required FixedTypePayload? keyPayload,
+  required FixedTypePayload? valuePayload,
+  required FieldType? keyFieldType,
+  required FieldType? valueFieldType,
+  required TypeInfo? declaredKeyTypeInfo,
+  required TypeInfo? declaredValueTypeInfo,
   required bool keyDeclared,
   required bool valueDeclared,
 }) {
@@ -378,7 +378,7 @@ void _writeNullChunk(
   context.buffer.writeUint8(header);
   if (key != null) {
     if (keyDeclared) {
-      writePinnedValueInternal(
+      writeFixedTypeValue(
         context,
         keyPayload!,
         key,
@@ -392,7 +392,7 @@ void _writeNullChunk(
   }
   if (value != null) {
     if (valueDeclared) {
-      writePinnedValueInternal(
+      writeFixedTypeValue(
         context,
         valuePayload!,
         value,
@@ -412,16 +412,16 @@ void _writePair(
   Object value, {
   required bool keyTrackRef,
   required bool valueTrackRef,
-  required PinnedTypeInfoPayloadInternal keyPayload,
-  required PinnedTypeInfoPayloadInternal valuePayload,
+  required FixedTypePayload keyPayload,
+  required FixedTypePayload valuePayload,
 }) {
-  writePinnedValueInternal(
+  writeFixedTypeValue(
     context,
     keyPayload,
     key,
     trackRef: keyTrackRef,
   );
-  writePinnedValueInternal(
+  writeFixedTypeValue(
     context,
     valuePayload,
     value,
@@ -432,8 +432,8 @@ void _writePair(
 Object? _readNullChunkKey(
   ReadContext context,
   int header,
-  FieldTypeInternal? keyFieldType,
-  PinnedTypeInfoPayloadInternal? declaredKeyPayload,
+  FieldType? keyFieldType,
+  FixedTypePayload? declaredKeyPayload,
 ) {
   final keyHasNull = (header & 0x02) != 0;
   if (keyHasNull) {
@@ -455,8 +455,8 @@ Object? _readNullChunkKey(
 Object? _readNullChunkValue(
   ReadContext context,
   int header,
-  FieldTypeInternal? valueFieldType,
-  PinnedTypeInfoPayloadInternal? declaredValuePayload,
+  FieldType? valueFieldType,
+  FixedTypePayload? declaredValuePayload,
 ) {
   final valueHasNull = (header & 0x10) != 0;
   if (valueHasNull) {
@@ -475,8 +475,8 @@ Object? _readNullChunkValue(
   return trackRef ? context.readRef() : context.readNonRef();
 }
 
-FieldTypeInternal _declaredMapFieldType(
-  FieldTypeInternal fieldType, {
+FieldType _declaredMapFieldType(
+  FieldType fieldType, {
   required bool trackRef,
 }) {
   return fieldType.withRootOverrides(nullable: false, ref: trackRef);
@@ -484,8 +484,8 @@ FieldTypeInternal _declaredMapFieldType(
 
 Object? _readDeclaredMapValue(
   ReadContext context,
-  FieldTypeInternal fieldType,
-  PinnedTypeInfoPayloadInternal payload, {
+  FieldType fieldType,
+  FixedTypePayload payload, {
   required bool trackRef,
 }) {
   if (!trackRef) {
@@ -501,7 +501,7 @@ Object? _readDeclaredMapValue(
 
 Object? _readResolvedMapValue(
   ReadContext context,
-  PinnedTypeInfoPayloadInternal payload, {
+  FixedTypePayload payload, {
   required bool trackRef,
 }) {
   if (!trackRef) {

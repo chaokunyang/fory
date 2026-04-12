@@ -26,15 +26,57 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import java.util.List;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import java.util.Objects;
 import org.apache.fory.Fory;
-import org.apache.fory.ForyTestBase;
+import org.apache.fory.TestBase;
 import org.apache.fory.config.Language;
 import org.testng.Assert;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
-public class GuavaCollectionSerializersTest extends ForyTestBase {
+public class GuavaCollectionSerializersTest extends TestBase {
+  @DataProvider(name = "trackingRefFory")
+  public static Object[][] trackingRefFory() {
+    return new Object[][] {{newJavaFory(true, false)}, {newJavaFory(false, false)}};
+  }
+
+  @DataProvider(name = "foryCopyConfig")
+  public static Object[][] foryCopyConfig() {
+    return new Object[][] {{newCopyFory(false)}, {newCopyFory(true)}};
+  }
+
+  @DataProvider(name = "javaFory")
+  public static Object[][] javaFory() {
+    return new Object[][] {
+      {newJavaFory(true, false)},
+      {newJavaFory(false, false)},
+      {newJavaFory(true, true)},
+      {newJavaFory(false, true)}
+    };
+  }
+
+  private static Fory newJavaFory(boolean trackingRef, boolean codegen) {
+    return builder()
+        .withRefTracking(trackingRef)
+        .withCodegen(codegen)
+        .suppressClassRegistrationWarnings(true)
+        .build();
+  }
+
+  private static Fory newCopyFory(boolean codegen) {
+    return builder()
+        .withRefCopy(true)
+        .withJdkClassSerializableCheck(false)
+        .withCodegen(codegen)
+        .suppressClassRegistrationWarnings(true)
+        .build();
+  }
+
+  private static void copyCheck(Fory fory, Object obj) {
+    Object copy = fory.copy(obj);
+    Assert.assertEquals(copy, obj);
+    Assert.assertNotSame(copy, obj);
+  }
 
   @Test(dataProvider = "trackingRefFory")
   public void testImmutableListSerializer(Fory fory) {
@@ -153,8 +195,13 @@ public class GuavaCollectionSerializersTest extends ForyTestBase {
   }
 
   @Test
-  public void tesXlangSerialize() {
-    Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
+  public void testXlangSerialize() {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .requireClassRegistration(false)
+            .suppressClassRegistrationWarnings(true)
+            .build();
     serDe(fory, ImmutableBiMap.of());
     serDe(fory, ImmutableBiMap.of(1, 2));
     serDe(fory, ImmutableBiMap.of(1, 2, 3, 4));
@@ -168,23 +215,45 @@ public class GuavaCollectionSerializersTest extends ForyTestBase {
     serDe(fory, ImmutableSet.of(1, 2, 3, 4));
   }
 
-  @Data
-  @AllArgsConstructor
-  public static class Pojo {
-    List<List<Object>> data;
-  }
-
   @Test(dataProvider = "javaFory")
-  void testNestedRefTracking(Fory fory) {
+  public void testNestedRefTracking(Fory fory) {
     Pojo pojo = new Pojo(ImmutableList.of(ImmutableList.of(1, 2), ImmutableList.of(2, 2)));
-    byte[] bytes = fory.serialize(pojo);
-    Pojo deserializedPojo = (Pojo) fory.deserialize(bytes);
-    System.out.println(deserializedPojo);
+    Assert.assertEquals(serDe(fory, pojo), pojo);
   }
 
   @Test(dataProvider = "foryCopyConfig")
-  void testNestedRefTrackingCopy(Fory fory) {
+  public void testNestedRefTrackingCopy(Fory fory) {
     Pojo pojo = new Pojo(ImmutableList.of(ImmutableList.of(1, 2), ImmutableList.of(2, 2)));
     copyCheck(fory, pojo);
+  }
+
+  public static final class Pojo {
+    private final List<List<Object>> data;
+
+    public Pojo(List<List<Object>> data) {
+      this.data = data;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (this == other) {
+        return true;
+      }
+      if (!(other instanceof Pojo)) {
+        return false;
+      }
+      Pojo pojo = (Pojo) other;
+      return Objects.equals(data, pojo.data);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(data);
+    }
+
+    @Override
+    public String toString() {
+      return "Pojo{" + "data=" + data + '}';
+    }
   }
 }

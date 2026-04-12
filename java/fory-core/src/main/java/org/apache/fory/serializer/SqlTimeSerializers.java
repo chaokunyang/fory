@@ -27,7 +27,7 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.resolver.TypeResolver;
 
 /** Optional SQL time serializers loaded only when {@code java.sql} types are actually used. */
 public final class SqlTimeSerializers {
@@ -58,7 +58,7 @@ public final class SqlTimeSerializers {
     return new TimestampSerializer(config);
   }
 
-  public static void registerDefaultSerializers(ClassResolver resolver) {
+  public static void registerDefaultSerializers(TypeResolver resolver) {
     Config config = resolver.getConfig();
     resolver.registerInternalSerializer(java.sql.Date.class, newSqlDateSerializer(config));
     resolver.registerInternalSerializer(Time.class, new SqlTimeSerializer(config));

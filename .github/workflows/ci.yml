@@ -945,10 +945,14 @@ jobs:
           dart pub get
       - name: Generate Dart code
         run: |
-          cd dart/packages/fory
-          dart run build_runner build --delete-conflicting-outputs
-          cd dart/packages/fory-test
-          dart run build_runner build --delete-conflicting-outputs
+          (
+            cd dart/packages/fory
+            dart run build_runner build --delete-conflicting-outputs
+          )
+          (
+            cd dart/packages/fory-test
+            dart run build_runner build --delete-conflicting-outputs
+          )
       - name: Run Dart Xlang Test
         env:
           FORY_DART_JAVA_CI: "1"
@@ -980,10 +984,14 @@ jobs:
           dart pub get
       - name: Generate code
         run: |
-          cd dart/packages/fory
-          dart run build_runner build --delete-conflicting-outputs
-          cd dart/packages/fory-test
-          dart run build_runner build --delete-conflicting-outputs
+          (
+            cd dart/packages/fory
+            dart run build_runner build --delete-conflicting-outputs
+          )
+          (
+            cd dart/packages/fory-test
+            dart run build_runner build --delete-conflicting-outputs
+          )
       - name: Run tests
         run: |
           cd dart/packages/fory-test

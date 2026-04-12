@@ -945,6 +945,8 @@ jobs:
           dart pub get
       - name: Generate Dart code
         run: |
+          cd dart/packages/fory
+          dart run build_runner build --delete-conflicting-outputs
           cd dart/packages/fory-test
           dart run build_runner build --delete-conflicting-outputs
       - name: Run Dart Xlang Test
@@ -978,6 +980,8 @@ jobs:
           dart pub get
       - name: Generate code
         run: |
+          cd dart/packages/fory
+          dart run build_runner build --delete-conflicting-outputs
           cd dart/packages/fory-test
           dart run build_runner build --delete-conflicting-outputs
       - name: Run tests
@@ -1068,7 +1072,6 @@ jobs:
           cat <<'EOF' | sed 's/^          //' > "$FLUTTER_SMOKE_DIR/test/fory_smoke_test.dart"
           import 'package:flutter_test/flutter_test.dart';
           import 'package:fory/fory.dart';
-          import 'package:fory_flutter_smoke/person.dart';
           import 'package:fory_flutter_smoke/person.dart';
 
           void main() {

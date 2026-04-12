@@ -46,20 +46,23 @@ def main() -> None:
     os.makedirs(args.output_dir, exist_ok=True)
 
     with open(args.json_file, "r", encoding="utf-8") as handle:
-      payload = json.load(handle)
+        payload = json.load(handle)
 
     results = defaultdict(lambda: defaultdict(dict))
     for record in payload["results"]:
-        results[record["data_type"]][record["operation"]][record["serializer"]] = record[
-            "median_ops_per_sec"
-        ]
+        results[record["data_type"]][record["operation"]][record["serializer"]] = (
+            record["median_ops_per_sec"]
+        )
 
     plot_paths = []
     for data_type, operations in sorted(results.items()):
         figure, axes = plt.subplots(1, 2, figsize=(12, 5))
         for index, operation in enumerate(["serialize", "deserialize"]):
             serializers = ["fory", "protobuf"]
-            values = [operations.get(operation, {}).get(serializer, 0.0) for serializer in serializers]
+            values = [
+                operations.get(operation, {}).get(serializer, 0.0)
+                for serializer in serializers
+            ]
             bars = axes[index].bar(
                 serializers,
                 values,
@@ -89,7 +92,9 @@ def main() -> None:
     with open(report_path, "w", encoding="utf-8") as handle:
         handle.write("# Dart benchmark results\n\n")
         handle.write("## Throughput\n\n")
-        handle.write("| Data Type | Operation | Fory (ops/s) | Protobuf (ops/s) | Fory vs PB |\n")
+        handle.write(
+            "| Data Type | Operation | Fory (ops/s) | Protobuf (ops/s) | Fory vs PB |\n"
+        )
         handle.write("| --- | --- | ---: | ---: | ---: |\n")
         for data_type, operations in sorted(results.items()):
             for operation in ["serialize", "deserialize"]:
@@ -104,9 +109,7 @@ def main() -> None:
         handle.write("| Data Type | Fory | Protobuf |\n")
         handle.write("| --- | ---: | ---: |\n")
         for data_type, values in sorted(payload["sizes"].items()):
-            handle.write(
-                f"| {data_type} | {values['fory']} | {values['protobuf']} |\n"
-            )
+            handle.write(f"| {data_type} | {values['fory']} | {values['protobuf']} |\n")
         if plot_paths:
             handle.write("\n## Plots\n\n")
             for data_type, path in plot_paths:

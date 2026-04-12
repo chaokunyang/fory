@@ -9,7 +9,7 @@ import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/payload_codec.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/serializer/struct_session.dart';
+import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/types/float16.dart';
 
 /// Read-side serializer context.
@@ -27,7 +27,7 @@ final class ReadContext {
 
   late Buffer _buffer;
   final List<ResolvedTypeInternal> _sharedTypes = <ResolvedTypeInternal>[];
-  StructReadSession? _structReadSession;
+  StructReadSlots? _structReadSlots;
   int _depth = 0;
 
   @internal
@@ -42,10 +42,14 @@ final class ReadContext {
   @internal
   void prepare(Buffer buffer) {
     _buffer = buffer;
+  }
+
+  @internal
+  void reset() {
     _sharedTypes.clear();
     _refReader.reset();
     _metaStringReader.reset();
-    _structReadSession = null;
+    _structReadSlots = null;
     _depth = 0;
   }
 
@@ -60,28 +64,28 @@ final class ReadContext {
 
   @internal
   T? localStateAs<T>(Object key) {
-    if (!identical(key, structReadSessionKey)) {
+    if (!identical(key, structReadSlotsKey)) {
       throw StateError('Unknown read local state key: $key.');
     }
-    return _structReadSession as T?;
+    return _structReadSlots as T?;
   }
 
   @internal
   Object? replaceLocalState(Object key, Object? next) {
-    if (!identical(key, structReadSessionKey)) {
+    if (!identical(key, structReadSlotsKey)) {
       throw StateError('Unknown read local state key: $key.');
     }
-    final previous = _structReadSession;
-    _structReadSession = next as StructReadSession?;
+    final previous = _structReadSlots;
+    _structReadSlots = next as StructReadSlots?;
     return previous;
   }
 
   @internal
   void restoreLocalState(Object key, Object? previous) {
-    if (!identical(key, structReadSessionKey)) {
+    if (!identical(key, structReadSlotsKey)) {
       throw StateError('Unknown read local state key: $key.');
     }
-    _structReadSession = previous as StructReadSession?;
+    _structReadSlots = previous as StructReadSlots?;
   }
 
   @internal
@@ -109,15 +113,13 @@ final class ReadContext {
     } else {
       sentinelId = null;
     }
-    try {
-      return serializer.read(this) as Object;
-    } finally {
-      if (needsSentinel &&
-          _refReader.hasPreservedRefId &&
-          _refReader.lastPreservedRefId == sentinelId) {
-        _refReader.discardPreservedRefId(sentinelId!);
-      }
+    final value = serializer.read(this) as Object;
+    if (needsSentinel &&
+        _refReader.hasPreservedRefId &&
+        _refReader.lastPreservedRefId == sentinelId) {
+      _refReader.discardPreservedRefId(sentinelId!);
     }
+    return value;
   }
 
   /// Records entry into one more nested read frame.
@@ -275,16 +277,14 @@ final class ReadContext {
       );
     }
     increaseDepth();
-    try {
-      return readPayloadValue(
-        this,
-        resolved,
-        declaredShape,
-        hasPreservedRef: hasPreservedRef,
-      );
-    } finally {
-      decreaseDepth();
-    }
+    final value = readPayloadValue(
+      this,
+      resolved,
+      declaredShape,
+      hasPreservedRef: hasPreservedRef,
+    );
+    decreaseDepth();
+    return value;
   }
 
   ResolvedTypeInternal _readTypeMeta([

@@ -91,52 +91,48 @@ const List<GeneratedFieldMetadata> _personForyFieldMetadata =
   ),
 ];
 
-typedef _PersonSessionWriter = GeneratedStructFieldWriter<Person>;
-typedef _PersonSessionReader = GeneratedStructFieldReader<Person>;
+typedef _PersonFieldWriter = GeneratedStructFieldWriter<Person>;
+typedef _PersonFieldReader = GeneratedStructFieldReader<Person>;
 
-void _writePersonSessionField0(
+void _writePersonField0(
     WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructRuntimeValue(context, field, value.age);
+  writeGeneratedStructFieldValue(context, field, value.age);
 }
 
-void _writePersonSessionField1(
+void _writePersonField1(
     WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructRuntimeValue(context, field, value.name);
+  writeGeneratedStructFieldValue(context, field, value.name);
 }
 
-void _writePersonSessionField2(
+void _writePersonField2(
     WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructRuntimeValue(context, field, value.tags);
+  writeGeneratedStructFieldValue(context, field, value.tags);
 }
 
-void _writePersonSessionField3(
+void _writePersonField3(
     WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructRuntimeValue(context, field, value.favoriteColor);
+  writeGeneratedStructFieldValue(context, field, value.favoriteColor);
 }
 
-void _readPersonSessionField0(
-    ReadContext context, Person value, Object? rawValue) {
+void _readPersonField0(ReadContext context, Person value, Object? rawValue) {
   value.age = _readPersonAge(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.age);
 }
 
-void _readPersonSessionField1(
-    ReadContext context, Person value, Object? rawValue) {
+void _readPersonField1(ReadContext context, Person value, Object? rawValue) {
   value.name = _readPersonName(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.name);
 }
 
-void _readPersonSessionField2(
-    ReadContext context, Person value, Object? rawValue) {
+void _readPersonField2(ReadContext context, Person value, Object? rawValue) {
   value.tags = _readPersonTags(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.tags);
 }
 
-void _readPersonSessionField3(
-    ReadContext context, Person value, Object? rawValue) {
+void _readPersonField3(ReadContext context, Person value, Object? rawValue) {
   value.favoriteColor = _readPersonFavoriteColor(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.favoriteColor);
@@ -144,18 +140,18 @@ void _readPersonSessionField3(
 
 final GeneratedStructRegistration<Person> _personForyRegistration =
     GeneratedStructRegistration<Person>(
-  sessionWritersBySlot: <_PersonSessionWriter>[
-    _writePersonSessionField0,
-    _writePersonSessionField1,
-    _writePersonSessionField2,
-    _writePersonSessionField3,
+  fieldWritersBySlot: <_PersonFieldWriter>[
+    _writePersonField0,
+    _writePersonField1,
+    _writePersonField2,
+    _writePersonField3,
   ],
   compatibleFactory: Person.new,
-  compatibleReadersBySlot: <_PersonSessionReader>[
-    _readPersonSessionField0,
-    _readPersonSessionField1,
-    _readPersonSessionField2,
-    _readPersonSessionField3,
+  compatibleReadersBySlot: <_PersonFieldReader>[
+    _readPersonField0,
+    _readPersonField1,
+    _readPersonField2,
+    _readPersonField3,
   ],
   type: Person,
   serializerFactory: _PersonForySerializer.new,
@@ -168,15 +164,15 @@ final class _PersonForySerializer extends Serializer<Person> {
 
   _PersonForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _personForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _personForyRegistration,
     );
@@ -184,34 +180,34 @@ final class _PersonForySerializer extends Serializer<Person> {
 
   @override
   void write(WriteContext context, Person value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor0.writeVarInt32(value.age.value);
       cursor0.finish();
       context.writeString(value.name);
-      writeGeneratedStructRuntimeValue(context, fields[2], value.tags);
+      writeGeneratedStructFieldValue(context, fields[2], value.tags);
       final cursor3 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor3.writeVarUint32(value.favoriteColor.index);
       cursor3.finish();
       return;
     }
-    final writers = _personForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _personForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   Person read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = Person();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.age = Int32(cursor0.readVarInt32());
       cursor0.finish();
@@ -223,32 +219,32 @@ final class _PersonForySerializer extends Serializer<Person> {
       cursor3.finish();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawPerson0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawPerson0 = slots.valueForSlot(0);
       value.age = _readPersonAge(
           rawPerson0 is DeferredReadRef
               ? context.getReadRef(rawPerson0.id)
               : rawPerson0,
           value.age);
     }
-    if (session.containsSlot(1)) {
-      final rawPerson1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawPerson1 = slots.valueForSlot(1);
       value.name = _readPersonName(
           rawPerson1 is DeferredReadRef
               ? context.getReadRef(rawPerson1.id)
               : rawPerson1,
           value.name);
     }
-    if (session.containsSlot(2)) {
-      final rawPerson2 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawPerson2 = slots.valueForSlot(2);
       value.tags = _readPersonTags(
           rawPerson2 is DeferredReadRef
               ? context.getReadRef(rawPerson2.id)
               : rawPerson2,
           value.tags);
     }
-    if (session.containsSlot(3)) {
-      final rawPerson3 = session.valueForSlot(3);
+    if (slots.containsSlot(3)) {
+      final rawPerson3 = slots.valueForSlot(3);
       value.favoriteColor = _readPersonFavoriteColor(
           rawPerson3 is DeferredReadRef
               ? context.getReadRef(rawPerson3.id)

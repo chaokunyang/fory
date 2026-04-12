@@ -9,7 +9,7 @@ import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/payload_codec.dart';
-import 'package:fory/src/serializer/struct_session.dart';
+import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/types/float16.dart';
 
 /// Write-side serializer context.
@@ -28,7 +28,7 @@ final class WriteContext {
   late Buffer _buffer;
   final LinkedHashMap<SharedTypeDefInternal, int> _typeDefIds =
       LinkedHashMap<SharedTypeDefInternal, int>.identity();
-  StructWriteSession? _structWriteSession;
+  StructWriteSlots? _structWriteSlots;
   bool _rootTrackRef = false;
   int _depth = 0;
 
@@ -45,10 +45,15 @@ final class WriteContext {
   void prepare(Buffer buffer, {required bool trackRef}) {
     _buffer = buffer;
     _rootTrackRef = trackRef;
+  }
+
+  @internal
+  void reset() {
     _typeDefIds.clear();
     _refWriter.reset();
     _metaStringWriter.reset();
-    _structWriteSession = null;
+    _structWriteSlots = null;
+    _rootTrackRef = false;
     _depth = 0;
   }
 
@@ -66,28 +71,28 @@ final class WriteContext {
 
   @internal
   T? localStateAs<T>(Object key) {
-    if (!identical(key, structWriteSessionKey)) {
+    if (!identical(key, structWriteSlotsKey)) {
       throw StateError('Unknown write local state key: $key.');
     }
-    return _structWriteSession as T?;
+    return _structWriteSlots as T?;
   }
 
   @internal
   Object? replaceLocalState(Object key, Object? next) {
-    if (!identical(key, structWriteSessionKey)) {
+    if (!identical(key, structWriteSlotsKey)) {
       throw StateError('Unknown write local state key: $key.');
     }
-    final previous = _structWriteSession;
-    _structWriteSession = next as StructWriteSession?;
+    final previous = _structWriteSlots;
+    _structWriteSlots = next as StructWriteSlots?;
     return previous;
   }
 
   @internal
   void restoreLocalState(Object key, Object? previous) {
-    if (!identical(key, structWriteSessionKey)) {
+    if (!identical(key, structWriteSlotsKey)) {
       throw StateError('Unknown write local state key: $key.');
     }
-    _structWriteSession = previous as StructWriteSession?;
+    _structWriteSlots = previous as StructWriteSlots?;
   }
 
   @internal
@@ -235,18 +240,15 @@ final class WriteContext {
       return;
     }
     increaseDepth();
-    try {
-      writePayloadValue(this, resolved, value, declaredShape);
-    } finally {
-      decreaseDepth();
-    }
+    writePayloadValue(this, resolved, value, declaredShape);
+    decreaseDepth();
   }
 
   void _writeTypeMeta(ResolvedTypeInternal resolved, Object value) {
     _typeResolver.writeTypeMeta(
       _buffer,
       resolved,
-      sharedTypeDef: resolved.structRuntime?.sharedTypeDefForWrite(
+      sharedTypeDef: resolved.structCodec?.sharedTypeDefForWrite(
         this,
         resolved,
         value,

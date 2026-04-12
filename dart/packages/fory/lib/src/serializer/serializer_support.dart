@@ -14,17 +14,17 @@ Object? readCompatibleField(
   ReadContext context,
   FieldMetadataInternal field,
 ) {
-  return readCompatibleFieldRuntime(
+  return readCompatibleFieldBinding(
     context,
-    _readImpl(context).typeResolver.declaredFieldRuntime(field),
+    _readImpl(context).typeResolver.declaredFieldBinding(field),
   );
 }
 
-Object? readCompatibleFieldRuntime(
+Object? readCompatibleFieldBinding(
   ReadContext context,
-  DeclaredValueRuntimeInternal runtime,
+  DeclaredValueBindingInternal binding,
 ) {
-  final shape = runtime.shape;
+  final shape = binding.shape;
   final internal = _readImpl(context);
   if (shape.isDynamic) {
     return context.readRef();
@@ -32,10 +32,10 @@ Object? readCompatibleFieldRuntime(
   if (shape.isPrimitive && !shape.nullable) {
     return internal.readPrimitiveValue(shape.typeId);
   }
-  final resolved = runtime.resolved!;
-  if (!runtime.usesDeclaredType) {
+  final resolved = binding.resolved!;
+  if (!binding.usesDeclaredType) {
     if (shape.ref) {
-      return _readCompatibleRefValueWithTypeMetaRuntime(context, runtime);
+      return _readCompatibleRefValueWithTypeMeta(context, binding);
     }
     if (shape.nullable) {
       final flag = context.buffer.readByte();
@@ -153,9 +153,9 @@ FieldMetadataInternal mergeCompatibleReadField(
   );
 }
 
-Object? _readCompatibleRefValueWithTypeMetaRuntime(
+Object? _readCompatibleRefValueWithTypeMeta(
   ReadContext context,
-  DeclaredValueRuntimeInternal runtime,
+  DeclaredValueBindingInternal binding,
 ) {
   final internal = _readImpl(context);
   final flag = internal.refReader.tryPreserveRefId(context.buffer);
@@ -174,8 +174,8 @@ Object? _readCompatibleRefValueWithTypeMetaRuntime(
     }
     return null;
   }
-  final declaredShape = runtime.shape;
-  final expectedResolved = runtime.resolved!;
+  final declaredShape = binding.shape;
+  final expectedResolved = binding.resolved!;
   final resolved = internal.readTypeMetaValue(
     expectedResolved.isNamed ? expectedResolved : null,
   );

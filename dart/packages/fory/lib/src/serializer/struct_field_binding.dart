@@ -3,10 +3,10 @@ import 'package:meta/meta.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
 @internal
-final class StructFieldRuntime {
+final class StructFieldBinding {
   final int slot;
   final FieldMetadataInternal metadata;
-  final DeclaredValueRuntimeInternal runtime;
+  final DeclaredValueBindingInternal valueBinding;
 
-  const StructFieldRuntime(this.slot, this.metadata, this.runtime);
+  const StructFieldBinding(this.slot, this.metadata, this.valueBinding);
 }

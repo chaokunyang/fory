@@ -337,11 +337,11 @@ final class ForyGenerator extends Generator {
       ..writeln('];')
       ..writeln()
       ..writeln(
-        'typedef _${structSpec.name}SessionWriter = GeneratedStructFieldWriter<${structSpec.name}>;',
+        'typedef _${structSpec.name}FieldWriter = GeneratedStructFieldWriter<${structSpec.name}>;',
       );
     if (structSpec.constructorPlan.mode == _ConstructorMode.mutable) {
       output.writeln(
-        'typedef _${structSpec.name}SessionReader = GeneratedStructFieldReader<${structSpec.name}>;',
+        'typedef _${structSpec.name}FieldReader = GeneratedStructFieldReader<${structSpec.name}>;',
       );
     }
     output.writeln();
@@ -349,10 +349,10 @@ final class ForyGenerator extends Generator {
       final field = structSpec.fields[index];
       output
         ..writeln(
-          'void _write${structSpec.name}SessionField$index(WriteContext context, GeneratedStructField field, ${structSpec.name} value) {',
+          'void _write${structSpec.name}Field$index(WriteContext context, GeneratedStructField field, ${structSpec.name} value) {',
         )
         ..writeln(
-          '  writeGeneratedStructRuntimeValue(context, field, value.${field.name});',
+          '  writeGeneratedStructFieldValue(context, field, value.${field.name});',
         )
         ..writeln('}')
         ..writeln();
@@ -363,10 +363,10 @@ final class ForyGenerator extends Generator {
         final readerFunctionName = field.readerFunctionName(structSpec.name);
         output
           ..writeln(
-            'void _read${structSpec.name}SessionField$index(ReadContext context, ${structSpec.name} value, Object? rawValue) {',
+            'void _read${structSpec.name}Field$index(ReadContext context, ${structSpec.name} value, Object? rawValue) {',
           )
           ..writeln(
-            '  value.${field.name} = $readerFunctionName(${_sessionResolvedRawExpression('rawValue')}, value.${field.name});',
+            '  value.${field.name} = $readerFunctionName(${_slotResolvedRawExpression('rawValue')}, value.${field.name});',
           )
           ..writeln('}')
           ..writeln();
@@ -377,10 +377,10 @@ final class ForyGenerator extends Generator {
         'final GeneratedStructRegistration<${structSpec.name}> $registrationName = GeneratedStructRegistration<${structSpec.name}>(',
       )
       ..writeln(
-        '  sessionWritersBySlot: <_${structSpec.name}SessionWriter>[',
+        '  fieldWritersBySlot: <_${structSpec.name}FieldWriter>[',
       );
     for (var index = 0; index < structSpec.fields.length; index += 1) {
-      output.writeln('    _write${structSpec.name}SessionField$index,');
+      output.writeln('    _write${structSpec.name}Field$index,');
     }
     output
       ..writeln('  ],')
@@ -391,10 +391,10 @@ final class ForyGenerator extends Generator {
       );
     if (structSpec.constructorPlan.mode == _ConstructorMode.mutable) {
       output.writeln(
-        '  compatibleReadersBySlot: <_${structSpec.name}SessionReader>[',
+        '  compatibleReadersBySlot: <_${structSpec.name}FieldReader>[',
       );
       for (var index = 0; index < structSpec.fields.length; index += 1) {
-        output.writeln('    _read${structSpec.name}SessionField$index,');
+        output.writeln('    _read${structSpec.name}Field$index,');
       }
       output.writeln('  ],');
     } else {
@@ -417,10 +417,10 @@ final class ForyGenerator extends Generator {
       ..writeln('  $serializerClassName();')
       ..writeln()
       ..writeln(
-        '  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {',
+        '  List<GeneratedStructField> _writeFields(WriteContext context) {',
       )
       ..writeln(
-        '    return _generatedFields ??= buildGeneratedStructRuntimeFields(',
+        '    return _generatedFields ??= buildGeneratedStructFields(',
       )
       ..writeln('      context.typeResolver,')
       ..writeln('      $registrationName,')
@@ -428,10 +428,10 @@ final class ForyGenerator extends Generator {
       ..writeln('  }')
       ..writeln()
       ..writeln(
-        '  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {',
+        '  List<GeneratedStructField> _readFields(ReadContext context) {',
       )
       ..writeln(
-        '    return _generatedFields ??= buildGeneratedStructRuntimeFields(',
+        '    return _generatedFields ??= buildGeneratedStructFields(',
       )
       ..writeln('      context.typeResolver,')
       ..writeln('      $registrationName,')
@@ -441,13 +441,13 @@ final class ForyGenerator extends Generator {
       ..writeln(
         '  void write(WriteContext context, ${structSpec.name} value) {',
       )
-      ..writeln('    final session = generatedStructWriteSession(context);')
-      ..writeln('    if (session == null) {');
+      ..writeln('    final slots = generatedStructWriteSlots(context);')
+      ..writeln('    if (slots == null) {');
     if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
       output.writeln('      final buffer = context.buffer;');
     }
     if (hasRuntimeFastPath) {
-      output.writeln('      final fields = _writeRuntimeFields(context);');
+      output.writeln('      final fields = _writeFields(context);');
     }
     for (var index = 0; index < structSpec.fields.length; index += 1) {
       final field = structSpec.fields[index];
@@ -467,7 +467,7 @@ final class ForyGenerator extends Generator {
         );
       } else {
         output.writeln(
-          '      writeGeneratedStructRuntimeValue(context, fields[$index], value.${field.name});',
+          '      writeGeneratedStructFieldValue(context, fields[$index], value.${field.name});',
         );
       }
       final directCursorEndRun = directCursorRunByEnd[index];
@@ -478,9 +478,9 @@ final class ForyGenerator extends Generator {
     output
       ..writeln('      return;')
       ..writeln('    }')
-      ..writeln('    final writers = $registrationName.sessionWritersBySlot;')
+      ..writeln('    final writers = $registrationName.fieldWritersBySlot;')
       ..writeln(
-        '    for (final field in session.orderedFields) {',
+        '    for (final field in slots.orderedFields) {',
       )
       ..writeln('      writers[field.slot](context, field, value);')
       ..writeln('    }')
@@ -492,15 +492,15 @@ final class ForyGenerator extends Generator {
     switch (structSpec.constructorPlan.mode) {
       case _ConstructorMode.mutable:
         output
-          ..writeln('    final session = generatedStructReadSession(context);')
+          ..writeln('    final slots = generatedStructReadSlots(context);')
           ..writeln('    final value = ${structSpec.name}();')
           ..writeln('    context.reference(value);')
-          ..writeln('    if (session == null) {');
+          ..writeln('    if (slots == null) {');
         if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
           output.writeln('      final buffer = context.buffer;');
         }
         if (hasRuntimeFastPath) {
-          output.writeln('      final fields = _readRuntimeFields(context);');
+          output.writeln('      final fields = _readFields(context);');
         }
         for (var index = 0; index < structSpec.fields.length; index += 1) {
           final field = structSpec.fields[index];
@@ -525,7 +525,7 @@ final class ForyGenerator extends Generator {
             );
           } else {
             output.writeln(
-              '      value.${field.name} = $readerFunctionName(readGeneratedStructRuntimeValue(context, fields[$index], value.${field.name}), value.${field.name});',
+              '      value.${field.name} = $readerFunctionName(readGeneratedStructFieldValue(context, fields[$index], value.${field.name}), value.${field.name});',
             );
           }
           final directCursorEndRun = directCursorRunByEnd[index];
@@ -540,32 +540,32 @@ final class ForyGenerator extends Generator {
           final readerFunctionName = field.readerFunctionName(structSpec.name);
           final rawValueName = 'raw${structSpec.name}$index';
           output.writeln(
-            '    if (session.containsSlot($index)) {',
+            '    if (slots.containsSlot($index)) {',
           );
           output.writeln(
-            '      final $rawValueName = session.valueForSlot($index);',
+            '      final $rawValueName = slots.valueForSlot($index);',
           );
           output.writeln(
-            '      value.${field.name} = $readerFunctionName(${_sessionResolvedRawExpression(rawValueName)}, value.${field.name});',
+            '      value.${field.name} = $readerFunctionName(${_slotResolvedRawExpression(rawValueName)}, value.${field.name});',
           );
           output.writeln('    }');
         }
         output.writeln('    return value;');
       case _ConstructorMode.constructor:
         output.writeln(
-            '    final session = generatedStructReadSession(context);');
+            '    final slots = generatedStructReadSlots(context);');
         for (var index = 0; index < structSpec.fields.length; index += 1) {
           final field = structSpec.fields[index];
           output.writeln(
             '    late final ${field.displayType} ${field.localName};',
           );
         }
-        output.writeln('    if (session == null) {');
+        output.writeln('    if (slots == null) {');
         if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
           output.writeln('      final buffer = context.buffer;');
         }
         if (hasRuntimeFastPath) {
-          output.writeln('      final fields = _readRuntimeFields(context);');
+          output.writeln('      final fields = _readFields(context);');
         }
         for (var index = 0; index < structSpec.fields.length; index += 1) {
           final field = structSpec.fields[index];
@@ -590,7 +590,7 @@ final class ForyGenerator extends Generator {
             );
           } else {
             output.writeln(
-              '      ${field.localName} = $readerFunctionName(readGeneratedStructRuntimeValue(context, fields[$index]));',
+              '      ${field.localName} = $readerFunctionName(readGeneratedStructFieldValue(context, fields[$index]));',
             );
           }
           final directCursorEndRun = directCursorRunByEnd[index];
@@ -604,13 +604,13 @@ final class ForyGenerator extends Generator {
           final readerFunctionName = field.readerFunctionName(structSpec.name);
           final rawValueName = 'raw${structSpec.name}$index';
           output.writeln(
-            '      if (session.containsSlot($index)) {',
+            '      if (slots.containsSlot($index)) {',
           );
           output.writeln(
-            '        final $rawValueName = session.valueForSlot($index);',
+            '        final $rawValueName = slots.valueForSlot($index);',
           );
           output.writeln(
-            '        ${field.localName} = $readerFunctionName(${_sessionResolvedRawExpression(rawValueName)});',
+            '        ${field.localName} = $readerFunctionName(${_slotResolvedRawExpression(rawValueName)});',
           );
           output.writeln('      } else {');
           output.writeln(
@@ -748,7 +748,7 @@ final class ForyGenerator extends Generator {
     return '${structSpec.name}($arguments)';
   }
 
-  String _sessionResolvedRawExpression(String rawValueExpression) {
+  String _slotResolvedRawExpression(String rawValueExpression) {
     return '$rawValueExpression is DeferredReadRef '
         '? context.getReadRef($rawValueExpression.id) '
         ': $rawValueExpression';

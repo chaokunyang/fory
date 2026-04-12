@@ -4,13 +4,13 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/fory.dart';
 import 'package:fory/src/buffer.dart';
-import 'package:fory/src/fory.dart' as runtime;
+import 'package:fory/src/fory.dart' as fory_internals;
 import 'package:fory/src/resolver/type_resolver.dart' as resolver;
 import 'package:fory/src/serializer/declared_value_codec.dart';
 import 'package:fory/src/serializer/payload_codec.dart';
-import 'package:fory/src/serializer/struct_field_runtime.dart';
-import 'package:fory/src/serializer/struct_runtime.dart';
-import 'package:fory/src/serializer/struct_session.dart';
+import 'package:fory/src/serializer/struct_field_binding.dart';
+import 'package:fory/src/serializer/struct_codec.dart';
+import 'package:fory/src/serializer/struct_slots.dart';
 
 final BigInt _generatedCursorMask64Big = (BigInt.one << 64) - BigInt.one;
 final BigInt _generatedCursorSevenBitMaskBig = BigInt.from(0x7f);
@@ -434,7 +434,7 @@ final class GeneratedEnumRegistration {
 }
 
 @internal
-typedef GeneratedStructField = StructFieldRuntime;
+typedef GeneratedStructField = StructFieldBinding;
 
 @internal
 typedef GeneratedStructFieldWriter<T> = void Function(
@@ -446,7 +446,7 @@ typedef GeneratedStructFieldReader<T> = void Function(
 
 @internal
 final class GeneratedStructRegistration<T> {
-  final List<GeneratedStructFieldWriter<T>> sessionWritersBySlot;
+  final List<GeneratedStructFieldWriter<T>> fieldWritersBySlot;
   final GeneratedStructCompatibleFactory<T>? compatibleFactory;
   final List<GeneratedStructFieldReader<T>>? compatibleReadersBySlot;
   final Type type;
@@ -455,7 +455,7 @@ final class GeneratedStructRegistration<T> {
   final List<GeneratedFieldMetadata> fields;
 
   GeneratedStructRegistration({
-    required this.sessionWritersBySlot,
+    required this.fieldWritersBySlot,
     this.compatibleFactory,
     this.compatibleReadersBySlot,
     required this.type,
@@ -482,7 +482,7 @@ void registerGeneratedEnum(
   String? namespace,
   String? typeName,
 }) {
-  runtime.bindGeneratedEnum(
+  fory_internals.bindGeneratedEnum(
     fory,
     registration.type,
     registration.serializerFactory,
@@ -503,7 +503,7 @@ void registerGeneratedStruct<T>(
   String? namespace,
   String? typeName,
 }) {
-  runtime.bindGeneratedStruct(
+  fory_internals.bindGeneratedStruct(
     fory,
     registration.type,
     registration.serializerFactory,
@@ -534,16 +534,16 @@ void registerGeneratedStruct<T>(
 }
 
 @internal
-StructWriteSession? generatedStructWriteSession(WriteContext context) {
-  return context.localStateAs<StructWriteSession>(
-    structWriteSessionKey,
+StructWriteSlots? generatedStructWriteSlots(WriteContext context) {
+  return context.localStateAs<StructWriteSlots>(
+    structWriteSlotsKey,
   );
 }
 
 @internal
-StructReadSession? generatedStructReadSession(ReadContext context) {
-  return context.localStateAs<StructReadSession>(
-    structReadSessionKey,
+StructReadSlots? generatedStructReadSlots(ReadContext context) {
+  return context.localStateAs<StructReadSlots>(
+    structReadSlotsKey,
   );
 }
 
@@ -621,20 +621,20 @@ T readGeneratedTypedArrayValue<T>(
 }
 
 @internal
-List<StructFieldRuntime> buildGeneratedStructRuntimeFields(
+List<StructFieldBinding> buildGeneratedStructFields(
   resolver.TypeResolver typeResolver,
   GeneratedStructRegistration registration,
 ) {
   final fields = registration.internalFields;
-  return List<StructFieldRuntime>.unmodifiable(
-    List<StructFieldRuntime>.generate(
+  return List<StructFieldBinding>.unmodifiable(
+    List<StructFieldBinding>.generate(
       fields.length,
       (slot) {
         final metadata = fields[slot];
-        return StructFieldRuntime(
+        return StructFieldBinding(
           slot,
           metadata,
-          typeResolver.createDeclaredFieldRuntime(metadata),
+          typeResolver.createDeclaredFieldBinding(metadata),
         );
       },
     ),
@@ -642,20 +642,20 @@ List<StructFieldRuntime> buildGeneratedStructRuntimeFields(
 }
 
 @internal
-void writeGeneratedStructRuntimeValue(
+void writeGeneratedStructFieldValue(
   WriteContext context,
-  StructFieldRuntime field,
+  StructFieldBinding field,
   Object? value,
 ) {
-  final runtime = field.runtime;
-  final shape = runtime.shape;
+  final binding = field.valueBinding;
+  final shape = binding.shape;
   if (!shape.isDynamic && !shape.ref && !shape.nullable) {
     if (shape.isPrimitive) {
       context.writePrimitiveValue(shape.typeId, value as Object);
       return;
     }
-    final resolved = runtime.resolved!;
-    if (runtime.usesDeclaredType) {
+    final resolved = binding.resolved!;
+    if (binding.usesDeclaredType) {
       context.writeResolvedValue(resolved, value as Object, shape);
       return;
     }
@@ -664,23 +664,23 @@ void writeGeneratedStructRuntimeValue(
     context.writeResolvedValue(actualResolved, value, shape);
     return;
   }
-  writeDeclaredValueRuntime(context, field.runtime, value);
+  writeDeclaredValueBinding(context, binding, value);
 }
 
 @internal
-Object? readGeneratedStructRuntimeValue(
+Object? readGeneratedStructFieldValue(
   ReadContext context,
-  StructFieldRuntime field, [
+  StructFieldBinding field, [
   Object? fallback,
 ]) {
-  final runtime = field.runtime;
-  final shape = runtime.shape;
+  final binding = field.valueBinding;
+  final shape = binding.shape;
   if (fallback == null && !shape.isDynamic && !shape.ref && !shape.nullable) {
     if (shape.isPrimitive) {
       return context.readPrimitiveValue(shape.typeId);
     }
-    final resolved = runtime.resolved!;
-    if (runtime.usesDeclaredType) {
+    final resolved = binding.resolved!;
+    if (binding.usesDeclaredType) {
       return context.readResolvedValue(resolved, shape);
     }
     final actualResolved = context.readTypeMetaValue(
@@ -688,16 +688,16 @@ Object? readGeneratedStructRuntimeValue(
     );
     return context.readResolvedValue(actualResolved, shape);
   }
-  return readDeclaredValueRuntime(context, field.runtime, fallback);
+  return readDeclaredValueBinding(context, binding, fallback);
 }
 
 @internal
 List<T> readGeneratedDirectListValue<T>(
   ReadContext context,
-  StructFieldRuntime field,
+  StructFieldBinding field,
   T Function(Object? value) convert,
 ) {
-  final shape = field.runtime.shape;
+  final shape = field.valueBinding.shape;
   if (shape.typeId != resolver.TypeIds.list ||
       shape.nullable ||
       shape.ref ||
@@ -714,10 +714,10 @@ List<T> readGeneratedDirectListValue<T>(
 @internal
 Set<T> readGeneratedDirectSetValue<T>(
   ReadContext context,
-  StructFieldRuntime field,
+  StructFieldBinding field,
   T Function(Object? value) convert,
 ) {
-  final shape = field.runtime.shape;
+  final shape = field.valueBinding.shape;
   if (shape.typeId != resolver.TypeIds.set ||
       shape.nullable ||
       shape.ref ||
@@ -734,11 +734,11 @@ Set<T> readGeneratedDirectSetValue<T>(
 @internal
 Map<K, V> readGeneratedDirectMapValue<K, V>(
   ReadContext context,
-  StructFieldRuntime field,
+  StructFieldBinding field,
   K Function(Object? value) convertKey,
   V Function(Object? value) convertValue,
 ) {
-  final shape = field.runtime.shape;
+  final shape = field.valueBinding.shape;
   if (shape.typeId != resolver.TypeIds.map ||
       shape.nullable ||
       shape.ref ||

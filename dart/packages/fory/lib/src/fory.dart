@@ -13,7 +13,7 @@ import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/serializer/struct_runtime.dart';
+import 'package:fory/src/serializer/struct_codec.dart';
 
 /// Root facade for Apache Fory xlang serialization in Dart.
 ///
@@ -74,12 +74,16 @@ final class Fory {
   void serializeTo(Object? value, Buffer buffer, {bool trackRef = false}) {
     buffer.clear();
     _writeContext.prepare(buffer, trackRef: trackRef);
-    if (value == null) {
-      buffer.writeUint8(_nullHeaderFlag);
-      return;
+    try {
+      if (value == null) {
+        buffer.writeUint8(_nullHeaderFlag);
+        return;
+      }
+      buffer.writeUint8(_xlangHeaderFlag);
+      _writeContext.writeRootValue(value, trackRef: trackRef);
+    } finally {
+      _writeContext.reset();
     }
-    buffer.writeUint8(_xlangHeaderFlag);
-    _writeContext.writeRootValue(value, trackRef: trackRef);
   }
 
   /// Deserializes [bytes] and then checks that the result is assignable to [T].
@@ -98,22 +102,26 @@ final class Fory {
   /// current reader position of [buffer].
   T deserializeFrom<T>(Buffer buffer) {
     _readContext.prepare(buffer);
-    final header = buffer.readUint8();
-    if ((header & _nullHeaderFlag) != 0) {
-      return null as T;
-    }
-    if ((header & _xlangHeaderFlag) == 0) {
+    try {
+      final header = buffer.readUint8();
+      if ((header & _nullHeaderFlag) != 0) {
+        return null as T;
+      }
+      if ((header & _xlangHeaderFlag) == 0) {
+        throw StateError(
+          'Only xlang payloads are supported by the Dart runtime.',
+        );
+      }
+      final value = _readContext.readRef();
+      if (value is T) {
+        return value;
+      }
       throw StateError(
-        'Only xlang payloads are supported by the Dart runtime.',
+        'Deserialized value has type ${value.runtimeType}, expected $T.',
       );
+    } finally {
+      _readContext.reset();
     }
-    final value = _readContext.readRef();
-    if (value is T) {
-      return value;
-    }
-    throw StateError(
-      'Deserialized value has type ${value.runtimeType}, expected $T.',
-    );
   }
 
   /// Registers a generated type.

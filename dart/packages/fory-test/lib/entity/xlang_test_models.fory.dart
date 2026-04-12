@@ -69,29 +69,29 @@ const List<GeneratedFieldMetadata>
   ),
 ];
 
-typedef _TwoEnumFieldStructEvolutionSessionWriter
+typedef _TwoEnumFieldStructEvolutionFieldWriter
     = GeneratedStructFieldWriter<TwoEnumFieldStructEvolution>;
-typedef _TwoEnumFieldStructEvolutionSessionReader
+typedef _TwoEnumFieldStructEvolutionFieldReader
     = GeneratedStructFieldReader<TwoEnumFieldStructEvolution>;
 
-void _writeTwoEnumFieldStructEvolutionSessionField0(WriteContext context,
+void _writeTwoEnumFieldStructEvolutionField0(WriteContext context,
     GeneratedStructField field, TwoEnumFieldStructEvolution value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _writeTwoEnumFieldStructEvolutionSessionField1(WriteContext context,
+void _writeTwoEnumFieldStructEvolutionField1(WriteContext context,
     GeneratedStructField field, TwoEnumFieldStructEvolution value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f2);
+  writeGeneratedStructFieldValue(context, field, value.f2);
 }
 
-void _readTwoEnumFieldStructEvolutionSessionField0(
+void _readTwoEnumFieldStructEvolutionField0(
     ReadContext context, TwoEnumFieldStructEvolution value, Object? rawValue) {
   value.f1 = _readTwoEnumFieldStructEvolutionF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f1);
 }
 
-void _readTwoEnumFieldStructEvolutionSessionField1(
+void _readTwoEnumFieldStructEvolutionField1(
     ReadContext context, TwoEnumFieldStructEvolution value, Object? rawValue) {
   value.f2 = _readTwoEnumFieldStructEvolutionF2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -101,14 +101,14 @@ void _readTwoEnumFieldStructEvolutionSessionField1(
 final GeneratedStructRegistration<TwoEnumFieldStructEvolution>
     _twoEnumFieldStructEvolutionForyRegistration =
     GeneratedStructRegistration<TwoEnumFieldStructEvolution>(
-  sessionWritersBySlot: <_TwoEnumFieldStructEvolutionSessionWriter>[
-    _writeTwoEnumFieldStructEvolutionSessionField0,
-    _writeTwoEnumFieldStructEvolutionSessionField1,
+  fieldWritersBySlot: <_TwoEnumFieldStructEvolutionFieldWriter>[
+    _writeTwoEnumFieldStructEvolutionField0,
+    _writeTwoEnumFieldStructEvolutionField1,
   ],
   compatibleFactory: TwoEnumFieldStructEvolution.new,
-  compatibleReadersBySlot: <_TwoEnumFieldStructEvolutionSessionReader>[
-    _readTwoEnumFieldStructEvolutionSessionField0,
-    _readTwoEnumFieldStructEvolutionSessionField1,
+  compatibleReadersBySlot: <_TwoEnumFieldStructEvolutionFieldReader>[
+    _readTwoEnumFieldStructEvolutionField0,
+    _readTwoEnumFieldStructEvolutionField1,
   ],
   type: TwoEnumFieldStructEvolution,
   serializerFactory: _TwoEnumFieldStructEvolutionForySerializer.new,
@@ -122,15 +122,15 @@ final class _TwoEnumFieldStructEvolutionForySerializer
 
   _TwoEnumFieldStructEvolutionForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _twoEnumFieldStructEvolutionForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _twoEnumFieldStructEvolutionForyRegistration,
     );
@@ -138,8 +138,8 @@ final class _TwoEnumFieldStructEvolutionForySerializer
 
   @override
   void write(WriteContext context, TwoEnumFieldStructEvolution value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 10);
       cursor0.writeVarUint32(value.f1.index);
@@ -148,18 +148,18 @@ final class _TwoEnumFieldStructEvolutionForySerializer
       return;
     }
     final writers =
-        _twoEnumFieldStructEvolutionForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+        _twoEnumFieldStructEvolutionForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   TwoEnumFieldStructEvolution read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = TwoEnumFieldStructEvolution();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.f1 = TestEnum.values[cursor0.readVarUint32()];
@@ -167,16 +167,16 @@ final class _TwoEnumFieldStructEvolutionForySerializer
       cursor0.finish();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawTwoEnumFieldStructEvolution0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawTwoEnumFieldStructEvolution0 = slots.valueForSlot(0);
       value.f1 = _readTwoEnumFieldStructEvolutionF1(
           rawTwoEnumFieldStructEvolution0 is DeferredReadRef
               ? context.getReadRef(rawTwoEnumFieldStructEvolution0.id)
               : rawTwoEnumFieldStructEvolution0,
           value.f1);
     }
-    if (session.containsSlot(1)) {
-      final rawTwoEnumFieldStructEvolution1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawTwoEnumFieldStructEvolution1 = slots.valueForSlot(1);
       value.f2 = _readTwoEnumFieldStructEvolutionF2(
           rawTwoEnumFieldStructEvolution1 is DeferredReadRef
               ? context.getReadRef(rawTwoEnumFieldStructEvolution1.id)
@@ -220,15 +220,15 @@ const List<GeneratedFieldMetadata> _itemForyFieldMetadata =
   ),
 ];
 
-typedef _ItemSessionWriter = GeneratedStructFieldWriter<Item>;
-typedef _ItemSessionReader = GeneratedStructFieldReader<Item>;
+typedef _ItemFieldWriter = GeneratedStructFieldWriter<Item>;
+typedef _ItemFieldReader = GeneratedStructFieldReader<Item>;
 
-void _writeItemSessionField0(
+void _writeItemField0(
     WriteContext context, GeneratedStructField field, Item value) {
-  writeGeneratedStructRuntimeValue(context, field, value.name);
+  writeGeneratedStructFieldValue(context, field, value.name);
 }
 
-void _readItemSessionField0(ReadContext context, Item value, Object? rawValue) {
+void _readItemField0(ReadContext context, Item value, Object? rawValue) {
   value.name = _readItemName(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.name);
@@ -236,12 +236,12 @@ void _readItemSessionField0(ReadContext context, Item value, Object? rawValue) {
 
 final GeneratedStructRegistration<Item> _itemForyRegistration =
     GeneratedStructRegistration<Item>(
-  sessionWritersBySlot: <_ItemSessionWriter>[
-    _writeItemSessionField0,
+  fieldWritersBySlot: <_ItemFieldWriter>[
+    _writeItemField0,
   ],
   compatibleFactory: Item.new,
-  compatibleReadersBySlot: <_ItemSessionReader>[
-    _readItemSessionField0,
+  compatibleReadersBySlot: <_ItemFieldReader>[
+    _readItemField0,
   ],
   type: Item,
   serializerFactory: _ItemForySerializer.new,
@@ -254,15 +254,15 @@ final class _ItemForySerializer extends Serializer<Item> {
 
   _ItemForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _itemForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _itemForyRegistration,
     );
@@ -270,28 +270,28 @@ final class _ItemForySerializer extends Serializer<Item> {
 
   @override
   void write(WriteContext context, Item value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       context.writeString(value.name);
       return;
     }
-    final writers = _itemForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _itemForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   Item read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = Item();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       value.name = context.readString();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawItem0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawItem0 = slots.valueForSlot(0);
       value.name = _readItemName(
           rawItem0 is DeferredReadRef
               ? context.getReadRef(rawItem0.id)
@@ -457,111 +457,111 @@ const List<GeneratedFieldMetadata> _simpleStructForyFieldMetadata =
   ),
 ];
 
-typedef _SimpleStructSessionWriter = GeneratedStructFieldWriter<SimpleStruct>;
-typedef _SimpleStructSessionReader = GeneratedStructFieldReader<SimpleStruct>;
+typedef _SimpleStructFieldWriter = GeneratedStructFieldWriter<SimpleStruct>;
+typedef _SimpleStructFieldReader = GeneratedStructFieldReader<SimpleStruct>;
 
-void _writeSimpleStructSessionField0(
+void _writeSimpleStructField0(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f2);
+  writeGeneratedStructFieldValue(context, field, value.f2);
 }
 
-void _writeSimpleStructSessionField1(
+void _writeSimpleStructField1(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f7);
+  writeGeneratedStructFieldValue(context, field, value.f7);
 }
 
-void _writeSimpleStructSessionField2(
+void _writeSimpleStructField2(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f8);
+  writeGeneratedStructFieldValue(context, field, value.f8);
 }
 
-void _writeSimpleStructSessionField3(
+void _writeSimpleStructField3(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.last);
+  writeGeneratedStructFieldValue(context, field, value.last);
 }
 
-void _writeSimpleStructSessionField4(
+void _writeSimpleStructField4(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f4);
+  writeGeneratedStructFieldValue(context, field, value.f4);
 }
 
-void _writeSimpleStructSessionField5(
+void _writeSimpleStructField5(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f6);
+  writeGeneratedStructFieldValue(context, field, value.f6);
 }
 
-void _writeSimpleStructSessionField6(
+void _writeSimpleStructField6(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _writeSimpleStructSessionField7(
+void _writeSimpleStructField7(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f3);
+  writeGeneratedStructFieldValue(context, field, value.f3);
 }
 
-void _writeSimpleStructSessionField8(
+void _writeSimpleStructField8(
     WriteContext context, GeneratedStructField field, SimpleStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f5);
+  writeGeneratedStructFieldValue(context, field, value.f5);
 }
 
-void _readSimpleStructSessionField0(
+void _readSimpleStructField0(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.f2 = _readSimpleStructF2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f2);
 }
 
-void _readSimpleStructSessionField1(
+void _readSimpleStructField1(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.f7 = _readSimpleStructF7(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f7);
 }
 
-void _readSimpleStructSessionField2(
+void _readSimpleStructField2(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.f8 = _readSimpleStructF8(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f8);
 }
 
-void _readSimpleStructSessionField3(
+void _readSimpleStructField3(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.last = _readSimpleStructLast(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.last);
 }
 
-void _readSimpleStructSessionField4(
+void _readSimpleStructField4(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.f4 = _readSimpleStructF4(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f4);
 }
 
-void _readSimpleStructSessionField5(
+void _readSimpleStructField5(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.f6 = _readSimpleStructF6(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f6);
 }
 
-void _readSimpleStructSessionField6(
+void _readSimpleStructField6(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.f1 = _readSimpleStructF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f1);
 }
 
-void _readSimpleStructSessionField7(
+void _readSimpleStructField7(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.f3 = _readSimpleStructF3(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f3);
 }
 
-void _readSimpleStructSessionField8(
+void _readSimpleStructField8(
     ReadContext context, SimpleStruct value, Object? rawValue) {
   value.f5 = _readSimpleStructF5(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -570,28 +570,28 @@ void _readSimpleStructSessionField8(
 
 final GeneratedStructRegistration<SimpleStruct> _simpleStructForyRegistration =
     GeneratedStructRegistration<SimpleStruct>(
-  sessionWritersBySlot: <_SimpleStructSessionWriter>[
-    _writeSimpleStructSessionField0,
-    _writeSimpleStructSessionField1,
-    _writeSimpleStructSessionField2,
-    _writeSimpleStructSessionField3,
-    _writeSimpleStructSessionField4,
-    _writeSimpleStructSessionField5,
-    _writeSimpleStructSessionField6,
-    _writeSimpleStructSessionField7,
-    _writeSimpleStructSessionField8,
+  fieldWritersBySlot: <_SimpleStructFieldWriter>[
+    _writeSimpleStructField0,
+    _writeSimpleStructField1,
+    _writeSimpleStructField2,
+    _writeSimpleStructField3,
+    _writeSimpleStructField4,
+    _writeSimpleStructField5,
+    _writeSimpleStructField6,
+    _writeSimpleStructField7,
+    _writeSimpleStructField8,
   ],
   compatibleFactory: SimpleStruct.new,
-  compatibleReadersBySlot: <_SimpleStructSessionReader>[
-    _readSimpleStructSessionField0,
-    _readSimpleStructSessionField1,
-    _readSimpleStructSessionField2,
-    _readSimpleStructSessionField3,
-    _readSimpleStructSessionField4,
-    _readSimpleStructSessionField5,
-    _readSimpleStructSessionField6,
-    _readSimpleStructSessionField7,
-    _readSimpleStructSessionField8,
+  compatibleReadersBySlot: <_SimpleStructFieldReader>[
+    _readSimpleStructField0,
+    _readSimpleStructField1,
+    _readSimpleStructField2,
+    _readSimpleStructField3,
+    _readSimpleStructField4,
+    _readSimpleStructField5,
+    _readSimpleStructField6,
+    _readSimpleStructField7,
+    _readSimpleStructField8,
   ],
   type: SimpleStruct,
   serializerFactory: _SimpleStructForySerializer.new,
@@ -604,15 +604,15 @@ final class _SimpleStructForySerializer extends Serializer<SimpleStruct> {
 
   _SimpleStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _simpleStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _simpleStructForyRegistration,
     );
@@ -620,10 +620,10 @@ final class _SimpleStructForySerializer extends Serializer<SimpleStruct> {
 
   @override
   void write(WriteContext context, SimpleStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 20);
       cursor0.writeVarInt32(value.f2.value);
       cursor0.writeVarInt32(value.f7.value);
@@ -631,28 +631,28 @@ final class _SimpleStructForySerializer extends Serializer<SimpleStruct> {
       cursor0.writeVarInt32(value.last.value);
       cursor0.finish();
       context.writeString(value.f4);
-      writeGeneratedStructRuntimeValue(context, fields[5], value.f6);
-      writeGeneratedStructRuntimeValue(context, fields[6], value.f1);
-      writeGeneratedStructRuntimeValue(context, fields[7], value.f3);
+      writeGeneratedStructFieldValue(context, fields[5], value.f6);
+      writeGeneratedStructFieldValue(context, fields[6], value.f1);
+      writeGeneratedStructFieldValue(context, fields[7], value.f3);
       final cursor8 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor8.writeVarUint32(value.f5.index);
       cursor8.finish();
       return;
     }
-    final writers = _simpleStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _simpleStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   SimpleStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = SimpleStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.f2 = Int32(cursor0.readVarInt32());
       value.f7 = Int32(cursor0.readVarInt32());
@@ -665,79 +665,79 @@ final class _SimpleStructForySerializer extends Serializer<SimpleStruct> {
       value.f1 = readGeneratedDirectMapValue<Int32?, double?>(
           context, fields[6], _readSimpleStructF1Key, _readSimpleStructF1Value);
       value.f3 = _readSimpleStructF3(
-          readGeneratedStructRuntimeValue(context, fields[7], value.f3),
+          readGeneratedStructFieldValue(context, fields[7], value.f3),
           value.f3);
       final cursor8 = GeneratedReadCursor.start(buffer);
       value.f5 = Color.values[cursor8.readVarUint32()];
       cursor8.finish();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawSimpleStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawSimpleStruct0 = slots.valueForSlot(0);
       value.f2 = _readSimpleStructF2(
           rawSimpleStruct0 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct0.id)
               : rawSimpleStruct0,
           value.f2);
     }
-    if (session.containsSlot(1)) {
-      final rawSimpleStruct1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawSimpleStruct1 = slots.valueForSlot(1);
       value.f7 = _readSimpleStructF7(
           rawSimpleStruct1 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct1.id)
               : rawSimpleStruct1,
           value.f7);
     }
-    if (session.containsSlot(2)) {
-      final rawSimpleStruct2 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawSimpleStruct2 = slots.valueForSlot(2);
       value.f8 = _readSimpleStructF8(
           rawSimpleStruct2 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct2.id)
               : rawSimpleStruct2,
           value.f8);
     }
-    if (session.containsSlot(3)) {
-      final rawSimpleStruct3 = session.valueForSlot(3);
+    if (slots.containsSlot(3)) {
+      final rawSimpleStruct3 = slots.valueForSlot(3);
       value.last = _readSimpleStructLast(
           rawSimpleStruct3 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct3.id)
               : rawSimpleStruct3,
           value.last);
     }
-    if (session.containsSlot(4)) {
-      final rawSimpleStruct4 = session.valueForSlot(4);
+    if (slots.containsSlot(4)) {
+      final rawSimpleStruct4 = slots.valueForSlot(4);
       value.f4 = _readSimpleStructF4(
           rawSimpleStruct4 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct4.id)
               : rawSimpleStruct4,
           value.f4);
     }
-    if (session.containsSlot(5)) {
-      final rawSimpleStruct5 = session.valueForSlot(5);
+    if (slots.containsSlot(5)) {
+      final rawSimpleStruct5 = slots.valueForSlot(5);
       value.f6 = _readSimpleStructF6(
           rawSimpleStruct5 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct5.id)
               : rawSimpleStruct5,
           value.f6);
     }
-    if (session.containsSlot(6)) {
-      final rawSimpleStruct6 = session.valueForSlot(6);
+    if (slots.containsSlot(6)) {
+      final rawSimpleStruct6 = slots.valueForSlot(6);
       value.f1 = _readSimpleStructF1(
           rawSimpleStruct6 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct6.id)
               : rawSimpleStruct6,
           value.f1);
     }
-    if (session.containsSlot(7)) {
-      final rawSimpleStruct7 = session.valueForSlot(7);
+    if (slots.containsSlot(7)) {
+      final rawSimpleStruct7 = slots.valueForSlot(7);
       value.f3 = _readSimpleStructF3(
           rawSimpleStruct7 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct7.id)
               : rawSimpleStruct7,
           value.f3);
     }
-    if (session.containsSlot(8)) {
-      final rawSimpleStruct8 = session.valueForSlot(8);
+    if (slots.containsSlot(8)) {
+      final rawSimpleStruct8 = slots.valueForSlot(8);
       value.f5 = _readSimpleStructF5(
           rawSimpleStruct8 is DeferredReadRef
               ? context.getReadRef(rawSimpleStruct8.id)
@@ -859,17 +859,17 @@ const List<GeneratedFieldMetadata> _evolvingOverrideStructForyFieldMetadata =
   ),
 ];
 
-typedef _EvolvingOverrideStructSessionWriter
+typedef _EvolvingOverrideStructFieldWriter
     = GeneratedStructFieldWriter<EvolvingOverrideStruct>;
-typedef _EvolvingOverrideStructSessionReader
+typedef _EvolvingOverrideStructFieldReader
     = GeneratedStructFieldReader<EvolvingOverrideStruct>;
 
-void _writeEvolvingOverrideStructSessionField0(WriteContext context,
+void _writeEvolvingOverrideStructField0(WriteContext context,
     GeneratedStructField field, EvolvingOverrideStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _readEvolvingOverrideStructSessionField0(
+void _readEvolvingOverrideStructField0(
     ReadContext context, EvolvingOverrideStruct value, Object? rawValue) {
   value.f1 = _readEvolvingOverrideStructF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -879,12 +879,12 @@ void _readEvolvingOverrideStructSessionField0(
 final GeneratedStructRegistration<EvolvingOverrideStruct>
     _evolvingOverrideStructForyRegistration =
     GeneratedStructRegistration<EvolvingOverrideStruct>(
-  sessionWritersBySlot: <_EvolvingOverrideStructSessionWriter>[
-    _writeEvolvingOverrideStructSessionField0,
+  fieldWritersBySlot: <_EvolvingOverrideStructFieldWriter>[
+    _writeEvolvingOverrideStructField0,
   ],
   compatibleFactory: EvolvingOverrideStruct.new,
-  compatibleReadersBySlot: <_EvolvingOverrideStructSessionReader>[
-    _readEvolvingOverrideStructSessionField0,
+  compatibleReadersBySlot: <_EvolvingOverrideStructFieldReader>[
+    _readEvolvingOverrideStructField0,
   ],
   type: EvolvingOverrideStruct,
   serializerFactory: _EvolvingOverrideStructForySerializer.new,
@@ -898,15 +898,15 @@ final class _EvolvingOverrideStructForySerializer
 
   _EvolvingOverrideStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _evolvingOverrideStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _evolvingOverrideStructForyRegistration,
     );
@@ -914,29 +914,28 @@ final class _EvolvingOverrideStructForySerializer
 
   @override
   void write(WriteContext context, EvolvingOverrideStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       context.writeString(value.f1);
       return;
     }
-    final writers =
-        _evolvingOverrideStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _evolvingOverrideStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   EvolvingOverrideStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = EvolvingOverrideStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       value.f1 = context.readString();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawEvolvingOverrideStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawEvolvingOverrideStruct0 = slots.valueForSlot(0);
       value.f1 = _readEvolvingOverrideStructF1(
           rawEvolvingOverrideStruct0 is DeferredReadRef
               ? context.getReadRef(rawEvolvingOverrideStruct0.id)
@@ -972,17 +971,17 @@ const List<GeneratedFieldMetadata> _fixedOverrideStructForyFieldMetadata =
   ),
 ];
 
-typedef _FixedOverrideStructSessionWriter
+typedef _FixedOverrideStructFieldWriter
     = GeneratedStructFieldWriter<FixedOverrideStruct>;
-typedef _FixedOverrideStructSessionReader
+typedef _FixedOverrideStructFieldReader
     = GeneratedStructFieldReader<FixedOverrideStruct>;
 
-void _writeFixedOverrideStructSessionField0(WriteContext context,
+void _writeFixedOverrideStructField0(WriteContext context,
     GeneratedStructField field, FixedOverrideStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _readFixedOverrideStructSessionField0(
+void _readFixedOverrideStructField0(
     ReadContext context, FixedOverrideStruct value, Object? rawValue) {
   value.f1 = _readFixedOverrideStructF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -992,12 +991,12 @@ void _readFixedOverrideStructSessionField0(
 final GeneratedStructRegistration<FixedOverrideStruct>
     _fixedOverrideStructForyRegistration =
     GeneratedStructRegistration<FixedOverrideStruct>(
-  sessionWritersBySlot: <_FixedOverrideStructSessionWriter>[
-    _writeFixedOverrideStructSessionField0,
+  fieldWritersBySlot: <_FixedOverrideStructFieldWriter>[
+    _writeFixedOverrideStructField0,
   ],
   compatibleFactory: FixedOverrideStruct.new,
-  compatibleReadersBySlot: <_FixedOverrideStructSessionReader>[
-    _readFixedOverrideStructSessionField0,
+  compatibleReadersBySlot: <_FixedOverrideStructFieldReader>[
+    _readFixedOverrideStructField0,
   ],
   type: FixedOverrideStruct,
   serializerFactory: _FixedOverrideStructForySerializer.new,
@@ -1011,15 +1010,15 @@ final class _FixedOverrideStructForySerializer
 
   _FixedOverrideStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _fixedOverrideStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _fixedOverrideStructForyRegistration,
     );
@@ -1027,28 +1026,28 @@ final class _FixedOverrideStructForySerializer
 
   @override
   void write(WriteContext context, FixedOverrideStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       context.writeString(value.f1);
       return;
     }
-    final writers = _fixedOverrideStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _fixedOverrideStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   FixedOverrideStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = FixedOverrideStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       value.f1 = context.readString();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawFixedOverrideStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawFixedOverrideStruct0 = slots.valueForSlot(0);
       value.f1 = _readFixedOverrideStructF1(
           rawFixedOverrideStruct0 is DeferredReadRef
               ? context.getReadRef(rawFixedOverrideStruct0.id)
@@ -1149,76 +1148,70 @@ const List<GeneratedFieldMetadata> _item1ForyFieldMetadata =
   ),
 ];
 
-typedef _Item1SessionWriter = GeneratedStructFieldWriter<Item1>;
-typedef _Item1SessionReader = GeneratedStructFieldReader<Item1>;
+typedef _Item1FieldWriter = GeneratedStructFieldWriter<Item1>;
+typedef _Item1FieldReader = GeneratedStructFieldReader<Item1>;
 
-void _writeItem1SessionField0(
+void _writeItem1Field0(
     WriteContext context, GeneratedStructField field, Item1 value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _writeItem1SessionField1(
+void _writeItem1Field1(
     WriteContext context, GeneratedStructField field, Item1 value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f2);
+  writeGeneratedStructFieldValue(context, field, value.f2);
 }
 
-void _writeItem1SessionField2(
+void _writeItem1Field2(
     WriteContext context, GeneratedStructField field, Item1 value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f3);
+  writeGeneratedStructFieldValue(context, field, value.f3);
 }
 
-void _writeItem1SessionField3(
+void _writeItem1Field3(
     WriteContext context, GeneratedStructField field, Item1 value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f4);
+  writeGeneratedStructFieldValue(context, field, value.f4);
 }
 
-void _writeItem1SessionField4(
+void _writeItem1Field4(
     WriteContext context, GeneratedStructField field, Item1 value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f5);
+  writeGeneratedStructFieldValue(context, field, value.f5);
 }
 
-void _writeItem1SessionField5(
+void _writeItem1Field5(
     WriteContext context, GeneratedStructField field, Item1 value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f6);
+  writeGeneratedStructFieldValue(context, field, value.f6);
 }
 
-void _readItem1SessionField0(
-    ReadContext context, Item1 value, Object? rawValue) {
+void _readItem1Field0(ReadContext context, Item1 value, Object? rawValue) {
   value.f1 = _readItem1F1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f1);
 }
 
-void _readItem1SessionField1(
-    ReadContext context, Item1 value, Object? rawValue) {
+void _readItem1Field1(ReadContext context, Item1 value, Object? rawValue) {
   value.f2 = _readItem1F2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f2);
 }
 
-void _readItem1SessionField2(
-    ReadContext context, Item1 value, Object? rawValue) {
+void _readItem1Field2(ReadContext context, Item1 value, Object? rawValue) {
   value.f3 = _readItem1F3(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f3);
 }
 
-void _readItem1SessionField3(
-    ReadContext context, Item1 value, Object? rawValue) {
+void _readItem1Field3(ReadContext context, Item1 value, Object? rawValue) {
   value.f4 = _readItem1F4(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f4);
 }
 
-void _readItem1SessionField4(
-    ReadContext context, Item1 value, Object? rawValue) {
+void _readItem1Field4(ReadContext context, Item1 value, Object? rawValue) {
   value.f5 = _readItem1F5(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f5);
 }
 
-void _readItem1SessionField5(
-    ReadContext context, Item1 value, Object? rawValue) {
+void _readItem1Field5(ReadContext context, Item1 value, Object? rawValue) {
   value.f6 = _readItem1F6(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f6);
@@ -1226,22 +1219,22 @@ void _readItem1SessionField5(
 
 final GeneratedStructRegistration<Item1> _item1ForyRegistration =
     GeneratedStructRegistration<Item1>(
-  sessionWritersBySlot: <_Item1SessionWriter>[
-    _writeItem1SessionField0,
-    _writeItem1SessionField1,
-    _writeItem1SessionField2,
-    _writeItem1SessionField3,
-    _writeItem1SessionField4,
-    _writeItem1SessionField5,
+  fieldWritersBySlot: <_Item1FieldWriter>[
+    _writeItem1Field0,
+    _writeItem1Field1,
+    _writeItem1Field2,
+    _writeItem1Field3,
+    _writeItem1Field4,
+    _writeItem1Field5,
   ],
   compatibleFactory: Item1.new,
-  compatibleReadersBySlot: <_Item1SessionReader>[
-    _readItem1SessionField0,
-    _readItem1SessionField1,
-    _readItem1SessionField2,
-    _readItem1SessionField3,
-    _readItem1SessionField4,
-    _readItem1SessionField5,
+  compatibleReadersBySlot: <_Item1FieldReader>[
+    _readItem1Field0,
+    _readItem1Field1,
+    _readItem1Field2,
+    _readItem1Field3,
+    _readItem1Field4,
+    _readItem1Field5,
   ],
   type: Item1,
   serializerFactory: _Item1ForySerializer.new,
@@ -1254,15 +1247,15 @@ final class _Item1ForySerializer extends Serializer<Item1> {
 
   _Item1ForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _item1ForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _item1ForyRegistration,
     );
@@ -1270,8 +1263,8 @@ final class _Item1ForySerializer extends Serializer<Item1> {
 
   @override
   void write(WriteContext context, Item1 value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 30);
       cursor0.writeVarInt32(value.f1.value);
@@ -1283,18 +1276,18 @@ final class _Item1ForySerializer extends Serializer<Item1> {
       cursor0.finish();
       return;
     }
-    final writers = _item1ForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _item1ForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   Item1 read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = Item1();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.f1 = Int32(cursor0.readVarInt32());
@@ -1306,48 +1299,48 @@ final class _Item1ForySerializer extends Serializer<Item1> {
       cursor0.finish();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawItem10 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawItem10 = slots.valueForSlot(0);
       value.f1 = _readItem1F1(
           rawItem10 is DeferredReadRef
               ? context.getReadRef(rawItem10.id)
               : rawItem10,
           value.f1);
     }
-    if (session.containsSlot(1)) {
-      final rawItem11 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawItem11 = slots.valueForSlot(1);
       value.f2 = _readItem1F2(
           rawItem11 is DeferredReadRef
               ? context.getReadRef(rawItem11.id)
               : rawItem11,
           value.f2);
     }
-    if (session.containsSlot(2)) {
-      final rawItem12 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawItem12 = slots.valueForSlot(2);
       value.f3 = _readItem1F3(
           rawItem12 is DeferredReadRef
               ? context.getReadRef(rawItem12.id)
               : rawItem12,
           value.f3);
     }
-    if (session.containsSlot(3)) {
-      final rawItem13 = session.valueForSlot(3);
+    if (slots.containsSlot(3)) {
+      final rawItem13 = slots.valueForSlot(3);
       value.f4 = _readItem1F4(
           rawItem13 is DeferredReadRef
               ? context.getReadRef(rawItem13.id)
               : rawItem13,
           value.f4);
     }
-    if (session.containsSlot(4)) {
-      final rawItem14 = session.valueForSlot(4);
+    if (slots.containsSlot(4)) {
+      final rawItem14 = slots.valueForSlot(4);
       value.f5 = _readItem1F5(
           rawItem14 is DeferredReadRef
               ? context.getReadRef(rawItem14.id)
               : rawItem14,
           value.f5);
     }
-    if (session.containsSlot(5)) {
-      final rawItem15 = session.valueForSlot(5);
+    if (slots.containsSlot(5)) {
+      final rawItem15 = slots.valueForSlot(5);
       value.f6 = _readItem1F6(
           rawItem15 is DeferredReadRef
               ? context.getReadRef(rawItem15.id)
@@ -1423,17 +1416,17 @@ const List<GeneratedFieldMetadata> _structWithUnion2ForyFieldMetadata =
   ),
 ];
 
-typedef _StructWithUnion2SessionWriter
+typedef _StructWithUnion2FieldWriter
     = GeneratedStructFieldWriter<StructWithUnion2>;
-typedef _StructWithUnion2SessionReader
+typedef _StructWithUnion2FieldReader
     = GeneratedStructFieldReader<StructWithUnion2>;
 
-void _writeStructWithUnion2SessionField0(
+void _writeStructWithUnion2Field0(
     WriteContext context, GeneratedStructField field, StructWithUnion2 value) {
-  writeGeneratedStructRuntimeValue(context, field, value.union);
+  writeGeneratedStructFieldValue(context, field, value.union);
 }
 
-void _readStructWithUnion2SessionField0(
+void _readStructWithUnion2Field0(
     ReadContext context, StructWithUnion2 value, Object? rawValue) {
   value.union = _readStructWithUnion2Union(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -1443,12 +1436,12 @@ void _readStructWithUnion2SessionField0(
 final GeneratedStructRegistration<StructWithUnion2>
     _structWithUnion2ForyRegistration =
     GeneratedStructRegistration<StructWithUnion2>(
-  sessionWritersBySlot: <_StructWithUnion2SessionWriter>[
-    _writeStructWithUnion2SessionField0,
+  fieldWritersBySlot: <_StructWithUnion2FieldWriter>[
+    _writeStructWithUnion2Field0,
   ],
   compatibleFactory: StructWithUnion2.new,
-  compatibleReadersBySlot: <_StructWithUnion2SessionReader>[
-    _readStructWithUnion2SessionField0,
+  compatibleReadersBySlot: <_StructWithUnion2FieldReader>[
+    _readStructWithUnion2Field0,
   ],
   type: StructWithUnion2,
   serializerFactory: _StructWithUnion2ForySerializer.new,
@@ -1462,15 +1455,15 @@ final class _StructWithUnion2ForySerializer
 
   _StructWithUnion2ForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _structWithUnion2ForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _structWithUnion2ForyRegistration,
     );
@@ -1478,32 +1471,32 @@ final class _StructWithUnion2ForySerializer
 
   @override
   void write(WriteContext context, StructWithUnion2 value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.union);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.union);
       return;
     }
-    final writers = _structWithUnion2ForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _structWithUnion2ForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   StructWithUnion2 read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = StructWithUnion2();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.union = _readStructWithUnion2Union(
-          readGeneratedStructRuntimeValue(context, fields[0], value.union),
+          readGeneratedStructFieldValue(context, fields[0], value.union),
           value.union);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawStructWithUnion20 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawStructWithUnion20 = slots.valueForSlot(0);
       value.union = _readStructWithUnion2Union(
           rawStructWithUnion20 is DeferredReadRef
               ? context.getReadRef(rawStructWithUnion20.id)
@@ -1548,17 +1541,15 @@ const List<GeneratedFieldMetadata> _structWithListForyFieldMetadata =
   ),
 ];
 
-typedef _StructWithListSessionWriter
-    = GeneratedStructFieldWriter<StructWithList>;
-typedef _StructWithListSessionReader
-    = GeneratedStructFieldReader<StructWithList>;
+typedef _StructWithListFieldWriter = GeneratedStructFieldWriter<StructWithList>;
+typedef _StructWithListFieldReader = GeneratedStructFieldReader<StructWithList>;
 
-void _writeStructWithListSessionField0(
+void _writeStructWithListField0(
     WriteContext context, GeneratedStructField field, StructWithList value) {
-  writeGeneratedStructRuntimeValue(context, field, value.items);
+  writeGeneratedStructFieldValue(context, field, value.items);
 }
 
-void _readStructWithListSessionField0(
+void _readStructWithListField0(
     ReadContext context, StructWithList value, Object? rawValue) {
   value.items = _readStructWithListItems(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -1568,12 +1559,12 @@ void _readStructWithListSessionField0(
 final GeneratedStructRegistration<StructWithList>
     _structWithListForyRegistration =
     GeneratedStructRegistration<StructWithList>(
-  sessionWritersBySlot: <_StructWithListSessionWriter>[
-    _writeStructWithListSessionField0,
+  fieldWritersBySlot: <_StructWithListFieldWriter>[
+    _writeStructWithListField0,
   ],
   compatibleFactory: StructWithList.new,
-  compatibleReadersBySlot: <_StructWithListSessionReader>[
-    _readStructWithListSessionField0,
+  compatibleReadersBySlot: <_StructWithListFieldReader>[
+    _readStructWithListField0,
   ],
   type: StructWithList,
   serializerFactory: _StructWithListForySerializer.new,
@@ -1586,15 +1577,15 @@ final class _StructWithListForySerializer extends Serializer<StructWithList> {
 
   _StructWithListForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _structWithListForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _structWithListForyRegistration,
     );
@@ -1602,31 +1593,31 @@ final class _StructWithListForySerializer extends Serializer<StructWithList> {
 
   @override
   void write(WriteContext context, StructWithList value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.items);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.items);
       return;
     }
-    final writers = _structWithListForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _structWithListForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   StructWithList read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = StructWithList();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.items = readGeneratedDirectListValue<String?>(
           context, fields[0], _readStructWithListItemsElement);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawStructWithList0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawStructWithList0 = slots.valueForSlot(0);
       value.items = _readStructWithListItems(
           rawStructWithList0 is DeferredReadRef
               ? context.getReadRef(rawStructWithList0.id)
@@ -1687,15 +1678,15 @@ const List<GeneratedFieldMetadata> _structWithMapForyFieldMetadata =
   ),
 ];
 
-typedef _StructWithMapSessionWriter = GeneratedStructFieldWriter<StructWithMap>;
-typedef _StructWithMapSessionReader = GeneratedStructFieldReader<StructWithMap>;
+typedef _StructWithMapFieldWriter = GeneratedStructFieldWriter<StructWithMap>;
+typedef _StructWithMapFieldReader = GeneratedStructFieldReader<StructWithMap>;
 
-void _writeStructWithMapSessionField0(
+void _writeStructWithMapField0(
     WriteContext context, GeneratedStructField field, StructWithMap value) {
-  writeGeneratedStructRuntimeValue(context, field, value.data);
+  writeGeneratedStructFieldValue(context, field, value.data);
 }
 
-void _readStructWithMapSessionField0(
+void _readStructWithMapField0(
     ReadContext context, StructWithMap value, Object? rawValue) {
   value.data = _readStructWithMapData(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -1704,12 +1695,12 @@ void _readStructWithMapSessionField0(
 
 final GeneratedStructRegistration<StructWithMap>
     _structWithMapForyRegistration = GeneratedStructRegistration<StructWithMap>(
-  sessionWritersBySlot: <_StructWithMapSessionWriter>[
-    _writeStructWithMapSessionField0,
+  fieldWritersBySlot: <_StructWithMapFieldWriter>[
+    _writeStructWithMapField0,
   ],
   compatibleFactory: StructWithMap.new,
-  compatibleReadersBySlot: <_StructWithMapSessionReader>[
-    _readStructWithMapSessionField0,
+  compatibleReadersBySlot: <_StructWithMapFieldReader>[
+    _readStructWithMapField0,
   ],
   type: StructWithMap,
   serializerFactory: _StructWithMapForySerializer.new,
@@ -1722,15 +1713,15 @@ final class _StructWithMapForySerializer extends Serializer<StructWithMap> {
 
   _StructWithMapForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _structWithMapForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _structWithMapForyRegistration,
     );
@@ -1738,31 +1729,31 @@ final class _StructWithMapForySerializer extends Serializer<StructWithMap> {
 
   @override
   void write(WriteContext context, StructWithMap value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.data);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.data);
       return;
     }
-    final writers = _structWithMapForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _structWithMapForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   StructWithMap read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = StructWithMap();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.data = readGeneratedDirectMapValue<String?, String?>(context,
           fields[0], _readStructWithMapDataKey, _readStructWithMapDataValue);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawStructWithMap0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawStructWithMap0 = slots.valueForSlot(0);
       value.data = _readStructWithMapData(
           rawStructWithMap0 is DeferredReadRef
               ? context.getReadRef(rawStructWithMap0.id)
@@ -1815,15 +1806,15 @@ const List<GeneratedFieldMetadata> _myStructForyFieldMetadata =
   ),
 ];
 
-typedef _MyStructSessionWriter = GeneratedStructFieldWriter<MyStruct>;
-typedef _MyStructSessionReader = GeneratedStructFieldReader<MyStruct>;
+typedef _MyStructFieldWriter = GeneratedStructFieldWriter<MyStruct>;
+typedef _MyStructFieldReader = GeneratedStructFieldReader<MyStruct>;
 
-void _writeMyStructSessionField0(
+void _writeMyStructField0(
     WriteContext context, GeneratedStructField field, MyStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.id);
+  writeGeneratedStructFieldValue(context, field, value.id);
 }
 
-void _readMyStructSessionField0(
+void _readMyStructField0(
     ReadContext context, MyStruct value, Object? rawValue) {
   value.id = _readMyStructId(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -1832,12 +1823,12 @@ void _readMyStructSessionField0(
 
 final GeneratedStructRegistration<MyStruct> _myStructForyRegistration =
     GeneratedStructRegistration<MyStruct>(
-  sessionWritersBySlot: <_MyStructSessionWriter>[
-    _writeMyStructSessionField0,
+  fieldWritersBySlot: <_MyStructFieldWriter>[
+    _writeMyStructField0,
   ],
   compatibleFactory: MyStruct.new,
-  compatibleReadersBySlot: <_MyStructSessionReader>[
-    _readMyStructSessionField0,
+  compatibleReadersBySlot: <_MyStructFieldReader>[
+    _readMyStructField0,
   ],
   type: MyStruct,
   serializerFactory: _MyStructForySerializer.new,
@@ -1850,15 +1841,15 @@ final class _MyStructForySerializer extends Serializer<MyStruct> {
 
   _MyStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _myStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _myStructForyRegistration,
     );
@@ -1866,34 +1857,34 @@ final class _MyStructForySerializer extends Serializer<MyStruct> {
 
   @override
   void write(WriteContext context, MyStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor0.writeVarInt32(value.id);
       cursor0.finish();
       return;
     }
-    final writers = _myStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _myStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   MyStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = MyStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.id = cursor0.readVarInt32();
       cursor0.finish();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawMyStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawMyStruct0 = slots.valueForSlot(0);
       value.id = _readMyStructId(
           rawMyStruct0 is DeferredReadRef
               ? context.getReadRef(rawMyStruct0.id)
@@ -1955,39 +1946,39 @@ const List<GeneratedFieldMetadata> _myWrapperForyFieldMetadata =
   ),
 ];
 
-typedef _MyWrapperSessionWriter = GeneratedStructFieldWriter<MyWrapper>;
-typedef _MyWrapperSessionReader = GeneratedStructFieldReader<MyWrapper>;
+typedef _MyWrapperFieldWriter = GeneratedStructFieldWriter<MyWrapper>;
+typedef _MyWrapperFieldReader = GeneratedStructFieldReader<MyWrapper>;
 
-void _writeMyWrapperSessionField0(
+void _writeMyWrapperField0(
     WriteContext context, GeneratedStructField field, MyWrapper value) {
-  writeGeneratedStructRuntimeValue(context, field, value.color);
+  writeGeneratedStructFieldValue(context, field, value.color);
 }
 
-void _writeMyWrapperSessionField1(
+void _writeMyWrapperField1(
     WriteContext context, GeneratedStructField field, MyWrapper value) {
-  writeGeneratedStructRuntimeValue(context, field, value.myExt);
+  writeGeneratedStructFieldValue(context, field, value.myExt);
 }
 
-void _writeMyWrapperSessionField2(
+void _writeMyWrapperField2(
     WriteContext context, GeneratedStructField field, MyWrapper value) {
-  writeGeneratedStructRuntimeValue(context, field, value.myStruct);
+  writeGeneratedStructFieldValue(context, field, value.myStruct);
 }
 
-void _readMyWrapperSessionField0(
+void _readMyWrapperField0(
     ReadContext context, MyWrapper value, Object? rawValue) {
   value.color = _readMyWrapperColor(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.color);
 }
 
-void _readMyWrapperSessionField1(
+void _readMyWrapperField1(
     ReadContext context, MyWrapper value, Object? rawValue) {
   value.myExt = _readMyWrapperMyExt(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.myExt);
 }
 
-void _readMyWrapperSessionField2(
+void _readMyWrapperField2(
     ReadContext context, MyWrapper value, Object? rawValue) {
   value.myStruct = _readMyWrapperMyStruct(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -1996,16 +1987,16 @@ void _readMyWrapperSessionField2(
 
 final GeneratedStructRegistration<MyWrapper> _myWrapperForyRegistration =
     GeneratedStructRegistration<MyWrapper>(
-  sessionWritersBySlot: <_MyWrapperSessionWriter>[
-    _writeMyWrapperSessionField0,
-    _writeMyWrapperSessionField1,
-    _writeMyWrapperSessionField2,
+  fieldWritersBySlot: <_MyWrapperFieldWriter>[
+    _writeMyWrapperField0,
+    _writeMyWrapperField1,
+    _writeMyWrapperField2,
   ],
   compatibleFactory: MyWrapper.new,
-  compatibleReadersBySlot: <_MyWrapperSessionReader>[
-    _readMyWrapperSessionField0,
-    _readMyWrapperSessionField1,
-    _readMyWrapperSessionField2,
+  compatibleReadersBySlot: <_MyWrapperFieldReader>[
+    _readMyWrapperField0,
+    _readMyWrapperField1,
+    _readMyWrapperField2,
   ],
   type: MyWrapper,
   serializerFactory: _MyWrapperForySerializer.new,
@@ -2018,15 +2009,15 @@ final class _MyWrapperForySerializer extends Serializer<MyWrapper> {
 
   _MyWrapperForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _myWrapperForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _myWrapperForyRegistration,
     );
@@ -2034,60 +2025,60 @@ final class _MyWrapperForySerializer extends Serializer<MyWrapper> {
 
   @override
   void write(WriteContext context, MyWrapper value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor0.writeVarUint32(value.color.index);
       cursor0.finish();
-      writeGeneratedStructRuntimeValue(context, fields[1], value.myExt);
-      writeGeneratedStructRuntimeValue(context, fields[2], value.myStruct);
+      writeGeneratedStructFieldValue(context, fields[1], value.myExt);
+      writeGeneratedStructFieldValue(context, fields[2], value.myStruct);
       return;
     }
-    final writers = _myWrapperForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _myWrapperForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   MyWrapper read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = MyWrapper();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.color = Color.values[cursor0.readVarUint32()];
       cursor0.finish();
       value.myExt = _readMyWrapperMyExt(
-          readGeneratedStructRuntimeValue(context, fields[1], value.myExt),
+          readGeneratedStructFieldValue(context, fields[1], value.myExt),
           value.myExt);
       value.myStruct = _readMyWrapperMyStruct(
-          readGeneratedStructRuntimeValue(context, fields[2], value.myStruct),
+          readGeneratedStructFieldValue(context, fields[2], value.myStruct),
           value.myStruct);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawMyWrapper0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawMyWrapper0 = slots.valueForSlot(0);
       value.color = _readMyWrapperColor(
           rawMyWrapper0 is DeferredReadRef
               ? context.getReadRef(rawMyWrapper0.id)
               : rawMyWrapper0,
           value.color);
     }
-    if (session.containsSlot(1)) {
-      final rawMyWrapper1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawMyWrapper1 = slots.valueForSlot(1);
       value.myExt = _readMyWrapperMyExt(
           rawMyWrapper1 is DeferredReadRef
               ? context.getReadRef(rawMyWrapper1.id)
               : rawMyWrapper1,
           value.myExt);
     }
-    if (session.containsSlot(2)) {
-      final rawMyWrapper2 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawMyWrapper2 = slots.valueForSlot(2);
       value.myStruct = _readMyWrapperMyStruct(
           rawMyWrapper2 is DeferredReadRef
               ? context.getReadRef(rawMyWrapper2.id)
@@ -2126,14 +2117,14 @@ MyStruct _readMyWrapperMyStruct(Object? value, [Object? fallback]) {
 const List<GeneratedFieldMetadata> _emptyWrapperForyFieldMetadata =
     <GeneratedFieldMetadata>[];
 
-typedef _EmptyWrapperSessionWriter = GeneratedStructFieldWriter<EmptyWrapper>;
-typedef _EmptyWrapperSessionReader = GeneratedStructFieldReader<EmptyWrapper>;
+typedef _EmptyWrapperFieldWriter = GeneratedStructFieldWriter<EmptyWrapper>;
+typedef _EmptyWrapperFieldReader = GeneratedStructFieldReader<EmptyWrapper>;
 
 final GeneratedStructRegistration<EmptyWrapper> _emptyWrapperForyRegistration =
     GeneratedStructRegistration<EmptyWrapper>(
-  sessionWritersBySlot: <_EmptyWrapperSessionWriter>[],
+  fieldWritersBySlot: <_EmptyWrapperFieldWriter>[],
   compatibleFactory: EmptyWrapper.new,
-  compatibleReadersBySlot: <_EmptyWrapperSessionReader>[],
+  compatibleReadersBySlot: <_EmptyWrapperFieldReader>[],
   type: EmptyWrapper,
   serializerFactory: _EmptyWrapperForySerializer.new,
   evolving: true,
@@ -2145,15 +2136,15 @@ final class _EmptyWrapperForySerializer extends Serializer<EmptyWrapper> {
 
   _EmptyWrapperForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _emptyWrapperForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _emptyWrapperForyRegistration,
     );
@@ -2161,22 +2152,22 @@ final class _EmptyWrapperForySerializer extends Serializer<EmptyWrapper> {
 
   @override
   void write(WriteContext context, EmptyWrapper value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       return;
     }
-    final writers = _emptyWrapperForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _emptyWrapperForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   EmptyWrapper read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = EmptyWrapper();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       return value;
     }
     return value;
@@ -2226,41 +2217,41 @@ const List<GeneratedFieldMetadata> _versionCheckStructForyFieldMetadata =
   ),
 ];
 
-typedef _VersionCheckStructSessionWriter
+typedef _VersionCheckStructFieldWriter
     = GeneratedStructFieldWriter<VersionCheckStruct>;
-typedef _VersionCheckStructSessionReader
+typedef _VersionCheckStructFieldReader
     = GeneratedStructFieldReader<VersionCheckStruct>;
 
-void _writeVersionCheckStructSessionField0(WriteContext context,
+void _writeVersionCheckStructField0(WriteContext context,
     GeneratedStructField field, VersionCheckStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f3);
+  writeGeneratedStructFieldValue(context, field, value.f3);
 }
 
-void _writeVersionCheckStructSessionField1(WriteContext context,
+void _writeVersionCheckStructField1(WriteContext context,
     GeneratedStructField field, VersionCheckStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _writeVersionCheckStructSessionField2(WriteContext context,
+void _writeVersionCheckStructField2(WriteContext context,
     GeneratedStructField field, VersionCheckStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f2);
+  writeGeneratedStructFieldValue(context, field, value.f2);
 }
 
-void _readVersionCheckStructSessionField0(
+void _readVersionCheckStructField0(
     ReadContext context, VersionCheckStruct value, Object? rawValue) {
   value.f3 = _readVersionCheckStructF3(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f3);
 }
 
-void _readVersionCheckStructSessionField1(
+void _readVersionCheckStructField1(
     ReadContext context, VersionCheckStruct value, Object? rawValue) {
   value.f1 = _readVersionCheckStructF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f1);
 }
 
-void _readVersionCheckStructSessionField2(
+void _readVersionCheckStructField2(
     ReadContext context, VersionCheckStruct value, Object? rawValue) {
   value.f2 = _readVersionCheckStructF2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -2270,16 +2261,16 @@ void _readVersionCheckStructSessionField2(
 final GeneratedStructRegistration<VersionCheckStruct>
     _versionCheckStructForyRegistration =
     GeneratedStructRegistration<VersionCheckStruct>(
-  sessionWritersBySlot: <_VersionCheckStructSessionWriter>[
-    _writeVersionCheckStructSessionField0,
-    _writeVersionCheckStructSessionField1,
-    _writeVersionCheckStructSessionField2,
+  fieldWritersBySlot: <_VersionCheckStructFieldWriter>[
+    _writeVersionCheckStructField0,
+    _writeVersionCheckStructField1,
+    _writeVersionCheckStructField2,
   ],
   compatibleFactory: VersionCheckStruct.new,
-  compatibleReadersBySlot: <_VersionCheckStructSessionReader>[
-    _readVersionCheckStructSessionField0,
-    _readVersionCheckStructSessionField1,
-    _readVersionCheckStructSessionField2,
+  compatibleReadersBySlot: <_VersionCheckStructFieldReader>[
+    _readVersionCheckStructField0,
+    _readVersionCheckStructField1,
+    _readVersionCheckStructField2,
   ],
   type: VersionCheckStruct,
   serializerFactory: _VersionCheckStructForySerializer.new,
@@ -2293,15 +2284,15 @@ final class _VersionCheckStructForySerializer
 
   _VersionCheckStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _versionCheckStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _versionCheckStructForyRegistration,
     );
@@ -2309,58 +2300,58 @@ final class _VersionCheckStructForySerializer
 
   @override
   void write(WriteContext context, VersionCheckStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 13);
       cursor0.writeFloat64(value.f3);
       cursor0.writeVarInt32(value.f1);
       cursor0.finish();
-      writeGeneratedStructRuntimeValue(context, fields[2], value.f2);
+      writeGeneratedStructFieldValue(context, fields[2], value.f2);
       return;
     }
-    final writers = _versionCheckStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _versionCheckStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   VersionCheckStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = VersionCheckStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.f3 = cursor0.readFloat64();
       value.f1 = cursor0.readVarInt32();
       cursor0.finish();
       value.f2 = _readVersionCheckStructF2(
-          readGeneratedStructRuntimeValue(context, fields[2], value.f2),
+          readGeneratedStructFieldValue(context, fields[2], value.f2),
           value.f2);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawVersionCheckStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawVersionCheckStruct0 = slots.valueForSlot(0);
       value.f3 = _readVersionCheckStructF3(
           rawVersionCheckStruct0 is DeferredReadRef
               ? context.getReadRef(rawVersionCheckStruct0.id)
               : rawVersionCheckStruct0,
           value.f3);
     }
-    if (session.containsSlot(1)) {
-      final rawVersionCheckStruct1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawVersionCheckStruct1 = slots.valueForSlot(1);
       value.f1 = _readVersionCheckStructF1(
           rawVersionCheckStruct1 is DeferredReadRef
               ? context.getReadRef(rawVersionCheckStruct1.id)
               : rawVersionCheckStruct1,
           value.f1);
     }
-    if (session.containsSlot(2)) {
-      final rawVersionCheckStruct2 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawVersionCheckStruct2 = slots.valueForSlot(2);
       value.f2 = _readVersionCheckStructF2(
           rawVersionCheckStruct2 is DeferredReadRef
               ? context.getReadRef(rawVersionCheckStruct2.id)
@@ -2425,26 +2416,26 @@ const List<GeneratedFieldMetadata> _dogForyFieldMetadata =
   ),
 ];
 
-typedef _DogSessionWriter = GeneratedStructFieldWriter<Dog>;
-typedef _DogSessionReader = GeneratedStructFieldReader<Dog>;
+typedef _DogFieldWriter = GeneratedStructFieldWriter<Dog>;
+typedef _DogFieldReader = GeneratedStructFieldReader<Dog>;
 
-void _writeDogSessionField0(
+void _writeDogField0(
     WriteContext context, GeneratedStructField field, Dog value) {
-  writeGeneratedStructRuntimeValue(context, field, value.age);
+  writeGeneratedStructFieldValue(context, field, value.age);
 }
 
-void _writeDogSessionField1(
+void _writeDogField1(
     WriteContext context, GeneratedStructField field, Dog value) {
-  writeGeneratedStructRuntimeValue(context, field, value.name);
+  writeGeneratedStructFieldValue(context, field, value.name);
 }
 
-void _readDogSessionField0(ReadContext context, Dog value, Object? rawValue) {
+void _readDogField0(ReadContext context, Dog value, Object? rawValue) {
   value.age = _readDogAge(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.age);
 }
 
-void _readDogSessionField1(ReadContext context, Dog value, Object? rawValue) {
+void _readDogField1(ReadContext context, Dog value, Object? rawValue) {
   value.name = _readDogName(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.name);
@@ -2452,14 +2443,14 @@ void _readDogSessionField1(ReadContext context, Dog value, Object? rawValue) {
 
 final GeneratedStructRegistration<Dog> _dogForyRegistration =
     GeneratedStructRegistration<Dog>(
-  sessionWritersBySlot: <_DogSessionWriter>[
-    _writeDogSessionField0,
-    _writeDogSessionField1,
+  fieldWritersBySlot: <_DogFieldWriter>[
+    _writeDogField0,
+    _writeDogField1,
   ],
   compatibleFactory: Dog.new,
-  compatibleReadersBySlot: <_DogSessionReader>[
-    _readDogSessionField0,
-    _readDogSessionField1,
+  compatibleReadersBySlot: <_DogFieldReader>[
+    _readDogField0,
+    _readDogField1,
   ],
   type: Dog,
   serializerFactory: _DogForySerializer.new,
@@ -2472,15 +2463,15 @@ final class _DogForySerializer extends Serializer<Dog> {
 
   _DogForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _dogForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _dogForyRegistration,
     );
@@ -2488,46 +2479,46 @@ final class _DogForySerializer extends Serializer<Dog> {
 
   @override
   void write(WriteContext context, Dog value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor0.writeVarInt32(value.age);
       cursor0.finish();
-      writeGeneratedStructRuntimeValue(context, fields[1], value.name);
+      writeGeneratedStructFieldValue(context, fields[1], value.name);
       return;
     }
-    final writers = _dogForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _dogForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   Dog read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = Dog();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.age = cursor0.readVarInt32();
       cursor0.finish();
       value.name = _readDogName(
-          readGeneratedStructRuntimeValue(context, fields[1], value.name),
+          readGeneratedStructFieldValue(context, fields[1], value.name),
           value.name);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawDog0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawDog0 = slots.valueForSlot(0);
       value.age = _readDogAge(
           rawDog0 is DeferredReadRef ? context.getReadRef(rawDog0.id) : rawDog0,
           value.age);
     }
-    if (session.containsSlot(1)) {
-      final rawDog1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawDog1 = slots.valueForSlot(1);
       value.name = _readDogName(
           rawDog1 is DeferredReadRef ? context.getReadRef(rawDog1.id) : rawDog1,
           value.name);
@@ -2582,26 +2573,26 @@ const List<GeneratedFieldMetadata> _catForyFieldMetadata =
   ),
 ];
 
-typedef _CatSessionWriter = GeneratedStructFieldWriter<Cat>;
-typedef _CatSessionReader = GeneratedStructFieldReader<Cat>;
+typedef _CatFieldWriter = GeneratedStructFieldWriter<Cat>;
+typedef _CatFieldReader = GeneratedStructFieldReader<Cat>;
 
-void _writeCatSessionField0(
+void _writeCatField0(
     WriteContext context, GeneratedStructField field, Cat value) {
-  writeGeneratedStructRuntimeValue(context, field, value.age);
+  writeGeneratedStructFieldValue(context, field, value.age);
 }
 
-void _writeCatSessionField1(
+void _writeCatField1(
     WriteContext context, GeneratedStructField field, Cat value) {
-  writeGeneratedStructRuntimeValue(context, field, value.lives);
+  writeGeneratedStructFieldValue(context, field, value.lives);
 }
 
-void _readCatSessionField0(ReadContext context, Cat value, Object? rawValue) {
+void _readCatField0(ReadContext context, Cat value, Object? rawValue) {
   value.age = _readCatAge(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.age);
 }
 
-void _readCatSessionField1(ReadContext context, Cat value, Object? rawValue) {
+void _readCatField1(ReadContext context, Cat value, Object? rawValue) {
   value.lives = _readCatLives(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.lives);
@@ -2609,14 +2600,14 @@ void _readCatSessionField1(ReadContext context, Cat value, Object? rawValue) {
 
 final GeneratedStructRegistration<Cat> _catForyRegistration =
     GeneratedStructRegistration<Cat>(
-  sessionWritersBySlot: <_CatSessionWriter>[
-    _writeCatSessionField0,
-    _writeCatSessionField1,
+  fieldWritersBySlot: <_CatFieldWriter>[
+    _writeCatField0,
+    _writeCatField1,
   ],
   compatibleFactory: Cat.new,
-  compatibleReadersBySlot: <_CatSessionReader>[
-    _readCatSessionField0,
-    _readCatSessionField1,
+  compatibleReadersBySlot: <_CatFieldReader>[
+    _readCatField0,
+    _readCatField1,
   ],
   type: Cat,
   serializerFactory: _CatForySerializer.new,
@@ -2629,15 +2620,15 @@ final class _CatForySerializer extends Serializer<Cat> {
 
   _CatForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _catForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _catForyRegistration,
     );
@@ -2645,8 +2636,8 @@ final class _CatForySerializer extends Serializer<Cat> {
 
   @override
   void write(WriteContext context, Cat value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 10);
       cursor0.writeVarInt32(value.age);
@@ -2654,18 +2645,18 @@ final class _CatForySerializer extends Serializer<Cat> {
       cursor0.finish();
       return;
     }
-    final writers = _catForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _catForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   Cat read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = Cat();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.age = cursor0.readVarInt32();
@@ -2673,14 +2664,14 @@ final class _CatForySerializer extends Serializer<Cat> {
       cursor0.finish();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawCat0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawCat0 = slots.valueForSlot(0);
       value.age = _readCatAge(
           rawCat0 is DeferredReadRef ? context.getReadRef(rawCat0.id) : rawCat0,
           value.age);
     }
-    if (session.containsSlot(1)) {
-      final rawCat1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawCat1 = slots.valueForSlot(1);
       value.lives = _readCatLives(
           rawCat1 is DeferredReadRef ? context.getReadRef(rawCat1.id) : rawCat1,
           value.lives);
@@ -2731,17 +2722,17 @@ const List<GeneratedFieldMetadata> _animalListHolderForyFieldMetadata =
   ),
 ];
 
-typedef _AnimalListHolderSessionWriter
+typedef _AnimalListHolderFieldWriter
     = GeneratedStructFieldWriter<AnimalListHolder>;
-typedef _AnimalListHolderSessionReader
+typedef _AnimalListHolderFieldReader
     = GeneratedStructFieldReader<AnimalListHolder>;
 
-void _writeAnimalListHolderSessionField0(
+void _writeAnimalListHolderField0(
     WriteContext context, GeneratedStructField field, AnimalListHolder value) {
-  writeGeneratedStructRuntimeValue(context, field, value.animals);
+  writeGeneratedStructFieldValue(context, field, value.animals);
 }
 
-void _readAnimalListHolderSessionField0(
+void _readAnimalListHolderField0(
     ReadContext context, AnimalListHolder value, Object? rawValue) {
   value.animals = _readAnimalListHolderAnimals(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -2751,12 +2742,12 @@ void _readAnimalListHolderSessionField0(
 final GeneratedStructRegistration<AnimalListHolder>
     _animalListHolderForyRegistration =
     GeneratedStructRegistration<AnimalListHolder>(
-  sessionWritersBySlot: <_AnimalListHolderSessionWriter>[
-    _writeAnimalListHolderSessionField0,
+  fieldWritersBySlot: <_AnimalListHolderFieldWriter>[
+    _writeAnimalListHolderField0,
   ],
   compatibleFactory: AnimalListHolder.new,
-  compatibleReadersBySlot: <_AnimalListHolderSessionReader>[
-    _readAnimalListHolderSessionField0,
+  compatibleReadersBySlot: <_AnimalListHolderFieldReader>[
+    _readAnimalListHolderField0,
   ],
   type: AnimalListHolder,
   serializerFactory: _AnimalListHolderForySerializer.new,
@@ -2770,15 +2761,15 @@ final class _AnimalListHolderForySerializer
 
   _AnimalListHolderForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _animalListHolderForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _animalListHolderForyRegistration,
     );
@@ -2786,31 +2777,31 @@ final class _AnimalListHolderForySerializer
 
   @override
   void write(WriteContext context, AnimalListHolder value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.animals);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.animals);
       return;
     }
-    final writers = _animalListHolderForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _animalListHolderForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   AnimalListHolder read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = AnimalListHolder();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.animals = readGeneratedDirectListValue<Animal>(
           context, fields[0], _readAnimalListHolderAnimalsElement);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawAnimalListHolder0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawAnimalListHolder0 = slots.valueForSlot(0);
       value.animals = _readAnimalListHolderAnimals(
           rawAnimalListHolder0 is DeferredReadRef
               ? context.getReadRef(rawAnimalListHolder0.id)
@@ -2869,17 +2860,17 @@ const List<GeneratedFieldMetadata> _animalMapHolderForyFieldMetadata =
   ),
 ];
 
-typedef _AnimalMapHolderSessionWriter
+typedef _AnimalMapHolderFieldWriter
     = GeneratedStructFieldWriter<AnimalMapHolder>;
-typedef _AnimalMapHolderSessionReader
+typedef _AnimalMapHolderFieldReader
     = GeneratedStructFieldReader<AnimalMapHolder>;
 
-void _writeAnimalMapHolderSessionField0(
+void _writeAnimalMapHolderField0(
     WriteContext context, GeneratedStructField field, AnimalMapHolder value) {
-  writeGeneratedStructRuntimeValue(context, field, value.animalMap);
+  writeGeneratedStructFieldValue(context, field, value.animalMap);
 }
 
-void _readAnimalMapHolderSessionField0(
+void _readAnimalMapHolderField0(
     ReadContext context, AnimalMapHolder value, Object? rawValue) {
   value.animalMap = _readAnimalMapHolderAnimalMap(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -2889,12 +2880,12 @@ void _readAnimalMapHolderSessionField0(
 final GeneratedStructRegistration<AnimalMapHolder>
     _animalMapHolderForyRegistration =
     GeneratedStructRegistration<AnimalMapHolder>(
-  sessionWritersBySlot: <_AnimalMapHolderSessionWriter>[
-    _writeAnimalMapHolderSessionField0,
+  fieldWritersBySlot: <_AnimalMapHolderFieldWriter>[
+    _writeAnimalMapHolderField0,
   ],
   compatibleFactory: AnimalMapHolder.new,
-  compatibleReadersBySlot: <_AnimalMapHolderSessionReader>[
-    _readAnimalMapHolderSessionField0,
+  compatibleReadersBySlot: <_AnimalMapHolderFieldReader>[
+    _readAnimalMapHolderField0,
   ],
   type: AnimalMapHolder,
   serializerFactory: _AnimalMapHolderForySerializer.new,
@@ -2907,15 +2898,15 @@ final class _AnimalMapHolderForySerializer extends Serializer<AnimalMapHolder> {
 
   _AnimalMapHolderForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _animalMapHolderForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _animalMapHolderForyRegistration,
     );
@@ -2923,25 +2914,25 @@ final class _AnimalMapHolderForySerializer extends Serializer<AnimalMapHolder> {
 
   @override
   void write(WriteContext context, AnimalMapHolder value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.animalMap);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.animalMap);
       return;
     }
-    final writers = _animalMapHolderForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _animalMapHolderForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   AnimalMapHolder read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = AnimalMapHolder();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.animalMap = readGeneratedDirectMapValue<String, Animal>(
           context,
           fields[0],
@@ -2949,8 +2940,8 @@ final class _AnimalMapHolderForySerializer extends Serializer<AnimalMapHolder> {
           _readAnimalMapHolderAnimalMapValue);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawAnimalMapHolder0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawAnimalMapHolder0 = slots.valueForSlot(0);
       value.animalMap = _readAnimalMapHolderAnimalMap(
           rawAnimalMapHolder0 is DeferredReadRef
               ? context.getReadRef(rawAnimalMapHolder0.id)
@@ -2987,14 +2978,14 @@ Map<String, Animal> _readAnimalMapHolderAnimalMap(Object? value,
 const List<GeneratedFieldMetadata> _emptyStructForyFieldMetadata =
     <GeneratedFieldMetadata>[];
 
-typedef _EmptyStructSessionWriter = GeneratedStructFieldWriter<EmptyStruct>;
-typedef _EmptyStructSessionReader = GeneratedStructFieldReader<EmptyStruct>;
+typedef _EmptyStructFieldWriter = GeneratedStructFieldWriter<EmptyStruct>;
+typedef _EmptyStructFieldReader = GeneratedStructFieldReader<EmptyStruct>;
 
 final GeneratedStructRegistration<EmptyStruct> _emptyStructForyRegistration =
     GeneratedStructRegistration<EmptyStruct>(
-  sessionWritersBySlot: <_EmptyStructSessionWriter>[],
+  fieldWritersBySlot: <_EmptyStructFieldWriter>[],
   compatibleFactory: EmptyStruct.new,
-  compatibleReadersBySlot: <_EmptyStructSessionReader>[],
+  compatibleReadersBySlot: <_EmptyStructFieldReader>[],
   type: EmptyStruct,
   serializerFactory: _EmptyStructForySerializer.new,
   evolving: true,
@@ -3006,15 +2997,15 @@ final class _EmptyStructForySerializer extends Serializer<EmptyStruct> {
 
   _EmptyStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _emptyStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _emptyStructForyRegistration,
     );
@@ -3022,22 +3013,22 @@ final class _EmptyStructForySerializer extends Serializer<EmptyStruct> {
 
   @override
   void write(WriteContext context, EmptyStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       return;
     }
-    final writers = _emptyStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _emptyStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   EmptyStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = EmptyStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       return value;
     }
     return value;
@@ -3061,17 +3052,17 @@ const List<GeneratedFieldMetadata> _oneStringFieldStructForyFieldMetadata =
   ),
 ];
 
-typedef _OneStringFieldStructSessionWriter
+typedef _OneStringFieldStructFieldWriter
     = GeneratedStructFieldWriter<OneStringFieldStruct>;
-typedef _OneStringFieldStructSessionReader
+typedef _OneStringFieldStructFieldReader
     = GeneratedStructFieldReader<OneStringFieldStruct>;
 
-void _writeOneStringFieldStructSessionField0(WriteContext context,
+void _writeOneStringFieldStructField0(WriteContext context,
     GeneratedStructField field, OneStringFieldStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _readOneStringFieldStructSessionField0(
+void _readOneStringFieldStructField0(
     ReadContext context, OneStringFieldStruct value, Object? rawValue) {
   value.f1 = _readOneStringFieldStructF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -3081,12 +3072,12 @@ void _readOneStringFieldStructSessionField0(
 final GeneratedStructRegistration<OneStringFieldStruct>
     _oneStringFieldStructForyRegistration =
     GeneratedStructRegistration<OneStringFieldStruct>(
-  sessionWritersBySlot: <_OneStringFieldStructSessionWriter>[
-    _writeOneStringFieldStructSessionField0,
+  fieldWritersBySlot: <_OneStringFieldStructFieldWriter>[
+    _writeOneStringFieldStructField0,
   ],
   compatibleFactory: OneStringFieldStruct.new,
-  compatibleReadersBySlot: <_OneStringFieldStructSessionReader>[
-    _readOneStringFieldStructSessionField0,
+  compatibleReadersBySlot: <_OneStringFieldStructFieldReader>[
+    _readOneStringFieldStructField0,
   ],
   type: OneStringFieldStruct,
   serializerFactory: _OneStringFieldStructForySerializer.new,
@@ -3100,15 +3091,15 @@ final class _OneStringFieldStructForySerializer
 
   _OneStringFieldStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _oneStringFieldStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _oneStringFieldStructForyRegistration,
     );
@@ -3116,32 +3107,32 @@ final class _OneStringFieldStructForySerializer
 
   @override
   void write(WriteContext context, OneStringFieldStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.f1);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.f1);
       return;
     }
-    final writers = _oneStringFieldStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _oneStringFieldStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   OneStringFieldStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = OneStringFieldStruct();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.f1 = _readOneStringFieldStructF1(
-          readGeneratedStructRuntimeValue(context, fields[0], value.f1),
+          readGeneratedStructFieldValue(context, fields[0], value.f1),
           value.f1);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawOneStringFieldStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawOneStringFieldStruct0 = slots.valueForSlot(0);
       value.f1 = _readOneStringFieldStructF1(
           rawOneStringFieldStruct0 is DeferredReadRef
               ? context.getReadRef(rawOneStringFieldStruct0.id)
@@ -3190,29 +3181,29 @@ const List<GeneratedFieldMetadata> _twoStringFieldStructForyFieldMetadata =
   ),
 ];
 
-typedef _TwoStringFieldStructSessionWriter
+typedef _TwoStringFieldStructFieldWriter
     = GeneratedStructFieldWriter<TwoStringFieldStruct>;
-typedef _TwoStringFieldStructSessionReader
+typedef _TwoStringFieldStructFieldReader
     = GeneratedStructFieldReader<TwoStringFieldStruct>;
 
-void _writeTwoStringFieldStructSessionField0(WriteContext context,
+void _writeTwoStringFieldStructField0(WriteContext context,
     GeneratedStructField field, TwoStringFieldStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _writeTwoStringFieldStructSessionField1(WriteContext context,
+void _writeTwoStringFieldStructField1(WriteContext context,
     GeneratedStructField field, TwoStringFieldStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f2);
+  writeGeneratedStructFieldValue(context, field, value.f2);
 }
 
-void _readTwoStringFieldStructSessionField0(
+void _readTwoStringFieldStructField0(
     ReadContext context, TwoStringFieldStruct value, Object? rawValue) {
   value.f1 = _readTwoStringFieldStructF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f1);
 }
 
-void _readTwoStringFieldStructSessionField1(
+void _readTwoStringFieldStructField1(
     ReadContext context, TwoStringFieldStruct value, Object? rawValue) {
   value.f2 = _readTwoStringFieldStructF2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -3222,14 +3213,14 @@ void _readTwoStringFieldStructSessionField1(
 final GeneratedStructRegistration<TwoStringFieldStruct>
     _twoStringFieldStructForyRegistration =
     GeneratedStructRegistration<TwoStringFieldStruct>(
-  sessionWritersBySlot: <_TwoStringFieldStructSessionWriter>[
-    _writeTwoStringFieldStructSessionField0,
-    _writeTwoStringFieldStructSessionField1,
+  fieldWritersBySlot: <_TwoStringFieldStructFieldWriter>[
+    _writeTwoStringFieldStructField0,
+    _writeTwoStringFieldStructField1,
   ],
   compatibleFactory: TwoStringFieldStruct.new,
-  compatibleReadersBySlot: <_TwoStringFieldStructSessionReader>[
-    _readTwoStringFieldStructSessionField0,
-    _readTwoStringFieldStructSessionField1,
+  compatibleReadersBySlot: <_TwoStringFieldStructFieldReader>[
+    _readTwoStringFieldStructField0,
+    _readTwoStringFieldStructField1,
   ],
   type: TwoStringFieldStruct,
   serializerFactory: _TwoStringFieldStructForySerializer.new,
@@ -3243,15 +3234,15 @@ final class _TwoStringFieldStructForySerializer
 
   _TwoStringFieldStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _twoStringFieldStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _twoStringFieldStructForyRegistration,
     );
@@ -3259,38 +3250,38 @@ final class _TwoStringFieldStructForySerializer
 
   @override
   void write(WriteContext context, TwoStringFieldStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       context.writeString(value.f1);
       context.writeString(value.f2);
       return;
     }
-    final writers = _twoStringFieldStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _twoStringFieldStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   TwoStringFieldStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = TwoStringFieldStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       value.f1 = context.readString();
       value.f2 = context.readString();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawTwoStringFieldStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawTwoStringFieldStruct0 = slots.valueForSlot(0);
       value.f1 = _readTwoStringFieldStructF1(
           rawTwoStringFieldStruct0 is DeferredReadRef
               ? context.getReadRef(rawTwoStringFieldStruct0.id)
               : rawTwoStringFieldStruct0,
           value.f1);
     }
-    if (session.containsSlot(1)) {
-      final rawTwoStringFieldStruct1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawTwoStringFieldStruct1 = slots.valueForSlot(1);
       value.f2 = _readTwoStringFieldStructF2(
           rawTwoStringFieldStruct1 is DeferredReadRef
               ? context.getReadRef(rawTwoStringFieldStruct1.id)
@@ -3334,17 +3325,17 @@ const List<GeneratedFieldMetadata> _oneEnumFieldStructForyFieldMetadata =
   ),
 ];
 
-typedef _OneEnumFieldStructSessionWriter
+typedef _OneEnumFieldStructFieldWriter
     = GeneratedStructFieldWriter<OneEnumFieldStruct>;
-typedef _OneEnumFieldStructSessionReader
+typedef _OneEnumFieldStructFieldReader
     = GeneratedStructFieldReader<OneEnumFieldStruct>;
 
-void _writeOneEnumFieldStructSessionField0(WriteContext context,
+void _writeOneEnumFieldStructField0(WriteContext context,
     GeneratedStructField field, OneEnumFieldStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _readOneEnumFieldStructSessionField0(
+void _readOneEnumFieldStructField0(
     ReadContext context, OneEnumFieldStruct value, Object? rawValue) {
   value.f1 = _readOneEnumFieldStructF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -3354,12 +3345,12 @@ void _readOneEnumFieldStructSessionField0(
 final GeneratedStructRegistration<OneEnumFieldStruct>
     _oneEnumFieldStructForyRegistration =
     GeneratedStructRegistration<OneEnumFieldStruct>(
-  sessionWritersBySlot: <_OneEnumFieldStructSessionWriter>[
-    _writeOneEnumFieldStructSessionField0,
+  fieldWritersBySlot: <_OneEnumFieldStructFieldWriter>[
+    _writeOneEnumFieldStructField0,
   ],
   compatibleFactory: OneEnumFieldStruct.new,
-  compatibleReadersBySlot: <_OneEnumFieldStructSessionReader>[
-    _readOneEnumFieldStructSessionField0,
+  compatibleReadersBySlot: <_OneEnumFieldStructFieldReader>[
+    _readOneEnumFieldStructField0,
   ],
   type: OneEnumFieldStruct,
   serializerFactory: _OneEnumFieldStructForySerializer.new,
@@ -3373,15 +3364,15 @@ final class _OneEnumFieldStructForySerializer
 
   _OneEnumFieldStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _oneEnumFieldStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _oneEnumFieldStructForyRegistration,
     );
@@ -3389,34 +3380,34 @@ final class _OneEnumFieldStructForySerializer
 
   @override
   void write(WriteContext context, OneEnumFieldStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor0.writeVarUint32(value.f1.index);
       cursor0.finish();
       return;
     }
-    final writers = _oneEnumFieldStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _oneEnumFieldStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   OneEnumFieldStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = OneEnumFieldStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.f1 = TestEnum.values[cursor0.readVarUint32()];
       cursor0.finish();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawOneEnumFieldStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawOneEnumFieldStruct0 = slots.valueForSlot(0);
       value.f1 = _readOneEnumFieldStructF1(
           rawOneEnumFieldStruct0 is DeferredReadRef
               ? context.getReadRef(rawOneEnumFieldStruct0.id)
@@ -3465,29 +3456,29 @@ const List<GeneratedFieldMetadata> _twoEnumFieldStructForyFieldMetadata =
   ),
 ];
 
-typedef _TwoEnumFieldStructSessionWriter
+typedef _TwoEnumFieldStructFieldWriter
     = GeneratedStructFieldWriter<TwoEnumFieldStruct>;
-typedef _TwoEnumFieldStructSessionReader
+typedef _TwoEnumFieldStructFieldReader
     = GeneratedStructFieldReader<TwoEnumFieldStruct>;
 
-void _writeTwoEnumFieldStructSessionField0(WriteContext context,
+void _writeTwoEnumFieldStructField0(WriteContext context,
     GeneratedStructField field, TwoEnumFieldStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f1);
+  writeGeneratedStructFieldValue(context, field, value.f1);
 }
 
-void _writeTwoEnumFieldStructSessionField1(WriteContext context,
+void _writeTwoEnumFieldStructField1(WriteContext context,
     GeneratedStructField field, TwoEnumFieldStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.f2);
+  writeGeneratedStructFieldValue(context, field, value.f2);
 }
 
-void _readTwoEnumFieldStructSessionField0(
+void _readTwoEnumFieldStructField0(
     ReadContext context, TwoEnumFieldStruct value, Object? rawValue) {
   value.f1 = _readTwoEnumFieldStructF1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.f1);
 }
 
-void _readTwoEnumFieldStructSessionField1(
+void _readTwoEnumFieldStructField1(
     ReadContext context, TwoEnumFieldStruct value, Object? rawValue) {
   value.f2 = _readTwoEnumFieldStructF2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -3497,14 +3488,14 @@ void _readTwoEnumFieldStructSessionField1(
 final GeneratedStructRegistration<TwoEnumFieldStruct>
     _twoEnumFieldStructForyRegistration =
     GeneratedStructRegistration<TwoEnumFieldStruct>(
-  sessionWritersBySlot: <_TwoEnumFieldStructSessionWriter>[
-    _writeTwoEnumFieldStructSessionField0,
-    _writeTwoEnumFieldStructSessionField1,
+  fieldWritersBySlot: <_TwoEnumFieldStructFieldWriter>[
+    _writeTwoEnumFieldStructField0,
+    _writeTwoEnumFieldStructField1,
   ],
   compatibleFactory: TwoEnumFieldStruct.new,
-  compatibleReadersBySlot: <_TwoEnumFieldStructSessionReader>[
-    _readTwoEnumFieldStructSessionField0,
-    _readTwoEnumFieldStructSessionField1,
+  compatibleReadersBySlot: <_TwoEnumFieldStructFieldReader>[
+    _readTwoEnumFieldStructField0,
+    _readTwoEnumFieldStructField1,
   ],
   type: TwoEnumFieldStruct,
   serializerFactory: _TwoEnumFieldStructForySerializer.new,
@@ -3518,15 +3509,15 @@ final class _TwoEnumFieldStructForySerializer
 
   _TwoEnumFieldStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _twoEnumFieldStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _twoEnumFieldStructForyRegistration,
     );
@@ -3534,8 +3525,8 @@ final class _TwoEnumFieldStructForySerializer
 
   @override
   void write(WriteContext context, TwoEnumFieldStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 10);
       cursor0.writeVarUint32(value.f1.index);
@@ -3543,18 +3534,18 @@ final class _TwoEnumFieldStructForySerializer
       cursor0.finish();
       return;
     }
-    final writers = _twoEnumFieldStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _twoEnumFieldStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   TwoEnumFieldStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = TwoEnumFieldStruct();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.f1 = TestEnum.values[cursor0.readVarUint32()];
@@ -3562,16 +3553,16 @@ final class _TwoEnumFieldStructForySerializer
       cursor0.finish();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawTwoEnumFieldStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawTwoEnumFieldStruct0 = slots.valueForSlot(0);
       value.f1 = _readTwoEnumFieldStructF1(
           rawTwoEnumFieldStruct0 is DeferredReadRef
               ? context.getReadRef(rawTwoEnumFieldStruct0.id)
               : rawTwoEnumFieldStruct0,
           value.f1);
     }
-    if (session.containsSlot(1)) {
-      final rawTwoEnumFieldStruct1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawTwoEnumFieldStruct1 = slots.valueForSlot(1);
       value.f2 = _readTwoEnumFieldStructF2(
           rawTwoEnumFieldStruct1 is DeferredReadRef
               ? context.getReadRef(rawTwoEnumFieldStruct1.id)
@@ -3933,218 +3924,162 @@ const List<GeneratedFieldMetadata>
   ),
 ];
 
-typedef _NullableComprehensiveSchemaConsistentSessionWriter
+typedef _NullableComprehensiveSchemaConsistentFieldWriter
     = GeneratedStructFieldWriter<NullableComprehensiveSchemaConsistent>;
-typedef _NullableComprehensiveSchemaConsistentSessionReader
+typedef _NullableComprehensiveSchemaConsistentFieldReader
     = GeneratedStructFieldReader<NullableComprehensiveSchemaConsistent>;
 
-void _writeNullableComprehensiveSchemaConsistentSessionField0(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.doubleField);
+void _writeNullableComprehensiveSchemaConsistentField0(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.doubleField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField1(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.floatField);
+void _writeNullableComprehensiveSchemaConsistentField1(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.floatField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField2(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.shortField);
+void _writeNullableComprehensiveSchemaConsistentField2(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.shortField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField3(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.byteField);
+void _writeNullableComprehensiveSchemaConsistentField3(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.byteField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField4(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.boolField);
+void _writeNullableComprehensiveSchemaConsistentField4(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.boolField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField5(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.longField);
+void _writeNullableComprehensiveSchemaConsistentField5(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.longField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField6(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.intField);
+void _writeNullableComprehensiveSchemaConsistentField6(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.intField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField7(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableDouble);
+void _writeNullableComprehensiveSchemaConsistentField7(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableDouble);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField8(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableFloat);
+void _writeNullableComprehensiveSchemaConsistentField8(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableFloat);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField9(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableBool);
+void _writeNullableComprehensiveSchemaConsistentField9(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableBool);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField10(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableLong);
+void _writeNullableComprehensiveSchemaConsistentField10(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableLong);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField11(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableInt);
+void _writeNullableComprehensiveSchemaConsistentField11(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableInt);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField12(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableString);
+void _writeNullableComprehensiveSchemaConsistentField12(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableString);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField13(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.stringField);
+void _writeNullableComprehensiveSchemaConsistentField13(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.stringField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField14(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.listField);
+void _writeNullableComprehensiveSchemaConsistentField14(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.listField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField15(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableList);
+void _writeNullableComprehensiveSchemaConsistentField15(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableList);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField16(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableSet);
+void _writeNullableComprehensiveSchemaConsistentField16(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableSet);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField17(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.setField);
+void _writeNullableComprehensiveSchemaConsistentField17(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.setField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField18(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.mapField);
+void _writeNullableComprehensiveSchemaConsistentField18(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.mapField);
 }
 
-void _writeNullableComprehensiveSchemaConsistentSessionField19(
-    WriteContext context,
-    GeneratedStructField field,
-    NullableComprehensiveSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableMap);
+void _writeNullableComprehensiveSchemaConsistentField19(WriteContext context,
+    GeneratedStructField field, NullableComprehensiveSchemaConsistent value) {
+  writeGeneratedStructFieldValue(context, field, value.nullableMap);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField0(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField0(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.doubleField = _readNullableComprehensiveSchemaConsistentDoubleField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.doubleField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField1(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField1(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.floatField = _readNullableComprehensiveSchemaConsistentFloatField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.floatField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField2(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField2(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.shortField = _readNullableComprehensiveSchemaConsistentShortField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.shortField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField3(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField3(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.byteField = _readNullableComprehensiveSchemaConsistentByteField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.byteField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField4(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField4(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.boolField = _readNullableComprehensiveSchemaConsistentBoolField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.boolField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField5(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField5(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.longField = _readNullableComprehensiveSchemaConsistentLongField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.longField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField6(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField6(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.intField = _readNullableComprehensiveSchemaConsistentIntField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.intField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField7(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField7(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableDouble =
       _readNullableComprehensiveSchemaConsistentNullableDouble(
           rawValue is DeferredReadRef
@@ -4153,46 +4088,36 @@ void _readNullableComprehensiveSchemaConsistentSessionField7(
           value.nullableDouble);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField8(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField8(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableFloat = _readNullableComprehensiveSchemaConsistentNullableFloat(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableFloat);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField9(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField9(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableBool = _readNullableComprehensiveSchemaConsistentNullableBool(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableBool);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField10(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField10(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableLong = _readNullableComprehensiveSchemaConsistentNullableLong(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableLong);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField11(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField11(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableInt = _readNullableComprehensiveSchemaConsistentNullableInt(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableInt);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField12(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField12(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableString =
       _readNullableComprehensiveSchemaConsistentNullableString(
           rawValue is DeferredReadRef
@@ -4201,64 +4126,50 @@ void _readNullableComprehensiveSchemaConsistentSessionField12(
           value.nullableString);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField13(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField13(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.stringField = _readNullableComprehensiveSchemaConsistentStringField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.stringField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField14(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField14(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.listField = _readNullableComprehensiveSchemaConsistentListField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.listField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField15(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField15(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableList = _readNullableComprehensiveSchemaConsistentNullableList(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableList);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField16(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField16(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableSet = _readNullableComprehensiveSchemaConsistentNullableSet(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableSet);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField17(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField17(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.setField = _readNullableComprehensiveSchemaConsistentSetField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.setField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField18(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField18(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.mapField = _readNullableComprehensiveSchemaConsistentMapField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.mapField);
 }
 
-void _readNullableComprehensiveSchemaConsistentSessionField19(
-    ReadContext context,
-    NullableComprehensiveSchemaConsistent value,
-    Object? rawValue) {
+void _readNullableComprehensiveSchemaConsistentField19(ReadContext context,
+    NullableComprehensiveSchemaConsistent value, Object? rawValue) {
   value.nullableMap = _readNullableComprehensiveSchemaConsistentNullableMap(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableMap);
@@ -4267,50 +4178,50 @@ void _readNullableComprehensiveSchemaConsistentSessionField19(
 final GeneratedStructRegistration<NullableComprehensiveSchemaConsistent>
     _nullableComprehensiveSchemaConsistentForyRegistration =
     GeneratedStructRegistration<NullableComprehensiveSchemaConsistent>(
-  sessionWritersBySlot: <_NullableComprehensiveSchemaConsistentSessionWriter>[
-    _writeNullableComprehensiveSchemaConsistentSessionField0,
-    _writeNullableComprehensiveSchemaConsistentSessionField1,
-    _writeNullableComprehensiveSchemaConsistentSessionField2,
-    _writeNullableComprehensiveSchemaConsistentSessionField3,
-    _writeNullableComprehensiveSchemaConsistentSessionField4,
-    _writeNullableComprehensiveSchemaConsistentSessionField5,
-    _writeNullableComprehensiveSchemaConsistentSessionField6,
-    _writeNullableComprehensiveSchemaConsistentSessionField7,
-    _writeNullableComprehensiveSchemaConsistentSessionField8,
-    _writeNullableComprehensiveSchemaConsistentSessionField9,
-    _writeNullableComprehensiveSchemaConsistentSessionField10,
-    _writeNullableComprehensiveSchemaConsistentSessionField11,
-    _writeNullableComprehensiveSchemaConsistentSessionField12,
-    _writeNullableComprehensiveSchemaConsistentSessionField13,
-    _writeNullableComprehensiveSchemaConsistentSessionField14,
-    _writeNullableComprehensiveSchemaConsistentSessionField15,
-    _writeNullableComprehensiveSchemaConsistentSessionField16,
-    _writeNullableComprehensiveSchemaConsistentSessionField17,
-    _writeNullableComprehensiveSchemaConsistentSessionField18,
-    _writeNullableComprehensiveSchemaConsistentSessionField19,
+  fieldWritersBySlot: <_NullableComprehensiveSchemaConsistentFieldWriter>[
+    _writeNullableComprehensiveSchemaConsistentField0,
+    _writeNullableComprehensiveSchemaConsistentField1,
+    _writeNullableComprehensiveSchemaConsistentField2,
+    _writeNullableComprehensiveSchemaConsistentField3,
+    _writeNullableComprehensiveSchemaConsistentField4,
+    _writeNullableComprehensiveSchemaConsistentField5,
+    _writeNullableComprehensiveSchemaConsistentField6,
+    _writeNullableComprehensiveSchemaConsistentField7,
+    _writeNullableComprehensiveSchemaConsistentField8,
+    _writeNullableComprehensiveSchemaConsistentField9,
+    _writeNullableComprehensiveSchemaConsistentField10,
+    _writeNullableComprehensiveSchemaConsistentField11,
+    _writeNullableComprehensiveSchemaConsistentField12,
+    _writeNullableComprehensiveSchemaConsistentField13,
+    _writeNullableComprehensiveSchemaConsistentField14,
+    _writeNullableComprehensiveSchemaConsistentField15,
+    _writeNullableComprehensiveSchemaConsistentField16,
+    _writeNullableComprehensiveSchemaConsistentField17,
+    _writeNullableComprehensiveSchemaConsistentField18,
+    _writeNullableComprehensiveSchemaConsistentField19,
   ],
   compatibleFactory: NullableComprehensiveSchemaConsistent.new,
-  compatibleReadersBySlot: <_NullableComprehensiveSchemaConsistentSessionReader>[
-    _readNullableComprehensiveSchemaConsistentSessionField0,
-    _readNullableComprehensiveSchemaConsistentSessionField1,
-    _readNullableComprehensiveSchemaConsistentSessionField2,
-    _readNullableComprehensiveSchemaConsistentSessionField3,
-    _readNullableComprehensiveSchemaConsistentSessionField4,
-    _readNullableComprehensiveSchemaConsistentSessionField5,
-    _readNullableComprehensiveSchemaConsistentSessionField6,
-    _readNullableComprehensiveSchemaConsistentSessionField7,
-    _readNullableComprehensiveSchemaConsistentSessionField8,
-    _readNullableComprehensiveSchemaConsistentSessionField9,
-    _readNullableComprehensiveSchemaConsistentSessionField10,
-    _readNullableComprehensiveSchemaConsistentSessionField11,
-    _readNullableComprehensiveSchemaConsistentSessionField12,
-    _readNullableComprehensiveSchemaConsistentSessionField13,
-    _readNullableComprehensiveSchemaConsistentSessionField14,
-    _readNullableComprehensiveSchemaConsistentSessionField15,
-    _readNullableComprehensiveSchemaConsistentSessionField16,
-    _readNullableComprehensiveSchemaConsistentSessionField17,
-    _readNullableComprehensiveSchemaConsistentSessionField18,
-    _readNullableComprehensiveSchemaConsistentSessionField19,
+  compatibleReadersBySlot: <_NullableComprehensiveSchemaConsistentFieldReader>[
+    _readNullableComprehensiveSchemaConsistentField0,
+    _readNullableComprehensiveSchemaConsistentField1,
+    _readNullableComprehensiveSchemaConsistentField2,
+    _readNullableComprehensiveSchemaConsistentField3,
+    _readNullableComprehensiveSchemaConsistentField4,
+    _readNullableComprehensiveSchemaConsistentField5,
+    _readNullableComprehensiveSchemaConsistentField6,
+    _readNullableComprehensiveSchemaConsistentField7,
+    _readNullableComprehensiveSchemaConsistentField8,
+    _readNullableComprehensiveSchemaConsistentField9,
+    _readNullableComprehensiveSchemaConsistentField10,
+    _readNullableComprehensiveSchemaConsistentField11,
+    _readNullableComprehensiveSchemaConsistentField12,
+    _readNullableComprehensiveSchemaConsistentField13,
+    _readNullableComprehensiveSchemaConsistentField14,
+    _readNullableComprehensiveSchemaConsistentField15,
+    _readNullableComprehensiveSchemaConsistentField16,
+    _readNullableComprehensiveSchemaConsistentField17,
+    _readNullableComprehensiveSchemaConsistentField18,
+    _readNullableComprehensiveSchemaConsistentField19,
   ],
   type: NullableComprehensiveSchemaConsistent,
   serializerFactory: _NullableComprehensiveSchemaConsistentForySerializer.new,
@@ -4324,15 +4235,15 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
 
   _NullableComprehensiveSchemaConsistentForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _nullableComprehensiveSchemaConsistentForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _nullableComprehensiveSchemaConsistentForyRegistration,
     );
@@ -4341,10 +4252,10 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
   @override
   void write(
       WriteContext context, NullableComprehensiveSchemaConsistent value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 31);
       cursor0.writeFloat64(value.doubleField);
       cursor0.writeFloat32(value.floatField.value);
@@ -4354,38 +4265,36 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
       cursor0.writeVarInt64(value.longField);
       cursor0.writeVarInt32(value.intField.value);
       cursor0.finish();
-      writeGeneratedStructRuntimeValue(
-          context, fields[7], value.nullableDouble);
-      writeGeneratedStructRuntimeValue(context, fields[8], value.nullableFloat);
-      writeGeneratedStructRuntimeValue(context, fields[9], value.nullableBool);
-      writeGeneratedStructRuntimeValue(context, fields[10], value.nullableLong);
-      writeGeneratedStructRuntimeValue(context, fields[11], value.nullableInt);
-      writeGeneratedStructRuntimeValue(
-          context, fields[12], value.nullableString);
+      writeGeneratedStructFieldValue(context, fields[7], value.nullableDouble);
+      writeGeneratedStructFieldValue(context, fields[8], value.nullableFloat);
+      writeGeneratedStructFieldValue(context, fields[9], value.nullableBool);
+      writeGeneratedStructFieldValue(context, fields[10], value.nullableLong);
+      writeGeneratedStructFieldValue(context, fields[11], value.nullableInt);
+      writeGeneratedStructFieldValue(context, fields[12], value.nullableString);
       context.writeString(value.stringField);
-      writeGeneratedStructRuntimeValue(context, fields[14], value.listField);
-      writeGeneratedStructRuntimeValue(context, fields[15], value.nullableList);
-      writeGeneratedStructRuntimeValue(context, fields[16], value.nullableSet);
-      writeGeneratedStructRuntimeValue(context, fields[17], value.setField);
-      writeGeneratedStructRuntimeValue(context, fields[18], value.mapField);
-      writeGeneratedStructRuntimeValue(context, fields[19], value.nullableMap);
+      writeGeneratedStructFieldValue(context, fields[14], value.listField);
+      writeGeneratedStructFieldValue(context, fields[15], value.nullableList);
+      writeGeneratedStructFieldValue(context, fields[16], value.nullableSet);
+      writeGeneratedStructFieldValue(context, fields[17], value.setField);
+      writeGeneratedStructFieldValue(context, fields[18], value.mapField);
+      writeGeneratedStructFieldValue(context, fields[19], value.nullableMap);
       return;
     }
     final writers = _nullableComprehensiveSchemaConsistentForyRegistration
-        .sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+        .fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   NullableComprehensiveSchemaConsistent read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = NullableComprehensiveSchemaConsistent();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.doubleField = cursor0.readFloat64();
       value.floatField = Float32(cursor0.readFloat32());
@@ -4397,31 +4306,30 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
       cursor0.finish();
       value.nullableDouble =
           _readNullableComprehensiveSchemaConsistentNullableDouble(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[7], value.nullableDouble),
               value.nullableDouble);
       value.nullableFloat =
           _readNullableComprehensiveSchemaConsistentNullableFloat(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[8], value.nullableFloat),
               value.nullableFloat);
       value.nullableBool =
           _readNullableComprehensiveSchemaConsistentNullableBool(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[9], value.nullableBool),
               value.nullableBool);
       value.nullableLong =
           _readNullableComprehensiveSchemaConsistentNullableLong(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[10], value.nullableLong),
               value.nullableLong);
       value.nullableInt = _readNullableComprehensiveSchemaConsistentNullableInt(
-          readGeneratedStructRuntimeValue(
-              context, fields[11], value.nullableInt),
+          readGeneratedStructFieldValue(context, fields[11], value.nullableInt),
           value.nullableInt);
       value.nullableString =
           _readNullableComprehensiveSchemaConsistentNullableString(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[12], value.nullableString),
               value.nullableString);
       value.stringField = context.readString();
@@ -4431,12 +4339,11 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
           _readNullableComprehensiveSchemaConsistentListFieldElement);
       value.nullableList =
           _readNullableComprehensiveSchemaConsistentNullableList(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[15], value.nullableList),
               value.nullableList);
       value.nullableSet = _readNullableComprehensiveSchemaConsistentNullableSet(
-          readGeneratedStructRuntimeValue(
-              context, fields[16], value.nullableSet),
+          readGeneratedStructFieldValue(context, fields[16], value.nullableSet),
           value.nullableSet);
       value.setField = readGeneratedDirectSetValue<String>(context, fields[17],
           _readNullableComprehensiveSchemaConsistentSetFieldElement);
@@ -4446,69 +4353,68 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
           _readNullableComprehensiveSchemaConsistentMapFieldKey,
           _readNullableComprehensiveSchemaConsistentMapFieldValue);
       value.nullableMap = _readNullableComprehensiveSchemaConsistentNullableMap(
-          readGeneratedStructRuntimeValue(
-              context, fields[19], value.nullableMap),
+          readGeneratedStructFieldValue(context, fields[19], value.nullableMap),
           value.nullableMap);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawNullableComprehensiveSchemaConsistent0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawNullableComprehensiveSchemaConsistent0 = slots.valueForSlot(0);
       value.doubleField = _readNullableComprehensiveSchemaConsistentDoubleField(
           rawNullableComprehensiveSchemaConsistent0 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveSchemaConsistent0.id)
               : rawNullableComprehensiveSchemaConsistent0,
           value.doubleField);
     }
-    if (session.containsSlot(1)) {
-      final rawNullableComprehensiveSchemaConsistent1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawNullableComprehensiveSchemaConsistent1 = slots.valueForSlot(1);
       value.floatField = _readNullableComprehensiveSchemaConsistentFloatField(
           rawNullableComprehensiveSchemaConsistent1 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveSchemaConsistent1.id)
               : rawNullableComprehensiveSchemaConsistent1,
           value.floatField);
     }
-    if (session.containsSlot(2)) {
-      final rawNullableComprehensiveSchemaConsistent2 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawNullableComprehensiveSchemaConsistent2 = slots.valueForSlot(2);
       value.shortField = _readNullableComprehensiveSchemaConsistentShortField(
           rawNullableComprehensiveSchemaConsistent2 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveSchemaConsistent2.id)
               : rawNullableComprehensiveSchemaConsistent2,
           value.shortField);
     }
-    if (session.containsSlot(3)) {
-      final rawNullableComprehensiveSchemaConsistent3 = session.valueForSlot(3);
+    if (slots.containsSlot(3)) {
+      final rawNullableComprehensiveSchemaConsistent3 = slots.valueForSlot(3);
       value.byteField = _readNullableComprehensiveSchemaConsistentByteField(
           rawNullableComprehensiveSchemaConsistent3 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveSchemaConsistent3.id)
               : rawNullableComprehensiveSchemaConsistent3,
           value.byteField);
     }
-    if (session.containsSlot(4)) {
-      final rawNullableComprehensiveSchemaConsistent4 = session.valueForSlot(4);
+    if (slots.containsSlot(4)) {
+      final rawNullableComprehensiveSchemaConsistent4 = slots.valueForSlot(4);
       value.boolField = _readNullableComprehensiveSchemaConsistentBoolField(
           rawNullableComprehensiveSchemaConsistent4 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveSchemaConsistent4.id)
               : rawNullableComprehensiveSchemaConsistent4,
           value.boolField);
     }
-    if (session.containsSlot(5)) {
-      final rawNullableComprehensiveSchemaConsistent5 = session.valueForSlot(5);
+    if (slots.containsSlot(5)) {
+      final rawNullableComprehensiveSchemaConsistent5 = slots.valueForSlot(5);
       value.longField = _readNullableComprehensiveSchemaConsistentLongField(
           rawNullableComprehensiveSchemaConsistent5 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveSchemaConsistent5.id)
               : rawNullableComprehensiveSchemaConsistent5,
           value.longField);
     }
-    if (session.containsSlot(6)) {
-      final rawNullableComprehensiveSchemaConsistent6 = session.valueForSlot(6);
+    if (slots.containsSlot(6)) {
+      final rawNullableComprehensiveSchemaConsistent6 = slots.valueForSlot(6);
       value.intField = _readNullableComprehensiveSchemaConsistentIntField(
           rawNullableComprehensiveSchemaConsistent6 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveSchemaConsistent6.id)
               : rawNullableComprehensiveSchemaConsistent6,
           value.intField);
     }
-    if (session.containsSlot(7)) {
-      final rawNullableComprehensiveSchemaConsistent7 = session.valueForSlot(7);
+    if (slots.containsSlot(7)) {
+      final rawNullableComprehensiveSchemaConsistent7 = slots.valueForSlot(7);
       value.nullableDouble =
           _readNullableComprehensiveSchemaConsistentNullableDouble(
               rawNullableComprehensiveSchemaConsistent7 is DeferredReadRef
@@ -4517,8 +4423,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
                   : rawNullableComprehensiveSchemaConsistent7,
               value.nullableDouble);
     }
-    if (session.containsSlot(8)) {
-      final rawNullableComprehensiveSchemaConsistent8 = session.valueForSlot(8);
+    if (slots.containsSlot(8)) {
+      final rawNullableComprehensiveSchemaConsistent8 = slots.valueForSlot(8);
       value.nullableFloat =
           _readNullableComprehensiveSchemaConsistentNullableFloat(
               rawNullableComprehensiveSchemaConsistent8 is DeferredReadRef
@@ -4527,8 +4433,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
                   : rawNullableComprehensiveSchemaConsistent8,
               value.nullableFloat);
     }
-    if (session.containsSlot(9)) {
-      final rawNullableComprehensiveSchemaConsistent9 = session.valueForSlot(9);
+    if (slots.containsSlot(9)) {
+      final rawNullableComprehensiveSchemaConsistent9 = slots.valueForSlot(9);
       value.nullableBool =
           _readNullableComprehensiveSchemaConsistentNullableBool(
               rawNullableComprehensiveSchemaConsistent9 is DeferredReadRef
@@ -4537,9 +4443,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
                   : rawNullableComprehensiveSchemaConsistent9,
               value.nullableBool);
     }
-    if (session.containsSlot(10)) {
-      final rawNullableComprehensiveSchemaConsistent10 =
-          session.valueForSlot(10);
+    if (slots.containsSlot(10)) {
+      final rawNullableComprehensiveSchemaConsistent10 = slots.valueForSlot(10);
       value.nullableLong =
           _readNullableComprehensiveSchemaConsistentNullableLong(
               rawNullableComprehensiveSchemaConsistent10 is DeferredReadRef
@@ -4548,9 +4453,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
                   : rawNullableComprehensiveSchemaConsistent10,
               value.nullableLong);
     }
-    if (session.containsSlot(11)) {
-      final rawNullableComprehensiveSchemaConsistent11 =
-          session.valueForSlot(11);
+    if (slots.containsSlot(11)) {
+      final rawNullableComprehensiveSchemaConsistent11 = slots.valueForSlot(11);
       value.nullableInt = _readNullableComprehensiveSchemaConsistentNullableInt(
           rawNullableComprehensiveSchemaConsistent11 is DeferredReadRef
               ? context
@@ -4558,9 +4462,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
               : rawNullableComprehensiveSchemaConsistent11,
           value.nullableInt);
     }
-    if (session.containsSlot(12)) {
-      final rawNullableComprehensiveSchemaConsistent12 =
-          session.valueForSlot(12);
+    if (slots.containsSlot(12)) {
+      final rawNullableComprehensiveSchemaConsistent12 = slots.valueForSlot(12);
       value.nullableString =
           _readNullableComprehensiveSchemaConsistentNullableString(
               rawNullableComprehensiveSchemaConsistent12 is DeferredReadRef
@@ -4569,9 +4472,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
                   : rawNullableComprehensiveSchemaConsistent12,
               value.nullableString);
     }
-    if (session.containsSlot(13)) {
-      final rawNullableComprehensiveSchemaConsistent13 =
-          session.valueForSlot(13);
+    if (slots.containsSlot(13)) {
+      final rawNullableComprehensiveSchemaConsistent13 = slots.valueForSlot(13);
       value.stringField = _readNullableComprehensiveSchemaConsistentStringField(
           rawNullableComprehensiveSchemaConsistent13 is DeferredReadRef
               ? context
@@ -4579,9 +4481,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
               : rawNullableComprehensiveSchemaConsistent13,
           value.stringField);
     }
-    if (session.containsSlot(14)) {
-      final rawNullableComprehensiveSchemaConsistent14 =
-          session.valueForSlot(14);
+    if (slots.containsSlot(14)) {
+      final rawNullableComprehensiveSchemaConsistent14 = slots.valueForSlot(14);
       value.listField = _readNullableComprehensiveSchemaConsistentListField(
           rawNullableComprehensiveSchemaConsistent14 is DeferredReadRef
               ? context
@@ -4589,9 +4490,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
               : rawNullableComprehensiveSchemaConsistent14,
           value.listField);
     }
-    if (session.containsSlot(15)) {
-      final rawNullableComprehensiveSchemaConsistent15 =
-          session.valueForSlot(15);
+    if (slots.containsSlot(15)) {
+      final rawNullableComprehensiveSchemaConsistent15 = slots.valueForSlot(15);
       value.nullableList =
           _readNullableComprehensiveSchemaConsistentNullableList(
               rawNullableComprehensiveSchemaConsistent15 is DeferredReadRef
@@ -4600,9 +4500,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
                   : rawNullableComprehensiveSchemaConsistent15,
               value.nullableList);
     }
-    if (session.containsSlot(16)) {
-      final rawNullableComprehensiveSchemaConsistent16 =
-          session.valueForSlot(16);
+    if (slots.containsSlot(16)) {
+      final rawNullableComprehensiveSchemaConsistent16 = slots.valueForSlot(16);
       value.nullableSet = _readNullableComprehensiveSchemaConsistentNullableSet(
           rawNullableComprehensiveSchemaConsistent16 is DeferredReadRef
               ? context
@@ -4610,9 +4509,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
               : rawNullableComprehensiveSchemaConsistent16,
           value.nullableSet);
     }
-    if (session.containsSlot(17)) {
-      final rawNullableComprehensiveSchemaConsistent17 =
-          session.valueForSlot(17);
+    if (slots.containsSlot(17)) {
+      final rawNullableComprehensiveSchemaConsistent17 = slots.valueForSlot(17);
       value.setField = _readNullableComprehensiveSchemaConsistentSetField(
           rawNullableComprehensiveSchemaConsistent17 is DeferredReadRef
               ? context
@@ -4620,9 +4518,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
               : rawNullableComprehensiveSchemaConsistent17,
           value.setField);
     }
-    if (session.containsSlot(18)) {
-      final rawNullableComprehensiveSchemaConsistent18 =
-          session.valueForSlot(18);
+    if (slots.containsSlot(18)) {
+      final rawNullableComprehensiveSchemaConsistent18 = slots.valueForSlot(18);
       value.mapField = _readNullableComprehensiveSchemaConsistentMapField(
           rawNullableComprehensiveSchemaConsistent18 is DeferredReadRef
               ? context
@@ -4630,9 +4527,8 @@ final class _NullableComprehensiveSchemaConsistentForySerializer
               : rawNullableComprehensiveSchemaConsistent18,
           value.mapField);
     }
-    if (session.containsSlot(19)) {
-      final rawNullableComprehensiveSchemaConsistent19 =
-          session.valueForSlot(19);
+    if (slots.containsSlot(19)) {
+      final rawNullableComprehensiveSchemaConsistent19 = slots.valueForSlot(19);
       value.nullableMap = _readNullableComprehensiveSchemaConsistentNullableMap(
           rawNullableComprehensiveSchemaConsistent19 is DeferredReadRef
               ? context
@@ -5265,305 +5161,305 @@ const List<GeneratedFieldMetadata>
   ),
 ];
 
-typedef _NullableComprehensiveCompatibleSessionWriter
+typedef _NullableComprehensiveCompatibleFieldWriter
     = GeneratedStructFieldWriter<NullableComprehensiveCompatible>;
-typedef _NullableComprehensiveCompatibleSessionReader
+typedef _NullableComprehensiveCompatibleFieldReader
     = GeneratedStructFieldReader<NullableComprehensiveCompatible>;
 
-void _writeNullableComprehensiveCompatibleSessionField0(WriteContext context,
+void _writeNullableComprehensiveCompatibleField0(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.boxedDouble);
+  writeGeneratedStructFieldValue(context, field, value.boxedDouble);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField1(WriteContext context,
+void _writeNullableComprehensiveCompatibleField1(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.doubleField);
+  writeGeneratedStructFieldValue(context, field, value.doubleField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField2(WriteContext context,
+void _writeNullableComprehensiveCompatibleField2(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableDouble1);
+  writeGeneratedStructFieldValue(context, field, value.nullableDouble1);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField3(WriteContext context,
+void _writeNullableComprehensiveCompatibleField3(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.boxedFloat);
+  writeGeneratedStructFieldValue(context, field, value.boxedFloat);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField4(WriteContext context,
+void _writeNullableComprehensiveCompatibleField4(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.floatField);
+  writeGeneratedStructFieldValue(context, field, value.floatField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField5(WriteContext context,
+void _writeNullableComprehensiveCompatibleField5(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableFloat1);
+  writeGeneratedStructFieldValue(context, field, value.nullableFloat1);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField6(WriteContext context,
+void _writeNullableComprehensiveCompatibleField6(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.shortField);
+  writeGeneratedStructFieldValue(context, field, value.shortField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField7(WriteContext context,
+void _writeNullableComprehensiveCompatibleField7(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.byteField);
+  writeGeneratedStructFieldValue(context, field, value.byteField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField8(WriteContext context,
+void _writeNullableComprehensiveCompatibleField8(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.boolField);
+  writeGeneratedStructFieldValue(context, field, value.boolField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField9(WriteContext context,
+void _writeNullableComprehensiveCompatibleField9(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.boxedBool);
+  writeGeneratedStructFieldValue(context, field, value.boxedBool);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField10(WriteContext context,
+void _writeNullableComprehensiveCompatibleField10(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableBool1);
+  writeGeneratedStructFieldValue(context, field, value.nullableBool1);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField11(WriteContext context,
+void _writeNullableComprehensiveCompatibleField11(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.boxedLong);
+  writeGeneratedStructFieldValue(context, field, value.boxedLong);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField12(WriteContext context,
+void _writeNullableComprehensiveCompatibleField12(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.longField);
+  writeGeneratedStructFieldValue(context, field, value.longField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField13(WriteContext context,
+void _writeNullableComprehensiveCompatibleField13(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableLong1);
+  writeGeneratedStructFieldValue(context, field, value.nullableLong1);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField14(WriteContext context,
+void _writeNullableComprehensiveCompatibleField14(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.boxedInt);
+  writeGeneratedStructFieldValue(context, field, value.boxedInt);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField15(WriteContext context,
+void _writeNullableComprehensiveCompatibleField15(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.intField);
+  writeGeneratedStructFieldValue(context, field, value.intField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField16(WriteContext context,
+void _writeNullableComprehensiveCompatibleField16(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableInt1);
+  writeGeneratedStructFieldValue(context, field, value.nullableInt1);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField17(WriteContext context,
+void _writeNullableComprehensiveCompatibleField17(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableString2);
+  writeGeneratedStructFieldValue(context, field, value.nullableString2);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField18(WriteContext context,
+void _writeNullableComprehensiveCompatibleField18(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.stringField);
+  writeGeneratedStructFieldValue(context, field, value.stringField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField19(WriteContext context,
+void _writeNullableComprehensiveCompatibleField19(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.listField);
+  writeGeneratedStructFieldValue(context, field, value.listField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField20(WriteContext context,
+void _writeNullableComprehensiveCompatibleField20(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableList2);
+  writeGeneratedStructFieldValue(context, field, value.nullableList2);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField21(WriteContext context,
+void _writeNullableComprehensiveCompatibleField21(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableSet2);
+  writeGeneratedStructFieldValue(context, field, value.nullableSet2);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField22(WriteContext context,
+void _writeNullableComprehensiveCompatibleField22(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.setField);
+  writeGeneratedStructFieldValue(context, field, value.setField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField23(WriteContext context,
+void _writeNullableComprehensiveCompatibleField23(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.mapField);
+  writeGeneratedStructFieldValue(context, field, value.mapField);
 }
 
-void _writeNullableComprehensiveCompatibleSessionField24(WriteContext context,
+void _writeNullableComprehensiveCompatibleField24(WriteContext context,
     GeneratedStructField field, NullableComprehensiveCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.nullableMap2);
+  writeGeneratedStructFieldValue(context, field, value.nullableMap2);
 }
 
-void _readNullableComprehensiveCompatibleSessionField0(ReadContext context,
+void _readNullableComprehensiveCompatibleField0(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.boxedDouble = _readNullableComprehensiveCompatibleBoxedDouble(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.boxedDouble);
 }
 
-void _readNullableComprehensiveCompatibleSessionField1(ReadContext context,
+void _readNullableComprehensiveCompatibleField1(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.doubleField = _readNullableComprehensiveCompatibleDoubleField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.doubleField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField2(ReadContext context,
+void _readNullableComprehensiveCompatibleField2(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableDouble1 = _readNullableComprehensiveCompatibleNullableDouble1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableDouble1);
 }
 
-void _readNullableComprehensiveCompatibleSessionField3(ReadContext context,
+void _readNullableComprehensiveCompatibleField3(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.boxedFloat = _readNullableComprehensiveCompatibleBoxedFloat(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.boxedFloat);
 }
 
-void _readNullableComprehensiveCompatibleSessionField4(ReadContext context,
+void _readNullableComprehensiveCompatibleField4(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.floatField = _readNullableComprehensiveCompatibleFloatField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.floatField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField5(ReadContext context,
+void _readNullableComprehensiveCompatibleField5(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableFloat1 = _readNullableComprehensiveCompatibleNullableFloat1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableFloat1);
 }
 
-void _readNullableComprehensiveCompatibleSessionField6(ReadContext context,
+void _readNullableComprehensiveCompatibleField6(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.shortField = _readNullableComprehensiveCompatibleShortField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.shortField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField7(ReadContext context,
+void _readNullableComprehensiveCompatibleField7(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.byteField = _readNullableComprehensiveCompatibleByteField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.byteField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField8(ReadContext context,
+void _readNullableComprehensiveCompatibleField8(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.boolField = _readNullableComprehensiveCompatibleBoolField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.boolField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField9(ReadContext context,
+void _readNullableComprehensiveCompatibleField9(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.boxedBool = _readNullableComprehensiveCompatibleBoxedBool(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.boxedBool);
 }
 
-void _readNullableComprehensiveCompatibleSessionField10(ReadContext context,
+void _readNullableComprehensiveCompatibleField10(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableBool1 = _readNullableComprehensiveCompatibleNullableBool1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableBool1);
 }
 
-void _readNullableComprehensiveCompatibleSessionField11(ReadContext context,
+void _readNullableComprehensiveCompatibleField11(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.boxedLong = _readNullableComprehensiveCompatibleBoxedLong(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.boxedLong);
 }
 
-void _readNullableComprehensiveCompatibleSessionField12(ReadContext context,
+void _readNullableComprehensiveCompatibleField12(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.longField = _readNullableComprehensiveCompatibleLongField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.longField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField13(ReadContext context,
+void _readNullableComprehensiveCompatibleField13(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableLong1 = _readNullableComprehensiveCompatibleNullableLong1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableLong1);
 }
 
-void _readNullableComprehensiveCompatibleSessionField14(ReadContext context,
+void _readNullableComprehensiveCompatibleField14(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.boxedInt = _readNullableComprehensiveCompatibleBoxedInt(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.boxedInt);
 }
 
-void _readNullableComprehensiveCompatibleSessionField15(ReadContext context,
+void _readNullableComprehensiveCompatibleField15(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.intField = _readNullableComprehensiveCompatibleIntField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.intField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField16(ReadContext context,
+void _readNullableComprehensiveCompatibleField16(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableInt1 = _readNullableComprehensiveCompatibleNullableInt1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableInt1);
 }
 
-void _readNullableComprehensiveCompatibleSessionField17(ReadContext context,
+void _readNullableComprehensiveCompatibleField17(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableString2 = _readNullableComprehensiveCompatibleNullableString2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableString2);
 }
 
-void _readNullableComprehensiveCompatibleSessionField18(ReadContext context,
+void _readNullableComprehensiveCompatibleField18(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.stringField = _readNullableComprehensiveCompatibleStringField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.stringField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField19(ReadContext context,
+void _readNullableComprehensiveCompatibleField19(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.listField = _readNullableComprehensiveCompatibleListField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.listField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField20(ReadContext context,
+void _readNullableComprehensiveCompatibleField20(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableList2 = _readNullableComprehensiveCompatibleNullableList2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableList2);
 }
 
-void _readNullableComprehensiveCompatibleSessionField21(ReadContext context,
+void _readNullableComprehensiveCompatibleField21(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableSet2 = _readNullableComprehensiveCompatibleNullableSet2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.nullableSet2);
 }
 
-void _readNullableComprehensiveCompatibleSessionField22(ReadContext context,
+void _readNullableComprehensiveCompatibleField22(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.setField = _readNullableComprehensiveCompatibleSetField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.setField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField23(ReadContext context,
+void _readNullableComprehensiveCompatibleField23(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.mapField = _readNullableComprehensiveCompatibleMapField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.mapField);
 }
 
-void _readNullableComprehensiveCompatibleSessionField24(ReadContext context,
+void _readNullableComprehensiveCompatibleField24(ReadContext context,
     NullableComprehensiveCompatible value, Object? rawValue) {
   value.nullableMap2 = _readNullableComprehensiveCompatibleNullableMap2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -5573,60 +5469,60 @@ void _readNullableComprehensiveCompatibleSessionField24(ReadContext context,
 final GeneratedStructRegistration<NullableComprehensiveCompatible>
     _nullableComprehensiveCompatibleForyRegistration =
     GeneratedStructRegistration<NullableComprehensiveCompatible>(
-  sessionWritersBySlot: <_NullableComprehensiveCompatibleSessionWriter>[
-    _writeNullableComprehensiveCompatibleSessionField0,
-    _writeNullableComprehensiveCompatibleSessionField1,
-    _writeNullableComprehensiveCompatibleSessionField2,
-    _writeNullableComprehensiveCompatibleSessionField3,
-    _writeNullableComprehensiveCompatibleSessionField4,
-    _writeNullableComprehensiveCompatibleSessionField5,
-    _writeNullableComprehensiveCompatibleSessionField6,
-    _writeNullableComprehensiveCompatibleSessionField7,
-    _writeNullableComprehensiveCompatibleSessionField8,
-    _writeNullableComprehensiveCompatibleSessionField9,
-    _writeNullableComprehensiveCompatibleSessionField10,
-    _writeNullableComprehensiveCompatibleSessionField11,
-    _writeNullableComprehensiveCompatibleSessionField12,
-    _writeNullableComprehensiveCompatibleSessionField13,
-    _writeNullableComprehensiveCompatibleSessionField14,
-    _writeNullableComprehensiveCompatibleSessionField15,
-    _writeNullableComprehensiveCompatibleSessionField16,
-    _writeNullableComprehensiveCompatibleSessionField17,
-    _writeNullableComprehensiveCompatibleSessionField18,
-    _writeNullableComprehensiveCompatibleSessionField19,
-    _writeNullableComprehensiveCompatibleSessionField20,
-    _writeNullableComprehensiveCompatibleSessionField21,
-    _writeNullableComprehensiveCompatibleSessionField22,
-    _writeNullableComprehensiveCompatibleSessionField23,
-    _writeNullableComprehensiveCompatibleSessionField24,
+  fieldWritersBySlot: <_NullableComprehensiveCompatibleFieldWriter>[
+    _writeNullableComprehensiveCompatibleField0,
+    _writeNullableComprehensiveCompatibleField1,
+    _writeNullableComprehensiveCompatibleField2,
+    _writeNullableComprehensiveCompatibleField3,
+    _writeNullableComprehensiveCompatibleField4,
+    _writeNullableComprehensiveCompatibleField5,
+    _writeNullableComprehensiveCompatibleField6,
+    _writeNullableComprehensiveCompatibleField7,
+    _writeNullableComprehensiveCompatibleField8,
+    _writeNullableComprehensiveCompatibleField9,
+    _writeNullableComprehensiveCompatibleField10,
+    _writeNullableComprehensiveCompatibleField11,
+    _writeNullableComprehensiveCompatibleField12,
+    _writeNullableComprehensiveCompatibleField13,
+    _writeNullableComprehensiveCompatibleField14,
+    _writeNullableComprehensiveCompatibleField15,
+    _writeNullableComprehensiveCompatibleField16,
+    _writeNullableComprehensiveCompatibleField17,
+    _writeNullableComprehensiveCompatibleField18,
+    _writeNullableComprehensiveCompatibleField19,
+    _writeNullableComprehensiveCompatibleField20,
+    _writeNullableComprehensiveCompatibleField21,
+    _writeNullableComprehensiveCompatibleField22,
+    _writeNullableComprehensiveCompatibleField23,
+    _writeNullableComprehensiveCompatibleField24,
   ],
   compatibleFactory: NullableComprehensiveCompatible.new,
-  compatibleReadersBySlot: <_NullableComprehensiveCompatibleSessionReader>[
-    _readNullableComprehensiveCompatibleSessionField0,
-    _readNullableComprehensiveCompatibleSessionField1,
-    _readNullableComprehensiveCompatibleSessionField2,
-    _readNullableComprehensiveCompatibleSessionField3,
-    _readNullableComprehensiveCompatibleSessionField4,
-    _readNullableComprehensiveCompatibleSessionField5,
-    _readNullableComprehensiveCompatibleSessionField6,
-    _readNullableComprehensiveCompatibleSessionField7,
-    _readNullableComprehensiveCompatibleSessionField8,
-    _readNullableComprehensiveCompatibleSessionField9,
-    _readNullableComprehensiveCompatibleSessionField10,
-    _readNullableComprehensiveCompatibleSessionField11,
-    _readNullableComprehensiveCompatibleSessionField12,
-    _readNullableComprehensiveCompatibleSessionField13,
-    _readNullableComprehensiveCompatibleSessionField14,
-    _readNullableComprehensiveCompatibleSessionField15,
-    _readNullableComprehensiveCompatibleSessionField16,
-    _readNullableComprehensiveCompatibleSessionField17,
-    _readNullableComprehensiveCompatibleSessionField18,
-    _readNullableComprehensiveCompatibleSessionField19,
-    _readNullableComprehensiveCompatibleSessionField20,
-    _readNullableComprehensiveCompatibleSessionField21,
-    _readNullableComprehensiveCompatibleSessionField22,
-    _readNullableComprehensiveCompatibleSessionField23,
-    _readNullableComprehensiveCompatibleSessionField24,
+  compatibleReadersBySlot: <_NullableComprehensiveCompatibleFieldReader>[
+    _readNullableComprehensiveCompatibleField0,
+    _readNullableComprehensiveCompatibleField1,
+    _readNullableComprehensiveCompatibleField2,
+    _readNullableComprehensiveCompatibleField3,
+    _readNullableComprehensiveCompatibleField4,
+    _readNullableComprehensiveCompatibleField5,
+    _readNullableComprehensiveCompatibleField6,
+    _readNullableComprehensiveCompatibleField7,
+    _readNullableComprehensiveCompatibleField8,
+    _readNullableComprehensiveCompatibleField9,
+    _readNullableComprehensiveCompatibleField10,
+    _readNullableComprehensiveCompatibleField11,
+    _readNullableComprehensiveCompatibleField12,
+    _readNullableComprehensiveCompatibleField13,
+    _readNullableComprehensiveCompatibleField14,
+    _readNullableComprehensiveCompatibleField15,
+    _readNullableComprehensiveCompatibleField16,
+    _readNullableComprehensiveCompatibleField17,
+    _readNullableComprehensiveCompatibleField18,
+    _readNullableComprehensiveCompatibleField19,
+    _readNullableComprehensiveCompatibleField20,
+    _readNullableComprehensiveCompatibleField21,
+    _readNullableComprehensiveCompatibleField22,
+    _readNullableComprehensiveCompatibleField23,
+    _readNullableComprehensiveCompatibleField24,
   ],
   type: NullableComprehensiveCompatible,
   serializerFactory: _NullableComprehensiveCompatibleForySerializer.new,
@@ -5640,15 +5536,15 @@ final class _NullableComprehensiveCompatibleForySerializer
 
   _NullableComprehensiveCompatibleForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _nullableComprehensiveCompatibleForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _nullableComprehensiveCompatibleForyRegistration,
     );
@@ -5656,10 +5552,10 @@ final class _NullableComprehensiveCompatibleForySerializer
 
   @override
   void write(WriteContext context, NullableComprehensiveCompatible value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 87);
       cursor0.writeFloat64(value.boxedDouble);
       cursor0.writeFloat64(value.doubleField);
@@ -5681,30 +5577,29 @@ final class _NullableComprehensiveCompatibleForySerializer
       cursor0.finish();
       context.writeString(value.nullableString2);
       context.writeString(value.stringField);
-      writeGeneratedStructRuntimeValue(context, fields[19], value.listField);
-      writeGeneratedStructRuntimeValue(
-          context, fields[20], value.nullableList2);
-      writeGeneratedStructRuntimeValue(context, fields[21], value.nullableSet2);
-      writeGeneratedStructRuntimeValue(context, fields[22], value.setField);
-      writeGeneratedStructRuntimeValue(context, fields[23], value.mapField);
-      writeGeneratedStructRuntimeValue(context, fields[24], value.nullableMap2);
+      writeGeneratedStructFieldValue(context, fields[19], value.listField);
+      writeGeneratedStructFieldValue(context, fields[20], value.nullableList2);
+      writeGeneratedStructFieldValue(context, fields[21], value.nullableSet2);
+      writeGeneratedStructFieldValue(context, fields[22], value.setField);
+      writeGeneratedStructFieldValue(context, fields[23], value.mapField);
+      writeGeneratedStructFieldValue(context, fields[24], value.nullableMap2);
       return;
     }
     final writers =
-        _nullableComprehensiveCompatibleForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+        _nullableComprehensiveCompatibleForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   NullableComprehensiveCompatible read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = NullableComprehensiveCompatible();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.boxedDouble = cursor0.readFloat64();
       value.doubleField = cursor0.readFloat64();
@@ -5746,24 +5641,24 @@ final class _NullableComprehensiveCompatibleForySerializer
           _readNullableComprehensiveCompatibleNullableMap2Value);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawNullableComprehensiveCompatible0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawNullableComprehensiveCompatible0 = slots.valueForSlot(0);
       value.boxedDouble = _readNullableComprehensiveCompatibleBoxedDouble(
           rawNullableComprehensiveCompatible0 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible0.id)
               : rawNullableComprehensiveCompatible0,
           value.boxedDouble);
     }
-    if (session.containsSlot(1)) {
-      final rawNullableComprehensiveCompatible1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawNullableComprehensiveCompatible1 = slots.valueForSlot(1);
       value.doubleField = _readNullableComprehensiveCompatibleDoubleField(
           rawNullableComprehensiveCompatible1 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible1.id)
               : rawNullableComprehensiveCompatible1,
           value.doubleField);
     }
-    if (session.containsSlot(2)) {
-      final rawNullableComprehensiveCompatible2 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawNullableComprehensiveCompatible2 = slots.valueForSlot(2);
       value.nullableDouble1 =
           _readNullableComprehensiveCompatibleNullableDouble1(
               rawNullableComprehensiveCompatible2 is DeferredReadRef
@@ -5771,120 +5666,120 @@ final class _NullableComprehensiveCompatibleForySerializer
                   : rawNullableComprehensiveCompatible2,
               value.nullableDouble1);
     }
-    if (session.containsSlot(3)) {
-      final rawNullableComprehensiveCompatible3 = session.valueForSlot(3);
+    if (slots.containsSlot(3)) {
+      final rawNullableComprehensiveCompatible3 = slots.valueForSlot(3);
       value.boxedFloat = _readNullableComprehensiveCompatibleBoxedFloat(
           rawNullableComprehensiveCompatible3 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible3.id)
               : rawNullableComprehensiveCompatible3,
           value.boxedFloat);
     }
-    if (session.containsSlot(4)) {
-      final rawNullableComprehensiveCompatible4 = session.valueForSlot(4);
+    if (slots.containsSlot(4)) {
+      final rawNullableComprehensiveCompatible4 = slots.valueForSlot(4);
       value.floatField = _readNullableComprehensiveCompatibleFloatField(
           rawNullableComprehensiveCompatible4 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible4.id)
               : rawNullableComprehensiveCompatible4,
           value.floatField);
     }
-    if (session.containsSlot(5)) {
-      final rawNullableComprehensiveCompatible5 = session.valueForSlot(5);
+    if (slots.containsSlot(5)) {
+      final rawNullableComprehensiveCompatible5 = slots.valueForSlot(5);
       value.nullableFloat1 = _readNullableComprehensiveCompatibleNullableFloat1(
           rawNullableComprehensiveCompatible5 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible5.id)
               : rawNullableComprehensiveCompatible5,
           value.nullableFloat1);
     }
-    if (session.containsSlot(6)) {
-      final rawNullableComprehensiveCompatible6 = session.valueForSlot(6);
+    if (slots.containsSlot(6)) {
+      final rawNullableComprehensiveCompatible6 = slots.valueForSlot(6);
       value.shortField = _readNullableComprehensiveCompatibleShortField(
           rawNullableComprehensiveCompatible6 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible6.id)
               : rawNullableComprehensiveCompatible6,
           value.shortField);
     }
-    if (session.containsSlot(7)) {
-      final rawNullableComprehensiveCompatible7 = session.valueForSlot(7);
+    if (slots.containsSlot(7)) {
+      final rawNullableComprehensiveCompatible7 = slots.valueForSlot(7);
       value.byteField = _readNullableComprehensiveCompatibleByteField(
           rawNullableComprehensiveCompatible7 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible7.id)
               : rawNullableComprehensiveCompatible7,
           value.byteField);
     }
-    if (session.containsSlot(8)) {
-      final rawNullableComprehensiveCompatible8 = session.valueForSlot(8);
+    if (slots.containsSlot(8)) {
+      final rawNullableComprehensiveCompatible8 = slots.valueForSlot(8);
       value.boolField = _readNullableComprehensiveCompatibleBoolField(
           rawNullableComprehensiveCompatible8 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible8.id)
               : rawNullableComprehensiveCompatible8,
           value.boolField);
     }
-    if (session.containsSlot(9)) {
-      final rawNullableComprehensiveCompatible9 = session.valueForSlot(9);
+    if (slots.containsSlot(9)) {
+      final rawNullableComprehensiveCompatible9 = slots.valueForSlot(9);
       value.boxedBool = _readNullableComprehensiveCompatibleBoxedBool(
           rawNullableComprehensiveCompatible9 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible9.id)
               : rawNullableComprehensiveCompatible9,
           value.boxedBool);
     }
-    if (session.containsSlot(10)) {
-      final rawNullableComprehensiveCompatible10 = session.valueForSlot(10);
+    if (slots.containsSlot(10)) {
+      final rawNullableComprehensiveCompatible10 = slots.valueForSlot(10);
       value.nullableBool1 = _readNullableComprehensiveCompatibleNullableBool1(
           rawNullableComprehensiveCompatible10 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible10.id)
               : rawNullableComprehensiveCompatible10,
           value.nullableBool1);
     }
-    if (session.containsSlot(11)) {
-      final rawNullableComprehensiveCompatible11 = session.valueForSlot(11);
+    if (slots.containsSlot(11)) {
+      final rawNullableComprehensiveCompatible11 = slots.valueForSlot(11);
       value.boxedLong = _readNullableComprehensiveCompatibleBoxedLong(
           rawNullableComprehensiveCompatible11 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible11.id)
               : rawNullableComprehensiveCompatible11,
           value.boxedLong);
     }
-    if (session.containsSlot(12)) {
-      final rawNullableComprehensiveCompatible12 = session.valueForSlot(12);
+    if (slots.containsSlot(12)) {
+      final rawNullableComprehensiveCompatible12 = slots.valueForSlot(12);
       value.longField = _readNullableComprehensiveCompatibleLongField(
           rawNullableComprehensiveCompatible12 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible12.id)
               : rawNullableComprehensiveCompatible12,
           value.longField);
     }
-    if (session.containsSlot(13)) {
-      final rawNullableComprehensiveCompatible13 = session.valueForSlot(13);
+    if (slots.containsSlot(13)) {
+      final rawNullableComprehensiveCompatible13 = slots.valueForSlot(13);
       value.nullableLong1 = _readNullableComprehensiveCompatibleNullableLong1(
           rawNullableComprehensiveCompatible13 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible13.id)
               : rawNullableComprehensiveCompatible13,
           value.nullableLong1);
     }
-    if (session.containsSlot(14)) {
-      final rawNullableComprehensiveCompatible14 = session.valueForSlot(14);
+    if (slots.containsSlot(14)) {
+      final rawNullableComprehensiveCompatible14 = slots.valueForSlot(14);
       value.boxedInt = _readNullableComprehensiveCompatibleBoxedInt(
           rawNullableComprehensiveCompatible14 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible14.id)
               : rawNullableComprehensiveCompatible14,
           value.boxedInt);
     }
-    if (session.containsSlot(15)) {
-      final rawNullableComprehensiveCompatible15 = session.valueForSlot(15);
+    if (slots.containsSlot(15)) {
+      final rawNullableComprehensiveCompatible15 = slots.valueForSlot(15);
       value.intField = _readNullableComprehensiveCompatibleIntField(
           rawNullableComprehensiveCompatible15 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible15.id)
               : rawNullableComprehensiveCompatible15,
           value.intField);
     }
-    if (session.containsSlot(16)) {
-      final rawNullableComprehensiveCompatible16 = session.valueForSlot(16);
+    if (slots.containsSlot(16)) {
+      final rawNullableComprehensiveCompatible16 = slots.valueForSlot(16);
       value.nullableInt1 = _readNullableComprehensiveCompatibleNullableInt1(
           rawNullableComprehensiveCompatible16 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible16.id)
               : rawNullableComprehensiveCompatible16,
           value.nullableInt1);
     }
-    if (session.containsSlot(17)) {
-      final rawNullableComprehensiveCompatible17 = session.valueForSlot(17);
+    if (slots.containsSlot(17)) {
+      final rawNullableComprehensiveCompatible17 = slots.valueForSlot(17);
       value.nullableString2 =
           _readNullableComprehensiveCompatibleNullableString2(
               rawNullableComprehensiveCompatible17 is DeferredReadRef
@@ -5892,56 +5787,56 @@ final class _NullableComprehensiveCompatibleForySerializer
                   : rawNullableComprehensiveCompatible17,
               value.nullableString2);
     }
-    if (session.containsSlot(18)) {
-      final rawNullableComprehensiveCompatible18 = session.valueForSlot(18);
+    if (slots.containsSlot(18)) {
+      final rawNullableComprehensiveCompatible18 = slots.valueForSlot(18);
       value.stringField = _readNullableComprehensiveCompatibleStringField(
           rawNullableComprehensiveCompatible18 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible18.id)
               : rawNullableComprehensiveCompatible18,
           value.stringField);
     }
-    if (session.containsSlot(19)) {
-      final rawNullableComprehensiveCompatible19 = session.valueForSlot(19);
+    if (slots.containsSlot(19)) {
+      final rawNullableComprehensiveCompatible19 = slots.valueForSlot(19);
       value.listField = _readNullableComprehensiveCompatibleListField(
           rawNullableComprehensiveCompatible19 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible19.id)
               : rawNullableComprehensiveCompatible19,
           value.listField);
     }
-    if (session.containsSlot(20)) {
-      final rawNullableComprehensiveCompatible20 = session.valueForSlot(20);
+    if (slots.containsSlot(20)) {
+      final rawNullableComprehensiveCompatible20 = slots.valueForSlot(20);
       value.nullableList2 = _readNullableComprehensiveCompatibleNullableList2(
           rawNullableComprehensiveCompatible20 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible20.id)
               : rawNullableComprehensiveCompatible20,
           value.nullableList2);
     }
-    if (session.containsSlot(21)) {
-      final rawNullableComprehensiveCompatible21 = session.valueForSlot(21);
+    if (slots.containsSlot(21)) {
+      final rawNullableComprehensiveCompatible21 = slots.valueForSlot(21);
       value.nullableSet2 = _readNullableComprehensiveCompatibleNullableSet2(
           rawNullableComprehensiveCompatible21 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible21.id)
               : rawNullableComprehensiveCompatible21,
           value.nullableSet2);
     }
-    if (session.containsSlot(22)) {
-      final rawNullableComprehensiveCompatible22 = session.valueForSlot(22);
+    if (slots.containsSlot(22)) {
+      final rawNullableComprehensiveCompatible22 = slots.valueForSlot(22);
       value.setField = _readNullableComprehensiveCompatibleSetField(
           rawNullableComprehensiveCompatible22 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible22.id)
               : rawNullableComprehensiveCompatible22,
           value.setField);
     }
-    if (session.containsSlot(23)) {
-      final rawNullableComprehensiveCompatible23 = session.valueForSlot(23);
+    if (slots.containsSlot(23)) {
+      final rawNullableComprehensiveCompatible23 = slots.valueForSlot(23);
       value.mapField = _readNullableComprehensiveCompatibleMapField(
           rawNullableComprehensiveCompatible23 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible23.id)
               : rawNullableComprehensiveCompatible23,
           value.mapField);
     }
-    if (session.containsSlot(24)) {
-      final rawNullableComprehensiveCompatible24 = session.valueForSlot(24);
+    if (slots.containsSlot(24)) {
+      final rawNullableComprehensiveCompatible24 = slots.valueForSlot(24);
       value.nullableMap2 = _readNullableComprehensiveCompatibleNullableMap2(
           rawNullableComprehensiveCompatible24 is DeferredReadRef
               ? context.getReadRef(rawNullableComprehensiveCompatible24.id)
@@ -6283,29 +6178,29 @@ const List<GeneratedFieldMetadata> _refInnerSchemaConsistentForyFieldMetadata =
   ),
 ];
 
-typedef _RefInnerSchemaConsistentSessionWriter
+typedef _RefInnerSchemaConsistentFieldWriter
     = GeneratedStructFieldWriter<RefInnerSchemaConsistent>;
-typedef _RefInnerSchemaConsistentSessionReader
+typedef _RefInnerSchemaConsistentFieldReader
     = GeneratedStructFieldReader<RefInnerSchemaConsistent>;
 
-void _writeRefInnerSchemaConsistentSessionField0(WriteContext context,
+void _writeRefInnerSchemaConsistentField0(WriteContext context,
     GeneratedStructField field, RefInnerSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.id);
+  writeGeneratedStructFieldValue(context, field, value.id);
 }
 
-void _writeRefInnerSchemaConsistentSessionField1(WriteContext context,
+void _writeRefInnerSchemaConsistentField1(WriteContext context,
     GeneratedStructField field, RefInnerSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.name);
+  writeGeneratedStructFieldValue(context, field, value.name);
 }
 
-void _readRefInnerSchemaConsistentSessionField0(
+void _readRefInnerSchemaConsistentField0(
     ReadContext context, RefInnerSchemaConsistent value, Object? rawValue) {
   value.id = _readRefInnerSchemaConsistentId(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.id);
 }
 
-void _readRefInnerSchemaConsistentSessionField1(
+void _readRefInnerSchemaConsistentField1(
     ReadContext context, RefInnerSchemaConsistent value, Object? rawValue) {
   value.name = _readRefInnerSchemaConsistentName(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -6315,14 +6210,14 @@ void _readRefInnerSchemaConsistentSessionField1(
 final GeneratedStructRegistration<RefInnerSchemaConsistent>
     _refInnerSchemaConsistentForyRegistration =
     GeneratedStructRegistration<RefInnerSchemaConsistent>(
-  sessionWritersBySlot: <_RefInnerSchemaConsistentSessionWriter>[
-    _writeRefInnerSchemaConsistentSessionField0,
-    _writeRefInnerSchemaConsistentSessionField1,
+  fieldWritersBySlot: <_RefInnerSchemaConsistentFieldWriter>[
+    _writeRefInnerSchemaConsistentField0,
+    _writeRefInnerSchemaConsistentField1,
   ],
   compatibleFactory: RefInnerSchemaConsistent.new,
-  compatibleReadersBySlot: <_RefInnerSchemaConsistentSessionReader>[
-    _readRefInnerSchemaConsistentSessionField0,
-    _readRefInnerSchemaConsistentSessionField1,
+  compatibleReadersBySlot: <_RefInnerSchemaConsistentFieldReader>[
+    _readRefInnerSchemaConsistentField0,
+    _readRefInnerSchemaConsistentField1,
   ],
   type: RefInnerSchemaConsistent,
   serializerFactory: _RefInnerSchemaConsistentForySerializer.new,
@@ -6336,15 +6231,15 @@ final class _RefInnerSchemaConsistentForySerializer
 
   _RefInnerSchemaConsistentForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refInnerSchemaConsistentForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refInnerSchemaConsistentForyRegistration,
     );
@@ -6352,8 +6247,8 @@ final class _RefInnerSchemaConsistentForySerializer
 
   @override
   void write(WriteContext context, RefInnerSchemaConsistent value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor0.writeVarInt32(value.id);
@@ -6362,18 +6257,18 @@ final class _RefInnerSchemaConsistentForySerializer
       return;
     }
     final writers =
-        _refInnerSchemaConsistentForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+        _refInnerSchemaConsistentForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   RefInnerSchemaConsistent read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = RefInnerSchemaConsistent();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.id = cursor0.readVarInt32();
@@ -6381,16 +6276,16 @@ final class _RefInnerSchemaConsistentForySerializer
       value.name = context.readString();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawRefInnerSchemaConsistent0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawRefInnerSchemaConsistent0 = slots.valueForSlot(0);
       value.id = _readRefInnerSchemaConsistentId(
           rawRefInnerSchemaConsistent0 is DeferredReadRef
               ? context.getReadRef(rawRefInnerSchemaConsistent0.id)
               : rawRefInnerSchemaConsistent0,
           value.id);
     }
-    if (session.containsSlot(1)) {
-      final rawRefInnerSchemaConsistent1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawRefInnerSchemaConsistent1 = slots.valueForSlot(1);
       value.name = _readRefInnerSchemaConsistentName(
           rawRefInnerSchemaConsistent1 is DeferredReadRef
               ? context.getReadRef(rawRefInnerSchemaConsistent1.id)
@@ -6447,29 +6342,29 @@ const List<GeneratedFieldMetadata> _refOuterSchemaConsistentForyFieldMetadata =
   ),
 ];
 
-typedef _RefOuterSchemaConsistentSessionWriter
+typedef _RefOuterSchemaConsistentFieldWriter
     = GeneratedStructFieldWriter<RefOuterSchemaConsistent>;
-typedef _RefOuterSchemaConsistentSessionReader
+typedef _RefOuterSchemaConsistentFieldReader
     = GeneratedStructFieldReader<RefOuterSchemaConsistent>;
 
-void _writeRefOuterSchemaConsistentSessionField0(WriteContext context,
+void _writeRefOuterSchemaConsistentField0(WriteContext context,
     GeneratedStructField field, RefOuterSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.inner1);
+  writeGeneratedStructFieldValue(context, field, value.inner1);
 }
 
-void _writeRefOuterSchemaConsistentSessionField1(WriteContext context,
+void _writeRefOuterSchemaConsistentField1(WriteContext context,
     GeneratedStructField field, RefOuterSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.inner2);
+  writeGeneratedStructFieldValue(context, field, value.inner2);
 }
 
-void _readRefOuterSchemaConsistentSessionField0(
+void _readRefOuterSchemaConsistentField0(
     ReadContext context, RefOuterSchemaConsistent value, Object? rawValue) {
   value.inner1 = _readRefOuterSchemaConsistentInner1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.inner1);
 }
 
-void _readRefOuterSchemaConsistentSessionField1(
+void _readRefOuterSchemaConsistentField1(
     ReadContext context, RefOuterSchemaConsistent value, Object? rawValue) {
   value.inner2 = _readRefOuterSchemaConsistentInner2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -6479,14 +6374,14 @@ void _readRefOuterSchemaConsistentSessionField1(
 final GeneratedStructRegistration<RefOuterSchemaConsistent>
     _refOuterSchemaConsistentForyRegistration =
     GeneratedStructRegistration<RefOuterSchemaConsistent>(
-  sessionWritersBySlot: <_RefOuterSchemaConsistentSessionWriter>[
-    _writeRefOuterSchemaConsistentSessionField0,
-    _writeRefOuterSchemaConsistentSessionField1,
+  fieldWritersBySlot: <_RefOuterSchemaConsistentFieldWriter>[
+    _writeRefOuterSchemaConsistentField0,
+    _writeRefOuterSchemaConsistentField1,
   ],
   compatibleFactory: RefOuterSchemaConsistent.new,
-  compatibleReadersBySlot: <_RefOuterSchemaConsistentSessionReader>[
-    _readRefOuterSchemaConsistentSessionField0,
-    _readRefOuterSchemaConsistentSessionField1,
+  compatibleReadersBySlot: <_RefOuterSchemaConsistentFieldReader>[
+    _readRefOuterSchemaConsistentField0,
+    _readRefOuterSchemaConsistentField1,
   ],
   type: RefOuterSchemaConsistent,
   serializerFactory: _RefOuterSchemaConsistentForySerializer.new,
@@ -6500,15 +6395,15 @@ final class _RefOuterSchemaConsistentForySerializer
 
   _RefOuterSchemaConsistentForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refOuterSchemaConsistentForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refOuterSchemaConsistentForyRegistration,
     );
@@ -6516,45 +6411,45 @@ final class _RefOuterSchemaConsistentForySerializer
 
   @override
   void write(WriteContext context, RefOuterSchemaConsistent value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.inner1);
-      writeGeneratedStructRuntimeValue(context, fields[1], value.inner2);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.inner1);
+      writeGeneratedStructFieldValue(context, fields[1], value.inner2);
       return;
     }
     final writers =
-        _refOuterSchemaConsistentForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+        _refOuterSchemaConsistentForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   RefOuterSchemaConsistent read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = RefOuterSchemaConsistent();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.inner1 = _readRefOuterSchemaConsistentInner1(
-          readGeneratedStructRuntimeValue(context, fields[0], value.inner1),
+          readGeneratedStructFieldValue(context, fields[0], value.inner1),
           value.inner1);
       value.inner2 = _readRefOuterSchemaConsistentInner2(
-          readGeneratedStructRuntimeValue(context, fields[1], value.inner2),
+          readGeneratedStructFieldValue(context, fields[1], value.inner2),
           value.inner2);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawRefOuterSchemaConsistent0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawRefOuterSchemaConsistent0 = slots.valueForSlot(0);
       value.inner1 = _readRefOuterSchemaConsistentInner1(
           rawRefOuterSchemaConsistent0 is DeferredReadRef
               ? context.getReadRef(rawRefOuterSchemaConsistent0.id)
               : rawRefOuterSchemaConsistent0,
           value.inner1);
     }
-    if (session.containsSlot(1)) {
-      final rawRefOuterSchemaConsistent1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawRefOuterSchemaConsistent1 = slots.valueForSlot(1);
       value.inner2 = _readRefOuterSchemaConsistentInner2(
           rawRefOuterSchemaConsistent1 is DeferredReadRef
               ? context.getReadRef(rawRefOuterSchemaConsistent1.id)
@@ -6613,29 +6508,29 @@ const List<GeneratedFieldMetadata> _refInnerCompatibleForyFieldMetadata =
   ),
 ];
 
-typedef _RefInnerCompatibleSessionWriter
+typedef _RefInnerCompatibleFieldWriter
     = GeneratedStructFieldWriter<RefInnerCompatible>;
-typedef _RefInnerCompatibleSessionReader
+typedef _RefInnerCompatibleFieldReader
     = GeneratedStructFieldReader<RefInnerCompatible>;
 
-void _writeRefInnerCompatibleSessionField0(WriteContext context,
+void _writeRefInnerCompatibleField0(WriteContext context,
     GeneratedStructField field, RefInnerCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.id);
+  writeGeneratedStructFieldValue(context, field, value.id);
 }
 
-void _writeRefInnerCompatibleSessionField1(WriteContext context,
+void _writeRefInnerCompatibleField1(WriteContext context,
     GeneratedStructField field, RefInnerCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.name);
+  writeGeneratedStructFieldValue(context, field, value.name);
 }
 
-void _readRefInnerCompatibleSessionField0(
+void _readRefInnerCompatibleField0(
     ReadContext context, RefInnerCompatible value, Object? rawValue) {
   value.id = _readRefInnerCompatibleId(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.id);
 }
 
-void _readRefInnerCompatibleSessionField1(
+void _readRefInnerCompatibleField1(
     ReadContext context, RefInnerCompatible value, Object? rawValue) {
   value.name = _readRefInnerCompatibleName(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -6645,14 +6540,14 @@ void _readRefInnerCompatibleSessionField1(
 final GeneratedStructRegistration<RefInnerCompatible>
     _refInnerCompatibleForyRegistration =
     GeneratedStructRegistration<RefInnerCompatible>(
-  sessionWritersBySlot: <_RefInnerCompatibleSessionWriter>[
-    _writeRefInnerCompatibleSessionField0,
-    _writeRefInnerCompatibleSessionField1,
+  fieldWritersBySlot: <_RefInnerCompatibleFieldWriter>[
+    _writeRefInnerCompatibleField0,
+    _writeRefInnerCompatibleField1,
   ],
   compatibleFactory: RefInnerCompatible.new,
-  compatibleReadersBySlot: <_RefInnerCompatibleSessionReader>[
-    _readRefInnerCompatibleSessionField0,
-    _readRefInnerCompatibleSessionField1,
+  compatibleReadersBySlot: <_RefInnerCompatibleFieldReader>[
+    _readRefInnerCompatibleField0,
+    _readRefInnerCompatibleField1,
   ],
   type: RefInnerCompatible,
   serializerFactory: _RefInnerCompatibleForySerializer.new,
@@ -6666,15 +6561,15 @@ final class _RefInnerCompatibleForySerializer
 
   _RefInnerCompatibleForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refInnerCompatibleForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refInnerCompatibleForyRegistration,
     );
@@ -6682,8 +6577,8 @@ final class _RefInnerCompatibleForySerializer
 
   @override
   void write(WriteContext context, RefInnerCompatible value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor0.writeVarInt32(value.id);
@@ -6691,18 +6586,18 @@ final class _RefInnerCompatibleForySerializer
       context.writeString(value.name);
       return;
     }
-    final writers = _refInnerCompatibleForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _refInnerCompatibleForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   RefInnerCompatible read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = RefInnerCompatible();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.id = cursor0.readVarInt32();
@@ -6710,16 +6605,16 @@ final class _RefInnerCompatibleForySerializer
       value.name = context.readString();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawRefInnerCompatible0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawRefInnerCompatible0 = slots.valueForSlot(0);
       value.id = _readRefInnerCompatibleId(
           rawRefInnerCompatible0 is DeferredReadRef
               ? context.getReadRef(rawRefInnerCompatible0.id)
               : rawRefInnerCompatible0,
           value.id);
     }
-    if (session.containsSlot(1)) {
-      final rawRefInnerCompatible1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawRefInnerCompatible1 = slots.valueForSlot(1);
       value.name = _readRefInnerCompatibleName(
           rawRefInnerCompatible1 is DeferredReadRef
               ? context.getReadRef(rawRefInnerCompatible1.id)
@@ -6776,29 +6671,29 @@ const List<GeneratedFieldMetadata> _refOuterCompatibleForyFieldMetadata =
   ),
 ];
 
-typedef _RefOuterCompatibleSessionWriter
+typedef _RefOuterCompatibleFieldWriter
     = GeneratedStructFieldWriter<RefOuterCompatible>;
-typedef _RefOuterCompatibleSessionReader
+typedef _RefOuterCompatibleFieldReader
     = GeneratedStructFieldReader<RefOuterCompatible>;
 
-void _writeRefOuterCompatibleSessionField0(WriteContext context,
+void _writeRefOuterCompatibleField0(WriteContext context,
     GeneratedStructField field, RefOuterCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.inner1);
+  writeGeneratedStructFieldValue(context, field, value.inner1);
 }
 
-void _writeRefOuterCompatibleSessionField1(WriteContext context,
+void _writeRefOuterCompatibleField1(WriteContext context,
     GeneratedStructField field, RefOuterCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.inner2);
+  writeGeneratedStructFieldValue(context, field, value.inner2);
 }
 
-void _readRefOuterCompatibleSessionField0(
+void _readRefOuterCompatibleField0(
     ReadContext context, RefOuterCompatible value, Object? rawValue) {
   value.inner1 = _readRefOuterCompatibleInner1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.inner1);
 }
 
-void _readRefOuterCompatibleSessionField1(
+void _readRefOuterCompatibleField1(
     ReadContext context, RefOuterCompatible value, Object? rawValue) {
   value.inner2 = _readRefOuterCompatibleInner2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -6808,14 +6703,14 @@ void _readRefOuterCompatibleSessionField1(
 final GeneratedStructRegistration<RefOuterCompatible>
     _refOuterCompatibleForyRegistration =
     GeneratedStructRegistration<RefOuterCompatible>(
-  sessionWritersBySlot: <_RefOuterCompatibleSessionWriter>[
-    _writeRefOuterCompatibleSessionField0,
-    _writeRefOuterCompatibleSessionField1,
+  fieldWritersBySlot: <_RefOuterCompatibleFieldWriter>[
+    _writeRefOuterCompatibleField0,
+    _writeRefOuterCompatibleField1,
   ],
   compatibleFactory: RefOuterCompatible.new,
-  compatibleReadersBySlot: <_RefOuterCompatibleSessionReader>[
-    _readRefOuterCompatibleSessionField0,
-    _readRefOuterCompatibleSessionField1,
+  compatibleReadersBySlot: <_RefOuterCompatibleFieldReader>[
+    _readRefOuterCompatibleField0,
+    _readRefOuterCompatibleField1,
   ],
   type: RefOuterCompatible,
   serializerFactory: _RefOuterCompatibleForySerializer.new,
@@ -6829,15 +6724,15 @@ final class _RefOuterCompatibleForySerializer
 
   _RefOuterCompatibleForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refOuterCompatibleForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refOuterCompatibleForyRegistration,
     );
@@ -6845,44 +6740,44 @@ final class _RefOuterCompatibleForySerializer
 
   @override
   void write(WriteContext context, RefOuterCompatible value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.inner1);
-      writeGeneratedStructRuntimeValue(context, fields[1], value.inner2);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.inner1);
+      writeGeneratedStructFieldValue(context, fields[1], value.inner2);
       return;
     }
-    final writers = _refOuterCompatibleForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _refOuterCompatibleForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   RefOuterCompatible read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = RefOuterCompatible();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.inner1 = _readRefOuterCompatibleInner1(
-          readGeneratedStructRuntimeValue(context, fields[0], value.inner1),
+          readGeneratedStructFieldValue(context, fields[0], value.inner1),
           value.inner1);
       value.inner2 = _readRefOuterCompatibleInner2(
-          readGeneratedStructRuntimeValue(context, fields[1], value.inner2),
+          readGeneratedStructFieldValue(context, fields[1], value.inner2),
           value.inner2);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawRefOuterCompatible0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawRefOuterCompatible0 = slots.valueForSlot(0);
       value.inner1 = _readRefOuterCompatibleInner1(
           rawRefOuterCompatible0 is DeferredReadRef
               ? context.getReadRef(rawRefOuterCompatible0.id)
               : rawRefOuterCompatible0,
           value.inner1);
     }
-    if (session.containsSlot(1)) {
-      final rawRefOuterCompatible1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawRefOuterCompatible1 = slots.valueForSlot(1);
       value.inner2 = _readRefOuterCompatibleInner2(
           rawRefOuterCompatible1 is DeferredReadRef
               ? context.getReadRef(rawRefOuterCompatible1.id)
@@ -6941,29 +6836,29 @@ const List<GeneratedFieldMetadata> _refOverrideElementForyFieldMetadata =
   ),
 ];
 
-typedef _RefOverrideElementSessionWriter
+typedef _RefOverrideElementFieldWriter
     = GeneratedStructFieldWriter<RefOverrideElement>;
-typedef _RefOverrideElementSessionReader
+typedef _RefOverrideElementFieldReader
     = GeneratedStructFieldReader<RefOverrideElement>;
 
-void _writeRefOverrideElementSessionField0(WriteContext context,
+void _writeRefOverrideElementField0(WriteContext context,
     GeneratedStructField field, RefOverrideElement value) {
-  writeGeneratedStructRuntimeValue(context, field, value.id);
+  writeGeneratedStructFieldValue(context, field, value.id);
 }
 
-void _writeRefOverrideElementSessionField1(WriteContext context,
+void _writeRefOverrideElementField1(WriteContext context,
     GeneratedStructField field, RefOverrideElement value) {
-  writeGeneratedStructRuntimeValue(context, field, value.name);
+  writeGeneratedStructFieldValue(context, field, value.name);
 }
 
-void _readRefOverrideElementSessionField0(
+void _readRefOverrideElementField0(
     ReadContext context, RefOverrideElement value, Object? rawValue) {
   value.id = _readRefOverrideElementId(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.id);
 }
 
-void _readRefOverrideElementSessionField1(
+void _readRefOverrideElementField1(
     ReadContext context, RefOverrideElement value, Object? rawValue) {
   value.name = _readRefOverrideElementName(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -6973,14 +6868,14 @@ void _readRefOverrideElementSessionField1(
 final GeneratedStructRegistration<RefOverrideElement>
     _refOverrideElementForyRegistration =
     GeneratedStructRegistration<RefOverrideElement>(
-  sessionWritersBySlot: <_RefOverrideElementSessionWriter>[
-    _writeRefOverrideElementSessionField0,
-    _writeRefOverrideElementSessionField1,
+  fieldWritersBySlot: <_RefOverrideElementFieldWriter>[
+    _writeRefOverrideElementField0,
+    _writeRefOverrideElementField1,
   ],
   compatibleFactory: RefOverrideElement.new,
-  compatibleReadersBySlot: <_RefOverrideElementSessionReader>[
-    _readRefOverrideElementSessionField0,
-    _readRefOverrideElementSessionField1,
+  compatibleReadersBySlot: <_RefOverrideElementFieldReader>[
+    _readRefOverrideElementField0,
+    _readRefOverrideElementField1,
   ],
   type: RefOverrideElement,
   serializerFactory: _RefOverrideElementForySerializer.new,
@@ -6994,15 +6889,15 @@ final class _RefOverrideElementForySerializer
 
   _RefOverrideElementForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refOverrideElementForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refOverrideElementForyRegistration,
     );
@@ -7010,8 +6905,8 @@ final class _RefOverrideElementForySerializer
 
   @override
   void write(WriteContext context, RefOverrideElement value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor0.writeVarInt32(value.id.value);
@@ -7019,18 +6914,18 @@ final class _RefOverrideElementForySerializer
       context.writeString(value.name);
       return;
     }
-    final writers = _refOverrideElementForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _refOverrideElementForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   RefOverrideElement read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = RefOverrideElement();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.id = Int32(cursor0.readVarInt32());
@@ -7038,16 +6933,16 @@ final class _RefOverrideElementForySerializer
       value.name = context.readString();
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawRefOverrideElement0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawRefOverrideElement0 = slots.valueForSlot(0);
       value.id = _readRefOverrideElementId(
           rawRefOverrideElement0 is DeferredReadRef
               ? context.getReadRef(rawRefOverrideElement0.id)
               : rawRefOverrideElement0,
           value.id);
     }
-    if (session.containsSlot(1)) {
-      final rawRefOverrideElement1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawRefOverrideElement1 = slots.valueForSlot(1);
       value.name = _readRefOverrideElementName(
           rawRefOverrideElement1 is DeferredReadRef
               ? context.getReadRef(rawRefOverrideElement1.id)
@@ -7104,29 +6999,29 @@ const List<GeneratedFieldMetadata> _circularRefStructForyFieldMetadata =
   ),
 ];
 
-typedef _CircularRefStructSessionWriter
+typedef _CircularRefStructFieldWriter
     = GeneratedStructFieldWriter<CircularRefStruct>;
-typedef _CircularRefStructSessionReader
+typedef _CircularRefStructFieldReader
     = GeneratedStructFieldReader<CircularRefStruct>;
 
-void _writeCircularRefStructSessionField0(
+void _writeCircularRefStructField0(
     WriteContext context, GeneratedStructField field, CircularRefStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.name);
+  writeGeneratedStructFieldValue(context, field, value.name);
 }
 
-void _writeCircularRefStructSessionField1(
+void _writeCircularRefStructField1(
     WriteContext context, GeneratedStructField field, CircularRefStruct value) {
-  writeGeneratedStructRuntimeValue(context, field, value.selfRef);
+  writeGeneratedStructFieldValue(context, field, value.selfRef);
 }
 
-void _readCircularRefStructSessionField0(
+void _readCircularRefStructField0(
     ReadContext context, CircularRefStruct value, Object? rawValue) {
   value.name = _readCircularRefStructName(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.name);
 }
 
-void _readCircularRefStructSessionField1(
+void _readCircularRefStructField1(
     ReadContext context, CircularRefStruct value, Object? rawValue) {
   value.selfRef = _readCircularRefStructSelfRef(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -7136,14 +7031,14 @@ void _readCircularRefStructSessionField1(
 final GeneratedStructRegistration<CircularRefStruct>
     _circularRefStructForyRegistration =
     GeneratedStructRegistration<CircularRefStruct>(
-  sessionWritersBySlot: <_CircularRefStructSessionWriter>[
-    _writeCircularRefStructSessionField0,
-    _writeCircularRefStructSessionField1,
+  fieldWritersBySlot: <_CircularRefStructFieldWriter>[
+    _writeCircularRefStructField0,
+    _writeCircularRefStructField1,
   ],
   compatibleFactory: CircularRefStruct.new,
-  compatibleReadersBySlot: <_CircularRefStructSessionReader>[
-    _readCircularRefStructSessionField0,
-    _readCircularRefStructSessionField1,
+  compatibleReadersBySlot: <_CircularRefStructFieldReader>[
+    _readCircularRefStructField0,
+    _readCircularRefStructField1,
   ],
   type: CircularRefStruct,
   serializerFactory: _CircularRefStructForySerializer.new,
@@ -7157,15 +7052,15 @@ final class _CircularRefStructForySerializer
 
   _CircularRefStructForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _circularRefStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _circularRefStructForyRegistration,
     );
@@ -7173,42 +7068,42 @@ final class _CircularRefStructForySerializer
 
   @override
   void write(WriteContext context, CircularRefStruct value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
       context.writeString(value.name);
-      writeGeneratedStructRuntimeValue(context, fields[1], value.selfRef);
+      writeGeneratedStructFieldValue(context, fields[1], value.selfRef);
       return;
     }
-    final writers = _circularRefStructForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _circularRefStructForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   CircularRefStruct read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = CircularRefStruct();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.name = context.readString();
       value.selfRef = _readCircularRefStructSelfRef(
-          readGeneratedStructRuntimeValue(context, fields[1], value.selfRef),
+          readGeneratedStructFieldValue(context, fields[1], value.selfRef),
           value.selfRef);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawCircularRefStruct0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawCircularRefStruct0 = slots.valueForSlot(0);
       value.name = _readCircularRefStructName(
           rawCircularRefStruct0 is DeferredReadRef
               ? context.getReadRef(rawCircularRefStruct0.id)
               : rawCircularRefStruct0,
           value.name);
     }
-    if (session.containsSlot(1)) {
-      final rawCircularRefStruct1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawCircularRefStruct1 = slots.valueForSlot(1);
       value.selfRef = _readCircularRefStructSelfRef(
           rawCircularRefStruct1 is DeferredReadRef
               ? context.getReadRef(rawCircularRefStruct1.id)
@@ -7422,132 +7317,131 @@ const List<GeneratedFieldMetadata> _unsignedSchemaConsistentForyFieldMetadata =
   ),
 ];
 
-typedef _UnsignedSchemaConsistentSessionWriter
+typedef _UnsignedSchemaConsistentFieldWriter
     = GeneratedStructFieldWriter<UnsignedSchemaConsistent>;
-typedef _UnsignedSchemaConsistentSessionReader
+typedef _UnsignedSchemaConsistentFieldReader
     = GeneratedStructFieldReader<UnsignedSchemaConsistent>;
 
-void _writeUnsignedSchemaConsistentSessionField0(WriteContext context,
+void _writeUnsignedSchemaConsistentField0(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64FixedField);
+  writeGeneratedStructFieldValue(context, field, value.u64FixedField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField1(WriteContext context,
+void _writeUnsignedSchemaConsistentField1(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u32FixedField);
+  writeGeneratedStructFieldValue(context, field, value.u32FixedField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField2(WriteContext context,
+void _writeUnsignedSchemaConsistentField2(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u16Field);
+  writeGeneratedStructFieldValue(context, field, value.u16Field);
 }
 
-void _writeUnsignedSchemaConsistentSessionField3(WriteContext context,
+void _writeUnsignedSchemaConsistentField3(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u8Field);
+  writeGeneratedStructFieldValue(context, field, value.u8Field);
 }
 
-void _writeUnsignedSchemaConsistentSessionField4(WriteContext context,
+void _writeUnsignedSchemaConsistentField4(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64TaggedField);
+  writeGeneratedStructFieldValue(context, field, value.u64TaggedField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField5(WriteContext context,
+void _writeUnsignedSchemaConsistentField5(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64VarField);
+  writeGeneratedStructFieldValue(context, field, value.u64VarField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField6(WriteContext context,
+void _writeUnsignedSchemaConsistentField6(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u32VarField);
+  writeGeneratedStructFieldValue(context, field, value.u32VarField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField7(WriteContext context,
+void _writeUnsignedSchemaConsistentField7(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64FixedNullableField);
+  writeGeneratedStructFieldValue(context, field, value.u64FixedNullableField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField8(WriteContext context,
+void _writeUnsignedSchemaConsistentField8(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u32FixedNullableField);
+  writeGeneratedStructFieldValue(context, field, value.u32FixedNullableField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField9(WriteContext context,
+void _writeUnsignedSchemaConsistentField9(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u16NullableField);
+  writeGeneratedStructFieldValue(context, field, value.u16NullableField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField10(WriteContext context,
+void _writeUnsignedSchemaConsistentField10(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u8NullableField);
+  writeGeneratedStructFieldValue(context, field, value.u8NullableField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField11(WriteContext context,
+void _writeUnsignedSchemaConsistentField11(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(
-      context, field, value.u64TaggedNullableField);
+  writeGeneratedStructFieldValue(context, field, value.u64TaggedNullableField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField12(WriteContext context,
+void _writeUnsignedSchemaConsistentField12(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64VarNullableField);
+  writeGeneratedStructFieldValue(context, field, value.u64VarNullableField);
 }
 
-void _writeUnsignedSchemaConsistentSessionField13(WriteContext context,
+void _writeUnsignedSchemaConsistentField13(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistent value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u32VarNullableField);
+  writeGeneratedStructFieldValue(context, field, value.u32VarNullableField);
 }
 
-void _readUnsignedSchemaConsistentSessionField0(
+void _readUnsignedSchemaConsistentField0(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u64FixedField = _readUnsignedSchemaConsistentU64FixedField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64FixedField);
 }
 
-void _readUnsignedSchemaConsistentSessionField1(
+void _readUnsignedSchemaConsistentField1(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u32FixedField = _readUnsignedSchemaConsistentU32FixedField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u32FixedField);
 }
 
-void _readUnsignedSchemaConsistentSessionField2(
+void _readUnsignedSchemaConsistentField2(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u16Field = _readUnsignedSchemaConsistentU16Field(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u16Field);
 }
 
-void _readUnsignedSchemaConsistentSessionField3(
+void _readUnsignedSchemaConsistentField3(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u8Field = _readUnsignedSchemaConsistentU8Field(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u8Field);
 }
 
-void _readUnsignedSchemaConsistentSessionField4(
+void _readUnsignedSchemaConsistentField4(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u64TaggedField = _readUnsignedSchemaConsistentU64TaggedField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64TaggedField);
 }
 
-void _readUnsignedSchemaConsistentSessionField5(
+void _readUnsignedSchemaConsistentField5(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u64VarField = _readUnsignedSchemaConsistentU64VarField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64VarField);
 }
 
-void _readUnsignedSchemaConsistentSessionField6(
+void _readUnsignedSchemaConsistentField6(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u32VarField = _readUnsignedSchemaConsistentU32VarField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u32VarField);
 }
 
-void _readUnsignedSchemaConsistentSessionField7(
+void _readUnsignedSchemaConsistentField7(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u64FixedNullableField =
       _readUnsignedSchemaConsistentU64FixedNullableField(
@@ -7557,7 +7451,7 @@ void _readUnsignedSchemaConsistentSessionField7(
           value.u64FixedNullableField);
 }
 
-void _readUnsignedSchemaConsistentSessionField8(
+void _readUnsignedSchemaConsistentField8(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u32FixedNullableField =
       _readUnsignedSchemaConsistentU32FixedNullableField(
@@ -7567,21 +7461,21 @@ void _readUnsignedSchemaConsistentSessionField8(
           value.u32FixedNullableField);
 }
 
-void _readUnsignedSchemaConsistentSessionField9(
+void _readUnsignedSchemaConsistentField9(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u16NullableField = _readUnsignedSchemaConsistentU16NullableField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u16NullableField);
 }
 
-void _readUnsignedSchemaConsistentSessionField10(
+void _readUnsignedSchemaConsistentField10(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u8NullableField = _readUnsignedSchemaConsistentU8NullableField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u8NullableField);
 }
 
-void _readUnsignedSchemaConsistentSessionField11(
+void _readUnsignedSchemaConsistentField11(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u64TaggedNullableField =
       _readUnsignedSchemaConsistentU64TaggedNullableField(
@@ -7591,14 +7485,14 @@ void _readUnsignedSchemaConsistentSessionField11(
           value.u64TaggedNullableField);
 }
 
-void _readUnsignedSchemaConsistentSessionField12(
+void _readUnsignedSchemaConsistentField12(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u64VarNullableField = _readUnsignedSchemaConsistentU64VarNullableField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64VarNullableField);
 }
 
-void _readUnsignedSchemaConsistentSessionField13(
+void _readUnsignedSchemaConsistentField13(
     ReadContext context, UnsignedSchemaConsistent value, Object? rawValue) {
   value.u32VarNullableField = _readUnsignedSchemaConsistentU32VarNullableField(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -7608,38 +7502,38 @@ void _readUnsignedSchemaConsistentSessionField13(
 final GeneratedStructRegistration<UnsignedSchemaConsistent>
     _unsignedSchemaConsistentForyRegistration =
     GeneratedStructRegistration<UnsignedSchemaConsistent>(
-  sessionWritersBySlot: <_UnsignedSchemaConsistentSessionWriter>[
-    _writeUnsignedSchemaConsistentSessionField0,
-    _writeUnsignedSchemaConsistentSessionField1,
-    _writeUnsignedSchemaConsistentSessionField2,
-    _writeUnsignedSchemaConsistentSessionField3,
-    _writeUnsignedSchemaConsistentSessionField4,
-    _writeUnsignedSchemaConsistentSessionField5,
-    _writeUnsignedSchemaConsistentSessionField6,
-    _writeUnsignedSchemaConsistentSessionField7,
-    _writeUnsignedSchemaConsistentSessionField8,
-    _writeUnsignedSchemaConsistentSessionField9,
-    _writeUnsignedSchemaConsistentSessionField10,
-    _writeUnsignedSchemaConsistentSessionField11,
-    _writeUnsignedSchemaConsistentSessionField12,
-    _writeUnsignedSchemaConsistentSessionField13,
+  fieldWritersBySlot: <_UnsignedSchemaConsistentFieldWriter>[
+    _writeUnsignedSchemaConsistentField0,
+    _writeUnsignedSchemaConsistentField1,
+    _writeUnsignedSchemaConsistentField2,
+    _writeUnsignedSchemaConsistentField3,
+    _writeUnsignedSchemaConsistentField4,
+    _writeUnsignedSchemaConsistentField5,
+    _writeUnsignedSchemaConsistentField6,
+    _writeUnsignedSchemaConsistentField7,
+    _writeUnsignedSchemaConsistentField8,
+    _writeUnsignedSchemaConsistentField9,
+    _writeUnsignedSchemaConsistentField10,
+    _writeUnsignedSchemaConsistentField11,
+    _writeUnsignedSchemaConsistentField12,
+    _writeUnsignedSchemaConsistentField13,
   ],
   compatibleFactory: UnsignedSchemaConsistent.new,
-  compatibleReadersBySlot: <_UnsignedSchemaConsistentSessionReader>[
-    _readUnsignedSchemaConsistentSessionField0,
-    _readUnsignedSchemaConsistentSessionField1,
-    _readUnsignedSchemaConsistentSessionField2,
-    _readUnsignedSchemaConsistentSessionField3,
-    _readUnsignedSchemaConsistentSessionField4,
-    _readUnsignedSchemaConsistentSessionField5,
-    _readUnsignedSchemaConsistentSessionField6,
-    _readUnsignedSchemaConsistentSessionField7,
-    _readUnsignedSchemaConsistentSessionField8,
-    _readUnsignedSchemaConsistentSessionField9,
-    _readUnsignedSchemaConsistentSessionField10,
-    _readUnsignedSchemaConsistentSessionField11,
-    _readUnsignedSchemaConsistentSessionField12,
-    _readUnsignedSchemaConsistentSessionField13,
+  compatibleReadersBySlot: <_UnsignedSchemaConsistentFieldReader>[
+    _readUnsignedSchemaConsistentField0,
+    _readUnsignedSchemaConsistentField1,
+    _readUnsignedSchemaConsistentField2,
+    _readUnsignedSchemaConsistentField3,
+    _readUnsignedSchemaConsistentField4,
+    _readUnsignedSchemaConsistentField5,
+    _readUnsignedSchemaConsistentField6,
+    _readUnsignedSchemaConsistentField7,
+    _readUnsignedSchemaConsistentField8,
+    _readUnsignedSchemaConsistentField9,
+    _readUnsignedSchemaConsistentField10,
+    _readUnsignedSchemaConsistentField11,
+    _readUnsignedSchemaConsistentField12,
+    _readUnsignedSchemaConsistentField13,
   ],
   type: UnsignedSchemaConsistent,
   serializerFactory: _UnsignedSchemaConsistentForySerializer.new,
@@ -7653,15 +7547,15 @@ final class _UnsignedSchemaConsistentForySerializer
 
   _UnsignedSchemaConsistentForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _unsignedSchemaConsistentForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _unsignedSchemaConsistentForyRegistration,
     );
@@ -7669,10 +7563,10 @@ final class _UnsignedSchemaConsistentForySerializer
 
   @override
   void write(WriteContext context, UnsignedSchemaConsistent value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 40);
       cursor0.writeUint64(value.u64FixedField);
       cursor0.writeUint32(value.u32FixedField.value);
@@ -7682,37 +7576,37 @@ final class _UnsignedSchemaConsistentForySerializer
       cursor0.writeVarUint64(value.u64VarField);
       cursor0.writeVarUint32(value.u32VarField.value);
       cursor0.finish();
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(
           context, fields[7], value.u64FixedNullableField);
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(
           context, fields[8], value.u32FixedNullableField);
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(
           context, fields[9], value.u16NullableField);
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(
           context, fields[10], value.u8NullableField);
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(
           context, fields[11], value.u64TaggedNullableField);
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(
           context, fields[12], value.u64VarNullableField);
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(
           context, fields[13], value.u32VarNullableField);
       return;
     }
     final writers =
-        _unsignedSchemaConsistentForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+        _unsignedSchemaConsistentForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   UnsignedSchemaConsistent read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = UnsignedSchemaConsistent();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.u64FixedField = cursor0.readUint64();
       value.u32FixedField = UInt32(cursor0.readUint32());
@@ -7724,97 +7618,97 @@ final class _UnsignedSchemaConsistentForySerializer
       cursor0.finish();
       value.u64FixedNullableField =
           _readUnsignedSchemaConsistentU64FixedNullableField(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[7], value.u64FixedNullableField),
               value.u64FixedNullableField);
       value.u32FixedNullableField =
           _readUnsignedSchemaConsistentU32FixedNullableField(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[8], value.u32FixedNullableField),
               value.u32FixedNullableField);
       value.u16NullableField = _readUnsignedSchemaConsistentU16NullableField(
-          readGeneratedStructRuntimeValue(
+          readGeneratedStructFieldValue(
               context, fields[9], value.u16NullableField),
           value.u16NullableField);
       value.u8NullableField = _readUnsignedSchemaConsistentU8NullableField(
-          readGeneratedStructRuntimeValue(
+          readGeneratedStructFieldValue(
               context, fields[10], value.u8NullableField),
           value.u8NullableField);
       value.u64TaggedNullableField =
           _readUnsignedSchemaConsistentU64TaggedNullableField(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[11], value.u64TaggedNullableField),
               value.u64TaggedNullableField);
       value.u64VarNullableField =
           _readUnsignedSchemaConsistentU64VarNullableField(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[12], value.u64VarNullableField),
               value.u64VarNullableField);
       value.u32VarNullableField =
           _readUnsignedSchemaConsistentU32VarNullableField(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[13], value.u32VarNullableField),
               value.u32VarNullableField);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawUnsignedSchemaConsistent0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawUnsignedSchemaConsistent0 = slots.valueForSlot(0);
       value.u64FixedField = _readUnsignedSchemaConsistentU64FixedField(
           rawUnsignedSchemaConsistent0 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent0.id)
               : rawUnsignedSchemaConsistent0,
           value.u64FixedField);
     }
-    if (session.containsSlot(1)) {
-      final rawUnsignedSchemaConsistent1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawUnsignedSchemaConsistent1 = slots.valueForSlot(1);
       value.u32FixedField = _readUnsignedSchemaConsistentU32FixedField(
           rawUnsignedSchemaConsistent1 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent1.id)
               : rawUnsignedSchemaConsistent1,
           value.u32FixedField);
     }
-    if (session.containsSlot(2)) {
-      final rawUnsignedSchemaConsistent2 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawUnsignedSchemaConsistent2 = slots.valueForSlot(2);
       value.u16Field = _readUnsignedSchemaConsistentU16Field(
           rawUnsignedSchemaConsistent2 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent2.id)
               : rawUnsignedSchemaConsistent2,
           value.u16Field);
     }
-    if (session.containsSlot(3)) {
-      final rawUnsignedSchemaConsistent3 = session.valueForSlot(3);
+    if (slots.containsSlot(3)) {
+      final rawUnsignedSchemaConsistent3 = slots.valueForSlot(3);
       value.u8Field = _readUnsignedSchemaConsistentU8Field(
           rawUnsignedSchemaConsistent3 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent3.id)
               : rawUnsignedSchemaConsistent3,
           value.u8Field);
     }
-    if (session.containsSlot(4)) {
-      final rawUnsignedSchemaConsistent4 = session.valueForSlot(4);
+    if (slots.containsSlot(4)) {
+      final rawUnsignedSchemaConsistent4 = slots.valueForSlot(4);
       value.u64TaggedField = _readUnsignedSchemaConsistentU64TaggedField(
           rawUnsignedSchemaConsistent4 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent4.id)
               : rawUnsignedSchemaConsistent4,
           value.u64TaggedField);
     }
-    if (session.containsSlot(5)) {
-      final rawUnsignedSchemaConsistent5 = session.valueForSlot(5);
+    if (slots.containsSlot(5)) {
+      final rawUnsignedSchemaConsistent5 = slots.valueForSlot(5);
       value.u64VarField = _readUnsignedSchemaConsistentU64VarField(
           rawUnsignedSchemaConsistent5 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent5.id)
               : rawUnsignedSchemaConsistent5,
           value.u64VarField);
     }
-    if (session.containsSlot(6)) {
-      final rawUnsignedSchemaConsistent6 = session.valueForSlot(6);
+    if (slots.containsSlot(6)) {
+      final rawUnsignedSchemaConsistent6 = slots.valueForSlot(6);
       value.u32VarField = _readUnsignedSchemaConsistentU32VarField(
           rawUnsignedSchemaConsistent6 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent6.id)
               : rawUnsignedSchemaConsistent6,
           value.u32VarField);
     }
-    if (session.containsSlot(7)) {
-      final rawUnsignedSchemaConsistent7 = session.valueForSlot(7);
+    if (slots.containsSlot(7)) {
+      final rawUnsignedSchemaConsistent7 = slots.valueForSlot(7);
       value.u64FixedNullableField =
           _readUnsignedSchemaConsistentU64FixedNullableField(
               rawUnsignedSchemaConsistent7 is DeferredReadRef
@@ -7822,8 +7716,8 @@ final class _UnsignedSchemaConsistentForySerializer
                   : rawUnsignedSchemaConsistent7,
               value.u64FixedNullableField);
     }
-    if (session.containsSlot(8)) {
-      final rawUnsignedSchemaConsistent8 = session.valueForSlot(8);
+    if (slots.containsSlot(8)) {
+      final rawUnsignedSchemaConsistent8 = slots.valueForSlot(8);
       value.u32FixedNullableField =
           _readUnsignedSchemaConsistentU32FixedNullableField(
               rawUnsignedSchemaConsistent8 is DeferredReadRef
@@ -7831,24 +7725,24 @@ final class _UnsignedSchemaConsistentForySerializer
                   : rawUnsignedSchemaConsistent8,
               value.u32FixedNullableField);
     }
-    if (session.containsSlot(9)) {
-      final rawUnsignedSchemaConsistent9 = session.valueForSlot(9);
+    if (slots.containsSlot(9)) {
+      final rawUnsignedSchemaConsistent9 = slots.valueForSlot(9);
       value.u16NullableField = _readUnsignedSchemaConsistentU16NullableField(
           rawUnsignedSchemaConsistent9 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent9.id)
               : rawUnsignedSchemaConsistent9,
           value.u16NullableField);
     }
-    if (session.containsSlot(10)) {
-      final rawUnsignedSchemaConsistent10 = session.valueForSlot(10);
+    if (slots.containsSlot(10)) {
+      final rawUnsignedSchemaConsistent10 = slots.valueForSlot(10);
       value.u8NullableField = _readUnsignedSchemaConsistentU8NullableField(
           rawUnsignedSchemaConsistent10 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistent10.id)
               : rawUnsignedSchemaConsistent10,
           value.u8NullableField);
     }
-    if (session.containsSlot(11)) {
-      final rawUnsignedSchemaConsistent11 = session.valueForSlot(11);
+    if (slots.containsSlot(11)) {
+      final rawUnsignedSchemaConsistent11 = slots.valueForSlot(11);
       value.u64TaggedNullableField =
           _readUnsignedSchemaConsistentU64TaggedNullableField(
               rawUnsignedSchemaConsistent11 is DeferredReadRef
@@ -7856,8 +7750,8 @@ final class _UnsignedSchemaConsistentForySerializer
                   : rawUnsignedSchemaConsistent11,
               value.u64TaggedNullableField);
     }
-    if (session.containsSlot(12)) {
-      final rawUnsignedSchemaConsistent12 = session.valueForSlot(12);
+    if (slots.containsSlot(12)) {
+      final rawUnsignedSchemaConsistent12 = slots.valueForSlot(12);
       value.u64VarNullableField =
           _readUnsignedSchemaConsistentU64VarNullableField(
               rawUnsignedSchemaConsistent12 is DeferredReadRef
@@ -7865,8 +7759,8 @@ final class _UnsignedSchemaConsistentForySerializer
                   : rawUnsignedSchemaConsistent12,
               value.u64VarNullableField);
     }
-    if (session.containsSlot(13)) {
-      final rawUnsignedSchemaConsistent13 = session.valueForSlot(13);
+    if (slots.containsSlot(13)) {
+      final rawUnsignedSchemaConsistent13 = slots.valueForSlot(13);
       value.u32VarNullableField =
           _readUnsignedSchemaConsistentU32VarNullableField(
               rawUnsignedSchemaConsistent13 is DeferredReadRef
@@ -8039,29 +7933,29 @@ const List<GeneratedFieldMetadata>
   ),
 ];
 
-typedef _UnsignedSchemaConsistentSimpleSessionWriter
+typedef _UnsignedSchemaConsistentSimpleFieldWriter
     = GeneratedStructFieldWriter<UnsignedSchemaConsistentSimple>;
-typedef _UnsignedSchemaConsistentSimpleSessionReader
+typedef _UnsignedSchemaConsistentSimpleFieldReader
     = GeneratedStructFieldReader<UnsignedSchemaConsistentSimple>;
 
-void _writeUnsignedSchemaConsistentSimpleSessionField0(WriteContext context,
+void _writeUnsignedSchemaConsistentSimpleField0(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistentSimple value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64Tagged);
+  writeGeneratedStructFieldValue(context, field, value.u64Tagged);
 }
 
-void _writeUnsignedSchemaConsistentSimpleSessionField1(WriteContext context,
+void _writeUnsignedSchemaConsistentSimpleField1(WriteContext context,
     GeneratedStructField field, UnsignedSchemaConsistentSimple value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64TaggedNullable);
+  writeGeneratedStructFieldValue(context, field, value.u64TaggedNullable);
 }
 
-void _readUnsignedSchemaConsistentSimpleSessionField0(ReadContext context,
+void _readUnsignedSchemaConsistentSimpleField0(ReadContext context,
     UnsignedSchemaConsistentSimple value, Object? rawValue) {
   value.u64Tagged = _readUnsignedSchemaConsistentSimpleU64Tagged(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64Tagged);
 }
 
-void _readUnsignedSchemaConsistentSimpleSessionField1(ReadContext context,
+void _readUnsignedSchemaConsistentSimpleField1(ReadContext context,
     UnsignedSchemaConsistentSimple value, Object? rawValue) {
   value.u64TaggedNullable =
       _readUnsignedSchemaConsistentSimpleU64TaggedNullable(
@@ -8074,14 +7968,14 @@ void _readUnsignedSchemaConsistentSimpleSessionField1(ReadContext context,
 final GeneratedStructRegistration<UnsignedSchemaConsistentSimple>
     _unsignedSchemaConsistentSimpleForyRegistration =
     GeneratedStructRegistration<UnsignedSchemaConsistentSimple>(
-  sessionWritersBySlot: <_UnsignedSchemaConsistentSimpleSessionWriter>[
-    _writeUnsignedSchemaConsistentSimpleSessionField0,
-    _writeUnsignedSchemaConsistentSimpleSessionField1,
+  fieldWritersBySlot: <_UnsignedSchemaConsistentSimpleFieldWriter>[
+    _writeUnsignedSchemaConsistentSimpleField0,
+    _writeUnsignedSchemaConsistentSimpleField1,
   ],
   compatibleFactory: UnsignedSchemaConsistentSimple.new,
-  compatibleReadersBySlot: <_UnsignedSchemaConsistentSimpleSessionReader>[
-    _readUnsignedSchemaConsistentSimpleSessionField0,
-    _readUnsignedSchemaConsistentSimpleSessionField1,
+  compatibleReadersBySlot: <_UnsignedSchemaConsistentSimpleFieldReader>[
+    _readUnsignedSchemaConsistentSimpleField0,
+    _readUnsignedSchemaConsistentSimpleField1,
   ],
   type: UnsignedSchemaConsistentSimple,
   serializerFactory: _UnsignedSchemaConsistentSimpleForySerializer.new,
@@ -8095,15 +7989,15 @@ final class _UnsignedSchemaConsistentSimpleForySerializer
 
   _UnsignedSchemaConsistentSimpleForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _unsignedSchemaConsistentSimpleForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _unsignedSchemaConsistentSimpleForyRegistration,
     );
@@ -8111,52 +8005,52 @@ final class _UnsignedSchemaConsistentSimpleForySerializer
 
   @override
   void write(WriteContext context, UnsignedSchemaConsistentSimple value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 10);
       cursor0.writeTaggedUint64(value.u64Tagged);
       cursor0.finish();
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(
           context, fields[1], value.u64TaggedNullable);
       return;
     }
     final writers =
-        _unsignedSchemaConsistentSimpleForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+        _unsignedSchemaConsistentSimpleForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   UnsignedSchemaConsistentSimple read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = UnsignedSchemaConsistentSimple();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.u64Tagged = cursor0.readTaggedUint64();
       cursor0.finish();
       value.u64TaggedNullable =
           _readUnsignedSchemaConsistentSimpleU64TaggedNullable(
-              readGeneratedStructRuntimeValue(
+              readGeneratedStructFieldValue(
                   context, fields[1], value.u64TaggedNullable),
               value.u64TaggedNullable);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawUnsignedSchemaConsistentSimple0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawUnsignedSchemaConsistentSimple0 = slots.valueForSlot(0);
       value.u64Tagged = _readUnsignedSchemaConsistentSimpleU64Tagged(
           rawUnsignedSchemaConsistentSimple0 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaConsistentSimple0.id)
               : rawUnsignedSchemaConsistentSimple0,
           value.u64Tagged);
     }
-    if (session.containsSlot(1)) {
-      final rawUnsignedSchemaConsistentSimple1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawUnsignedSchemaConsistentSimple1 = slots.valueForSlot(1);
       value.u64TaggedNullable =
           _readUnsignedSchemaConsistentSimpleU64TaggedNullable(
               rawUnsignedSchemaConsistentSimple1 is DeferredReadRef
@@ -8373,173 +8267,173 @@ const List<GeneratedFieldMetadata> _unsignedSchemaCompatibleForyFieldMetadata =
   ),
 ];
 
-typedef _UnsignedSchemaCompatibleSessionWriter
+typedef _UnsignedSchemaCompatibleFieldWriter
     = GeneratedStructFieldWriter<UnsignedSchemaCompatible>;
-typedef _UnsignedSchemaCompatibleSessionReader
+typedef _UnsignedSchemaCompatibleFieldReader
     = GeneratedStructFieldReader<UnsignedSchemaCompatible>;
 
-void _writeUnsignedSchemaCompatibleSessionField0(WriteContext context,
+void _writeUnsignedSchemaCompatibleField0(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64FixedField2);
+  writeGeneratedStructFieldValue(context, field, value.u64FixedField2);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField1(WriteContext context,
+void _writeUnsignedSchemaCompatibleField1(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u32FixedField2);
+  writeGeneratedStructFieldValue(context, field, value.u32FixedField2);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField2(WriteContext context,
+void _writeUnsignedSchemaCompatibleField2(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u16Field2);
+  writeGeneratedStructFieldValue(context, field, value.u16Field2);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField3(WriteContext context,
+void _writeUnsignedSchemaCompatibleField3(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u8Field2);
+  writeGeneratedStructFieldValue(context, field, value.u8Field2);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField4(WriteContext context,
+void _writeUnsignedSchemaCompatibleField4(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64TaggedField2);
+  writeGeneratedStructFieldValue(context, field, value.u64TaggedField2);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField5(WriteContext context,
+void _writeUnsignedSchemaCompatibleField5(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64VarField2);
+  writeGeneratedStructFieldValue(context, field, value.u64VarField2);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField6(WriteContext context,
+void _writeUnsignedSchemaCompatibleField6(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u32VarField2);
+  writeGeneratedStructFieldValue(context, field, value.u32VarField2);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField7(WriteContext context,
+void _writeUnsignedSchemaCompatibleField7(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64FixedField1);
+  writeGeneratedStructFieldValue(context, field, value.u64FixedField1);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField8(WriteContext context,
+void _writeUnsignedSchemaCompatibleField8(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u32FixedField1);
+  writeGeneratedStructFieldValue(context, field, value.u32FixedField1);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField9(WriteContext context,
+void _writeUnsignedSchemaCompatibleField9(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u16Field1);
+  writeGeneratedStructFieldValue(context, field, value.u16Field1);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField10(WriteContext context,
+void _writeUnsignedSchemaCompatibleField10(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u8Field1);
+  writeGeneratedStructFieldValue(context, field, value.u8Field1);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField11(WriteContext context,
+void _writeUnsignedSchemaCompatibleField11(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64TaggedField1);
+  writeGeneratedStructFieldValue(context, field, value.u64TaggedField1);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField12(WriteContext context,
+void _writeUnsignedSchemaCompatibleField12(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u64VarField1);
+  writeGeneratedStructFieldValue(context, field, value.u64VarField1);
 }
 
-void _writeUnsignedSchemaCompatibleSessionField13(WriteContext context,
+void _writeUnsignedSchemaCompatibleField13(WriteContext context,
     GeneratedStructField field, UnsignedSchemaCompatible value) {
-  writeGeneratedStructRuntimeValue(context, field, value.u32VarField1);
+  writeGeneratedStructFieldValue(context, field, value.u32VarField1);
 }
 
-void _readUnsignedSchemaCompatibleSessionField0(
+void _readUnsignedSchemaCompatibleField0(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u64FixedField2 = _readUnsignedSchemaCompatibleU64FixedField2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64FixedField2);
 }
 
-void _readUnsignedSchemaCompatibleSessionField1(
+void _readUnsignedSchemaCompatibleField1(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u32FixedField2 = _readUnsignedSchemaCompatibleU32FixedField2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u32FixedField2);
 }
 
-void _readUnsignedSchemaCompatibleSessionField2(
+void _readUnsignedSchemaCompatibleField2(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u16Field2 = _readUnsignedSchemaCompatibleU16Field2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u16Field2);
 }
 
-void _readUnsignedSchemaCompatibleSessionField3(
+void _readUnsignedSchemaCompatibleField3(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u8Field2 = _readUnsignedSchemaCompatibleU8Field2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u8Field2);
 }
 
-void _readUnsignedSchemaCompatibleSessionField4(
+void _readUnsignedSchemaCompatibleField4(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u64TaggedField2 = _readUnsignedSchemaCompatibleU64TaggedField2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64TaggedField2);
 }
 
-void _readUnsignedSchemaCompatibleSessionField5(
+void _readUnsignedSchemaCompatibleField5(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u64VarField2 = _readUnsignedSchemaCompatibleU64VarField2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64VarField2);
 }
 
-void _readUnsignedSchemaCompatibleSessionField6(
+void _readUnsignedSchemaCompatibleField6(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u32VarField2 = _readUnsignedSchemaCompatibleU32VarField2(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u32VarField2);
 }
 
-void _readUnsignedSchemaCompatibleSessionField7(
+void _readUnsignedSchemaCompatibleField7(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u64FixedField1 = _readUnsignedSchemaCompatibleU64FixedField1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64FixedField1);
 }
 
-void _readUnsignedSchemaCompatibleSessionField8(
+void _readUnsignedSchemaCompatibleField8(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u32FixedField1 = _readUnsignedSchemaCompatibleU32FixedField1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u32FixedField1);
 }
 
-void _readUnsignedSchemaCompatibleSessionField9(
+void _readUnsignedSchemaCompatibleField9(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u16Field1 = _readUnsignedSchemaCompatibleU16Field1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u16Field1);
 }
 
-void _readUnsignedSchemaCompatibleSessionField10(
+void _readUnsignedSchemaCompatibleField10(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u8Field1 = _readUnsignedSchemaCompatibleU8Field1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u8Field1);
 }
 
-void _readUnsignedSchemaCompatibleSessionField11(
+void _readUnsignedSchemaCompatibleField11(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u64TaggedField1 = _readUnsignedSchemaCompatibleU64TaggedField1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64TaggedField1);
 }
 
-void _readUnsignedSchemaCompatibleSessionField12(
+void _readUnsignedSchemaCompatibleField12(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u64VarField1 = _readUnsignedSchemaCompatibleU64VarField1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
       value.u64VarField1);
 }
 
-void _readUnsignedSchemaCompatibleSessionField13(
+void _readUnsignedSchemaCompatibleField13(
     ReadContext context, UnsignedSchemaCompatible value, Object? rawValue) {
   value.u32VarField1 = _readUnsignedSchemaCompatibleU32VarField1(
       rawValue is DeferredReadRef ? context.getReadRef(rawValue.id) : rawValue,
@@ -8549,38 +8443,38 @@ void _readUnsignedSchemaCompatibleSessionField13(
 final GeneratedStructRegistration<UnsignedSchemaCompatible>
     _unsignedSchemaCompatibleForyRegistration =
     GeneratedStructRegistration<UnsignedSchemaCompatible>(
-  sessionWritersBySlot: <_UnsignedSchemaCompatibleSessionWriter>[
-    _writeUnsignedSchemaCompatibleSessionField0,
-    _writeUnsignedSchemaCompatibleSessionField1,
-    _writeUnsignedSchemaCompatibleSessionField2,
-    _writeUnsignedSchemaCompatibleSessionField3,
-    _writeUnsignedSchemaCompatibleSessionField4,
-    _writeUnsignedSchemaCompatibleSessionField5,
-    _writeUnsignedSchemaCompatibleSessionField6,
-    _writeUnsignedSchemaCompatibleSessionField7,
-    _writeUnsignedSchemaCompatibleSessionField8,
-    _writeUnsignedSchemaCompatibleSessionField9,
-    _writeUnsignedSchemaCompatibleSessionField10,
-    _writeUnsignedSchemaCompatibleSessionField11,
-    _writeUnsignedSchemaCompatibleSessionField12,
-    _writeUnsignedSchemaCompatibleSessionField13,
+  fieldWritersBySlot: <_UnsignedSchemaCompatibleFieldWriter>[
+    _writeUnsignedSchemaCompatibleField0,
+    _writeUnsignedSchemaCompatibleField1,
+    _writeUnsignedSchemaCompatibleField2,
+    _writeUnsignedSchemaCompatibleField3,
+    _writeUnsignedSchemaCompatibleField4,
+    _writeUnsignedSchemaCompatibleField5,
+    _writeUnsignedSchemaCompatibleField6,
+    _writeUnsignedSchemaCompatibleField7,
+    _writeUnsignedSchemaCompatibleField8,
+    _writeUnsignedSchemaCompatibleField9,
+    _writeUnsignedSchemaCompatibleField10,
+    _writeUnsignedSchemaCompatibleField11,
+    _writeUnsignedSchemaCompatibleField12,
+    _writeUnsignedSchemaCompatibleField13,
   ],
   compatibleFactory: UnsignedSchemaCompatible.new,
-  compatibleReadersBySlot: <_UnsignedSchemaCompatibleSessionReader>[
-    _readUnsignedSchemaCompatibleSessionField0,
-    _readUnsignedSchemaCompatibleSessionField1,
-    _readUnsignedSchemaCompatibleSessionField2,
-    _readUnsignedSchemaCompatibleSessionField3,
-    _readUnsignedSchemaCompatibleSessionField4,
-    _readUnsignedSchemaCompatibleSessionField5,
-    _readUnsignedSchemaCompatibleSessionField6,
-    _readUnsignedSchemaCompatibleSessionField7,
-    _readUnsignedSchemaCompatibleSessionField8,
-    _readUnsignedSchemaCompatibleSessionField9,
-    _readUnsignedSchemaCompatibleSessionField10,
-    _readUnsignedSchemaCompatibleSessionField11,
-    _readUnsignedSchemaCompatibleSessionField12,
-    _readUnsignedSchemaCompatibleSessionField13,
+  compatibleReadersBySlot: <_UnsignedSchemaCompatibleFieldReader>[
+    _readUnsignedSchemaCompatibleField0,
+    _readUnsignedSchemaCompatibleField1,
+    _readUnsignedSchemaCompatibleField2,
+    _readUnsignedSchemaCompatibleField3,
+    _readUnsignedSchemaCompatibleField4,
+    _readUnsignedSchemaCompatibleField5,
+    _readUnsignedSchemaCompatibleField6,
+    _readUnsignedSchemaCompatibleField7,
+    _readUnsignedSchemaCompatibleField8,
+    _readUnsignedSchemaCompatibleField9,
+    _readUnsignedSchemaCompatibleField10,
+    _readUnsignedSchemaCompatibleField11,
+    _readUnsignedSchemaCompatibleField12,
+    _readUnsignedSchemaCompatibleField13,
   ],
   type: UnsignedSchemaCompatible,
   serializerFactory: _UnsignedSchemaCompatibleForySerializer.new,
@@ -8594,15 +8488,15 @@ final class _UnsignedSchemaCompatibleForySerializer
 
   _UnsignedSchemaCompatibleForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _unsignedSchemaCompatibleForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _unsignedSchemaCompatibleForyRegistration,
     );
@@ -8610,10 +8504,10 @@ final class _UnsignedSchemaCompatibleForySerializer
 
   @override
   void write(WriteContext context, UnsignedSchemaCompatible value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _writeRuntimeFields(context);
+      final fields = _writeFields(context);
       final cursor0 = GeneratedWriteCursor.reserve(buffer, 40);
       cursor0.writeUint64(value.u64FixedField2);
       cursor0.writeUint32(value.u32FixedField2.value);
@@ -8623,33 +8517,31 @@ final class _UnsignedSchemaCompatibleForySerializer
       cursor0.writeVarUint64(value.u64VarField2);
       cursor0.writeVarUint32(value.u32VarField2.value);
       cursor0.finish();
-      writeGeneratedStructRuntimeValue(
-          context, fields[7], value.u64FixedField1);
-      writeGeneratedStructRuntimeValue(
-          context, fields[8], value.u32FixedField1);
-      writeGeneratedStructRuntimeValue(context, fields[9], value.u16Field1);
-      writeGeneratedStructRuntimeValue(context, fields[10], value.u8Field1);
-      writeGeneratedStructRuntimeValue(
+      writeGeneratedStructFieldValue(context, fields[7], value.u64FixedField1);
+      writeGeneratedStructFieldValue(context, fields[8], value.u32FixedField1);
+      writeGeneratedStructFieldValue(context, fields[9], value.u16Field1);
+      writeGeneratedStructFieldValue(context, fields[10], value.u8Field1);
+      writeGeneratedStructFieldValue(
           context, fields[11], value.u64TaggedField1);
-      writeGeneratedStructRuntimeValue(context, fields[12], value.u64VarField1);
-      writeGeneratedStructRuntimeValue(context, fields[13], value.u32VarField1);
+      writeGeneratedStructFieldValue(context, fields[12], value.u64VarField1);
+      writeGeneratedStructFieldValue(context, fields[13], value.u32VarField1);
       return;
     }
     final writers =
-        _unsignedSchemaCompatibleForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+        _unsignedSchemaCompatibleForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   UnsignedSchemaCompatible read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = UnsignedSchemaCompatible();
     context.reference(value);
-    if (session == null) {
+    if (slots == null) {
       final buffer = context.buffer;
-      final fields = _readRuntimeFields(context);
+      final fields = _readFields(context);
       final cursor0 = GeneratedReadCursor.start(buffer);
       value.u64FixedField2 = cursor0.readUint64();
       value.u32FixedField2 = UInt32(cursor0.readUint32());
@@ -8660,139 +8552,139 @@ final class _UnsignedSchemaCompatibleForySerializer
       value.u32VarField2 = UInt32(cursor0.readVarUint32());
       cursor0.finish();
       value.u64FixedField1 = _readUnsignedSchemaCompatibleU64FixedField1(
-          readGeneratedStructRuntimeValue(
+          readGeneratedStructFieldValue(
               context, fields[7], value.u64FixedField1),
           value.u64FixedField1);
       value.u32FixedField1 = _readUnsignedSchemaCompatibleU32FixedField1(
-          readGeneratedStructRuntimeValue(
+          readGeneratedStructFieldValue(
               context, fields[8], value.u32FixedField1),
           value.u32FixedField1);
       value.u16Field1 = _readUnsignedSchemaCompatibleU16Field1(
-          readGeneratedStructRuntimeValue(context, fields[9], value.u16Field1),
+          readGeneratedStructFieldValue(context, fields[9], value.u16Field1),
           value.u16Field1);
       value.u8Field1 = _readUnsignedSchemaCompatibleU8Field1(
-          readGeneratedStructRuntimeValue(context, fields[10], value.u8Field1),
+          readGeneratedStructFieldValue(context, fields[10], value.u8Field1),
           value.u8Field1);
       value.u64TaggedField1 = _readUnsignedSchemaCompatibleU64TaggedField1(
-          readGeneratedStructRuntimeValue(
+          readGeneratedStructFieldValue(
               context, fields[11], value.u64TaggedField1),
           value.u64TaggedField1);
       value.u64VarField1 = _readUnsignedSchemaCompatibleU64VarField1(
-          readGeneratedStructRuntimeValue(
+          readGeneratedStructFieldValue(
               context, fields[12], value.u64VarField1),
           value.u64VarField1);
       value.u32VarField1 = _readUnsignedSchemaCompatibleU32VarField1(
-          readGeneratedStructRuntimeValue(
+          readGeneratedStructFieldValue(
               context, fields[13], value.u32VarField1),
           value.u32VarField1);
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawUnsignedSchemaCompatible0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawUnsignedSchemaCompatible0 = slots.valueForSlot(0);
       value.u64FixedField2 = _readUnsignedSchemaCompatibleU64FixedField2(
           rawUnsignedSchemaCompatible0 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible0.id)
               : rawUnsignedSchemaCompatible0,
           value.u64FixedField2);
     }
-    if (session.containsSlot(1)) {
-      final rawUnsignedSchemaCompatible1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawUnsignedSchemaCompatible1 = slots.valueForSlot(1);
       value.u32FixedField2 = _readUnsignedSchemaCompatibleU32FixedField2(
           rawUnsignedSchemaCompatible1 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible1.id)
               : rawUnsignedSchemaCompatible1,
           value.u32FixedField2);
     }
-    if (session.containsSlot(2)) {
-      final rawUnsignedSchemaCompatible2 = session.valueForSlot(2);
+    if (slots.containsSlot(2)) {
+      final rawUnsignedSchemaCompatible2 = slots.valueForSlot(2);
       value.u16Field2 = _readUnsignedSchemaCompatibleU16Field2(
           rawUnsignedSchemaCompatible2 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible2.id)
               : rawUnsignedSchemaCompatible2,
           value.u16Field2);
     }
-    if (session.containsSlot(3)) {
-      final rawUnsignedSchemaCompatible3 = session.valueForSlot(3);
+    if (slots.containsSlot(3)) {
+      final rawUnsignedSchemaCompatible3 = slots.valueForSlot(3);
       value.u8Field2 = _readUnsignedSchemaCompatibleU8Field2(
           rawUnsignedSchemaCompatible3 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible3.id)
               : rawUnsignedSchemaCompatible3,
           value.u8Field2);
     }
-    if (session.containsSlot(4)) {
-      final rawUnsignedSchemaCompatible4 = session.valueForSlot(4);
+    if (slots.containsSlot(4)) {
+      final rawUnsignedSchemaCompatible4 = slots.valueForSlot(4);
       value.u64TaggedField2 = _readUnsignedSchemaCompatibleU64TaggedField2(
           rawUnsignedSchemaCompatible4 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible4.id)
               : rawUnsignedSchemaCompatible4,
           value.u64TaggedField2);
     }
-    if (session.containsSlot(5)) {
-      final rawUnsignedSchemaCompatible5 = session.valueForSlot(5);
+    if (slots.containsSlot(5)) {
+      final rawUnsignedSchemaCompatible5 = slots.valueForSlot(5);
       value.u64VarField2 = _readUnsignedSchemaCompatibleU64VarField2(
           rawUnsignedSchemaCompatible5 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible5.id)
               : rawUnsignedSchemaCompatible5,
           value.u64VarField2);
     }
-    if (session.containsSlot(6)) {
-      final rawUnsignedSchemaCompatible6 = session.valueForSlot(6);
+    if (slots.containsSlot(6)) {
+      final rawUnsignedSchemaCompatible6 = slots.valueForSlot(6);
       value.u32VarField2 = _readUnsignedSchemaCompatibleU32VarField2(
           rawUnsignedSchemaCompatible6 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible6.id)
               : rawUnsignedSchemaCompatible6,
           value.u32VarField2);
     }
-    if (session.containsSlot(7)) {
-      final rawUnsignedSchemaCompatible7 = session.valueForSlot(7);
+    if (slots.containsSlot(7)) {
+      final rawUnsignedSchemaCompatible7 = slots.valueForSlot(7);
       value.u64FixedField1 = _readUnsignedSchemaCompatibleU64FixedField1(
           rawUnsignedSchemaCompatible7 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible7.id)
               : rawUnsignedSchemaCompatible7,
           value.u64FixedField1);
     }
-    if (session.containsSlot(8)) {
-      final rawUnsignedSchemaCompatible8 = session.valueForSlot(8);
+    if (slots.containsSlot(8)) {
+      final rawUnsignedSchemaCompatible8 = slots.valueForSlot(8);
       value.u32FixedField1 = _readUnsignedSchemaCompatibleU32FixedField1(
           rawUnsignedSchemaCompatible8 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible8.id)
               : rawUnsignedSchemaCompatible8,
           value.u32FixedField1);
     }
-    if (session.containsSlot(9)) {
-      final rawUnsignedSchemaCompatible9 = session.valueForSlot(9);
+    if (slots.containsSlot(9)) {
+      final rawUnsignedSchemaCompatible9 = slots.valueForSlot(9);
       value.u16Field1 = _readUnsignedSchemaCompatibleU16Field1(
           rawUnsignedSchemaCompatible9 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible9.id)
               : rawUnsignedSchemaCompatible9,
           value.u16Field1);
     }
-    if (session.containsSlot(10)) {
-      final rawUnsignedSchemaCompatible10 = session.valueForSlot(10);
+    if (slots.containsSlot(10)) {
+      final rawUnsignedSchemaCompatible10 = slots.valueForSlot(10);
       value.u8Field1 = _readUnsignedSchemaCompatibleU8Field1(
           rawUnsignedSchemaCompatible10 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible10.id)
               : rawUnsignedSchemaCompatible10,
           value.u8Field1);
     }
-    if (session.containsSlot(11)) {
-      final rawUnsignedSchemaCompatible11 = session.valueForSlot(11);
+    if (slots.containsSlot(11)) {
+      final rawUnsignedSchemaCompatible11 = slots.valueForSlot(11);
       value.u64TaggedField1 = _readUnsignedSchemaCompatibleU64TaggedField1(
           rawUnsignedSchemaCompatible11 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible11.id)
               : rawUnsignedSchemaCompatible11,
           value.u64TaggedField1);
     }
-    if (session.containsSlot(12)) {
-      final rawUnsignedSchemaCompatible12 = session.valueForSlot(12);
+    if (slots.containsSlot(12)) {
+      final rawUnsignedSchemaCompatible12 = slots.valueForSlot(12);
       value.u64VarField1 = _readUnsignedSchemaCompatibleU64VarField1(
           rawUnsignedSchemaCompatible12 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible12.id)
               : rawUnsignedSchemaCompatible12,
           value.u64VarField1);
     }
-    if (session.containsSlot(13)) {
-      final rawUnsignedSchemaCompatible13 = session.valueForSlot(13);
+    if (slots.containsSlot(13)) {
+      final rawUnsignedSchemaCompatible13 = slots.valueForSlot(13);
       value.u32VarField1 = _readUnsignedSchemaCompatibleU32VarField1(
           rawUnsignedSchemaCompatible13 is DeferredReadRef
               ? context.getReadRef(rawUnsignedSchemaCompatible13.id)

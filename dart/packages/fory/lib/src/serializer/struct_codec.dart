@@ -3,8 +3,8 @@ import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
-import 'package:fory/src/serializer/struct_field_runtime.dart';
-import 'package:fory/src/serializer/struct_session.dart';
+import 'package:fory/src/serializer/struct_field_binding.dart';
+import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/util/hash_util.dart';
 
 typedef GeneratedStructCompatibleFactory<T> = T Function();
@@ -15,39 +15,39 @@ typedef GeneratedStructCompatibleFieldReader<T> = void Function(
   Object? rawValue,
 );
 
-/// Internal struct-specific runtime orchestration.
+/// Internal struct-specific serialization orchestration.
 ///
 /// This mirrors the Java/Cython ownership split: schema/version framing,
 /// compatible-field staging, and remembered remote metadata live here rather
 /// than on generic read/write contexts or on the public serializer API.
-final class StructRuntime {
+final class StructCodec {
   final Serializer<Object?> _payloadSerializer;
   final StructMetadataInternal _metadata;
   final TypeResolver _typeResolver;
-  late final List<StructFieldRuntime> _localFields =
-      List<StructFieldRuntime>.unmodifiable(
-        List<StructFieldRuntime>.generate(
+  late final List<StructFieldBinding> _localFields =
+      List<StructFieldBinding>.unmodifiable(
+        List<StructFieldBinding>.generate(
           _metadata.fields.length,
-          (slot) => StructFieldRuntime(
+          (slot) => StructFieldBinding(
             slot,
             _metadata.fields[slot],
-            _typeResolver.createDeclaredFieldRuntime(_metadata.fields[slot]),
+            _typeResolver.createDeclaredFieldBinding(_metadata.fields[slot]),
           ),
         ),
       );
-  late final Map<String, StructFieldRuntime> _localFieldsByIdentifier =
-      <String, StructFieldRuntime>{
+  late final Map<String, StructFieldBinding> _localFieldsByIdentifier =
+      <String, StructFieldBinding>{
         for (final field in _localFields) field.metadata.identifier: field,
       };
-  final Expando<_CompatibleWritePlan> _compatibleWritePlans =
-      Expando<_CompatibleWritePlan>('fory_compatible_write_plan');
-  final Expando<_CompatibleReadPlan> _compatibleReadPlans =
-      Expando<_CompatibleReadPlan>('fory_compatible_read_plan');
+  final Expando<_CompatibleWriteLayout> _compatibleWriteLayouts =
+      Expando<_CompatibleWriteLayout>('fory_compatible_write_layout');
+  final Expando<_CompatibleReadLayout> _compatibleReadLayouts =
+      Expando<_CompatibleReadLayout>('fory_compatible_read_layout');
   final GeneratedStructCompatibleFactory<Object>? _compatibleFactory;
   final List<GeneratedStructCompatibleFieldReader<Object>>?
       _compatibleReadersBySlot;
 
-  StructRuntime(
+  StructCodec(
     this._payloadSerializer,
     this._metadata,
     this._typeResolver, {
@@ -57,18 +57,18 @@ final class StructRuntime {
   })  : _compatibleFactory = compatibleFactory,
         _compatibleReadersBySlot = compatibleReadersBySlot;
 
-  List<StructFieldRuntime> get localFields => _localFields;
+  List<StructFieldBinding> get localFields => _localFields;
 
   SharedTypeDefInternal sharedTypeDefForWrite(
     WriteContext context,
     ResolvedTypeInternal resolved,
     Object value,
   ) {
-    final plan = _compatibleWritePlanForValue(context, resolved, value);
-    if (plan == null) {
+    final layout = _compatibleWriteLayoutForValue(context, resolved, value);
+    if (layout == null) {
       return resolved.sharedTypeDef!;
     }
-    return plan.sharedTypeDef;
+    return layout.sharedTypeDef;
   }
 
   void write(
@@ -81,15 +81,12 @@ final class StructRuntime {
       context.buffer.writeUint32(schemaHashInternal(_metadata));
     }
     final previousCompatibleFields =
-        _replaceWriteSession(internal, resolved, value);
-    try {
-      _payloadSerializer.write(context, value);
-    } finally {
-      internal.restoreLocalState(
-        structWriteSessionKey,
-        previousCompatibleFields,
-      );
-    }
+        _replaceWriteSlots(internal, resolved, value);
+    _payloadSerializer.write(context, value);
+    internal.restoreLocalState(
+      structWriteSlotsKey,
+      previousCompatibleFields,
+    );
   }
 
   Object read(
@@ -116,39 +113,36 @@ final class StructRuntime {
         hasCurrentPreservedRef: hasCurrentPreservedRef,
       );
     }
-    final previousReadSession = internal.replaceLocalState(
-      structReadSessionKey,
+    final previousReadSlots = internal.replaceLocalState(
+      structReadSlotsKey,
       null,
     );
-    try {
-      final value = internal.readSerializerPayload(
-        _payloadSerializer,
-        resolved,
-        hasCurrentPreservedRef: hasCurrentPreservedRef,
-      );
-      _rememberRemoteMetadata(internal, resolved, value);
-      return value;
-    } finally {
-      internal.restoreLocalState(
-        structReadSessionKey,
-        previousReadSession,
-      );
-    }
+    final value = internal.readSerializerPayload(
+      _payloadSerializer,
+      resolved,
+      hasCurrentPreservedRef: hasCurrentPreservedRef,
+    );
+    internal.restoreLocalState(
+      structReadSlotsKey,
+      previousReadSlots,
+    );
+    _rememberRemoteMetadata(internal, resolved, value);
+    return value;
   }
 
-  Object? _replaceWriteSession(
+  Object? _replaceWriteSlots(
     WriteContext context,
     ResolvedTypeInternal resolved,
     Object value,
   ) {
-    final plan = _compatibleWritePlanForValue(context, resolved, value);
+    final layout = _compatibleWriteLayoutForValue(context, resolved, value);
     return context.replaceLocalState(
-      structWriteSessionKey,
-      plan == null ? null : StructWriteSession(plan.fields, _localFields.length),
+      structWriteSlotsKey,
+      layout == null ? null : StructWriteSlots(layout.fields, _localFields.length),
     );
   }
 
-  _CompatibleWritePlan? _compatibleWritePlanForValue(
+  _CompatibleWriteLayout? _compatibleWriteLayoutForValue(
     WriteContext context,
     ResolvedTypeInternal resolved,
     Object value,
@@ -160,11 +154,11 @@ final class StructRuntime {
     if (remoteMetadata == null) {
       return null;
     }
-    final cached = _compatibleWritePlans[remoteMetadata];
+    final cached = _compatibleWriteLayouts[remoteMetadata];
     if (cached != null) {
       return cached;
     }
-    final orderedFields = <StructFieldRuntime>[];
+    final orderedFields = <StructFieldBinding>[];
     final usedIdentifiers = <String>{};
     for (final remoteField in remoteMetadata.fields) {
       final localField = _localFieldsByIdentifier[remoteField.identifier];
@@ -176,10 +170,10 @@ final class StructRuntime {
         remoteField,
       );
       orderedFields.add(
-        StructFieldRuntime(
+        StructFieldBinding(
           localField.slot,
           mergedField,
-          _typeResolver.createDeclaredFieldRuntime(mergedField),
+          _typeResolver.createDeclaredFieldBinding(mergedField),
         ),
       );
       usedIdentifiers.add(remoteField.identifier);
@@ -189,16 +183,16 @@ final class StructRuntime {
         orderedFields.add(localField);
       }
     }
-    final fields = List<StructFieldRuntime>.unmodifiable(orderedFields);
+    final fields = List<StructFieldBinding>.unmodifiable(orderedFields);
     final sharedTypeDef = context.typeResolver.sharedTypeDefForResolved(
       resolved,
       fields: fields
           .map((field) => field.metadata)
           .toList(growable: false),
     );
-    final plan = _CompatibleWritePlan(fields, sharedTypeDef);
-    _compatibleWritePlans[remoteMetadata] = plan;
-    return plan;
+    final layout = _CompatibleWriteLayout(fields, sharedTypeDef);
+    _compatibleWriteLayouts[remoteMetadata] = layout;
+    return layout;
   }
 
   Object _readCompatible(
@@ -206,7 +200,7 @@ final class StructRuntime {
     ResolvedTypeInternal resolved,
     {required bool hasCurrentPreservedRef}
   ) {
-    final plan = _compatibleReadPlanForResolved(resolved);
+    final layout = _compatibleReadLayoutForResolved(resolved);
     final compatibleFactory = _compatibleFactory;
     final compatibleReadersBySlot = _compatibleReadersBySlot;
     if (compatibleFactory != null && compatibleReadersBySlot != null) {
@@ -218,81 +212,75 @@ final class StructRuntime {
       } else {
         sentinelId = null;
       }
-      try {
-        final value = compatibleFactory();
-        context.reference(value);
-        for (var index = 0; index < plan.fields.length; index += 1) {
-          final localField = plan.fields[index];
-          if (localField == null) {
-            readCompatibleField(context, plan.remoteFields[index]);
-            continue;
-          }
-          compatibleReadersBySlot[localField.slot](
+      final value = compatibleFactory();
+      context.reference(value);
+      for (var index = 0; index < layout.fields.length; index += 1) {
+        final localField = layout.fields[index];
+        if (localField == null) {
+          readCompatibleField(context, layout.remoteFields[index]);
+          continue;
+        }
+        compatibleReadersBySlot[localField.slot](
+          context,
+          value,
+          readCompatibleFieldBinding(
             context,
-            value,
-            readCompatibleFieldRuntime(
-              context,
-              localField.runtime,
-            ),
-          );
-        }
-        _rememberRemoteMetadata(context, resolved, value);
-        return value;
-      } finally {
-        if (needsSentinel &&
-            context.refReader.hasPreservedRefId &&
-            context.refReader.lastPreservedRefId == sentinelId) {
-          context.refReader.discardPreservedRefId(sentinelId!);
-        }
+            localField.valueBinding,
+          ),
+        );
       }
+      if (needsSentinel &&
+          context.refReader.hasPreservedRefId &&
+          context.refReader.lastPreservedRefId == sentinelId) {
+        context.refReader.discardPreservedRefId(sentinelId!);
+      }
+      _rememberRemoteMetadata(context, resolved, value);
+      return value;
     }
     final compatibleValues = List<Object?>.filled(_localFields.length, null);
     final presentSlots = List<bool>.filled(_localFields.length, false);
-    for (var index = 0; index < plan.fields.length; index += 1) {
-      final localField = plan.fields[index];
+    for (var index = 0; index < layout.fields.length; index += 1) {
+      final localField = layout.fields[index];
       if (localField == null) {
-        readCompatibleField(context, plan.remoteFields[index]);
+        readCompatibleField(context, layout.remoteFields[index]);
         continue;
       }
       final slot = localField.slot;
-      compatibleValues[slot] = readCompatibleFieldRuntime(
+      compatibleValues[slot] = readCompatibleFieldBinding(
         context,
-        localField.runtime,
+        localField.valueBinding,
       );
       presentSlots[slot] = true;
     }
     final previousCompatibleFields = context.replaceLocalState(
-      structReadSessionKey,
-      StructReadSession(compatibleValues, presentSlots),
+      structReadSlotsKey,
+      StructReadSlots(compatibleValues, presentSlots),
     );
-    try {
-      final value = context.readSerializerPayload(
-        _payloadSerializer,
-        resolved,
-        hasCurrentPreservedRef: hasCurrentPreservedRef,
-      );
-      _rememberRemoteMetadata(context, resolved, value);
-      return value;
-    } finally {
-      context.restoreLocalState(
-        structReadSessionKey,
-        previousCompatibleFields,
-      );
-    }
+    final value = context.readSerializerPayload(
+      _payloadSerializer,
+      resolved,
+      hasCurrentPreservedRef: hasCurrentPreservedRef,
+    );
+    context.restoreLocalState(
+      structReadSlotsKey,
+      previousCompatibleFields,
+    );
+    _rememberRemoteMetadata(context, resolved, value);
+    return value;
   }
 
-  _CompatibleReadPlan _compatibleReadPlanForResolved(
+  _CompatibleReadLayout _compatibleReadLayoutForResolved(
     ResolvedTypeInternal resolved,
   ) {
     final remoteMetadata = resolved.remoteStructMetadata;
     if (remoteMetadata == null) {
-      return _CompatibleReadPlan(_metadata.fields, _localFields);
+      return _CompatibleReadLayout(_metadata.fields, _localFields);
     }
-    final cached = _compatibleReadPlans[remoteMetadata];
+    final cached = _compatibleReadLayouts[remoteMetadata];
     if (cached != null) {
       return cached;
     }
-    final fields = <StructFieldRuntime?>[];
+    final fields = <StructFieldBinding?>[];
     for (final remoteField in remoteMetadata.fields) {
       final localField = _localFieldsByIdentifier[remoteField.identifier];
       if (localField == null) {
@@ -304,19 +292,19 @@ final class StructRuntime {
         remoteField,
       );
       fields.add(
-        StructFieldRuntime(
+        StructFieldBinding(
           localField.slot,
           mergedField,
-          _typeResolver.createDeclaredFieldRuntime(mergedField),
+          _typeResolver.createDeclaredFieldBinding(mergedField),
         ),
       );
     }
-    final plan = _CompatibleReadPlan(
+    final layout = _CompatibleReadLayout(
       remoteMetadata.fields,
-      List<StructFieldRuntime?>.unmodifiable(fields),
+      List<StructFieldBinding?>.unmodifiable(fields),
     );
-    _compatibleReadPlans[remoteMetadata] = plan;
-    return plan;
+    _compatibleReadLayouts[remoteMetadata] = layout;
+    return layout;
   }
 
   void _rememberRemoteMetadata(
@@ -331,16 +319,16 @@ final class StructRuntime {
   }
 }
 
-final class _CompatibleWritePlan {
-  final List<StructFieldRuntime> fields;
+final class _CompatibleWriteLayout {
+  final List<StructFieldBinding> fields;
   final SharedTypeDefInternal sharedTypeDef;
 
-  const _CompatibleWritePlan(this.fields, this.sharedTypeDef);
+  const _CompatibleWriteLayout(this.fields, this.sharedTypeDef);
 }
 
-final class _CompatibleReadPlan {
+final class _CompatibleReadLayout {
   final List<FieldMetadataInternal> remoteFields;
-  final List<StructFieldRuntime?> fields;
+  final List<StructFieldBinding?> fields;
 
-  const _CompatibleReadPlan(this.remoteFields, this.fields);
+  const _CompatibleReadLayout(this.remoteFields, this.fields);
 }

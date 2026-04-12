@@ -159,9 +159,9 @@ const List<GeneratedFieldMetadata> _refOverrideContainerForyFieldMetadata =
 final GeneratedStructRegistration<RefOverrideContainer>
     _refOverrideContainerForyRegistration =
     GeneratedStructRegistration<RefOverrideContainer>(
-      sessionWritersBySlot: <GeneratedStructFieldWriter<RefOverrideContainer>>[
-        _writeRefOverrideContainerSessionField0,
-        _writeRefOverrideContainerSessionField1,
+      fieldWritersBySlot: <GeneratedStructFieldWriter<RefOverrideContainer>>[
+        _writeRefOverrideContainerField0,
+        _writeRefOverrideContainerField1,
       ],
       type: RefOverrideContainer,
       serializerFactory: _RefOverrideContainerForySerializer.new,
@@ -169,20 +169,20 @@ final GeneratedStructRegistration<RefOverrideContainer>
       fields: _refOverrideContainerForyFieldMetadata,
     );
 
-void _writeRefOverrideContainerSessionField0(
+void _writeRefOverrideContainerField0(
   WriteContext context,
   GeneratedStructField field,
   RefOverrideContainer value,
 ) {
-  writeGeneratedStructRuntimeValue(context, field, value.listField);
+  writeGeneratedStructFieldValue(context, field, value.listField);
 }
 
-void _writeRefOverrideContainerSessionField1(
+void _writeRefOverrideContainerField1(
   WriteContext context,
   GeneratedStructField field,
   RefOverrideContainer value,
 ) {
-  writeGeneratedStructRuntimeValue(context, field, value.mapField);
+  writeGeneratedStructFieldValue(context, field, value.mapField);
 }
 
 final class _RefOverrideContainerForySerializer
@@ -191,15 +191,15 @@ final class _RefOverrideContainerForySerializer
 
   _RefOverrideContainerForySerializer();
 
-  List<GeneratedStructField> _writeRuntimeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refOverrideContainerForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readRuntimeFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructRuntimeFields(
+  List<GeneratedStructField> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFields(
       context.typeResolver,
       _refOverrideContainerForyRegistration,
     );
@@ -207,38 +207,38 @@ final class _RefOverrideContainerForySerializer
 
   @override
   void write(WriteContext context, RefOverrideContainer value) {
-    final session = generatedStructWriteSession(context);
-    if (session == null) {
-      final fields = _writeRuntimeFields(context);
-      writeGeneratedStructRuntimeValue(context, fields[0], value.listField);
-      writeGeneratedStructRuntimeValue(context, fields[1], value.mapField);
+    final slots = generatedStructWriteSlots(context);
+    if (slots == null) {
+      final fields = _writeFields(context);
+      writeGeneratedStructFieldValue(context, fields[0], value.listField);
+      writeGeneratedStructFieldValue(context, fields[1], value.mapField);
       return;
     }
-    final writers = _refOverrideContainerForyRegistration.sessionWritersBySlot;
-    for (final field in session.orderedFields) {
+    final writers = _refOverrideContainerForyRegistration.fieldWritersBySlot;
+    for (final field in slots.orderedFields) {
       writers[field.slot](context, field, value);
     }
   }
 
   @override
   RefOverrideContainer read(ReadContext context) {
-    final session = generatedStructReadSession(context);
+    final slots = generatedStructReadSlots(context);
     final value = RefOverrideContainer();
     context.reference(value);
-    if (session == null) {
-      final fields = _readRuntimeFields(context);
+    if (slots == null) {
+      final fields = _readFields(context);
       value.listField = _readRefOverrideContainerListField(
-        readGeneratedStructRuntimeValue(context, fields[0], value.listField),
+        readGeneratedStructFieldValue(context, fields[0], value.listField),
         value.listField,
       );
       value.mapField = _readRefOverrideContainerMapField(
-        readGeneratedStructRuntimeValue(context, fields[1], value.mapField),
+        readGeneratedStructFieldValue(context, fields[1], value.mapField),
         value.mapField,
       );
       return value;
     }
-    if (session.containsSlot(0)) {
-      final rawRefOverrideContainer0 = session.valueForSlot(0);
+    if (slots.containsSlot(0)) {
+      final rawRefOverrideContainer0 = slots.valueForSlot(0);
       value.listField = _readRefOverrideContainerListField(
         rawRefOverrideContainer0 is DeferredReadRef
             ? context.getReadRef(rawRefOverrideContainer0.id)
@@ -246,8 +246,8 @@ final class _RefOverrideContainerForySerializer
         value.listField,
       );
     }
-    if (session.containsSlot(1)) {
-      final rawRefOverrideContainer1 = session.valueForSlot(1);
+    if (slots.containsSlot(1)) {
+      final rawRefOverrideContainer1 = slots.valueForSlot(1);
       value.mapField = _readRefOverrideContainerMapField(
         rawRefOverrideContainer1 is DeferredReadRef
             ? context.getReadRef(rawRefOverrideContainer1.id)

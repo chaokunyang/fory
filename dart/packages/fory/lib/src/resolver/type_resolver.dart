@@ -7,7 +7,7 @@ import 'package:fory/src/context/meta_string_codec.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/serializer/struct_runtime.dart';
+import 'package:fory/src/serializer/struct_codec.dart';
 import 'package:fory/src/types/fixed_ints.dart';
 import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
@@ -229,7 +229,7 @@ final class ResolvedTypeInternal {
   final int typeId;
   final bool supportsRef;
   final Serializer<Object?>? serializer;
-  final StructRuntime? structRuntime;
+  final StructCodec? structCodec;
   final int? userTypeId;
   final String? namespace;
   final String? typeName;
@@ -245,7 +245,7 @@ final class ResolvedTypeInternal {
     required this.typeId,
     required this.supportsRef,
     required this.serializer,
-    required this.structRuntime,
+    required this.structCodec,
     required this.userTypeId,
     required this.namespace,
     required this.typeName,
@@ -265,13 +265,13 @@ final class ResolvedTypeInternal {
   bool get isBasicValue => TypeIds.isBasicValue(typeId);
 }
 
-final class DeclaredValueRuntimeInternal {
+final class DeclaredValueBindingInternal {
   final FieldMetadataInternal metadata;
   final TypeShapeInternal shape;
   final ResolvedTypeInternal? resolved;
   final bool usesDeclaredType;
 
-  const DeclaredValueRuntimeInternal({
+  const DeclaredValueBindingInternal({
     required this.metadata,
     required this.shape,
     required this.resolved,
@@ -333,12 +333,12 @@ final class TypeResolver {
   final Map<_EncodedMetaStringKey, EncodedMetaStringInternal>
       _internedEncodedMetaStrings =
       <_EncodedMetaStringKey, EncodedMetaStringInternal>{};
-  final Map<FieldMetadataInternal, DeclaredValueRuntimeInternal>
-      _declaredFieldRuntimeCache = LinkedHashMap<FieldMetadataInternal,
-          DeclaredValueRuntimeInternal>.identity();
-  final Map<_DeclaredShapeRuntimeCacheKey, DeclaredValueRuntimeInternal>
-      _declaredShapeRuntimeCache =
-      <_DeclaredShapeRuntimeCacheKey, DeclaredValueRuntimeInternal>{};
+  final Map<FieldMetadataInternal, DeclaredValueBindingInternal>
+      _declaredFieldBindingCache = LinkedHashMap<FieldMetadataInternal,
+          DeclaredValueBindingInternal>.identity();
+  final Map<_DeclaredShapeBindingCacheKey, DeclaredValueBindingInternal>
+      _declaredShapeBindingCache =
+      <_DeclaredShapeBindingCacheKey, DeclaredValueBindingInternal>{};
   final Map<Type, _GeneratedBindingInternal> _generatedByType =
       <Type, _GeneratedBindingInternal>{};
 
@@ -452,9 +452,9 @@ final class TypeResolver {
       typeId: _defaultTypeIdForType(type),
       supportsRef: payloadSerializer.supportsRef,
       serializer: payloadSerializer,
-      structRuntime: structMetadata == null
+      structCodec: structMetadata == null
           ? null
-          : StructRuntime(
+          : StructCodec(
               payloadSerializer,
               structMetadata,
               this,
@@ -733,24 +733,24 @@ final class TypeResolver {
     return resolved;
   }
 
-  DeclaredValueRuntimeInternal declaredFieldRuntime(
+  DeclaredValueBindingInternal declaredFieldBinding(
     FieldMetadataInternal field,
   ) {
-    final cached = _declaredFieldRuntimeCache[field];
+    final cached = _declaredFieldBindingCache[field];
     if (cached != null) {
       return cached;
     }
-    final runtime = createDeclaredFieldRuntime(field);
-    _declaredFieldRuntimeCache[field] = runtime;
-    return runtime;
+    final binding = createDeclaredFieldBinding(field);
+    _declaredFieldBindingCache[field] = binding;
+    return binding;
   }
 
-  DeclaredValueRuntimeInternal createDeclaredFieldRuntime(
+  DeclaredValueBindingInternal createDeclaredFieldBinding(
     FieldMetadataInternal field,
   ) {
     final shape = field.shape;
     if (shape.isDynamic || (shape.isPrimitive && !shape.nullable)) {
-      return DeclaredValueRuntimeInternal(
+      return DeclaredValueBindingInternal(
         metadata: field,
         shape: shape,
         resolved: null,
@@ -758,7 +758,7 @@ final class TypeResolver {
       );
     }
     final resolved = resolveShape(shape);
-    return DeclaredValueRuntimeInternal(
+    return DeclaredValueBindingInternal(
       metadata: field,
       shape: shape,
       resolved: resolved,
@@ -770,23 +770,23 @@ final class TypeResolver {
     );
   }
 
-  DeclaredValueRuntimeInternal declaredValueRuntimeForShape(
+  DeclaredValueBindingInternal declaredValueBindingForShape(
     TypeShapeInternal shape, {
     required String identifier,
     bool nullable = false,
     bool ref = false,
   }) {
-    final key = _DeclaredShapeRuntimeCacheKey(
+    final key = _DeclaredShapeBindingCacheKey(
       shape,
       identifier,
       nullable,
       ref,
     );
-    final cached = _declaredShapeRuntimeCache[key];
+    final cached = _declaredShapeBindingCache[key];
     if (cached != null) {
       return cached;
     }
-    final runtime = createDeclaredFieldRuntime(
+    final binding = createDeclaredFieldBinding(
       FieldMetadataInternal(
         name: identifier,
         identifier: identifier,
@@ -797,8 +797,8 @@ final class TypeResolver {
         ),
       ),
     );
-    _declaredShapeRuntimeCache[key] = runtime;
-    return runtime;
+    _declaredShapeBindingCache[key] = binding;
+    return binding;
   }
 
   TypeMeta typeMetaForResolved(ResolvedTypeInternal resolved) {
@@ -1139,7 +1139,7 @@ final class TypeResolver {
       typeId: resolved.typeId,
       supportsRef: resolved.supportsRef,
       serializer: resolved.serializer,
-      structRuntime: resolved.structRuntime,
+      structCodec: resolved.structCodec,
       userTypeId: resolved.userTypeId,
       namespace: resolved.namespace,
       typeName: resolved.typeName,
@@ -1321,7 +1321,7 @@ final class TypeResolver {
       typeId: typeId,
       supportsRef: TypeIds.supportsRef(typeId),
       serializer: null,
-      structRuntime: null,
+      structCodec: null,
       userTypeId: null,
       namespace: null,
       typeName: null,
@@ -1600,13 +1600,13 @@ final class _EncodedMetaStringKey {
   }
 }
 
-final class _DeclaredShapeRuntimeCacheKey {
+final class _DeclaredShapeBindingCacheKey {
   final TypeShapeInternal shape;
   final String identifier;
   final bool nullable;
   final bool ref;
 
-  const _DeclaredShapeRuntimeCacheKey(
+  const _DeclaredShapeBindingCacheKey(
     this.shape,
     this.identifier,
     this.nullable,
@@ -1615,7 +1615,7 @@ final class _DeclaredShapeRuntimeCacheKey {
 
   @override
   bool operator ==(Object other) {
-    return other is _DeclaredShapeRuntimeCacheKey &&
+    return other is _DeclaredShapeBindingCacheKey &&
         identical(shape, other.shape) &&
         identifier == other.identifier &&
         nullable == other.nullable &&

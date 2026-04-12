@@ -206,7 +206,7 @@ void writePayloadValue(
       return;
     default:
       if (resolved.kind == RegistrationKindInternal.struct) {
-        resolved.structRuntime!.write(context, resolved, value);
+        resolved.structCodec!.write(context, resolved, value);
         return;
       }
       final serializer = resolved.serializer;
@@ -406,7 +406,7 @@ Object? readPayloadValue(
       );
     default:
       if (resolved.kind == RegistrationKindInternal.struct) {
-        return resolved.structRuntime!.read(
+        return resolved.structCodec!.read(
           context,
           resolved,
           hasCurrentPreservedRef: hasPreservedRef,
@@ -500,7 +500,7 @@ final class _PinnedResolvedPayload {
         writeStringPayload(context, value as String);
         return;
       case _PinnedResolvedPayloadKind.struct:
-        resolved.structRuntime!.write(context, resolved, value);
+        resolved.structCodec!.write(context, resolved, value);
         return;
       case _PinnedResolvedPayloadKind.serializer:
         serializer!.write(context, value);
@@ -519,7 +519,7 @@ final class _PinnedResolvedPayload {
       case _PinnedResolvedPayloadKind.string:
         return readStringPayload(context);
       case _PinnedResolvedPayloadKind.struct:
-        return resolved.structRuntime!.read(
+        return resolved.structCodec!.read(
           context,
           resolved,
           hasCurrentPreservedRef: hasPreservedRef,
@@ -663,8 +663,8 @@ void _writeList(
     header |= 0x08;
   }
   context.buffer.writeUint8(header);
-  final declaredRuntime = declaredType
-      ? internal.typeResolver.declaredValueRuntimeForShape(
+  final declaredBinding = declaredType
+      ? internal.typeResolver.declaredValueBindingForShape(
           elementShape,
           identifier: 'item',
           nullable: analysis.hasNull,
@@ -692,30 +692,27 @@ void _writeList(
     if (tracksDepth) {
       context.increaseDepth();
     }
-    try {
-      for (final value in values) {
-        if (value == null) {
-          context.buffer.writeByte(RefWriter.nullFlag);
-          continue;
-        }
-        if (elementTrackRef) {
-          _writePinnedResolvedValue(
-            context,
-            declaredPayload,
-            value as Object,
-            trackRef: true,
-          );
-        } else if (analysis.hasNull) {
-          context.buffer.writeByte(RefWriter.notNullValueFlag);
-          declaredPayload.write(context, value as Object);
-        } else {
-          declaredPayload.write(context, value as Object);
-        }
+    for (final value in values) {
+      if (value == null) {
+        context.buffer.writeByte(RefWriter.nullFlag);
+        continue;
       }
-    } finally {
-      if (tracksDepth) {
-        context.decreaseDepth();
+      if (elementTrackRef) {
+        _writePinnedResolvedValue(
+          context,
+          declaredPayload,
+          value as Object,
+          trackRef: true,
+        );
+      } else if (analysis.hasNull) {
+        context.buffer.writeByte(RefWriter.notNullValueFlag);
+        declaredPayload.write(context, value as Object);
+      } else {
+        declaredPayload.write(context, value as Object);
       }
+    }
+    if (tracksDepth) {
+      context.decreaseDepth();
     }
     return;
   }
@@ -724,35 +721,32 @@ void _writeList(
     if (tracksDepth) {
       context.increaseDepth();
     }
-    try {
-      for (final value in values) {
-        if (value == null) {
-          context.buffer.writeByte(RefWriter.nullFlag);
-        } else if (elementTrackRef) {
-          _writePinnedResolvedValue(
-            context,
-            samePayload,
-            value as Object,
-            trackRef: true,
-          );
-        } else if (analysis.hasNull) {
-          context.buffer.writeByte(RefWriter.notNullValueFlag);
-          samePayload.write(context, value as Object);
-        } else {
-          samePayload.write(context, value as Object);
-        }
+    for (final value in values) {
+      if (value == null) {
+        context.buffer.writeByte(RefWriter.nullFlag);
+      } else if (elementTrackRef) {
+        _writePinnedResolvedValue(
+          context,
+          samePayload,
+          value as Object,
+          trackRef: true,
+        );
+      } else if (analysis.hasNull) {
+        context.buffer.writeByte(RefWriter.notNullValueFlag);
+        samePayload.write(context, value as Object);
+      } else {
+        samePayload.write(context, value as Object);
       }
-    } finally {
-      if (tracksDepth) {
-        context.decreaseDepth();
-      }
+    }
+    if (tracksDepth) {
+      context.decreaseDepth();
     }
     return;
   }
   for (final value in values) {
     if (declaredType) {
       if (elementTrackRef || analysis.hasNull) {
-        writeDeclaredValueRuntime(context, declaredRuntime!, value);
+        writeDeclaredValueBinding(context, declaredBinding!, value);
       } else {
         writePayloadValue(
           context,
@@ -941,66 +935,63 @@ void _writeMap(
     if (tracksDepth) {
       context.increaseDepth();
     }
-    try {
+    _writeMapValuePair(
+      context,
+      key as Object,
+      value as Object,
+      keyTrackRef: chunkKeyTrackRef,
+      valueTrackRef: chunkValueTrackRef,
+      keyPayload: chunkKeyPayload,
+      valuePayload: chunkValuePayload,
+    );
+    while (chunkLength < 255) {
+      if (!iterator.moveNext()) {
+        exhausted = true;
+        break;
+      }
+      final nextEntry = iterator.current;
+      final nextKey = nextEntry.key;
+      final nextValue = nextEntry.value;
+      if (nextKey == null || nextValue == null) {
+        pendingEntry = nextEntry;
+        break;
+      }
+      final nextKeyResolved = keyDeclared
+          ? declaredKeyResolved
+          : internal.typeResolver.resolveValue(nextKey as Object);
+      final nextValueResolved = valueDeclared
+          ? declaredValueResolved
+          : internal.typeResolver.resolveValue(nextValue as Object);
+      final nextKeyTrackRef = keyRequestedRef &&
+          (keyDeclared
+              ? declaredKeyResolved.supportsRef
+              : nextKeyResolved.supportsRef);
+      final nextValueTrackRef = valueRequestedRef &&
+          (valueDeclared
+              ? declaredValueResolved.supportsRef
+              : nextValueResolved.supportsRef);
+      if (nextKeyTrackRef != chunkKeyTrackRef ||
+          nextValueTrackRef != chunkValueTrackRef ||
+          (!keyDeclared &&
+              !_sameResolvedType(chunkKeyResolved, nextKeyResolved)) ||
+          (!valueDeclared &&
+              !_sameResolvedType(chunkValueResolved, nextValueResolved))) {
+        pendingEntry = nextEntry;
+        break;
+      }
       _writeMapValuePair(
         context,
-        key as Object,
-        value as Object,
+        nextKey,
+        nextValue,
         keyTrackRef: chunkKeyTrackRef,
         valueTrackRef: chunkValueTrackRef,
         keyPayload: chunkKeyPayload,
         valuePayload: chunkValuePayload,
       );
-      while (chunkLength < 255) {
-        if (!iterator.moveNext()) {
-          exhausted = true;
-          break;
-        }
-        final nextEntry = iterator.current;
-        final nextKey = nextEntry.key;
-        final nextValue = nextEntry.value;
-        if (nextKey == null || nextValue == null) {
-          pendingEntry = nextEntry;
-          break;
-        }
-        final nextKeyResolved = keyDeclared
-            ? declaredKeyResolved
-            : internal.typeResolver.resolveValue(nextKey as Object);
-        final nextValueResolved = valueDeclared
-            ? declaredValueResolved
-            : internal.typeResolver.resolveValue(nextValue as Object);
-        final nextKeyTrackRef = keyRequestedRef &&
-            (keyDeclared
-                ? declaredKeyResolved.supportsRef
-                : nextKeyResolved.supportsRef);
-        final nextValueTrackRef = valueRequestedRef &&
-            (valueDeclared
-                ? declaredValueResolved.supportsRef
-                : nextValueResolved.supportsRef);
-        if (nextKeyTrackRef != chunkKeyTrackRef ||
-            nextValueTrackRef != chunkValueTrackRef ||
-            (!keyDeclared &&
-                !_sameResolvedType(chunkKeyResolved, nextKeyResolved)) ||
-            (!valueDeclared &&
-                !_sameResolvedType(chunkValueResolved, nextValueResolved))) {
-          pendingEntry = nextEntry;
-          break;
-        }
-        _writeMapValuePair(
-          context,
-          nextKey,
-          nextValue,
-          keyTrackRef: chunkKeyTrackRef,
-          valueTrackRef: chunkValueTrackRef,
-          keyPayload: chunkKeyPayload,
-          valuePayload: chunkValuePayload,
-        );
-        chunkLength += 1;
-      }
-    } finally {
-      if (tracksDepth) {
-        context.decreaseDepth();
-      }
+      chunkLength += 1;
+    }
+    if (tracksDepth) {
+      context.decreaseDepth();
     }
     bufferWriteUint8AtInternal(context.buffer, chunkLengthOffset, chunkLength);
   }
@@ -1113,16 +1104,18 @@ List<T> readTypedListPayload<T>(
   if (state.size == 0) {
     return List<T>.empty(growable: false);
   }
-  state.enterDepth(context);
-  try {
-    return List<T>.generate(
-      state.size,
-      (_) => convert(_readPreparedListItem(context, state)),
-      growable: false,
-    );
-  } finally {
-    state.exitDepth(context);
+  if (state.tracksDepth) {
+    context.increaseDepth();
   }
+  final result = List<T>.generate(
+    state.size,
+    (_) => convert(_readPreparedListItem(context, state)),
+    growable: false,
+  );
+  if (state.tracksDepth) {
+    context.decreaseDepth();
+  }
+  return result;
 }
 
 Set<T> readTypedSetPayload<T>(
@@ -1206,38 +1199,35 @@ Map<K, V> readTypedMapPayload<K, V>(
     if (tracksDepth) {
       context.increaseDepth();
     }
-    try {
-      for (var index = 0; index < chunkSize; index += 1) {
-        final key = keyDeclared
-            ? _readDeclaredMapValue(
-                context,
-                keyShape!,
-                keyPayload!,
-                trackRef: keyTrackRef,
-              )
-            : _readResolvedMapValue(
-                context,
-                keyPayload!,
-                trackRef: keyTrackRef,
-              );
-        final value = valueDeclared
-            ? _readDeclaredMapValue(
-                context,
-                valueShape!,
-                valuePayload!,
-                trackRef: valueTrackRef,
-              )
-            : _readResolvedMapValue(
-                context,
-                valuePayload!,
-                trackRef: valueTrackRef,
-              );
-        result[convertKey(key)] = convertValue(value);
-      }
-    } finally {
-      if (tracksDepth) {
-        context.decreaseDepth();
-      }
+    for (var index = 0; index < chunkSize; index += 1) {
+      final key = keyDeclared
+          ? _readDeclaredMapValue(
+              context,
+              keyShape!,
+              keyPayload!,
+              trackRef: keyTrackRef,
+            )
+          : _readResolvedMapValue(
+              context,
+              keyPayload!,
+              trackRef: keyTrackRef,
+            );
+      final value = valueDeclared
+          ? _readDeclaredMapValue(
+              context,
+              valueShape!,
+              valuePayload!,
+              trackRef: valueTrackRef,
+            )
+          : _readResolvedMapValue(
+              context,
+              valuePayload!,
+              trackRef: valueTrackRef,
+            );
+      result[convertKey(key)] = convertValue(value);
+    }
+    if (tracksDepth) {
+      context.decreaseDepth();
     }
     remaining -= chunkSize;
   }
@@ -1253,13 +1243,14 @@ List<Object?> _readList(
   if (state.size == 0) {
     return result;
   }
-  state.enterDepth(context);
-  try {
-    for (var index = 0; index < state.size; index += 1) {
-      result[index] = _readPreparedListItem(context, state);
-    }
-  } finally {
-    state.exitDepth(context);
+  if (state.tracksDepth) {
+    context.increaseDepth();
+  }
+  for (var index = 0; index < state.size; index += 1) {
+    result[index] = _readPreparedListItem(context, state);
+  }
+  if (state.tracksDepth) {
+    context.decreaseDepth();
   }
   return result;
 }
@@ -1291,12 +1282,12 @@ final class _PreparedListRead {
   final bool hasNull;
   final bool declaredType;
   final TypeShapeInternal? elementShape;
-  final DeclaredValueRuntimeInternal? declaredRuntime;
+  final DeclaredValueBindingInternal? declaredBinding;
   final ResolvedTypeInternal? declaredDirectResolved;
   final _PinnedResolvedPayload? declaredPayload;
   final ResolvedTypeInternal? sameResolved;
   final _PinnedResolvedPayload? samePayload;
-  final bool _tracksDepth;
+  final bool tracksDepth;
 
   const _PreparedListRead({
     required this.size,
@@ -1304,27 +1295,13 @@ final class _PreparedListRead {
     required this.hasNull,
     required this.declaredType,
     required this.elementShape,
-    required this.declaredRuntime,
+    required this.declaredBinding,
     required this.declaredDirectResolved,
     required this.declaredPayload,
     required this.sameResolved,
     required this.samePayload,
-    required bool tracksDepth,
-  }) : _tracksDepth = tracksDepth;
-
-  @pragma('vm:prefer-inline')
-  void enterDepth(ReadContext context) {
-    if (_tracksDepth) {
-      context.increaseDepth();
-    }
-  }
-
-  @pragma('vm:prefer-inline')
-  void exitDepth(ReadContext context) {
-    if (_tracksDepth) {
-      context.decreaseDepth();
-    }
-  }
+    required this.tracksDepth,
+  });
 }
 
 _PreparedListRead _prepareListRead(
@@ -1345,7 +1322,7 @@ _PreparedListRead _prepareListRead(
       hasNull: false,
       declaredType: false,
       elementShape: elementShape,
-      declaredRuntime: null,
+      declaredBinding: null,
       declaredDirectResolved: null,
       declaredPayload: null,
       sameResolved: null,
@@ -1358,15 +1335,15 @@ _PreparedListRead _prepareListRead(
   final hasNull = (header & 0x02) != 0;
   final declaredType = (header & 0x04) != 0;
   final sameType = (header & 0x08) != 0;
-  final declaredRuntime = declaredType && elementShape != null
-      ? internal.typeResolver.declaredValueRuntimeForShape(
+  final declaredBinding = declaredType && elementShape != null
+      ? internal.typeResolver.declaredValueBindingForShape(
           elementShape,
           identifier: 'item',
           nullable: hasNull,
           ref: trackRef,
         )
       : null;
-  final declaredDirectResolved = declaredRuntime?.resolved;
+  final declaredDirectResolved = declaredBinding?.resolved;
   final sameResolved = (!declaredType && sameType)
       ? internal.readTypeMetaValue()
       : null;
@@ -1385,7 +1362,7 @@ _PreparedListRead _prepareListRead(
     hasNull: hasNull,
     declaredType: declaredType,
     elementShape: elementShape,
-    declaredRuntime: declaredRuntime,
+    declaredBinding: declaredBinding,
     declaredDirectResolved: declaredDirectResolved,
     declaredPayload: declaredPayload,
     sameResolved: sameResolved,
@@ -1450,16 +1427,16 @@ Object? _readPreparedListItem(
   }
   if (state.declaredType && state.elementShape != null) {
     if (!state.trackRef && !state.hasNull) {
-      return state.declaredRuntime!.shape.isPrimitive
-          ? internal.readPrimitiveValue(state.declaredRuntime!.shape.typeId)
+      return state.declaredBinding!.shape.isPrimitive
+          ? internal.readPrimitiveValue(state.declaredBinding!.shape.typeId)
           : internal.readResolvedValue(
               state.declaredDirectResolved!,
               state.elementShape,
             );
     }
-    return readDeclaredValueRuntime<Object?>(
+    return readDeclaredValueBinding<Object?>(
       context,
-      state.declaredRuntime!,
+      state.declaredBinding!,
     );
   }
   if (state.sameResolved != null) {

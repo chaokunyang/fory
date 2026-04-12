@@ -12,16 +12,16 @@ void writeDeclaredValue(
   FieldMetadataInternal field,
   Object? value,
 ) {
-  final runtime = _writeImpl(context).typeResolver.declaredFieldRuntime(field);
-  writeDeclaredValueRuntime(context, runtime, value);
+  final binding = _writeImpl(context).typeResolver.declaredFieldBinding(field);
+  writeDeclaredValueBinding(context, binding, value);
 }
 
-void writeDeclaredValueRuntime(
+void writeDeclaredValueBinding(
   WriteContext context,
-  DeclaredValueRuntimeInternal runtime,
+  DeclaredValueBindingInternal binding,
   Object? value,
 ) {
-  final shape = runtime.shape;
+  final shape = binding.shape;
   final internal = _writeImpl(context);
   if (shape.isDynamic) {
     if (shape.ref) {
@@ -37,13 +37,13 @@ void writeDeclaredValueRuntime(
   }
   if (shape.isPrimitive && !shape.nullable) {
     if (value == null) {
-      throw StateError('Field ${runtime.metadata.name} is not nullable.');
+      throw StateError('Field ${binding.metadata.name} is not nullable.');
     }
     internal.writePrimitiveValue(shape.typeId, value);
     return;
   }
-  final resolved = runtime.resolved!;
-  if (!runtime.usesDeclaredType) {
+  final resolved = binding.resolved!;
+  if (!binding.usesDeclaredType) {
     if (shape.ref) {
       context.writeRef(value);
       return;
@@ -54,7 +54,7 @@ void writeDeclaredValueRuntime(
       }
       context.buffer.writeByte(RefWriter.notNullValueFlag);
     } else if (value == null) {
-      throw StateError('Field ${runtime.metadata.name} is not nullable.');
+      throw StateError('Field ${binding.metadata.name} is not nullable.');
     }
     context.writeNonRef(value as Object);
     return;
@@ -70,7 +70,7 @@ void writeDeclaredValueRuntime(
     }
   }
   if (value == null) {
-    throw StateError('Field ${runtime.metadata.name} is not nullable.');
+    throw StateError('Field ${binding.metadata.name} is not nullable.');
   }
   internal.writeResolvedValue(resolved, value, shape);
 }
@@ -80,16 +80,16 @@ T readDeclaredValue<T>(
   FieldMetadataInternal field, [
   T? fallback,
 ]) {
-  final runtime = _readImpl(context).typeResolver.declaredFieldRuntime(field);
-  return readDeclaredValueRuntime(context, runtime, fallback);
+  final binding = _readImpl(context).typeResolver.declaredFieldBinding(field);
+  return readDeclaredValueBinding(context, binding, fallback);
 }
 
-T readDeclaredValueRuntime<T>(
+T readDeclaredValueBinding<T>(
   ReadContext context,
-  DeclaredValueRuntimeInternal runtime, [
+  DeclaredValueBindingInternal binding, [
   T? fallback,
 ]) {
-  final shape = runtime.shape;
+  final shape = binding.shape;
   final internal = _readImpl(context);
   if (shape.isDynamic) {
     return context.readRef() as T;
@@ -97,8 +97,8 @@ T readDeclaredValueRuntime<T>(
   if (shape.isPrimitive && !shape.nullable) {
     return internal.readPrimitiveValue(shape.typeId) as T;
   }
-  final resolved = runtime.resolved!;
-  if (!runtime.usesDeclaredType) {
+  final resolved = binding.resolved!;
+  if (!binding.usesDeclaredType) {
     if (shape.ref) {
       return context.readRef() as T;
     }

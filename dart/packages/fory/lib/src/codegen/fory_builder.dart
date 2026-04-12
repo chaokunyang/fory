@@ -4,4 +4,4 @@ import 'package:source_gen/source_gen.dart';
 import 'package:fory/src/codegen/fory_generator.dart';
 
 Builder foryBuilder(BuilderOptions options) =>
-    LibraryBuilder(ForyGenerator(), generatedExtension: '.fory.dart');
+    PartBuilder([ForyGenerator()], '.fory.dart');

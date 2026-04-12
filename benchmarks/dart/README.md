@@ -5,7 +5,8 @@ Buffers using the shared benchmark schema in `benchmarks/proto/bench.proto`.
 
 The harness uses:
 
-- generated Fory serializers via `package:fory/fory.dart` and `*.fory.dart`
+- generated Fory serializers via `package:fory/fory.dart` and `part` files
+  named `*.fory.dart`
 - generated protobuf messages via `package:protobuf`
 - the same benchmark data families used by the C++, Go, and Rust benchmarks
 

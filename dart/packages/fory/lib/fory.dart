@@ -3,6 +3,7 @@
 /// Most applications only need [Fory], [Config], [ForyStruct], and [ForyField].
 /// [Buffer], [WriteContext], [ReadContext], and [Serializer] are advanced APIs
 /// used by generated code, custom serializers, and low-level integrations.
+// ignore_for_file: invalid_export_of_internal_element
 library;
 
 export 'src/annotation/fory_field.dart';
@@ -18,6 +19,7 @@ export 'src/buffer.dart'
         bufferWriteUint8At,
         bufferReaderIndex,
         bufferWriterIndex;
+export 'src/codegen/generated_support.dart';
 export 'src/config.dart';
 export 'src/context/read_context.dart';
 export 'src/context/write_context.dart';

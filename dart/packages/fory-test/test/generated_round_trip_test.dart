@@ -78,5 +78,29 @@ void main() {
       expect(
           fory.deserialize<FixedPayload>(fixedBytes).value, equals('payload'));
     });
+
+    test('serializes private mutable fields', () {
+      final fory = Fory();
+      registerPersonTypes(fory);
+
+      final mutable = PrivatePayload()..updateSecret('hidden');
+      final bytes = fory.serialize(mutable);
+      final roundTrip = fory.deserialize<PrivatePayload>(bytes);
+
+      expect(bytes, isNotEmpty);
+      expect(roundTrip.secret, equals('hidden'));
+    });
+
+    test('serializes private immutable fields', () {
+      final fory = Fory();
+      registerPersonTypes(fory);
+
+      final immutable = PrivateImmutablePayload('sealed');
+      final bytes = fory.serialize(immutable);
+      final roundTrip = fory.deserialize<PrivateImmutablePayload>(bytes);
+
+      expect(bytes, isNotEmpty);
+      expect(roundTrip.secret, equals('sealed'));
+    });
   });
 }

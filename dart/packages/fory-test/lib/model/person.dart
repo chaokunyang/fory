@@ -2,7 +2,7 @@ library;
 
 import 'package:fory/fory.dart';
 
-import 'person.fory.dart' as generated;
+part 'person.fory.dart';
 
 enum Color {
   red,
@@ -45,7 +45,7 @@ class FixedPayload {
 }
 
 void registerPersonTypes(Fory fory) {
-  generated.registerPersonForyTypes(fory);
+  registerPersonForyTypes(fory);
 }
 
 void registerPersonType(
@@ -55,11 +55,33 @@ void registerPersonType(
   String? namespace,
   String? typeName,
 }) {
-  generated.registerPersonForyType(
+  registerPersonForyType(
     fory,
     type,
     id: id,
     namespace: namespace,
     typeName: typeName,
   );
+}
+
+@ForyStruct()
+class PrivatePayload {
+  PrivatePayload([this._secret = '']);
+
+  String _secret;
+
+  String get secret => _secret;
+
+  void updateSecret(String value) {
+    _secret = value;
+  }
+}
+
+@ForyStruct()
+class PrivateImmutablePayload {
+  PrivateImmutablePayload(this._secret);
+
+  final String _secret;
+
+  String get secret => _secret;
 }

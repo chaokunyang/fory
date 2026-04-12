@@ -31,7 +31,6 @@ final class ForyGenerator extends Generator {
     }
 
     final namespace = _buildNamespace(buildStep.inputId);
-    final sourceFileName = buildStep.inputId.pathSegments.last;
     final helperBaseName = _toPascalCase(
       buildStep.inputId.pathSegments.last.split('.').first,
     );
@@ -43,24 +42,9 @@ final class ForyGenerator extends Generator {
         .toList(growable: false);
     final structSpecs =
         annotatedClasses.map(_analyzeStruct).toList(growable: false);
-    final needsTypedDataImport = structSpecs.any(
-      (structSpec) => structSpec.fields.any(
-        (field) => _usesTypedDataType(field.type),
-      ),
-    );
-
     final output = StringBuffer()
-      ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND')
       ..writeln(
-          '// ignore_for_file: implementation_imports, invalid_use_of_internal_member')
-      ..writeln()
-      ..write(
-        needsTypedDataImport ? "import 'dart:typed_data';\n" : '',
-      )
-      ..writeln("import 'package:fory/fory.dart';")
-      ..writeln("import 'package:fory/src/codegen/generated_support.dart';")
-      ..writeln("import 'package:fory/src/serializer/serializer_support.dart';")
-      ..writeln("import '$sourceFileName';")
+          '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, unused_element, unnecessary_null_comparison')
       ..writeln();
 
     for (final enumSpec in enumSpecs) {
@@ -90,8 +74,7 @@ final class ForyGenerator extends Generator {
         .where(
           (field) =>
               !field.isStatic &&
-              !field.isSynthetic &&
-              !field.name.startsWith('_'),
+              !field.isSynthetic,
         )
         .where((field) => !_isSkipped(field))
         .map(_analyzeField)
@@ -747,9 +730,7 @@ final class ForyGenerator extends Generator {
   }
 
   String _slotResolvedRawExpression(String rawValueExpression) {
-    return '$rawValueExpression is DeferredReadRef '
-        '? context.getReadRef($rawValueExpression.id) '
-        ': $rawValueExpression';
+    return 'resolveGeneratedSlotRawValue(context, $rawValueExpression)';
   }
 
   bool _isSkipped(FieldElement field) {
@@ -1880,25 +1861,6 @@ GeneratedFieldType(
       type is InterfaceType && type.element.name == 'Set';
 
   bool _isMap(DartType type) => type.isDartCoreMap;
-
-  bool _usesTypedDataType(DartType type) {
-    final display = _typeLiteral(_withoutNullability(type));
-    switch (display) {
-      case 'Uint8List':
-      case 'Int8List':
-      case 'Int16List':
-      case 'Int32List':
-      case 'Int64List':
-      case 'Uint16List':
-      case 'Uint32List':
-      case 'Uint64List':
-      case 'Float32List':
-      case 'Float64List':
-        return true;
-      default:
-        return false;
-    }
-  }
 
   String _typeLiteral(DartType type) {
     if (type is DynamicType || type is InvalidType) {

@@ -401,6 +401,17 @@ final class GeneratedFieldType {
 }
 
 @internal
+Object? resolveGeneratedSlotRawValue(
+  ReadContext context,
+  Object? rawValue,
+) {
+  if (rawValue is DeferredReadRef) {
+    return context.getReadRef(rawValue.id);
+  }
+  return rawValue;
+}
+
+@internal
 final class GeneratedFieldInfo {
   final String name;
   final String identifier;

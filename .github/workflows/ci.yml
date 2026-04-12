@@ -1069,7 +1069,7 @@ jobs:
           import 'package:flutter_test/flutter_test.dart';
           import 'package:fory/fory.dart';
           import 'package:fory_flutter_smoke/person.dart';
-          import 'package:fory_flutter_smoke/person.fory.dart';
+          import 'package:fory_flutter_smoke/person.dart';
 
           void main() {
             test('generated fory serializers work in flutter', () {

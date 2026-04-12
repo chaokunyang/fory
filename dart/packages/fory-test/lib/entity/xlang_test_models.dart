@@ -21,8 +21,9 @@ library;
 
 import 'package:fory/fory.dart';
 
-import 'xlang_test_models.fory.dart' as generated;
 import 'xlang_test_manual.dart' as manual;
+
+part 'xlang_test_models.fory.dart';
 
 void registerXlangType(
   Fory fory,
@@ -40,7 +41,7 @@ void registerXlangType(
   )) {
     return;
   }
-  generated.registerXlangTestModelsForyType(
+  registerXlangTestModelsForyType(
     fory,
     type,
     id: id,

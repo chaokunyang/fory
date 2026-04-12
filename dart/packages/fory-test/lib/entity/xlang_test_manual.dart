@@ -22,7 +22,6 @@ library;
 // ignore_for_file: implementation_imports, invalid_use_of_internal_member
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/codegen/generated_support.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
 import 'package:fory/src/resolver/type_resolver.dart' as resolver;
 

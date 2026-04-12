@@ -23,7 +23,7 @@ import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
 
-import 'models.fory.dart' as generated;
+part 'models.fory.dart';
 
 enum Player {
   java,
@@ -273,16 +273,16 @@ class MediaContentList {
 }
 
 void registerBenchmarkTypes(Fory fory) {
-  generated.registerModelsForyType(fory, NumericStruct, id: 1);
-  generated.registerModelsForyType(fory, Sample, id: 2);
-  generated.registerModelsForyType(fory, Media, id: 3);
-  generated.registerModelsForyType(fory, Image, id: 4);
-  generated.registerModelsForyType(fory, MediaContent, id: 5);
-  generated.registerModelsForyType(fory, StructList, id: 6);
-  generated.registerModelsForyType(fory, SampleList, id: 7);
-  generated.registerModelsForyType(fory, MediaContentList, id: 8);
-  generated.registerModelsForyType(fory, Player, id: 9);
-  generated.registerModelsForyType(fory, MediaSize, id: 10);
+  registerModelsForyType(fory, NumericStruct, id: 1);
+  registerModelsForyType(fory, Sample, id: 2);
+  registerModelsForyType(fory, Media, id: 3);
+  registerModelsForyType(fory, Image, id: 4);
+  registerModelsForyType(fory, MediaContent, id: 5);
+  registerModelsForyType(fory, StructList, id: 6);
+  registerModelsForyType(fory, SampleList, id: 7);
+  registerModelsForyType(fory, MediaContentList, id: 8);
+  registerModelsForyType(fory, Player, id: 9);
+  registerModelsForyType(fory, MediaSize, id: 10);
 }
 
 NumericStruct createNumericStruct() {

@@ -21,8 +21,6 @@ package org.apache.fory.serializer;
 
 import static org.apache.fory.util.function.Functions.makeGetterFunction;
 
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -42,6 +40,8 @@ import java.util.function.Function;
 import java.util.function.ToIntFunction;
 import java.util.regex.Pattern;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.Cache;
+import org.apache.fory.collection.CacheBuilder;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
@@ -245,6 +245,15 @@ public class Serializers {
     }
     if (serializerClass == ChildContainerSerializers.ChildMapSerializer.class) {
       return new ChildContainerSerializers.ChildMapSerializer(typeResolver, type);
+    }
+    if (serializerClass == ChildContainerSerializers.ChildSortedSetSerializer.class) {
+      return new ChildContainerSerializers.ChildSortedSetSerializer(typeResolver, type);
+    }
+    if (serializerClass == ChildContainerSerializers.ChildPriorityQueueSerializer.class) {
+      return new ChildContainerSerializers.ChildPriorityQueueSerializer(typeResolver, type);
+    }
+    if (serializerClass == ChildContainerSerializers.ChildSortedMapSerializer.class) {
+      return new ChildContainerSerializers.ChildSortedMapSerializer(typeResolver, type);
     }
     if (serializerClass == SingletonCollectionSerializer.class) {
       return new SingletonCollectionSerializer(typeResolver, type);

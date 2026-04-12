@@ -6,121 +6,68 @@ import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
 
-enum _FixedTypePayloadKind {
-  primitive,
-  string,
-  struct,
-  serializer,
-  generic,
+@pragma('vm:prefer-inline')
+void _writeDirectTypeInfoValue(
+  WriteContext context,
+  TypeInfo typeInfo,
+  FieldType? fieldType,
+  Object value,
+) {
+  if (TypeIds.isPrimitive(typeInfo.typeId)) {
+    PrimitiveSerializer.writePayload(context, typeInfo.typeId, value);
+    return;
+  }
+  if (typeInfo.typeId == TypeIds.string) {
+    StringSerializer.writePayload(context, value as String);
+    return;
+  }
+  if (typeInfo.kind == RegistrationKind.struct) {
+    typeInfo.structSerializer!.writeValue(context, typeInfo, value);
+    return;
+  }
+  if (typeInfo.typeId == TypeIds.list ||
+      typeInfo.typeId == TypeIds.set ||
+      typeInfo.typeId == TypeIds.map) {
+    context.writeResolvedValue(typeInfo, value, fieldType);
+    return;
+  }
+  typeInfo.serializer.write(context, value);
 }
 
-final class FixedTypePayload {
-  final TypeInfo typeInfo;
-  final FieldType? declaredFieldType;
-  final Serializer<Object?>? serializer;
-  final _FixedTypePayloadKind _kind;
-
-  const FixedTypePayload._(
-    this.typeInfo,
-    this.declaredFieldType,
-    this.serializer,
-    this._kind,
-  );
-
-  factory FixedTypePayload(
-    TypeInfo typeInfo, [
-    FieldType? declaredFieldType,
-  ]) {
-    if (TypeIds.isPrimitive(typeInfo.typeId)) {
-      return FixedTypePayload._(
-        typeInfo,
-        declaredFieldType,
-        null,
-        _FixedTypePayloadKind.primitive,
-      );
-    }
-    if (typeInfo.typeId == TypeIds.string) {
-      return FixedTypePayload._(
-        typeInfo,
-        declaredFieldType,
-        null,
-        _FixedTypePayloadKind.string,
-      );
-    }
-    if (typeInfo.kind == RegistrationKind.struct) {
-      return FixedTypePayload._(
-        typeInfo,
-        declaredFieldType,
-        null,
-        _FixedTypePayloadKind.struct,
-      );
-    }
-    if (typeInfo.typeId == TypeIds.list ||
-        typeInfo.typeId == TypeIds.set ||
-        typeInfo.typeId == TypeIds.map) {
-      return FixedTypePayload._(
-        typeInfo,
-        declaredFieldType,
-        null,
-        _FixedTypePayloadKind.generic,
-      );
-    }
-    return FixedTypePayload._(
+@pragma('vm:prefer-inline')
+Object? readTypeInfoValue(
+  ReadContext context,
+  TypeInfo typeInfo,
+  FieldType? fieldType, {
+  bool hasPreservedRef = false,
+}) {
+  if (TypeIds.isPrimitive(typeInfo.typeId)) {
+    return PrimitiveSerializer.readPayload(context, typeInfo.typeId);
+  }
+  if (typeInfo.typeId == TypeIds.string) {
+    return StringSerializer.readPayload(context);
+  }
+  if (typeInfo.kind == RegistrationKind.struct) {
+    return typeInfo.structSerializer!.readValue(
+      context,
       typeInfo,
-      declaredFieldType,
-      typeInfo.serializer,
-      _FixedTypePayloadKind.serializer,
+      hasCurrentPreservedRef: hasPreservedRef,
     );
   }
-
-  @pragma('vm:prefer-inline')
-  void write(WriteContext context, Object value) {
-    switch (_kind) {
-      case _FixedTypePayloadKind.primitive:
-        PrimitiveSerializer.writePayload(context, typeInfo.typeId, value);
-        return;
-      case _FixedTypePayloadKind.string:
-        StringSerializer.writePayload(context, value as String);
-        return;
-      case _FixedTypePayloadKind.struct:
-        typeInfo.structSerializer!.writeValue(context, typeInfo, value);
-        return;
-      case _FixedTypePayloadKind.serializer:
-        serializer!.write(context, value);
-        return;
-      case _FixedTypePayloadKind.generic:
-        context.writeResolvedValue(typeInfo, value, declaredFieldType);
-        return;
-    }
+  if (typeInfo.typeId == TypeIds.list ||
+      typeInfo.typeId == TypeIds.set ||
+      typeInfo.typeId == TypeIds.map) {
+    return context.readResolvedValue(
+      typeInfo,
+      fieldType,
+      hasPreservedRef: hasPreservedRef,
+    );
   }
-
-  @pragma('vm:prefer-inline')
-  Object? read(ReadContext context, {bool hasPreservedRef = false}) {
-    switch (_kind) {
-      case _FixedTypePayloadKind.primitive:
-        return PrimitiveSerializer.readPayload(context, typeInfo.typeId);
-      case _FixedTypePayloadKind.string:
-        return StringSerializer.readPayload(context);
-      case _FixedTypePayloadKind.struct:
-        return typeInfo.structSerializer!.readValue(
-          context,
-          typeInfo,
-          hasCurrentPreservedRef: hasPreservedRef,
-        );
-      case _FixedTypePayloadKind.serializer:
-        return context.readSerializerPayload(
-          serializer!,
-          typeInfo,
-          hasCurrentPreservedRef: hasPreservedRef,
-        );
-      case _FixedTypePayloadKind.generic:
-        return context.readResolvedValue(
-          typeInfo,
-          declaredFieldType,
-          hasPreservedRef: hasPreservedRef,
-        );
-    }
-  }
+  return context.readSerializerPayload(
+    typeInfo.serializer,
+    typeInfo,
+    hasCurrentPreservedRef: hasPreservedRef,
+  );
 }
 
 bool tracksNestedPayloadDepth(TypeInfo typeInfo) {
@@ -326,16 +273,8 @@ final class ListSerializer extends Serializer<List> {
       header |= 0x08;
     }
     context.buffer.writeUint8(header);
-    final declaredPayload = declaredTypeInfo == null
-        ? null
-        : FixedTypePayload(
-            declaredTypeInfo,
-            elementFieldType,
-          );
     final sameTypeInfo =
         !usesDeclaredType && analysis.sameType ? analysis.sameTypeInfo : null;
-    final samePayload =
-        sameTypeInfo == null ? null : FixedTypePayload(sameTypeInfo);
     if (!usesDeclaredType &&
         sameTypeInfo != null &&
         analysis.firstNonNull != null) {
@@ -344,8 +283,8 @@ final class ListSerializer extends Serializer<List> {
         analysis.firstNonNull!,
       );
     }
-    if (declaredPayload != null) {
-      final tracksDepth = tracksNestedPayloadDepth(declaredTypeInfo!);
+    if (declaredTypeInfo != null) {
+      final tracksDepth = tracksNestedPayloadDepth(declaredTypeInfo);
       if (tracksDepth) {
         context.increaseDepth();
       }
@@ -355,17 +294,28 @@ final class ListSerializer extends Serializer<List> {
           continue;
         }
         if (elementTrackRef) {
-          writeFixedTypeValue(
+          writeTypeInfoValue(
             context,
-            declaredPayload,
+            declaredTypeInfo,
+            elementFieldType,
             value as Object,
             trackRef: true,
           );
         } else if (analysis.hasNull) {
           context.buffer.writeByte(RefWriter.notNullValueFlag);
-          declaredPayload.write(context, value as Object);
+          _writeDirectTypeInfoValue(
+            context,
+            declaredTypeInfo,
+            elementFieldType,
+            value as Object,
+          );
         } else {
-          declaredPayload.write(context, value as Object);
+          _writeDirectTypeInfoValue(
+            context,
+            declaredTypeInfo,
+            elementFieldType,
+            value as Object,
+          );
         }
       }
       if (tracksDepth) {
@@ -373,8 +323,8 @@ final class ListSerializer extends Serializer<List> {
       }
       return;
     }
-    if (samePayload != null) {
-      final tracksDepth = tracksNestedPayloadDepth(sameTypeInfo!);
+    if (sameTypeInfo != null) {
+      final tracksDepth = tracksNestedPayloadDepth(sameTypeInfo);
       if (tracksDepth) {
         context.increaseDepth();
       }
@@ -382,17 +332,28 @@ final class ListSerializer extends Serializer<List> {
         if (value == null) {
           context.buffer.writeByte(RefWriter.nullFlag);
         } else if (elementTrackRef) {
-          writeFixedTypeValue(
+          writeTypeInfoValue(
             context,
-            samePayload,
+            sameTypeInfo,
+            null,
             value as Object,
             trackRef: true,
           );
         } else if (analysis.hasNull) {
           context.buffer.writeByte(RefWriter.notNullValueFlag);
-          samePayload.write(context, value as Object);
+          _writeDirectTypeInfoValue(
+            context,
+            sameTypeInfo,
+            null,
+            value as Object,
+          );
         } else {
-          samePayload.write(context, value as Object);
+          _writeDirectTypeInfoValue(
+            context,
+            sameTypeInfo,
+            null,
+            value as Object,
+          );
         }
       }
       if (tracksDepth) {
@@ -538,9 +499,7 @@ final class _PreparedListRead {
   final bool usesDeclaredType;
   final FieldType? elementFieldType;
   final TypeInfo? declaredTypeInfo;
-  final FixedTypePayload? declaredPayload;
   final TypeInfo? sameTypeInfo;
-  final FixedTypePayload? samePayload;
   final bool tracksDepth;
 
   const _PreparedListRead({
@@ -550,9 +509,7 @@ final class _PreparedListRead {
     required this.usesDeclaredType,
     required this.elementFieldType,
     required this.declaredTypeInfo,
-    required this.declaredPayload,
     required this.sameTypeInfo,
-    required this.samePayload,
     required this.tracksDepth,
   });
 }
@@ -575,9 +532,7 @@ _PreparedListRead _prepareListRead(
       usesDeclaredType: false,
       elementFieldType: elementFieldType,
       declaredTypeInfo: null,
-      declaredPayload: null,
       sameTypeInfo: null,
-      samePayload: null,
       tracksDepth: false,
     );
   }
@@ -593,17 +548,9 @@ _PreparedListRead _prepareListRead(
       : null;
   final sameTypeInfo =
       (!usesDeclaredType && sameType) ? context.readTypeMetaValue() : null;
-  final declaredPayload = declaredTypeInfo == null
-      ? null
-      : FixedTypePayload(
-          declaredTypeInfo,
-          elementFieldType,
-        );
-  final samePayload =
-      sameTypeInfo == null ? null : FixedTypePayload(sameTypeInfo);
-  final tracksDepth = (declaredPayload != null &&
-          tracksNestedPayloadDepth(declaredTypeInfo!)) ||
-      (samePayload != null && tracksNestedPayloadDepth(sameTypeInfo!));
+  final tracksDepth = (declaredTypeInfo != null &&
+          tracksNestedPayloadDepth(declaredTypeInfo)) ||
+      (sameTypeInfo != null && tracksNestedPayloadDepth(sameTypeInfo));
   return _PreparedListRead(
     size: size,
     trackRef: trackRef,
@@ -611,9 +558,7 @@ _PreparedListRead _prepareListRead(
     usesDeclaredType: usesDeclaredType,
     elementFieldType: elementFieldType,
     declaredTypeInfo: declaredTypeInfo,
-    declaredPayload: declaredPayload,
     sameTypeInfo: sameTypeInfo,
-    samePayload: samePayload,
     tracksDepth: tracksDepth,
   );
 }
@@ -623,8 +568,7 @@ Object? _readPreparedListItem(
   ReadContext context,
   _PreparedListRead state,
 ) {
-  final declaredPayload = state.declaredPayload;
-  if (declaredPayload != null) {
+  if (state.declaredTypeInfo != null) {
     if (state.hasNull || state.trackRef) {
       final flag = context.refReader.tryPreserveRefId(context.buffer);
       final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
@@ -634,8 +578,10 @@ Object? _readPreparedListItem(
       if (flag == RefWriter.refFlag) {
         return context.refReader.getReadRef();
       }
-      final value = declaredPayload.read(
+      final value = readTypeInfoValue(
         context,
+        state.declaredTypeInfo!,
+        state.elementFieldType,
         hasPreservedRef: preservedRefId != null,
       );
       if (preservedRefId != null &&
@@ -645,10 +591,13 @@ Object? _readPreparedListItem(
       }
       return value;
     }
-    return declaredPayload.read(context);
+    return readTypeInfoValue(
+      context,
+      state.declaredTypeInfo!,
+      state.elementFieldType,
+    );
   }
-  final samePayload = state.samePayload;
-  if (samePayload != null) {
+  if (state.sameTypeInfo != null) {
     if (state.hasNull || state.trackRef) {
       final flag = context.refReader.tryPreserveRefId(context.buffer);
       final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
@@ -658,8 +607,10 @@ Object? _readPreparedListItem(
       if (flag == RefWriter.refFlag) {
         return context.refReader.getReadRef();
       }
-      final value = samePayload.read(
+      final value = readTypeInfoValue(
         context,
+        state.sameTypeInfo!,
+        null,
         hasPreservedRef: preservedRefId != null,
       );
       if (preservedRefId != null &&
@@ -669,7 +620,7 @@ Object? _readPreparedListItem(
       }
       return value;
     }
-    return samePayload.read(context);
+    return readTypeInfoValue(context, state.sameTypeInfo!, null);
   }
   if (state.usesDeclaredType && state.elementFieldType != null) {
     return readFieldTypeValue<Object?>(
@@ -713,23 +664,24 @@ Object? _readPreparedListItem(
 }
 
 @pragma('vm:prefer-inline')
-void writeFixedTypeValue(
+void writeTypeInfoValue(
   WriteContext context,
-  FixedTypePayload payload,
+  TypeInfo typeInfo,
+  FieldType? fieldType,
   Object value, {
   required bool trackRef,
 }) {
   if (!trackRef) {
-    payload.write(context, value);
+    _writeDirectTypeInfoValue(context, typeInfo, fieldType, value);
     return;
   }
   final handled = context.refWriter.writeRefOrNull(
     context.buffer,
     value,
-    trackRef: payload.typeInfo.supportsRef,
+    trackRef: typeInfo.supportsRef,
   );
   if (!handled) {
-    payload.write(context, value);
+    _writeDirectTypeInfoValue(context, typeInfo, fieldType, value);
   }
 }
 

@@ -33,8 +33,8 @@ final class WriteContext {
   final CompatibleStructMetadataStore _compatibleStructMetadata;
 
   late Buffer _buffer;
-  final LinkedHashMap<SharedTypeDef, int> _typeDefIds =
-      LinkedHashMap<SharedTypeDef, int>.identity();
+  final LinkedHashMap<TypeDef, int> _typeDefIds =
+      LinkedHashMap<TypeDef, int>.identity();
   final LinkedHashMap<Object, Object?> _contextObjects =
       LinkedHashMap<Object, Object?>.identity();
   bool _rootTrackRef = false;
@@ -373,12 +373,12 @@ final class WriteContext {
     _typeResolver.writeTypeMeta(
       _buffer,
       resolved,
-      sharedTypeDef: resolved.structSerializer?.sharedTypeDefForWrite(
+      typeDef: resolved.structSerializer?.typeDefForWrite(
         this,
         resolved,
         value,
       ),
-      sharedTypeDefIds: _typeDefIds,
+      typeDefIds: _typeDefIds,
       metaStringWriter: _metaStringWriter,
     );
   }

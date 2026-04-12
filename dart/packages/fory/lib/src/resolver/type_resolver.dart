@@ -246,11 +246,11 @@ final class StructMetadata {
   const StructMetadata({required this.evolving, required this.fields});
 }
 
-final class SharedTypeDef {
+final class TypeDef {
   final int header;
   final Uint8List encoded;
 
-  const SharedTypeDef({
+  const TypeDef({
     required this.header,
     required this.encoded,
   });
@@ -270,7 +270,7 @@ final class TypeInfo {
   final EncodedMetaString? encodedTypeName;
   final StructMetadata? structMetadata;
   final StructMetadata? remoteStructMetadata;
-  final SharedTypeDef? sharedTypeDef;
+  final TypeDef? typeDef;
 
   const TypeInfo({
     required this.type,
@@ -286,7 +286,7 @@ final class TypeInfo {
     required this.encodedTypeName,
     required this.structMetadata,
     required this.remoteStructMetadata,
-    required this.sharedTypeDef,
+    required this.typeDef,
   });
 
   bool get isNamed =>
@@ -322,8 +322,8 @@ bool usesDeclaredTypeInfo(
 
 final class TypeResolver {
   final Config config;
-  final TypeMetaEncoder _typeMetaEncoder = const TypeMetaEncoder();
-  final TypeMetaDecoder _typeMetaDecoder = const TypeMetaDecoder();
+  final WireTypeMetaEncoder _wireTypeMetaEncoder = const WireTypeMetaEncoder();
+  final WireTypeMetaDecoder _wireTypeMetaDecoder = const WireTypeMetaDecoder();
   final ParsedTypeMetaCache _parsedTypeMetaCache = ParsedTypeMetaCache();
   final List<TypeInfo?> _lastNamedTypeByWireType =
       List<TypeInfo?>.filled(64, null);
@@ -457,7 +457,7 @@ final class TypeResolver {
             fields: normalizedFields,
           )
         : null;
-    final sharedTypeDef = _buildSharedTypeDef(
+    final typeDef = _buildTypeDef(
       kind: registrationKind,
       userTypeId: id,
       encodedNamespace: encodedNamespace,
@@ -487,9 +487,9 @@ final class TypeResolver {
       encodedTypeName: encodedTypeName,
       structMetadata: structMetadata,
       remoteStructMetadata: null,
-      sharedTypeDef: sharedTypeDef,
+      typeDef: typeDef,
     );
-    _parsedTypeMetaCache.remember(TypeHeader(sharedTypeDef.header), resolved);
+    _parsedTypeMetaCache.remember(TypeHeader(typeDef.header), resolved);
     _storeResolved(type, resolved,
         id: id, namespace: namespace, typeName: typeName);
   }
@@ -782,19 +782,19 @@ final class TypeResolver {
     );
   }
 
-  TypeMeta typeMetaForResolved(TypeInfo resolved) {
-    return _typeMetaEncoder.typeMetaFor(config, resolved);
+  WireTypeMeta wireTypeMetaForResolved(TypeInfo resolved) {
+    return _wireTypeMetaEncoder.typeMetaFor(config, resolved);
   }
 
-  SharedTypeDef sharedTypeDefForResolved(
+  TypeDef typeDefForResolved(
     TypeInfo resolved, {
     List<FieldInfo>? fields,
   }) {
     final resolvedFields = resolved.structMetadata?.fields;
     if (fields == null || identical(fields, resolvedFields)) {
-      return resolved.sharedTypeDef!;
+      return resolved.typeDef!;
     }
-    return _buildSharedTypeDef(
+    return _buildTypeDef(
       kind: resolved.kind,
       userTypeId: resolved.userTypeId,
       encodedNamespace: resolved.encodedNamespace,
@@ -806,17 +806,17 @@ final class TypeResolver {
   void writeTypeMeta(
     Buffer buffer,
     TypeInfo resolved, {
-    required SharedTypeDef? sharedTypeDef,
-    required LinkedHashMap<SharedTypeDef, int> sharedTypeDefIds,
+    required TypeDef? typeDef,
+    required LinkedHashMap<TypeDef, int> typeDefIds,
     required MetaStringWriteSink metaStringWriter,
   }) {
-    _typeMetaEncoder.write(
+    _wireTypeMetaEncoder.write(
       buffer,
-      typeMetaForResolved(resolved),
-      writeSharedTypeDef: (typeMeta) => _writeSharedTypeDef(
+      wireTypeMetaForResolved(resolved),
+      writeTypeDef: (wireTypeMeta) => _writeTypeDef(
         buffer,
-        sharedTypeDef ?? typeMeta.resolvedType.sharedTypeDef!,
-        sharedTypeDefIds: sharedTypeDefIds,
+        typeDef ?? wireTypeMeta.resolvedType.typeDef!,
+        typeDefIds: typeDefIds,
       ),
       writePackageMetaString: (value) => metaStringWriter.writeMetaString(
         buffer,
@@ -835,7 +835,7 @@ final class TypeResolver {
     required List<TypeInfo> sharedTypes,
     required MetaStringReadSource metaStringReader,
   }) {
-    final typeMeta = _typeMetaDecoder.read(
+    final typeMeta = _wireTypeMetaDecoder.read(
       buffer,
       config: config,
       resolveBuiltinWireType: resolveBuiltinWireType,
@@ -850,7 +850,7 @@ final class TypeResolver {
             ? _lastNamedTypeByWireType[wireTypeId]
             : null;
       },
-      readSharedTypeDef: () => _readSharedTypeDef(
+      readTypeDef: () => _readTypeDef(
         buffer,
         sharedTypes: sharedTypes,
       ),
@@ -865,23 +865,23 @@ final class TypeResolver {
     return typeMeta.resolvedType;
   }
 
-  void _writeSharedTypeDef(
+  void _writeTypeDef(
     Buffer buffer,
-    SharedTypeDef sharedTypeDef, {
-    required LinkedHashMap<SharedTypeDef, int> sharedTypeDefIds,
+    TypeDef typeDef, {
+    required LinkedHashMap<TypeDef, int> typeDefIds,
   }) {
-    final index = sharedTypeDefIds[sharedTypeDef];
+    final index = typeDefIds[typeDef];
     if (index != null) {
       buffer.writeVarUint32((index << 1) | 1);
       return;
     }
-    final newIndex = sharedTypeDefIds.length;
-    sharedTypeDefIds[sharedTypeDef] = newIndex;
+    final newIndex = typeDefIds.length;
+    typeDefIds[typeDef] = newIndex;
     buffer.writeVarUint32(newIndex << 1);
-    buffer.writeBytes(sharedTypeDef.encoded);
+    buffer.writeBytes(typeDef.encoded);
   }
 
-  SharedTypeDef _buildSharedTypeDef({
+  TypeDef _buildTypeDef({
     required RegistrationKind kind,
     required int? userTypeId,
     required EncodedMetaString? encodedNamespace,
@@ -896,7 +896,7 @@ final class TypeResolver {
       fields: fields,
     );
     final header = Buffer.wrap(encoded).readInt64();
-    return SharedTypeDef(header: header, encoded: encoded);
+    return TypeDef(header: header, encoded: encoded);
   }
 
   Uint8List _encodeTypeDef({
@@ -1030,8 +1030,7 @@ final class TypeResolver {
       case RegistrationKind.union:
         return TypeIds.typedUnion;
       case RegistrationKind.builtin:
-        throw StateError(
-            'Built-in types do not write shared TypeDef metadata.');
+        throw StateError('Built-in types do not write TypeDef metadata.');
     }
   }
 
@@ -1047,7 +1046,7 @@ final class TypeResolver {
     return fieldType.ref ? TypeIds.unknown : fieldType.typeId;
   }
 
-  TypeMeta _readSharedTypeDef(
+  WireTypeMeta _readTypeDef(
     Buffer buffer, {
     required List<TypeInfo> sharedTypes,
   }) {
@@ -1055,42 +1054,42 @@ final class TypeResolver {
     final isRef = (marker & 1) == 1;
     final index = marker >>> 1;
     if (isRef) {
-      return typeMetaForResolved(sharedTypes[index]);
+      return wireTypeMetaForResolved(sharedTypes[index]);
     }
     final header = TypeHeader(buffer.readInt64());
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       header.skipRemaining(buffer);
       sharedTypes.add(cached);
-      return typeMetaForResolved(cached);
+      return wireTypeMetaForResolved(cached);
     }
     final resolved = _readTypeDefWithHeader(buffer, header);
     _parsedTypeMetaCache.remember(header, resolved);
     sharedTypes.add(resolved);
-    return typeMetaForResolved(resolved);
+    return wireTypeMetaForResolved(resolved);
   }
 
   TypeInfo _readTypeDefWithHeader(Buffer buffer, TypeHeader header) {
     final metaSize = header.readMetaSize(buffer);
-    final typeDefBytes = Buffer.wrap(buffer.readBytes(metaSize));
-    final classHeader = typeDefBytes.readUint8();
+    final metaBytes = Buffer.wrap(buffer.readBytes(metaSize));
+    final classHeader = metaBytes.readUint8();
     var fieldCount = classHeader & typeDefSmallFieldCountThreshold;
     if (fieldCount == typeDefSmallFieldCountThreshold) {
-      fieldCount += typeDefBytes.readVarUint32Small7();
+      fieldCount += metaBytes.readVarUint32Small7();
     }
     final byName = (classHeader & typeDefRegisterByNameFlag) != 0;
     final encodedNamespace =
-        byName ? _readTypeDefName(typeDefBytes, packageNameEncoding) : null;
+        byName ? _readTypeDefName(metaBytes, packageNameEncoding) : null;
     final encodedTypeName =
-        byName ? _readTypeDefName(typeDefBytes, typeNameEncoding) : null;
+        byName ? _readTypeDefName(metaBytes, typeNameEncoding) : null;
     int? userTypeId;
     if (!byName) {
-      typeDefBytes.readUint8();
-      userTypeId = typeDefBytes.readVarUint32();
+      metaBytes.readUint8();
+      userTypeId = metaBytes.readVarUint32();
     }
     final fields = <FieldInfo>[];
     for (var i = 0; i < fieldCount; i += 1) {
-      fields.add(_readTypeDefField(typeDefBytes));
+      fields.add(_readTypeDefField(metaBytes));
     }
     final resolved = userTypeId != null
         ? resolveUserById(userTypeId)
@@ -1124,7 +1123,7 @@ final class TypeResolver {
       encodedTypeName: resolved.encodedTypeName,
       structMetadata: resolved.structMetadata,
       remoteStructMetadata: remoteMetadata,
-      sharedTypeDef: resolved.sharedTypeDef,
+      typeDef: resolved.typeDef,
     );
   }
 
@@ -1306,7 +1305,7 @@ final class TypeResolver {
       encodedTypeName: null,
       structMetadata: null,
       remoteStructMetadata: null,
-      sharedTypeDef: null,
+      typeDef: null,
     );
     _builtinByTypeId[typeId] = resolved;
     return resolved;

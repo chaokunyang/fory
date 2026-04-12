@@ -1,7 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/context/meta_string_codec.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
+
+typedef _MetaStringWords =
+    ({int length, int word0, int word1, int word2, int word3});
 
 /// Read-side state for meta-string references in one deserialization stream.
 final class MetaStringReader implements MetaStringReadSource {
@@ -72,11 +77,11 @@ final class MetaStringReader implements MetaStringReadSource {
       return EncodedMetaString.empty;
     }
     final encoding = buffer.readByte() & 0xff;
-    final packed = bufferReadPackedBytes(buffer, length);
-    final word0 = packed.word0;
-    final word1 = packed.word1;
-    final word2 = packed.word2;
-    final word3 = packed.word3;
+    final words = _readMetaStringWords(buffer, length);
+    final word0 = words.word0;
+    final word1 = words.word1;
+    final word2 = words.word2;
+    final word3 = words.word3;
     if (expected != null &&
         expected.matchesPacked(
           encoding,
@@ -106,7 +111,7 @@ final class MetaStringReader implements MetaStringReadSource {
       }
     }
     final encoded = _typeResolver.internEncodedMetaString(
-      bufferMaterializePackedBytes(packed),
+      _materializeMetaStringWords(words),
       encoding: encoding,
     );
     (bucket ?? (_smallMetaStrings[hash] = <EncodedMetaString>[])).add(
@@ -132,4 +137,56 @@ int _smallMetaStringHash(
   hash = (hash ^ word2) * 0x01000193;
   hash = (hash ^ word3) * 0x01000193;
   return hash;
+}
+
+_MetaStringWords _readMetaStringWords(Buffer buffer, int length) {
+  final start = bufferReaderIndex(buffer);
+  bufferSetReaderIndex(buffer, start + length);
+  final bytes = bufferBytes(buffer);
+  var word0 = 0;
+  var word1 = 0;
+  var word2 = 0;
+  var word3 = 0;
+  for (var index = 0; index < length; index += 1) {
+    final byte = bytes[start + index] & 0xff;
+    final shift = (index & 0x03) << 3;
+    switch (index >> 2) {
+      case 0:
+        word0 |= byte << shift;
+        break;
+      case 1:
+        word1 |= byte << shift;
+        break;
+      case 2:
+        word2 |= byte << shift;
+        break;
+      default:
+        word3 |= byte << shift;
+        break;
+    }
+  }
+  return (
+    length: length,
+    word0: word0,
+    word1: word1,
+    word2: word2,
+    word3: word3,
+  );
+}
+
+Uint8List _materializeMetaStringWords(_MetaStringWords words) {
+  final bytes = Uint8List(words.length);
+
+  void unpackWord(int word, int offset) {
+    final end = offset + 4;
+    for (var index = offset; index < words.length && index < end; index += 1) {
+      bytes[index] = (word >> ((index - offset) << 3)) & 0xff;
+    }
+  }
+
+  unpackWord(words.word0, 0);
+  unpackWord(words.word1, 4);
+  unpackWord(words.word2, 8);
+  unpackWord(words.word3, 12);
+  return bytes;
 }

@@ -10,12 +10,9 @@ export 'src/annotation/fory_struct.dart';
 export 'src/annotation/numeric_types.dart';
 export 'src/buffer.dart'
     hide
-        PackedBytes,
         bufferByteData,
         bufferBytes,
         bufferReserveBytes,
-        bufferMaterializePackedBytes,
-        bufferReadPackedBytes,
         bufferSetReaderIndex,
         bufferSetWriterIndex,
         bufferWriteUint8At,

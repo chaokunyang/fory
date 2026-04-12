@@ -60,16 +60,16 @@ final class StructSerializer extends Serializer<Object?> {
 
   List<FieldInfo> get localFields => _localFields;
 
-  SharedTypeDef sharedTypeDefForWrite(
+  TypeDef typeDefForWrite(
     WriteContext context,
     TypeInfo resolved,
     Object value,
   ) {
     final layout = _compatibleWriteLayoutForValue(context, resolved, value);
     if (layout == null) {
-      return resolved.sharedTypeDef!;
+      return resolved.typeDef!;
     }
-    return layout.sharedTypeDef;
+    return layout.typeDef;
   }
 
   void writeValue(
@@ -184,11 +184,11 @@ final class StructSerializer extends Serializer<Object?> {
       }
     }
     final fields = List<FieldInfo>.unmodifiable(orderedFields);
-    final sharedTypeDef = context.typeResolver.sharedTypeDefForResolved(
+    final typeDef = context.typeResolver.typeDefForResolved(
       resolved,
       fields: fields,
     );
-    final layout = _CompatibleWriteLayout(fields, sharedTypeDef);
+    final layout = _CompatibleWriteLayout(fields, typeDef);
     _compatibleWriteLayouts[remoteMetadata] = layout;
     return layout;
   }
@@ -312,9 +312,9 @@ final class StructSerializer extends Serializer<Object?> {
 
 final class _CompatibleWriteLayout {
   final List<FieldInfo> fields;
-  final SharedTypeDef sharedTypeDef;
+  final TypeDef typeDef;
 
-  const _CompatibleWriteLayout(this.fields, this.sharedTypeDef);
+  const _CompatibleWriteLayout(this.fields, this.typeDef);
 }
 
 final class _CompatibleReadLayout {

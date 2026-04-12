@@ -6,15 +6,15 @@ import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
 /// Wire-level type metadata for one value.
-final class TypeMeta {
+final class WireTypeMeta {
   final TypeInfo resolvedType;
   final int wireTypeId;
-  final bool sharedTypeDef;
+  final bool writesTypeDef;
 
-  const TypeMeta({
+  const WireTypeMeta({
     required this.resolvedType,
     required this.wireTypeId,
-    required this.sharedTypeDef,
+    required this.writesTypeDef,
   });
 
   bool get writesUserTypeId =>
@@ -24,7 +24,7 @@ final class TypeMeta {
       wireTypeId == TypeIds.typedUnion;
 
   bool get writesNamedType =>
-      !sharedTypeDef &&
+      !writesTypeDef &&
       (wireTypeId == TypeIds.namedEnum ||
           wireTypeId == TypeIds.namedStruct ||
           wireTypeId == TypeIds.namedExt ||
@@ -79,29 +79,29 @@ final class ParsedTypeMetaCache {
 }
 
 /// Encodes type metadata into the xlang wire format.
-final class TypeMetaEncoder {
-  const TypeMetaEncoder();
+final class WireTypeMetaEncoder {
+  const WireTypeMetaEncoder();
 
-  TypeMeta typeMetaFor(Config config, TypeInfo resolvedType) {
+  WireTypeMeta typeMetaFor(Config config, TypeInfo resolvedType) {
     final wireTypeId = _wireTypeIdFor(config, resolvedType);
-    final sharedTypeDef = wireTypeId == TypeIds.compatibleStruct ||
+    final writesTypeDef = wireTypeId == TypeIds.compatibleStruct ||
         wireTypeId == TypeIds.namedCompatibleStruct ||
         (config.compatible &&
             (wireTypeId == TypeIds.namedEnum ||
                 wireTypeId == TypeIds.namedStruct ||
                 wireTypeId == TypeIds.namedExt ||
                 wireTypeId == TypeIds.namedUnion));
-    return TypeMeta(
+    return WireTypeMeta(
       resolvedType: resolvedType,
       wireTypeId: wireTypeId,
-      sharedTypeDef: sharedTypeDef,
+      writesTypeDef: writesTypeDef,
     );
   }
 
   void write(
     Buffer buffer,
-    TypeMeta typeMeta, {
-    required void Function(TypeMeta typeMeta) writeSharedTypeDef,
+    WireTypeMeta typeMeta, {
+    required void Function(WireTypeMeta typeMeta) writeTypeDef,
     required void Function(EncodedMetaString value) writePackageMetaString,
     required void Function(EncodedMetaString value) writeTypeNameMetaString,
   }) {
@@ -110,8 +110,8 @@ final class TypeMetaEncoder {
       buffer.writeVarUint32(typeMeta.resolvedType.userTypeId!);
       return;
     }
-    if (typeMeta.sharedTypeDef) {
-      writeSharedTypeDef(typeMeta);
+    if (typeMeta.writesTypeDef) {
+      writeTypeDef(typeMeta);
       return;
     }
     if (typeMeta.writesNamedType) {
@@ -147,10 +147,10 @@ final class TypeMetaEncoder {
 }
 
 /// Decodes type metadata from the xlang wire format.
-final class TypeMetaDecoder {
-  const TypeMetaDecoder();
+final class WireTypeMetaDecoder {
+  const WireTypeMetaDecoder();
 
-  TypeMeta read(
+  WireTypeMeta read(
     Buffer buffer, {
     required Config config,
     required TypeInfo Function(int wireTypeId) resolveBuiltinWireType,
@@ -161,7 +161,7 @@ final class TypeMetaDecoder {
       EncodedMetaString typeName,
     ) resolveUserByEncodedNameCached,
     required TypeInfo? Function(int wireTypeId) expectedNamedType,
-    required TypeMeta Function() readSharedTypeDef,
+    required WireTypeMeta Function() readTypeDef,
     required EncodedMetaString Function([
       EncodedMetaString? expected,
     ]) readPackageMetaString,
@@ -171,10 +171,10 @@ final class TypeMetaDecoder {
   }) {
     final wireTypeId = buffer.readVarUint32Small7();
     if (_isBuiltinWireType(wireTypeId)) {
-      return TypeMeta(
+      return WireTypeMeta(
         resolvedType: resolveBuiltinWireType(wireTypeId),
         wireTypeId: wireTypeId,
-        sharedTypeDef: false,
+        writesTypeDef: false,
       );
     }
     switch (wireTypeId) {
@@ -182,17 +182,17 @@ final class TypeMetaDecoder {
       case TypeIds.struct:
       case TypeIds.ext:
       case TypeIds.typedUnion:
-        return TypeMeta(
+        return WireTypeMeta(
           resolvedType: resolveUserById(buffer.readVarUint32()),
           wireTypeId: wireTypeId,
-          sharedTypeDef: false,
+          writesTypeDef: false,
         );
       case TypeIds.namedEnum:
       case TypeIds.namedStruct:
       case TypeIds.namedExt:
       case TypeIds.namedUnion:
         if (config.compatible) {
-          return readSharedTypeDef();
+          return readTypeDef();
         }
         final expected = expectedNamedType(wireTypeId);
         final namespace = readPackageMetaString(expected?.encodedNamespace);
@@ -200,24 +200,24 @@ final class TypeMetaDecoder {
         if (expected != null &&
             identical(namespace, expected.encodedNamespace) &&
             identical(typeName, expected.encodedTypeName)) {
-          return TypeMeta(
+          return WireTypeMeta(
             resolvedType: expected,
             wireTypeId: wireTypeId,
-            sharedTypeDef: false,
+            writesTypeDef: false,
           );
         }
-        return TypeMeta(
+        return WireTypeMeta(
           resolvedType: resolveUserByEncodedNameCached(
             wireTypeId,
             namespace,
             typeName,
           ),
           wireTypeId: wireTypeId,
-          sharedTypeDef: false,
+          writesTypeDef: false,
         );
       case TypeIds.compatibleStruct:
       case TypeIds.namedCompatibleStruct:
-        return readSharedTypeDef();
+        return readTypeDef();
       default:
         throw StateError('Unsupported wire type id $wireTypeId.');
     }

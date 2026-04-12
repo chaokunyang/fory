@@ -130,3 +130,5 @@ docs/superpowers
 test.md
 
 benchmarks/dart/profile_output
+**/*.fory.dart
+**/pubspec.lock

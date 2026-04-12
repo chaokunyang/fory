@@ -29,6 +29,7 @@ import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
+import org.apache.fory.collection.BiMap;
 import org.apache.fory.collection.ConcurrentIdentityMap;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.meta.EncodedMetaString;
@@ -80,11 +81,11 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   private final Object metaStringCacheLock = new Object();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
-  volatile TwoWayClassMap registeredClasses;
+  volatile BiMap<String, Class<?>> registeredClasses;
 
   synchronized void setRegistrationIfAbsent(
       IdentityHashMap<Class<?>, Integer> candidateRegisteredClassIdMap,
-      TwoWayClassMap candidateRegisteredClasses) {
+      BiMap<String, Class<?>> candidateRegisteredClasses) {
     Objects.requireNonNull(candidateRegisteredClassIdMap);
     Objects.requireNonNull(candidateRegisteredClasses);
     if (registeredClassIdMap == null) {
@@ -97,7 +98,7 @@ public final class SharedRegistry {
     return Objects.requireNonNull(registeredClassIdMap);
   }
 
-  synchronized TwoWayClassMap getRegisteredClasses() {
+  synchronized BiMap<String, Class<?>> getRegisteredClasses() {
     return Objects.requireNonNull(registeredClasses);
   }
 

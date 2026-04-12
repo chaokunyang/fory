@@ -17,49 +17,53 @@
  * under the License.
  */
 
-package org.apache.fory.resolver;
+package org.apache.fory.collection;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
-/** Bidirectional map specialized for class registration lookups. */
-final class TwoWayClassMap {
-  private final Map<String, Class<?>> classesByName;
-  private final IdentityHashMap<Class<?>, String> namesByClass;
+/** Minimal bidirectional map backed by caller-provided forward and reverse maps. */
+public final class BiMap<K, V> {
+  private final Map<K, V> valuesByKey;
+  private final Map<V, K> keysByValue;
   private final Inverse inverse = new Inverse();
 
-  TwoWayClassMap(int expectedSize) {
-    classesByName = new HashMap<>(expectedSize);
-    namesByClass = new IdentityHashMap<>(expectedSize);
+  public BiMap(Map<K, V> valuesByKey, Map<V, K> keysByValue) {
+    this.valuesByKey = valuesByKey;
+    this.keysByValue = keysByValue;
   }
 
-  public Class<?> get(String name) {
-    return classesByName.get(name);
+  public static <K, V> BiMap<K, V> newHashIdentityBiMap(int expectedSize) {
+    return new BiMap<>(new HashMap<>(expectedSize), new IdentityHashMap<>(expectedSize));
   }
 
-  public boolean containsKey(String name) {
-    return classesByName.containsKey(name);
+  public V get(K key) {
+    return valuesByKey.get(key);
   }
 
-  public void put(String name, Class<?> cls) {
-    classesByName.put(name, cls);
-    namesByClass.put(cls, name);
+  public boolean containsKey(K key) {
+    return valuesByKey.containsKey(key);
+  }
+
+  public void put(K key, V value) {
+    valuesByKey.put(key, value);
+    keysByValue.put(value, key);
   }
 
   public Inverse inverse() {
     return inverse;
   }
 
-  final class Inverse {
+  public final class Inverse {
     private Inverse() {}
 
-    public boolean containsKey(Class<?> cls) {
-      return namesByClass.containsKey(cls);
+    public boolean containsKey(V value) {
+      return keysByValue.containsKey(value);
     }
 
-    public String get(Class<?> cls) {
-      return namesByClass.get(cls);
+    public K get(V value) {
+      return keysByValue.get(value);
     }
   }
 }

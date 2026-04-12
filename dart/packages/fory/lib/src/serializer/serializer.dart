@@ -20,16 +20,3 @@ abstract class Serializer<T> {
   /// Reads a value of type [T] from [context].
   T read(ReadContext context);
 }
-
-/// Enum-specific serializer base used by generated enum serializers.
-abstract class EnumSerializer<T> extends Serializer<T> {
-  const EnumSerializer();
-
-  @override
-  bool get supportsRef => false;
-}
-
-/// Union-specific serializer base used by manual union serializers.
-abstract class UnionSerializer<T> extends Serializer<T> {
-  const UnionSerializer();
-}

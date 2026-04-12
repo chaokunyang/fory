@@ -26,92 +26,91 @@ final class _ColorForySerializer extends EnumSerializer<Color> {
   }
 }
 
-const List<GeneratedFieldMetadata> _personForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _personForyFieldInfo = <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'age',
     identifier: 'age',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Int32,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'name',
     identifier: 'name',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'tags',
     identifier: 'tags',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: 22,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: String,
           typeId: 21,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'favoriteColor',
     identifier: 'favorite_color',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Color,
       typeId: 25,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _PersonFieldWriter = GeneratedStructFieldWriter<Person>;
-typedef _PersonFieldReader = GeneratedStructFieldReader<Person>;
+typedef _PersonFieldWriter = GeneratedStructFieldInfoWriter<Person>;
+typedef _PersonFieldReader = GeneratedStructFieldInfoReader<Person>;
 
 void _writePersonField0(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.age);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.age);
 }
 
 void _writePersonField1(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.name);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.name);
 }
 
 void _writePersonField2(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.tags);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.tags);
 }
 
 void _writePersonField3(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.favoriteColor);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.favoriteColor);
 }
 
 void _readPersonField0(ReadContext context, Person value, Object? rawValue) {
@@ -156,23 +155,23 @@ final GeneratedStructRegistration<Person> _personForyRegistration =
   type: Person,
   serializerFactory: _PersonForySerializer.new,
   evolving: true,
-  fields: _personForyFieldMetadata,
+  fields: _personForyFieldInfo,
 );
 
 final class _PersonForySerializer extends Serializer<Person> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _PersonForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _personForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _personForyRegistration,
     );
@@ -188,7 +187,7 @@ final class _PersonForySerializer extends Serializer<Person> {
       cursor0.writeVarInt32(value.age.value);
       cursor0.finish();
       context.writeString(value.name);
-      writeGeneratedStructFieldValue(context, fields[2], value.tags);
+      writeGeneratedStructFieldInfoValue(context, fields[2], value.tags);
       final cursor3 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor3.writeVarUint32(value.favoriteColor.index);
       cursor3.finish();

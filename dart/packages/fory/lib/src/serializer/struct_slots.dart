@@ -1,5 +1,5 @@
 import 'package:meta/meta.dart';
-import 'package:fory/src/serializer/struct_field_binding.dart';
+import 'package:fory/src/resolver/type_resolver.dart';
 
 @internal
 final Object structWriteSlotsKey = Object();
@@ -9,17 +9,17 @@ final Object structReadSlotsKey = Object();
 
 @internal
 final class StructWriteSlots {
-  final List<StructFieldBinding> orderedFields;
-  final List<StructFieldBinding?> _fieldsBySlot;
+  final List<FieldInfoInternal> orderedFields;
+  final List<FieldInfoInternal?> _fieldsBySlot;
 
   StructWriteSlots(this.orderedFields, int fieldCount)
-      : _fieldsBySlot = List<StructFieldBinding?>.filled(fieldCount, null) {
+      : _fieldsBySlot = List<FieldInfoInternal?>.filled(fieldCount, null) {
     for (final field in orderedFields) {
       _fieldsBySlot[field.slot] = field;
     }
   }
 
-  StructFieldBinding? fieldForSlot(int slot) => _fieldsBySlot[slot];
+  FieldInfoInternal? fieldForSlot(int slot) => _fieldsBySlot[slot];
 }
 
 @internal

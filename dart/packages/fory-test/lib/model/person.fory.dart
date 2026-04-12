@@ -26,127 +26,126 @@ final class _ColorForySerializer extends EnumSerializer<Color> {
   }
 }
 
-const List<GeneratedFieldMetadata> _personForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _personForyFieldInfo = <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'age',
     identifier: 'age',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Int32,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'name',
     identifier: 'name',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'tags',
     identifier: 'tags',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: 22,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: String,
           typeId: 21,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'scores',
     identifier: 'scores',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Map,
       typeId: 24,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: String,
           typeId: 21,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         ),
-        GeneratedTypeShape(
+        GeneratedFieldType(
           type: Int32,
           typeId: 5,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'favoriteColor',
     identifier: 'favorite_color',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Color,
       typeId: 25,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _PersonFieldWriter = GeneratedStructFieldWriter<Person>;
-typedef _PersonFieldReader = GeneratedStructFieldReader<Person>;
+typedef _PersonFieldWriter = GeneratedStructFieldInfoWriter<Person>;
+typedef _PersonFieldReader = GeneratedStructFieldInfoReader<Person>;
 
 void _writePersonField0(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.age);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.age);
 }
 
 void _writePersonField1(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.name);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.name);
 }
 
 void _writePersonField2(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.tags);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.tags);
 }
 
 void _writePersonField3(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.scores);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.scores);
 }
 
 void _writePersonField4(
-    WriteContext context, GeneratedStructField field, Person value) {
-  writeGeneratedStructFieldValue(context, field, value.favoriteColor);
+    WriteContext context, GeneratedStructFieldInfo field, Person value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.favoriteColor);
 }
 
 void _readPersonField0(ReadContext context, Person value, Object? rawValue) {
@@ -199,23 +198,23 @@ final GeneratedStructRegistration<Person> _personForyRegistration =
   type: Person,
   serializerFactory: _PersonForySerializer.new,
   evolving: true,
-  fields: _personForyFieldMetadata,
+  fields: _personForyFieldInfo,
 );
 
 final class _PersonForySerializer extends Serializer<Person> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _PersonForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _personForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _personForyRegistration,
     );
@@ -231,8 +230,8 @@ final class _PersonForySerializer extends Serializer<Person> {
       cursor0.writeVarInt32(value.age.value);
       cursor0.finish();
       context.writeString(value.name);
-      writeGeneratedStructFieldValue(context, fields[2], value.tags);
-      writeGeneratedStructFieldValue(context, fields[3], value.scores);
+      writeGeneratedStructFieldInfoValue(context, fields[2], value.tags);
+      writeGeneratedStructFieldInfoValue(context, fields[3], value.scores);
       final cursor4 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor4.writeVarUint32(value.favoriteColor.index);
       cursor4.finish();
@@ -370,47 +369,46 @@ Color _readPersonFavoriteColor(Object? value, [Object? fallback]) {
       : value as Color;
 }
 
-const List<GeneratedFieldMetadata> _refNodeForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _refNodeForyFieldInfo = <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'name',
     identifier: 'name',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'self',
     identifier: 'self',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: RefNode,
       typeId: 28,
       nullable: true,
       ref: true,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _RefNodeFieldWriter = GeneratedStructFieldWriter<RefNode>;
-typedef _RefNodeFieldReader = GeneratedStructFieldReader<RefNode>;
+typedef _RefNodeFieldWriter = GeneratedStructFieldInfoWriter<RefNode>;
+typedef _RefNodeFieldReader = GeneratedStructFieldInfoReader<RefNode>;
 
 void _writeRefNodeField0(
-    WriteContext context, GeneratedStructField field, RefNode value) {
-  writeGeneratedStructFieldValue(context, field, value.name);
+    WriteContext context, GeneratedStructFieldInfo field, RefNode value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.name);
 }
 
 void _writeRefNodeField1(
-    WriteContext context, GeneratedStructField field, RefNode value) {
-  writeGeneratedStructFieldValue(context, field, value.self);
+    WriteContext context, GeneratedStructFieldInfo field, RefNode value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.self);
 }
 
 void _readRefNodeField0(ReadContext context, RefNode value, Object? rawValue) {
@@ -439,23 +437,23 @@ final GeneratedStructRegistration<RefNode> _refNodeForyRegistration =
   type: RefNode,
   serializerFactory: _RefNodeForySerializer.new,
   evolving: true,
-  fields: _refNodeForyFieldMetadata,
+  fields: _refNodeForyFieldInfo,
 );
 
 final class _RefNodeForySerializer extends Serializer<RefNode> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _RefNodeForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _refNodeForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _refNodeForyRegistration,
     );
@@ -467,7 +465,7 @@ final class _RefNodeForySerializer extends Serializer<RefNode> {
     if (slots == null) {
       final fields = _writeFields(context);
       context.writeString(value.name);
-      writeGeneratedStructFieldValue(context, fields[1], value.self);
+      writeGeneratedStructFieldInfoValue(context, fields[1], value.self);
       return;
     }
     final writers = _refNodeForyRegistration.fieldWritersBySlot;
@@ -485,7 +483,7 @@ final class _RefNodeForySerializer extends Serializer<RefNode> {
       final fields = _readFields(context);
       value.name = context.readString();
       value.self = _readRefNodeSelf(
-          readGeneratedStructFieldValue(context, fields[1], value.self),
+          readGeneratedStructFieldInfoValue(context, fields[1], value.self),
           value.self);
       return value;
     }
@@ -525,31 +523,31 @@ RefNode? _readRefNodeSelf(Object? value, [Object? fallback]) {
           : value as RefNode;
 }
 
-const List<GeneratedFieldMetadata> _evolvingPayloadForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _evolvingPayloadForyFieldInfo =
+    <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'value',
     identifier: 'value',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
 typedef _EvolvingPayloadFieldWriter
-    = GeneratedStructFieldWriter<EvolvingPayload>;
+    = GeneratedStructFieldInfoWriter<EvolvingPayload>;
 typedef _EvolvingPayloadFieldReader
-    = GeneratedStructFieldReader<EvolvingPayload>;
+    = GeneratedStructFieldInfoReader<EvolvingPayload>;
 
-void _writeEvolvingPayloadField0(
-    WriteContext context, GeneratedStructField field, EvolvingPayload value) {
-  writeGeneratedStructFieldValue(context, field, value.value);
+void _writeEvolvingPayloadField0(WriteContext context,
+    GeneratedStructFieldInfo field, EvolvingPayload value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.value);
 }
 
 void _readEvolvingPayloadField0(
@@ -572,23 +570,23 @@ final GeneratedStructRegistration<EvolvingPayload>
   type: EvolvingPayload,
   serializerFactory: _EvolvingPayloadForySerializer.new,
   evolving: true,
-  fields: _evolvingPayloadForyFieldMetadata,
+  fields: _evolvingPayloadForyFieldInfo,
 );
 
 final class _EvolvingPayloadForySerializer extends Serializer<EvolvingPayload> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _EvolvingPayloadForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _evolvingPayloadForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _evolvingPayloadForyRegistration,
     );
@@ -636,29 +634,29 @@ String _readEvolvingPayloadValue(Object? value, [Object? fallback]) {
       : value as String;
 }
 
-const List<GeneratedFieldMetadata> _fixedPayloadForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _fixedPayloadForyFieldInfo =
+    <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'value',
     identifier: 'value',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _FixedPayloadFieldWriter = GeneratedStructFieldWriter<FixedPayload>;
-typedef _FixedPayloadFieldReader = GeneratedStructFieldReader<FixedPayload>;
+typedef _FixedPayloadFieldWriter = GeneratedStructFieldInfoWriter<FixedPayload>;
+typedef _FixedPayloadFieldReader = GeneratedStructFieldInfoReader<FixedPayload>;
 
 void _writeFixedPayloadField0(
-    WriteContext context, GeneratedStructField field, FixedPayload value) {
-  writeGeneratedStructFieldValue(context, field, value.value);
+    WriteContext context, GeneratedStructFieldInfo field, FixedPayload value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.value);
 }
 
 void _readFixedPayloadField0(
@@ -680,23 +678,23 @@ final GeneratedStructRegistration<FixedPayload> _fixedPayloadForyRegistration =
   type: FixedPayload,
   serializerFactory: _FixedPayloadForySerializer.new,
   evolving: false,
-  fields: _fixedPayloadForyFieldMetadata,
+  fields: _fixedPayloadForyFieldInfo,
 );
 
 final class _FixedPayloadForySerializer extends Serializer<FixedPayload> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _FixedPayloadForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _fixedPayloadForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _fixedPayloadForyRegistration,
     );

@@ -9,7 +9,8 @@ const int _typeDefHashShift = 14;
 
 final BigInt _mask64Big = (BigInt.one << 64) - BigInt.one;
 final BigInt _signBit64Big = BigInt.one << 63;
-final BigInt _metaStringHashMaskBig = BigInt.parse('ffffffffffffff00', radix: 16);
+final BigInt _metaStringHashMaskBig =
+    BigInt.parse('ffffffffffffff00', radix: 16);
 final BigInt _c1Big = BigInt.parse('87c37b91114253d5', radix: 16);
 final BigInt _c2Big = BigInt.parse('4cf5ad432745937f', radix: 16);
 
@@ -128,7 +129,8 @@ int typeDefHeaderInternal(
   required bool hasFieldsMeta,
   bool compressed = false,
 }) {
-  final hash = _toSigned64(murmurHash3X64_128Internal(bytes).$1 << _typeDefHashShift);
+  final hash =
+      _toSigned64(murmurHash3X64_128Internal(bytes).$1 << _typeDefHashShift);
   var header = _absSigned64(hash);
   if (compressed) {
     header |= _typeDefCompressMetaFlag;
@@ -136,9 +138,8 @@ int typeDefHeaderInternal(
   if (hasFieldsMeta) {
     header |= _typeDefHasFieldsMetaFlag;
   }
-  header |= bytes.length > _typeDefMetaSizeMask
-      ? _typeDefMetaSizeMask
-      : bytes.length;
+  header |=
+      bytes.length > _typeDefMetaSizeMask ? _typeDefMetaSizeMask : bytes.length;
   return _toSigned64(header);
 }
 
@@ -150,9 +151,9 @@ int schemaHashInternal(StructMetadataInternal metadata) {
           ..write(',')
           ..write(_fingerprintTypeId(field))
           ..write(',')
-          ..write(field.shape.ref ? '1' : '0')
+          ..write(field.fieldType.ref ? '1' : '0')
           ..write(',')
-          ..write(field.shape.nullable ? '1' : '0')
+          ..write(field.fieldType.nullable ? '1' : '0')
           ..write(';'),
       )
       .map((buffer) => buffer.toString())
@@ -162,9 +163,9 @@ int schemaHashInternal(StructMetadataInternal metadata) {
   return hash & 0xffffffff;
 }
 
-int _fingerprintTypeId(FieldMetadataInternal field) {
-  final typeId = field.shape.typeId;
-  if (field.shape.isDynamic || typeId == TypeIds.unknown) {
+int _fingerprintTypeId(FieldInfoInternal field) {
+  final typeId = field.fieldType.typeId;
+  if (field.fieldType.isDynamic || typeId == TypeIds.unknown) {
     return TypeIds.unknown;
   }
   switch (typeId) {
@@ -194,8 +195,7 @@ int _toSigned64Big(BigInt value) {
 }
 
 int _readLongLittleEndian(List<int> bytes, int offset) {
-  final value =
-      (_signedByte(bytes[offset + 7]) << 56) |
+  final value = (_signedByte(bytes[offset + 7]) << 56) |
       ((bytes[offset + 6] & 0xff) << 48) |
       ((bytes[offset + 5] & 0xff) << 40) |
       ((bytes[offset + 4] & 0xff) << 32) |

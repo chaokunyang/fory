@@ -1,8 +1,7 @@
 import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/ref_writer.dart';
+import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
-
-ReadContext _readImpl(ReadContext context) => context;
 
 final class DeferredReadRef {
   final int id;
@@ -10,184 +9,223 @@ final class DeferredReadRef {
   const DeferredReadRef(this.id);
 }
 
-Object? readCompatibleField(
-  ReadContext context,
-  FieldMetadataInternal field,
+TypeInfoInternal? fieldDeclaredTypeInfo(
+  TypeResolver resolver,
+  FieldInfoInternal field,
 ) {
-  return readCompatibleFieldBinding(
-    context,
-    _readImpl(context).typeResolver.declaredFieldBinding(field),
+  final declaredTypeInfo = field.declaredTypeInfo;
+  if (declaredTypeInfo != null) {
+    return declaredTypeInfo;
+  }
+  final fieldType = field.fieldType;
+  if (fieldType.isDynamic || (fieldType.isPrimitive && !fieldType.nullable)) {
+    return null;
+  }
+  return resolver.resolveFieldType(fieldType);
+}
+
+bool fieldUsesDeclaredType(
+  TypeResolver resolver,
+  FieldInfoInternal field,
+) {
+  if (field.declaredTypeInfo != null) {
+    return field.usesDeclaredType;
+  }
+  final fieldType = field.fieldType;
+  if (fieldType.isDynamic || (fieldType.isPrimitive && !fieldType.nullable)) {
+    return false;
+  }
+  final declaredTypeInfo = resolver.resolveFieldType(fieldType);
+  return usesDeclaredTypeInfo(
+    resolver.config.compatible,
+    fieldType,
+    declaredTypeInfo,
   );
 }
 
-Object? readCompatibleFieldBinding(
-  ReadContext context,
-  DeclaredValueBindingInternal binding,
+void writeFieldValue(
+  WriteContext context,
+  FieldInfoInternal field,
+  Object? value,
 ) {
-  final shape = binding.shape;
-  final internal = _readImpl(context);
-  if (shape.isDynamic) {
-    return context.readRef();
-  }
-  if (shape.isPrimitive && !shape.nullable) {
-    return internal.readPrimitiveValue(shape.typeId);
-  }
-  final resolved = binding.resolved!;
-  if (!binding.usesDeclaredType) {
-    if (shape.ref) {
-      return _readCompatibleRefValueWithTypeMeta(context, binding);
+  final fieldType = field.fieldType;
+  if (fieldType.isDynamic) {
+    if (fieldType.ref) {
+      context.writeRef(value);
+      return;
     }
-    if (shape.nullable) {
-      final flag = context.buffer.readByte();
-      if (flag == RefWriter.nullFlag) {
-        return null;
-      }
-      if (flag != RefWriter.notNullValueFlag) {
-        throw StateError('Unexpected nullable flag $flag.');
-      }
+    if (context.writeNullFlag(value)) {
+      return;
     }
-    return internal.readResolvedValue(
-      internal.readTypeMetaValue(resolved.isNamed ? resolved : null),
-      shape,
+    context.buffer.writeByte(RefWriter.notNullValueFlag);
+    context.writeNonRef(value as Object);
+    return;
+  }
+  if (fieldType.isPrimitive && !fieldType.nullable) {
+    if (value == null) {
+      throw StateError('Field ${field.name} is not nullable.');
+    }
+    context.writePrimitiveValue(fieldType.typeId, value);
+    return;
+  }
+  final declaredTypeInfo = fieldDeclaredTypeInfo(context.typeResolver, field);
+  final usesDeclaredType = fieldUsesDeclaredType(context.typeResolver, field);
+  if (!usesDeclaredType) {
+    if (fieldType.ref) {
+      context.writeRef(value);
+      return;
+    }
+    if (fieldType.nullable) {
+      if (context.writeNullFlag(value)) {
+        return;
+      }
+      context.buffer.writeByte(RefWriter.notNullValueFlag);
+    } else if (value == null) {
+      throw StateError('Field ${field.name} is not nullable.');
+    }
+    context.writeNonRef(value as Object);
+    return;
+  }
+  final resolved = declaredTypeInfo!;
+  if (fieldType.nullable || fieldType.ref) {
+    final handled = context.refWriter.writeRefOrNull(
+      context.buffer,
+      value,
+      trackRef: fieldType.ref && resolved.supportsRef,
     );
+    if (handled) {
+      return;
+    }
   }
-  if (shape.nullable || shape.ref) {
-    final flag = internal.refReader.tryPreserveRefId(context.buffer);
+  if (value == null) {
+    throw StateError('Field ${field.name} is not nullable.');
+  }
+  context.writeResolvedValue(resolved, value, fieldType);
+}
+
+T readFieldValue<T>(
+  ReadContext context,
+  FieldInfoInternal field, [
+  T? fallback,
+]) {
+  final fieldType = field.fieldType;
+  if (fieldType.isDynamic) {
+    return context.readRef() as T;
+  }
+  if (fieldType.isPrimitive && !fieldType.nullable) {
+    return context.readPrimitiveValue(fieldType.typeId) as T;
+  }
+  final declaredTypeInfo = fieldDeclaredTypeInfo(context.typeResolver, field);
+  final usesDeclaredType = fieldUsesDeclaredType(context.typeResolver, field);
+  if (!usesDeclaredType) {
+    if (fieldType.ref) {
+      return context.readRef() as T;
+    }
+    if (fieldType.nullable) {
+      return context.readNullable() as T;
+    }
+    return context.readNonRef() as T;
+  }
+  final resolved = declaredTypeInfo!;
+  if (fieldType.nullable || fieldType.ref) {
+    final flag = context.refReader.tryPreserveRefId(context.buffer);
     final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
     if (flag == RefWriter.nullFlag) {
-      return null;
+      return fallback as T;
     }
     if (flag == RefWriter.refFlag) {
-      final value = internal.refReader.getReadRef();
-      if (value != null) {
-        return value;
-      }
-      final refId = internal.refReader.readRefId;
-      if (refId != null) {
-        return DeferredReadRef(refId);
-      }
-      return null;
+      return context.refReader.getReadRef() as T;
     }
-    final value = internal.readResolvedValue(
+    final value = context.readResolvedValue(
       resolved,
-      shape,
+      fieldType,
       hasPreservedRef: preservedRefId != null,
     );
     if (preservedRefId != null &&
         resolved.supportsRef &&
-        internal.refReader.readRefAt(preservedRefId) == null) {
-      internal.refReader.setReadRef(preservedRefId, value);
+        context.refReader.readRefAt(preservedRefId) == null) {
+      context.refReader.setReadRef(preservedRefId, value);
     }
-    return value;
+    return value as T;
   }
-  return internal.readResolvedValue(resolved, shape);
+  return context.readResolvedValue(resolved, fieldType) as T;
 }
 
-FieldMetadataInternal mergeCompatibleWriteField(
-  FieldMetadataInternal localField,
-  FieldMetadataInternal remoteField,
-) {
-  TypeShapeInternal mergeShape(
-    TypeShapeInternal local,
-    TypeShapeInternal remote,
-  ) {
-    final mergedArguments = <TypeShapeInternal>[];
-    final argumentCount = remote.arguments.length;
-    for (var index = 0; index < argumentCount; index += 1) {
-      final remoteArgument = remote.arguments[index];
-      final localArgument = index < local.arguments.length
-          ? local.arguments[index]
-          : remoteArgument;
-      mergedArguments.add(mergeShape(localArgument, remoteArgument));
-    }
-    return TypeShapeInternal(
-      type: local.type,
-      typeId: remote.typeId,
-      nullable: remote.nullable,
-      ref: remote.ref,
-      dynamic: local.dynamic ?? remote.dynamic,
-      arguments: mergedArguments,
-    );
-  }
-
-  return FieldMetadataInternal(
-    name: localField.name,
-    identifier: localField.identifier,
-    id: localField.id,
-    shape: mergeShape(localField.shape, remoteField.shape),
-  );
-}
-
-FieldMetadataInternal mergeCompatibleReadField(
-  FieldMetadataInternal localField,
-  FieldMetadataInternal remoteField,
-) {
-  TypeShapeInternal mergeShape(
-    TypeShapeInternal local,
-    TypeShapeInternal remote,
-  ) {
-    final mergedArguments = <TypeShapeInternal>[];
-    final argumentCount = remote.arguments.length;
-    for (var index = 0; index < argumentCount; index += 1) {
-      final remoteArgument = remote.arguments[index];
-      final localArgument = index < local.arguments.length
-          ? local.arguments[index]
-          : remoteArgument;
-      mergedArguments.add(mergeShape(localArgument, remoteArgument));
-    }
-    return TypeShapeInternal(
-      type: local.type,
-      typeId: remote.typeId,
-      nullable: remote.nullable,
-      ref: remote.ref,
-      dynamic: local.dynamic ?? remote.dynamic,
-      arguments: mergedArguments,
-    );
-  }
-
-  return FieldMetadataInternal(
-    name: localField.name,
-    identifier: localField.identifier,
-    id: localField.id,
-    shape: mergeShape(localField.shape, remoteField.shape),
-  );
-}
-
-Object? _readCompatibleRefValueWithTypeMeta(
+Object? readCompatibleField(
   ReadContext context,
-  DeclaredValueBindingInternal binding,
+  FieldInfoInternal field,
 ) {
-  final internal = _readImpl(context);
-  final flag = internal.refReader.tryPreserveRefId(context.buffer);
-  final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
-  if (flag == RefWriter.nullFlag) {
-    return null;
-  }
-  if (flag == RefWriter.refFlag) {
-    final value = internal.refReader.getReadRef();
-    if (value != null) {
-      return value;
+  return readFieldValue<Object?>(context, field);
+}
+
+FieldInfoInternal mergeCompatibleWriteField(
+  FieldInfoInternal localField,
+  FieldInfoInternal remoteField,
+) {
+  FieldTypeInternal mergeFieldType(
+    FieldTypeInternal local,
+    FieldTypeInternal remote,
+  ) {
+    final mergedArguments = <FieldTypeInternal>[];
+    final argumentCount = remote.arguments.length;
+    for (var index = 0; index < argumentCount; index += 1) {
+      final remoteArgument = remote.arguments[index];
+      final localArgument = index < local.arguments.length
+          ? local.arguments[index]
+          : remoteArgument;
+      mergedArguments.add(mergeFieldType(localArgument, remoteArgument));
     }
-    final refId = internal.refReader.readRefId;
-    if (refId != null) {
-      return DeferredReadRef(refId);
+    return FieldTypeInternal(
+      type: local.type,
+      typeId: remote.typeId,
+      nullable: remote.nullable,
+      ref: remote.ref,
+      dynamic: local.dynamic ?? remote.dynamic,
+      arguments: mergedArguments,
+    );
+  }
+
+  return FieldInfoInternal(
+    name: localField.name,
+    identifier: localField.identifier,
+    id: localField.id,
+    slot: localField.slot,
+    fieldType: mergeFieldType(localField.fieldType, remoteField.fieldType),
+  );
+}
+
+FieldInfoInternal mergeCompatibleReadField(
+  FieldInfoInternal localField,
+  FieldInfoInternal remoteField,
+) {
+  FieldTypeInternal mergeFieldType(
+    FieldTypeInternal local,
+    FieldTypeInternal remote,
+  ) {
+    final mergedArguments = <FieldTypeInternal>[];
+    final argumentCount = remote.arguments.length;
+    for (var index = 0; index < argumentCount; index += 1) {
+      final remoteArgument = remote.arguments[index];
+      final localArgument = index < local.arguments.length
+          ? local.arguments[index]
+          : remoteArgument;
+      mergedArguments.add(mergeFieldType(localArgument, remoteArgument));
     }
-    return null;
+    return FieldTypeInternal(
+      type: local.type,
+      typeId: remote.typeId,
+      nullable: remote.nullable,
+      ref: remote.ref,
+      dynamic: local.dynamic ?? remote.dynamic,
+      arguments: mergedArguments,
+    );
   }
-  final declaredShape = binding.shape;
-  final expectedResolved = binding.resolved!;
-  final resolved = internal.readTypeMetaValue(
-    expectedResolved.isNamed ? expectedResolved : null,
+
+  return FieldInfoInternal(
+    name: localField.name,
+    identifier: localField.identifier,
+    id: localField.id,
+    slot: localField.slot,
+    fieldType: mergeFieldType(localField.fieldType, remoteField.fieldType),
   );
-  final value = internal.readResolvedValue(
-    resolved,
-    declaredShape,
-    hasPreservedRef: preservedRefId != null,
-  );
-  if (preservedRefId != null &&
-      resolved.supportsRef &&
-      internal.refReader.readRefAt(preservedRefId) == null) {
-    internal.refReader.setReadRef(preservedRefId, value);
-  }
-  return value;
 }

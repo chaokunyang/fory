@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'dart:collection';
 
 import 'package:meta/meta.dart';
@@ -8,9 +10,14 @@ import 'package:fory/src/context/compatible_struct_metadata_store.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
-import 'package:fory/src/serializer/payload_codec.dart';
-import 'package:fory/src/serializer/struct_slots.dart';
+import 'package:fory/src/serializer/collection_serializers.dart';
+import 'package:fory/src/serializer/map_serializers.dart';
+import 'package:fory/src/serializer/primitive_serializers.dart';
+import 'package:fory/src/serializer/scalar_serializers.dart';
+import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/types/float16.dart';
+import 'package:fory/src/types/local_date.dart';
+import 'package:fory/src/types/timestamp.dart';
 
 /// Write-side serializer context.
 ///
@@ -28,7 +35,8 @@ final class WriteContext {
   late Buffer _buffer;
   final LinkedHashMap<SharedTypeDefInternal, int> _typeDefIds =
       LinkedHashMap<SharedTypeDefInternal, int>.identity();
-  StructWriteSlots? _structWriteSlots;
+  final LinkedHashMap<Object, Object?> _contextObjects =
+      LinkedHashMap<Object, Object?>.identity();
   bool _rootTrackRef = false;
   int _depth = 0;
 
@@ -52,7 +60,7 @@ final class WriteContext {
     _typeDefIds.clear();
     _refWriter.reset();
     _metaStringWriter.reset();
-    _structWriteSlots = null;
+    _contextObjects.clear();
     _rootTrackRef = false;
     _depth = 0;
   }
@@ -70,29 +78,33 @@ final class WriteContext {
   bool get rootTrackRef => _rootTrackRef;
 
   @internal
-  T? localStateAs<T>(Object key) {
-    if (!identical(key, structWriteSlotsKey)) {
-      throw StateError('Unknown write local state key: $key.');
-    }
-    return _structWriteSlots as T?;
+  bool hasContextObject(Object key) {
+    return _contextObjects.containsKey(key);
   }
 
   @internal
-  Object? replaceLocalState(Object key, Object? next) {
-    if (!identical(key, structWriteSlotsKey)) {
-      throw StateError('Unknown write local state key: $key.');
+  T? getContextObject<T>(Object key) {
+    return _contextObjects[key] as T?;
+  }
+
+  @internal
+  Object? replaceContextObject(Object key, Object? next) {
+    final previous = _contextObjects[key];
+    if (next == null) {
+      _contextObjects.remove(key);
+    } else {
+      _contextObjects[key] = next;
     }
-    final previous = _structWriteSlots;
-    _structWriteSlots = next as StructWriteSlots?;
     return previous;
   }
 
   @internal
-  void restoreLocalState(Object key, Object? previous) {
-    if (!identical(key, structWriteSlotsKey)) {
-      throw StateError('Unknown write local state key: $key.');
+  void restoreContextObject(Object key, Object? previous) {
+    if (previous == null) {
+      _contextObjects.remove(key);
+    } else {
+      _contextObjects[key] = previous;
     }
-    _structWriteSlots = previous as StructWriteSlots?;
   }
 
   @internal
@@ -159,7 +171,7 @@ final class WriteContext {
   void writeTaggedUint64(int value) => _buffer.writeTaggedUint64(value);
 
   /// Writes a non-null string payload without adding type metadata.
-  void writeString(String value) => writeStringPayload(this, value);
+  void writeString(String value) => StringSerializer.writePayload(this, value);
 
   /// Writes a nullable value with Ref tracking and type metadata.
   void writeRef(Object? value) {
@@ -227,28 +239,141 @@ final class WriteContext {
 
   @internal
   void writePrimitiveValue(int typeId, Object value) =>
-      writePayloadPrimitive(this, typeId, value);
+      PrimitiveSerializer.writePayload(this, typeId, value);
 
   @internal
   void writeResolvedValue(
-    ResolvedTypeInternal resolved,
+    TypeInfoInternal resolved,
     Object value,
-    TypeShapeInternal? declaredShape,
+    FieldTypeInternal? declaredFieldType,
   ) {
     if (!_tracksDepth(resolved)) {
-      writePayloadValue(this, resolved, value, declaredShape);
+      _writePayloadValue(resolved, value, declaredFieldType);
       return;
     }
     increaseDepth();
-    writePayloadValue(this, resolved, value, declaredShape);
+    _writePayloadValue(resolved, value, declaredFieldType);
     decreaseDepth();
   }
 
-  void _writeTypeMeta(ResolvedTypeInternal resolved, Object value) {
+  void _writePayloadValue(
+    TypeInfoInternal resolved,
+    Object value,
+    FieldTypeInternal? declaredFieldType,
+  ) {
+    switch (resolved.typeId) {
+      case TypeIds.boolType:
+      case TypeIds.int8:
+      case TypeIds.int16:
+      case TypeIds.int32:
+      case TypeIds.varInt32:
+      case TypeIds.varInt64:
+      case TypeIds.taggedInt64:
+      case TypeIds.int64:
+      case TypeIds.uint8:
+      case TypeIds.uint16:
+      case TypeIds.uint32:
+      case TypeIds.varUint32:
+      case TypeIds.uint64:
+      case TypeIds.varUint64:
+      case TypeIds.taggedUint64:
+      case TypeIds.float16:
+      case TypeIds.float32:
+      case TypeIds.float64:
+        PrimitiveSerializer.writePayload(this, resolved.typeId, value);
+        return;
+      case TypeIds.string:
+        StringSerializer.writePayload(this, value as String);
+        return;
+      case TypeIds.binary:
+        BinarySerializer.writePayload(this, value as Uint8List);
+        return;
+      case TypeIds.boolArray:
+        boolArraySerializer.write(this, value as List<bool>);
+        return;
+      case TypeIds.int8Array:
+        int8ArraySerializer.write(this, value as Int8List);
+        return;
+      case TypeIds.int16Array:
+        int16ArraySerializer.write(this, value as Int16List);
+        return;
+      case TypeIds.int32Array:
+        int32ArraySerializer.write(this, value as Int32List);
+        return;
+      case TypeIds.int64Array:
+        int64ArraySerializer.write(this, value as Int64List);
+        return;
+      case TypeIds.uint16Array:
+        uint16ArraySerializer.write(this, value as Uint16List);
+        return;
+      case TypeIds.uint32Array:
+        uint32ArraySerializer.write(this, value as Uint32List);
+        return;
+      case TypeIds.uint64Array:
+        uint64ArraySerializer.write(this, value as Uint64List);
+        return;
+      case TypeIds.float32Array:
+        float32ArraySerializer.write(this, value as Float32List);
+        return;
+      case TypeIds.float64Array:
+        float64ArraySerializer.write(this, value as Float64List);
+        return;
+      case TypeIds.list:
+        ListSerializer.writePayload(
+          this,
+          value as Iterable,
+          declaredFieldType?.arguments.isEmpty ?? true
+              ? null
+              : declaredFieldType!.arguments.first,
+          trackRef:
+              declaredFieldType == null ? rootTrackRef : declaredFieldType.ref,
+        );
+        return;
+      case TypeIds.set:
+        ListSerializer.writePayload(
+          this,
+          value as Set,
+          declaredFieldType?.arguments.isEmpty ?? true
+              ? null
+              : declaredFieldType!.arguments.first,
+          trackRef:
+              declaredFieldType == null ? rootTrackRef : declaredFieldType.ref,
+        );
+        return;
+      case TypeIds.map:
+        MapSerializer.writePayload(
+          this,
+          value as Map,
+          declaredFieldType == null || declaredFieldType.arguments.isEmpty
+              ? null
+              : declaredFieldType.arguments[0],
+          declaredFieldType == null || declaredFieldType.arguments.length < 2
+              ? null
+              : declaredFieldType.arguments[1],
+          trackRef:
+              declaredFieldType == null ? rootTrackRef : declaredFieldType.ref,
+        );
+        return;
+      case TypeIds.date:
+        localDateSerializer.write(this, value as LocalDate);
+        return;
+      case TypeIds.timestamp:
+        timestampSerializer.write(this, value as Timestamp);
+        return;
+      default:
+        if (resolved.kind == RegistrationKindInternal.struct) {
+          resolved.structSerializer!.writeValue(this, resolved, value);
+          return;
+        }
+        resolved.serializer.write(this, value);
+    }
+  }
+
+  void _writeTypeMeta(TypeInfoInternal resolved, Object value) {
     _typeResolver.writeTypeMeta(
       _buffer,
       resolved,
-      sharedTypeDef: resolved.structCodec?.sharedTypeDefForWrite(
+      sharedTypeDef: resolved.structSerializer?.sharedTypeDefForWrite(
         this,
         resolved,
         value,
@@ -259,11 +384,11 @@ final class WriteContext {
   }
 
   @internal
-  void writeTypeMetaValue(ResolvedTypeInternal resolved, Object value) {
+  void writeTypeMetaValue(TypeInfoInternal resolved, Object value) {
     _writeTypeMeta(resolved, value);
   }
 
-  bool _tracksDepth(ResolvedTypeInternal resolved) {
+  bool _tracksDepth(TypeInfoInternal resolved) {
     if (TypeIds.isContainer(resolved.typeId)) {
       return true;
     }

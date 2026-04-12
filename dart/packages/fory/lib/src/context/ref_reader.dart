@@ -6,7 +6,6 @@ final class RefReader {
   final List<int> _preservedIds = <int>[];
   Object? _resolved;
   int? _resolvedId;
-  int _nextSentinelId = -1;
 
   int readRefOrNull(Buffer buffer) {
     final flag = buffer.readByte();
@@ -33,19 +32,16 @@ final class RefReader {
     final preservedId = refId ?? _refs.length;
     if (refId == null) {
       _refs.add(null);
+    } else if (refId >= 0 && refId == _refs.length) {
+      _refs.add(null);
     }
     _preservedIds.add(preservedId);
     return preservedId;
   }
 
-  int preserveSentinel() {
-    final sentinelId = _nextSentinelId;
-    _nextSentinelId -= 1;
-    _preservedIds.add(sentinelId);
-    return sentinelId;
-  }
-
   bool get hasPreservedRefId => _preservedIds.isNotEmpty;
+
+  int get preservedRefDepth => _preservedIds.length;
 
   int get lastPreservedRefId => _preservedIds.last;
 
@@ -60,7 +56,7 @@ final class RefReader {
   void reference(Object? value) {
     if (_preservedIds.isEmpty) {
       throw StateError(
-        'reference(value) requires a preserved read ref id or sentinel.',
+        'reference(value) requires a preserved read ref id.',
       );
     }
     final id = _preservedIds.removeLast();
@@ -68,16 +64,6 @@ final class RefReader {
       return;
     }
     _refs[id] = value;
-  }
-
-  void discardPreservedRefId(int id) {
-    if (_preservedIds.isEmpty) {
-      return;
-    }
-    final last = _preservedIds.removeLast();
-    if (last != id) {
-      throw StateError('Expected preserved ref id $id, got $last.');
-    }
   }
 
   void setReadRef(int id, Object? value) {
@@ -89,6 +75,5 @@ final class RefReader {
     _preservedIds.clear();
     _resolved = null;
     _resolvedId = null;
-    _nextSentinelId = -1;
   }
 }

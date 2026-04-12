@@ -133,7 +133,7 @@ final class ForyGenerator extends Generator {
       ref: ref,
       dynamic: dynamic,
       writable: field.setter != null,
-      shape: _shapeForType(
+      fieldType: _fieldTypeForType(
         field.type,
         nullable: nullable,
         ref: ref,
@@ -143,7 +143,7 @@ final class ForyGenerator extends Generator {
     );
   }
 
-  _GeneratedShapeSpec _shapeForType(
+  _GeneratedFieldTypeSpec _fieldTypeForType(
     DartType type, {
     required bool nullable,
     required bool ref,
@@ -152,14 +152,14 @@ final class ForyGenerator extends Generator {
   }) {
     if (_isList(type) || _isSet(type)) {
       final argument = (type as InterfaceType).typeArguments.single;
-      return _GeneratedShapeSpec(
+      return _GeneratedFieldTypeSpec(
         typeLiteral: _typeLiteral(type),
         typeId: _typeIdFor(type),
         nullable: nullable,
         ref: ref,
         dynamic: dynamic,
-        arguments: <_GeneratedShapeSpec>[
-          _shapeForType(
+        arguments: <_GeneratedFieldTypeSpec>[
+          _fieldTypeForType(
             argument,
             nullable: true,
             ref: false,
@@ -170,20 +170,20 @@ final class ForyGenerator extends Generator {
     }
     if (_isMap(type)) {
       final arguments = (type as InterfaceType).typeArguments;
-      return _GeneratedShapeSpec(
+      return _GeneratedFieldTypeSpec(
         typeLiteral: _typeLiteral(type),
         typeId: _typeIdFor(type),
         nullable: nullable,
         ref: ref,
         dynamic: dynamic,
-        arguments: <_GeneratedShapeSpec>[
-          _shapeForType(
+        arguments: <_GeneratedFieldTypeSpec>[
+          _fieldTypeForType(
             arguments[0],
             nullable: true,
             ref: false,
             dynamic: _autoDynamic(arguments[0]),
           ),
-          _shapeForType(
+          _fieldTypeForType(
             arguments[1],
             nullable: true,
             ref: false,
@@ -192,13 +192,13 @@ final class ForyGenerator extends Generator {
         ],
       );
     }
-    return _GeneratedShapeSpec(
+    return _GeneratedFieldTypeSpec(
       typeLiteral: _typeLiteral(type),
       typeId: _typeIdFor(type, integerAnnotation: integerAnnotation),
       nullable: nullable,
       ref: ref,
       dynamic: dynamic,
-      arguments: const <_GeneratedShapeSpec>[],
+      arguments: const <_GeneratedFieldTypeSpec>[],
     );
   }
 
@@ -303,8 +303,7 @@ final class ForyGenerator extends Generator {
 
   void _writeStruct(StringBuffer output, _GeneratedStructSpec structSpec) {
     final serializerClassName = '_${structSpec.name}ForySerializer';
-    final metadataListName =
-        '_${_toCamelCase(structSpec.name)}ForyFieldMetadata';
+    final metadataListName = '_${_toCamelCase(structSpec.name)}ForyFieldInfo';
     final registrationName =
         '_${_toCamelCase(structSpec.name)}ForyRegistration';
     final hasDirectPrimitiveFastPath = structSpec.fields.any(
@@ -328,20 +327,20 @@ final class ForyGenerator extends Generator {
     };
 
     output.writeln(
-      'const List<GeneratedFieldMetadata> $metadataListName = <GeneratedFieldMetadata>[',
+      'const List<GeneratedFieldInfo> $metadataListName = <GeneratedFieldInfo>[',
     );
     for (final field in structSpec.fields) {
-      output.writeln(_fieldMetadataLiteral(field));
+      output.writeln(_fieldInfoLiteral(field));
     }
     output
       ..writeln('];')
       ..writeln()
       ..writeln(
-        'typedef _${structSpec.name}FieldWriter = GeneratedStructFieldWriter<${structSpec.name}>;',
+        'typedef _${structSpec.name}FieldWriter = GeneratedStructFieldInfoWriter<${structSpec.name}>;',
       );
     if (structSpec.constructorPlan.mode == _ConstructorMode.mutable) {
       output.writeln(
-        'typedef _${structSpec.name}FieldReader = GeneratedStructFieldReader<${structSpec.name}>;',
+        'typedef _${structSpec.name}FieldReader = GeneratedStructFieldInfoReader<${structSpec.name}>;',
       );
     }
     output.writeln();
@@ -349,10 +348,10 @@ final class ForyGenerator extends Generator {
       final field = structSpec.fields[index];
       output
         ..writeln(
-          'void _write${structSpec.name}Field$index(WriteContext context, GeneratedStructField field, ${structSpec.name} value) {',
+          'void _write${structSpec.name}Field$index(WriteContext context, GeneratedStructFieldInfo field, ${structSpec.name} value) {',
         )
         ..writeln(
-          '  writeGeneratedStructFieldValue(context, field, value.${field.name});',
+          '  writeGeneratedStructFieldInfoValue(context, field, value.${field.name});',
         )
         ..writeln('}')
         ..writeln();
@@ -412,15 +411,15 @@ final class ForyGenerator extends Generator {
       ..writeln(
         'final class $serializerClassName extends Serializer<${structSpec.name}> {',
       )
-      ..writeln('  List<GeneratedStructField>? _generatedFields;')
+      ..writeln('  List<GeneratedStructFieldInfo>? _generatedFields;')
       ..writeln()
       ..writeln('  $serializerClassName();')
       ..writeln()
       ..writeln(
-        '  List<GeneratedStructField> _writeFields(WriteContext context) {',
+        '  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {',
       )
       ..writeln(
-        '    return _generatedFields ??= buildGeneratedStructFields(',
+        '    return _generatedFields ??= buildGeneratedStructFieldInfos(',
       )
       ..writeln('      context.typeResolver,')
       ..writeln('      $registrationName,')
@@ -428,10 +427,10 @@ final class ForyGenerator extends Generator {
       ..writeln('  }')
       ..writeln()
       ..writeln(
-        '  List<GeneratedStructField> _readFields(ReadContext context) {',
+        '  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {',
       )
       ..writeln(
-        '    return _generatedFields ??= buildGeneratedStructFields(',
+        '    return _generatedFields ??= buildGeneratedStructFieldInfos(',
       )
       ..writeln('      context.typeResolver,')
       ..writeln('      $registrationName,')
@@ -467,7 +466,7 @@ final class ForyGenerator extends Generator {
         );
       } else {
         output.writeln(
-          '      writeGeneratedStructFieldValue(context, fields[$index], value.${field.name});',
+          '      writeGeneratedStructFieldInfoValue(context, fields[$index], value.${field.name});',
         );
       }
       final directCursorEndRun = directCursorRunByEnd[index];
@@ -525,7 +524,7 @@ final class ForyGenerator extends Generator {
             );
           } else {
             output.writeln(
-              '      value.${field.name} = $readerFunctionName(readGeneratedStructFieldValue(context, fields[$index], value.${field.name}), value.${field.name});',
+              '      value.${field.name} = $readerFunctionName(readGeneratedStructFieldInfoValue(context, fields[$index], value.${field.name}), value.${field.name});',
             );
           }
           final directCursorEndRun = directCursorRunByEnd[index];
@@ -552,8 +551,7 @@ final class ForyGenerator extends Generator {
         }
         output.writeln('    return value;');
       case _ConstructorMode.constructor:
-        output.writeln(
-            '    final slots = generatedStructReadSlots(context);');
+        output.writeln('    final slots = generatedStructReadSlots(context);');
         for (var index = 0; index < structSpec.fields.length; index += 1) {
           final field = structSpec.fields[index];
           output.writeln(
@@ -590,7 +588,7 @@ final class ForyGenerator extends Generator {
             );
           } else {
             output.writeln(
-              '      ${field.localName} = $readerFunctionName(readGeneratedStructFieldValue(context, fields[$index]));',
+              '      ${field.localName} = $readerFunctionName(readGeneratedStructFieldInfoValue(context, fields[$index]));',
             );
           }
           final directCursorEndRun = directCursorRunByEnd[index];
@@ -762,32 +760,32 @@ final class ForyGenerator extends Generator {
     return ConstantReader(annotation).peek('skip')?.boolValue ?? false;
   }
 
-  String _fieldMetadataLiteral(_GeneratedFieldSpec field) {
+  String _fieldInfoLiteral(_GeneratedFieldSpec field) {
     final idLiteral = field.id == null ? 'null' : '${field.id}';
     return '''
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: '${field.name}',
     identifier: '${field.identifier}',
     id: $idLiteral,
-    shape: ${_shapeLiteral(field.shape)},
+    fieldType: ${_fieldTypeLiteral(field.fieldType)},
   ),''';
   }
 
-  String _shapeLiteral(_GeneratedShapeSpec shape) {
-    final argumentsLiteral = shape.arguments.isEmpty
-        ? '<GeneratedTypeShape>[]'
-        : '<GeneratedTypeShape>[\n${shape.arguments.map(_shapeLiteral).join(',\n')}\n      ]';
-    final dynamicLiteral = switch (shape.dynamic) {
+  String _fieldTypeLiteral(_GeneratedFieldTypeSpec fieldType) {
+    final argumentsLiteral = fieldType.arguments.isEmpty
+        ? '<GeneratedFieldType>[]'
+        : '<GeneratedFieldType>[\n${fieldType.arguments.map(_fieldTypeLiteral).join(',\n')}\n      ]';
+    final dynamicLiteral = switch (fieldType.dynamic) {
       true => 'true',
       false => 'false',
       null => 'null',
     };
     return '''
-GeneratedTypeShape(
-      type: ${shape.typeLiteral},
-      typeId: ${shape.typeId},
-      nullable: ${shape.nullable},
-      ref: ${shape.ref},
+GeneratedFieldType(
+      type: ${fieldType.typeLiteral},
+      typeId: ${fieldType.typeId},
+      nullable: ${fieldType.nullable},
+      ref: ${fieldType.ref},
       dynamic: $dynamicLiteral,
       arguments: $argumentsLiteral,
     )''';
@@ -800,7 +798,7 @@ GeneratedTypeShape(
   ) {
     return _conversionExpressionForType(
       field.type,
-      field.shape,
+      field.fieldType,
       valueExpression,
       nullExpression: _nullExpression(
         field.type,
@@ -812,16 +810,16 @@ GeneratedTypeShape(
 
   String _conversionExpressionForType(
     DartType type,
-    _GeneratedShapeSpec shape,
+    _GeneratedFieldTypeSpec fieldType,
     String valueExpression, {
     required String nullExpression,
   }) {
     if (_isNullable(type)) {
       final nonNullableType = _withoutNullability(type);
-      final nonNullableShape = _nonNullableShape(shape);
+      final nonNullableFieldType = _nonNullableFieldType(fieldType);
       final converted = _conversionExpressionForType(
         nonNullableType,
-        nonNullableShape,
+        nonNullableFieldType,
         valueExpression,
         nullExpression: _nullExpression(
           nonNullableType,
@@ -832,7 +830,7 @@ GeneratedTypeShape(
     }
     final converted = _conversionExpressionWithoutNullCheck(
       type,
-      shape,
+      fieldType,
       valueExpression,
     );
     return '$valueExpression == null ? $nullExpression : $converted';
@@ -840,18 +838,18 @@ GeneratedTypeShape(
 
   String _conversionExpressionWithoutNullCheck(
     DartType type,
-    _GeneratedShapeSpec shape,
+    _GeneratedFieldTypeSpec fieldType,
     String valueExpression,
   ) {
     if (_isList(type)) {
       final elementType = (type as InterfaceType).typeArguments.single;
-      final elementShape = shape.arguments.single;
-      if (_supportsDirectContainerCast(elementType, elementShape)) {
+      final elementFieldType = fieldType.arguments.single;
+      if (_supportsDirectContainerCast(elementType, elementFieldType)) {
         return 'List.castFrom<dynamic, ${elementType.getDisplayString()}>($valueExpression as List)';
       }
       final convertedElement = _conversionExpressionForType(
         elementType,
-        elementShape,
+        elementFieldType,
         'item',
         nullExpression: _nullExpression(
           elementType,
@@ -862,13 +860,13 @@ GeneratedTypeShape(
     }
     if (_isSet(type)) {
       final elementType = (type as InterfaceType).typeArguments.single;
-      final elementShape = shape.arguments.single;
-      if (_supportsDirectContainerCast(elementType, elementShape)) {
+      final elementFieldType = fieldType.arguments.single;
+      if (_supportsDirectContainerCast(elementType, elementFieldType)) {
         return 'Set.castFrom<dynamic, ${elementType.getDisplayString()}>($valueExpression as Set)';
       }
       final convertedElement = _conversionExpressionForType(
         elementType,
-        elementShape,
+        elementFieldType,
         'item',
         nullExpression: _nullExpression(
           elementType,
@@ -881,15 +879,15 @@ GeneratedTypeShape(
       final arguments = (type as InterfaceType).typeArguments;
       final keyType = arguments[0];
       final valueType = arguments[1];
-      final keyShape = shape.arguments[0];
-      final valueShape = shape.arguments[1];
-      if (_supportsDirectContainerCast(keyType, keyShape) &&
-          _supportsDirectContainerCast(valueType, valueShape)) {
+      final keyFieldType = fieldType.arguments[0];
+      final valueFieldType = fieldType.arguments[1];
+      if (_supportsDirectContainerCast(keyType, keyFieldType) &&
+          _supportsDirectContainerCast(valueType, valueFieldType)) {
         return 'Map.castFrom<dynamic, dynamic, ${keyType.getDisplayString()}, ${valueType.getDisplayString()}>($valueExpression as Map)';
       }
       final convertedKey = _conversionExpressionForType(
         keyType,
-        keyShape,
+        keyFieldType,
         'key',
         nullExpression: _nullExpression(
           keyType,
@@ -898,7 +896,7 @@ GeneratedTypeShape(
       );
       final convertedValue = _conversionExpressionForType(
         valueType,
-        valueShape,
+        valueFieldType,
         'value',
         nullExpression: _nullExpression(
           valueType,
@@ -908,7 +906,8 @@ GeneratedTypeShape(
       return 'Map<${keyType.getDisplayString()}, ${valueType.getDisplayString()}>.of((($valueExpression as Map)).map((key, value) => MapEntry($convertedKey, $convertedValue)))';
     }
     if (type.isDartCoreInt) {
-      if (shape.typeId == TypeIds.int32 || shape.typeId == TypeIds.varInt32) {
+      if (fieldType.typeId == TypeIds.int32 ||
+          fieldType.typeId == TypeIds.varInt32) {
         return '($valueExpression as Int32).value';
       }
       return '$valueExpression as int';
@@ -927,50 +926,51 @@ GeneratedTypeShape(
 
   bool _supportsDirectContainerCast(
     DartType type,
-    _GeneratedShapeSpec shape,
+    _GeneratedFieldTypeSpec fieldType,
   ) {
     if (_isNullable(type)) {
       return _supportsDirectContainerCast(
         _withoutNullability(type),
-        _nonNullableShape(shape),
+        _nonNullableFieldType(fieldType),
       );
     }
     if (_isList(type) || _isSet(type) || _isMap(type)) {
       return false;
     }
     if (type.isDartCoreInt) {
-      return shape.typeId != TypeIds.int32 && shape.typeId != TypeIds.varInt32;
+      return fieldType.typeId != TypeIds.int32 &&
+          fieldType.typeId != TypeIds.varInt32;
     }
     return true;
   }
 
   bool _usesDirectGeneratedBasicFastPath(_GeneratedFieldSpec field) {
-    if (field.shape.nullable ||
-        field.shape.ref ||
-        field.shape.dynamic == true) {
+    if (field.fieldType.nullable ||
+        field.fieldType.ref ||
+        field.fieldType.dynamic == true) {
       return false;
     }
-    return _isPrimitiveTypeId(field.shape.typeId) ||
-        field.shape.typeId == TypeIds.string ||
-        _isBuiltInTypeId(field.shape.typeId) ||
-        field.shape.typeId == TypeIds.enumById;
+    return _isPrimitiveTypeId(field.fieldType.typeId) ||
+        field.fieldType.typeId == TypeIds.string ||
+        _isBuiltInTypeId(field.fieldType.typeId) ||
+        field.fieldType.typeId == TypeIds.enumById;
   }
 
   bool _usesDirectGeneratedTypedContainerReadFastPath(
     _GeneratedFieldSpec field,
   ) {
-    if (field.shape.nullable ||
-        field.shape.ref ||
-        field.shape.dynamic == true) {
+    if (field.fieldType.nullable ||
+        field.fieldType.ref ||
+        field.fieldType.dynamic == true) {
       return false;
     }
-    return field.shape.typeId == TypeIds.list ||
-        field.shape.typeId == TypeIds.set ||
-        field.shape.typeId == TypeIds.map;
+    return field.fieldType.typeId == TypeIds.list ||
+        field.fieldType.typeId == TypeIds.set ||
+        field.fieldType.typeId == TypeIds.map;
   }
 
   bool _usesDirectGeneratedPrimitiveFastPath(_GeneratedFieldSpec field) {
-    return _isPrimitiveTypeId(field.shape.typeId);
+    return _isPrimitiveTypeId(field.fieldType.typeId);
   }
 
   List<_DirectGeneratedWriteReservationRun>
@@ -1011,7 +1011,7 @@ GeneratedTypeShape(
     if (!_usesDirectGeneratedBasicFastPath(field)) {
       return null;
     }
-    switch (field.shape.typeId) {
+    switch (field.fieldType.typeId) {
       case TypeIds.boolType:
       case TypeIds.int8:
       case TypeIds.uint8:
@@ -1049,7 +1049,7 @@ GeneratedTypeShape(
     _GeneratedFieldSpec field,
     String valueExpression,
   ) {
-    switch (field.shape.typeId) {
+    switch (field.fieldType.typeId) {
       case TypeIds.boolType:
         return 'buffer.writeBool($valueExpression)';
       case TypeIds.int8:
@@ -1122,7 +1122,7 @@ GeneratedTypeShape(
     String cursorExpression,
     String valueExpression,
   ) {
-    switch (field.shape.typeId) {
+    switch (field.fieldType.typeId) {
       case TypeIds.boolType:
         return '$cursorExpression.writeBool($valueExpression)';
       case TypeIds.int8:
@@ -1173,7 +1173,7 @@ GeneratedTypeShape(
   }
 
   String _directGeneratedReadExpression(_GeneratedFieldSpec field) {
-    switch (field.shape.typeId) {
+    switch (field.fieldType.typeId) {
       case TypeIds.boolType:
         return 'buffer.readBool()';
       case TypeIds.int8:
@@ -1268,7 +1268,7 @@ GeneratedTypeShape(
     _GeneratedFieldSpec field,
     String cursorExpression,
   ) {
-    switch (field.shape.typeId) {
+    switch (field.fieldType.typeId) {
       case TypeIds.boolType:
         return '$cursorExpression.readBool()';
       case TypeIds.int8:
@@ -1364,7 +1364,7 @@ GeneratedTypeShape(
         field.type.isDartCoreString) {
       return valueExpression;
     }
-    switch (field.shape.typeId) {
+    switch (field.fieldType.typeId) {
       case TypeIds.float16:
         return valueExpression;
       default:
@@ -1387,17 +1387,18 @@ GeneratedTypeShape(
     return '(throw StateError(\'Received null for non-nullable $errorTarget.\'))';
   }
 
-  _GeneratedShapeSpec _nonNullableShape(_GeneratedShapeSpec shape) {
-    if (!shape.nullable) {
-      return shape;
+  _GeneratedFieldTypeSpec _nonNullableFieldType(
+      _GeneratedFieldTypeSpec fieldType) {
+    if (!fieldType.nullable) {
+      return fieldType;
     }
-    return _GeneratedShapeSpec(
-      typeLiteral: shape.typeLiteral,
-      typeId: shape.typeId,
+    return _GeneratedFieldTypeSpec(
+      typeLiteral: fieldType.typeLiteral,
+      typeId: fieldType.typeId,
       nullable: false,
-      ref: shape.ref,
-      dynamic: shape.dynamic,
-      arguments: shape.arguments,
+      ref: fieldType.ref,
+      dynamic: fieldType.dynamic,
+      arguments: fieldType.arguments,
     );
   }
 
@@ -1408,7 +1409,7 @@ GeneratedTypeShape(
   ) {
     if (_isList(field.type) || _isSet(field.type)) {
       final elementType = (field.type as InterfaceType).typeArguments.single;
-      final elementShape = field.shape.arguments.single;
+      final elementFieldType = field.fieldType.arguments.single;
       final functionName = _containerElementReaderFunctionName(
         structName,
         field,
@@ -1418,7 +1419,7 @@ GeneratedTypeShape(
           '${elementType.getDisplayString()} $functionName(Object? value) {',
         )
         ..writeln(
-          '  return ${_conversionExpressionForType(elementType, elementShape, 'value', nullExpression: _nullExpression(elementType, errorTarget: '${field.name} item'))};',
+          '  return ${_conversionExpressionForType(elementType, elementFieldType, 'value', nullExpression: _nullExpression(elementType, errorTarget: '${field.name} item'))};',
         )
         ..writeln('}')
         ..writeln();
@@ -1428,8 +1429,8 @@ GeneratedTypeShape(
       final arguments = (field.type as InterfaceType).typeArguments;
       final keyType = arguments[0];
       final valueType = arguments[1];
-      final keyShape = field.shape.arguments[0];
-      final valueShape = field.shape.arguments[1];
+      final keyFieldType = field.fieldType.arguments[0];
+      final valueFieldType = field.fieldType.arguments[1];
       final keyFunctionName = _containerKeyReaderFunctionName(
         structName,
         field,
@@ -1443,7 +1444,7 @@ GeneratedTypeShape(
           '${keyType.getDisplayString()} $keyFunctionName(Object? value) {',
         )
         ..writeln(
-          '  return ${_conversionExpressionForType(keyType, keyShape, 'value', nullExpression: _nullExpression(keyType, errorTarget: '${field.name} map key'))};',
+          '  return ${_conversionExpressionForType(keyType, keyFieldType, 'value', nullExpression: _nullExpression(keyType, errorTarget: '${field.name} map key'))};',
         )
         ..writeln('}')
         ..writeln()
@@ -1451,7 +1452,7 @@ GeneratedTypeShape(
           '${valueType.getDisplayString()} $valueFunctionName(Object? value) {',
         )
         ..writeln(
-          '  return ${_conversionExpressionForType(valueType, valueShape, 'value', nullExpression: _nullExpression(valueType, errorTarget: '${field.name} map value'))};',
+          '  return ${_conversionExpressionForType(valueType, valueFieldType, 'value', nullExpression: _nullExpression(valueType, errorTarget: '${field.name} map value'))};',
         )
         ..writeln('}')
         ..writeln();
@@ -1498,18 +1499,18 @@ GeneratedTypeShape(
     final otherFields = <_GeneratedFieldSpec>[];
 
     for (final field in fields) {
-      if (_isPrimitiveTypeId(field.shape.typeId)) {
+      if (_isPrimitiveTypeId(field.fieldType.typeId)) {
         if (field.nullable) {
           boxedPrimitiveFields.add(field);
         } else {
           primitiveFields.add(field);
         }
-      } else if (field.shape.typeId == TypeIds.list ||
-          field.shape.typeId == TypeIds.set) {
+      } else if (field.fieldType.typeId == TypeIds.list ||
+          field.fieldType.typeId == TypeIds.set) {
         collectionFields.add(field);
-      } else if (field.shape.typeId == TypeIds.map) {
+      } else if (field.fieldType.typeId == TypeIds.map) {
         mapFields.add(field);
-      } else if (_isBuiltInTypeId(field.shape.typeId)) {
+      } else if (_isBuiltInTypeId(field.fieldType.typeId)) {
         builtInFields.add(field);
       } else {
         otherFields.add(field);
@@ -1537,17 +1538,17 @@ GeneratedTypeShape(
     _GeneratedFieldSpec left,
     _GeneratedFieldSpec right,
   ) {
-    final leftCompressed = _isCompressedTypeId(left.shape.typeId);
-    final rightCompressed = _isCompressedTypeId(right.shape.typeId);
+    final leftCompressed = _isCompressedTypeId(left.fieldType.typeId);
+    final rightCompressed = _isCompressedTypeId(right.fieldType.typeId);
     if (leftCompressed != rightCompressed) {
       return leftCompressed ? 1 : -1;
     }
-    final sizeCompare =
-        _primitiveSize(right.shape.typeId) - _primitiveSize(left.shape.typeId);
+    final sizeCompare = _primitiveSize(right.fieldType.typeId) -
+        _primitiveSize(left.fieldType.typeId);
     if (sizeCompare != 0) {
       return sizeCompare;
     }
-    final typeCompare = right.shape.typeId - left.shape.typeId;
+    final typeCompare = right.fieldType.typeId - left.fieldType.typeId;
     if (typeCompare != 0) {
       return typeCompare;
     }
@@ -1562,7 +1563,7 @@ GeneratedTypeShape(
     _GeneratedFieldSpec left,
     _GeneratedFieldSpec right,
   ) {
-    final typeCompare = left.shape.typeId - right.shape.typeId;
+    final typeCompare = left.fieldType.typeId - right.fieldType.typeId;
     if (typeCompare != 0) {
       return typeCompare;
     }
@@ -1972,7 +1973,7 @@ final class _GeneratedFieldSpec {
   final bool ref;
   final bool? dynamic;
   final bool writable;
-  final _GeneratedShapeSpec shape;
+  final _GeneratedFieldTypeSpec fieldType;
 
   const _GeneratedFieldSpec({
     required this.name,
@@ -1984,7 +1985,7 @@ final class _GeneratedFieldSpec {
     required this.ref,
     required this.dynamic,
     required this.writable,
-    required this.shape,
+    required this.fieldType,
   });
 
   String get sortKey => id != null && id! >= 0 ? '$id' : identifier;
@@ -2005,15 +2006,15 @@ final class _DirectGeneratedWriteReservationRun {
   const _DirectGeneratedWriteReservationRun(this.start, this.end, this.bytes);
 }
 
-final class _GeneratedShapeSpec {
+final class _GeneratedFieldTypeSpec {
   final String typeLiteral;
   final int typeId;
   final bool nullable;
   final bool ref;
   final bool? dynamic;
-  final List<_GeneratedShapeSpec> arguments;
+  final List<_GeneratedFieldTypeSpec> arguments;
 
-  const _GeneratedShapeSpec({
+  const _GeneratedFieldTypeSpec({
     required this.typeLiteral,
     required this.typeId,
     required this.nullable,

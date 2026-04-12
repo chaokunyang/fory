@@ -7,7 +7,7 @@ import 'package:fory/src/resolver/type_resolver.dart';
 
 /// Internal representation of the wire-level type metadata for one value.
 final class TypeMeta {
-  final ResolvedTypeInternal resolvedType;
+  final TypeInfoInternal resolvedType;
   final int wireTypeId;
   final bool sharedTypeDef;
 
@@ -52,12 +52,12 @@ final class TypeHeader {
 final class ParsedTypeMetaCache {
   static const int maxEntries = 8192;
 
-  final LinkedHashMap<int, ResolvedTypeInternal> _entries =
-      LinkedHashMap<int, ResolvedTypeInternal>();
+  final LinkedHashMap<int, TypeInfoInternal> _entries =
+      LinkedHashMap<int, TypeInfoInternal>();
   int? _lastHeader;
-  ResolvedTypeInternal? _lastResolved;
+  TypeInfoInternal? _lastResolved;
 
-  ResolvedTypeInternal? lookup(TypeHeader header) {
+  TypeInfoInternal? lookup(TypeHeader header) {
     if (_lastHeader == header.value) {
       return _lastResolved;
     }
@@ -69,7 +69,7 @@ final class ParsedTypeMetaCache {
     return resolved;
   }
 
-  void remember(TypeHeader header, ResolvedTypeInternal resolved) {
+  void remember(TypeHeader header, TypeInfoInternal resolved) {
     if (!_entries.containsKey(header.value) && _entries.length >= maxEntries) {
       _entries.remove(_entries.keys.first);
     }
@@ -83,7 +83,7 @@ final class ParsedTypeMetaCache {
 final class TypeMetaEncoder {
   const TypeMetaEncoder();
 
-  TypeMeta typeMetaFor(Config config, ResolvedTypeInternal resolvedType) {
+  TypeMeta typeMetaFor(Config config, TypeInfoInternal resolvedType) {
     final wireTypeId = _wireTypeIdFor(config, resolvedType);
     final sharedTypeDef = wireTypeId == TypeIds.compatibleStruct ||
         wireTypeId == TypeIds.namedCompatibleStruct ||
@@ -123,7 +123,7 @@ final class TypeMetaEncoder {
     }
   }
 
-  int _wireTypeIdFor(Config config, ResolvedTypeInternal resolvedType) {
+  int _wireTypeIdFor(Config config, TypeInfoInternal resolvedType) {
     switch (resolvedType.kind) {
       case RegistrationKindInternal.builtin:
         return resolvedType.typeId;
@@ -156,15 +156,14 @@ final class TypeMetaDecoder {
   TypeMeta read(
     Buffer buffer, {
     required Config config,
-    required ResolvedTypeInternal Function(int wireTypeId)
-        resolveBuiltinWireType,
-    required ResolvedTypeInternal Function(int id) resolveUserById,
-    required ResolvedTypeInternal Function(
+    required TypeInfoInternal Function(int wireTypeId) resolveBuiltinWireType,
+    required TypeInfoInternal Function(int id) resolveUserById,
+    required TypeInfoInternal Function(
       int wireTypeId,
       EncodedMetaStringInternal namespace,
       EncodedMetaStringInternal typeName,
     ) resolveUserByEncodedNameCached,
-    required ResolvedTypeInternal? Function(int wireTypeId) expectedNamedType,
+    required TypeInfoInternal? Function(int wireTypeId) expectedNamedType,
     required TypeMeta Function() readSharedTypeDef,
     required EncodedMetaStringInternal Function([
       EncodedMetaStringInternal? expected,

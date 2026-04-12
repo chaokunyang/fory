@@ -13,7 +13,7 @@ import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/serializer/struct_codec.dart';
+import 'package:fory/src/serializer/struct_serializer.dart';
 
 /// Root facade for Apache Fory xlang serialization in Dart.
 ///
@@ -190,10 +190,9 @@ void bindGeneratedStruct(
   Type type,
   Serializer<Object?> Function() serializerFactory, {
   required bool evolving,
-  required List<FieldMetadataInternal> fields,
+  required List<FieldInfoInternal> fields,
   GeneratedStructCompatibleFactory<Object>? compatibleFactory,
-  List<GeneratedStructCompatibleFieldReader<Object>>?
-      compatibleReadersBySlot,
+  List<GeneratedStructCompatibleFieldReader<Object>>? compatibleReadersBySlot,
 }) {
   fory._typeResolver.bindGeneratedStruct(
     type,

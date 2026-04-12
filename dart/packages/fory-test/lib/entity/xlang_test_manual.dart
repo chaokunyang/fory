@@ -107,50 +107,50 @@ final class _MyExtSerializer extends Serializer<MyExt> {
   }
 }
 
-const GeneratedTypeShape _refOverrideElementShape = GeneratedTypeShape(
+const GeneratedFieldType _refOverrideElementFieldType = GeneratedFieldType(
   type: RefOverrideElement,
   typeId: resolver.TypeIds.compatibleStruct,
   nullable: true,
   ref: true,
   dynamic: null,
-  arguments: <GeneratedTypeShape>[],
+  arguments: <GeneratedFieldType>[],
 );
 
-const List<GeneratedFieldMetadata> _refOverrideContainerForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _refOverrideContainerForyFieldInfo =
+    <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'listField',
     identifier: 'list_field',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: resolver.TypeIds.list,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[_refOverrideElementShape],
+      arguments: <GeneratedFieldType>[_refOverrideElementFieldType],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'mapField',
     identifier: 'map_field',
     id: null,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Map,
       typeId: resolver.TypeIds.map,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: String,
           typeId: resolver.TypeIds.string,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         ),
-        _refOverrideElementShape,
+        _refOverrideElementFieldType,
       ],
     ),
   ),
@@ -159,47 +159,47 @@ const List<GeneratedFieldMetadata> _refOverrideContainerForyFieldMetadata =
 final GeneratedStructRegistration<RefOverrideContainer>
     _refOverrideContainerForyRegistration =
     GeneratedStructRegistration<RefOverrideContainer>(
-      fieldWritersBySlot: <GeneratedStructFieldWriter<RefOverrideContainer>>[
-        _writeRefOverrideContainerField0,
-        _writeRefOverrideContainerField1,
-      ],
-      type: RefOverrideContainer,
-      serializerFactory: _RefOverrideContainerForySerializer.new,
-      evolving: true,
-      fields: _refOverrideContainerForyFieldMetadata,
-    );
+  fieldWritersBySlot: <GeneratedStructFieldInfoWriter<RefOverrideContainer>>[
+    _writeRefOverrideContainerField0,
+    _writeRefOverrideContainerField1,
+  ],
+  type: RefOverrideContainer,
+  serializerFactory: _RefOverrideContainerForySerializer.new,
+  evolving: true,
+  fields: _refOverrideContainerForyFieldInfo,
+);
 
 void _writeRefOverrideContainerField0(
   WriteContext context,
-  GeneratedStructField field,
+  GeneratedStructFieldInfo field,
   RefOverrideContainer value,
 ) {
-  writeGeneratedStructFieldValue(context, field, value.listField);
+  writeGeneratedStructFieldInfoValue(context, field, value.listField);
 }
 
 void _writeRefOverrideContainerField1(
   WriteContext context,
-  GeneratedStructField field,
+  GeneratedStructFieldInfo field,
   RefOverrideContainer value,
 ) {
-  writeGeneratedStructFieldValue(context, field, value.mapField);
+  writeGeneratedStructFieldInfoValue(context, field, value.mapField);
 }
 
 final class _RefOverrideContainerForySerializer
     extends Serializer<RefOverrideContainer> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _RefOverrideContainerForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _refOverrideContainerForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _refOverrideContainerForyRegistration,
     );
@@ -210,8 +210,8 @@ final class _RefOverrideContainerForySerializer
     final slots = generatedStructWriteSlots(context);
     if (slots == null) {
       final fields = _writeFields(context);
-      writeGeneratedStructFieldValue(context, fields[0], value.listField);
-      writeGeneratedStructFieldValue(context, fields[1], value.mapField);
+      writeGeneratedStructFieldInfoValue(context, fields[0], value.listField);
+      writeGeneratedStructFieldInfoValue(context, fields[1], value.mapField);
       return;
     }
     final writers = _refOverrideContainerForyRegistration.fieldWritersBySlot;
@@ -228,11 +228,11 @@ final class _RefOverrideContainerForySerializer
     if (slots == null) {
       final fields = _readFields(context);
       value.listField = _readRefOverrideContainerListField(
-        readGeneratedStructFieldValue(context, fields[0], value.listField),
+        readGeneratedStructFieldInfoValue(context, fields[0], value.listField),
         value.listField,
       );
       value.mapField = _readRefOverrideContainerMapField(
-        readGeneratedStructFieldValue(context, fields[1], value.mapField),
+        readGeneratedStructFieldInfoValue(context, fields[1], value.mapField),
         value.mapField,
       );
       return value;
@@ -265,14 +265,15 @@ List<RefOverrideElement> _readRefOverrideContainerListField(
 ]) {
   return value == null
       ? (fallback != null
-            ? fallback as List<RefOverrideElement>
-            : (throw StateError(
-                'Received null for non-nullable field listField.',
-              )))
+          ? fallback as List<RefOverrideElement>
+          : (throw StateError(
+              'Received null for non-nullable field listField.',
+            )))
       : List<RefOverrideElement>.of(
           (value as List).map(
             (item) => item == null
-                ? (throw StateError('Received null for non-nullable list item.'))
+                ? (throw StateError(
+                    'Received null for non-nullable list item.'))
                 : item as RefOverrideElement,
           ),
         );
@@ -284,15 +285,16 @@ Map<String, RefOverrideElement> _readRefOverrideContainerMapField(
 ]) {
   return value == null
       ? (fallback != null
-            ? fallback as Map<String, RefOverrideElement>
-            : (throw StateError(
-                'Received null for non-nullable field mapField.',
-              )))
+          ? fallback as Map<String, RefOverrideElement>
+          : (throw StateError(
+              'Received null for non-nullable field mapField.',
+            )))
       : Map<String, RefOverrideElement>.of(
           (value as Map).map(
             (key, mappedValue) => MapEntry(
               key == null
-                  ? (throw StateError('Received null for non-nullable map key.'))
+                  ? (throw StateError(
+                      'Received null for non-nullable map key.'))
                   : key as String,
               mappedValue == null
                   ? (throw StateError(

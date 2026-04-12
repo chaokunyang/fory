@@ -6,11 +6,13 @@ import 'package:fory/fory.dart';
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/fory.dart' as fory_internals;
 import 'package:fory/src/resolver/type_resolver.dart' as resolver;
-import 'package:fory/src/serializer/declared_value_codec.dart';
-import 'package:fory/src/serializer/payload_codec.dart';
-import 'package:fory/src/serializer/struct_field_binding.dart';
-import 'package:fory/src/serializer/struct_codec.dart';
+import 'package:fory/src/serializer/collection_serializers.dart';
+import 'package:fory/src/serializer/map_serializers.dart';
+import 'package:fory/src/serializer/scalar_serializers.dart';
+import 'package:fory/src/serializer/serializer_support.dart';
+import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
+import 'package:fory/src/serializer/typed_array_serializers.dart';
 
 final BigInt _generatedCursorMask64Big = (BigInt.one << 64) - BigInt.one;
 final BigInt _generatedCursorSevenBitMaskBig = BigInt.from(0x7f);
@@ -367,15 +369,15 @@ final class GeneratedReadCursor {
 }
 
 @internal
-final class GeneratedTypeShape {
+final class GeneratedFieldType {
   final Type type;
   final int typeId;
   final bool nullable;
   final bool ref;
   final bool? dynamic;
-  final List<GeneratedTypeShape> arguments;
+  final List<GeneratedFieldType> arguments;
 
-  const GeneratedTypeShape({
+  const GeneratedFieldType({
     required this.type,
     required this.typeId,
     required this.nullable,
@@ -384,8 +386,8 @@ final class GeneratedTypeShape {
     required this.arguments,
   });
 
-  resolver.TypeShapeInternal toInternal() {
-    return resolver.TypeShapeInternal(
+  resolver.FieldTypeInternal toInternal() {
+    return resolver.FieldTypeInternal(
       type: type,
       typeId: typeId,
       nullable: nullable,
@@ -399,25 +401,25 @@ final class GeneratedTypeShape {
 }
 
 @internal
-final class GeneratedFieldMetadata {
+final class GeneratedFieldInfo {
   final String name;
   final String identifier;
   final int? id;
-  final GeneratedTypeShape shape;
+  final GeneratedFieldType fieldType;
 
-  const GeneratedFieldMetadata({
+  const GeneratedFieldInfo({
     required this.name,
     required this.identifier,
     required this.id,
-    required this.shape,
+    required this.fieldType,
   });
 
-  resolver.FieldMetadataInternal toInternal() {
-    return resolver.FieldMetadataInternal(
+  resolver.FieldInfoInternal toInternal() {
+    return resolver.FieldInfoInternal(
       name: name,
       identifier: identifier,
       id: id,
-      shape: shape.toInternal(),
+      fieldType: fieldType.toInternal(),
     );
   }
 }
@@ -434,25 +436,25 @@ final class GeneratedEnumRegistration {
 }
 
 @internal
-typedef GeneratedStructField = StructFieldBinding;
+typedef GeneratedStructFieldInfo = resolver.FieldInfoInternal;
 
 @internal
-typedef GeneratedStructFieldWriter<T> = void Function(
-    WriteContext context, GeneratedStructField field, T value);
+typedef GeneratedStructFieldInfoWriter<T> = void Function(
+    WriteContext context, GeneratedStructFieldInfo field, T value);
 
 @internal
-typedef GeneratedStructFieldReader<T> = void Function(
+typedef GeneratedStructFieldInfoReader<T> = void Function(
     ReadContext context, T value, Object? rawValue);
 
 @internal
 final class GeneratedStructRegistration<T> {
-  final List<GeneratedStructFieldWriter<T>> fieldWritersBySlot;
+  final List<GeneratedStructFieldInfoWriter<T>> fieldWritersBySlot;
   final GeneratedStructCompatibleFactory<T>? compatibleFactory;
-  final List<GeneratedStructFieldReader<T>>? compatibleReadersBySlot;
+  final List<GeneratedStructFieldInfoReader<T>>? compatibleReadersBySlot;
   final Type type;
   final Serializer<Object?> Function() serializerFactory;
   final bool evolving;
-  final List<GeneratedFieldMetadata> fields;
+  final List<GeneratedFieldInfo> fields;
 
   GeneratedStructRegistration({
     required this.fieldWritersBySlot,
@@ -464,9 +466,12 @@ final class GeneratedStructRegistration<T> {
     required this.fields,
   });
 
-  late final List<resolver.FieldMetadataInternal> internalFields =
-      List<resolver.FieldMetadataInternal>.unmodifiable(
-    fields.map((field) => field.toInternal()),
+  late final List<resolver.FieldInfoInternal> internalFields =
+      List<resolver.FieldInfoInternal>.unmodifiable(
+    List<resolver.FieldInfoInternal>.generate(
+      fields.length,
+      (index) => fields[index].toInternal().copyWith(slot: index),
+    ),
   );
 
   late final List<int> defaultSlots = List<int>.unmodifiable(
@@ -535,80 +540,61 @@ void registerGeneratedStruct<T>(
 
 @internal
 StructWriteSlots? generatedStructWriteSlots(WriteContext context) {
-  return context.localStateAs<StructWriteSlots>(
+  return context.getContextObject<StructWriteSlots>(
     structWriteSlotsKey,
   );
 }
 
 @internal
 StructReadSlots? generatedStructReadSlots(ReadContext context) {
-  return context.localStateAs<StructReadSlots>(
+  return context.getContextObject<StructReadSlots>(
     structReadSlotsKey,
   );
 }
 
 @internal
 void writeGeneratedBinaryValue(WriteContext context, Uint8List value) {
-  context.buffer.writeVarUint32(value.lengthInBytes);
-  context.buffer.writeBytes(value);
+  BinarySerializer.writePayload(context, value);
 }
 
 @internal
 Uint8List readGeneratedBinaryValue(ReadContext context) {
-  final size = context.buffer.readVarUint32();
-  if (size > context.config.maxBinarySize) {
-    throw StateError(
-      'Binary payload exceeds ${context.config.maxBinarySize} bytes.',
-    );
-  }
-  return context.buffer.copyBytes(size);
+  return BinarySerializer.readPayload(context);
 }
 
 @internal
 void writeGeneratedBoolArrayValue(WriteContext context, List<bool> value) {
-  context.buffer.writeVarUint32(value.length);
-  for (final entry in value) {
-    context.buffer.writeBool(entry);
-  }
+  const BoolArraySerializer().write(context, value);
 }
 
 @internal
 List<bool> readGeneratedBoolArrayValue(ReadContext context) {
-  final size = context.buffer.readVarUint32();
-  return List<bool>.generate(
-    size,
-    (_) => context.buffer.readBool(),
-    growable: false,
-  );
+  return const BoolArraySerializer().read(context);
 }
 
 @internal
 void writeGeneratedLocalDateValue(WriteContext context, LocalDate value) {
-  context.buffer.writeInt32(value.toEpochDay());
+  const LocalDateSerializer().write(context, value);
 }
 
 @internal
 LocalDate readGeneratedLocalDateValue(ReadContext context) {
-  return LocalDate.fromEpochDay(context.buffer.readInt32());
+  return const LocalDateSerializer().read(context);
 }
 
 @internal
 void writeGeneratedTimestampValue(WriteContext context, Timestamp value) {
-  context.buffer.writeInt64(value.seconds);
-  context.buffer.writeUint32(value.nanoseconds);
+  const TimestampSerializer().write(context, value);
 }
 
 @internal
 Timestamp readGeneratedTimestampValue(ReadContext context) {
-  return Timestamp(
-    context.buffer.readInt64(),
-    context.buffer.readUint32(),
-  );
+  return const TimestampSerializer().read(context);
 }
 
 @internal
 void writeGeneratedFixedArrayValue(WriteContext context, TypedData value) {
-  writeFixedArrayPayload(context, value);
+  writeTypedArrayBytes(context, value);
 }
 
 @internal
@@ -617,96 +603,87 @@ T readGeneratedTypedArrayValue<T>(
   int elementSize,
   T Function(Uint8List bytes) viewBuilder,
 ) {
-  return readTypedArrayPayload(context, elementSize, viewBuilder);
+  return readTypedArrayBytes(context, elementSize, viewBuilder);
 }
 
 @internal
-List<StructFieldBinding> buildGeneratedStructFields(
+List<resolver.FieldInfoInternal> buildGeneratedStructFieldInfos(
   resolver.TypeResolver typeResolver,
   GeneratedStructRegistration registration,
 ) {
-  final fields = registration.internalFields;
-  return List<StructFieldBinding>.unmodifiable(
-    List<StructFieldBinding>.generate(
-      fields.length,
-      (slot) {
-        final metadata = fields[slot];
-        return StructFieldBinding(
-          slot,
-          metadata,
-          typeResolver.createDeclaredFieldBinding(metadata),
-        );
-      },
-    ),
-  );
+  return typeResolver
+      .resolvedRegisteredType(registration.type)
+      .structMetadata!
+      .fields;
 }
 
 @internal
-void writeGeneratedStructFieldValue(
+void writeGeneratedStructFieldInfoValue(
   WriteContext context,
-  StructFieldBinding field,
+  resolver.FieldInfoInternal field,
   Object? value,
 ) {
-  final binding = field.valueBinding;
-  final shape = binding.shape;
-  if (!shape.isDynamic && !shape.ref && !shape.nullable) {
-    if (shape.isPrimitive) {
-      context.writePrimitiveValue(shape.typeId, value as Object);
+  final fieldType = field.fieldType;
+  if (!fieldType.isDynamic && !fieldType.ref && !fieldType.nullable) {
+    if (fieldType.isPrimitive) {
+      context.writePrimitiveValue(fieldType.typeId, value as Object);
       return;
     }
-    final resolved = binding.resolved!;
-    if (binding.usesDeclaredType) {
-      context.writeResolvedValue(resolved, value as Object, shape);
+    final resolved = fieldDeclaredTypeInfo(context.typeResolver, field)!;
+    if (fieldUsesDeclaredType(context.typeResolver, field)) {
+      context.writeResolvedValue(resolved, value as Object, fieldType);
       return;
     }
     final actualResolved = context.typeResolver.resolveValue(value as Object);
     context.writeTypeMetaValue(actualResolved, value);
-    context.writeResolvedValue(actualResolved, value, shape);
+    context.writeResolvedValue(actualResolved, value, fieldType);
     return;
   }
-  writeDeclaredValueBinding(context, binding, value);
+  writeFieldValue(context, field, value);
 }
 
 @internal
-Object? readGeneratedStructFieldValue(
+Object? readGeneratedStructFieldInfoValue(
   ReadContext context,
-  StructFieldBinding field, [
+  resolver.FieldInfoInternal field, [
   Object? fallback,
 ]) {
-  final binding = field.valueBinding;
-  final shape = binding.shape;
-  if (fallback == null && !shape.isDynamic && !shape.ref && !shape.nullable) {
-    if (shape.isPrimitive) {
-      return context.readPrimitiveValue(shape.typeId);
+  final fieldType = field.fieldType;
+  if (fallback == null &&
+      !fieldType.isDynamic &&
+      !fieldType.ref &&
+      !fieldType.nullable) {
+    if (fieldType.isPrimitive) {
+      return context.readPrimitiveValue(fieldType.typeId);
     }
-    final resolved = binding.resolved!;
-    if (binding.usesDeclaredType) {
-      return context.readResolvedValue(resolved, shape);
+    final resolved = fieldDeclaredTypeInfo(context.typeResolver, field)!;
+    if (fieldUsesDeclaredType(context.typeResolver, field)) {
+      return context.readResolvedValue(resolved, fieldType);
     }
     final actualResolved = context.readTypeMetaValue(
       resolved.isNamed ? resolved : null,
     );
-    return context.readResolvedValue(actualResolved, shape);
+    return context.readResolvedValue(actualResolved, fieldType);
   }
-  return readDeclaredValueBinding(context, binding, fallback);
+  return readFieldValue(context, field, fallback);
 }
 
 @internal
 List<T> readGeneratedDirectListValue<T>(
   ReadContext context,
-  StructFieldBinding field,
+  resolver.FieldInfoInternal field,
   T Function(Object? value) convert,
 ) {
-  final shape = field.valueBinding.shape;
-  if (shape.typeId != resolver.TypeIds.list ||
-      shape.nullable ||
-      shape.ref ||
-      shape.isDynamic) {
-    throw StateError('Field ${field.metadata.name} is not a direct list path.');
+  final fieldType = field.fieldType;
+  if (fieldType.typeId != resolver.TypeIds.list ||
+      fieldType.nullable ||
+      fieldType.ref ||
+      fieldType.isDynamic) {
+    throw StateError('Field ${field.name} is not a direct list path.');
   }
   return readTypedListPayload(
     context,
-    shape.arguments.single,
+    fieldType.arguments.single,
     convert,
   );
 }
@@ -714,19 +691,19 @@ List<T> readGeneratedDirectListValue<T>(
 @internal
 Set<T> readGeneratedDirectSetValue<T>(
   ReadContext context,
-  StructFieldBinding field,
+  resolver.FieldInfoInternal field,
   T Function(Object? value) convert,
 ) {
-  final shape = field.valueBinding.shape;
-  if (shape.typeId != resolver.TypeIds.set ||
-      shape.nullable ||
-      shape.ref ||
-      shape.isDynamic) {
-    throw StateError('Field ${field.metadata.name} is not a direct set path.');
+  final fieldType = field.fieldType;
+  if (fieldType.typeId != resolver.TypeIds.set ||
+      fieldType.nullable ||
+      fieldType.ref ||
+      fieldType.isDynamic) {
+    throw StateError('Field ${field.name} is not a direct set path.');
   }
   return readTypedSetPayload(
     context,
-    shape.arguments.single,
+    fieldType.arguments.single,
     convert,
   );
 }
@@ -734,21 +711,21 @@ Set<T> readGeneratedDirectSetValue<T>(
 @internal
 Map<K, V> readGeneratedDirectMapValue<K, V>(
   ReadContext context,
-  StructFieldBinding field,
+  resolver.FieldInfoInternal field,
   K Function(Object? value) convertKey,
   V Function(Object? value) convertValue,
 ) {
-  final shape = field.valueBinding.shape;
-  if (shape.typeId != resolver.TypeIds.map ||
-      shape.nullable ||
-      shape.ref ||
-      shape.isDynamic) {
-    throw StateError('Field ${field.metadata.name} is not a direct map path.');
+  final fieldType = field.fieldType;
+  if (fieldType.typeId != resolver.TypeIds.map ||
+      fieldType.nullable ||
+      fieldType.ref ||
+      fieldType.isDynamic) {
+    throw StateError('Field ${field.name} is not a direct map path.');
   }
   return readTypedMapPayload(
     context,
-    shape.arguments[0],
-    shape.arguments[1],
+    fieldType.arguments[0],
+    fieldType.arguments[1],
     convertKey,
     convertValue,
   );

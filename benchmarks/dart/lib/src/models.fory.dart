@@ -40,154 +40,155 @@ final class _MediaSizeForySerializer extends EnumSerializer<MediaSize> {
   }
 }
 
-const List<GeneratedFieldMetadata> _numericStructForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _numericStructForyFieldInfo =
+    <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'f1',
     identifier: '1',
     id: 1,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'f2',
     identifier: '2',
     id: 2,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'f3',
     identifier: '3',
     id: 3,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'f4',
     identifier: '4',
     id: 4,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'f5',
     identifier: '5',
     id: 5,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'f6',
     identifier: '6',
     id: 6,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'f7',
     identifier: '7',
     id: 7,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'f8',
     identifier: '8',
     id: 8,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _NumericStructFieldWriter = GeneratedStructFieldWriter<NumericStruct>;
+typedef _NumericStructFieldWriter
+    = GeneratedStructFieldInfoWriter<NumericStruct>;
 
 void _writeNumericStructField0(
-    WriteContext context, GeneratedStructField field, NumericStruct value) {
-  writeGeneratedStructFieldValue(context, field, value.f1);
+    WriteContext context, GeneratedStructFieldInfo field, NumericStruct value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.f1);
 }
 
 void _writeNumericStructField1(
-    WriteContext context, GeneratedStructField field, NumericStruct value) {
-  writeGeneratedStructFieldValue(context, field, value.f2);
+    WriteContext context, GeneratedStructFieldInfo field, NumericStruct value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.f2);
 }
 
 void _writeNumericStructField2(
-    WriteContext context, GeneratedStructField field, NumericStruct value) {
-  writeGeneratedStructFieldValue(context, field, value.f3);
+    WriteContext context, GeneratedStructFieldInfo field, NumericStruct value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.f3);
 }
 
 void _writeNumericStructField3(
-    WriteContext context, GeneratedStructField field, NumericStruct value) {
-  writeGeneratedStructFieldValue(context, field, value.f4);
+    WriteContext context, GeneratedStructFieldInfo field, NumericStruct value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.f4);
 }
 
 void _writeNumericStructField4(
-    WriteContext context, GeneratedStructField field, NumericStruct value) {
-  writeGeneratedStructFieldValue(context, field, value.f5);
+    WriteContext context, GeneratedStructFieldInfo field, NumericStruct value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.f5);
 }
 
 void _writeNumericStructField5(
-    WriteContext context, GeneratedStructField field, NumericStruct value) {
-  writeGeneratedStructFieldValue(context, field, value.f6);
+    WriteContext context, GeneratedStructFieldInfo field, NumericStruct value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.f6);
 }
 
 void _writeNumericStructField6(
-    WriteContext context, GeneratedStructField field, NumericStruct value) {
-  writeGeneratedStructFieldValue(context, field, value.f7);
+    WriteContext context, GeneratedStructFieldInfo field, NumericStruct value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.f7);
 }
 
 void _writeNumericStructField7(
-    WriteContext context, GeneratedStructField field, NumericStruct value) {
-  writeGeneratedStructFieldValue(context, field, value.f8);
+    WriteContext context, GeneratedStructFieldInfo field, NumericStruct value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.f8);
 }
 
 final GeneratedStructRegistration<NumericStruct>
@@ -207,23 +208,23 @@ final GeneratedStructRegistration<NumericStruct>
   type: NumericStruct,
   serializerFactory: _NumericStructForySerializer.new,
   evolving: true,
-  fields: _numericStructForyFieldMetadata,
+  fields: _numericStructForyFieldInfo,
 );
 
 final class _NumericStructForySerializer extends Serializer<NumericStruct> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _NumericStructForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _numericStructForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _numericStructForyRegistration,
     );
@@ -419,415 +420,414 @@ int _readNumericStructF8(Object? value, [Object? fallback]) {
       : (value as Int32).value;
 }
 
-const List<GeneratedFieldMetadata> _sampleForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _sampleForyFieldInfo = <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'doubleValueBoxed',
     identifier: '11',
     id: 11,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: double,
       typeId: 20,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'doubleValue',
     identifier: '4',
     id: 4,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: double,
       typeId: 20,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'floatValueBoxed',
     identifier: '10',
     id: 10,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Float32,
       typeId: 19,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'floatValue',
     identifier: '3',
     id: 3,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Float32,
       typeId: 19,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'booleanValueBoxed',
     identifier: '14',
     id: 14,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: bool,
       typeId: 1,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'booleanValue',
     identifier: '7',
     id: 7,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: bool,
       typeId: 1,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'longValue',
     identifier: '2',
     id: 2,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 7,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'longValueBoxed',
     identifier: '9',
     id: 9,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 7,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'intValue',
     identifier: '1',
     id: 1,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'shortValueBoxed',
     identifier: '12',
     id: 12,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'charValueBoxed',
     identifier: '13',
     id: 13,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'shortValue',
     identifier: '5',
     id: 5,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'charValue',
     identifier: '6',
     id: 6,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'intValueBoxed',
     identifier: '8',
     id: 8,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'string',
     identifier: '22',
     id: 22,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'booleanArray',
     identifier: '21',
     id: 21,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: 43,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: bool,
           typeId: 1,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'intArray',
     identifier: '15',
     id: 15,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Int32List,
       typeId: 46,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'shortArray',
     identifier: '19',
     id: 19,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Int32List,
       typeId: 46,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'charArray',
     identifier: '20',
     id: 20,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Int32List,
       typeId: 46,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'longArray',
     identifier: '16',
     id: 16,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Int64List,
       typeId: 47,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'floatArray',
     identifier: '17',
     id: 17,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Float32List,
       typeId: 55,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'doubleArray',
     identifier: '18',
     id: 18,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Float64List,
       typeId: 56,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _SampleFieldWriter = GeneratedStructFieldWriter<Sample>;
+typedef _SampleFieldWriter = GeneratedStructFieldInfoWriter<Sample>;
 
 void _writeSampleField0(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.doubleValueBoxed);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.doubleValueBoxed);
 }
 
 void _writeSampleField1(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.doubleValue);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.doubleValue);
 }
 
 void _writeSampleField2(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.floatValueBoxed);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.floatValueBoxed);
 }
 
 void _writeSampleField3(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.floatValue);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.floatValue);
 }
 
 void _writeSampleField4(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.booleanValueBoxed);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.booleanValueBoxed);
 }
 
 void _writeSampleField5(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.booleanValue);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.booleanValue);
 }
 
 void _writeSampleField6(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.longValue);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.longValue);
 }
 
 void _writeSampleField7(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.longValueBoxed);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.longValueBoxed);
 }
 
 void _writeSampleField8(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.intValue);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.intValue);
 }
 
 void _writeSampleField9(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.shortValueBoxed);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.shortValueBoxed);
 }
 
 void _writeSampleField10(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.charValueBoxed);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.charValueBoxed);
 }
 
 void _writeSampleField11(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.shortValue);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.shortValue);
 }
 
 void _writeSampleField12(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.charValue);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.charValue);
 }
 
 void _writeSampleField13(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.intValueBoxed);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.intValueBoxed);
 }
 
 void _writeSampleField14(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.string);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.string);
 }
 
 void _writeSampleField15(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.booleanArray);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.booleanArray);
 }
 
 void _writeSampleField16(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.intArray);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.intArray);
 }
 
 void _writeSampleField17(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.shortArray);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.shortArray);
 }
 
 void _writeSampleField18(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.charArray);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.charArray);
 }
 
 void _writeSampleField19(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.longArray);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.longArray);
 }
 
 void _writeSampleField20(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.floatArray);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.floatArray);
 }
 
 void _writeSampleField21(
-    WriteContext context, GeneratedStructField field, Sample value) {
-  writeGeneratedStructFieldValue(context, field, value.doubleArray);
+    WriteContext context, GeneratedStructFieldInfo field, Sample value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.doubleArray);
 }
 
 final GeneratedStructRegistration<Sample> _sampleForyRegistration =
@@ -861,23 +861,23 @@ final GeneratedStructRegistration<Sample> _sampleForyRegistration =
   type: Sample,
   serializerFactory: _SampleForySerializer.new,
   evolving: true,
-  fields: _sampleForyFieldMetadata,
+  fields: _sampleForyFieldInfo,
 );
 
 final class _SampleForySerializer extends Serializer<Sample> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _SampleForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _sampleForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _sampleForyRegistration,
     );
@@ -1408,235 +1408,234 @@ Float64List _readSampleDoubleArray(Object? value, [Object? fallback]) {
       : value as Float64List;
 }
 
-const List<GeneratedFieldMetadata> _mediaForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _mediaForyFieldInfo = <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'hasBitrate',
     identifier: '9',
     id: 9,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: bool,
       typeId: 1,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'duration',
     identifier: '6',
     id: 6,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 7,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'size',
     identifier: '7',
     id: 7,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 7,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'width',
     identifier: '3',
     id: 3,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'height',
     identifier: '4',
     id: 4,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'bitrate',
     identifier: '8',
     id: 8,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'uri',
     identifier: '1',
     id: 1,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'copyright',
     identifier: '12',
     id: 12,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'title',
     identifier: '2',
     id: 2,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'format',
     identifier: '5',
     id: 5,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'persons',
     identifier: '10',
     id: 10,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: 22,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: String,
           typeId: 21,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'player',
     identifier: '11',
     id: 11,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Player,
       typeId: 25,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _MediaFieldWriter = GeneratedStructFieldWriter<Media>;
+typedef _MediaFieldWriter = GeneratedStructFieldInfoWriter<Media>;
 
 void _writeMediaField0(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.hasBitrate);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.hasBitrate);
 }
 
 void _writeMediaField1(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.duration);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.duration);
 }
 
 void _writeMediaField2(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.size);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.size);
 }
 
 void _writeMediaField3(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.width);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.width);
 }
 
 void _writeMediaField4(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.height);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.height);
 }
 
 void _writeMediaField5(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.bitrate);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.bitrate);
 }
 
 void _writeMediaField6(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.uri);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.uri);
 }
 
 void _writeMediaField7(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.copyright);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.copyright);
 }
 
 void _writeMediaField8(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.title);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.title);
 }
 
 void _writeMediaField9(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.format);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.format);
 }
 
 void _writeMediaField10(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.persons);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.persons);
 }
 
 void _writeMediaField11(
-    WriteContext context, GeneratedStructField field, Media value) {
-  writeGeneratedStructFieldValue(context, field, value.player);
+    WriteContext context, GeneratedStructFieldInfo field, Media value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.player);
 }
 
 final GeneratedStructRegistration<Media> _mediaForyRegistration =
@@ -1660,23 +1659,23 @@ final GeneratedStructRegistration<Media> _mediaForyRegistration =
   type: Media,
   serializerFactory: _MediaForySerializer.new,
   evolving: true,
-  fields: _mediaForyFieldMetadata,
+  fields: _mediaForyFieldInfo,
 );
 
 final class _MediaForySerializer extends Serializer<Media> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _MediaForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _mediaForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _mediaForyRegistration,
     );
@@ -1700,7 +1699,7 @@ final class _MediaForySerializer extends Serializer<Media> {
       context.writeString(value.copyright);
       context.writeString(value.title);
       context.writeString(value.format);
-      writeGeneratedStructFieldValue(context, fields[10], value.persons);
+      writeGeneratedStructFieldInfoValue(context, fields[10], value.persons);
       final cursor11 = GeneratedWriteCursor.reserve(buffer, 5);
       cursor11.writeVarUint32(value.player.index);
       cursor11.finish();
@@ -1968,100 +1967,99 @@ Player _readMediaPlayer(Object? value, [Object? fallback]) {
       : value as Player;
 }
 
-const List<GeneratedFieldMetadata> _imageForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _imageForyFieldInfo = <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'width',
     identifier: '3',
     id: 3,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'height',
     identifier: '4',
     id: 4,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: int,
       typeId: 5,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'uri',
     identifier: '1',
     id: 1,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'title',
     identifier: '2',
     id: 2,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: String,
       typeId: 21,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'size',
     identifier: '5',
     id: 5,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: MediaSize,
       typeId: 25,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _ImageFieldWriter = GeneratedStructFieldWriter<Image>;
+typedef _ImageFieldWriter = GeneratedStructFieldInfoWriter<Image>;
 
 void _writeImageField0(
-    WriteContext context, GeneratedStructField field, Image value) {
-  writeGeneratedStructFieldValue(context, field, value.width);
+    WriteContext context, GeneratedStructFieldInfo field, Image value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.width);
 }
 
 void _writeImageField1(
-    WriteContext context, GeneratedStructField field, Image value) {
-  writeGeneratedStructFieldValue(context, field, value.height);
+    WriteContext context, GeneratedStructFieldInfo field, Image value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.height);
 }
 
 void _writeImageField2(
-    WriteContext context, GeneratedStructField field, Image value) {
-  writeGeneratedStructFieldValue(context, field, value.uri);
+    WriteContext context, GeneratedStructFieldInfo field, Image value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.uri);
 }
 
 void _writeImageField3(
-    WriteContext context, GeneratedStructField field, Image value) {
-  writeGeneratedStructFieldValue(context, field, value.title);
+    WriteContext context, GeneratedStructFieldInfo field, Image value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.title);
 }
 
 void _writeImageField4(
-    WriteContext context, GeneratedStructField field, Image value) {
-  writeGeneratedStructFieldValue(context, field, value.size);
+    WriteContext context, GeneratedStructFieldInfo field, Image value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.size);
 }
 
 final GeneratedStructRegistration<Image> _imageForyRegistration =
@@ -2078,23 +2076,23 @@ final GeneratedStructRegistration<Image> _imageForyRegistration =
   type: Image,
   serializerFactory: _ImageForySerializer.new,
   evolving: true,
-  fields: _imageForyFieldMetadata,
+  fields: _imageForyFieldInfo,
 );
 
 final class _ImageForySerializer extends Serializer<Image> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _ImageForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _imageForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _imageForyRegistration,
     );
@@ -2234,55 +2232,55 @@ MediaSize _readImageSize(Object? value, [Object? fallback]) {
       : value as MediaSize;
 }
 
-const List<GeneratedFieldMetadata> _mediaContentForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _mediaContentForyFieldInfo =
+    <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'images',
     identifier: '2',
     id: 2,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: 22,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: Image,
           typeId: 28,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
   ),
-  GeneratedFieldMetadata(
+  GeneratedFieldInfo(
     name: 'media',
     identifier: '1',
     id: 1,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: Media,
       typeId: 28,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[],
+      arguments: <GeneratedFieldType>[],
     ),
   ),
 ];
 
-typedef _MediaContentFieldWriter = GeneratedStructFieldWriter<MediaContent>;
+typedef _MediaContentFieldWriter = GeneratedStructFieldInfoWriter<MediaContent>;
 
 void _writeMediaContentField0(
-    WriteContext context, GeneratedStructField field, MediaContent value) {
-  writeGeneratedStructFieldValue(context, field, value.images);
+    WriteContext context, GeneratedStructFieldInfo field, MediaContent value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.images);
 }
 
 void _writeMediaContentField1(
-    WriteContext context, GeneratedStructField field, MediaContent value) {
-  writeGeneratedStructFieldValue(context, field, value.media);
+    WriteContext context, GeneratedStructFieldInfo field, MediaContent value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.media);
 }
 
 final GeneratedStructRegistration<MediaContent> _mediaContentForyRegistration =
@@ -2296,23 +2294,23 @@ final GeneratedStructRegistration<MediaContent> _mediaContentForyRegistration =
   type: MediaContent,
   serializerFactory: _MediaContentForySerializer.new,
   evolving: true,
-  fields: _mediaContentForyFieldMetadata,
+  fields: _mediaContentForyFieldInfo,
 );
 
 final class _MediaContentForySerializer extends Serializer<MediaContent> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _MediaContentForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _mediaContentForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _mediaContentForyRegistration,
     );
@@ -2323,8 +2321,8 @@ final class _MediaContentForySerializer extends Serializer<MediaContent> {
     final slots = generatedStructWriteSlots(context);
     if (slots == null) {
       final fields = _writeFields(context);
-      writeGeneratedStructFieldValue(context, fields[0], value.images);
-      writeGeneratedStructFieldValue(context, fields[1], value.media);
+      writeGeneratedStructFieldInfoValue(context, fields[0], value.images);
+      writeGeneratedStructFieldInfoValue(context, fields[1], value.media);
       return;
     }
     final writers = _mediaContentForyRegistration.fieldWritersBySlot;
@@ -2343,7 +2341,7 @@ final class _MediaContentForySerializer extends Serializer<MediaContent> {
       _imagesValue = readGeneratedDirectListValue<Image>(
           context, fields[0], _readMediaContentImagesElement);
       _mediaValue = _readMediaContentMedia(
-          readGeneratedStructFieldValue(context, fields[1]));
+          readGeneratedStructFieldInfoValue(context, fields[1]));
     } else {
       if (slots.containsSlot(0)) {
         final rawMediaContent0 = slots.valueForSlot(0);
@@ -2391,37 +2389,36 @@ Media _readMediaContentMedia(Object? value, [Object? fallback]) {
       : value as Media;
 }
 
-const List<GeneratedFieldMetadata> _structListForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _structListForyFieldInfo = <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'structList',
     identifier: '1',
     id: 1,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: 22,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: NumericStruct,
           typeId: 28,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
   ),
 ];
 
-typedef _StructListFieldWriter = GeneratedStructFieldWriter<StructList>;
+typedef _StructListFieldWriter = GeneratedStructFieldInfoWriter<StructList>;
 
 void _writeStructListField0(
-    WriteContext context, GeneratedStructField field, StructList value) {
-  writeGeneratedStructFieldValue(context, field, value.structList);
+    WriteContext context, GeneratedStructFieldInfo field, StructList value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.structList);
 }
 
 final GeneratedStructRegistration<StructList> _structListForyRegistration =
@@ -2434,23 +2431,23 @@ final GeneratedStructRegistration<StructList> _structListForyRegistration =
   type: StructList,
   serializerFactory: _StructListForySerializer.new,
   evolving: true,
-  fields: _structListForyFieldMetadata,
+  fields: _structListForyFieldInfo,
 );
 
 final class _StructListForySerializer extends Serializer<StructList> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _StructListForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _structListForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _structListForyRegistration,
     );
@@ -2461,7 +2458,7 @@ final class _StructListForySerializer extends Serializer<StructList> {
     final slots = generatedStructWriteSlots(context);
     if (slots == null) {
       final fields = _writeFields(context);
-      writeGeneratedStructFieldValue(context, fields[0], value.structList);
+      writeGeneratedStructFieldInfoValue(context, fields[0], value.structList);
       return;
     }
     final writers = _structListForyRegistration.fieldWritersBySlot;
@@ -2511,37 +2508,36 @@ List<NumericStruct> _readStructListStructList(Object? value,
       : List.castFrom<dynamic, NumericStruct>(value as List);
 }
 
-const List<GeneratedFieldMetadata> _sampleListForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _sampleListForyFieldInfo = <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'sampleList',
     identifier: '1',
     id: 1,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: 22,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: Sample,
           typeId: 28,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
   ),
 ];
 
-typedef _SampleListFieldWriter = GeneratedStructFieldWriter<SampleList>;
+typedef _SampleListFieldWriter = GeneratedStructFieldInfoWriter<SampleList>;
 
 void _writeSampleListField0(
-    WriteContext context, GeneratedStructField field, SampleList value) {
-  writeGeneratedStructFieldValue(context, field, value.sampleList);
+    WriteContext context, GeneratedStructFieldInfo field, SampleList value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.sampleList);
 }
 
 final GeneratedStructRegistration<SampleList> _sampleListForyRegistration =
@@ -2554,23 +2550,23 @@ final GeneratedStructRegistration<SampleList> _sampleListForyRegistration =
   type: SampleList,
   serializerFactory: _SampleListForySerializer.new,
   evolving: true,
-  fields: _sampleListForyFieldMetadata,
+  fields: _sampleListForyFieldInfo,
 );
 
 final class _SampleListForySerializer extends Serializer<SampleList> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _SampleListForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _sampleListForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _sampleListForyRegistration,
     );
@@ -2581,7 +2577,7 @@ final class _SampleListForySerializer extends Serializer<SampleList> {
     final slots = generatedStructWriteSlots(context);
     if (slots == null) {
       final fields = _writeFields(context);
-      writeGeneratedStructFieldValue(context, fields[0], value.sampleList);
+      writeGeneratedStructFieldInfoValue(context, fields[0], value.sampleList);
       return;
     }
     final writers = _sampleListForyRegistration.fieldWritersBySlot;
@@ -2630,26 +2626,26 @@ List<Sample> _readSampleListSampleList(Object? value, [Object? fallback]) {
       : List.castFrom<dynamic, Sample>(value as List);
 }
 
-const List<GeneratedFieldMetadata> _mediaContentListForyFieldMetadata =
-    <GeneratedFieldMetadata>[
-  GeneratedFieldMetadata(
+const List<GeneratedFieldInfo> _mediaContentListForyFieldInfo =
+    <GeneratedFieldInfo>[
+  GeneratedFieldInfo(
     name: 'mediaContentList',
     identifier: '1',
     id: 1,
-    shape: GeneratedTypeShape(
+    fieldType: GeneratedFieldType(
       type: List,
       typeId: 22,
       nullable: false,
       ref: false,
       dynamic: null,
-      arguments: <GeneratedTypeShape>[
-        GeneratedTypeShape(
+      arguments: <GeneratedFieldType>[
+        GeneratedFieldType(
           type: MediaContent,
           typeId: 28,
           nullable: true,
           ref: false,
           dynamic: null,
-          arguments: <GeneratedTypeShape>[],
+          arguments: <GeneratedFieldType>[],
         )
       ],
     ),
@@ -2657,11 +2653,11 @@ const List<GeneratedFieldMetadata> _mediaContentListForyFieldMetadata =
 ];
 
 typedef _MediaContentListFieldWriter
-    = GeneratedStructFieldWriter<MediaContentList>;
+    = GeneratedStructFieldInfoWriter<MediaContentList>;
 
-void _writeMediaContentListField0(
-    WriteContext context, GeneratedStructField field, MediaContentList value) {
-  writeGeneratedStructFieldValue(context, field, value.mediaContentList);
+void _writeMediaContentListField0(WriteContext context,
+    GeneratedStructFieldInfo field, MediaContentList value) {
+  writeGeneratedStructFieldInfoValue(context, field, value.mediaContentList);
 }
 
 final GeneratedStructRegistration<MediaContentList>
@@ -2675,24 +2671,24 @@ final GeneratedStructRegistration<MediaContentList>
   type: MediaContentList,
   serializerFactory: _MediaContentListForySerializer.new,
   evolving: true,
-  fields: _mediaContentListForyFieldMetadata,
+  fields: _mediaContentListForyFieldInfo,
 );
 
 final class _MediaContentListForySerializer
     extends Serializer<MediaContentList> {
-  List<GeneratedStructField>? _generatedFields;
+  List<GeneratedStructFieldInfo>? _generatedFields;
 
   _MediaContentListForySerializer();
 
-  List<GeneratedStructField> _writeFields(WriteContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _mediaContentListForyRegistration,
     );
   }
 
-  List<GeneratedStructField> _readFields(ReadContext context) {
-    return _generatedFields ??= buildGeneratedStructFields(
+  List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
+    return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
       _mediaContentListForyRegistration,
     );
@@ -2703,7 +2699,7 @@ final class _MediaContentListForySerializer
     final slots = generatedStructWriteSlots(context);
     if (slots == null) {
       final fields = _writeFields(context);
-      writeGeneratedStructFieldValue(
+      writeGeneratedStructFieldInfoValue(
           context, fields[0], value.mediaContentList);
       return;
     }

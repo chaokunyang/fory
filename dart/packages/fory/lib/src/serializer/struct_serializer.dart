@@ -3,7 +3,6 @@ import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
-import 'package:fory/src/serializer/struct_field_binding.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/util/hash_util.dart';
 
@@ -15,29 +14,20 @@ typedef GeneratedStructCompatibleFieldReader<T> = void Function(
   Object? rawValue,
 );
 
-/// Internal struct-specific serialization orchestration.
-///
-/// This mirrors the Java/Cython ownership split: schema/version framing,
-/// compatible-field staging, and remembered remote metadata live here rather
-/// than on generic read/write contexts or on the public serializer API.
-final class StructCodec {
+final class StructSerializer extends Serializer<Object?> {
   final Serializer<Object?> _payloadSerializer;
   final StructMetadataInternal _metadata;
   final TypeResolver _typeResolver;
-  late final List<StructFieldBinding> _localFields =
-      List<StructFieldBinding>.unmodifiable(
-        List<StructFieldBinding>.generate(
+  late final List<FieldInfoInternal> _localFields =
+      List<FieldInfoInternal>.unmodifiable(
+        List<FieldInfoInternal>.generate(
           _metadata.fields.length,
-          (slot) => StructFieldBinding(
-            slot,
-            _metadata.fields[slot],
-            _typeResolver.createDeclaredFieldBinding(_metadata.fields[slot]),
-          ),
+          (slot) => _typeResolver.fieldInfo(_metadata.fields[slot], slot: slot),
         ),
       );
-  late final Map<String, StructFieldBinding> _localFieldsByIdentifier =
-      <String, StructFieldBinding>{
-        for (final field in _localFields) field.metadata.identifier: field,
+  late final Map<String, FieldInfoInternal>
+      _localFieldsByIdentifier = <String, FieldInfoInternal>{
+        for (final field in _localFields) field.identifier: field,
       };
   final Expando<_CompatibleWriteLayout> _compatibleWriteLayouts =
       Expando<_CompatibleWriteLayout>('fory_compatible_write_layout');
@@ -47,7 +37,7 @@ final class StructCodec {
   final List<GeneratedStructCompatibleFieldReader<Object>>?
       _compatibleReadersBySlot;
 
-  StructCodec(
+  StructSerializer(
     this._payloadSerializer,
     this._metadata,
     this._typeResolver, {
@@ -57,11 +47,24 @@ final class StructCodec {
   })  : _compatibleFactory = compatibleFactory,
         _compatibleReadersBySlot = compatibleReadersBySlot;
 
-  List<StructFieldBinding> get localFields => _localFields;
+  @override
+  bool get supportsRef => _payloadSerializer.supportsRef;
+
+  @override
+  void write(WriteContext context, Object? value) {
+    throw StateError('StructSerializer.write requires struct dispatch.');
+  }
+
+  @override
+  Object read(ReadContext context) {
+    throw StateError('StructSerializer.read requires struct dispatch.');
+  }
+
+  List<FieldInfoInternal> get localFields => _localFields;
 
   SharedTypeDefInternal sharedTypeDefForWrite(
     WriteContext context,
-    ResolvedTypeInternal resolved,
+    TypeInfoInternal resolved,
     Object value,
   ) {
     final layout = _compatibleWriteLayoutForValue(context, resolved, value);
@@ -71,9 +74,9 @@ final class StructCodec {
     return layout.sharedTypeDef;
   }
 
-  void write(
+  void writeValue(
     WriteContext context,
-    ResolvedTypeInternal resolved,
+    TypeInfoInternal resolved,
     Object value,
   ) {
     final internal = context;
@@ -83,17 +86,17 @@ final class StructCodec {
     final previousCompatibleFields =
         _replaceWriteSlots(internal, resolved, value);
     _payloadSerializer.write(context, value);
-    internal.restoreLocalState(
+    internal.restoreContextObject(
       structWriteSlotsKey,
       previousCompatibleFields,
     );
   }
 
-  Object read(
+  Object readValue(
     ReadContext context,
-    ResolvedTypeInternal resolved,
-    {bool hasCurrentPreservedRef = false}
-  ) {
+    TypeInfoInternal resolved, {
+    bool hasCurrentPreservedRef = false,
+  }) {
     final internal = context;
     if (!context.config.compatible && context.config.checkStructVersion) {
       final expected = schemaHashInternal(_metadata);
@@ -113,7 +116,7 @@ final class StructCodec {
         hasCurrentPreservedRef: hasCurrentPreservedRef,
       );
     }
-    final previousReadSlots = internal.replaceLocalState(
+    final previousReadSlots = internal.replaceContextObject(
       structReadSlotsKey,
       null,
     );
@@ -122,7 +125,7 @@ final class StructCodec {
       resolved,
       hasCurrentPreservedRef: hasCurrentPreservedRef,
     );
-    internal.restoreLocalState(
+    internal.restoreContextObject(
       structReadSlotsKey,
       previousReadSlots,
     );
@@ -132,11 +135,11 @@ final class StructCodec {
 
   Object? _replaceWriteSlots(
     WriteContext context,
-    ResolvedTypeInternal resolved,
+    TypeInfoInternal resolved,
     Object value,
   ) {
     final layout = _compatibleWriteLayoutForValue(context, resolved, value);
-    return context.replaceLocalState(
+    return context.replaceContextObject(
       structWriteSlotsKey,
       layout == null ? null : StructWriteSlots(layout.fields, _localFields.length),
     );
@@ -144,7 +147,7 @@ final class StructCodec {
 
   _CompatibleWriteLayout? _compatibleWriteLayoutForValue(
     WriteContext context,
-    ResolvedTypeInternal resolved,
+    TypeInfoInternal resolved,
     Object value,
   ) {
     if (!_metadata.evolving || !context.config.compatible) {
@@ -158,37 +161,33 @@ final class StructCodec {
     if (cached != null) {
       return cached;
     }
-    final orderedFields = <StructFieldBinding>[];
+    final orderedFields = <FieldInfoInternal>[];
     final usedIdentifiers = <String>{};
     for (final remoteField in remoteMetadata.fields) {
       final localField = _localFieldsByIdentifier[remoteField.identifier];
       if (localField == null) {
         continue;
       }
-      final mergedField = mergeCompatibleWriteField(
-        localField.metadata,
-        remoteField,
-      );
-      orderedFields.add(
-        StructFieldBinding(
-          localField.slot,
-          mergedField,
-          _typeResolver.createDeclaredFieldBinding(mergedField),
+      final mergedField = _typeResolver.fieldInfo(
+        mergeCompatibleWriteField(
+          localField,
+          remoteField,
         ),
+        slot: localField.slot,
       );
+      orderedFields.add(mergedField);
       usedIdentifiers.add(remoteField.identifier);
     }
     for (final localField in _localFields) {
-      if (usedIdentifiers.add(localField.metadata.identifier)) {
+      if (usedIdentifiers.add(localField.identifier)) {
         orderedFields.add(localField);
       }
     }
-    final fields = List<StructFieldBinding>.unmodifiable(orderedFields);
+    final fields =
+        List<FieldInfoInternal>.unmodifiable(orderedFields);
     final sharedTypeDef = context.typeResolver.sharedTypeDefForResolved(
       resolved,
-      fields: fields
-          .map((field) => field.metadata)
-          .toList(growable: false),
+      fields: fields,
     );
     final layout = _CompatibleWriteLayout(fields, sharedTypeDef);
     _compatibleWriteLayouts[remoteMetadata] = layout;
@@ -197,18 +196,17 @@ final class StructCodec {
 
   Object _readCompatible(
     ReadContext context,
-    ResolvedTypeInternal resolved,
-    {required bool hasCurrentPreservedRef}
-  ) {
+    TypeInfoInternal resolved, {
+    required bool hasCurrentPreservedRef,
+  }) {
     final layout = _compatibleReadLayoutForResolved(resolved);
     final compatibleFactory = _compatibleFactory;
     final compatibleReadersBySlot = _compatibleReadersBySlot;
     if (compatibleFactory != null && compatibleReadersBySlot != null) {
       final int? sentinelId;
-      final needsSentinel =
-          resolved.supportsRef && !hasCurrentPreservedRef;
+      final needsSentinel = resolved.supportsRef && !hasCurrentPreservedRef;
       if (needsSentinel) {
-        sentinelId = context.refReader.preserveSentinel();
+        sentinelId = context.refReader.preserveRefId(-1);
       } else {
         sentinelId = null;
       }
@@ -223,16 +221,13 @@ final class StructCodec {
         compatibleReadersBySlot[localField.slot](
           context,
           value,
-          readCompatibleFieldBinding(
-            context,
-            localField.valueBinding,
-          ),
+          readCompatibleField(context, localField),
         );
       }
       if (needsSentinel &&
           context.refReader.hasPreservedRefId &&
           context.refReader.lastPreservedRefId == sentinelId) {
-        context.refReader.discardPreservedRefId(sentinelId!);
+        context.refReader.reference(null);
       }
       _rememberRemoteMetadata(context, resolved, value);
       return value;
@@ -246,13 +241,13 @@ final class StructCodec {
         continue;
       }
       final slot = localField.slot;
-      compatibleValues[slot] = readCompatibleFieldBinding(
+      compatibleValues[slot] = readCompatibleField(
         context,
-        localField.valueBinding,
+        localField,
       );
       presentSlots[slot] = true;
     }
-    final previousCompatibleFields = context.replaceLocalState(
+    final previousCompatibleFields = context.replaceContextObject(
       structReadSlotsKey,
       StructReadSlots(compatibleValues, presentSlots),
     );
@@ -261,7 +256,7 @@ final class StructCodec {
       resolved,
       hasCurrentPreservedRef: hasCurrentPreservedRef,
     );
-    context.restoreLocalState(
+    context.restoreContextObject(
       structReadSlotsKey,
       previousCompatibleFields,
     );
@@ -270,7 +265,7 @@ final class StructCodec {
   }
 
   _CompatibleReadLayout _compatibleReadLayoutForResolved(
-    ResolvedTypeInternal resolved,
+    TypeInfoInternal resolved,
   ) {
     final remoteMetadata = resolved.remoteStructMetadata;
     if (remoteMetadata == null) {
@@ -280,28 +275,25 @@ final class StructCodec {
     if (cached != null) {
       return cached;
     }
-    final fields = <StructFieldBinding?>[];
+    final fields = <FieldInfoInternal?>[];
     for (final remoteField in remoteMetadata.fields) {
       final localField = _localFieldsByIdentifier[remoteField.identifier];
       if (localField == null) {
         fields.add(null);
         continue;
       }
-      final mergedField = mergeCompatibleReadField(
-        localField.metadata,
-        remoteField,
-      );
-      fields.add(
-        StructFieldBinding(
-          localField.slot,
-          mergedField,
-          _typeResolver.createDeclaredFieldBinding(mergedField),
+      final mergedField = _typeResolver.fieldInfo(
+        mergeCompatibleReadField(
+          localField,
+          remoteField,
         ),
+        slot: localField.slot,
       );
+      fields.add(mergedField);
     }
     final layout = _CompatibleReadLayout(
       remoteMetadata.fields,
-      List<StructFieldBinding?>.unmodifiable(fields),
+      List<FieldInfoInternal?>.unmodifiable(fields),
     );
     _compatibleReadLayouts[remoteMetadata] = layout;
     return layout;
@@ -309,7 +301,7 @@ final class StructCodec {
 
   void _rememberRemoteMetadata(
     ReadContext context,
-    ResolvedTypeInternal resolved,
+    TypeInfoInternal resolved,
     Object value,
   ) {
     final remoteMetadata = resolved.remoteStructMetadata;
@@ -320,15 +312,15 @@ final class StructCodec {
 }
 
 final class _CompatibleWriteLayout {
-  final List<StructFieldBinding> fields;
+  final List<FieldInfoInternal> fields;
   final SharedTypeDefInternal sharedTypeDef;
 
   const _CompatibleWriteLayout(this.fields, this.sharedTypeDef);
 }
 
 final class _CompatibleReadLayout {
-  final List<FieldMetadataInternal> remoteFields;
-  final List<StructFieldBinding?> fields;
+  final List<FieldInfoInternal> remoteFields;
+  final List<FieldInfoInternal?> fields;
 
   const _CompatibleReadLayout(this.remoteFields, this.fields);
 }

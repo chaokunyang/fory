@@ -7,9 +7,12 @@ import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/ref_reader.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
-import 'package:fory/src/serializer/payload_codec.dart';
+import 'package:fory/src/serializer/collection_serializers.dart';
+import 'package:fory/src/serializer/map_serializers.dart';
+import 'package:fory/src/serializer/primitive_serializers.dart';
+import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/serializer/struct_slots.dart';
+import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/types/float16.dart';
 
 /// Read-side serializer context.
@@ -26,8 +29,8 @@ final class ReadContext {
   final CompatibleStructMetadataStore _compatibleStructMetadata;
 
   late Buffer _buffer;
-  final List<ResolvedTypeInternal> _sharedTypes = <ResolvedTypeInternal>[];
-  StructReadSlots? _structReadSlots;
+  final List<TypeInfoInternal> _sharedTypes = <TypeInfoInternal>[];
+  final Map<Object, Object?> _contextObjects = <Object, Object?>{};
   int _depth = 0;
 
   @internal
@@ -49,7 +52,7 @@ final class ReadContext {
     _sharedTypes.clear();
     _refReader.reset();
     _metaStringReader.reset();
-    _structReadSlots = null;
+    _contextObjects.clear();
     _depth = 0;
   }
 
@@ -63,29 +66,33 @@ final class ReadContext {
   RefReader get refReader => _refReader;
 
   @internal
-  T? localStateAs<T>(Object key) {
-    if (!identical(key, structReadSlotsKey)) {
-      throw StateError('Unknown read local state key: $key.');
-    }
-    return _structReadSlots as T?;
+  bool hasContextObject(Object key) {
+    return _contextObjects.containsKey(key);
   }
 
   @internal
-  Object? replaceLocalState(Object key, Object? next) {
-    if (!identical(key, structReadSlotsKey)) {
-      throw StateError('Unknown read local state key: $key.');
+  T? getContextObject<T>(Object key) {
+    return _contextObjects[key] as T?;
+  }
+
+  @internal
+  Object? replaceContextObject(Object key, Object? next) {
+    final previous = _contextObjects[key];
+    if (next == null) {
+      _contextObjects.remove(key);
+    } else {
+      _contextObjects[key] = next;
     }
-    final previous = _structReadSlots;
-    _structReadSlots = next as StructReadSlots?;
     return previous;
   }
 
   @internal
-  void restoreLocalState(Object key, Object? previous) {
-    if (!identical(key, structReadSlotsKey)) {
-      throw StateError('Unknown read local state key: $key.');
+  void restoreContextObject(Object key, Object? previous) {
+    if (previous == null) {
+      _contextObjects.remove(key);
+    } else {
+      _contextObjects[key] = previous;
     }
-    _structReadSlots = previous as StructReadSlots?;
   }
 
   @internal
@@ -97,27 +104,31 @@ final class ReadContext {
   }
 
   @internal
-  ResolvedTypeInternal readTypeMetaValue([
-    ResolvedTypeInternal? expectedNamedType,
+  TypeInfoInternal readTypeMetaValue([
+    TypeInfoInternal? expectedNamedType,
   ]) =>
       _readTypeMeta(expectedNamedType);
 
   @internal
   Object readSerializerPayload(
-      Serializer<Object?> serializer, ResolvedTypeInternal resolved,
+      Serializer<Object?> serializer, TypeInfoInternal resolved,
       {required bool hasCurrentPreservedRef}) {
     final int? sentinelId;
+    final int? sentinelDepth;
     final needsSentinel = resolved.supportsRef && !hasCurrentPreservedRef;
     if (needsSentinel) {
-      sentinelId = _refReader.preserveSentinel();
+      sentinelId = _refReader.preserveRefId(-1);
+      sentinelDepth = _refReader.preservedRefDepth;
     } else {
       sentinelId = null;
+      sentinelDepth = null;
     }
     final value = serializer.read(this) as Object;
     if (needsSentinel &&
+        _refReader.preservedRefDepth == sentinelDepth &&
         _refReader.hasPreservedRefId &&
         _refReader.lastPreservedRefId == sentinelId) {
-      _refReader.discardPreservedRefId(sentinelId!);
+      _refReader.reference(null);
     }
     return value;
   }
@@ -186,7 +197,7 @@ final class ReadContext {
   }
 
   /// Reads a non-null string payload without ref/null handling.
-  String readString() => readStringPayload(this);
+  String readString() => StringSerializer.readPayload(this);
 
   /// Reads a ref-or-null header and resolves back-references immediately.
   int readRefOrNull() => _refReader.readRefOrNull(_buffer);
@@ -262,33 +273,109 @@ final class ReadContext {
   }
 
   @internal
-  Object readPrimitiveValue(int typeId) => readPayloadPrimitive(this, typeId);
+  Object readPrimitiveValue(int typeId) =>
+      PrimitiveSerializer.readPayload(this, typeId);
 
   @internal
   Object? readResolvedValue(
-      ResolvedTypeInternal resolved, TypeShapeInternal? declaredShape,
+      TypeInfoInternal resolved, FieldTypeInternal? declaredFieldType,
       {bool hasPreservedRef = false}) {
     if (!_tracksDepth(resolved)) {
-      return readPayloadValue(
-        this,
+      return _readPayloadValue(
         resolved,
-        declaredShape,
+        declaredFieldType,
         hasPreservedRef: hasPreservedRef,
       );
     }
     increaseDepth();
-    final value = readPayloadValue(
-      this,
+    final value = _readPayloadValue(
       resolved,
-      declaredShape,
+      declaredFieldType,
       hasPreservedRef: hasPreservedRef,
     );
     decreaseDepth();
     return value;
   }
 
-  ResolvedTypeInternal _readTypeMeta([
-    ResolvedTypeInternal? expectedNamedType,
+  Object? _readPayloadValue(
+    TypeInfoInternal resolved,
+    FieldTypeInternal? declaredFieldType, {
+    required bool hasPreservedRef,
+  }) {
+    if (TypeIds.isPrimitive(resolved.typeId)) {
+      return PrimitiveSerializer.readPayload(this, resolved.typeId);
+    }
+    switch (resolved.typeId) {
+      case TypeIds.string:
+        return StringSerializer.readPayload(this);
+      case TypeIds.binary:
+        return BinarySerializer.readPayload(this);
+      case TypeIds.boolArray:
+        return const BoolArraySerializer().read(this);
+      case TypeIds.int8Array:
+        return int8ArraySerializer.read(this);
+      case TypeIds.int16Array:
+        return int16ArraySerializer.read(this);
+      case TypeIds.int32Array:
+        return int32ArraySerializer.read(this);
+      case TypeIds.int64Array:
+        return int64ArraySerializer.read(this);
+      case TypeIds.uint16Array:
+        return uint16ArraySerializer.read(this);
+      case TypeIds.uint32Array:
+        return uint32ArraySerializer.read(this);
+      case TypeIds.uint64Array:
+        return uint64ArraySerializer.read(this);
+      case TypeIds.float32Array:
+        return float32ArraySerializer.read(this);
+      case TypeIds.float64Array:
+        return float64ArraySerializer.read(this);
+      case TypeIds.list:
+        return ListSerializer.readPayload(
+          this,
+          declaredFieldType?.arguments.isEmpty ?? true
+              ? null
+              : declaredFieldType!.arguments.first,
+        );
+      case TypeIds.set:
+        return SetSerializer.readPayload(
+          this,
+          declaredFieldType?.arguments.isEmpty ?? true
+              ? null
+              : declaredFieldType!.arguments.first,
+        );
+      case TypeIds.map:
+        return MapSerializer.readPayload(
+          this,
+          declaredFieldType == null || declaredFieldType.arguments.isEmpty
+              ? null
+              : declaredFieldType.arguments[0],
+          declaredFieldType == null || declaredFieldType.arguments.length < 2
+              ? null
+              : declaredFieldType.arguments[1],
+        );
+      case TypeIds.date:
+        return const LocalDateSerializer().read(this);
+      case TypeIds.timestamp:
+        return const TimestampSerializer().read(this);
+      default:
+        if (resolved.kind == RegistrationKindInternal.struct) {
+          return resolved.structSerializer!.readValue(
+            this,
+            resolved,
+            hasCurrentPreservedRef: hasPreservedRef,
+          );
+        }
+        return readSerializerPayload(
+          resolved.serializer,
+          resolved,
+          hasCurrentPreservedRef: hasPreservedRef,
+        );
+    }
+  }
+
+  TypeInfoInternal _readTypeMeta([
+    TypeInfoInternal? expectedNamedType,
   ]) {
     return _typeResolver.readTypeMeta(
       _buffer,
@@ -298,7 +385,7 @@ final class ReadContext {
     );
   }
 
-  bool _tracksDepth(ResolvedTypeInternal resolved) {
+  bool _tracksDepth(TypeInfoInternal resolved) {
     if (TypeIds.isContainer(resolved.typeId)) {
       return true;
     }

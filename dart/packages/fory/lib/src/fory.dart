@@ -28,11 +28,24 @@ final class Fory {
   late final ReadContext _readContext;
   late final TypeResolver _typeResolver;
 
-  /// Creates a runtime configured by [config].
+  /// Creates a runtime configured by direct constructor options.
   ///
   /// The same instance can be reused across many operations. Each operation
   /// resets its transient read/write state before work starts.
-  Fory({Config config = const Config()}) {
+  Fory({
+    bool compatible = false,
+    bool checkStructVersion = true,
+    int maxDepth = Config.defaultMaxDepth,
+    int maxCollectionSize = Config.defaultMaxCollectionSize,
+    int maxBinarySize = Config.defaultMaxBinarySize,
+  }) {
+    final config = Config(
+      compatible: compatible,
+      checkStructVersion: checkStructVersion,
+      maxDepth: maxDepth,
+      maxCollectionSize: maxCollectionSize,
+      maxBinarySize: maxBinarySize,
+    );
     _buffer = Buffer();
     _typeResolver = TypeResolver(config);
     _writeContext = WriteContext(

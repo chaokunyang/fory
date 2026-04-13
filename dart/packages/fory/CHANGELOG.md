@@ -1,3 +1,3 @@
-## 1.0.0
+## 0.17.0-dev
 
-- Initial version.
+- Rewrite the Dart runtime around `Fory`, `Buffer`, `WriteContext`, `ReadContext`, and `TypeResolver`.

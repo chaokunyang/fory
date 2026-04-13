@@ -19,273 +19,421 @@ license: |
   limitations under the License.
 ---
 
-This document describes the current Java xlang runtime architecture. The wire format is defined by
-[Xlang Serialization Spec](xlang_serialization_spec.md); this guide explains the service
-boundaries and control flow that the reference implementation uses today. New runtimes do not need
-the same class names, but they should preserve the same ownership model: root operations stay on
-the runtime facade, while payload work stays on explicit read and write contexts.
+## Overview
 
-## Runtime ownership model
+This guide describes the current xlang runtime ownership model used by the
+reference Java runtime and mirrored by the Dart runtime rewrite.
+
+The wire format is defined by
+[Xlang Serialization Spec](xlang_serialization_spec.md). This document is about
+service boundaries, operation flow, and internal ownership. New runtimes do not
+need the same class names, but they should preserve the same control flow:
+
+- root operations stay on the runtime facade
+- nested payload work stays on explicit read and write contexts
+- type metadata stays in the type resolver layer
+- serializers stay payload-focused
+
+When this guide conflicts with the wire-format specification, follow
+`docs/specification/xlang_serialization_spec.md`. When it conflicts with a
+runtime-specific implementation detail, follow the current runtime code for
+that language.
+
+## Source Of Truth
+
+Use these sources in this order:
+
+1. `docs/specification/xlang_serialization_spec.md`
+2. the current runtime implementation for the language
+3. cross-language tests under `integration_tests/`
+
+For Dart, the runtime shape is centered on:
+
+- `Fory`
+- `WriteContext`
+- `ReadContext`
+- `RefWriter`
+- `RefReader`
+- `TypeResolver`
+- `StructCodec`
+
+## Runtime Ownership Model
 
 ### `Fory` is the root-operation facade
 
-`Fory` owns the immutable `Config`, the active `TypeResolver`, the `JITContext`, and one reusable
-`WriteContext`, `ReadContext`, and `CopyContext` for that runtime instance. Top-level
-`serialize(...)`, `deserialize(...)`, and `copy(...)` entry points live here.
+`Fory` owns the reusable runtime services for one runtime instance.
 
-Before the first root operation, `Fory` freezes registration by calling
-`TypeResolver.finishRegistration()`. After that point, serializers and type IDs are treated as
-stable for the lifetime of the runtime.
+In Dart, `Fory` owns exactly four runtime members:
 
-`Fory` is deliberately not the place where nested serializers do their work. During an active root
-operation, nested calls back into `Fory.serializeXXX` or `Fory.deserializeXXX` are rejected. Inside
-serializers, nested payload handling must go through `WriteContext` and `ReadContext`.
+- `Buffer`
+- `WriteContext`
+- `ReadContext`
+- `TypeResolver`
 
-### `WriteContext` and `ReadContext` hold all operation-local state
+In Java, `Fory` also owns runtime-local services such as `JITContext` and
+`CopyContext`, but the ownership rule is the same: `Fory` is the root facade,
+not the place where nested serializers do their work.
 
-`WriteContext` and `ReadContext` are prepared by `Fory` for one root operation and reset in a
-`finally` block before reuse. They hold:
+`Fory` is responsible for:
 
-- the current `MemoryBuffer`
-- the shared `Generics` stack
-- the active `TypeResolver`
+- preparing the shared buffer for root operations
+- writing and reading the root xlang header bitmap
+- delegating nested value encoding to `WriteContext`
+- delegating nested value decoding to `ReadContext`
+- owning registration through `TypeResolver`
+- resetting operation-local context state in a top-level `finally`
+
+Nested serializers must not call back into root `serialize(...)` or
+`deserialize(...)` entry points.
+
+### `WriteContext` and `ReadContext` hold operation-local state
+
+`WriteContext` and `ReadContext` are prepared by `Fory` for one root operation
+and reset by `Fory` in a `finally` block before reuse.
+
+`prepare(...)` should only bind the active buffer and root-operation inputs.
+`reset()` should clear operation-local mutable state.
+
+That operation-local state includes:
+
+- the current buffer
 - the active `RefWriter` or `RefReader`
-- meta-string and meta-share state
-- operation-local scratch state keyed by object identity
-- the logical object-graph depth
-- out-of-band buffer state on the read side
+- meta-string state
+- shared type-definition state
+- operation-local scratch state keyed by identity
+- compatible struct slot state
+- logical object-graph depth
 
-Generated and hand-written serializers should treat these contexts as the only source of
-operation-local services. Serializers must not keep ambient runtime state in thread locals or in
-serializer instance fields.
+Generated and hand-written serializers should treat these contexts as the only
+source of operation-local services. Serializers must not keep ambient runtime
+state in thread locals, globals, or serializer instance fields.
 
-### Reference tracking is a pluggable service
+### `WriteContext`
 
-Reference handling is split behind two small interfaces:
+`WriteContext` owns all write-side per-operation state:
 
-- `RefWriter` writes null, reference, and new-value markers and remembers previously written
-  objects by identity.
-- `RefReader` decodes those markers, reserves read reference IDs, and resolves previously
-  materialized objects.
+- current `Buffer`
+- `RefWriter`
+- `MetaStringWriter`
+- shared TypeDef write state
+- root `trackRef` mode
+- recursion depth and limits
+- local struct slot state used by compatible writes
 
-When reference tracking is enabled, Java uses `MapRefWriter` and `MapRefReader`. When it is
-disabled, Java swaps in `NoRefWriter` and `NoRefReader`, which keep the same call shape while
-avoiding map and array maintenance.
+It exposes one-shot primitive helpers such as:
 
-### Type resolution is a separate service
+- `writeBool`
+- `writeInt32`
+- `writeVarUint32`
 
-`TypeResolver` owns serializer lookup, type registration, type metadata encoding, and the caches
-used while reading type info from the stream.
+These helpers are convenience methods. Serializers that perform repeated
+primitive IO should cache `final buffer = context.buffer;` and call buffer
+methods directly.
 
-In xlang mode, Java uses `XtypeResolver`. In native Java mode, it uses `ClassResolver`. The rest of
-the runtime talks to the abstract `TypeResolver` contract.
+### `ReadContext`
 
-## Root frame responsibilities
+`ReadContext` owns all read-side per-operation state:
 
-Every root payload starts with a one-byte bitmap written and read by `Fory` itself, not by
-serializers:
+- current `Buffer`
+- `RefReader`
+- `MetaStringReader`
+- shared TypeDef read state
+- recursion depth and limits
+- local struct slot state used by compatible reads
 
-| Bit | Meaning                         |
-| --- | ------------------------------- |
-| `0` | null root payload               |
-| `1` | xlang payload                   |
-| `2` | out-of-band buffers are enabled |
+It exposes matching one-shot primitive helpers such as:
 
-Per-object reference markers are separate from that root bitmap. Java uses these signed marker
-bytes throughout the object graph:
+- `readBool`
+- `readInt32`
+- `readVarUint32`
 
-| Value | Meaning               |
-| ----- | --------------------- |
-| `-3`  | `NULL_FLAG`           |
-| `-2`  | `REF_FLAG`            |
-| `-1`  | `NOT_NULL_VALUE_FLAG` |
-| `0`   | `REF_VALUE_FLAG`      |
+Generated struct serializers call `context.reference(value)` immediately after
+constructing the target instance so back-references can resolve to that object.
 
-Keep those two layers separate in every runtime:
+## Reference Tracking
+
+Reference handling is split behind two explicit services:
+
+- `RefWriter` writes null, ref, and new-value markers and remembers previously
+  written objects by identity.
+- `RefReader` decodes those markers, reserves read reference IDs, and resolves
+  previously materialized objects.
+
+The xlang ref markers are:
+
+- `NULL_FLAG (-3)`
+- `REF_FLAG (-2)`
+- `NOT_NULL_VALUE_FLAG (-1)`
+- `REF_VALUE_FLAG (0)`
+
+Key behavior:
+
+- basic values never use ref tracking
+- field metadata controls ref behavior inside generated structs
+- root `trackRef` is only for top-level graphs and container roots with no
+  field metadata
+- serializers that allocate an object before all nested reads complete must bind
+  that object early with `context.reference(...)`
+
+## Type Resolution
+
+`TypeResolver` owns:
+
+- built-in type resolution
+- registration by numeric id or by `namespace + typeName`
+- serializer lookup
+- struct metadata lookup
+- type metadata encoding and decoding
+- canonical encoded meta strings for package names, type names, and field names
+- encoded-name lookup for named type resolution
+- wire type decisions for struct, compatible struct, enum, ext, and union forms
+
+In Java xlang mode the concrete implementation is `XtypeResolver`. In Dart the
+same ownership stays behind the internal `TypeResolver`.
+
+Serializers do not resolve class metadata themselves. They ask the current
+context to read or write nested values, and the context delegates type work to
+`TypeResolver`.
+
+## Root Frame Responsibilities
+
+Every root payload starts with a one-byte bitmap written and read by `Fory`
+itself, not by serializers.
+
+Current xlang root bits:
+
+| Bit | Meaning                    |
+| --- | -------------------------- |
+| `0` | null root payload          |
+| `1` | xlang payload              |
+| `2` | out-of-band buffers in use |
+
+Keep the root bitmap separate from per-object ref markers:
 
 - the root bitmap describes the whole payload
 - ref flags describe one nested value at a time
 
-## Serialization flow
+## Serialization Flow
 
 ### Root write path
 
-The current Java xlang write path is:
+The current root write flow is:
 
-1. `Fory.serialize(...)` calls `ensureRegistrationFinished()`.
-2. `Fory` binds the target buffer and optional `BufferCallback` with `writeContext.prepare(...)`.
+1. `Fory.serialize(...)` or `serializeTo(...)` prepares the target buffer.
+2. `Fory` calls `writeContext.prepare(...)`.
 3. `Fory` writes the root bitmap.
-4. If the root value is non-null, `Fory` locks the `JITContext`, verifies that this is not a
-   nested root call, and delegates the root object to `writeContext.writeRef(obj)`.
-5. `writeContext.reset()` runs in `finally`, regardless of success or failure.
+4. `Fory` delegates the root object to `WriteContext`.
+5. `writeContext.reset()` runs in `finally`.
 
-`WriteContext.writeRef(...)` is the main object-graph entry point:
+For a non-null root value, `WriteContext.writeRootValue(...)` performs:
 
-1. `RefWriter.writeRefOrNull(...)` emits the null, ref, or new-value marker.
-2. If the object is new, `WriteContext` resolves `TypeInfo` from the active `TypeResolver`.
-3. For most types, `TypeResolver.writeTypeInfo(...)` writes the xlang type header.
-4. `WriteContext.writeData(...)` writes the payload. Primitive and string-like hot paths write
-   directly to `MemoryBuffer`; other types delegate to the resolved serializer.
+1. ref/null framing
+2. type metadata write
+3. payload write
 
-The xlang `UnknownStruct` path is the main special case: it owns its own stream representation and
-does not follow the normal "write type info, then payload" sequence.
+Payload serializers are responsible only for the payload of their type. They do
+not write the root bitmap and they do not own registration or type-header
+encoding.
 
-### Payload serializers write through `WriteContext`
+### Nested writes use `WriteContext`
 
-Serializers are responsible only for the payload of their type. They do not write the root bitmap,
-own registration, or decide how class metadata is encoded.
+Important rules:
 
-Important current Java rules:
+- nested serializers must use `WriteContext` helpers such as `writeRef(...)`,
+  `writeNonRef(...)`, and container helpers when they need ref handling or type
+  metadata
+- repeated primitive writes should go directly through the buffer
+- nested serializer flow should stay straight-line; do not add internal
+  `try/finally` blocks just to clean per-operation state
+- top-level `Fory.serialize(...)` owns the operation reset `finally`
 
-- Serializer instances are runtime-local by default. Only serializers that implement `Shareable`
-  may be reused across equivalent runtimes.
-- Use `WriteContext` helpers such as `writeRef(...)`, `writeNonRef(...)`, `writeStringRef(...)`,
-  and `writeBufferObject(...)` when nested values need ref handling or type metadata.
-- If several primitive writes happen in a row, fetch `MemoryBuffer` once from
-  `WriteContext.getBuffer()` and write directly for better inlining and fewer helper calls.
-- `WriteContext` maintains `depth` around nested serializer calls. That depth is also used to block
-  illegal nested root operations.
-
-## Deserialization flow
+## Deserialization Flow
 
 ### Root read path
 
-The current Java xlang read path mirrors the write path:
+The current root read flow mirrors the write flow:
 
-1. `Fory.deserialize(...)` calls `ensureRegistrationFinished()`.
-2. `Fory` reads the root bitmap.
-3. If the null bit is set, deserialization returns `null` immediately.
-4. `Fory` verifies that the payload xlang bit matches the runtime mode.
-5. `Fory` validates whether out-of-band buffers must or must not be supplied.
-6. `Fory` binds the buffer and optional out-of-band buffer iterator with
-   `readContext.prepare(...)`.
-7. `Fory` locks the `JITContext`, verifies that this is not a nested root call, and delegates to
-   `readContext.readRef()` or the typed `deserializeByType(...)` path.
-8. `readContext.reset()` runs in `finally`.
+1. `Fory.deserialize(...)` or `deserializeFrom(...)` reads the root bitmap.
+2. null roots return immediately.
+3. `Fory` validates xlang mode and other root framing requirements.
+4. `Fory` calls `readContext.prepare(...)`.
+5. `Fory` delegates to `ReadContext`.
+6. `readContext.reset()` runs in `finally`.
 
-### `ReadContext` owns reference reservation and payload materialization
+### `ReadContext` owns ref reservation and payload materialization
 
 `ReadContext.readRef()` performs the normal xlang read sequence:
 
-1. `RefReader.tryPreserveRefId(...)` consumes the next ref marker.
-2. If the marker is `REF_FLAG`, the previously materialized object is returned immediately.
-3. If the marker is `NULL_FLAG`, `null` is returned.
-4. If the marker indicates a new value, the reader reserves a dense read reference ID before the
-   payload is materialized.
-5. `TypeResolver.readTypeInfo(...)` decodes the type header.
-6. `ReadContext.readNonRef(typeInfo)` reads the payload.
-7. `RefReader.setReadRef(...)` binds the reserved ID to the completed object.
+1. consume the next ref marker
+2. return `null` or a back-reference immediately when appropriate
+3. reserve a fresh read ref id for new reference-tracked values
+4. read type metadata
+5. read the payload
+6. bind the reserved read ref id to the completed object
 
-Primitive and string-like hot paths read directly from `MemoryBuffer`; complex payloads delegate to
-the resolved serializer. This reservation-before-read pattern is what lets Java support cycles and
-back-references to partially built objects inside containers and structs.
+Primitive and string-like hot paths should read directly from the buffer;
+complex payloads delegate to the resolved serializer.
 
-### Serializers must bind newly created objects early when needed
+### Nested reads use `ReadContext`
 
-Many serializers allocate the target object before all child values have been read. In that case,
-the serializer must register the partially built object with `readContext.reference(obj)` or
-`readContext.setReadRef(...)` before reading nested children that may point back to it.
+Important rules:
 
-That rule is essential for arrays, collections, maps, object serializers, meta-share serializers,
-replace/resolve serializers, and any other serializer that can participate in cycles.
+- serializers that allocate the result object early must call
+  `context.reference(obj)` before reading nested children that may refer back to
+  it
+- nested serializer flow should stay straight-line; do not add internal
+  `try/finally` blocks just to restore operation-local state
+- top-level `Fory.deserialize(...)` owns the operation reset `finally`
 
-### Read-side depth and security
+## Depth Tracking
 
-`ReadContext` tracks logical object depth. `increaseDepth()` enforces `Config.maxDepth()` and
-throws if the stream looks malicious or unexpectedly deep. New runtimes should keep the same
-explicit depth accounting instead of relying on the native call stack alone.
+`WriteContext` and `ReadContext` track logical object depth explicitly.
+`increaseDepth()` enforces `Config.maxDepth`.
 
-## Type metadata and xlang type resolution
+Depth should stay explicit on the contexts rather than relying on the native
+call stack alone. At the same time, depth cleanup should not depend on nested
+`try/finally` blocks throughout serializer code. Top-level context reset must be
+able to recover operation-local state after failures.
 
-### `TypeResolver` writes and reads all xlang type headers
+## Struct Compatibility
 
-`TypeResolver.writeTypeInfo(...)` always writes the 8-bit type ID first, then emits any extra type
-metadata required by that kind:
+Struct-specific schema/version framing and compatible-field staging belong in
+the struct serializer layer, not on `Fory` and not on the public serializer
+API.
 
-- registered user enum, struct, ext, and typed union types write the user type ID
-- named types write namespace and type-name meta strings when meta share is disabled
-- compatible struct modes write shared `TypeDef` metadata
-- built-in types write only the internal type ID
+In Dart that internal owner is `StructCodec`.
 
-`TypeResolver.readTypeInfo(...)` is the inverse operation. It decodes the type ID, consumes any
-attached metadata, returns the matching `TypeInfo`, and ensures that a serializer exists before the
-payload is read.
+`StructCodec` is responsible for:
 
-### `XtypeResolver` is the xlang-specific implementation
+- schema-hash framing when compatibility mode is off and version checks are on
+- compatible-struct field remapping when compatibility mode is on
+- caching compatible write and read layouts
+- providing compatible write/read slot state to generated serializers
+- remembering remote struct metadata after successful reads
 
-`XtypeResolver` extends `TypeResolver` with xlang-specific registration and lookup rules:
+When `Config.compatible` is enabled and the struct is marked evolving:
 
-- it assigns xlang user type IDs
-- it registers built-in xlang serializers
-- it resolves named types from namespace and type-name bytes
-- it handles `UnknownStruct` and other unknown-class cases
-- it builds or loads meta-shared serializers when compatible struct metadata is used
+- the wire type uses the compatible struct form
+- the runtime writes shared TypeDef metadata
+- reads map incoming fields by identifier and skip unknown fields
 
-The important design point is that serializers do not resolve class metadata themselves. They ask
-the current context for nested reads and writes, and the context delegates type work to
-`TypeResolver`.
+When `compatible` is disabled and `checkStructVersion` is enabled:
 
-For typed Java entry points, `Fory.deserialize(..., Class<T>)` also pushes the expected generic
-type onto the shared `Generics` stack before reading and pops it afterward.
+- the runtime writes the schema hash for struct payloads
+- the read side checks that hash before reading fields
 
-## Meta strings and meta-share state
+## Meta Strings And Shared Type Metadata
 
-Two pieces of explicit runtime state back xlang type metadata:
+Two explicit pieces of state back xlang type metadata:
 
-- `MetaStringWriter` and `MetaStringReader` deduplicate and decode namespace and type-name strings
-- `MetaWriteContext` and `MetaReadContext` track shared `TypeDef` announcements for meta-share mode
+- `MetaStringWriter` and `MetaStringReader` deduplicate and decode namespace
+  and type-name strings
+- shared TypeDef write/read state tracks announced compatible struct metadata
 
-When scoped meta share is enabled, each `WriteContext` and `ReadContext` owns its own meta-share
-state for one root operation and clears it during `reset()`.
+Ownership rules:
 
-When scoped meta share is disabled, callers may install externally owned `MetaWriteContext` and
-`MetaReadContext` instances through `setMetaWriteContext(...)` and `setMetaReadContext(...)` so the
-same meta-share session can span multiple root operations.
+- canonical encoded names live in `TypeResolver`
+- per-operation dynamic meta-string ids live on `MetaStringWriter` and
+  `MetaStringReader`
+- shared type-definition tables are operation-local context state
 
-This state is explicit on the contexts. It is not hidden in globals or thread-local caches.
+## Enums In Xlang Mode
 
-## Enums in xlang mode
+In xlang mode, enums are serialized by numeric tag, not by name.
 
-In Java xlang mode, enums are serialized by numeric tag, not by name.
+In Java:
 
-- By default, the tag is the declaration ordinal.
-- If the enum is configured with `@ForyEnumId`, Java writes that explicit stable tag instead.
-- `serializeEnumByName(true)` only changes native Java mode; xlang still uses numeric tags.
+- the default tag is the declaration ordinal
+- `@ForyEnumId` can override that with a stable explicit tag
+- `serializeEnumByName(true)` affects native Java mode, not xlang mode
 
-`EnumSerializer` precomputes two structures from the chosen tags:
+Other runtimes should preserve the same wire rule even if the configuration or
+annotation surface differs.
 
-- `tagByOrdinal` for the write path
-- either a dense `Enum[]` lookup table or a sparse `Map<Integer, Enum>` for the read path
+## Out-Of-Band Buffer Objects
 
-Small explicit ID spaces use the array fast path. Large sparse ID spaces use the map fast path.
+Buffer-object handling follows the same split:
 
-## Out-of-band buffer objects
+- one root bit advertises whether out-of-band buffers are in play
+- nested buffer-object payloads still decide in-band vs out-of-band one value at
+  a time
+- serializers use read/write context helpers rather than bypassing the runtime
 
-`WriteContext.writeBufferObject(...)` and `ReadContext.readBufferObject()` implement the current
-buffer-object contract:
+## Code Generation
 
-- one boolean says whether the bytes are in-band or out-of-band
-- in-band payloads encode the byte length and then the raw bytes
-- out-of-band payloads rely on the caller-supplied `BufferCallback` and out-of-band buffer iterator
+The normal Dart integration path is:
 
-The root bitmap advertises whether out-of-band buffers are in play for the whole payload. Runtime
-validation happens in `Fory.deserialize(...)` before nested serializers start reading.
+1. annotate structs with `@ForyStruct`
+2. annotate field overrides with `@ForyField`
+3. run `build_runner`
+4. from the source library, bind the generated metadata privately and register
+   generated types through `Fory.register(...)`
 
-## Serializer design rules for new runtimes
+Generated code should emit:
 
-Any new xlang runtime should follow these rules even if its surface API looks different:
+- private serializer classes
+- private metadata constants
+- private generated installation helpers per annotated library
+- generated binding installation that keeps serializer factories private
 
-1. Keep root operations on the runtime facade and nested payload work on explicit read and write
-   contexts.
-2. Keep reference tracking behind dedicated read-side and write-side services so the disabled path
-   stays cheap.
-3. Make serializers payload-only. Type metadata, registration, and root framing belong to the
-   runtime and type resolver layers.
-4. Track per-operation state explicitly. Do not rely on ambient thread-local runtime state.
-5. Reserve read reference IDs before materializing new objects, and bind partially built objects as
-   soon as a nested child may refer back to them.
-6. Keep meta-share session state explicit and resettable.
-7. Preserve the separation between the root bitmap, per-object ref flags, type headers, and
-   payload bytes.
-8. After any xlang protocol change, run the cross-language test matrix and update both this guide
-   and [Xlang Serialization Spec](xlang_serialization_spec.md).
+Generated code should not create a public global registry or a second public API
+family.
+
+## Directory Layout
+
+Under each Dart package `lib/` tree, only one nested source layer is allowed.
+
+Allowed:
+
+- `lib/fory.dart`
+- `lib/src/<file>.dart`
+- `lib/src/<area>/<file>.dart`
+
+Not allowed:
+
+- `lib/src/<area>/<subarea>/<file>.dart`
+
+## Serializer Design Rules For New Runtimes
+
+Any new xlang runtime should follow these rules even if its surface API looks
+different:
+
+1. Keep root operations on the runtime facade and nested payload work on
+   explicit read and write contexts.
+2. Keep reference tracking behind dedicated read-side and write-side services
+   so the disabled path stays cheap.
+3. Make serializers payload-only. Type metadata, registration, and root
+   framing belong to the runtime and type resolver layers.
+4. Track per-operation state explicitly. Do not rely on ambient thread-local
+   runtime state.
+5. Reserve read reference IDs before materializing new objects, and bind
+   partially built objects as soon as a nested child may refer back to them.
+6. Keep operation setup and operation cleanup separate. `prepare(...)` binds
+   the current operation inputs, and `reset()` clears operation-local state.
+7. Preserve the separation between the root bitmap, per-object ref flags, type
+   headers, and payload bytes.
+8. Keep internal naming in the serialization domain. Prefer words like
+   `codec`, `binding`, `layout`, and `slots`; avoid RPC-style terms such as
+   `session` or vague control-flow terms such as `plan`.
+9. After any xlang protocol or ownership change, run the cross-language test
+   matrix and update both this guide and
+   [Xlang Serialization Spec](xlang_serialization_spec.md).
+
+## Validation
+
+For Dart runtime changes, run at minimum:
+
+```bash
+cd dart
+dart run build_runner build --delete-conflicting-outputs
+dart analyze
+dart test
+```
+
+For generated consumer coverage, also run:
+
+```bash
+cd dart/packages/fory-test
+dart run build_runner build --delete-conflicting-outputs
+dart test
+```

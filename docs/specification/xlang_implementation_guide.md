@@ -366,13 +366,14 @@ The normal Dart integration path is:
 1. annotate structs with `@ForyStruct`
 2. annotate field overrides with `@ForyField`
 3. run `build_runner`
-4. call the generated registration helper for that library
+4. from the source library, bind the generated metadata privately and register
+   generated types through `Fory.register(...)`
 
 Generated code should emit:
 
 - private serializer classes
 - private metadata constants
-- one generated registration helper per annotated library
+- private generated installation helpers per annotated library
 - generated binding installation that keeps serializer factories private
 
 Generated code should not create a public global registry or a second public API

@@ -3,7 +3,7 @@ import 'package:fory/src/context/write_context.dart';
 
 /// Advanced extension point for generated and manual serializers.
 ///
-/// Most application code uses generated registration helpers instead of
+/// Most application code uses [Fory.register] for generated types instead of
 /// implementing this interface directly.
 abstract class Serializer<T> {
   const Serializer();

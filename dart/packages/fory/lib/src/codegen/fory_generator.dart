@@ -34,8 +34,8 @@ final class ForyGenerator extends Generator {
     final helperBaseName = _toPascalCase(
       buildStep.inputId.pathSegments.last.split('.').first,
     );
-    final registrationHelperName = 'register${helperBaseName}ForyTypes';
-    final registrationByTypeHelperName = 'register${helperBaseName}ForyType';
+    final installAllHelperName = '_install${helperBaseName}ForyRegistrations';
+    final installByTypeHelperName = '_install${helperBaseName}ForyRegistration';
 
     final enumSpecs = enumElements
         .map((element) => _GeneratedEnumSpec(name: element.name))
@@ -59,8 +59,8 @@ final class ForyGenerator extends Generator {
       enumSpecs: enumSpecs,
       structSpecs: structSpecs,
       namespace: namespace,
-      registrationHelperName: registrationHelperName,
-      registrationByTypeHelperName: registrationByTypeHelperName,
+      installAllHelperName: installAllHelperName,
+      installByTypeHelperName: installByTypeHelperName,
     );
     return output.toString();
   }
@@ -640,8 +640,8 @@ final class ForyGenerator extends Generator {
     required List<_GeneratedEnumSpec> enumSpecs,
     required List<_GeneratedStructSpec> structSpecs,
     required String namespace,
-    required String registrationHelperName,
-    required String registrationByTypeHelperName,
+    required String installAllHelperName,
+    required String installByTypeHelperName,
   }) {
     for (final enumSpec in enumSpecs) {
       final registrationName =
@@ -660,7 +660,7 @@ final class ForyGenerator extends Generator {
     }
 
     output.writeln(
-      'void $registrationByTypeHelperName(Fory fory, Type type, {int? id, String? namespace, String? typeName}) {',
+      'void $installByTypeHelperName(Fory fory, Type type) {',
     );
 
     for (final enumSpec in enumSpecs) {
@@ -668,7 +668,7 @@ final class ForyGenerator extends Generator {
           '_${_toCamelCase(enumSpec.name)}ForyRegistration';
       output.writeln('  if (type == ${enumSpec.name}) {');
       output.writeln(
-        '    registerGeneratedEnum(fory, $registrationName, id: id, namespace: namespace, typeName: typeName);',
+        "    installGeneratedEnumRegistration(fory, $registrationName, namespace: '$namespace', typeName: '${enumSpec.name}');",
       );
       output.writeln('    return;');
       output.writeln('  }');
@@ -678,7 +678,7 @@ final class ForyGenerator extends Generator {
           '_${_toCamelCase(structSpec.name)}ForyRegistration';
       output.writeln('  if (type == ${structSpec.name}) {');
       output.writeln(
-        '    registerGeneratedStruct(fory, $registrationName, id: id, namespace: namespace, typeName: typeName);',
+        "    installGeneratedStructRegistration(fory, $registrationName, namespace: '$namespace', typeName: '${structSpec.name}');",
       );
       output.writeln('    return;');
       output.writeln('  }');
@@ -686,24 +686,24 @@ final class ForyGenerator extends Generator {
 
     output
       ..writeln(
-        "  throw ArgumentError.value(type, 'type', 'No generated registration for this library.');",
+        "  throw ArgumentError.value(type, 'type', 'No generated serializer metadata for this library.');",
       )
       ..writeln('}')
       ..writeln()
-      ..writeln('void $registrationHelperName(Fory fory) {');
+      ..writeln('void $installAllHelperName(Fory fory) {');
 
     for (final enumSpec in enumSpecs) {
       final registrationName =
           '_${_toCamelCase(enumSpec.name)}ForyRegistration';
       output.writeln(
-        "  registerGeneratedEnum(fory, $registrationName, namespace: '$namespace', typeName: '${enumSpec.name}');",
+        "  installGeneratedEnumRegistration(fory, $registrationName, namespace: '$namespace', typeName: '${enumSpec.name}');",
       );
     }
     for (final structSpec in structSpecs) {
       final registrationName =
           '_${_toCamelCase(structSpec.name)}ForyRegistration';
       output.writeln(
-        "  registerGeneratedStruct(fory, $registrationName, namespace: '$namespace', typeName: '${structSpec.name}');",
+        "  installGeneratedStructRegistration(fory, $registrationName, namespace: '$namespace', typeName: '${structSpec.name}');",
       );
     }
     output

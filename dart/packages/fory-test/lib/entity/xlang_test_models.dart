@@ -41,8 +41,8 @@ void registerXlangType(
   )) {
     return;
   }
-  registerXlangTestModelsForyType(
-    fory,
+  _installXlangTestModelsForyRegistration(fory, type);
+  fory.register(
     type,
     id: id,
     namespace: namespace,

@@ -18,7 +18,9 @@ class Person {
 }
 
 void registerExampleTypes(Fory fory) {
-  registerExampleForyTypes(fory);
+  _installExampleForyRegistrations(fory);
+  fory.register(Color);
+  fory.register(Person);
 }
 
 void registerExampleType(
@@ -28,8 +30,8 @@ void registerExampleType(
   String? namespace,
   String? typeName,
 }) {
-  registerExampleForyType(
-    fory,
+  _installExampleForyRegistration(fory, type);
+  fory.register(
     type,
     id: id,
     namespace: namespace,

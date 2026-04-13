@@ -273,16 +273,17 @@ class MediaContentList {
 }
 
 void registerBenchmarkTypes(Fory fory) {
-  registerModelsForyType(fory, NumericStruct, id: 1);
-  registerModelsForyType(fory, Sample, id: 2);
-  registerModelsForyType(fory, Media, id: 3);
-  registerModelsForyType(fory, Image, id: 4);
-  registerModelsForyType(fory, MediaContent, id: 5);
-  registerModelsForyType(fory, StructList, id: 6);
-  registerModelsForyType(fory, SampleList, id: 7);
-  registerModelsForyType(fory, MediaContentList, id: 8);
-  registerModelsForyType(fory, Player, id: 9);
-  registerModelsForyType(fory, MediaSize, id: 10);
+  _installModelsForyRegistrations(fory);
+  fory.register(NumericStruct, id: 1);
+  fory.register(Sample, id: 2);
+  fory.register(Media, id: 3);
+  fory.register(Image, id: 4);
+  fory.register(MediaContent, id: 5);
+  fory.register(StructList, id: 6);
+  fory.register(SampleList, id: 7);
+  fory.register(MediaContentList, id: 8);
+  fory.register(Player, id: 9);
+  fory.register(MediaSize, id: 10);
 }
 
 NumericStruct createNumericStruct() {

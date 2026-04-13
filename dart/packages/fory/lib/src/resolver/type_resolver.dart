@@ -353,17 +353,23 @@ final class TypeResolver {
 
   void bindGeneratedEnum(
     Type type,
-    Serializer<Object?> Function() serializerFactory,
-  ) {
+    Serializer<Object?> Function() serializerFactory, {
+    String? namespace,
+    String? typeName,
+  }) {
     _generatedByType[type] = _GeneratedRegistration(
       kind: RegistrationKind.enumType,
       serializerFactory: serializerFactory,
+      namespace: namespace,
+      typeName: typeName,
     );
   }
 
   void bindGeneratedStruct(
     Type type,
     Serializer<Object?> Function() serializerFactory, {
+    String? namespace,
+    String? typeName,
     required bool evolving,
     required List<FieldInfo> fields,
     GeneratedStructCompatibleFactory<Object>? compatibleFactory,
@@ -372,6 +378,8 @@ final class TypeResolver {
     _generatedByType[type] = _GeneratedRegistration(
       kind: RegistrationKind.struct,
       serializerFactory: serializerFactory,
+      namespace: namespace,
+      typeName: typeName,
       evolving: evolving,
       fields: fields,
       compatibleFactory: compatibleFactory,
@@ -388,9 +396,11 @@ final class TypeResolver {
     final registration = _generatedByType[type];
     if (registration == null) {
       throw StateError(
-        'Type $type has no generated registration metadata. Call the generated registration helper for this library first.',
+        'Type $type has no generated registration metadata bound in this Fory instance.',
       );
     }
+    final useGeneratedNameDefaults =
+        id == null && namespace == null && typeName == null;
     _registerResolvedSerializer(
       type,
       registration.serializerFactory(),
@@ -400,8 +410,9 @@ final class TypeResolver {
       compatibleFactory: registration.compatibleFactory,
       compatibleReadersBySlot: registration.compatibleReadersBySlot,
       id: id,
-      namespace: namespace,
-      typeName: typeName,
+      namespace:
+          useGeneratedNameDefaults ? registration.namespace : namespace,
+      typeName: useGeneratedNameDefaults ? registration.typeName : typeName,
     );
   }
 
@@ -633,7 +644,7 @@ final class TypeResolver {
       return _builtin(Timestamp, TypeIds.timestamp);
     }
     throw StateError(
-      'Type $runtimeType is not registered. Call the generated registration helper or register a serializer explicitly.',
+      'Type $runtimeType is not registered. Register generated types with Fory.register(...) from their source library, or register a serializer explicitly.',
     );
   }
 
@@ -1593,6 +1604,8 @@ final class TypeResolver {
 final class _GeneratedRegistration {
   final RegistrationKind kind;
   final Serializer<Object?> Function() serializerFactory;
+  final String? namespace;
+  final String? typeName;
   final bool evolving;
   final List<FieldInfo> fields;
   final GeneratedStructCompatibleFactory<Object>? compatibleFactory;
@@ -1602,6 +1615,8 @@ final class _GeneratedRegistration {
   const _GeneratedRegistration({
     required this.kind,
     required this.serializerFactory,
+    this.namespace,
+    this.typeName,
     this.evolving = true,
     this.fields = const <FieldInfo>[],
     this.compatibleFactory,

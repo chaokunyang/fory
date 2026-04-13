@@ -45,7 +45,14 @@ class FixedPayload {
 }
 
 void registerPersonTypes(Fory fory) {
-  registerPersonForyTypes(fory);
+  _installPersonForyRegistrations(fory);
+  fory.register(Color);
+  fory.register(Person);
+  fory.register(RefNode);
+  fory.register(EvolvingPayload);
+  fory.register(FixedPayload);
+  fory.register(PrivatePayload);
+  fory.register(PrivateImmutablePayload);
 }
 
 void registerPersonType(
@@ -55,8 +62,8 @@ void registerPersonType(
   String? namespace,
   String? typeName,
 }) {
-  registerPersonForyType(
-    fory,
+  _installPersonForyRegistration(fory, type);
+  fory.register(
     type,
     id: id,
     namespace: namespace,

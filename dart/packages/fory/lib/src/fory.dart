@@ -130,9 +130,8 @@ final class Fory {
   /// - pass [id] for id-based registration, or
   /// - pass both [namespace] and [typeName] for name-based registration.
   ///
-  /// Normal application code reaches this through a generated registration
-  /// helper. For manual serializers, including unions, use
-  /// [registerSerializer].
+  /// Generated struct and enum registration should flow through this method.
+  /// For manual serializers, including unions, use [registerSerializer].
   void register(
     Type type, {
     int? id,
@@ -176,11 +175,15 @@ final class Fory {
 void bindGeneratedEnum(
   Fory fory,
   Type type,
-  Serializer<Object?> Function() serializerFactory,
-) {
+  Serializer<Object?> Function() serializerFactory, {
+  String? namespace,
+  String? typeName,
+}) {
   fory._typeResolver.bindGeneratedEnum(
     type,
     serializerFactory,
+    namespace: namespace,
+    typeName: typeName,
   );
 }
 
@@ -189,6 +192,8 @@ void bindGeneratedStruct(
   Fory fory,
   Type type,
   Serializer<Object?> Function() serializerFactory, {
+  String? namespace,
+  String? typeName,
   required bool evolving,
   required List<FieldInfo> fields,
   GeneratedStructCompatibleFactory<Object>? compatibleFactory,
@@ -197,6 +202,8 @@ void bindGeneratedStruct(
   fory._typeResolver.bindGeneratedStruct(
     type,
     serializerFactory,
+    namespace: namespace,
+    typeName: typeName,
     evolving: evolving,
     fields: fields,
     compatibleFactory: compatibleFactory,

@@ -491,38 +491,34 @@ final class GeneratedStructRegistration<T> {
 }
 
 @internal
-void registerGeneratedEnum(
+void installGeneratedEnumRegistration(
   Fory fory,
   GeneratedEnumRegistration registration, {
-  int? id,
-  String? namespace,
-  String? typeName,
+  required String namespace,
+  required String typeName,
 }) {
   fory_internals.bindGeneratedEnum(
     fory,
     registration.type,
     registration.serializerFactory,
-  );
-  fory.register(
-    registration.type,
-    id: id,
     namespace: namespace,
     typeName: typeName,
   );
 }
 
 @internal
-void registerGeneratedStruct<T>(
+void installGeneratedStructRegistration<T>(
   Fory fory,
   GeneratedStructRegistration<T> registration, {
-  int? id,
-  String? namespace,
-  String? typeName,
+  required String namespace,
+  required String typeName,
 }) {
   fory_internals.bindGeneratedStruct(
     fory,
     registration.type,
     registration.serializerFactory,
+    namespace: namespace,
+    typeName: typeName,
     evolving: registration.evolving,
     fields: registration.fieldInfos,
     compatibleFactory: registration.compatibleFactory == null
@@ -540,12 +536,6 @@ void registerGeneratedStruct<T>(
                   reader(context, value as T, rawValue),
             ),
           ),
-  );
-  fory.register(
-    registration.type,
-    id: id,
-    namespace: namespace,
-    typeName: typeName,
   );
 }
 

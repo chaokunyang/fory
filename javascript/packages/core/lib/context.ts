@@ -227,7 +227,7 @@ export class WriteContext {
       this.writer.writeInt8(RefFlags.NullFlag);
       return true;
     }
-    if (this.typeResolver.config.refTracking === true) {
+    if (this.typeResolver.config.ref === true) {
       const refId = this.refWriter.getWrittenRefId(object);
       if (typeof refId === "number") {
         this.writer.writeInt8(RefFlags.RefFlag);

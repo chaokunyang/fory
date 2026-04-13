@@ -62,7 +62,7 @@ Internally, the wrapper installs generated metadata and then calls `Fory.registe
 
 ## Register a Manual Serializer
 
-Manual serializers register through `registerSerializer`:
+Customized serializers register through `registerSerializer`:
 
 ```dart
 fory.registerSerializer(

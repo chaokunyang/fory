@@ -2,7 +2,7 @@
 
 Apache Fory Dart is the Dart xlang runtime for Apache Fory. It reads and writes
 Fory's cross-language wire format and is designed around generated serializers
-for annotated Dart models, with manual serializers available for advanced use
+for annotated Dart models, with customized serializers available for advanced use
 cases.
 
 ## Features
@@ -158,7 +158,7 @@ class NodeList {
 }
 ```
 
-## Manual Serializers
+## Customized Serializers
 
 Use `Serializer<T>` when a type cannot use generated struct support or when you
 need custom wire behavior.

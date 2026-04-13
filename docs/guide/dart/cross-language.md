@@ -99,7 +99,7 @@ final bytes = fory.serialize(Person()
   ..age = Int32(30));
 ```
 
-### C#
+### CSharp
 
 ```csharp
 [ForyObject]

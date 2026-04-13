@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Apache Fory™ Dart is a cross-language serialization runtime for Dart. It reads and writes the xlang wire format defined by the [xlang serialization specification](../../specification/xlang_serialization_spec.md) and is designed around generated serializers with an advanced manual serializer escape hatch.
+Apache Fory™ Dart is a cross-language serialization runtime for Dart. It reads and writes the xlang wire format defined by the [xlang serialization specification](../../specification/xlang_serialization_spec.md) and is designed around generated serializers with an advanced customized serializer escape hatch.
 
 ## Why Fory Dart?
 

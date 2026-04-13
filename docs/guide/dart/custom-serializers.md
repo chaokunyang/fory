@@ -19,15 +19,15 @@ license: |
   limitations under the License.
 ---
 
-Use manual serializers when generated struct support is not the right fit.
+Use customized serializers when generated struct support is not the right fit.
 
-## When Manual Serializers Make Sense
+## When Customized Serializers Make Sense
 
 Typical cases include:
 
 - external types you cannot annotate
 - custom payload layouts
-- manual extension types
+- customized extension types
 - unions built on the `UnionSerializer<T>` base class
 
 ## Implement `Serializer<T>`

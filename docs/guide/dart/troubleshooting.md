@@ -64,7 +64,7 @@ Check whether reference tracking is enabled in the correct place:
 
 - root graph or root container: `trackRef: true`
 - generated field graph: `@ForyField(ref: true)`
-- manual serializer: use `writeRef`, `readRef`, and `context.reference(...)` correctly
+- customized serializer: use `writeRef`, `readRef`, and `context.reference(...)` correctly
 
 `writeNonRef` intentionally does not seed later back-references.
 

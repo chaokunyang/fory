@@ -105,7 +105,7 @@ Use `evolving: true` when you want compatible-mode field evolution. Use `evolvin
 
 Generated registration keeps serializer metadata private to the defining library while exposing a public wrapper API. Applications should call the generated wrapper instead of private helper functions.
 
-## When to Use Manual Serializers Instead
+## When to Use Customized Serializers Instead
 
 Use [Custom Serializers](custom-serializers.md) when:
 

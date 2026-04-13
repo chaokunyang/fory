@@ -82,7 +82,7 @@ final birthday = LocalDate(1990, 12, 1);
 
 ## Structs and Enums
 
-User-defined structs and enums are supported through generated registration or manual serializers.
+User-defined structs and enums are supported through generated registration or customized serializers.
 
 ```dart
 @ForyStruct()

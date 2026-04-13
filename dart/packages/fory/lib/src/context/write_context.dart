@@ -6,7 +6,7 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
-import 'package:fory/src/context/compatible_struct_metadata_store.dart';
+import 'package:fory/src/context/compatible_struct_metadata_index.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
@@ -30,7 +30,7 @@ final class WriteContext {
   final TypeResolver _typeResolver;
   final RefWriter _refWriter;
   final MetaStringWriter _metaStringWriter;
-  final CompatibleStructMetadataStore _compatibleStructMetadata;
+  final CompatibleStructMetadataIndex _compatibleStructMetadata;
 
   late Buffer _buffer;
   final LinkedHashMap<TypeDef, int> _typeDefIds =

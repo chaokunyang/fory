@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
-import 'package:fory/src/context/meta_string_codec.dart';
+import 'package:fory/src/context/meta_string_io.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/serializer/collection_serializers.dart';
@@ -490,7 +490,7 @@ final class TypeResolver {
       typeDef: typeDef,
     );
     _parsedTypeMetaCache.remember(TypeHeader(typeDef.header), resolved);
-    _storeResolved(type, resolved,
+    _rememberResolved(type, resolved,
         id: id, namespace: namespace, typeName: typeName);
   }
 
@@ -1460,7 +1460,7 @@ final class TypeResolver {
     return TypeIds.unknown;
   }
 
-  void _storeResolved(
+  void _rememberResolved(
     Type type,
     TypeInfo resolved, {
     required int? id,

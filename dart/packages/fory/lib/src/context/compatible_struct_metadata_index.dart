@@ -1,6 +1,6 @@
 import 'package:fory/src/resolver/type_resolver.dart';
 
-final class CompatibleStructMetadataStore {
+final class CompatibleStructMetadataIndex {
   Expando<StructMetadata> _metadata =
       Expando<StructMetadata>('fory_compatible_struct_metadata');
 

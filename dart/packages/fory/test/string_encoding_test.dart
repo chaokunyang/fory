@@ -1,9 +1,9 @@
 import 'package:fory/src/buffer.dart';
-import 'package:fory/src/string_codec.dart';
+import 'package:fory/src/string_encoding.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('string codec', () {
+  group('string encoding', () {
     test('round-trips latin1 strings from the buffer fast path', () {
       const value = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789é';
       final buffer = Buffer();

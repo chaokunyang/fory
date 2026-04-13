@@ -4,7 +4,7 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
-import 'package:fory/src/context/compatible_struct_metadata_store.dart';
+import 'package:fory/src/context/compatible_struct_metadata_index.dart';
 import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/read_context.dart';
@@ -39,7 +39,7 @@ final class Fory {
   Fory({Config config = const Config()}) {
     _buffer = Buffer();
     _typeResolver = TypeResolver(config);
-    final compatibleStructMetadata = CompatibleStructMetadataStore();
+    final compatibleStructMetadata = CompatibleStructMetadataIndex();
     _writeContext = WriteContext(
       config,
       _typeResolver,

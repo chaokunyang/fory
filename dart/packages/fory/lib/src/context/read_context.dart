@@ -2,7 +2,7 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
-import 'package:fory/src/context/compatible_struct_metadata_store.dart';
+import 'package:fory/src/context/compatible_struct_metadata_index.dart';
 import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/ref_reader.dart';
 import 'package:fory/src/context/ref_writer.dart';
@@ -26,7 +26,7 @@ final class ReadContext {
   final TypeResolver _typeResolver;
   final RefReader _refReader;
   final MetaStringReader _metaStringReader;
-  final CompatibleStructMetadataStore _compatibleStructMetadata;
+  final CompatibleStructMetadataIndex _compatibleStructMetadata;
 
   late Buffer _buffer;
   final List<TypeInfo> _sharedTypes = <TypeInfo>[];
@@ -217,7 +217,7 @@ final class ReadContext {
   /// Returns the resolved read ref or the read ref stored at [id].
   Object? getReadRef([int? id]) => _refReader.getReadRef(id);
 
-  /// Stores [value] under a previously preserved read ref [id].
+  /// Associates [value] with a previously preserved read ref [id].
   void setReadRef(int id, Object? value) => _refReader.setReadRef(id, value);
 
   /// Reads a nullable value using Ref semantics and wire type metadata.

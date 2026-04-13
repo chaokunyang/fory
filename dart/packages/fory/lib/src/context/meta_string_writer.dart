@@ -1,7 +1,7 @@
 import 'dart:collection';
 
 import 'package:fory/src/buffer.dart';
-import 'package:fory/src/context/meta_string_codec.dart';
+import 'package:fory/src/context/meta_string_io.dart';
 import 'package:fory/src/meta/meta_string.dart';
 
 /// Write-side state for meta-string references in one serialization stream.

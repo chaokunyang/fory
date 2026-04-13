@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/string_codec.dart';
+import 'package:fory/src/string_encoding.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
 

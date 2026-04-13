@@ -662,30 +662,18 @@ final class ForyGenerator extends Generator {
       ..writeln('    String? namespace,')
       ..writeln('    String? typeName,')
       ..writeln('  }) {')
-      ..writeln('    final generatedTypeName = _bindType(fory, type);')
       ..writeln('    final hasNumeric = id != null;')
       ..writeln('    final hasNamed = namespace != null || typeName != null;')
       ..writeln('    if (hasNumeric == hasNamed) {')
       ..writeln(
-        "      throw ArgumentError('Exactly one registration mode is required: id, or namespace with an optional typeName override.');",
+        "      throw ArgumentError('Exactly one registration mode is required: id, or namespace + typeName.');",
       )
       ..writeln('    }')
-      ..writeln('    if (namespace == null && typeName != null) {')
+      ..writeln('    if (hasNamed && (namespace == null || typeName == null)) {')
       ..writeln(
-        "      throw ArgumentError('namespace is required when typeName is provided.');",
+        "      throw ArgumentError('Both namespace and typeName are required for named registration.');",
       )
-      ..writeln('    }')
-      ..writeln('    fory.register(')
-      ..writeln('      type,')
-      ..writeln('      id: id,')
-      ..writeln('      namespace: namespace,')
-      ..writeln(
-        '      typeName: namespace == null ? typeName : (typeName ?? generatedTypeName),',
-      )
-      ..writeln('    );')
-      ..writeln('  }')
-      ..writeln()
-      ..writeln('  static String _bindType(Fory fory, Type type) {');
+      ..writeln('    }');
 
     for (final enumSpec in enumSpecs) {
       final registrationName =
@@ -694,7 +682,13 @@ final class ForyGenerator extends Generator {
       output.writeln(
         '    installGeneratedEnumRegistration(fory, $registrationName);',
       );
-      output.writeln("    return '${enumSpec.name}';");
+      output.writeln('    fory.register(');
+      output.writeln('      type,');
+      output.writeln('      id: id,');
+      output.writeln('      namespace: namespace,');
+      output.writeln('      typeName: typeName,');
+      output.writeln('    );');
+      output.writeln('    return;');
       output.writeln('  }');
     }
     for (final structSpec in structSpecs) {
@@ -704,7 +698,13 @@ final class ForyGenerator extends Generator {
       output.writeln(
         '    installGeneratedStructRegistration(fory, $registrationName);',
       );
-      output.writeln("    return '${structSpec.name}';");
+      output.writeln('    fory.register(');
+      output.writeln('      type,');
+      output.writeln('      id: id,');
+      output.writeln('      namespace: namespace,');
+      output.writeln('      typeName: typeName,');
+      output.writeln('    );');
+      output.writeln('    return;');
       output.writeln('  }');
     }
 

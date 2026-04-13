@@ -19,8 +19,18 @@ class Person {
 
 void main() {
   final fory = Fory();
-  ExampleFory.register(fory, Color, namespace: 'example');
-  ExampleFory.register(fory, Person, namespace: 'example');
+  ExampleFory.register(
+    fory,
+    Color,
+    namespace: 'example',
+    typeName: 'Color',
+  );
+  ExampleFory.register(
+    fory,
+    Person,
+    namespace: 'example',
+    typeName: 'Person',
+  );
 
   final person = Person()
     ..name = 'Ada'

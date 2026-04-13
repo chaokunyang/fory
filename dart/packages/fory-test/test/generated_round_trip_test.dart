@@ -10,8 +10,18 @@ void main() {
   group('generated registration', () {
     test('round-trips struct and enum data', () {
       final fory = Fory();
-      PersonFory.register(fory, Color, namespace: 'fory_test.person');
-      PersonFory.register(fory, Person, namespace: 'fory_test.person');
+      PersonFory.register(
+        fory,
+        Color,
+        namespace: 'fory_test.person',
+        typeName: 'Color',
+      );
+      PersonFory.register(
+        fory,
+        Person,
+        namespace: 'fory_test.person',
+        typeName: 'Person',
+      );
 
       final person = Person()
         ..name = 'Ada'
@@ -36,7 +46,12 @@ void main() {
 
     test('supports root trackRef for top-level graphs', () {
       final fory = Fory();
-      PersonFory.register(fory, RefNode, namespace: 'fory_test.person');
+      PersonFory.register(
+        fory,
+        RefNode,
+        namespace: 'fory_test.person',
+        typeName: 'RefNode',
+      );
 
       // `trackRef` is the root-level escape hatch for graphs without field
       // metadata, so this top-level list verifies shared identity at the root.
@@ -50,7 +65,12 @@ void main() {
 
     test('preserves self reference on annotated ref fields', () {
       final fory = Fory();
-      PersonFory.register(fory, RefNode, namespace: 'fory_test.person');
+      PersonFory.register(
+        fory,
+        RefNode,
+        namespace: 'fory_test.person',
+        typeName: 'RefNode',
+      );
 
       final node = RefNode()
         ..name = 'self'
@@ -69,11 +89,13 @@ void main() {
         fory,
         EvolvingPayload,
         namespace: 'fory_test.person',
+        typeName: 'EvolvingPayload',
       );
       PersonFory.register(
         fory,
         FixedPayload,
         namespace: 'fory_test.person',
+        typeName: 'FixedPayload',
       );
 
       final evolving = EvolvingPayload()..value = 'payload';
@@ -91,7 +113,12 @@ void main() {
 
     test('serializes private mutable fields', () {
       final fory = Fory();
-      PersonFory.register(fory, PrivatePayload, namespace: 'fory_test.person');
+      PersonFory.register(
+        fory,
+        PrivatePayload,
+        namespace: 'fory_test.person',
+        typeName: 'PrivatePayload',
+      );
 
       final mutable = PrivatePayload()..updateSecret('hidden');
       final bytes = fory.serialize(mutable);
@@ -107,6 +134,7 @@ void main() {
         fory,
         PrivateImmutablePayload,
         namespace: 'fory_test.person',
+        typeName: 'PrivateImmutablePayload',
       );
 
       final immutable = PrivateImmutablePayload('sealed');

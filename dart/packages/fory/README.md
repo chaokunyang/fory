@@ -4,7 +4,7 @@ This package provides the Dart runtime for Apache Fory xlang serialization.
 
 For normal application code, use annotated objects plus the generated
 library-level namespace such as `ExampleFory.register(fory, Person, id: 1)` or
-`ExampleFory.register(fory, Person, namespace: 'example')`.
+`ExampleFory.register(fory, Person, namespace: 'example', typeName: 'Person')`.
 Those generated helpers keep serializer metadata private to the source library
 and route into
 `Fory.register(...)` internally, while manual `Serializer` implementations
@@ -25,9 +25,8 @@ The runtime is built around a small public surface:
 Generated structs and enums register through the generated library namespace,
 which binds generated metadata and then calls `Fory.register(...)`. Generated
 wrappers require an explicit registration mode: pass `id` for id-based
-registration, or pass `namespace` for name-based registration. The generated
-wrapper supplies the default type name for the selected type unless you
-override `typeName`.
+registration, or pass both `namespace` and `typeName` for name-based
+registration.
 
 ## Public API
 
@@ -52,6 +51,6 @@ The primary example uses generated serializers:
 
 The example library exposes `ExampleFory.register(...)` for generated
 registration, for example `ExampleFory.register(fory, Person, namespace:
-'example')`.
+'example', typeName: 'Person')`.
 
 The advanced manual serializer example lives at `example/manual_serializer.dart`.

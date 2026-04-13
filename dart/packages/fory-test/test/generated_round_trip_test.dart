@@ -84,7 +84,7 @@ void main() {
 
     test('fixed payload stays smaller than evolving payload in compatible mode',
         () {
-      final fory = Fory(config: const Config(compatible: true));
+      final fory = Fory(compatible: true);
       PersonFory.register(
         fory,
         EvolvingPayload,

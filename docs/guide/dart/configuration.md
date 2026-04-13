@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Apache Fory Dart is configured through the immutable `Config` object passed to `Fory`.
+This page covers `Config` options and default runtime values for Apache Fory™ Dart.
 
 ## Create a Runtime
 
@@ -27,12 +27,10 @@ Apache Fory Dart is configured through the immutable `Config` object passed to `
 import 'package:fory/fory.dart';
 
 final fory = Fory(
-  config: const Config(
-    compatible: true,
-    maxDepth: 512,
-    maxCollectionSize: 1 << 18,
-    maxBinarySize: 16 * 1024 * 1024,
-  ),
+  compatible: true,
+  maxDepth: 512,
+  maxCollectionSize: 1 << 18,
+  maxBinarySize: 16 * 1024 * 1024,
 );
 ```
 
@@ -45,7 +43,7 @@ The same `Fory` instance should be reused across many operations. `Fory` resets 
 Enables compatible struct encoding and decoding.
 
 ```dart
-final fory = Fory(config: const Config(compatible: true));
+final fory = Fory(compatible: true);
 ```
 
 In compatible mode, generated evolving structs exchange shared `TypeDef` metadata rather than relying on the schema-consistent struct hash checks used by fixed-schema mode.
@@ -56,10 +54,8 @@ Controls struct schema-version validation in schema-consistent mode.
 
 ```dart
 final fory = Fory(
-  config: const Config(
-    compatible: false,
-    checkStructVersion: true,
-  ),
+  compatible: false,
+  checkStructVersion: true,
 );
 ```
 

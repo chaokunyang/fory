@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 
 void main() {
   test('compatible named struct round trip scopes nested struct slots', () {
-    final fory = Fory(config: const Config(compatible: true));
+    final fory = Fory(compatible: true);
     registerXlangType(
       fory,
       Color,

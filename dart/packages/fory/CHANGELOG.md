@@ -1,3 +1,3 @@
 ## 0.17.0-dev
 
-- Rewrite the Dart runtime around `Fory`, `Buffer`, `WriteContext`, `ReadContext`, and `TypeResolver`.
+- Dart runtime implementation around `Fory`, `Buffer`, `WriteContext`, `ReadContext`, and `TypeResolver`.

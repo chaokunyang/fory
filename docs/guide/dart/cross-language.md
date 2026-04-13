@@ -19,9 +19,9 @@ license: |
   limitations under the License.
 ---
 
-Apache Fory Dart reads and writes the standard xlang frame used by other Fory runtimes.
+Apache Fory™ Dart supports cross-language serialization with other Fory runtimes.
 
-## No Separate Xlang Switch
+## Cross-Language Runtime
 
 The Dart runtime only supports xlang payloads, so you do not enable a separate cross-language mode.
 
@@ -92,7 +92,7 @@ Person value = (Person) fory.deserialize(bytesFromDart);
 ### Dart
 
 ```dart
-final fory = Fory(config: const Config(compatible: true));
+final fory = Fory(compatible: true);
 PersonFory.register(fory, Person, id: 100);
 final bytes = fory.serialize(Person()
   ..name = 'Alice'

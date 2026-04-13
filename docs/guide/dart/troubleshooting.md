@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-This page covers common issues when using Apache Fory Dart.
+This page covers common Dart runtime issues and fixes.
 
 ## `Only xlang payloads are supported by the Dart runtime.`
 

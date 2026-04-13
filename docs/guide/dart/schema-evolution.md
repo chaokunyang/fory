@@ -36,7 +36,7 @@ This is the default when `Config.compatible` is `false`.
 Enable compatible mode when you want evolving field metadata on the wire.
 
 ```dart
-final fory = Fory(config: const Config(compatible: true));
+final fory = Fory(compatible: true);
 ```
 
 In compatible mode:

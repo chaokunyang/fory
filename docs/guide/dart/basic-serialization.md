@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-This guide covers the root serialization APIs in Apache Fory Dart.
+This page covers the root serialization APIs in Apache Fory™ Dart.
 
 ## Create and Reuse `Fory`
 
@@ -123,7 +123,7 @@ final value = fory.deserializeFrom<Int32>(buffer);
 
 ## Generated Registration Before Use
 
-Generated and manual user-defined types must be registered before serialization or deserialization.
+Generated and manual user-defined types must be registered before use.
 
 ```dart
 PersonFory.register(

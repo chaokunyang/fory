@@ -41,10 +41,8 @@ void _writeFile(Uint8List bytes) {
 
 Fory _newFory({bool compatible = false}) {
   return Fory(
-    config: Config(
-      compatible: compatible,
-      checkStructVersion: !compatible,
-    ),
+    compatible: compatible,
+    checkStructVersion: !compatible,
   );
 }
 

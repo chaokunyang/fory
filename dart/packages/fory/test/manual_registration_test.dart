@@ -134,7 +134,8 @@ void main() {
     expect(identical(roundTrip.first, roundTrip.second), isFalse);
   });
 
-  test('writeRefValueFlag returns true only when payload bytes must follow', () {
+  test('writeRefValueFlag returns true only when payload bytes must follow',
+      () {
     final fory = Fory();
     fory.registerSerializer(
       RefPayload,
@@ -159,12 +160,22 @@ void main() {
   test('root trackRef supports repeated strings', () {
     final fory = Fory();
     final shared = String.fromCharCodes('shared'.codeUnits);
-    final roundTrip =
-        fory.deserialize<Object?>(fory.serialize(<Object?>[shared, shared], trackRef: true))
-            as List;
+    final roundTrip = fory.deserialize<Object?>(
+        fory.serialize(<Object?>[shared, shared], trackRef: true)) as List;
 
     expect(roundTrip[0], equals('shared'));
     expect(roundTrip[1], equals('shared'));
     expect(identical(roundTrip[0], roundTrip[1]), isTrue);
+  });
+
+  test('constructor forwards direct config parameters', () {
+    final fory = Fory(
+      compatible: true,
+      maxDepth: 64,
+      maxCollectionSize: 1024,
+      maxBinarySize: 4096,
+    );
+    final bytes = fory.serialize(Int32(42));
+    expect(fory.deserialize<Int32>(bytes), equals(Int32(42)));
   });
 }

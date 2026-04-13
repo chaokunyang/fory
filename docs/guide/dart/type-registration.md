@@ -19,11 +19,11 @@ license: |
   limitations under the License.
 ---
 
-User-defined structs, enums, manual extension types, and manual unions must be registered before use.
+This page covers how to register user-defined types in Apache Fory™ Dart.
 
 ## Registration Modes
 
-Fory Dart supports the same two cross-language registration styles used by other xlang runtimes.
+Fory Dart supports the same two registration styles used by other xlang runtimes.
 
 ### Register by Numeric ID
 
@@ -50,7 +50,7 @@ ModelsFory.register(
 
 The same `namespace + typeName` pair must be used by every runtime that reads or writes the type.
 
-## Generated Registration
+## Generated Type Registration
 
 Generated types should normally be registered through the generated namespace wrapper:
 
@@ -60,7 +60,7 @@ UserModelsFory.register(fory, User, id: 100);
 
 Internally, the wrapper installs generated metadata and then calls `Fory.register(...)`.
 
-## Manual Serializer Registration
+## Register a Manual Serializer
 
 Manual serializers register through `registerSerializer`:
 

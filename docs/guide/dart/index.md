@@ -19,15 +19,15 @@ license: |
   limitations under the License.
 ---
 
-Apache Fory™ Dart is the xlang runtime for Dart and Flutter-style environments. It reads and writes the same cross-language wire format defined by the [xlang serialization specification](../../specification/xlang_serialization_spec.md) and is designed around generated serializers plus an advanced manual serializer escape hatch.
+Apache Fory™ Dart is a cross-language serialization runtime for Dart. It reads and writes the xlang wire format defined by the [xlang serialization specification](../../specification/xlang_serialization_spec.md) and is designed around generated serializers with an advanced manual serializer escape hatch.
 
 ## Why Fory Dart?
 
-- Cross-language serialization with the Fory xlang format
+- Cross-language compatibility with other Fory xlang runtimes
 - Generated serializers for annotated Dart models
-- Compatible-mode schema evolution for evolving structs
-- Explicit reference tracking for shared and circular object graphs
-- Manual serializer support for external types, special wire behavior, and unions
+- Compatible mode for schema evolution
+- Optional reference tracking for shared and circular object graphs
+- Manual serializer support for external types, custom wire behavior, and unions
 - A small public API centered on `Fory`, `Config`, annotations, and xlang value wrappers
 
 ## Runtime Model
@@ -43,7 +43,7 @@ The Dart runtime only supports xlang payloads. There is no separate native-mode 
 
 ### Install
 
-Add the package from the `dart/packages/fory` workspace or publish source once available for your environment.
+Add the package from your Dart workspace or package source. In this repository, the runtime lives under `dart/packages/fory`.
 
 ```yaml
 dependencies:
@@ -110,9 +110,9 @@ cd dart/packages/fory
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-## Core API Surface
+## Core API
 
-- `Fory({Config config = const Config()})`
+- `Fory({bool compatible = false, bool checkStructVersion = true, int maxDepth = Config.defaultMaxDepth, int maxCollectionSize = Config.defaultMaxCollectionSize, int maxBinarySize = Config.defaultMaxBinarySize})`
 - `serialize(Object? value, {bool trackRef = false})`
 - `deserialize<T>(Uint8List bytes)`
 - `register(Type type, {int? id, String? namespace, String? typeName})`

@@ -177,15 +177,11 @@ final class Fory {
 void bindGeneratedEnum(
   Fory fory,
   Type type,
-  Serializer<Object?> Function() serializerFactory, {
-  String? namespace,
-  String? typeName,
-}) {
+  Serializer<Object?> Function() serializerFactory,
+) {
   fory._typeResolver.bindGeneratedEnum(
     type,
     serializerFactory,
-    namespace: namespace,
-    typeName: typeName,
   );
 }
 
@@ -194,8 +190,6 @@ void bindGeneratedStruct(
   Fory fory,
   Type type,
   Serializer<Object?> Function() serializerFactory, {
-  String? namespace,
-  String? typeName,
   required bool evolving,
   required List<FieldInfo> fields,
   GeneratedStructCompatibleFactory<Object>? compatibleFactory,
@@ -204,8 +198,6 @@ void bindGeneratedStruct(
   fory._typeResolver.bindGeneratedStruct(
     type,
     serializerFactory,
-    namespace: namespace,
-    typeName: typeName,
     evolving: evolving,
     fields: fields,
     compatibleFactory: compatibleFactory,

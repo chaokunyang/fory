@@ -353,23 +353,17 @@ final class TypeResolver {
 
   void bindGeneratedEnum(
     Type type,
-    Serializer<Object?> Function() serializerFactory, {
-    String? namespace,
-    String? typeName,
-  }) {
+    Serializer<Object?> Function() serializerFactory,
+  ) {
     _generatedByType[type] = _GeneratedRegistration(
       kind: RegistrationKind.enumType,
       serializerFactory: serializerFactory,
-      namespace: namespace,
-      typeName: typeName,
     );
   }
 
   void bindGeneratedStruct(
     Type type,
     Serializer<Object?> Function() serializerFactory, {
-    String? namespace,
-    String? typeName,
     required bool evolving,
     required List<FieldInfo> fields,
     GeneratedStructCompatibleFactory<Object>? compatibleFactory,
@@ -378,8 +372,6 @@ final class TypeResolver {
     _generatedByType[type] = _GeneratedRegistration(
       kind: RegistrationKind.struct,
       serializerFactory: serializerFactory,
-      namespace: namespace,
-      typeName: typeName,
       evolving: evolving,
       fields: fields,
       compatibleFactory: compatibleFactory,
@@ -399,8 +391,6 @@ final class TypeResolver {
         'Type $type has no generated registration metadata bound in this Fory instance.',
       );
     }
-    final useGeneratedNameDefaults =
-        id == null && namespace == null && typeName == null;
     _registerResolvedSerializer(
       type,
       registration.serializerFactory(),
@@ -410,9 +400,8 @@ final class TypeResolver {
       compatibleFactory: registration.compatibleFactory,
       compatibleReadersBySlot: registration.compatibleReadersBySlot,
       id: id,
-      namespace:
-          useGeneratedNameDefaults ? registration.namespace : namespace,
-      typeName: useGeneratedNameDefaults ? registration.typeName : typeName,
+      namespace: namespace,
+      typeName: typeName,
     );
   }
 
@@ -1604,8 +1593,6 @@ final class TypeResolver {
 final class _GeneratedRegistration {
   final RegistrationKind kind;
   final Serializer<Object?> Function() serializerFactory;
-  final String? namespace;
-  final String? typeName;
   final bool evolving;
   final List<FieldInfo> fields;
   final GeneratedStructCompatibleFactory<Object>? compatibleFactory;
@@ -1615,8 +1602,6 @@ final class _GeneratedRegistration {
   const _GeneratedRegistration({
     required this.kind,
     required this.serializerFactory,
-    this.namespace,
-    this.typeName,
     this.evolving = true,
     this.fields = const <FieldInfo>[],
     this.compatibleFactory,

@@ -58,8 +58,6 @@ bool registerXlangManualType(
     installGeneratedStructRegistration(
       fory,
       _refOverrideContainerForyRegistration,
-      namespace: 'fory_test/entity/xlang_test_models',
-      typeName: 'RefOverrideContainer',
     );
     fory.register(
       RefOverrideContainer,

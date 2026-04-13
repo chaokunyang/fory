@@ -30,7 +30,6 @@ final class ForyGenerator extends Generator {
       return '';
     }
 
-    final namespace = _buildNamespace(buildStep.inputId);
     final helperBaseName = _toPascalCase(
       buildStep.inputId.pathSegments.last.split('.').first,
     );
@@ -57,7 +56,6 @@ final class ForyGenerator extends Generator {
       output,
       enumSpecs: enumSpecs,
       structSpecs: structSpecs,
-      namespace: namespace,
       generatedApiName: generatedApiName,
     );
     return output.toString();
@@ -637,7 +635,6 @@ final class ForyGenerator extends Generator {
     StringBuffer output, {
     required List<_GeneratedEnumSpec> enumSpecs,
     required List<_GeneratedStructSpec> structSpecs,
-    required String namespace,
     required String generatedApiName,
   }) {
     for (final enumSpec in enumSpecs) {
@@ -658,44 +655,46 @@ final class ForyGenerator extends Generator {
 
     output
       ..writeln('abstract final class $generatedApiName {')
-      ..writeln('  static void registerType(')
+      ..writeln('  static void register(')
       ..writeln('    Fory fory,')
       ..writeln('    Type type, {')
       ..writeln('    int? id,')
       ..writeln('    String? namespace,')
       ..writeln('    String? typeName,')
       ..writeln('  }) {')
-      ..writeln('    _bindType(fory, type);')
+      ..writeln('    final generatedTypeName = _bindType(fory, type);')
+      ..writeln('    final hasNumeric = id != null;')
+      ..writeln('    final hasNamed = namespace != null || typeName != null;')
+      ..writeln('    if (hasNumeric == hasNamed) {')
+      ..writeln(
+        "      throw ArgumentError('Exactly one registration mode is required: id, or namespace with an optional typeName override.');",
+      )
+      ..writeln('    }')
+      ..writeln('    if (namespace == null && typeName != null) {')
+      ..writeln(
+        "      throw ArgumentError('namespace is required when typeName is provided.');",
+      )
+      ..writeln('    }')
       ..writeln('    fory.register(')
       ..writeln('      type,')
       ..writeln('      id: id,')
       ..writeln('      namespace: namespace,')
-      ..writeln('      typeName: typeName,')
+      ..writeln(
+        '      typeName: namespace == null ? typeName : (typeName ?? generatedTypeName),',
+      )
       ..writeln('    );')
       ..writeln('  }')
       ..writeln()
-      ..writeln('  static void registerAll(Fory fory) {');
-
-    for (final enumSpec in enumSpecs) {
-      output.writeln('    registerType(fory, ${enumSpec.name});');
-    }
-    for (final structSpec in structSpecs) {
-      output.writeln('    registerType(fory, ${structSpec.name});');
-    }
-
-    output
-      ..writeln('  }')
-      ..writeln()
-      ..writeln('  static void _bindType(Fory fory, Type type) {');
+      ..writeln('  static String _bindType(Fory fory, Type type) {');
 
     for (final enumSpec in enumSpecs) {
       final registrationName =
           '_${_toCamelCase(enumSpec.name)}ForyRegistration';
       output.writeln('  if (type == ${enumSpec.name}) {');
       output.writeln(
-        "    installGeneratedEnumRegistration(fory, $registrationName, namespace: '$namespace', typeName: '${enumSpec.name}');",
+        '    installGeneratedEnumRegistration(fory, $registrationName);',
       );
-      output.writeln('    return;');
+      output.writeln("    return '${enumSpec.name}';");
       output.writeln('  }');
     }
     for (final structSpec in structSpecs) {
@@ -703,9 +702,9 @@ final class ForyGenerator extends Generator {
           '_${_toCamelCase(structSpec.name)}ForyRegistration';
       output.writeln('  if (type == ${structSpec.name}) {');
       output.writeln(
-        "    installGeneratedStructRegistration(fory, $registrationName, namespace: '$namespace', typeName: '${structSpec.name}');",
+        '    installGeneratedStructRegistration(fory, $registrationName);',
       );
-      output.writeln('    return;');
+      output.writeln("    return '${structSpec.name}';");
       output.writeln('  }');
     }
 
@@ -1877,11 +1876,6 @@ GeneratedFieldType(
       return type.element.name;
     }
     return type.getDisplayString().replaceAll('?', '');
-  }
-
-  String _buildNamespace(AssetId id) {
-    final normalizedPath = id.path.replaceFirst(RegExp(r'^lib/'), '');
-    return '${id.package}/${normalizedPath.replaceAll('.dart', '')}';
   }
 
   String _toPascalCase(String value) => value

@@ -41,7 +41,7 @@ void registerXlangType(
   )) {
     return;
   }
-  XlangTestModelsFory.registerType(
+  XlangTestModelsFory.register(
     fory,
     type,
     id: id,

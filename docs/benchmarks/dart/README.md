@@ -71,4 +71,3 @@ This benchmark compares serialization and deserialization throughput for Apache 
 ### MediaContentList
 
 ![MediaContentList](mediacontentlist.png)
-

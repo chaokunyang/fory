@@ -23,7 +23,7 @@ export 'src/codegen/generated_support.dart';
 export 'src/config.dart';
 export 'src/context/read_context.dart';
 export 'src/context/write_context.dart';
-export 'src/fory.dart' hide bindGeneratedEnum, bindGeneratedStruct;
+export 'src/fory.dart';
 export 'src/serializer/enum_serializer.dart';
 export 'src/serializer/serializer.dart';
 export 'src/serializer/union_serializer.dart';

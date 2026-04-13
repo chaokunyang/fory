@@ -1,6 +1,8 @@
 import 'dart:convert';
 
-import 'package:fory/src/resolver/type_resolver.dart';
+import 'package:fory/src/meta/field_info.dart';
+import 'package:fory/src/meta/type_def.dart';
+import 'package:fory/src/resolver/type_resolver.dart' show TypeIds;
 
 const int _typeDefCompressMetaFlag = 1 << 9;
 const int _typeDefHasFieldsMetaFlag = 1 << 8;
@@ -142,8 +144,8 @@ int typeDefHeader(
   return _toSigned64(header);
 }
 
-int schemaHash(StructMetadata metadata) {
-  final parts = metadata.fields
+int schemaHash(TypeDef typeDef) {
+  final parts = typeDef.fields
       .map(
         (field) => StringBuffer()
           ..write(field.identifier)

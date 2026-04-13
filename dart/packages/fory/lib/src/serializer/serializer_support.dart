@@ -1,7 +1,10 @@
 import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/context/write_context.dart';
+import 'package:fory/src/meta/field_info.dart';
+import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
+import 'package:fory/src/serializer/serialization_field_info.dart';
 
 final class DeferredReadRef {
   final int id;
@@ -11,41 +14,21 @@ final class DeferredReadRef {
 
 TypeInfo? fieldDeclaredTypeInfo(
   TypeResolver resolver,
-  FieldInfo field,
+  SerializationFieldInfo field,
 ) {
-  final declaredTypeInfo = field.declaredTypeInfo;
-  if (declaredTypeInfo != null) {
-    return declaredTypeInfo;
-  }
-  final fieldType = field.fieldType;
-  if (fieldType.isDynamic || (fieldType.isPrimitive && !fieldType.nullable)) {
-    return null;
-  }
-  return resolver.resolveFieldType(fieldType);
+  return field.declaredTypeInfo(resolver);
 }
 
 bool fieldUsesDeclaredType(
   TypeResolver resolver,
-  FieldInfo field,
+  SerializationFieldInfo field,
 ) {
-  if (field.declaredTypeInfo != null) {
-    return field.usesDeclaredType;
-  }
-  final fieldType = field.fieldType;
-  if (fieldType.isDynamic || (fieldType.isPrimitive && !fieldType.nullable)) {
-    return false;
-  }
-  final declaredTypeInfo = resolver.resolveFieldType(fieldType);
-  return usesDeclaredTypeInfo(
-    resolver.config.compatible,
-    fieldType,
-    declaredTypeInfo,
-  );
+  return field.usesDeclaredType(resolver);
 }
 
 void writeFieldValue(
   WriteContext context,
-  FieldInfo field,
+  SerializationFieldInfo field,
   Object? value,
 ) {
   final fieldType = field.fieldType;
@@ -70,7 +53,7 @@ void writeFieldValue(
   }
   final declaredTypeInfo = fieldDeclaredTypeInfo(context.typeResolver, field);
   final usesDeclaredType = fieldUsesDeclaredType(context.typeResolver, field);
-  if (!usesDeclaredType) {
+  if (!usesDeclaredType || declaredTypeInfo == null) {
     if (fieldType.ref) {
       context.writeRef(value);
       return;
@@ -86,7 +69,7 @@ void writeFieldValue(
     context.writeNonRef(value as Object);
     return;
   }
-  final resolved = declaredTypeInfo!;
+  final resolved = declaredTypeInfo;
   if (fieldType.nullable || fieldType.ref) {
     final handled = context.refWriter.writeRefOrNull(
       context.buffer,
@@ -105,7 +88,7 @@ void writeFieldValue(
 
 T readFieldValue<T>(
   ReadContext context,
-  FieldInfo field, [
+  SerializationFieldInfo field, [
   T? fallback,
 ]) {
   final fieldType = field.fieldType;
@@ -117,7 +100,7 @@ T readFieldValue<T>(
   }
   final declaredTypeInfo = fieldDeclaredTypeInfo(context.typeResolver, field);
   final usesDeclaredType = fieldUsesDeclaredType(context.typeResolver, field);
-  if (!usesDeclaredType) {
+  if (!usesDeclaredType || declaredTypeInfo == null) {
     if (fieldType.ref) {
       return context.readRef() as T;
     }
@@ -126,7 +109,7 @@ T readFieldValue<T>(
     }
     return context.readNonRef() as T;
   }
-  final resolved = declaredTypeInfo!;
+  final resolved = declaredTypeInfo;
   if (fieldType.nullable || fieldType.ref) {
     final flag = context.refReader.tryPreserveRefId(context.buffer);
     final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
@@ -155,7 +138,66 @@ Object? readCompatibleField(
   ReadContext context,
   FieldInfo field,
 ) {
-  return readFieldValue<Object?>(context, field);
+  final fieldType = field.fieldType;
+  if (fieldType.isDynamic) {
+    return context.readRef();
+  }
+  if (fieldType.isPrimitive && !fieldType.nullable) {
+    return context.readPrimitiveValue(fieldType.typeId);
+  }
+  final declaredTypeInfo = _compatibleFieldDeclaredTypeInfo(
+    context.typeResolver,
+    field,
+  );
+  final usesDeclaredType = declaredTypeInfo != null &&
+      usesDeclaredTypeInfo(
+        context.typeResolver.config.compatible,
+        fieldType,
+        declaredTypeInfo,
+      );
+  if (!usesDeclaredType) {
+    if (fieldType.ref) {
+      return context.readRef();
+    }
+    if (fieldType.nullable) {
+      return context.readNullable();
+    }
+    return context.readNonRef();
+  }
+  final resolved = declaredTypeInfo;
+  if (fieldType.nullable || fieldType.ref) {
+    final flag = context.refReader.tryPreserveRefId(context.buffer);
+    final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+    if (flag == RefWriter.nullFlag) {
+      return null;
+    }
+    if (flag == RefWriter.refFlag) {
+      return context.refReader.getReadRef();
+    }
+    final value = context.readResolvedValue(
+      resolved,
+      fieldType,
+      hasPreservedRef: preservedRefId != null,
+    );
+    if (preservedRefId != null &&
+        resolved.supportsRef &&
+        context.refReader.readRefAt(preservedRefId) == null) {
+      context.refReader.setReadRef(preservedRefId, value);
+    }
+    return value;
+  }
+  return context.readResolvedValue(resolved, fieldType);
+}
+
+TypeInfo? _compatibleFieldDeclaredTypeInfo(
+  TypeResolver resolver,
+  FieldInfo field,
+) {
+  final fieldType = field.fieldType;
+  if (fieldType.isDynamic || (fieldType.isPrimitive && !fieldType.nullable)) {
+    return null;
+  }
+  return resolver.resolveFieldType(fieldType);
 }
 
 FieldInfo mergeCompatibleWriteField(
@@ -189,7 +231,6 @@ FieldInfo mergeCompatibleWriteField(
     name: localField.name,
     identifier: localField.identifier,
     id: localField.id,
-    slot: localField.slot,
     fieldType: mergeFieldType(localField.fieldType, remoteField.fieldType),
   );
 }
@@ -225,7 +266,6 @@ FieldInfo mergeCompatibleReadField(
     name: localField.name,
     identifier: localField.identifier,
     id: localField.id,
-    slot: localField.slot,
     fieldType: mergeFieldType(localField.fieldType, remoteField.fieldType),
   );
 }

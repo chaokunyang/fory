@@ -2,10 +2,10 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
-import 'package:fory/src/context/compatible_struct_metadata_index.dart';
 import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/ref_reader.dart';
 import 'package:fory/src/context/ref_writer.dart';
+import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/map_serializers.dart';
@@ -26,7 +26,6 @@ final class ReadContext {
   final TypeResolver _typeResolver;
   final RefReader _refReader;
   final MetaStringReader _metaStringReader;
-  final CompatibleStructMetadataIndex _compatibleStructMetadata;
 
   late Buffer _buffer;
   final List<TypeInfo> _sharedTypes = <TypeInfo>[];
@@ -39,7 +38,6 @@ final class ReadContext {
     this._typeResolver,
     this._refReader,
     this._metaStringReader,
-    this._compatibleStructMetadata,
   );
 
   @internal
@@ -93,14 +91,6 @@ final class ReadContext {
     } else {
       _contextObjects[key] = previous;
     }
-  }
-
-  @internal
-  void rememberCompatibleStructMetadata(
-    Object value,
-    StructMetadata metadata,
-  ) {
-    _compatibleStructMetadata.remember(value, metadata);
   }
 
   @internal

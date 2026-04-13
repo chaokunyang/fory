@@ -1,11 +1,10 @@
 import 'dart:collection';
 
 import 'package:fory/src/buffer.dart';
-import 'package:fory/src/context/meta_string_io.dart';
 import 'package:fory/src/meta/meta_string.dart';
 
 /// Write-side state for meta-string references in one serialization stream.
-final class MetaStringWriter implements MetaStringWriteSink {
+final class MetaStringWriter {
   final Map<EncodedMetaString, int> _writtenMetaStrings =
       LinkedHashMap<EncodedMetaString, int>.identity();
 
@@ -15,7 +14,6 @@ final class MetaStringWriter implements MetaStringWriteSink {
   }
 
   /// Writes [encoded] using the stream-local meta-string table.
-  @override
   void writeMetaString(Buffer buffer, EncodedMetaString encoded) {
     final existing = _writtenMetaStrings[encoded];
     if (existing != null) {

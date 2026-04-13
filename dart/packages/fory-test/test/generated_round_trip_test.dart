@@ -3,9 +3,9 @@ import 'package:fory_test/model/person.dart';
 import 'package:test/test.dart';
 
 // Consumer-side integration coverage for build_runner output. These tests prove
-// that generated library namespaces built on Fory.register(...) work against
-// the public package:fory API; the Java-driven xlang harness covers cross-
-// runtime wire compatibility separately.
+// that generated library namespaces register directly against the public
+// package:fory API; the Java-driven xlang harness covers cross-runtime wire
+// compatibility separately.
 void main() {
   group('generated registration', () {
     test('round-trips struct and enum data', () {

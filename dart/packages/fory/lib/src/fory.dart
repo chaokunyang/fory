@@ -1,10 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:meta/meta.dart';
-
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
-import 'package:fory/src/context/compatible_struct_metadata_index.dart';
 import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/read_context.dart';
@@ -13,7 +10,6 @@ import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/serializer/struct_serializer.dart';
 
 /// Root facade for Apache Fory xlang serialization in Dart.
 ///
@@ -39,20 +35,17 @@ final class Fory {
   Fory({Config config = const Config()}) {
     _buffer = Buffer();
     _typeResolver = TypeResolver(config);
-    final compatibleStructMetadata = CompatibleStructMetadataIndex();
     _writeContext = WriteContext(
       config,
       _typeResolver,
       RefWriter(),
       MetaStringWriter(),
-      compatibleStructMetadata,
     );
     _readContext = ReadContext(
       config,
       _typeResolver,
       RefReader(),
       MetaStringReader(_typeResolver),
-      compatibleStructMetadata,
     );
   }
 
@@ -131,9 +124,9 @@ final class Fory {
   /// - pass both [namespace] and [typeName] for name-based registration.
   ///
   /// Generated struct and enum registration should normally flow through the
-  /// generated library namespace, which calls this method after binding its
-  /// metadata. For manual serializers, including unions, use
-  /// [registerSerializer].
+  /// generated library namespace, which installs generated metadata into the
+  /// internal registry before calling this method. For manual serializers,
+  /// including unions, use [registerSerializer].
   void register(
     Type type, {
     int? id,
@@ -171,36 +164,4 @@ final class Fory {
       typeName: typeName,
     );
   }
-}
-
-@internal
-void bindGeneratedEnum(
-  Fory fory,
-  Type type,
-  Serializer<Object?> Function() serializerFactory,
-) {
-  fory._typeResolver.bindGeneratedEnum(
-    type,
-    serializerFactory,
-  );
-}
-
-@internal
-void bindGeneratedStruct(
-  Fory fory,
-  Type type,
-  Serializer<Object?> Function() serializerFactory, {
-  required bool evolving,
-  required List<FieldInfo> fields,
-  GeneratedStructCompatibleFactory<Object>? compatibleFactory,
-  List<GeneratedStructCompatibleFieldReader<Object>>? compatibleReadersBySlot,
-}) {
-  fory._typeResolver.bindGeneratedStruct(
-    type,
-    serializerFactory,
-    evolving: evolving,
-    fields: fields,
-    compatibleFactory: compatibleFactory,
-    compatibleReadersBySlot: compatibleReadersBySlot,
-  );
 }

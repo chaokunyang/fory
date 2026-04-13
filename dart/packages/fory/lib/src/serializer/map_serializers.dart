@@ -2,6 +2,7 @@ import 'package:fory/src/buffer.dart';
 import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/context/write_context.dart';
+import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';

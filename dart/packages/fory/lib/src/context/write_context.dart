@@ -6,9 +6,10 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
-import 'package:fory/src/context/compatible_struct_metadata_index.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/ref_writer.dart';
+import 'package:fory/src/meta/field_type.dart';
+import 'package:fory/src/meta/type_def.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/map_serializers.dart';
@@ -30,7 +31,6 @@ final class WriteContext {
   final TypeResolver _typeResolver;
   final RefWriter _refWriter;
   final MetaStringWriter _metaStringWriter;
-  final CompatibleStructMetadataIndex _compatibleStructMetadata;
 
   late Buffer _buffer;
   final LinkedHashMap<TypeDef, int> _typeDefIds =
@@ -46,7 +46,6 @@ final class WriteContext {
     this._typeResolver,
     this._refWriter,
     this._metaStringWriter,
-    this._compatibleStructMetadata,
   );
 
   @internal
@@ -105,11 +104,6 @@ final class WriteContext {
     } else {
       _contextObjects[key] = previous;
     }
-  }
-
-  @internal
-  StructMetadata? compatibleStructMetadataFor(Object value) {
-    return _compatibleStructMetadata.metadataFor(value);
   }
 
   /// Records entry into one more nested write frame.

@@ -679,11 +679,9 @@ final class ForyGenerator extends Generator {
       final registrationName =
           '_${_toCamelCase(enumSpec.name)}ForyRegistration';
       output.writeln('  if (type == ${enumSpec.name}) {');
-      output.writeln(
-        '    installGeneratedEnumRegistration(fory, $registrationName);',
-      );
-      output.writeln('    fory.register(');
-      output.writeln('      type,');
+      output.writeln('    registerGeneratedEnum(');
+      output.writeln('      fory,');
+      output.writeln('      $registrationName,');
       output.writeln('      id: id,');
       output.writeln('      namespace: namespace,');
       output.writeln('      typeName: typeName,');
@@ -695,11 +693,9 @@ final class ForyGenerator extends Generator {
       final registrationName =
           '_${_toCamelCase(structSpec.name)}ForyRegistration';
       output.writeln('  if (type == ${structSpec.name}) {');
-      output.writeln(
-        '    installGeneratedStructRegistration(fory, $registrationName);',
-      );
-      output.writeln('    fory.register(');
-      output.writeln('      type,');
+      output.writeln('    registerGeneratedStruct(');
+      output.writeln('      fory,');
+      output.writeln('      $registrationName,');
       output.writeln('      id: id,');
       output.writeln('      namespace: namespace,');
       output.writeln('      typeName: typeName,');

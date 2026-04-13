@@ -55,12 +55,9 @@ bool registerXlangManualType(
     return true;
   }
   if (type == RefOverrideContainer) {
-    installGeneratedStructRegistration(
+    registerGeneratedStruct(
       fory,
       _refOverrideContainerForyRegistration,
-    );
-    fory.register(
-      RefOverrideContainer,
       id: id,
       namespace: namespace,
       typeName: typeName,

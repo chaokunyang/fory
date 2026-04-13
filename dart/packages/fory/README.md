@@ -6,8 +6,8 @@ For normal application code, use annotated objects plus the generated
 library-level namespace such as `ExampleFory.register(fory, Person, id: 1)` or
 `ExampleFory.register(fory, Person, namespace: 'example', typeName: 'Person')`.
 Those generated helpers keep serializer metadata private to the source library
-and route into
-`Fory.register(...)` internally, while manual `Serializer` implementations
+and register directly through generated serializer metadata, while manual
+`Serializer` implementations
 remain the advanced escape hatch for external types, custom wire behavior, or
 manual union implementations through `Fory.registerSerializer(...)`.
 
@@ -22,10 +22,9 @@ The runtime is built around a small public surface:
 - `ForyStruct`
 - `ForyField`
 
-Generated structs and enums register through the generated library namespace,
-which binds generated metadata and then calls `Fory.register(...)`. Generated
-wrappers require an explicit registration mode: pass `id` for id-based
-registration, or pass both `namespace` and `typeName` for name-based
+Generated structs and enums register through the generated library namespace.
+Generated wrappers require an explicit registration mode: pass `id` for
+id-based registration, or pass both `namespace` and `typeName` for name-based
 registration.
 
 ## Public API

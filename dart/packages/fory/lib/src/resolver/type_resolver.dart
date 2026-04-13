@@ -2,9 +2,14 @@ import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:fory/src/buffer.dart';
+import 'package:fory/src/codegen/generated_registry.dart';
 import 'package:fory/src/config.dart';
-import 'package:fory/src/context/meta_string_io.dart';
+import 'package:fory/src/context/meta_string_reader.dart';
+import 'package:fory/src/context/meta_string_writer.dart';
+import 'package:fory/src/meta/field_info.dart';
+import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/meta/meta_string.dart';
+import 'package:fory/src/meta/type_def.dart';
 import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/enum_serializer.dart';
@@ -12,6 +17,7 @@ import 'package:fory/src/serializer/map_serializers.dart';
 import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
+import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/serializer/union_serializer.dart';
@@ -158,104 +164,6 @@ abstract final class TypeIds {
 
 enum RegistrationKind { builtin, struct, enumType, ext, union }
 
-final class FieldType {
-  final Type type;
-  final int typeId;
-  final bool nullable;
-  final bool ref;
-  final bool? dynamic;
-  final List<FieldType> arguments;
-
-  const FieldType({
-    required this.type,
-    required this.typeId,
-    required this.nullable,
-    required this.ref,
-    required this.dynamic,
-    required this.arguments,
-  });
-
-  bool get isDynamic => dynamic == true || typeId == TypeIds.unknown;
-
-  bool get isPrimitive => TypeIds.isPrimitive(typeId);
-
-  bool get isContainer => TypeIds.isContainer(typeId);
-
-  FieldType withRootOverrides({
-    required bool nullable,
-    required bool ref,
-  }) {
-    if (this.nullable == nullable && this.ref == ref) {
-      return this;
-    }
-    return FieldType(
-      type: type,
-      typeId: typeId,
-      nullable: nullable,
-      ref: ref,
-      dynamic: dynamic,
-      arguments: arguments,
-    );
-  }
-}
-
-final class FieldInfo {
-  final String name;
-  final String identifier;
-  final int? id;
-  final int slot;
-  final FieldType fieldType;
-  final TypeInfo? declaredTypeInfo;
-  final bool usesDeclaredType;
-
-  const FieldInfo({
-    required this.name,
-    required this.identifier,
-    required this.id,
-    this.slot = -1,
-    required this.fieldType,
-    this.declaredTypeInfo,
-    this.usesDeclaredType = false,
-  });
-
-  FieldInfo copyWith({
-    String? name,
-    String? identifier,
-    int? id,
-    int? slot,
-    FieldType? fieldType,
-    TypeInfo? declaredTypeInfo,
-    bool? usesDeclaredType,
-  }) {
-    return FieldInfo(
-      name: name ?? this.name,
-      identifier: identifier ?? this.identifier,
-      id: id ?? this.id,
-      slot: slot ?? this.slot,
-      fieldType: fieldType ?? this.fieldType,
-      declaredTypeInfo: declaredTypeInfo ?? this.declaredTypeInfo,
-      usesDeclaredType: usesDeclaredType ?? this.usesDeclaredType,
-    );
-  }
-}
-
-final class StructMetadata {
-  final bool evolving;
-  final List<FieldInfo> fields;
-
-  const StructMetadata({required this.evolving, required this.fields});
-}
-
-final class TypeDef {
-  final int header;
-  final Uint8List encoded;
-
-  const TypeDef({
-    required this.header,
-    required this.encoded,
-  });
-}
-
 final class TypeInfo {
   final Type type;
   final RegistrationKind kind;
@@ -268,9 +176,8 @@ final class TypeInfo {
   final String? typeName;
   final EncodedMetaString? encodedNamespace;
   final EncodedMetaString? encodedTypeName;
-  final StructMetadata? structMetadata;
-  final StructMetadata? remoteStructMetadata;
   final TypeDef? typeDef;
+  final TypeDef? remoteTypeDef;
 
   const TypeInfo({
     required this.type,
@@ -284,16 +191,15 @@ final class TypeInfo {
     required this.typeName,
     required this.encodedNamespace,
     required this.encodedTypeName,
-    required this.structMetadata,
-    required this.remoteStructMetadata,
     required this.typeDef,
+    required this.remoteTypeDef,
   });
 
   bool get isNamed =>
       userTypeId == null && namespace != null && typeName != null;
 
   bool get isCompatibleStruct =>
-      kind == RegistrationKind.struct && structMetadata!.evolving;
+      kind == RegistrationKind.struct && typeDef!.evolving;
 
   bool get isBasicValue => TypeIds.isBasicValue(typeId);
 }
@@ -346,38 +252,8 @@ final class TypeResolver {
   final Map<_EncodedMetaStringKey, EncodedMetaString>
       _internedEncodedMetaStrings =
       <_EncodedMetaStringKey, EncodedMetaString>{};
-  final Map<Type, _GeneratedRegistration> _generatedByType =
-      <Type, _GeneratedRegistration>{};
 
   TypeResolver(this.config);
-
-  void bindGeneratedEnum(
-    Type type,
-    Serializer<Object?> Function() serializerFactory,
-  ) {
-    _generatedByType[type] = _GeneratedRegistration(
-      kind: RegistrationKind.enumType,
-      serializerFactory: serializerFactory,
-    );
-  }
-
-  void bindGeneratedStruct(
-    Type type,
-    Serializer<Object?> Function() serializerFactory, {
-    required bool evolving,
-    required List<FieldInfo> fields,
-    GeneratedStructCompatibleFactory<Object>? compatibleFactory,
-    List<GeneratedStructCompatibleFieldReader<Object>>? compatibleReadersBySlot,
-  }) {
-    _generatedByType[type] = _GeneratedRegistration(
-      kind: RegistrationKind.struct,
-      serializerFactory: serializerFactory,
-      evolving: evolving,
-      fields: fields,
-      compatibleFactory: compatibleFactory,
-      compatibleReadersBySlot: compatibleReadersBySlot,
-    );
-  }
 
   void registerGenerated(
     Type type, {
@@ -385,16 +261,20 @@ final class TypeResolver {
     String? namespace,
     String? typeName,
   }) {
-    final registration = _generatedByType[type];
+    final registration = GeneratedRegistrationCatalog.lookup(type);
     if (registration == null) {
       throw StateError(
-        'Type $type has no generated registration metadata bound in this Fory instance.',
+        'Type $type has no generated registration metadata. '
+        'Register it through its generated library namespace first.',
       );
     }
     _registerResolvedSerializer(
       type,
       registration.serializerFactory(),
-      registration.kind,
+      switch (registration.kind) {
+        GeneratedRegistrationKind.enumType => RegistrationKind.enumType,
+        GeneratedRegistrationKind.struct => RegistrationKind.struct,
+      },
       evolving: registration.evolving,
       fields: registration.fields,
       compatibleFactory: registration.compatibleFactory,
@@ -442,33 +322,22 @@ final class TypeResolver {
         typeName == null ? null : typeNameMetaString(typeName);
     final normalizedFields = registrationKind == RegistrationKind.struct
         ? List<FieldInfo>.unmodifiable(
-            List<FieldInfo>.generate(
-              fields.length,
-              (slot) => fieldInfo(
-                fields[slot],
-                slot: fields[slot].slot >= 0 ? fields[slot].slot : slot,
-              ),
-            ),
+            List<FieldInfo>.from(fields),
           )
         : const <FieldInfo>[];
-    final structMetadata = registrationKind == RegistrationKind.struct
-        ? StructMetadata(
-            evolving: evolving,
-            fields: normalizedFields,
-          )
-        : null;
     final typeDef = _buildTypeDef(
       kind: registrationKind,
+      evolving: registrationKind == RegistrationKind.struct ? evolving : false,
       userTypeId: id,
       encodedNamespace: encodedNamespace,
       encodedTypeName: encodedTypeName,
-      fields: structMetadata?.fields ?? const <FieldInfo>[],
+      fields: normalizedFields,
     );
-    final structSerializer = structMetadata == null
+    final structSerializer = registrationKind != RegistrationKind.struct
         ? null
         : StructSerializer(
             payloadSerializer,
-            structMetadata,
+            typeDef,
             this,
             compatibleFactory: compatibleFactory,
             compatibleReadersBySlot: compatibleReadersBySlot,
@@ -485,9 +354,8 @@ final class TypeResolver {
       typeName: typeName,
       encodedNamespace: encodedNamespace,
       encodedTypeName: encodedTypeName,
-      structMetadata: structMetadata,
-      remoteStructMetadata: null,
       typeDef: typeDef,
+      remoteTypeDef: null,
     );
     _parsedTypeMetaCache.remember(TypeHeader(typeDef.header), resolved);
     _rememberResolved(type, resolved,
@@ -633,7 +501,8 @@ final class TypeResolver {
       return _builtin(Timestamp, TypeIds.timestamp);
     }
     throw StateError(
-      'Type $runtimeType is not registered. Register generated types with Fory.register(...) from their source library, or register a serializer explicitly.',
+      'Type $runtimeType is not registered. Register generated types with '
+      'their generated library namespace, or register a serializer explicitly.',
     );
   }
 
@@ -756,20 +625,22 @@ final class TypeResolver {
     return resolved;
   }
 
-  FieldInfo fieldInfo(
+  SerializationFieldInfo serializationFieldInfo(
     FieldInfo field, {
-    int? slot,
+    required int slot,
   }) {
     final fieldType = field.fieldType;
     if (fieldType.isDynamic || (fieldType.isPrimitive && !fieldType.nullable)) {
-      return field.copyWith(
+      return SerializationFieldInfo(
+        field: field,
         slot: slot,
         declaredTypeInfo: null,
         usesDeclaredType: false,
       );
     }
     final declaredTypeInfo = tryResolveFieldType(fieldType);
-    return field.copyWith(
+    return SerializationFieldInfo(
+      field: field,
       slot: slot,
       declaredTypeInfo: declaredTypeInfo,
       usesDeclaredType: declaredTypeInfo != null
@@ -790,12 +661,13 @@ final class TypeResolver {
     TypeInfo resolved, {
     List<FieldInfo>? fields,
   }) {
-    final resolvedFields = resolved.structMetadata?.fields;
+    final resolvedFields = resolved.typeDef?.fields;
     if (fields == null || identical(fields, resolvedFields)) {
       return resolved.typeDef!;
     }
     return _buildTypeDef(
       kind: resolved.kind,
+      evolving: resolved.typeDef!.evolving,
       userTypeId: resolved.userTypeId,
       encodedNamespace: resolved.encodedNamespace,
       encodedTypeName: resolved.encodedTypeName,
@@ -808,7 +680,7 @@ final class TypeResolver {
     TypeInfo resolved, {
     required TypeDef? typeDef,
     required LinkedHashMap<TypeDef, int> typeDefIds,
-    required MetaStringWriteSink metaStringWriter,
+    required MetaStringWriter metaStringWriter,
   }) {
     _wireTypeMetaEncoder.write(
       buffer,
@@ -833,7 +705,7 @@ final class TypeResolver {
     Buffer buffer, {
     TypeInfo? expectedNamedType,
     required List<TypeInfo> sharedTypes,
-    required MetaStringReadSource metaStringReader,
+    required MetaStringReader metaStringReader,
   }) {
     final typeMeta = _wireTypeMetaDecoder.read(
       buffer,
@@ -883,6 +755,7 @@ final class TypeResolver {
 
   TypeDef _buildTypeDef({
     required RegistrationKind kind,
+    required bool evolving,
     required int? userTypeId,
     required EncodedMetaString? encodedNamespace,
     required EncodedMetaString? encodedTypeName,
@@ -896,7 +769,12 @@ final class TypeResolver {
       fields: fields,
     );
     final header = Buffer.wrap(encoded).readInt64();
-    return TypeDef(header: header, encoded: encoded);
+    return TypeDef(
+      evolving: evolving,
+      fields: fields,
+      header: header,
+      encoded: encoded,
+    );
   }
 
   Uint8List _encodeTypeDef({
@@ -1100,13 +978,14 @@ final class TypeResolver {
     if (resolved.kind != RegistrationKind.struct) {
       return resolved;
     }
-    final remoteMetadata = StructMetadata(
+    final remoteTypeDef = TypeDef(
       evolving: true,
-      fields: fields,
+      fields: List<FieldInfo>.unmodifiable(fields),
+      header: header.value,
+      encoded: Uint8List(0),
     );
-    final localMetadata = resolved.structMetadata;
-    if (localMetadata != null &&
-        _sameStructMetadata(localMetadata, remoteMetadata)) {
+    final localTypeDef = resolved.typeDef;
+    if (localTypeDef != null && _sameTypeDef(localTypeDef, remoteTypeDef)) {
       return resolved;
     }
     return TypeInfo(
@@ -1121,9 +1000,8 @@ final class TypeResolver {
       typeName: resolved.typeName,
       encodedNamespace: resolved.encodedNamespace,
       encodedTypeName: resolved.encodedTypeName,
-      structMetadata: resolved.structMetadata,
-      remoteStructMetadata: remoteMetadata,
       typeDef: resolved.typeDef,
+      remoteTypeDef: remoteTypeDef,
     );
   }
 
@@ -1303,9 +1181,8 @@ final class TypeResolver {
       typeName: null,
       encodedNamespace: null,
       encodedTypeName: null,
-      structMetadata: null,
-      remoteStructMetadata: null,
       typeDef: null,
+      remoteTypeDef: null,
     );
     _builtinByTypeId[typeId] = resolved;
     return resolved;
@@ -1536,11 +1413,12 @@ final class TypeResolver {
     return Object.hash(wireTypeId, namespace.hash, typeName.hash);
   }
 
-  bool _sameStructMetadata(
-    StructMetadata left,
-    StructMetadata right,
+  bool _sameTypeDef(
+    TypeDef left,
+    TypeDef right,
   ) {
-    if (left.fields.length != right.fields.length) {
+    if (left.evolving != right.evolving ||
+        left.fields.length != right.fields.length) {
       return false;
     }
     for (var index = 0; index < left.fields.length; index += 1) {
@@ -1588,25 +1466,6 @@ final class TypeResolver {
         return false;
     }
   }
-}
-
-final class _GeneratedRegistration {
-  final RegistrationKind kind;
-  final Serializer<Object?> Function() serializerFactory;
-  final bool evolving;
-  final List<FieldInfo> fields;
-  final GeneratedStructCompatibleFactory<Object>? compatibleFactory;
-  final List<GeneratedStructCompatibleFieldReader<Object>>?
-      compatibleReadersBySlot;
-
-  const _GeneratedRegistration({
-    required this.kind,
-    required this.serializerFactory,
-    this.evolving = true,
-    this.fields = const <FieldInfo>[],
-    this.compatibleFactory,
-    this.compatibleReadersBySlot,
-  });
 }
 
 final class _NamedTypeReadCacheEntry {

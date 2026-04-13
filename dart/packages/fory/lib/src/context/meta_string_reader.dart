@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:fory/src/buffer.dart';
-import 'package:fory/src/context/meta_string_io.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
@@ -9,7 +8,7 @@ typedef _MetaStringWords =
     ({int length, int word0, int word1, int word2, int word3});
 
 /// Read-side state for meta-string references in one deserialization stream.
-final class MetaStringReader implements MetaStringReadSource {
+final class MetaStringReader {
   final TypeResolver _typeResolver;
   final List<EncodedMetaString> _dynamicReadMetaStrings = <EncodedMetaString>[];
   final Map<int, EncodedMetaString> _bigMetaStrings =
@@ -28,7 +27,6 @@ final class MetaStringReader implements MetaStringReadSource {
   ///
   /// Callers with a likely expected value may pass [expected] to avoid an
   /// additional map lookup in the common exact-match case.
-  @override
   EncodedMetaString readMetaString(
     Buffer buffer, [
     EncodedMetaString? expected,

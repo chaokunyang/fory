@@ -134,8 +134,7 @@ final class WireTypeMetaEncoder {
         }
         return resolvedType.isNamed ? TypeIds.namedUnion : TypeIds.union;
       case RegistrationKind.struct:
-        final compatible =
-            config.compatible && resolvedType.structMetadata!.evolving;
+        final compatible = config.compatible && resolvedType.typeDef!.evolving;
         if (compatible) {
           return resolvedType.isNamed
               ? TypeIds.namedCompatibleStruct

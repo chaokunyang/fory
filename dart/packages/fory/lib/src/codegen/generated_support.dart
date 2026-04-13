@@ -4,11 +4,14 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/fory.dart';
 import 'package:fory/src/buffer.dart';
-import 'package:fory/src/fory.dart' as fory_internals;
+import 'package:fory/src/codegen/generated_registry.dart';
+import 'package:fory/src/meta/field_info.dart' as meta;
+import 'package:fory/src/meta/field_type.dart' as meta_types;
 import 'package:fory/src/resolver/type_resolver.dart' as resolver;
 import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/map_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
+import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
 import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
@@ -386,8 +389,8 @@ final class GeneratedFieldType {
     required this.arguments,
   });
 
-  resolver.FieldType toFieldType() {
-    return resolver.FieldType(
+  meta_types.FieldType toFieldType() {
+    return meta_types.FieldType(
       type: type,
       typeId: typeId,
       nullable: nullable,
@@ -425,8 +428,8 @@ final class GeneratedFieldInfo {
     required this.fieldType,
   });
 
-  resolver.FieldInfo toFieldInfo() {
-    return resolver.FieldInfo(
+  meta.FieldInfo toFieldInfo() {
+    return meta.FieldInfo(
       name: name,
       identifier: identifier,
       id: id,
@@ -447,7 +450,7 @@ final class GeneratedEnumRegistration {
 }
 
 @internal
-typedef GeneratedStructFieldInfo = resolver.FieldInfo;
+typedef GeneratedStructFieldInfo = SerializationFieldInfo;
 
 @internal
 typedef GeneratedStructFieldInfoWriter<T> = void Function(
@@ -477,11 +480,11 @@ final class GeneratedStructRegistration<T> {
     required this.fields,
   });
 
-  late final List<resolver.FieldInfo> fieldInfos =
-      List<resolver.FieldInfo>.unmodifiable(
-    List<resolver.FieldInfo>.generate(
+  late final List<meta.FieldInfo> fieldInfos =
+      List<meta.FieldInfo>.unmodifiable(
+    List<meta.FieldInfo>.generate(
       fields.length,
-      (index) => fields[index].toFieldInfo().copyWith(slot: index),
+      (index) => fields[index].toFieldInfo(),
     ),
   );
 
@@ -491,43 +494,66 @@ final class GeneratedStructRegistration<T> {
 }
 
 @internal
-void installGeneratedEnumRegistration(
+void registerGeneratedEnum(
   Fory fory,
-  GeneratedEnumRegistration registration,
-) {
-  fory_internals.bindGeneratedEnum(
-    fory,
+  GeneratedEnumRegistration registration, {
+  int? id,
+  String? namespace,
+  String? typeName,
+}) {
+  GeneratedRegistrationCatalog.remember(
     registration.type,
-    registration.serializerFactory,
+    GeneratedRegistration(
+      kind: GeneratedRegistrationKind.enumType,
+      serializerFactory: registration.serializerFactory,
+    ),
+  );
+  fory.register(
+    registration.type,
+    id: id,
+    namespace: namespace,
+    typeName: typeName,
   );
 }
 
 @internal
-void installGeneratedStructRegistration<T>(
+void registerGeneratedStruct<T>(
   Fory fory,
-  GeneratedStructRegistration<T> registration,
-) {
-  fory_internals.bindGeneratedStruct(
-    fory,
-    registration.type,
-    registration.serializerFactory,
-    evolving: registration.evolving,
-    fields: registration.fieldInfos,
-    compatibleFactory: registration.compatibleFactory == null
-        ? null
-        : () => registration.compatibleFactory!() as Object,
-    compatibleReadersBySlot: registration.compatibleReadersBySlot == null
-        ? null
-        : List<GeneratedStructCompatibleFieldReader<Object>>.unmodifiable(
-            registration.compatibleReadersBySlot!.map(
-              (reader) => (
-                ReadContext context,
-                Object value,
-                Object? rawValue,
-              ) =>
-                  reader(context, value as T, rawValue),
-            ),
+  GeneratedStructRegistration<T> registration, {
+  int? id,
+  String? namespace,
+  String? typeName,
+}) {
+  final compatibleReadersBySlot = registration.compatibleReadersBySlot == null
+      ? null
+      : List<GeneratedStructCompatibleFieldReader<Object>>.unmodifiable(
+          registration.compatibleReadersBySlot!.map(
+            (reader) => (
+              ReadContext context,
+              Object value,
+              Object? rawValue,
+            ) =>
+                reader(context, value as T, rawValue),
           ),
+        );
+  GeneratedRegistrationCatalog.remember(
+    registration.type,
+    GeneratedRegistration(
+      kind: GeneratedRegistrationKind.struct,
+      serializerFactory: registration.serializerFactory,
+      evolving: registration.evolving,
+      fields: registration.fieldInfos,
+      compatibleFactory: registration.compatibleFactory == null
+          ? null
+          : () => registration.compatibleFactory!() as Object,
+      compatibleReadersBySlot: compatibleReadersBySlot,
+    ),
+  );
+  fory.register(
+    registration.type,
+    id: id,
+    namespace: namespace,
+    typeName: typeName,
   );
 }
 
@@ -600,20 +626,20 @@ T readGeneratedTypedArrayValue<T>(
 }
 
 @internal
-List<resolver.FieldInfo> buildGeneratedStructFieldInfos(
+List<GeneratedStructFieldInfo> buildGeneratedStructFieldInfos(
   resolver.TypeResolver typeResolver,
   GeneratedStructRegistration registration,
 ) {
   return typeResolver
       .resolvedRegisteredType(registration.type)
-      .structMetadata!
-      .fields;
+      .structSerializer!
+      .localFields;
 }
 
 @internal
 void writeGeneratedStructFieldInfoValue(
   WriteContext context,
-  resolver.FieldInfo field,
+  GeneratedStructFieldInfo field,
   Object? value,
 ) {
   final fieldType = field.fieldType;
@@ -638,7 +664,7 @@ void writeGeneratedStructFieldInfoValue(
 @internal
 Object? readGeneratedStructFieldInfoValue(
   ReadContext context,
-  resolver.FieldInfo field, [
+  GeneratedStructFieldInfo field, [
   Object? fallback,
 ]) {
   final fieldType = field.fieldType;
@@ -664,7 +690,7 @@ Object? readGeneratedStructFieldInfoValue(
 @internal
 List<T> readGeneratedDirectListValue<T>(
   ReadContext context,
-  resolver.FieldInfo field,
+  GeneratedStructFieldInfo field,
   T Function(Object? value) convert,
 ) {
   final fieldType = field.fieldType;
@@ -684,7 +710,7 @@ List<T> readGeneratedDirectListValue<T>(
 @internal
 Set<T> readGeneratedDirectSetValue<T>(
   ReadContext context,
-  resolver.FieldInfo field,
+  GeneratedStructFieldInfo field,
   T Function(Object? value) convert,
 ) {
   final fieldType = field.fieldType;
@@ -704,7 +730,7 @@ Set<T> readGeneratedDirectSetValue<T>(
 @internal
 Map<K, V> readGeneratedDirectMapValue<K, V>(
   ReadContext context,
-  resolver.FieldInfo field,
+  GeneratedStructFieldInfo field,
   K Function(Object? value) convertKey,
   V Function(Object? value) convertValue,
 ) {

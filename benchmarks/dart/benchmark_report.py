@@ -17,16 +17,58 @@
 
 import argparse
 import json
+import math
 import os
+import socket
+import subprocess
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
 
 
 COLORS = {
-    "fory": "#FF6f01",
+    "fory": "#FF6F01",
     "protobuf": "#55BCC2",
 }
+
+DATA_TYPES = [
+    "struct",
+    "sample",
+    "mediacontent",
+    "structlist",
+    "samplelist",
+    "mediacontentlist",
+]
+
+DISPLAY_NAMES = {
+    "struct": "Struct",
+    "sample": "Sample",
+    "mediacontent": "MediaContent",
+    "structlist": "StructList",
+    "samplelist": "SampleList",
+    "mediacontentlist": "MediaContentList",
+}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate Dart benchmark report")
+    parser.add_argument("--json-file", required=True)
+    parser.add_argument("--output-dir", required=True)
+    return parser.parse_args()
+
+
+def load_payload(path: str) -> dict:
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def collect_results(payload: dict) -> dict:
+    results = defaultdict(lambda: defaultdict(dict))
+    for record in payload["results"]:
+        results[record["data_type"]][record["operation"]][record["serializer"]] = (
+            record["median_ops_per_sec"]
+        )
+    return results
 
 
 def format_label(value: float) -> str:
@@ -37,25 +79,114 @@ def format_label(value: float) -> str:
     return f"{value:.2f}"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate Dart benchmark report")
-    parser.add_argument("--json-file", required=True)
-    parser.add_argument("--output-dir", required=True)
-    args = parser.parse_args()
+def format_int(value: float) -> str:
+    return f"{int(round(value)):,}"
 
-    os.makedirs(args.output_dir, exist_ok=True)
 
-    with open(args.json_file, "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
+def fastest_entry(fory_value: float, protobuf_value: float) -> str:
+    if protobuf_value <= 0 and fory_value <= 0:
+        return "n/a"
+    if protobuf_value <= 0:
+        return "fory"
+    if fory_value <= 0:
+        return "protobuf"
+    if math.isclose(fory_value, protobuf_value):
+        return "tie (1.00x)"
+    if fory_value > protobuf_value:
+        return f"fory ({fory_value / protobuf_value:.2f}x)"
+    return f"protobuf ({protobuf_value / fory_value:.2f}x)"
 
-    results = defaultdict(lambda: defaultdict(dict))
-    for record in payload["results"]:
-        results[record["data_type"]][record["operation"]][record["serializer"]] = (
-            record["median_ops_per_sec"]
+
+def detect_memory_gb() -> str:
+    try:
+        output = subprocess.check_output(
+            ["sysctl", "-n", "hw.memsize"],
+            text=True,
+        ).strip()
+        return f"{int(output) / (1024 ** 3):.2f}"
+    except Exception:
+        return "Unknown"
+
+
+def system_info(metadata: dict) -> list[tuple[str, str]]:
+    return [
+        ("Timestamp", metadata.get("generated_at", "Unknown")),
+        ("OS", metadata.get("os_version", metadata.get("os", "Unknown"))),
+        ("Host", socket.gethostname() or "Unknown"),
+        ("CPU Cores (Logical)", str(metadata.get("cpus", "Unknown"))),
+        ("Memory (GB)", detect_memory_gb()),
+        ("Dart", metadata.get("dart_version", "Unknown")),
+        ("Samples per case", str(metadata.get("samples", "Unknown"))),
+        ("Warmup per case (s)", str(metadata.get("warmup_seconds", "Unknown"))),
+        ("Duration per case (s)", str(metadata.get("duration_seconds", "Unknown"))),
+    ]
+
+
+def save_summary_plot(results: dict, output_dir: str) -> str:
+    figure, axes = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
+    x_positions = range(len(DATA_TYPES))
+    bar_width = 0.36
+
+    for axis, operation in zip(axes, ["serialize", "deserialize"]):
+        fory_values = [
+            results.get(data_type, {}).get(operation, {}).get("fory", 0.0)
+            for data_type in DATA_TYPES
+        ]
+        protobuf_values = [
+            results.get(data_type, {}).get(operation, {}).get("protobuf", 0.0)
+            for data_type in DATA_TYPES
+        ]
+        fory_positions = [x - bar_width / 2 for x in x_positions]
+        protobuf_positions = [x + bar_width / 2 for x in x_positions]
+        fory_bars = axis.bar(
+            fory_positions,
+            fory_values,
+            width=bar_width,
+            color=COLORS["fory"],
+            label="Fory",
         )
+        protobuf_bars = axis.bar(
+            protobuf_positions,
+            protobuf_values,
+            width=bar_width,
+            color=COLORS["protobuf"],
+            label="Protobuf",
+        )
+        axis.set_title(f"{operation.capitalize()} throughput")
+        axis.set_ylabel("ops/s")
+        axis.grid(True, axis="y", linestyle="--", alpha=0.35)
+        axis.legend(loc="upper right")
+        for bars in (fory_bars, protobuf_bars):
+            for bar in bars:
+                value = bar.get_height()
+                axis.annotate(
+                    format_label(value),
+                    xy=(bar.get_x() + bar.get_width() / 2, value),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                    rotation=90,
+                )
 
+    axes[-1].set_xticks(list(x_positions))
+    axes[-1].set_xticklabels([DISPLAY_NAMES[data_type] for data_type in DATA_TYPES])
+    figure.suptitle("Apache Fory Dart Benchmark")
+    figure.tight_layout(rect=[0, 0, 1, 0.97])
+
+    path = os.path.join(output_dir, "throughput.png")
+    figure.savefig(path, dpi=150)
+    plt.close(figure)
+    return path
+
+
+def save_per_type_plots(results: dict, output_dir: str) -> list[tuple[str, str]]:
     plot_paths = []
-    for data_type, operations in sorted(results.items()):
+    for data_type in DATA_TYPES:
+        operations = results.get(data_type, {})
+        if not operations:
+            continue
         figure, axes = plt.subplots(1, 2, figsize=(12, 5))
         for index, operation in enumerate(["serialize", "deserialize"]):
             serializers = ["fory", "protobuf"]
@@ -74,48 +205,82 @@ def main() -> None:
             for bar, value in zip(bars, values):
                 axes[index].annotate(
                     format_label(value),
-                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xy=(bar.get_x() + bar.get_width() / 2, value),
                     xytext=(0, 3),
                     textcoords="offset points",
                     ha="center",
                     va="bottom",
                     fontsize=9,
                 )
-        figure.suptitle(data_type)
+        figure.suptitle(DISPLAY_NAMES[data_type])
         figure.tight_layout(rect=[0, 0, 1, 0.95])
-        path = os.path.join(args.output_dir, f"{data_type}.png")
+        path = os.path.join(output_dir, f"{data_type}.png")
         figure.savefig(path, dpi=150)
         plt.close(figure)
-        plot_paths.append((data_type, path))
+        plot_paths.append((DISPLAY_NAMES[data_type], path))
+    return plot_paths
 
-    report_path = os.path.join(args.output_dir, "README.md")
+
+def write_report(payload: dict, results: dict, output_dir: str, plot_paths: list[tuple[str, str]]):
+    metadata = payload["metadata"]
+    report_path = os.path.join(output_dir, "README.md")
     with open(report_path, "w", encoding="utf-8") as handle:
-        handle.write("# Dart benchmark results\n\n")
-        handle.write("## Throughput\n\n")
+        handle.write("# Fory Dart Benchmark\n\n")
         handle.write(
-            "| Data Type | Operation | Fory (ops/s) | Protobuf (ops/s) | Fory vs PB |\n"
+            "This benchmark compares serialization and deserialization throughput for "
+            "Apache Fory and Protocol Buffers in Dart.\n\n"
         )
-        handle.write("| --- | --- | ---: | ---: | ---: |\n")
-        for data_type, operations in sorted(results.items()):
+        handle.write("## Hardware and Runtime Info\n\n")
+        handle.write("| Key | Value |\n")
+        handle.write("| --- | --- |\n")
+        for key, value in system_info(metadata):
+            handle.write(f"| {key} | {value} |\n")
+
+        handle.write("\n## Throughput Results\n\n")
+        handle.write("![Throughput](throughput.png)\n\n")
+        handle.write(
+            "| Datatype | Operation | Fory TPS | Protobuf TPS | Fastest |\n"
+        )
+        handle.write("| --- | --- | ---: | ---: | --- |\n")
+        for data_type in DATA_TYPES:
+            operations = results.get(data_type, {})
+            if not operations:
+                continue
             for operation in ["serialize", "deserialize"]:
                 fory_value = operations.get(operation, {}).get("fory", 0.0)
                 protobuf_value = operations.get(operation, {}).get("protobuf", 0.0)
-                ratio = (fory_value / protobuf_value) if protobuf_value else 0.0
                 handle.write(
-                    f"| {data_type} | {operation} | {fory_value:,.2f} | "
-                    f"{protobuf_value:,.2f} | {ratio:.2f}x |\n"
+                    f"| {DISPLAY_NAMES[data_type]} | {operation.capitalize()} | "
+                    f"{format_int(fory_value)} | {format_int(protobuf_value)} | "
+                    f"{fastest_entry(fory_value, protobuf_value)} |\n"
                 )
-        handle.write("\n## Serialized sizes\n\n")
-        handle.write("| Data Type | Fory | Protobuf |\n")
+
+        handle.write("\n## Serialized Size (bytes)\n\n")
+        handle.write("| Datatype | Fory | Protobuf |\n")
         handle.write("| --- | ---: | ---: |\n")
-        for data_type, values in sorted(payload["sizes"].items()):
-            handle.write(f"| {data_type} | {values['fory']} | {values['protobuf']} |\n")
+        for data_type in DATA_TYPES:
+            sizes = payload["sizes"].get(data_type)
+            if sizes is None:
+                continue
+            handle.write(
+                f"| {DISPLAY_NAMES[data_type]} | {sizes['fory']} | {sizes['protobuf']} |\n"
+            )
+
         if plot_paths:
-            handle.write("\n## Plots\n\n")
-            for data_type, path in plot_paths:
-                handle.write(
-                    f"### {data_type}\n\n![{data_type}]({os.path.basename(path)})\n\n"
-                )
+            handle.write("\n## Per-workload Plots\n\n")
+            for display_name, path in plot_paths:
+                handle.write(f"### {display_name}\n\n")
+                handle.write(f"![{display_name}]({os.path.basename(path)})\n\n")
+
+
+def main() -> None:
+    args = parse_args()
+    os.makedirs(args.output_dir, exist_ok=True)
+    payload = load_payload(args.json_file)
+    results = collect_results(payload)
+    save_summary_plot(results, args.output_dir)
+    plot_paths = save_per_type_plots(results, args.output_dir)
+    write_report(payload, results, args.output_dir, plot_paths)
 
 
 if __name__ == "__main__":

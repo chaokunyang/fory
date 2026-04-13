@@ -1061,6 +1061,11 @@ jobs:
             String name = '';
             Int32 age = Int32(0);
           }
+
+          void registerPersonTypes(Fory fory) {
+            _installPersonForyRegistrations(fory);
+            fory.register(Person);
+          }
           EOF
           cat <<'EOF' | sed 's/^          //' > "$FLUTTER_SMOKE_DIR/lib/main.dart"
           import 'package:flutter/material.dart';
@@ -1085,7 +1090,7 @@ jobs:
           void main() {
             test('generated fory serializers work in flutter', () {
               final fory = Fory();
-              registerPersonForyTypes(fory);
+              registerPersonTypes(fory);
 
               final person = Person()
                 ..name = 'Ada'

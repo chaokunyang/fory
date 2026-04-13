@@ -260,7 +260,7 @@ export enum Mode {
 
 export interface Config {
   hps?: Hps;
-  ref: boolean | null;
+  ref: boolean;
   useSliceString: boolean;
   maxDepth?: number;
   maxBinarySize?: number;

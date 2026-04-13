@@ -61,7 +61,7 @@ export default class Fory {
 
   private initConfig(config: Partial<Config> | undefined) {
     return {
-      ref: config?.ref !== null ? Boolean(config?.ref) : null,
+      ref: Boolean(config?.ref),
       useSliceString: Boolean(config?.useSliceString),
       maxDepth: config?.maxDepth,
       maxBinarySize: config?.maxBinarySize,

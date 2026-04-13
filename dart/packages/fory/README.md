@@ -2,11 +2,13 @@
 
 This package provides the Dart runtime for Apache Fory xlang serialization.
 
-For normal application code, use annotated objects plus `Fory.register(...)`.
-Generated parts keep serializer metadata private to the source library, while
-manual `Serializer` implementations remain the advanced escape hatch for
-external types, custom wire behavior, or manual union implementations through
-`Fory.registerSerializer(...)`.
+For normal application code, use annotated objects plus the generated
+library-level namespace such as `ExampleFory.registerAll(fory)` or
+`ExampleFory.registerType(fory, Person, id: 1)`. Those generated helpers keep
+serializer metadata private to the source library and route into
+`Fory.register(...)` internally, while manual `Serializer` implementations
+remain the advanced escape hatch for external types, custom wire behavior, or
+manual union implementations through `Fory.registerSerializer(...)`.
 
 The runtime is built around a small public surface:
 
@@ -19,9 +21,8 @@ The runtime is built around a small public surface:
 - `ForyStruct`
 - `ForyField`
 
-Generated structs and enums register through `Fory.register(...)`. The
-generated part only installs private metadata needed to make that work from the
-source library.
+Generated structs and enums register through the generated library namespace,
+which binds generated metadata and then calls `Fory.register(...)`.
 
 ## Public API
 
@@ -43,5 +44,8 @@ The primary example uses generated serializers:
    `dart run build_runner build --delete-conflicting-outputs`
 2. Run the example:
    `dart run example/example.dart`
+
+The example library exposes `ExampleFory.registerType(...)` and
+`ExampleFory.registerAll(...)` for generated registration.
 
 The advanced manual serializer example lives at `example/manual_serializer.dart`.

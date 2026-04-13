@@ -34,8 +34,7 @@ final class ForyGenerator extends Generator {
     final helperBaseName = _toPascalCase(
       buildStep.inputId.pathSegments.last.split('.').first,
     );
-    final installAllHelperName = '_install${helperBaseName}ForyRegistrations';
-    final installByTypeHelperName = '_install${helperBaseName}ForyRegistration';
+    final generatedApiName = '${helperBaseName}Fory';
 
     final enumSpecs = enumElements
         .map((element) => _GeneratedEnumSpec(name: element.name))
@@ -59,8 +58,7 @@ final class ForyGenerator extends Generator {
       enumSpecs: enumSpecs,
       structSpecs: structSpecs,
       namespace: namespace,
-      installAllHelperName: installAllHelperName,
-      installByTypeHelperName: installByTypeHelperName,
+      generatedApiName: generatedApiName,
     );
     return output.toString();
   }
@@ -640,8 +638,7 @@ final class ForyGenerator extends Generator {
     required List<_GeneratedEnumSpec> enumSpecs,
     required List<_GeneratedStructSpec> structSpecs,
     required String namespace,
-    required String installAllHelperName,
-    required String installByTypeHelperName,
+    required String generatedApiName,
   }) {
     for (final enumSpec in enumSpecs) {
       final registrationName =
@@ -659,9 +656,37 @@ final class ForyGenerator extends Generator {
       output.writeln();
     }
 
-    output.writeln(
-      'void $installByTypeHelperName(Fory fory, Type type) {',
-    );
+    output
+      ..writeln('abstract final class $generatedApiName {')
+      ..writeln('  static void registerType(')
+      ..writeln('    Fory fory,')
+      ..writeln('    Type type, {')
+      ..writeln('    int? id,')
+      ..writeln('    String? namespace,')
+      ..writeln('    String? typeName,')
+      ..writeln('  }) {')
+      ..writeln('    _bindType(fory, type);')
+      ..writeln('    fory.register(')
+      ..writeln('      type,')
+      ..writeln('      id: id,')
+      ..writeln('      namespace: namespace,')
+      ..writeln('      typeName: typeName,')
+      ..writeln('    );')
+      ..writeln('  }')
+      ..writeln()
+      ..writeln('  static void registerAll(Fory fory) {');
+
+    for (final enumSpec in enumSpecs) {
+      output.writeln('    registerType(fory, ${enumSpec.name});');
+    }
+    for (final structSpec in structSpecs) {
+      output.writeln('    registerType(fory, ${structSpec.name});');
+    }
+
+    output
+      ..writeln('  }')
+      ..writeln()
+      ..writeln('  static void _bindType(Fory fory, Type type) {');
 
     for (final enumSpec in enumSpecs) {
       final registrationName =
@@ -689,24 +714,6 @@ final class ForyGenerator extends Generator {
         "  throw ArgumentError.value(type, 'type', 'No generated serializer metadata for this library.');",
       )
       ..writeln('}')
-      ..writeln()
-      ..writeln('void $installAllHelperName(Fory fory) {');
-
-    for (final enumSpec in enumSpecs) {
-      final registrationName =
-          '_${_toCamelCase(enumSpec.name)}ForyRegistration';
-      output.writeln(
-        "  installGeneratedEnumRegistration(fory, $registrationName, namespace: '$namespace', typeName: '${enumSpec.name}');",
-      );
-    }
-    for (final structSpec in structSpecs) {
-      final registrationName =
-          '_${_toCamelCase(structSpec.name)}ForyRegistration';
-      output.writeln(
-        "  installGeneratedStructRegistration(fory, $registrationName, namespace: '$namespace', typeName: '${structSpec.name}');",
-      );
-    }
-    output
       ..writeln('}')
       ..writeln();
   }

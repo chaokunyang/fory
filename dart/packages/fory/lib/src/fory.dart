@@ -130,8 +130,10 @@ final class Fory {
   /// - pass [id] for id-based registration, or
   /// - pass both [namespace] and [typeName] for name-based registration.
   ///
-  /// Generated struct and enum registration should flow through this method.
-  /// For manual serializers, including unions, use [registerSerializer].
+  /// Generated struct and enum registration should normally flow through the
+  /// generated library namespace, which calls this method after binding its
+  /// metadata. For manual serializers, including unions, use
+  /// [registerSerializer].
   void register(
     Type type, {
     int? id,

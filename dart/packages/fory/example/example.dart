@@ -17,31 +17,9 @@ class Person {
   List<String> tags = <String>[];
 }
 
-void registerExampleTypes(Fory fory) {
-  _installExampleForyRegistrations(fory);
-  fory.register(Color);
-  fory.register(Person);
-}
-
-void registerExampleType(
-  Fory fory,
-  Type type, {
-  int? id,
-  String? namespace,
-  String? typeName,
-}) {
-  _installExampleForyRegistration(fory, type);
-  fory.register(
-    type,
-    id: id,
-    namespace: namespace,
-    typeName: typeName,
-  );
-}
-
 void main() {
   final fory = Fory();
-  registerExampleTypes(fory);
+  ExampleFory.registerAll(fory);
 
   final person = Person()
     ..name = 'Ada'

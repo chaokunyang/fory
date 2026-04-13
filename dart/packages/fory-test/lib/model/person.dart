@@ -44,33 +44,6 @@ class FixedPayload {
   String value = '';
 }
 
-void registerPersonTypes(Fory fory) {
-  _installPersonForyRegistrations(fory);
-  fory.register(Color);
-  fory.register(Person);
-  fory.register(RefNode);
-  fory.register(EvolvingPayload);
-  fory.register(FixedPayload);
-  fory.register(PrivatePayload);
-  fory.register(PrivateImmutablePayload);
-}
-
-void registerPersonType(
-  Fory fory,
-  Type type, {
-  int? id,
-  String? namespace,
-  String? typeName,
-}) {
-  _installPersonForyRegistration(fory, type);
-  fory.register(
-    type,
-    id: id,
-    namespace: namespace,
-    typeName: typeName,
-  );
-}
-
 @ForyStruct()
 class PrivatePayload {
   PrivatePayload([this._secret = '']);

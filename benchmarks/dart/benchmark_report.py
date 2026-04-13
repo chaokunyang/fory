@@ -114,7 +114,7 @@ def detect_memory_gb() -> str:
             ["sysctl", "-n", "hw.memsize"],
             text=True,
         ).strip()
-        return f"{int(output) / (1024 ** 3):.2f}"
+        return f"{int(output) / (1024**3):.2f}"
     except Exception:
         return "Unknown"
 
@@ -133,7 +133,9 @@ def system_info(metadata: dict) -> list[tuple[str, str]]:
     ]
 
 
-def plot_summary_group(ax, results: dict, grouped_data_types: list[str], operation: str, title: str) -> None:
+def plot_summary_group(
+    ax, results: dict, grouped_data_types: list[str], operation: str, title: str
+) -> None:
     if not grouped_data_types:
         ax.set_title(f"{title}\nNo Data")
         ax.axis("off")
@@ -170,7 +172,9 @@ def plot_summary_group(ax, results: dict, grouped_data_types: list[str], operati
 
     ax.set_title(title)
     ax.set_xticks(x_positions)
-    ax.set_xticklabels([datatype_plot_label(data_type) for data_type in grouped_data_types])
+    ax.set_xticklabels(
+        [datatype_plot_label(data_type) for data_type in grouped_data_types]
+    )
     ax.set_ylabel("Throughput (ops/sec)")
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
     ax.legend()
@@ -179,10 +183,14 @@ def plot_summary_group(ax, results: dict, grouped_data_types: list[str], operati
 
 def save_summary_plot(results: dict, output_dir: str) -> str:
     non_list_data_types = [
-        data_type for data_type in DATA_TYPES if data_type in results and not data_type.endswith("list")
+        data_type
+        for data_type in DATA_TYPES
+        if data_type in results and not data_type.endswith("list")
     ]
     list_data_types = [
-        data_type for data_type in DATA_TYPES if data_type in results and data_type.endswith("list")
+        data_type
+        for data_type in DATA_TYPES
+        if data_type in results and data_type.endswith("list")
     ]
 
     figure, axes = plt.subplots(1, 4, figsize=(28, 6))
@@ -265,7 +273,9 @@ def save_per_type_plots(results: dict, output_dir: str) -> list[tuple[str, str]]
     return plot_paths
 
 
-def write_report(payload: dict, results: dict, output_dir: str, plot_paths: list[tuple[str, str]]):
+def write_report(
+    payload: dict, results: dict, output_dir: str, plot_paths: list[tuple[str, str]]
+):
     metadata = payload["metadata"]
     report_path = os.path.join(output_dir, "README.md")
     with open(report_path, "w", encoding="utf-8") as handle:
@@ -282,9 +292,7 @@ def write_report(payload: dict, results: dict, output_dir: str, plot_paths: list
 
         handle.write("\n## Throughput Results\n\n")
         handle.write("![Throughput](throughput.png)\n\n")
-        handle.write(
-            "| Datatype | Operation | Fory TPS | Protobuf TPS | Fastest |\n"
-        )
+        handle.write("| Datatype | Operation | Fory TPS | Protobuf TPS | Fastest |\n")
         handle.write("| --- | --- | ---: | ---: | --- |\n")
         for data_type in DATA_TYPES:
             operations = results.get(data_type, {})

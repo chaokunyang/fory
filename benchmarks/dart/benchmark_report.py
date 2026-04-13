@@ -19,6 +19,7 @@ import argparse
 import json
 import math
 import os
+import shutil
 import socket
 import subprocess
 from collections import defaultdict
@@ -323,6 +324,10 @@ def write_report(
             for display_name, path in plot_paths:
                 handle.write(f"### {display_name}\n\n")
                 handle.write(f"![{display_name}]({os.path.basename(path)})\n\n")
+
+    prettier = shutil.which("prettier")
+    if prettier is not None:
+        subprocess.run([prettier, "--write", report_path], check=True)
 
 
 def main() -> None:

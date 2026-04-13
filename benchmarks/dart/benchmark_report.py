@@ -24,6 +24,7 @@ import subprocess
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 COLORS = {
@@ -83,6 +84,16 @@ def format_int(value: float) -> str:
     return f"{int(round(value)):,}"
 
 
+def datatype_plot_label(data_type: str) -> str:
+    if data_type == "mediacontent":
+        return "MediaContent"
+    if data_type == "mediacontentlist":
+        return "MediaContent\nList"
+    if data_type.endswith("list"):
+        return f"{data_type[:-4].capitalize()}\nList"
+    return data_type.capitalize()
+
+
 def fastest_entry(fory_value: float, protobuf_value: float) -> str:
     if protobuf_value <= 0 and fory_value <= 0:
         return "n/a"
@@ -122,58 +133,91 @@ def system_info(metadata: dict) -> list[tuple[str, str]]:
     ]
 
 
+def plot_summary_group(ax, results: dict, grouped_data_types: list[str], operation: str, title: str) -> None:
+    if not grouped_data_types:
+        ax.set_title(f"{title}\nNo Data")
+        ax.axis("off")
+        return
+
+    serializers = [
+        serializer
+        for serializer in ["fory", "protobuf"]
+        if any(
+            results.get(data_type, {}).get(operation, {}).get(serializer, 0.0) > 0
+            for data_type in grouped_data_types
+        )
+    ]
+    if not serializers:
+        ax.set_title(f"{title}\nNo Data")
+        ax.axis("off")
+        return
+
+    x_positions = np.arange(len(grouped_data_types))
+    bar_width = 0.8 / len(serializers)
+    for index, serializer in enumerate(serializers):
+        values = [
+            results.get(data_type, {}).get(operation, {}).get(serializer, 0.0)
+            for data_type in grouped_data_types
+        ]
+        offset = (index - (len(serializers) - 1) / 2) * bar_width
+        ax.bar(
+            x_positions + offset,
+            values,
+            width=bar_width,
+            label=serializer,
+            color=COLORS[serializer],
+        )
+
+    ax.set_title(title)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels([datatype_plot_label(data_type) for data_type in grouped_data_types])
+    ax.set_ylabel("Throughput (ops/sec)")
+    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+    ax.legend()
+    ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
+
+
 def save_summary_plot(results: dict, output_dir: str) -> str:
-    figure, axes = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
-    x_positions = range(len(DATA_TYPES))
-    bar_width = 0.36
+    non_list_data_types = [
+        data_type for data_type in DATA_TYPES if data_type in results and not data_type.endswith("list")
+    ]
+    list_data_types = [
+        data_type for data_type in DATA_TYPES if data_type in results and data_type.endswith("list")
+    ]
 
-    for axis, operation in zip(axes, ["serialize", "deserialize"]):
-        fory_values = [
-            results.get(data_type, {}).get(operation, {}).get("fory", 0.0)
-            for data_type in DATA_TYPES
-        ]
-        protobuf_values = [
-            results.get(data_type, {}).get(operation, {}).get("protobuf", 0.0)
-            for data_type in DATA_TYPES
-        ]
-        fory_positions = [x - bar_width / 2 for x in x_positions]
-        protobuf_positions = [x + bar_width / 2 for x in x_positions]
-        fory_bars = axis.bar(
-            fory_positions,
-            fory_values,
-            width=bar_width,
-            color=COLORS["fory"],
-            label="Fory",
-        )
-        protobuf_bars = axis.bar(
-            protobuf_positions,
-            protobuf_values,
-            width=bar_width,
-            color=COLORS["protobuf"],
-            label="Protobuf",
-        )
-        axis.set_title(f"{operation.capitalize()} throughput")
-        axis.set_ylabel("ops/s")
-        axis.grid(True, axis="y", linestyle="--", alpha=0.35)
-        axis.legend(loc="upper right")
-        for bars in (fory_bars, protobuf_bars):
-            for bar in bars:
-                value = bar.get_height()
-                axis.annotate(
-                    format_label(value),
-                    xy=(bar.get_x() + bar.get_width() / 2, value),
-                    xytext=(0, 3),
-                    textcoords="offset points",
-                    ha="center",
-                    va="bottom",
-                    fontsize=8,
-                    rotation=90,
-                )
+    figure, axes = plt.subplots(1, 4, figsize=(28, 6))
+    figure.suptitle("Dart Serialization Throughput", fontsize=14)
 
-    axes[-1].set_xticks(list(x_positions))
-    axes[-1].set_xticklabels([DISPLAY_NAMES[data_type] for data_type in DATA_TYPES])
-    figure.suptitle("Apache Fory Dart Benchmark")
-    figure.tight_layout(rect=[0, 0, 1, 0.97])
+    plot_summary_group(
+        axes[0],
+        results,
+        non_list_data_types,
+        "serialize",
+        "Serialize Throughput (higher is better)",
+    )
+    plot_summary_group(
+        axes[1],
+        results,
+        non_list_data_types,
+        "deserialize",
+        "Deserialize Throughput (higher is better)",
+    )
+    plot_summary_group(
+        axes[2],
+        results,
+        list_data_types,
+        "serialize",
+        "Serialize Throughput (*List)",
+    )
+    plot_summary_group(
+        axes[3],
+        results,
+        list_data_types,
+        "deserialize",
+        "Deserialize Throughput (*List)",
+    )
+
+    figure.tight_layout()
 
     path = os.path.join(output_dir, "throughput.png")
     figure.savefig(path, dpi=150)

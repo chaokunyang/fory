@@ -716,7 +716,6 @@ public class IdlRoundTripTest {
       case "javascript":
         workDir = idlRoot.resolve("javascript");
         command = Arrays.asList("npx", "ts-node", "roundtrip.ts");
-        peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
         break;
       default:
         throw new IllegalArgumentException("Unknown peer language: " + peer);
@@ -729,7 +728,9 @@ public class IdlRoundTripTest {
 
   private void runPeer(PeerCommand command, String peer) throws IOException, InterruptedException {
     ProcessBuilder builder = new ProcessBuilder(command.command);
-    builder.inheritIO();
+    // Keep peer output off the forked JVM stdio so Surefire's control channel
+    // cannot be corrupted by child process logs.
+    builder.redirectErrorStream(true);
     builder.directory(command.workDir.toFile());
     builder.environment().putAll(command.environment);
 
@@ -737,22 +738,23 @@ public class IdlRoundTripTest {
     boolean finished = process.waitFor(180, TimeUnit.SECONDS);
     if (!finished) {
       process.destroyForcibly();
-      Assert.fail("Peer process timed out for " + peer);
+      process.waitFor(10, TimeUnit.SECONDS);
+      String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+      Assert.fail(
+          "Peer process timed out for "
+              + peer
+              + (output.isEmpty() ? "" : "\noutput:\n" + output));
     }
 
     int exitCode = process.exitValue();
-    String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-    String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+    String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
     if (exitCode != 0) {
       Assert.fail(
           "Peer process failed for "
               + peer
               + " with exit code "
               + exitCode
-              + "\nstdout:\n"
-              + stdout
-              + "\nstderr:\n"
-              + stderr);
+              + (output.isEmpty() ? "" : "\noutput:\n" + output));
     }
   }
 

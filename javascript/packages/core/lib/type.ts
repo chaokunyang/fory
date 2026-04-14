@@ -164,6 +164,7 @@ export const TypeId = {
     return this.structType(id)
       || this.extType(id)
       || this.enumType(id)
+      || id == TypeId.UNION
       || id == TypeId.TYPED_UNION
       || id == TypeId.NAMED_UNION;
   },

@@ -701,14 +701,14 @@ export class TypeMeta {
       }
 
       // Categorize based on type_id
-      if (TypeId.isBuiltin(typeId)) {
-        internalTypeFields.push(typeInfo);
-      } else if (typeId === TypeId.LIST) {
+      if (typeId === TypeId.LIST) {
         listFields.push(typeInfo);
       } else if (typeId === TypeId.SET) {
         setFields.push(typeInfo);
       } else if (typeId === TypeId.MAP) {
         mapFields.push(typeInfo);
+      } else if (TypeId.isBuiltin(typeId)) {
+        internalTypeFields.push(typeInfo);
       } else {
         otherFields.push(typeInfo);
       }

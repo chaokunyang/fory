@@ -34,6 +34,7 @@ import "./struct";
 import "./typedArray";
 import "./enum";
 import "./any";
+import "./union";
 import "./ext";
 import TypeResolver from "../typeResolver";
 
@@ -76,7 +77,7 @@ export class Gen {
         return;
       }
       const options = (typeInfo).options;
-      if (options?.props) {
+      if (options?.props && Object.keys(options.props).length > 0) {
         this.register(typeInfo);
         Object.values(options.props).forEach((x) => {
           this.traversalContainer(x);
@@ -97,6 +98,11 @@ export class Gen {
       }
       this.traversalContainer((typeInfo).options!.key!);
       this.traversalContainer((typeInfo).options!.value!);
+    }
+    if (typeInfo.options?.cases) {
+      Object.values(typeInfo.options.cases).forEach((caseTypeInfo) => {
+        this.traversalContainer(caseTypeInfo);
+      });
     }
   }
 

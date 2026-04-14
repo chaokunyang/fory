@@ -101,6 +101,9 @@ class CollectionAnySerializer {
 
   write(value: any, size: number) {
     this.writeContext.writer.writeVarUint32Small7(size);
+    if (size === 0) {
+      return;
+    }
     const { serializer, isSame, includeNone, trackingRef } = this.writeElementsHeader(value);
     if (isSame) {
       serializer!.writeTypeInfo(value);
@@ -152,12 +155,15 @@ class CollectionAnySerializer {
   read(accessor: (result: any, index: number, v: any) => void, createCollection: (len: number) => any, fromRef: boolean): any {
     void fromRef;
     const len = this.readContext.reader.readVarUint32Small7();
+    const result = createCollection(len);
+    if (len === 0) {
+      return result;
+    }
     this.readContext.checkCollectionSize(len);
     const flags = this.readContext.reader.readUint8();
     const isSame = flags & CollectionFlags.SAME_TYPE;
     const includeNone = flags & CollectionFlags.HAS_NULL;
     const refTracking = flags & CollectionFlags.TRACKING_REF;
-    const result = createCollection(len);
 
     if (isSame) {
       const serializer = AnyHelper.detectSerializer(this.readContext);
@@ -262,6 +268,7 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     return `
             let ${flags} = ${(this.innerGenerator.needToWriteRef() ? CollectionFlags.TRACKING_REF : 0) | flag};
             ${this.builder.writer.writeVarUint32Small7(`${accessor}.${this.sizeProp()}`)}
+            if (${accessor}.${this.sizeProp()} > 0) {
             ${this.writeElementsHeader(accessor, flags)}
             ${this.builder.writer.reserve(`${this.innerGenerator.getFixedSize()} * ${accessor}.${this.sizeProp()}`)};
             if (${flags} & ${CollectionFlags.TRACKING_REF}) {
@@ -294,6 +301,7 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                     ${this.innerGenerator.writeEmbed().write(item)}
                 }
             }
+            }
         `;
   }
 
@@ -303,40 +311,66 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const flags = this.scope.uniqueName("flags");
     const idx = this.scope.uniqueName("idx");
     const refFlag = this.scope.uniqueName("refFlag");
+    const elemSerializer = this.scope.uniqueName("elemSerializer");
+    const anyHelper = this.builder.getExternal(AnyHelper.name);
+    const readContextName = this.builder.getReadContextName();
     return `
             const ${len} = ${this.builder.reader.readVarUint32Small7()};
             ${this.builder.getReadContextName()}.checkCollectionSize(${len});
-            const ${flags} = ${this.builder.reader.readUint8()};
             const ${result} = ${this.newCollection(len)};
             ${this.maybeReference(result, refState)}
-            if (${flags} & ${CollectionFlags.TRACKING_REF}) {
-                for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-                    const ${refFlag} = ${this.builder.reader.readInt8()};
-                    switch (${refFlag}) {
-                        case ${RefFlags.NotNullValueFlag}:
-                        case ${RefFlags.RefValueFlag}:
-                            ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, `${refFlag} === ${RefFlags.RefValueFlag}`)}
-                            break;
-                        case ${RefFlags.RefFlag}:
-                            ${this.putAccessor(result, this.builder.referenceResolver.getReadRef(this.builder.reader.readVarUInt32()), idx)}
-                            break;
-                        case ${RefFlags.NullFlag}:
+            if (${len} > 0) {
+                const ${flags} = ${this.builder.reader.readUint8()};
+                let ${elemSerializer} = null;
+                if (!(${flags} & ${CollectionFlags.DECL_ELEMENT_TYPE})) {
+                    ${elemSerializer} = ${anyHelper}.detectSerializer(${readContextName});
+                }
+                if (${flags} & ${CollectionFlags.TRACKING_REF}) {
+                    for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+                        const ${refFlag} = ${this.builder.reader.readInt8()};
+                        switch (${refFlag}) {
+                            case ${RefFlags.NotNullValueFlag}:
+                            case ${RefFlags.RefValueFlag}:
+                                if (${elemSerializer}) {
+                                    ${readContextName}.incReadDepth();
+                                    ${this.putAccessor(result, `${elemSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag})`, idx)}
+                                    ${readContextName}.decReadDepth();
+                                } else {
+                                    ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, `${refFlag} === ${RefFlags.RefValueFlag}`)}
+                                }
+                                break;
+                            case ${RefFlags.RefFlag}:
+                                ${this.putAccessor(result, this.builder.referenceResolver.getReadRef(this.builder.reader.readVarUInt32()), idx)}
+                                break;
+                            case ${RefFlags.NullFlag}:
+                                ${this.putAccessor(result, "null", idx)}
+                                break;
+                        }
+                    }
+                } else if (${flags} & ${CollectionFlags.HAS_NULL}) {
+                    for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+                        if (${this.builder.reader.readInt8()} == ${RefFlags.NullFlag}) {
                             ${this.putAccessor(result, "null", idx)}
-                            break;
+                        } else {
+                            if (${elemSerializer}) {
+                                ${readContextName}.incReadDepth();
+                                ${this.putAccessor(result, `${elemSerializer}.read(false)`, idx)}
+                                ${readContextName}.decReadDepth();
+                            } else {
+                                ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
+                            }
+                        }
                     }
-                }
-            } else if (${flags} & ${CollectionFlags.HAS_NULL}) {
-                for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-                    if (${this.builder.reader.readInt8()} == ${RefFlags.NullFlag}) {
-                        ${this.putAccessor(result, "null", idx)}
-                    } else {
-                        ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
+                } else {
+                    for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+                        if (${elemSerializer}) {
+                            ${readContextName}.incReadDepth();
+                            ${this.putAccessor(result, `${elemSerializer}.read(false)`, idx)}
+                            ${readContextName}.decReadDepth();
+                        } else {
+                            ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
+                        }
                     }
-                }
-
-            } else {
-                for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-                    ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
                 }
             }
             ${accessor(result)}

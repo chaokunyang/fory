@@ -302,10 +302,10 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
   }
 
   private isAny() {
-    return this.typeInfo.options?.key!.typeId === TypeId.UNKNOWN
-      || this.typeInfo.options?.value!.typeId === TypeId.UNKNOWN
-      || !this.builder.resolver.isMonomorphic(this.typeInfo.options!.key!)
-      || !this.builder.resolver.isMonomorphic(this.typeInfo.options!.value!);
+    const keyTypeId = this.typeInfo.options?.key!.typeId;
+    const valueTypeId = this.typeInfo.options?.value!.typeId;
+    return keyTypeId === TypeId.UNKNOWN || valueTypeId === TypeId.UNKNOWN
+      || !TypeId.isBuiltin(keyTypeId!) || !TypeId.isBuiltin(valueTypeId!);
   }
 
   private writeSpecificType(accessor: string) {
@@ -397,9 +397,6 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
       return this.writeSpecificType(accessor);
     }
     const innerSerializer = (innerTypeInfo: TypeInfo) => {
-      if (!this.builder.resolver.isMonomorphic(innerTypeInfo)) {
-        return null;
-      }
       return this.scope.declare(
         "map_inner_ser",
         TypeId.isNamedType(innerTypeInfo.typeId)
@@ -499,9 +496,6 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
       return this.readSpecificType(accessor, refState);
     }
     const innerSerializer = (innerTypeInfo: TypeInfo) => {
-      if (!this.builder.resolver.isMonomorphic(innerTypeInfo)) {
-        return null;
-      }
       return this.scope.declare(
         "map_inner_ser",
         TypeId.isNamedType(innerTypeInfo.typeId)

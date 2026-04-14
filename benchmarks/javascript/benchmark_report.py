@@ -45,6 +45,14 @@ SERIALIZER_LABELS = {
     "protobuf": "protobuf",
     "json": "json",
 }
+DATATYPE_ORDER = [
+    "struct",
+    "sample",
+    "mediacontent",
+    "structlist",
+    "samplelist",
+    "mediacontentlist",
+]
 
 parser = argparse.ArgumentParser(
     description="Generate plots and Markdown report for JavaScript benchmark results"
@@ -188,7 +196,7 @@ def plot_datatype(ax, datatype, operation):
 
 
 plot_images = []
-datatypes = sorted(data.keys())
+datatypes = [datatype for datatype in DATATYPE_ORDER if datatype in data]
 operations = ["serialize", "deserialize"]
 
 for datatype in datatypes:

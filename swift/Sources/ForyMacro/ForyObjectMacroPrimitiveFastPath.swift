@@ -338,7 +338,9 @@ private func buildPrimitiveFastReadBlock(
         }
         """
     )
-    readSections.append("let __length = __bytes.count")
+    if readLayout.consumedExpr == "__readerIndex" {
+        readSections.append("let __length = __bytes.count")
+    }
     readSections.append(contentsOf: readLayout.statements)
     readSections.append("return \(readLayout.consumedExpr)")
     let readBody = readSections.joined(separator: "\n            ")

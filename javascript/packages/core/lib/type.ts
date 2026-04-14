@@ -220,6 +220,7 @@ export type CustomSerializer<T> = {
 
 // read, write
 export type Serializer<T = any> = {
+  _initialized?: boolean;
   fixedSize: number;
   getTypeInfo: () => TypeInfo;
   needToWriteRef: () => boolean;

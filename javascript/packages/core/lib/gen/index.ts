@@ -71,9 +71,14 @@ export class Gen {
     return !!this.typeResolver.getSerializerByTypeInfo(typeInfo);
   }
 
+  private isFullyGenerated(typeInfo: TypeInfo) {
+    const ser = this.typeResolver.getSerializerByTypeInfo(typeInfo);
+    return ser && ser._initialized;
+  }
+
   private traversalContainer(typeInfo: TypeInfo) {
     if (TypeId.userDefinedType(typeInfo.typeId)) {
-      if (this.isRegistered(typeInfo)) {
+      if (this.isFullyGenerated(typeInfo)) {
         return;
       }
       const options = (typeInfo).options;
@@ -84,6 +89,12 @@ export class Gen {
         });
         const func = this.generate(typeInfo);
         this.register(typeInfo, func()(this.typeResolver, Gen.external, typeInfo, this.regOptions));
+      } else if (!this.isRegistered(typeInfo) && TypeId.structType(typeInfo.typeId)) {
+        // Forward reference to a struct type not yet fully defined — register a
+        // placeholder so that serializer factories can capture the object
+        // reference.  The placeholder will be filled in via Object.assign
+        // when the real serializer is generated later.
+        this.register(typeInfo);
       }
     }
     if (typeInfo.typeId === TypeId.LIST) {

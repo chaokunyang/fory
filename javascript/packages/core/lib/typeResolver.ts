@@ -23,6 +23,7 @@ import { Dynamic, Type, TypeInfo } from "./typeInfo";
 import { ReadContext, WriteContext } from "./context";
 
 const uninitSerialize = {
+  _initialized: false,
   fixedSize: 0,
   getTypeInfo: () => {
     throw new Error("uninitSerialize");

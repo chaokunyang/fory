@@ -42,6 +42,8 @@ const DATA_ORDER = [
   "mediacontentlist",
 ];
 const LIST_SIZE = 5;
+const PLAYER_ENUM = { JAVA: 0, FLASH: 1 };
+const SIZE_ENUM = { SMALL: 0, LARGE: 1 };
 
 let blackhole = 0;
 
@@ -105,11 +107,11 @@ Options:
 }
 
 function int32Field(id) {
-  return Type.int32().setId(id);
+  return Type.varInt32().setId(id);
 }
 
 function int64Field(id) {
-  return Type.int64().setId(id);
+  return Type.varInt64().setId(id);
 }
 
 function float32Field(id) {
@@ -130,6 +132,30 @@ function stringField(id) {
 
 function arrayField(id, inner) {
   return Type.array(inner).setId(id);
+}
+
+function boolArrayField(id) {
+  return Type.boolArray().setId(id);
+}
+
+function int32ArrayField(id) {
+  return Type.int32Array().setId(id);
+}
+
+function int64ArrayField(id) {
+  return Type.int64Array().setId(id);
+}
+
+function float32ArrayField(id) {
+  return Type.float32Array().setId(id);
+}
+
+function float64ArrayField(id) {
+  return Type.float64Array().setId(id);
+}
+
+function enumField(id, userTypeId, enumProps) {
+  return Type.enum(userTypeId, enumProps).setId(id);
 }
 
 function structField(id, typeId) {
@@ -163,13 +189,13 @@ function createSchemas() {
       short_value_boxed: int32Field(12),
       char_value_boxed: int32Field(13),
       boolean_value_boxed: boolField(14),
-      int_array: arrayField(15, Type.int32()),
-      long_array: arrayField(16, Type.int64()),
-      float_array: arrayField(17, Type.float32()),
-      double_array: arrayField(18, Type.float64()),
-      short_array: arrayField(19, Type.int32()),
-      char_array: arrayField(20, Type.int32()),
-      boolean_array: arrayField(21, Type.bool()),
+      int_array: int32ArrayField(15),
+      long_array: int64ArrayField(16),
+      float_array: float32ArrayField(17),
+      double_array: float64ArrayField(18),
+      short_array: int32ArrayField(19),
+      char_array: int32ArrayField(20),
+      boolean_array: boolArrayField(21),
       string: stringField(22),
     }),
     Media: Type.struct(3, {
@@ -183,7 +209,7 @@ function createSchemas() {
       bitrate: int32Field(8),
       has_bitrate: boolField(9),
       persons: arrayField(10, Type.string()),
-      player: int32Field(11),
+      player: enumField(11, 101, PLAYER_ENUM),
       copyright: stringField(12),
     }),
     Image: Type.struct(4, {
@@ -191,7 +217,7 @@ function createSchemas() {
       title: stringField(2),
       width: int32Field(3),
       height: int32Field(4),
-      size: int32Field(5),
+      size: enumField(5, 102, SIZE_ENUM),
     }),
     MediaContent: Type.struct(5, {
       media: structField(1, 3),
@@ -603,8 +629,12 @@ function normalizeForyValue(datasetKey, value) {
         long_value_boxed: BigInt(value.long_value_boxed),
         float_value: toFloat32(value.float_value),
         float_value_boxed: toFloat32(value.float_value_boxed),
-        long_array: value.long_array.map((item) => BigInt(item)),
-        float_array: value.float_array.map(toFloat32),
+        int_array: Int32Array.from(value.int_array),
+        long_array: BigInt64Array.from(value.long_array, (item) => BigInt(item)),
+        float_array: Float32Array.from(value.float_array, toFloat32),
+        double_array: Float64Array.from(value.double_array),
+        short_array: Int32Array.from(value.short_array),
+        char_array: Int32Array.from(value.char_array),
       };
     case "mediacontent":
       return {
@@ -654,9 +684,10 @@ function normalizeProtobufValue(datasetKey, value) {
 
 function ensureSerializationWorks(dataset) {
   const value = dataset.createValue();
-  const foryBytes = dataset.forySerializer.serialize(value);
+  const foryValue = normalizeForyValue(dataset.key, value);
+  const foryBytes = dataset.forySerializer.serialize(foryValue);
   const foryRoundTrip = dataset.forySerializer.deserialize(foryBytes);
-  assert.deepStrictEqual(foryRoundTrip, normalizeForyValue(dataset.key, value));
+  assert.deepStrictEqual(foryRoundTrip, foryValue);
 
   const protoPayload = dataset.toProto(value);
   const protoBytes = dataset.protoType.encode(dataset.protoType.create(protoPayload)).finish();
@@ -671,7 +702,7 @@ function ensureSerializationWorks(dataset) {
 function serializeBytes(serializerName, dataset, value) {
   switch (serializerName) {
     case "fory":
-      return dataset.forySerializer.serialize(value);
+      return dataset.forySerializer.serialize(normalizeForyValue(dataset.key, value));
     case "protobuf":
       return dataset.protoType.encode(dataset.protoType.create(dataset.toProto(value))).finish();
     case "json":
@@ -685,13 +716,14 @@ function createBenchmarkCase(serializerName, dataset, operation) {
   const value = dataset.createValue();
 
   if (serializerName === "fory") {
+    const foryValue = normalizeForyValue(dataset.key, value);
     if (operation === "Serialize") {
       return () => {
-        const bytes = dataset.forySerializer.serialize(value);
+        const bytes = dataset.forySerializer.serialize(foryValue);
         blackhole ^= bytes.length;
       };
     }
-    const bytes = dataset.forySerializer.serialize(value);
+    const bytes = dataset.forySerializer.serialize(foryValue);
     return () => {
       const decoded = dataset.forySerializer.deserialize(bytes);
       blackhole ^= Array.isArray(decoded) ? decoded.length : 1;

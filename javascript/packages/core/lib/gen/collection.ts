@@ -244,6 +244,16 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
 
   abstract sizeProp(): string;
 
+  private isDeclaredElementType() {
+    const innerTypeId = this.innerGenerator.getTypeId();
+    return innerTypeId !== TypeId.STRUCT
+      && innerTypeId !== TypeId.COMPATIBLE_STRUCT
+      && innerTypeId !== TypeId.NAMED_STRUCT
+      && innerTypeId !== TypeId.NAMED_COMPATIBLE_STRUCT
+      && innerTypeId !== TypeId.EXT
+      && innerTypeId !== TypeId.NAMED_EXT;
+  }
+
   protected writeElementsHeader(accessor: string, flagAccessor: string) {
     const item = this.scope.uniqueName("item");
     const stmts = [
@@ -264,12 +274,17 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const item = this.scope.uniqueName("item");
     const flags = this.scope.uniqueName("flags");
     const existsId = this.scope.uniqueName("existsId");
-    const flag = CollectionFlags.SAME_TYPE | CollectionFlags.DECL_ELEMENT_TYPE;
+    const flag = this.isDeclaredElementType()
+      ? CollectionFlags.SAME_TYPE | CollectionFlags.DECL_ELEMENT_TYPE
+      : CollectionFlags.SAME_TYPE;
     return `
             let ${flags} = ${(this.innerGenerator.needToWriteRef() ? CollectionFlags.TRACKING_REF : 0) | flag};
             ${this.builder.writer.writeVarUint32Small7(`${accessor}.${this.sizeProp()}`)}
             if (${accessor}.${this.sizeProp()} > 0) {
             ${this.writeElementsHeader(accessor, flags)}
+            if (!(${flags} & ${CollectionFlags.DECL_ELEMENT_TYPE})) {
+                ${this.innerGenerator.writeEmbed().writeTypeInfo("null")}
+            }
             ${this.builder.writer.reserve(`${this.innerGenerator.getFixedSize()} * ${accessor}.${this.sizeProp()}`)};
             if (${flags} & ${CollectionFlags.TRACKING_REF}) {
                 for (const ${item} of ${accessor}) {

@@ -19,9 +19,9 @@ license: |
   limitations under the License.
 ---
 
-This guide covers the core serialization flow in Apache Fory JavaScript.
+This guide covers the core serialization APIs in Apache Fory JavaScript.
 
-## Create and Reuse a `Fory` Instance
+## Create a `Fory` Instance
 
 ```ts
 import Fory from "@apache-fory/core";
@@ -29,7 +29,7 @@ import Fory from "@apache-fory/core";
 const fory = new Fory();
 ```
 
-Create one instance, register your schemas, and reuse it. A `Fory` instance caches generated serializers and type metadata, so recreating it for every request adds unnecessary overhead.
+Create one instance, register your schemas, and reuse it. Fory caches the generated serializers after the first `register` call, so recreating it on every request wastes that work.
 
 ## Define a Schema with `Type.struct`
 
@@ -109,15 +109,15 @@ fory.deserialize(fory.serialize(new Date("2021-10-20T09:13:00Z")));
 // Date
 ```
 
-### Number and `bigint` behavior
+### Number and `bigint`
 
-JavaScript has both `number` and `bigint`, but xlang distinguishes between 32-bit, 64-bit, floating-point, and tagged integer representations. For any cross-language or long-lived contract, prefer explicit field types in schemas instead of depending on dynamic root-type inference.
+JavaScript `number` is a 64-bit float, which cannot exactly represent all 64-bit integers. For cross-language contracts or anywhere exact integer sizes matter, use explicit field types in your schema:
 
-- use `Type.int32()` for 32-bit integers
-- use `Type.int64()` for 64-bit integers and pass `bigint`
-- use `Type.float32()` or `Type.float64()` for floating-point values
+- `Type.int32()` — 32-bit integer; use JavaScript `number`
+- `Type.int64()` — 64-bit integer; use JavaScript `bigint`
+- `Type.float32()` / `Type.float64()` — floating-point
 
-Dynamic root serialization is convenient, but the exact heuristic for whether a value comes back as `number` or `bigint` should not be treated as a stable API contract.
+Dynamic root serialization (calling `fory.serialize(someNumber)` without a schema) will infer a type, but the inferred type is not guaranteed by the API. Use a schema for any stable contract.
 
 ## Arrays, Maps, and Sets
 

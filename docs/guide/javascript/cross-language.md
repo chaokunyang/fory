@@ -19,34 +19,31 @@ license: |
   limitations under the License.
 ---
 
-Apache Fory JavaScript always uses the xlang wire format. Interoperability depends on matching schemas and compatible type mappings rather than on enabling a separate mode switch.
+Fory JavaScript serializes to the same binary format as the Java, Python, Go, Rust, Swift, and C++ Fory runtimes. You can write a message in JavaScript and read it in Java — or any other direction — without any conversion layer.
 
-Current limits to keep in mind:
+Things to keep in mind:
 
-- JavaScript deserializes xlang payloads only
-- out-of-band mode is not currently supported in the JavaScript runtime
+- The Fory JavaScript runtime reads and writes cross-language payloads only (it does not support any language-native format).
+- Out-of-band mode is not currently supported.
 
-## Interop rules
+## Requirements for a Successful Round Trip
 
-For a payload to round-trip between JavaScript and another runtime:
+For a message to survive a round trip between JavaScript and another runtime:
 
-1. **Register the same logical type identity** on both sides.
-   - same numeric type ID, or
-   - same namespace + type name
-2. **Use compatible field types** according to the [type mapping spec](../../specification/xlang_type_mapping.md).
-3. **Match nullability and reference-tracking expectations** where object graphs require them.
-4. **Use compatible mode** when independent schema evolution is expected.
+1. **Same type identity** on both sides — same numeric ID, or same `namespace + typeName`.
+2. **Compatible field types** — a `Type.int32()` field in JavaScript matches Java `int`, Go `int32`, C# `int`.
+3. **Same nullability** — if one side marks a field nullable, the other should too.
+4. **Same `compatible` mode** if using schema evolution.
+5. **Same reference tracking config** if your data has shared or circular references.
 
-## Interoperability workflow
+## Step-by-Step: JavaScript to Another Runtime
 
-When wiring JavaScript to another runtime in production code:
+1. Define the JavaScript schema with the same type name or numeric ID used by the other runtime.
+2. Register the schema in both runtimes.
+3. Match field types, nullability, and `compatible` settings.
+4. Test a real payload end-to-end before shipping.
 
-1. define the JavaScript schema with the same type identity used by the other runtime
-2. register the same type name or type ID in every participating runtime
-3. keep field types, nullability, enum layout, and schema-evolution settings aligned
-4. validate the end-to-end payload before relying on it in a shared contract
-
-Example JavaScript side:
+JavaScript side:
 
 ```ts
 import Fory, { Type } from "@apache-fory/core";
@@ -68,40 +65,36 @@ const bytes = serialize({
 });
 ```
 
-On the receiving side, register the same `example.message` type identity and compatible field types using that runtime's public API and guide:
+On the other side, register the same `example.message` type (same name or same numeric ID) using the peer runtime's API:
 
-- [Go guide](../go/index.md)
-- [Python guide](../python/index.md)
 - [Java guide](../java/index.md)
+- [Python guide](../python/index.md)
+- [Go guide](../go/index.md)
 - [Rust guide](../rust/index.md)
 
-## Field naming and ordering
+## Field Naming
 
-Cross-language matching depends on consistent field identity. When multiple runtimes model the same struct, use a naming scheme that maps cleanly across languages.
+Fory matches fields by name. When models are defined in multiple languages, keep field names consistent — or at minimum use a naming scheme that maps unambiguously across languages (e.g. `snake_case` everywhere).
 
-Practical guidance:
+When using `compatible: true` for schema evolution, field order differences are tolerated, but the names themselves must still match.
 
-- prefer stable snake_case or clearly corresponding names across runtimes
-- avoid accidental renames without updating every participating runtime
-- use compatible mode when fields may be added or removed over time
+## Numeric Types
 
-## Numeric mapping guidance
+JavaScript `number` is a 64-bit float, which does not map cleanly to every integer type in other languages. Use explicit schema types:
 
-JavaScript needs extra care because `number` is IEEE 754 double precision.
+- `Type.int32()` for 32-bit integers (Java `int`, Go `int32`, C# `int`)
+- `Type.int64()` with `bigint` values for 64-bit integers (Java `long`, Go `int64`)
+- `Type.float32()` or `Type.float64()` for floating-point values
 
-- use `Type.int64()` with `bigint` for true 64-bit integers
-- use `Type.float32()` or `Type.float64()` for floating-point fields
-- avoid assuming that a dynamic JavaScript `number` maps cleanly to every integer width in another language
+## Date and Time
 
-## Time mapping guidance
+- `Type.timestamp()` — a point in time; round-trips as a JavaScript `Date`
+- `Type.date()` — a date without time; deserializes as `Date`
+- `Type.duration()` — exposed as a numeric millisecond value in JavaScript
 
-- `Type.timestamp()` maps to a point in time and deserializes as `Date`
-- `Type.duration()` should be treated as a duration value, but JavaScript currently exposes typed duration fields as numeric time values rather than a dedicated duration class
-- `Type.date()` corresponds to a date-without-timezone type in the specification and deserializes as `Date`
+## Polymorphic Fields
 
-## Polymorphism and `Type.any()`
-
-Use `Type.any()` only when you genuinely need runtime-dispatched values.
+`Type.any()` lets a field hold different types at runtime, but it is harder to keep in sync across languages. Prefer explicit field schemas whenever possible.
 
 ```ts
 const wrapperType = Type.struct(
@@ -112,11 +105,9 @@ const wrapperType = Type.struct(
 );
 ```
 
-This works for polymorphic values, but explicit field schemas are easier to keep aligned across languages.
-
 ## Enums
 
-Enums must also be registered consistently across languages.
+Enum member **order** must match across languages. Fory encodes enums by ordinal position, not by value.
 
 ```ts
 const Color = { Red: 1, Green: 2, Blue: 3 };
@@ -124,11 +115,11 @@ const fory = new Fory();
 fory.register(Type.enum({ typeId: 210 }, Color));
 ```
 
-Use the same type ID or type name in Java, Python, Go, and other runtimes.
+Use the same type ID or type name in every peer runtime.
 
-## Limits and safety
+## Safety Limits
 
-Deserialization guardrails such as `maxDepth`, `maxBinarySize`, and `maxCollectionSize` are local runtime protections. They do not affect the wire format, but they can reject payloads that exceed local policy.
+The `maxDepth`, `maxBinarySize`, and `maxCollectionSize` options protect the JavaScript runtime from overly large payloads. They do not change the binary format — they only control what the local runtime is willing to accept.
 
 ## Related Topics
 

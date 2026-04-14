@@ -19,18 +19,16 @@ license: |
   limitations under the License.
 ---
 
-Apache Fory JavaScript provides cross-language serialization for JavaScript and TypeScript applications. It uses the xlang wire format described in the [xlang serialization specification](../../specification/xlang_serialization_spec.md), so it is designed to interoperate with other Fory runtimes such as Java, Python, Go, Rust, Swift, and C++.
-
-The JavaScript runtime is schema-driven: you describe your data shape with `Type.*` builders or TypeScript decorators, register that schema with `Fory`, and then reuse the returned serializer pair for serialization and deserialization.
+Apache Fory JavaScript lets you serialize JavaScript and TypeScript objects to bytes and deserialize them back — including across services written in Java, Python, Go, Rust, Swift, and other Fory-supported languages.
 
 ## Why Fory JavaScript?
 
-- **Cross-language by design**: JavaScript uses the xlang wire format and interoperates with other Fory runtimes.
-- **Generated hot paths**: serializers are generated at runtime and cached per `Fory` instance.
-- **Reference-aware object graphs**: shared references and circular structures are supported when enabled.
-- **Explicit schemas**: field types, nullability, dynamic dispatch, and type identity are declared up front.
-- **Guardrails for untrusted data**: configurable depth, binary size, and collection size limits help bound deserialization work.
-- **Modern numeric support**: `bigint`, typed arrays, `Map`, `Set`, `Date`, `float16`, and `bfloat16` are supported.
+- **Cross-language**: serialize in JavaScript, deserialize in Java, Python, Go, and more without writing glue code
+- **Fast**: serializer code is generated and cached the first time you register a schema, not on every call
+- **Reference-aware**: shared references and circular object graphs are supported when enabled
+- **Explicit schemas**: field types, nullability, and polymorphism are declared once with `Type.*` builders or TypeScript decorators
+- **Safe defaults**: configurable depth, binary size, and collection size limits reject unexpectedly large or deep payloads
+- **Modern types**: `bigint`, typed arrays, `Map`, `Set`, `Date`, `float16`, and `bfloat16` are supported
 
 ## Installation
 
@@ -76,49 +74,29 @@ console.log(user);
 // { id: 1n, name: 'Alice', age: 30 }
 ```
 
-## Core Model
+## How it works
 
-### `Fory`
-
-A `Fory` instance owns:
-
-- the type registry
-- generated serializers
-- read/write contexts
-- configuration such as reference tracking and guardrails
-
-Reuse the same `Fory` instance across many operations. Registration is per instance.
-
-### `Type`
-
-`Type` is the schema DSL. It is used to describe:
-
-- primitive fields such as `Type.int32()` and `Type.string()`
-- collections such as `Type.array(...)`, `Type.map(...)`, and `Type.set(...)`
-- user types such as `Type.struct(...)` and `Type.enum(...)`
-- field-level metadata such as nullability, reference tracking, and dynamic dispatch
-
-### Registration
-
-`fory.register(...)` compiles and registers a serializer. It returns:
-
-- `serializer`: the generated serializer object
-- `serialize(value)`: serialize using that schema
-- `deserialize(bytes)`: deserialize using that schema
+Fory is schema-driven. You describe the shape of your data once with `Type.*` builders (or TypeScript decorators), then call `fory.register(schema)`. This returns a `{ serialize, deserialize }` pair that is fast to call repeatedly.
 
 ```ts
+// 1. Define the schema
 const personType = Type.struct("example.person", {
   name: Type.string(),
   email: Type.string().setNullable(true),
 });
 
+// 2. Register once
 const fory = new Fory();
-const personSerde = fory.register(personType);
+const { serialize, deserialize } = fory.register(personType);
+
+// 3. Use as many times as needed
+const bytes = serialize({ name: "Alice", email: null });
+const person = deserialize(bytes);
 ```
 
-## Configuration
+Create one `Fory` instance per application and reuse it — creating a new one for every request wastes the work of schema registration.
 
-The JavaScript runtime always uses xlang serialization. The most important options are:
+## Configuration
 
 ```ts
 import Fory from "@apache-fory/core";
@@ -130,21 +108,20 @@ const fory = new Fory({
   maxDepth: 100,
   maxBinarySize: 64 * 1024 * 1024,
   maxCollectionSize: 1_000_000,
-  useSliceString: false,
   hps,
 });
 ```
 
-| Option                     | Default            | Meaning                                                                                                                           |
-| -------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `ref`                      | `false`            | Enables reference tracking for graphs with shared or circular references.                                                         |
-| `compatible`               | `false`            | Uses compatible struct encoding for schema evolution.                                                                             |
-| `maxDepth`                 | `50`               | Maximum nesting depth accepted during deserialization. Must be `>= 2`.                                                            |
-| `maxBinarySize`            | `64 * 1024 * 1024` | Maximum allowed binary payload for guarded binary reads.                                                                          |
-| `maxCollectionSize`        | `1_000_000`        | Maximum number of elements accepted for lists, sets, and maps.                                                                    |
-| `useSliceString`           | `false`            | Optional string-reading mode for Node.js environments. Leave it at the default unless you have benchmarked a reason to change it. |
-| `hps`                      | unset              | Optional Node.js string fast-path helper from `@apache-fory/hps`.                                                                 |
-| `hooks.afterCodeGenerated` | unset              | Callback to inspect or transform generated serializer code. Useful for debugging.                                                 |
+| Option                     | Default     | Description                                                                           |
+| -------------------------- | ----------- | ------------------------------------------------------------------------------------- |
+| `ref`                      | `false`     | Enable reference tracking for shared or circular object graphs                        |
+| `compatible`               | `false`     | Allow field additions/removals without breaking existing messages                     |
+| `maxDepth`                 | `50`        | Maximum nesting depth. Must be `>= 2`. Increase for deeply nested structures          |
+| `maxBinarySize`            | 64 MiB      | Maximum bytes accepted for any single binary field                                    |
+| `maxCollectionSize`        | `1_000_000` | Maximum elements accepted in any list, set, or map                                    |
+| `useSliceString`           | `false`     | Optional string-reading optimization for Node.js. Leave at default unless benchmarked |
+| `hps`                      | unset       | Optional fast string helper from `@apache-fory/hps` (Node.js 20+)                     |
+| `hooks.afterCodeGenerated` | unset       | Callback to inspect the generated serializer code — useful for debugging              |
 
 ## Documentation
 

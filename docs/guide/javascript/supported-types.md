@@ -19,49 +19,45 @@ license: |
   limitations under the License.
 ---
 
-This page summarizes the main JavaScript and TypeScript values supported by Fory JavaScript.
+This page lists the JavaScript and TypeScript types supported by Fory, and explains when you need to be deliberate about type choices for cross-language compatibility.
 
 ## Primitive and Scalar Types
 
-| JavaScript/TypeScript    | Fory schema                                                                                               | Notes                                                                             |
-| ------------------------ | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `boolean`                | `Type.bool()`                                                                                             | Boolean value                                                                     |
-| `number`                 | `Type.int8()` / `Type.int16()` / `Type.int32()` / `Type.float32()` / `Type.float64()` / unsigned variants | Pick explicit numeric width/encoding in schemas                                   |
-| `bigint`                 | `Type.int64()` / `Type.varInt64()` / `Type.uint64()` / tagged variants                                    | Use for 64-bit integer fields                                                     |
-| `string`                 | `Type.string()`                                                                                           | Encoded as Latin1, UTF-16, or UTF-8 depending on content/runtime path             |
-| `Uint8Array`             | `Type.binary()`                                                                                           | Variable-length binary payload                                                    |
-| `Date`                   | `Type.timestamp()` / dynamic root date                                                                    | Timestamps round-trip as `Date`                                                   |
-| `Date` or day count      | `Type.date()`                                                                                             | Date values deserialize as `Date`; some typed APIs also accept numeric day counts |
-| duration in milliseconds | `Type.duration()`                                                                                         | JavaScript currently exposes duration fields as numeric millisecond values        |
-| `BFloat16` or `number`   | `Type.bfloat16()`                                                                                         | Deserializes to `BFloat16`                                                        |
-| `number`                 | `Type.float16()`                                                                                          | Half-precision floating-point support                                             |
+| JavaScript value      | Fory schema                                                                           | Notes                                                |
+| --------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `boolean`             | `Type.bool()`                                                                         |                                                      |
+| `number`              | `Type.int8()` / `Type.int16()` / `Type.int32()` / `Type.float32()` / `Type.float64()` | Pick the width that matches the peer language        |
+| `bigint`              | `Type.int64()` / `Type.varInt64()` / `Type.uint64()`                                  | Use `bigint` for 64-bit integers                     |
+| `string`              | `Type.string()`                                                                       |                                                      |
+| `Uint8Array`          | `Type.binary()`                                                                       | Binary blob                                          |
+| `Date`                | `Type.timestamp()`                                                                    | Serializes/deserializes as `Date`                    |
+| `Date`                | `Type.date()`                                                                         | Date without time; deserializes as `Date`            |
+| duration (ms)         | `Type.duration()`                                                                     | Exposed as a numeric millisecond value in JavaScript |
+| `number`              | `Type.float16()`                                                                      | Half-precision float                                 |
+| `BFloat16` / `number` | `Type.bfloat16()`                                                                     | Deserializes to `BFloat16`                           |
 
 ## Integer Types
 
-Use explicit integer schema helpers when the wire contract matters.
+JavaScript `number` is a 64-bit float. It cannot safely represent all 64-bit integers (integers above `Number.MAX_SAFE_INTEGER` lose precision). Use explicit schemas to match the width expected by the peer language:
 
 ```ts
-Type.int8();
-Type.int16();
-Type.int32();
-Type.varInt32();
-Type.int64();
+Type.int8(); // -128 to 127
+Type.int16(); // -32,768 to 32,767
+Type.int32(); // matches Java int, Go int32, C# int
+Type.varInt32(); // variable-length encoding; smaller for small values
+Type.int64(); // use with bigint; matches Java long, Go int64
 Type.varInt64();
 Type.sliInt64();
 Type.uint8();
 Type.uint16();
 Type.uint32();
 Type.varUInt32();
-Type.uint64();
+Type.uint64(); // use with bigint
 Type.varUInt64();
 Type.taggedUInt64();
 ```
 
-### Important JavaScript notes
-
-- `number` cannot safely represent all 64-bit integers.
-- For 64-bit integer fields, prefer `bigint` values in application code.
-- Dynamic root deserialization may return `bigint` for integer values that exceed JavaScript's safe integer range.
+**Rule of thumb**: anything that maps to a 64-bit integer in another language should use `Type.int64()` or `Type.uint64()` on the JavaScript side and be passed as a `bigint` value.
 
 ## Floating-Point Types
 
@@ -89,33 +85,22 @@ Type.array(
 
 These map to JavaScript arrays.
 
-### Optimized typed arrays
+## Optimized Numeric Arrays
 
-Fory JavaScript supports specialized array schemas for compact numeric and boolean arrays.
+For arrays of numbers, use the specialized typed array schemas. They are more compact and map to native typed arrays:
 
 ```ts
-Type.boolArray();
-Type.int16Array();
-Type.int32Array();
-Type.int64Array();
-Type.float16Array();
-Type.bfloat16Array();
-Type.float32Array();
-Type.float64Array();
+Type.boolArray(); // boolean[] in JS
+Type.int16Array(); // Int16Array
+Type.int32Array(); // Int32Array
+Type.int64Array(); // BigInt64Array
+Type.float32Array(); // Float32Array
+Type.float64Array(); // Float64Array
+Type.float16Array(); // number[]
+Type.bfloat16Array(); // BFloat16[]
 ```
 
-Typical runtime values are:
-
-| Schema                 | Typical JavaScript value                                             |
-| ---------------------- | -------------------------------------------------------------------- |
-| `Type.boolArray()`     | `boolean[]`                                                          |
-| `Type.int16Array()`    | `Int16Array`                                                         |
-| `Type.int32Array()`    | `Int32Array`                                                         |
-| `Type.int64Array()`    | `BigInt64Array`                                                      |
-| `Type.float32Array()`  | `Float32Array`                                                       |
-| `Type.float64Array()`  | `Float64Array`                                                       |
-| `Type.float16Array()`  | `number[]`                                                           |
-| `Type.bfloat16Array()` | `BFloat16Array` or `number[]` as input; deserializes to `BFloat16[]` |
+For non-numeric or struct arrays, use `Type.array(elementType)` instead.
 
 ## Maps and Sets
 
@@ -148,7 +133,7 @@ Type.enum("example.color", {
 });
 ```
 
-Both numeric and string enum values are supported. JavaScript encodes enum members by ordinal position in the declared enum object order and maps that ordinal back to the corresponding JavaScript value on read, so cross-language peers must agree on the enum member order and shape, not only the literal values.
+Fory encodes enum values by their ordinal position in the object (not their value). Both sides must declare enum members in the same order. When interoperating with another language, make sure the member order matches, not just the values.
 
 ## Nullable fields
 
@@ -158,9 +143,9 @@ Use `.setNullable(true)` when a field may be `null`.
 Type.string().setNullable(true);
 ```
 
-## Dynamic fields
+## Dynamic Fields
 
-Use `Type.any()` for dynamically typed content.
+Use `Type.any()` when a field can hold values of different types at runtime.
 
 ```ts
 const eventType = Type.struct("example.event", {
@@ -169,23 +154,21 @@ const eventType = Type.struct("example.event", {
 });
 ```
 
-This is useful for polymorphic payload slots, but more explicit field types are preferable when the schema is stable.
+Explicit field schemas are preferable when the type is known — `Type.any()` is harder to keep aligned across languages.
 
-## Reference-tracked fields
+## Reference-Tracked Fields
 
-Fields that can participate in shared or circular graphs should opt in:
+When the same object instance can appear in multiple fields, or when your graph is circular, opt individual fields into reference tracking:
 
 ```ts
 Type.struct("example.node").setTrackingRef(true).setNullable(true);
 ```
 
-This requires `new Fory({ ref: true })` at the instance level.
+This requires `new Fory({ ref: true })`. See [References](references.md).
 
-## Extension types and advanced areas
+## Extension Types
 
-JavaScript supports extension types through `Type.ext(...)` plus a custom serializer passed to `fory.register(...)`.
-
-The xlang specification also includes additional kinds such as unions. If you plan to depend on advanced features beyond the documented JavaScript surface, validate the exact API and interoperability behavior in your target runtime versions before committing to a shared wire contract.
+For types that need completely custom encoding, use `Type.ext(...)` and pass a custom serializer to `fory.register(...)`. This is an advanced use case; the standard `Type.struct` covers most scenarios.
 
 ## Related Topics
 

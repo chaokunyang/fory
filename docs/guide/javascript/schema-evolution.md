@@ -19,22 +19,24 @@ license: |
   limitations under the License.
 ---
 
-Fory JavaScript supports two struct encodings:
+Schema evolution lets different versions of your service exchange messages safely — a v2 writer can produce a message a v1 reader still understands, and vice versa.
 
-- **schema-consistent mode**: more compact, assumes the schema matches exactly
-- **compatible mode**: writes extra metadata so readers can tolerate added or missing fields
+## Two Modes
 
-## Enable compatible mode
+- **Schema-consistent mode** (default): more compact, but both sides must have exactly the same schema. Good when all services update together.
+- **Compatible mode**: writes extra field metadata so readers can skip unknown fields and tolerate missing ones. Good for independent deployments or rolling upgrades.
+
+## Enable Compatible Mode
 
 ```ts
 const fory = new Fory({ compatible: true });
 ```
 
-Compatible mode is the right choice when:
+Use this when:
 
-- multiple services roll out schema changes independently
+- services deploy schema changes independently
 - older readers may see newer payloads
-- newer readers may see older payloads
+- newer readers may see older payloads from before a field was added
 
 ## Example
 
@@ -61,11 +63,11 @@ const readerType = Type.struct(
 );
 ```
 
-With `compatible: true`, the reader can ignore fields it does not know about.
+With `compatible: true`, the reader ignores fields it does not know about, and fills unknown fields with default values.
 
-## Per-struct evolving override
+## Opting Out of Evolution for One Struct
 
-In JavaScript, struct schemas can explicitly disable evolving metadata even when type identity is otherwise compatible.
+You can disable evolution metadata for a specific struct even inside a `compatible: true` instance:
 
 ```ts
 const fixedType = Type.struct(
@@ -76,25 +78,20 @@ const fixedType = Type.struct(
 );
 ```
 
-This produces a smaller payload than an otherwise evolving-compatible struct, but the reader must then assume the schema matches. In cross-language use, both sides must agree on whether that struct is evolving; if one side treats the type as compatible and the other uses `evolving: false`, the on-wire type kind no longer matches.
+`evolving: false` produces smaller messages for that struct, but **both the writer and reader must agree** on this setting. If one side writes with `evolving: false` and the other reads expecting compatible metadata, deserialization will fail.
 
-## Practical guidance
+## When to Use Each Mode
 
-Choose **schema-consistent mode** when:
+|                                 | Schema-consistent | Compatible          |
+| ------------------------------- | ----------------- | ------------------- |
+| Services always update together | ✔ best choice     | works, but wasteful |
+| Independent deployments         | will break        | ✔ best choice       |
+| Smallest possible messages      | ✔                 | slightly larger     |
+| Rolling upgrades                | risky             | ✔ safe              |
 
-- both ends deploy together
-- size and throughput matter most
-- schema drift is tightly controlled
+## Cross-Language Requirement
 
-Choose **compatible mode** when:
-
-- services evolve independently
-- you need forward/backward tolerance
-- operational safety is more important than the last bytes of payload size
-
-## Cross-language requirement
-
-Compatible mode only helps when the logical type identity still matches across runtimes. The same struct must still be registered with the same numeric ID or name across languages.
+Compatible mode only protects you from schema differences in the _fields_ of a type. You still need the same type identity (same numeric ID or same `namespace + typeName`) on every side. See [Cross-Language](cross-language.md).
 
 ## Related Topics
 

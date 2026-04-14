@@ -23,21 +23,19 @@ This page covers common Dart runtime issues and fixes.
 
 ## `Only xlang payloads are supported by the Dart runtime.`
 
-The Dart runtime only deserializes xlang frames. Make sure the peer runtime is writing xlang payloads rather than a language-native format.
+The writer is sending a native-mode (non-xlang) payload. Make sure every service uses the xlang-compatible path:
 
-- Java must use `withLanguage(Language.XLANG)`.
-- Go must enable `WithXlang(true)`.
-- Other peers must use their xlang-compatible path.
+- **Java**: add `.withLanguage(Language.XLANG)` to the Fory builder.
+- **Go**: use `WithXlang(true)` in the Fory options.
+- **Other runtimes**: check their respective guides for enabling cross-language mode.
 
 ## `Type ... is not registered.`
 
-Generated and manual user-defined types must be registered before reading or writing them.
+Fory does not know how to serialize or deserialize this type. Fix it by:
 
-Checklist:
-
-1. Run code generation.
-2. Register the type through the generated namespace or `registerSerializer`.
-3. Register all nested user-defined types, not only the root type.
+1. Running code generation if you haven't: `dart run build_runner build --delete-conflicting-outputs`
+2. Calling the generated `register` function (or `registerSerializer`) for the type **before** calling `serialize` or `deserialize`.
+3. Registering **all** types that appear in a message, not just the root type. For example, if `Order` contains an `Address`, register both.
 
 ## Generated part file is missing or stale
 
@@ -52,45 +50,45 @@ If you moved files or renamed types, rebuild before re-running analysis or tests
 
 ## `Deserialized value has type ..., expected ...`
 
-`deserialize<T>` validates the runtime result after decoding. This error usually means:
+The payload describes a different type than `T` in `deserialize<T>`. Common causes:
 
-- the payload describes a different root type than the requested `T`
-- registration points to a different logical type than expected
-- a dynamic payload should be decoded as `Object?` or a container type first
+- You registered the type on the writing side with a different ID or name than on the reading side.
+- The payload was produced by a different code path that serializes a different root object.
+- You are trying to deserialize a heterogeneous container — decode it as `Object?` or `List<Object?>` first, then cast.
 
-## Unexpected reference identity behavior
+## Objects aren't the same instance after deserialization
 
-Check whether reference tracking is enabled in the correct place:
+Fory does not track object identity by default, so two fields pointing to the same object will produce two independent copies after a round trip.
 
-- root graph or root container: `trackRef: true`
-- generated field graph: `@ForyField(ref: true)`
-- customized serializer: use `writeRef`, `readRef`, and `context.reference(...)` correctly
+To preserve identity:
 
-`writeNonRef` intentionally does not seed later back-references.
+- For fields inside a `@ForyStruct`, add `@ForyField(ref: true)` to those fields.
+- For a top-level collection, pass `trackRef: true` to `fory.serialize(...)`.
+- In a custom serializer, use `context.writeRef` / `context.readRef` and call `context.reference(obj)` before reading nested fields.
 
-## Cross-language field mismatch
+## Cross-language field mismatch (missing data or wrong values)
 
-Symptoms include missing data, default values, or type errors on peers.
+Symptoms: fields come back as default values or wrong types after a round trip to another language.
 
-Check:
+Checklist:
 
-- same registration identity on both sides
-- stable field IDs for evolving structs
-- matching logical field names and meanings
-- compatible numeric widths and temporal types
+1. Same registration identity on both sides (same numeric ID **or** same `namespace + typeName`).
+2. Stable `@ForyField(id: ...)` assigned before the first payload was produced.
+3. Compatible numeric widths — use `Int32` in Dart when the peer field is `int` (Java), `int32` (Go), or `int` (C#).
+4. `Timestamp` / `LocalDate` instead of raw `DateTime` for date/time fields.
+5. `compatible: true` on **both** sides if using schema evolution.
 
-## Validation Commands
+## Running Tests Locally
 
-For the main Dart workspace:
+Main Dart package:
 
 ```bash
-cd dart
 dart run build_runner build --delete-conflicting-outputs
 dart analyze
 dart test
 ```
 
-For the integration-style test package:
+Integration test package:
 
 ```bash
 cd dart/packages/fory-test

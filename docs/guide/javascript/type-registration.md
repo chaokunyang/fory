@@ -19,13 +19,15 @@ license: |
   limitations under the License.
 ---
 
-Type registration tells Fory JavaScript how to identify and encode user-defined structs and enums.
+Every struct and enum you serialize must be registered with the `Fory` instance before use. Registration tells Fory how to identify the type in a message and how to encode and decode it.
 
 ## Registering Structs
 
-You can register a struct by numeric ID or by name.
+You can identify a struct with a numeric ID or with a name. Pick one strategy and use it consistently across all languages that share the same messages.
 
-### Register by numeric type ID
+### Register by numeric ID
+
+Smaller wire representation. Good when a small team can coordinate IDs.
 
 ```ts
 const userType = Type.struct(
@@ -37,16 +39,14 @@ const userType = Type.struct(
 );
 
 const fory = new Fory();
-const userSerde = fory.register(userType);
+const { serialize, deserialize } = fory.register(userType);
 ```
 
-Use numeric IDs when:
-
-- you want compact metadata on the wire
-- you control IDs across all participating languages
-- the same logical type is registered everywhere with the same ID
+The same number must be used in every runtime that reads or writes this type.
 
 ### Register by name
+
+Easier to coordinate across teams. Slightly larger metadata in the message.
 
 ```ts
 const userType = Type.struct(
@@ -58,19 +58,14 @@ const userType = Type.struct(
 );
 
 const fory = new Fory();
-const userSerde = fory.register(userType);
+const { serialize, deserialize } = fory.register(userType);
 ```
 
-Named registration is usually easier to evolve operationally because it avoids central numeric ID allocation, but it writes more metadata than numeric IDs.
-
-### Explicit namespace and type name
+You can also split namespace and type name explicitly:
 
 ```ts
 const userType = Type.struct(
-  {
-    namespace: "example",
-    typeName: "user",
-  },
+  { namespace: "example", typeName: "user" },
   {
     id: Type.int64(),
     name: Type.string(),
@@ -78,7 +73,7 @@ const userType = Type.struct(
 );
 ```
 
-This corresponds to the named xlang type identity carried in metadata.
+> **Do not mix strategies for the same type across runtimes.** If one side uses a numeric ID and the other uses a name, deserialization will fail.
 
 ## Registering with Decorators
 
@@ -129,41 +124,29 @@ fory.register(Type.enum("example.status", Status));
 
 ## Registration Scope
 
-Registration is per `Fory` instance.
+Registration is per `Fory` instance. If you create two instances, you need to register schemas in both.
+
+## What `register` Returns
+
+`fory.register(schema)` returns a bound serializer pair:
 
 ```ts
-const fory1 = new Fory();
-const fory2 = new Fory();
+const { serialize, deserialize } = fory.register(orderType);
 
-fory1.register(
-  Type.struct("example.user", {
-    id: Type.int64(),
-  }),
-);
+// serialize returns Uint8Array bytes
+const bytes = serialize({ id: 1n, total: 99.99 });
 
-// fory2 does not know that schema until you register it again there.
+// deserialize returns the decoded value
+const order = deserialize(bytes);
 ```
 
-## Schema Handles Returned by `register`
+Store and reuse this pair — it is the fast path.
 
-`register` returns a bound serializer pair:
+## Field Options
 
-```ts
-const orderType = Type.struct("example.order", {
-  id: Type.int64(),
-  total: Type.float64(),
-});
+### Nullable fields
 
-const { serializer, serialize, deserialize } = new Fory().register(orderType);
-```
-
-Use these bound functions for repeated operations on the same type.
-
-## Field Metadata
-
-Each field type can be refined with schema metadata.
-
-### Nullability
+If a field can be `null`, mark it explicitly. Passing `null` to a non-nullable field throws.
 
 ```ts
 Type.string().setNullable(true);
@@ -171,44 +154,44 @@ Type.string().setNullable(true);
 
 ### Reference tracking on a field
 
+Needed when the same object instance can appear in multiple fields (see [References](references.md)):
+
 ```ts
 Type.struct("example.node").setTrackingRef(true);
 ```
 
-This matters only when `new Fory({ ref: true })` is also enabled globally.
+This only has an effect when `new Fory({ ref: true })` is also set.
 
-### Dynamic dispatch
+### Polymorphic fields
+
+Use `Type.any()` when a field can hold different types at runtime:
 
 ```ts
-import { Dynamic, Type } from "@apache-fory/core";
-
-Type.struct("example.child").setDynamic(Dynamic.FALSE);
+const eventType = Type.struct("example.event", {
+  kind: Type.string(),
+  payload: Type.any(),
+});
 ```
 
-Use `dynamic` when the runtime type behavior must be controlled explicitly. In this implementation, `Dynamic.FALSE` forces monomorphic handling, `Dynamic.TRUE` forces polymorphic handling, and `Dynamic.AUTO` leaves the decision to the runtime. This is especially relevant for polymorphic fields in xlang payloads, while most users should keep the default behavior unless they are tuning a specific schema edge case.
+For fine-grained control over how a specific struct field handles its runtime type, you can call `.setDynamic(Dynamic.FALSE)` (always treat as the declared type) or `.setDynamic(Dynamic.TRUE)` (always write the runtime type). The default (`Dynamic.AUTO`) is correct for the vast majority of cases.
 
-## Choosing IDs vs names
+## Choosing IDs vs Names
 
 Use **numeric IDs** when:
 
-- you want the smallest wire representation
-- your organization can keep IDs stable and unique
-- multiple runtimes are coordinated tightly
+- you want the smallest possible message size
+- your organization can keep IDs stable and globally unique
+- services are tightly coordinated
 
 Use **names** when:
 
-- you want easier decentralized coordination
-- schemas are shared by package/module name already
-- slightly larger metadata is acceptable
+- teams define types independently
+- schemas are already identified by package/module name
+- slightly larger metadata overhead is acceptable
 
-## Cross-language requirement
+## Cross-Language
 
-For xlang interoperability, the serializer and deserializer must agree on the same type identity:
-
-- same numeric ID, or
-- same namespace + type name
-
-The field schema must also match in a cross-language-compatible way. See [Cross-Language](cross-language.md).
+For a message to round-trip between JavaScript and another runtime, both sides must use the same identity for a given type: same numeric ID, or same `namespace + typeName`. See [Cross-Language](cross-language.md).
 
 ## Related Topics
 

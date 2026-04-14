@@ -19,11 +19,11 @@ license: |
   limitations under the License.
 ---
 
-Fory Dart uses source generation for structs and enums defined in your Dart libraries.
+Fory generates fast serializer code for your Dart classes at build time. You annotate your models, run `build_runner`, and Fory takes care of the rest.
 
-## Annotate Struct Types
+## Step 1 — Annotate Your Models
 
-Mark classes with `@ForyStruct()` and include the generated part file.
+Add `@ForyStruct()` to each class you want to serialize. Include the generated part directive at the top of the file.
 
 ```dart
 import 'package:fory/fory.dart';
@@ -48,21 +48,21 @@ class User {
 }
 ```
 
-Enums in the same library also participate in generated registration.
+Enums defined in the same file are automatically included in the generated registration.
 
-## Run the Generator
+## Step 2 — Run the Generator
 
-From `dart/packages/fory` or the package that depends on the generator:
+From the directory that contains your `pubspec.yaml`:
 
 ```bash
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-The builder emits a `.fory.dart` part file next to the source library.
+This emits a `.fory.dart` file next to your source file. Re-run this command any time you add or rename annotated types.
 
-## Register Through the Generated Namespace
+## Step 3 — Register and Use
 
-Generated code exposes a library-level namespace that knows how to install generated metadata into `Fory`.
+The generator creates a namespace (named after your file) with a `register` function. Call it before serializing:
 
 ```dart
 final fory = Fory();
@@ -70,7 +70,7 @@ ModelsFory.register(fory, Address, id: 1);
 ModelsFory.register(fory, User, id: 2);
 ```
 
-Or use named registration:
+Or use a stable name instead of a numeric ID (useful for cross-language scenarios):
 
 ```dart
 ModelsFory.register(
@@ -81,16 +81,17 @@ ModelsFory.register(
 );
 ```
 
-Exactly one registration mode is required:
+See [Type Registration](type-registration.md) for guidance on choosing between IDs and names.
 
-- `id: ...`
-- `namespace: ...` plus `typeName: ...`
+## Schema Evolution: `evolving`
 
-## Choosing `evolving`
+`@ForyStruct()` defaults to `evolving: true`, which is the right choice for most applications.
 
-`@ForyStruct()` defaults to `evolving: true`.
+- `evolving: true` — Fory stores enough metadata so that if you add or remove fields later, old and new code can still exchange messages. Enable this whenever different versions of your app or service may be running at the same time.
+- `evolving: false` — No extra metadata; marginally smaller payloads. Safe only when both writer and reader are always updated together.
 
 ```dart
+// evolving: true is the default, you can omit it
 @ForyStruct(evolving: true)
 class Event {
   Event();
@@ -99,19 +100,11 @@ class Event {
 }
 ```
 
-Use `evolving: true` when you want compatible-mode field evolution. Use `evolving: false` for a fixed schema when you want schema-consistent behavior.
+When using evolving structs, also assign stable field IDs with `@ForyField(id: ...)` before you ship your first payload — those IDs are how Fory matches fields after a schema change.
 
-## Generated Registration Design
+## When Not to Use Code Generation
 
-Generated registration keeps serializer metadata private to the defining library while exposing a public wrapper API. Applications should call the generated wrapper instead of private helper functions.
-
-## When to Use Customized Serializers Instead
-
-Use [Custom Serializers](custom-serializers.md) when:
-
-- the type is external and cannot be annotated
-- you need custom payload layout
-- you are implementing a union or extension type manually
+If you cannot annotate a type (e.g., it comes from a package you do not own), write a [Custom Serializer](custom-serializers.md) instead.
 
 ## Related Topics
 

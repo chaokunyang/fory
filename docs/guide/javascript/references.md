@@ -19,19 +19,23 @@ license: |
   limitations under the License.
 ---
 
-Fory can preserve shared references and circular object graphs, but in JavaScript you should enable reference tracking globally and mark the specific struct fields that participate in shared or circular references.
+By default Fory treats every value as a separate copy — if the same object appears in two fields it gets serialized twice, and after deserialization you get two independent copies. Enable reference tracking when:
 
-## Enable reference tracking globally
+- the same object instance is referenced from multiple places in the graph
+- your data contains a circular structure (e.g. a node that points to itself)
+- object identity must be preserved after a round trip
+
+Leave reference tracking off for plain tree-shaped data; it adds a small overhead.
+
+## Step 1: Enable Reference Tracking on the `Fory` Instance
 
 ```ts
 const fory = new Fory({ ref: true });
 ```
 
-Without `ref: true`, Fory treats values as ordinary tree-shaped data.
+## Step 2: Mark the Fields That Can Have Shared or Circular References
 
-## Mark reference-capable fields
-
-For schema-based structs, mark fields that can hold shared or circular references with `.setTrackingRef(true)`.
+For each field whose value may be shared or circular, call `.setTrackingRef(true)` on the field's schema:
 
 ```ts
 const nodeType = Type.struct("example.node", {
@@ -39,6 +43,8 @@ const nodeType = Type.struct("example.node", {
   next: Type.struct("example.node").setNullable(true).setTrackingRef(true),
 });
 ```
+
+You need **both** the global flag and the field-level flag. Missing either one results in values being copied rather than referenced.
 
 ## Circular self-reference example
 
@@ -94,9 +100,9 @@ Leave it disabled when:
 - you want the lowest overhead
 - object identity does not matter
 
-## Cross-language note
+## Cross-Language Note
 
-Reference tracking is part of the xlang protocol, but every participating runtime still needs compatible schema and configuration. If one side models a graph as plain values and the other depends on object identity, behavior may not match your expectations.
+Reference tracking is part of the Fory binary protocol and works across runtimes. Both sides must enable reference tracking and mark the same fields as reference-tracked for the behavior to be consistent.
 
 ## Related Topics
 

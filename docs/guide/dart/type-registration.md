@@ -19,25 +19,30 @@ license: |
   limitations under the License.
 ---
 
-This page covers how to register user-defined types in Apache Fory™ Dart.
+Fory needs to know which class corresponds to which type in a serialized message. You do this by registering each class before you serialize or deserialize it.
 
-## Registration Modes
+## Choosing a Registration Strategy
 
-Fory Dart supports the same two registration styles used by other xlang runtimes.
+Fory offers two strategies. Pick one and use it consistently across every language that reads or writes the type.
 
-### Register by Numeric ID
+### Strategy 1: Numeric ID
 
-Numeric IDs are compact on the wire and fast to resolve.
+Compact and fast. Good when a small team can coordinate IDs across services.
 
 ```dart
 ModelsFory.register(fory, User, id: 100);
 ```
 
-Use the same numeric ID for the same logical type in every language.
+The same number must be used in every other language:
 
-### Register by Namespace and Type Name
+```java
+// Java side
+fory.register(User.class, 100);
+```
 
-Name-based registration avoids global numeric ID coordination and is often easier across multiple teams.
+### Strategy 2: Namespace + Type Name
+
+More self-describing. Good when multiple teams or packages define types independently and numeric ID coordination is impractical.
 
 ```dart
 ModelsFory.register(
@@ -48,21 +53,21 @@ ModelsFory.register(
 );
 ```
 
-The same `namespace + typeName` pair must be used by every runtime that reads or writes the type.
+Every runtime that reads or writes this type must use the same `namespace` and `typeName`.
 
-## Generated Type Registration
+> **Do not mix strategies for the same type.** If one side uses a numeric ID and the other uses a name, deserialization will fail.
 
-Generated types should normally be registered through the generated namespace wrapper:
+## Registering Generated Types
+
+Call the generated `register` function from the `.fory.dart` file. It installs all the serializer metadata for you:
 
 ```dart
 UserModelsFory.register(fory, User, id: 100);
 ```
 
-Internally, the wrapper installs generated metadata and then calls `Fory.register(...)`.
+## Registering a Custom Serializer
 
-## Register a Manual Serializer
-
-Customized serializers register through `registerSerializer`:
+For types that you cannot annotate with `@ForyStruct()`, pass a serializer instance directly:
 
 ```dart
 fory.registerSerializer(
@@ -73,21 +78,18 @@ fory.registerSerializer(
 );
 ```
 
+See [Custom Serializers](custom-serializers.md) for how to implement a serializer.
+
+## Rules to Follow
+
+- Register **before** the first `serialize` or `deserialize` call.
+- Register **every** class that can appear in a message, not only the root type.
+- Keep IDs (or names) **stable** once payloads are persisted or exchanged across services. Changing them will break deserialization of old messages.
+- Do not mix a numeric ID on one side with a name on the other for the same type.
+
 ## Cross-Language Requirements
 
-Registration must match across runtimes:
-
-- same numeric ID, or
-- same namespace and type name
-
-The wire format distinguishes built-in xlang type IDs from user-registered type IDs. The user ID is encoded separately as an unsigned varint32, as described in the [xlang serialization specification](../../specification/xlang_serialization_spec.md).
-
-## Common Rules
-
-- Register before the first serialize or deserialize call.
-- Register nested user-defined types as well as root types.
-- Keep IDs stable once payloads are persisted or exchanged across services.
-- Do not mix a numeric ID on one side with a name-based registration on the other side for the same type.
+The same numeric ID or `namespace + typeName` pair must be used in every runtime that reads or writes the type. See [Cross-Language](cross-language.md) for examples.
 
 ## Related Topics
 

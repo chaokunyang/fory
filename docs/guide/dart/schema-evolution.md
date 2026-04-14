@@ -19,36 +19,31 @@ license: |
   limitations under the License.
 ---
 
-Fory Dart supports schema evolution through compatible structs.
+Schema evolution lets different versions of your app exchange messages safely — a v2 writer can produce a message that a v1 reader can still decode, and vice versa.
 
-## Two Struct Modes
+## Two Modes
 
-### Schema-Consistent Mode
+### Compatible Mode (recommended for evolving services)
 
-This is the default when `Config.compatible` is `false`.
-
-- Structs use the schema-consistent path.
-- `checkStructVersion` can validate schema-version compatibility.
-- This mode is appropriate when both sides evolve in lockstep or when you want stricter validation.
-
-### Compatible Mode
-
-Enable compatible mode when you want evolving field metadata on the wire.
+Enable this when services may run different versions at the same time — for example, during a rolling deployment or when clients are not updated immediately.
 
 ```dart
 final fory = Fory(compatible: true);
 ```
 
-In compatible mode:
+In compatible mode, Fory includes enough field metadata in each message so that the reader can skip unknown fields and use defaults for missing ones. Use stable field IDs (see below) to anchor the schema across changes.
 
-- evolving structs use compatible struct encoding
-- `checkStructVersion` is disabled
-- field IDs become the stability anchor for changed schemas
-- TypeDef metadata is shared and reused across payloads
+### Schema-Consistent Mode (default)
 
-## Generated Struct Controls
+Both sides must have the same model. Fory validates that the schemas match and will reject messages from a different schema version. Use this when all services are always updated together and you want schema mismatches to be caught as fast errors.
 
-`@ForyStruct(evolving: true)` is the default and is the right choice when the type may evolve over time.
+```dart
+final fory = Fory(); // compatible: false by default
+```
+
+## Setting Up for Evolution
+
+To use compatible mode safely, mark your structs with `@ForyStruct(evolving: true)` (the default) and assign a stable `@ForyField(id: ...)` to every field **before you ship your first payload**:
 
 ```dart
 @ForyStruct(evolving: true)
@@ -63,25 +58,32 @@ class UserProfile {
 }
 ```
 
-Use explicit stable field IDs when a schema may change.
+If you add field IDs after payloads are already in production, existing stored messages won't have them and evolution won't work correctly.
 
-## Safe Evolution Practices
+## What You Can Safely Change
 
-Typical compatible changes include:
+**Safe changes** (compatible on both sides):
 
-- adding a new optional field with a new field ID
-- keeping existing field IDs stable
-- widening consumer behavior to tolerate missing data
+- Add a new optional field with a new, unused field ID.
+- Rename a field — as long as the `@ForyField(id: ...)` stays the same.
+- Remove a field — the peer will just ignore the missing value and use the Dart default.
 
-Changes that require extra care include:
+**Unsafe changes** (may break existing messages):
 
-- reusing an old field ID for different semantics
-- changing a field's logical cross-language meaning
-- changing registration identity for an existing type
+- Reuse an existing field ID for a different field.
+- Change a field's type to an incompatible type (e.g., `Int32` → `String`).
+- Change the registration identity (`id`, `namespace`, or `typeName`) of a type after messages are in production.
+- Change a field's logical meaning without changing its ID.
 
-## Cross-Language Guidance
+## Cross-Language Notes
 
-Schema evolution only works when all runtimes agree on the type registration identity and the logical meaning of field IDs. Validate rolling upgrades with real round trips across the languages you support.
+Evolution only works when **all** runtimes that exchange messages agree on:
+
+1. The same `compatible` setting.
+2. The same type registration identity (numeric ID or `namespace + typeName`).
+3. The logical meaning of field IDs.
+
+Test rolling-upgrade scenarios with real round trips before deploying.
 
 ## Related Topics
 

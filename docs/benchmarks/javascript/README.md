@@ -1,6 +1,6 @@
 # JavaScript Benchmark Performance Report
 
-_Generated on 2026-04-14 14:56:11_
+_Generated on 2026-04-14 15:32:27_
 
 ## How to Generate This Report
 
@@ -19,10 +19,10 @@ cd benchmarks/javascript
 | CPU Cores (Physical)       | 12                       |
 | CPU Cores (Logical)        | 12                       |
 | Total RAM (GB)             | 48.0                     |
-| Benchmark Date             | 2026-04-14T06:50:56.546Z |
+| Benchmark Date             | 2026-04-14T07:30:36.278Z |
 | CPU Cores (from benchmark) | 12                       |
-| Node.js                    | v25.8.1                  |
-| V8                         | 14.1.146.11-node.21      |
+| Node.js                    | v22.20.0                 |
+| V8                         | 12.4.254.21-node.33      |
 
 ## Benchmark Plots
 
@@ -62,35 +62,35 @@ All class-level plots below show throughput (ops/sec).
 
 | Datatype         | Operation   | fory (ns) | protobuf (ns) | json (ns) | Fastest  |
 | ---------------- | ----------- | --------- | ------------- | --------- | -------- |
-| Struct           | Serialize   | 113.4     | 434.5         | 88.4      | json     |
-| Struct           | Deserialize | 220.6     | 113.7         | 261.4     | protobuf |
-| Sample           | Serialize   | 692.7     | 2154.4        | 596.4     | json     |
-| Sample           | Deserialize | 1139.3    | 1218.0        | 1392.9    | fory     |
-| MediaContent     | Serialize   | 875.3     | 1340.1        | 563.8     | json     |
-| MediaContent     | Deserialize | 1385.8    | 900.9         | 1188.0    | protobuf |
-| StructList       | Serialize   | 359.1     | 1581.4        | 426.1     | fory     |
-| StructList       | Deserialize | 488.9     | 639.2         | 1042.4    | fory     |
-| SampleList       | Serialize   | 3340.3    | 8725.7        | 2834.2    | json     |
-| SampleList       | Deserialize | 3816.0    | 5796.2        | 5848.5    | fory     |
-| MediaContentList | Serialize   | 4142.2    | 6626.7        | 2442.4    | json     |
-| MediaContentList | Deserialize | 5524.2    | 4557.2        | 6305.6    | protobuf |
+| Struct           | Serialize   | 106.8     | 535.1         | 332.4     | fory     |
+| Struct           | Deserialize | 124.8     | 130.5         | 266.8     | fory     |
+| Sample           | Serialize   | 628.6     | 2394.6        | 1378.8    | fory     |
+| Sample           | Deserialize | 679.7     | 1232.9        | 1418.1    | fory     |
+| MediaContent     | Serialize   | 848.8     | 1416.7        | 786.4     | json     |
+| MediaContent     | Deserialize | 1074.5    | 819.8         | 1118.3    | protobuf |
+| StructList       | Serialize   | 317.1     | 2072.9        | 1140.1    | fory     |
+| StructList       | Deserialize | 413.2     | 728.5         | 1080.2    | fory     |
+| SampleList       | Serialize   | 2983.5    | 9541.6        | 6226.3    | fory     |
+| SampleList       | Deserialize | 3128.0    | 6236.3        | 6321.1    | fory     |
+| MediaContentList | Serialize   | 3828.5    | 7050.9        | 3688.2    | json     |
+| MediaContentList | Deserialize | 4992.5    | 4360.3        | 5396.4    | protobuf |
 
 ### Throughput Results (ops/sec)
 
-| Datatype         | Operation   | fory TPS  | protobuf TPS | json TPS   | Fastest  |
-| ---------------- | ----------- | --------- | ------------ | ---------- | -------- |
-| Struct           | Serialize   | 8,815,859 | 2,301,627    | 11,309,688 | json     |
-| Struct           | Deserialize | 4,532,327 | 8,793,358    | 3,825,292  | protobuf |
-| Sample           | Serialize   | 1,443,696 | 464,162      | 1,676,750  | json     |
-| Sample           | Deserialize | 877,718   | 821,027      | 717,930    | fory     |
-| MediaContent     | Serialize   | 1,142,472 | 746,194      | 1,773,606  | json     |
-| MediaContent     | Deserialize | 721,615   | 1,109,944    | 841,732    | protobuf |
-| StructList       | Serialize   | 2,785,094 | 632,345      | 2,346,856  | fory     |
-| StructList       | Deserialize | 2,045,390 | 1,564,335    | 959,342    | fory     |
-| SampleList       | Serialize   | 299,376   | 114,603      | 352,832    | json     |
-| SampleList       | Deserialize | 262,051   | 172,528      | 170,985    | fory     |
-| MediaContentList | Serialize   | 241,415   | 150,904      | 409,430    | json     |
-| MediaContentList | Deserialize | 181,020   | 219,434      | 158,590    | protobuf |
+| Datatype         | Operation   | fory TPS  | protobuf TPS | json TPS  | Fastest  |
+| ---------------- | ----------- | --------- | ------------ | --------- | -------- |
+| Struct           | Serialize   | 9,366,643 | 1,868,870    | 3,008,589 | fory     |
+| Struct           | Deserialize | 8,012,212 | 7,661,344    | 3,748,390 | fory     |
+| Sample           | Serialize   | 1,590,714 | 417,612      | 725,249   | fory     |
+| Sample           | Deserialize | 1,471,175 | 811,093      | 705,147   | fory     |
+| MediaContent     | Serialize   | 1,178,111 | 705,890      | 1,271,668 | json     |
+| MediaContent     | Deserialize | 930,701   | 1,219,807    | 894,205   | protobuf |
+| StructList       | Serialize   | 3,153,309 | 482,413      | 877,109   | fory     |
+| StructList       | Deserialize | 2,420,060 | 1,372,723    | 925,751   | fory     |
+| SampleList       | Serialize   | 335,172   | 104,804      | 160,610   | fory     |
+| SampleList       | Deserialize | 319,696   | 160,351      | 158,199   | fory     |
+| MediaContentList | Serialize   | 261,198   | 141,826      | 271,133   | json     |
+| MediaContentList | Deserialize | 200,301   | 229,342      | 185,308   | protobuf |
 
 ### Serialized Data Sizes (bytes)
 

@@ -124,9 +124,9 @@ export class Gen {
 
   generateSerializer(typeInfo: TypeInfo) {
     this.traversalContainer(typeInfo);
-    const exists = this.isRegistered(typeInfo);
-    if (exists) {
-      return this.typeResolver.getSerializerByTypeInfo(typeInfo);
+    const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
+    if (serializer?._initialized) {
+      return serializer;
     }
     return this.reGenerateSerializer(typeInfo);
   }

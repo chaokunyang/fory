@@ -178,11 +178,13 @@ For fine-grained control over how a specific struct field handles its runtime ty
 ## Choosing IDs vs Names
 
 Use **numeric IDs** when:
+
 - you want the smallest possible message size
 - your organization can keep IDs stable and globally unique
 - services are tightly coordinated
 
 Use **names** when:
+
 - teams define types independently
 - schemas are already identified by package/module name
 - slightly larger metadata overhead is acceptable

@@ -25,15 +25,15 @@ This page lists the Dart types you can use in Fory messages, and flags where you
 
 The following Dart types serialize directly without any special handling:
 
-| Dart type | Cross-language notes |
-|---|---|
-| `bool` | Direct mapping |
-| `int` | Serialized as 64-bit by default. Use wrappers or `@Int32Type` etc. when the peer expects a narrower integer |
-| `double` | Maps to 64-bit float. Use `Float32` wrapper when the peer expects 32-bit |
-| `String` | Direct mapping |
-| `Uint8List` | Binary blob |
-| `List`, `Set`, `Map` | Supported; element types must also be supported |
-| `DateTime` | Use `Timestamp` or `LocalDate` wrappers for explicit semantics |
+| Dart type            | Cross-language notes                                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `bool`               | Direct mapping                                                                                              |
+| `int`                | Serialized as 64-bit by default. Use wrappers or `@Int32Type` etc. when the peer expects a narrower integer |
+| `double`             | Maps to 64-bit float. Use `Float32` wrapper when the peer expects 32-bit                                    |
+| `String`             | Direct mapping                                                                                              |
+| `Uint8List`          | Binary blob                                                                                                 |
+| `List`, `Set`, `Map` | Supported; element types must also be supported                                                             |
+| `DateTime`           | Use `Timestamp` or `LocalDate` wrappers for explicit semantics                                              |
 
 ## Integer Wrappers
 

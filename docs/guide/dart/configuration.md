@@ -51,10 +51,12 @@ final fory = Fory(compatible: true);
 ```
 
 When `compatible: true`:
+
 - Adding or removing fields on one side does not break the other.
 - Peers must still use the same `namespace` + `typeName` (or numeric `id`) to identify types.
 
 When `compatible: false` (default):
+
 - Both sides must have exactly the same schema. This is slightly faster and is fine when you deploy Dart-only services or always update all sides together.
 
 ### `checkStructVersion`
@@ -96,13 +98,13 @@ final fory = Fory(maxBinarySize: 8 * 1024 * 1024);
 
 ## Defaults
 
-| Option | Default |
-|---|---|
-| `compatible` | `false` |
-| `checkStructVersion` | `true` |
-| `maxDepth` | 256 |
-| `maxCollectionSize` | 1 048 576 |
-| `maxBinarySize` | 64 MiB |
+| Option               | Default   |
+| -------------------- | --------- |
+| `compatible`         | `false`   |
+| `checkStructVersion` | `true`    |
+| `maxDepth`           | 256       |
+| `maxCollectionSize`  | 1 048 576 |
+| `maxBinarySize`      | 64 MiB    |
 
 ## Cross-Language Notes
 

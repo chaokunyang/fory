@@ -82,16 +82,16 @@ const fixedType = Type.struct(
 
 ## When to Use Each Mode
 
-| | Schema-consistent | Compatible |
-|---|---|---|
-| Services always update together | ✔ best choice | works, but wasteful |
-| Independent deployments | will break | ✔ best choice |
-| Smallest possible messages | ✔ | slightly larger |
-| Rolling upgrades | risky | ✔ safe |
+|                                 | Schema-consistent | Compatible          |
+| ------------------------------- | ----------------- | ------------------- |
+| Services always update together | ✔ best choice     | works, but wasteful |
+| Independent deployments         | will break        | ✔ best choice       |
+| Smallest possible messages      | ✔                 | slightly larger     |
+| Rolling upgrades                | risky             | ✔ safe              |
 
 ## Cross-Language Requirement
 
-Compatible mode only protects you from schema differences in the *fields* of a type. You still need the same type identity (same numeric ID or same `namespace + typeName`) on every side. See [Cross-Language](cross-language.md).
+Compatible mode only protects you from schema differences in the _fields_ of a type. You still need the same type identity (same numeric ID or same `namespace + typeName`) on every side. See [Cross-Language](cross-language.md).
 
 ## Related Topics
 

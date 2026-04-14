@@ -30,6 +30,7 @@ For your own models, `@ForyStruct()` with code generation is almost always the b
 ## Implement `Serializer<T>`
 
 Subclass `Serializer<T>` and implement `write` and `read`. Use `context.buffer` to read and write raw bytes:
+
 ```dart
 import 'package:fory/fory.dart';
 

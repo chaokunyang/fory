@@ -112,16 +112,16 @@ const fory = new Fory({
 });
 ```
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `ref` | `false` | Enable reference tracking for shared or circular object graphs |
-| `compatible` | `false` | Allow field additions/removals without breaking existing messages |
-| `maxDepth` | `50` | Maximum nesting depth. Must be `>= 2`. Increase for deeply nested structures |
-| `maxBinarySize` | 64 MiB | Maximum bytes accepted for any single binary field |
-| `maxCollectionSize` | `1_000_000` | Maximum elements accepted in any list, set, or map |
-| `useSliceString` | `false` | Optional string-reading optimization for Node.js. Leave at default unless benchmarked |
-| `hps` | unset | Optional fast string helper from `@apache-fory/hps` (Node.js 20+) |
-| `hooks.afterCodeGenerated` | unset | Callback to inspect the generated serializer code — useful for debugging |
+| Option                     | Default     | Description                                                                           |
+| -------------------------- | ----------- | ------------------------------------------------------------------------------------- |
+| `ref`                      | `false`     | Enable reference tracking for shared or circular object graphs                        |
+| `compatible`               | `false`     | Allow field additions/removals without breaking existing messages                     |
+| `maxDepth`                 | `50`        | Maximum nesting depth. Must be `>= 2`. Increase for deeply nested structures          |
+| `maxBinarySize`            | 64 MiB      | Maximum bytes accepted for any single binary field                                    |
+| `maxCollectionSize`        | `1_000_000` | Maximum elements accepted in any list, set, or map                                    |
+| `useSliceString`           | `false`     | Optional string-reading optimization for Node.js. Leave at default unless benchmarked |
+| `hps`                      | unset       | Optional fast string helper from `@apache-fory/hps` (Node.js 20+)                     |
+| `hooks.afterCodeGenerated` | unset       | Callback to inspect the generated serializer code — useful for debugging              |
 
 ## Documentation
 

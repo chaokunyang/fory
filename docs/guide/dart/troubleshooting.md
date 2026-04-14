@@ -61,6 +61,7 @@ The payload describes a different type than `T` in `deserialize<T>`. Common caus
 Fory does not track object identity by default, so two fields pointing to the same object will produce two independent copies after a round trip.
 
 To preserve identity:
+
 - For fields inside a `@ForyStruct`, add `@ForyField(ref: true)` to those fields.
 - For a top-level collection, pass `trackRef: true` to `fory.serialize(...)`.
 - In a custom serializer, use `context.writeRef` / `context.readRef` and call `context.reference(obj)` before reading nested fields.

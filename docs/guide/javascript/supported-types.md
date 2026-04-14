@@ -23,36 +23,36 @@ This page lists the JavaScript and TypeScript types supported by Fory, and expla
 
 ## Primitive and Scalar Types
 
-| JavaScript value | Fory schema | Notes |
-| --- | --- | --- |
-| `boolean` | `Type.bool()` | |
-| `number` | `Type.int8()` / `Type.int16()` / `Type.int32()` / `Type.float32()` / `Type.float64()` | Pick the width that matches the peer language |
-| `bigint` | `Type.int64()` / `Type.varInt64()` / `Type.uint64()` | Use `bigint` for 64-bit integers |
-| `string` | `Type.string()` | |
-| `Uint8Array` | `Type.binary()` | Binary blob |
-| `Date` | `Type.timestamp()` | Serializes/deserializes as `Date` |
-| `Date` | `Type.date()` | Date without time; deserializes as `Date` |
-| duration (ms) | `Type.duration()` | Exposed as a numeric millisecond value in JavaScript |
-| `number` | `Type.float16()` | Half-precision float |
-| `BFloat16` / `number` | `Type.bfloat16()` | Deserializes to `BFloat16` |
+| JavaScript value      | Fory schema                                                                           | Notes                                                |
+| --------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `boolean`             | `Type.bool()`                                                                         |                                                      |
+| `number`              | `Type.int8()` / `Type.int16()` / `Type.int32()` / `Type.float32()` / `Type.float64()` | Pick the width that matches the peer language        |
+| `bigint`              | `Type.int64()` / `Type.varInt64()` / `Type.uint64()`                                  | Use `bigint` for 64-bit integers                     |
+| `string`              | `Type.string()`                                                                       |                                                      |
+| `Uint8Array`          | `Type.binary()`                                                                       | Binary blob                                          |
+| `Date`                | `Type.timestamp()`                                                                    | Serializes/deserializes as `Date`                    |
+| `Date`                | `Type.date()`                                                                         | Date without time; deserializes as `Date`            |
+| duration (ms)         | `Type.duration()`                                                                     | Exposed as a numeric millisecond value in JavaScript |
+| `number`              | `Type.float16()`                                                                      | Half-precision float                                 |
+| `BFloat16` / `number` | `Type.bfloat16()`                                                                     | Deserializes to `BFloat16`                           |
 
 ## Integer Types
 
 JavaScript `number` is a 64-bit float. It cannot safely represent all 64-bit integers (integers above `Number.MAX_SAFE_INTEGER` lose precision). Use explicit schemas to match the width expected by the peer language:
 
 ```ts
-Type.int8();      // -128 to 127
-Type.int16();     // -32,768 to 32,767
-Type.int32();     // matches Java int, Go int32, C# int
-Type.varInt32();  // variable-length encoding; smaller for small values
-Type.int64();     // use with bigint; matches Java long, Go int64
+Type.int8(); // -128 to 127
+Type.int16(); // -32,768 to 32,767
+Type.int32(); // matches Java int, Go int32, C# int
+Type.varInt32(); // variable-length encoding; smaller for small values
+Type.int64(); // use with bigint; matches Java long, Go int64
 Type.varInt64();
 Type.sliInt64();
 Type.uint8();
 Type.uint16();
 Type.uint32();
 Type.varUInt32();
-Type.uint64();    // use with bigint
+Type.uint64(); // use with bigint
 Type.varUInt64();
 Type.taggedUInt64();
 ```
@@ -90,13 +90,13 @@ These map to JavaScript arrays.
 For arrays of numbers, use the specialized typed array schemas. They are more compact and map to native typed arrays:
 
 ```ts
-Type.boolArray();     // boolean[] in JS
-Type.int16Array();    // Int16Array
-Type.int32Array();    // Int32Array
-Type.int64Array();    // BigInt64Array
-Type.float32Array();  // Float32Array
-Type.float64Array();  // Float64Array
-Type.float16Array();  // number[]
+Type.boolArray(); // boolean[] in JS
+Type.int16Array(); // Int16Array
+Type.int32Array(); // Int32Array
+Type.int64Array(); // BigInt64Array
+Type.float32Array(); // Float32Array
+Type.float64Array(); // Float64Array
+Type.float16Array(); // number[]
 Type.bfloat16Array(); // BFloat16[]
 ```
 

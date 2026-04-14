@@ -18,6 +18,12 @@ final class ForyField {
   /// Basic scalar types never track references even if this flag is `true`.
   final bool ref;
 
+  /// Enables reference tracking for list or set elements.
+  final bool elementRef;
+
+  /// Enables reference tracking for map values.
+  final bool valueRef;
+
   /// Controls whether generated code writes runtime type metadata for this
   /// field.
   ///
@@ -31,6 +37,8 @@ final class ForyField {
     this.id,
     this.nullable,
     this.ref = false,
+    this.elementRef = false,
+    this.valueRef = false,
     this.dynamic,
   });
 }

@@ -26,11 +26,13 @@ import { BFloat16 } from "../bfloat16";
 const MAX_POOL_SIZE = 1024 * 1024 * 3; // 3MB
 
 function getInternalStringDetector() {
-  if (!globalThis || !globalThis.require) {
-    return null;
-  }
-  const { isStringOneByteRepresentation } = global.require("node:v8");
-  return isStringOneByteRepresentation;
+  try {
+    const { isStringOneByteRepresentation } = require("node:v8");
+    if (typeof isStringOneByteRepresentation === "function") {
+      return isStringOneByteRepresentation;
+    }
+  } catch { /* not available */ }
+  return null;
 }
 
 export class BinaryWriter {
@@ -308,26 +310,37 @@ export class BinaryWriter {
   }
 
   stringWithHeaderCompatibly(v: string) {
-    const len = strByteLength(v);
-    const isLatin1 = len === v.length;
-    this.writeVarUInt32((len << 2) | (isLatin1 ? LATIN1 : UTF8));
-    this.reserve(len);
+    const strLen = v.length;
+    // Fast inline ASCII check — avoids expensive strByteLength for the common case.
+    let isLatin1 = true;
+    for (let i = 0; i < strLen; i++) {
+      if (v.charCodeAt(i) >= 128) {
+        isLatin1 = false;
+        break;
+      }
+    }
     if (isLatin1) {
-      if (len < 40) {
-        for (let index = 0; index < v.length; index++) {
+      this.writeVarUInt32((strLen << 2) | LATIN1);
+      this.reserve(strLen);
+      if (strLen < 40) {
+        for (let index = 0; index < strLen; index++) {
           this.platformBuffer[this.cursor + index] = v.charCodeAt(index);
         }
       } else {
         this.platformBuffer.write(v, this.cursor, "latin1");
       }
+      this.cursor += strLen;
     } else {
+      const len = strByteLength(v);
+      this.writeVarUInt32((len << 2) | UTF8);
+      this.reserve(len);
       if (len < 40) {
         this.fastWriteStringUtf8(v, this.platformBuffer, this.cursor);
       } else {
         this.platformBuffer.write(v, this.cursor, "utf8");
       }
+      this.cursor += len;
     }
-    this.cursor += len;
   }
 
   writeVarInt32(v: number) {

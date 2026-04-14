@@ -325,6 +325,7 @@ export abstract class BaseSerializerGenerator implements SerializerGenerator {
             ${this.scope.generate()}
             ${declare}
             return {
+              _initialized: true,
               fixedSize: ${this.getFixedSize()},
               needToWriteRef: () => ${this.needToWriteRef()},
               getTypeId: () => ${this.getTypeId()},

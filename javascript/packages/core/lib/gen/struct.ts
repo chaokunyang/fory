@@ -25,6 +25,27 @@ import { CodegenRegistry } from "./router";
 import { BaseSerializerGenerator, SerializerGenerator } from "./serializer";
 import { TypeMeta } from "../meta/TypeMeta";
 
+/**
+ * Returns true when a field's read cannot recurse and needs no depth tracking.
+ * Covers leaf scalars, typed arrays, and collections/maps whose elements are all leaf types.
+ */
+function isDepthFreeField(typeInfo: TypeInfo): boolean {
+  const id = typeInfo.typeId;
+  if (TypeId.isLeafTypeId(id)) return true;
+  // LIST / SET with leaf element type
+  if (id === TypeId.LIST || id === TypeId.SET) {
+    const inner = typeInfo.options?.inner;
+    return !!inner && TypeId.isLeafTypeId(inner.typeId);
+  }
+  // MAP with leaf key and value types
+  if (id === TypeId.MAP) {
+    const key = typeInfo.options?.key;
+    const value = typeInfo.options?.value;
+    return !!key && !!value && TypeId.isLeafTypeId(key.typeId) && TypeId.isLeafTypeId(value.typeId);
+  }
+  return false;
+}
+
 const sortProps = (typeInfo: TypeInfo, typeResolver: CodecBuilder["resolver"]) => {
   const names = TypeMeta.fromTypeInfo(typeInfo, typeResolver).getFieldInfo();
   const props = typeInfo.options!.props;
@@ -76,6 +97,9 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     // This is needed so that nested struct generators (e.g., Person inside
     // AddressBook) use their own TypeInfo for meta-share tracking, not the
     // enclosing struct's TypeInfo.
+    // Keep the raw expression for self-references (used in read/readNoRef for
+    // edge cases). The self-serializer may not be registered yet during factory
+    // initialization so we cannot hoist it eagerly.
     this.serializerExpr = TypeId.isNamedType(typeInfo.typeId)
       ? `${this.builder.getTypeResolverName()}.getSerializerByName("${CodecBuilder.replaceBackslashAndQuote(typeInfo.named!)}")`
       : `${this.builder.getTypeResolverName()}.getSerializerById(${typeInfo.typeId}, ${typeInfo.userTypeId})`;
@@ -92,6 +116,9 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         stmt = `
           ${embedGenerator.readRefWithoutTypeInfo(assignStmt)}
         `;
+      } else if (isDepthFreeField(fieldTypeInfo)) {
+        // Leaf types and collections of leaf types cannot recurse — skip depth tracking.
+        stmt = embedGenerator.read(assignStmt, "false");
       } else {
         stmt = embedGenerator.readWithDepth(assignStmt, "false");
       }
@@ -328,7 +355,10 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
   }
 
   readEmbed() {
-    const serializerExpr = this.serializerExpr;
+    // Hoist the serializer lookup into a scope-level const, evaluated once during
+    // factory init. This is safe because readEmbed() is called by the PARENT
+    // struct whose factory runs after all child serializers are registered.
+    const hoisted = this.scope.declare("ser", this.serializerExpr);
     const scope = this.scope;
     const builder = this.builder;
     return new Proxy({}, {
@@ -337,9 +367,9 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           return (accessor: (expr: string) => string, refState: string) => {
             const result = scope.uniqueName("result");
             return `
-              ${serializerExpr}.readTypeInfo();
+              ${hoisted}.readTypeInfo();
               ${builder.getReadContextName()}.incReadDepth();
-              let ${result} = ${serializerExpr}.read(${refState});
+              let ${result} = ${hoisted}.read(${refState});
               ${builder.getReadContextName()}.decReadDepth();
               ${accessor(result)};
             `;
@@ -357,9 +387,9 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
               } else if (${refFlag} === ${RefFlags.RefFlag}) {
                 ${result} = ${builder.referenceResolver.getReadRef(builder.reader.readVarUInt32())};
               } else {
-                ${serializerExpr}.readTypeInfo();
+                ${hoisted}.readTypeInfo();
                 ${builder.getReadContextName()}.incReadDepth();
-                ${result} = ${serializerExpr}.read(${refFlag} === ${RefFlags.RefValueFlag});
+                ${result} = ${hoisted}.read(${refFlag} === ${RefFlags.RefValueFlag});
                 ${builder.getReadContextName()}.decReadDepth();
               }
               ${accessor(result)};
@@ -371,29 +401,31 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
             const result = scope.uniqueName("result");
             return `
               ${builder.getReadContextName()}.incReadDepth();
-              let ${result} = ${serializerExpr}.read(${refState});
+              let ${result} = ${hoisted}.read(${refState});
               ${builder.getReadContextName()}.decReadDepth();
               ${accessor(result)};
             `;
           };
         }
         return (accessor: (expr: string) => string, ...args: string[]) => {
-          return accessor(`${serializerExpr}.${prop}(${args.join(",")})`);
+          return accessor(`${hoisted}.${prop}(${args.join(",")})`);
         };
       },
     });
   }
 
   writeEmbed() {
-    const serializerExpr = this.serializerExpr;
+    // Hoist the serializer lookup — safe because writeEmbed() is used by
+    // the parent struct whose factory runs after child serializers exist.
+    const hoisted = this.scope.declare("ser", this.serializerExpr);
     const scope = this.scope;
     return new Proxy({}, {
       get: (target, prop: string) => {
         if (prop === "writeNoRef") {
           return (accessor: string) => {
             return `
-              ${serializerExpr}.writeTypeInfo(${accessor});
-              ${serializerExpr}.write(${accessor});
+              ${hoisted}.writeTypeInfo(${accessor});
+              ${hoisted}.write(${accessor});
             `;
           };
         }
@@ -401,19 +433,19 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           return (accessor: string) => {
             const noneedWrite = scope.uniqueName("noneedWrite");
             return `
-              let ${noneedWrite} = ${serializerExpr}.writeRefOrNull(${accessor});
+              let ${noneedWrite} = ${hoisted}.writeRefOrNull(${accessor});
               if (!${noneedWrite}) {
-                ${serializerExpr}.writeTypeInfo(${accessor});
-                ${serializerExpr}.write(${accessor});
+                ${hoisted}.writeTypeInfo(${accessor});
+                ${hoisted}.write(${accessor});
               }
             `;
           };
         }
         return (accessor: string, ...args: any) => {
           if (prop === "writeRefOrNull") {
-            return args[0](`${serializerExpr}.${prop}(${accessor})`);
+            return args[0](`${hoisted}.${prop}(${accessor})`);
           }
-          return `${serializerExpr}.${prop}(${accessor})`;
+          return `${hoisted}.${prop}(${accessor})`;
         };
       },
     });

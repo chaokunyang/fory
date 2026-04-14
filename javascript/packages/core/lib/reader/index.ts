@@ -30,6 +30,8 @@ export class BinaryReader {
   private platformBuffer!: PlatformBuffer;
   private bigString = "";
   private byteLength = 0;
+  /** Cached ArrayBuffer for fast-path DataView reuse. */
+  private cachedArrayBuffer: ArrayBuffer | null = null;
 
   constructor(config: {
     useSliceString?: boolean;
@@ -40,7 +42,15 @@ export class BinaryReader {
   reset(ab: Uint8Array) {
     this.platformBuffer = fromUint8Array(ab);
     this.byteLength = this.platformBuffer.byteLength;
-    this.dataView = new DataView(this.platformBuffer.buffer, this.platformBuffer.byteOffset, this.byteLength);
+    // Reuse DataView when the underlying ArrayBuffer, byteOffset, and byteLength are unchanged.
+    const buf = this.platformBuffer.buffer;
+    if (buf !== this.cachedArrayBuffer
+        || !this.dataView
+        || this.dataView.byteOffset !== this.platformBuffer.byteOffset
+        || this.dataView.byteLength !== this.byteLength) {
+      this.dataView = new DataView(buf, this.platformBuffer.byteOffset, this.byteLength);
+      this.cachedArrayBuffer = buf;
+    }
     if (this.sliceStringEnable) {
       this.bigString = this.platformBuffer.toString("latin1", 0, this.byteLength);
     }

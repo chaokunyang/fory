@@ -329,6 +329,13 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const elemSerializer = this.scope.uniqueName("elemSerializer");
     const anyHelper = this.builder.getExternal(AnyHelper.name);
     const readContextName = this.builder.getReadContextName();
+    // Skip depth tracking for leaf element types (primitives, string, enum, time, typed arrays).
+    const innerIsLeaf = TypeId.isLeafTypeId(this.innerGenerator.getTypeId()!);
+    const readInnerElement = (assignStmt: (x: any) => string, refState: string) => {
+      return innerIsLeaf
+        ? this.innerGenerator.read(assignStmt, refState)
+        : this.innerGenerator.readWithDepth(assignStmt, refState);
+    };
     return `
             const ${len} = ${this.builder.reader.readVarUint32Small7()};
             ${this.builder.getReadContextName()}.checkCollectionSize(${len});
@@ -347,11 +354,11 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                             case ${RefFlags.NotNullValueFlag}:
                             case ${RefFlags.RefValueFlag}:
                                 if (${elemSerializer}) {
-                                    ${readContextName}.incReadDepth();
+                                    ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
                                     ${this.putAccessor(result, `${elemSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag})`, idx)}
-                                    ${readContextName}.decReadDepth();
+                                    ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
                                 } else {
-                                    ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, `${refFlag} === ${RefFlags.RefValueFlag}`)}
+                                    ${readInnerElement((x: any) => `${this.putAccessor(result, x, idx)}`, `${refFlag} === ${RefFlags.RefValueFlag}`)}
                                 }
                                 break;
                             case ${RefFlags.RefFlag}:
@@ -368,22 +375,22 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                             ${this.putAccessor(result, "null", idx)}
                         } else {
                             if (${elemSerializer}) {
-                                ${readContextName}.incReadDepth();
+                                ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
                                 ${this.putAccessor(result, `${elemSerializer}.read(false)`, idx)}
-                                ${readContextName}.decReadDepth();
+                                ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
                             } else {
-                                ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
+                                ${readInnerElement((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
                             }
                         }
                     }
                 } else {
                     for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
                         if (${elemSerializer}) {
-                            ${readContextName}.incReadDepth();
+                            ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
                             ${this.putAccessor(result, `${elemSerializer}.read(false)`, idx)}
-                            ${readContextName}.decReadDepth();
+                            ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
                         } else {
-                            ${this.innerGenerator.readWithDepth((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
+                            ${readInnerElement((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
                         }
                     }
                 }

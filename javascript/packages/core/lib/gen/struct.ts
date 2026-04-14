@@ -25,6 +25,27 @@ import { CodegenRegistry } from "./router";
 import { BaseSerializerGenerator, SerializerGenerator } from "./serializer";
 import { TypeMeta } from "../meta/TypeMeta";
 
+/**
+ * Returns true when a field's read cannot recurse and needs no depth tracking.
+ * Covers leaf scalars, typed arrays, and collections/maps whose elements are all leaf types.
+ */
+function isDepthFreeField(typeInfo: TypeInfo): boolean {
+  const id = typeInfo.typeId;
+  if (TypeId.isLeafTypeId(id)) return true;
+  // LIST / SET with leaf element type
+  if (id === TypeId.LIST || id === TypeId.SET) {
+    const inner = typeInfo.options?.inner;
+    return !!inner && TypeId.isLeafTypeId(inner.typeId);
+  }
+  // MAP with leaf key and value types
+  if (id === TypeId.MAP) {
+    const key = typeInfo.options?.key;
+    const value = typeInfo.options?.value;
+    return !!key && !!value && TypeId.isLeafTypeId(key.typeId) && TypeId.isLeafTypeId(value.typeId);
+  }
+  return false;
+}
+
 const sortProps = (typeInfo: TypeInfo, typeResolver: CodecBuilder["resolver"]) => {
   const names = TypeMeta.fromTypeInfo(typeInfo, typeResolver).getFieldInfo();
   const props = typeInfo.options!.props;
@@ -92,6 +113,9 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         stmt = `
           ${embedGenerator.readRefWithoutTypeInfo(assignStmt)}
         `;
+      } else if (isDepthFreeField(fieldTypeInfo)) {
+        // Leaf types and collections of leaf types cannot recurse — skip depth tracking.
+        stmt = embedGenerator.read(assignStmt, "false");
       } else {
         stmt = embedGenerator.readWithDepth(assignStmt, "false");
       }

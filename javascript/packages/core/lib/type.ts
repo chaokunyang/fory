@@ -193,6 +193,18 @@ export const TypeId = {
         return false;
     }
   },
+  /** Returns true for types whose read() is a leaf operation (no recursion possible). */
+  isLeafTypeId(typeId: number) {
+    // Primitives BOOL(1)..FLOAT64(20), STRING(21)
+    if (typeId >= TypeId.BOOL && typeId <= TypeId.STRING) return true;
+    // ENUM(25), NAMED_ENUM(26)
+    if (typeId === TypeId.ENUM || typeId === TypeId.NAMED_ENUM) return true;
+    // NONE(36), DURATION(37), TIMESTAMP(38), DATE(39), DECIMAL(40), BINARY(41)
+    if (typeId >= TypeId.NONE && typeId <= TypeId.BINARY) return true;
+    // Typed arrays BOOL_ARRAY(43)..FLOAT64_ARRAY(56)
+    if (typeId >= TypeId.BOOL_ARRAY && typeId <= TypeId.FLOAT64_ARRAY) return true;
+    return false;
+  },
 } as const;
 
 export enum ConfigFlags {

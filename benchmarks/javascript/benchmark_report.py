@@ -220,7 +220,9 @@ def plot_combined_tps_subplot(ax, grouped_datatypes, operation, title):
     available_libs = [
         lib
         for lib in SERIALIZER_ORDER
-        if any(data[datatype][operation].get(lib, 0) > 0 for datatype in grouped_datatypes)
+        if any(
+            data[datatype][operation].get(lib, 0) > 0 for datatype in grouped_datatypes
+        )
     ]
     if not available_libs:
         ax.set_title(f"{title}\nNo Data")
@@ -230,7 +232,9 @@ def plot_combined_tps_subplot(ax, grouped_datatypes, operation, title):
     x = np.arange(len(grouped_datatypes))
     width = 0.8 / len(available_libs)
     for idx, lib in enumerate(available_libs):
-        times = [data[datatype][operation].get(lib, 0) for datatype in grouped_datatypes]
+        times = [
+            data[datatype][operation].get(lib, 0) for datatype in grouped_datatypes
+        ]
         throughput = [1e9 / value if value > 0 else 0 for value in times]
         offset = (idx - (len(available_libs) - 1) / 2) * width
         ax.bar(
@@ -243,13 +247,17 @@ def plot_combined_tps_subplot(ax, grouped_datatypes, operation, title):
 
     ax.set_title(title)
     ax.set_xticks(x)
-    ax.set_xticklabels([format_datatype_label(datatype) for datatype in grouped_datatypes])
+    ax.set_xticklabels(
+        [format_datatype_label(datatype) for datatype in grouped_datatypes]
+    )
     ax.legend()
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
     ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
 
 
-non_list_datatypes = [datatype for datatype in datatypes if not datatype.endswith("list")]
+non_list_datatypes = [
+    datatype for datatype in datatypes if not datatype.endswith("list")
+]
 list_datatypes = [datatype for datatype in datatypes if datatype.endswith("list")]
 
 fig, axes = plt.subplots(1, 4, figsize=(28, 6))
@@ -263,7 +271,9 @@ combined_subplots = [
 ]
 
 for ax, grouped_datatypes, operation, title in combined_subplots:
-    plot_combined_tps_subplot(ax, grouped_datatypes, operation, f"{title} (higher is better)")
+    plot_combined_tps_subplot(
+        ax, grouped_datatypes, operation, f"{title} (higher is better)"
+    )
 
 fig.tight_layout()
 combined_plot_path = os.path.join(output_dir, "throughput.png")
@@ -294,7 +304,11 @@ for datatype, image in sorted(
 ):
     image_name = os.path.basename(image)
     image_path = args.plot_prefix + image_name
-    title = "Throughput" if datatype == "throughput" else format_datatype_table_label(datatype)
+    title = (
+        "Throughput"
+        if datatype == "throughput"
+        else format_datatype_table_label(datatype)
+    )
     md_report.append(f"\n### {title}\n\n")
     md_report.append(f"![{title}]({image_path})\n")
 

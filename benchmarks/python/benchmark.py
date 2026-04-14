@@ -71,6 +71,7 @@ SERIALIZER_LABELS = {
     "protobuf": "Protobuf",
 }
 
+
 def int32_array(values: Iterable[int]) -> np.ndarray:
     return np.array(list(values), dtype=np.int32)
 

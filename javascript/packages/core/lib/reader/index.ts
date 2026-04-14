@@ -45,9 +45,9 @@ export class BinaryReader {
     // Reuse DataView when the underlying ArrayBuffer, byteOffset, and byteLength are unchanged.
     const buf = this.platformBuffer.buffer;
     if (buf !== this.cachedArrayBuffer
-        || !this.dataView
-        || this.dataView.byteOffset !== this.platformBuffer.byteOffset
-        || this.dataView.byteLength !== this.byteLength) {
+      || !this.dataView
+      || this.dataView.byteOffset !== this.platformBuffer.byteOffset
+      || this.dataView.byteLength !== this.byteLength) {
       this.dataView = new DataView(buf, this.platformBuffer.byteOffset, this.byteLength);
       this.cachedArrayBuffer = buf;
     }

@@ -876,6 +876,21 @@ GeneratedFieldType(
     );
   }
 
+  _GeneratedFieldTypeSpec _fromDebugFieldType(
+    DebugGeneratedFieldTypeSpec fieldType,
+  ) {
+    return _GeneratedFieldTypeSpec(
+      typeLiteral: fieldType.typeLiteral,
+      typeId: fieldType.typeId,
+      nullable: fieldType.nullable,
+      ref: fieldType.ref,
+      dynamic: fieldType.dynamic,
+      arguments: fieldType.arguments
+          .map(_fromDebugFieldType)
+          .toList(growable: false),
+    );
+  }
+
   String _conversionExpression(
     _GeneratedFieldSpec field,
     String valueExpression,

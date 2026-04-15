@@ -694,13 +694,9 @@ class DartGenerator(BaseGenerator):
         if isinstance(field.field_type, ListType) and (
             field.element_ref or field.field_type.element_ref
         ):
-            annotations.append(
-                "@ListType(element: ValueType.ref())"
-            )
+            annotations.append("@ListType(element: ValueType.ref())")
         if isinstance(field.field_type, MapType) and field.field_type.value_ref:
-            annotations.append(
-                "@MapType(value: ValueType.ref())"
-            )
+            annotations.append("@MapType(value: ValueType.ref())")
         return annotations
 
     def numeric_annotation(self, field_type: FieldType) -> Optional[str]:

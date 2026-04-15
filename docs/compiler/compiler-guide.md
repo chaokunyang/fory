@@ -239,17 +239,17 @@ Compiling src/main.fdl...
 
 ## Supported Languages
 
-| Language   | Flag         | Output Extension | Description                           |
-| ---------- | ------------ | ---------------- | ------------------------------------- |
-| Java       | `java`       | `.java`          | POJOs with Fory annotations           |
-| Python     | `python`     | `.py`            | Dataclasses with type hints           |
-| Go         | `go`         | `.go`            | Structs with struct tags              |
-| Rust       | `rust`       | `.rs`            | Structs with derive macros            |
-| C++        | `cpp`        | `.h`             | Structs with FORY macros              |
-| C#         | `csharp`     | `.cs`            | Classes with Fory attributes          |
-| JavaScript | `javascript` | `.ts`            | Interfaces with registration function |
-| Swift      | `swift`      | `.swift`         | `@ForyObject` Swift models            |
-| Dart       | `dart`       | `.dart`          | `@ForyStruct` classes with annotations|
+| Language   | Flag         | Output Extension | Description                            |
+| ---------- | ------------ | ---------------- | -------------------------------------- |
+| Java       | `java`       | `.java`          | POJOs with Fory annotations            |
+| Python     | `python`     | `.py`            | Dataclasses with type hints            |
+| Go         | `go`         | `.go`            | Structs with struct tags               |
+| Rust       | `rust`       | `.rs`            | Structs with derive macros             |
+| C++        | `cpp`        | `.h`             | Structs with FORY macros               |
+| C#         | `csharp`     | `.cs`            | Classes with Fory attributes           |
+| JavaScript | `javascript` | `.ts`            | Interfaces with registration function  |
+| Swift      | `swift`      | `.swift`         | `@ForyObject` Swift models             |
+| Dart       | `dart`       | `.dart`          | `@ForyStruct` classes with annotations |
 
 ## Output Structure
 

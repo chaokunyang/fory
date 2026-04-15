@@ -655,7 +655,7 @@ message Person {  // Auto-generated when enable_auto_type_id = true
 | Rust       | Struct with `#[derive(ForyObject)]` |
 | C++        | Struct with `FORY_STRUCT` macro     |
 | JavaScript | `export interface` declaration      |
-| Dart       | `@ForyStruct` `final class`        |
+| Dart       | `@ForyStruct` `final class`         |
 
 Type IDs control cross-language registration for messages, unions, and enums. See
 [Type IDs](#type-ids) for auto-generation, aliases, and collision handling.
@@ -913,15 +913,15 @@ message Node {
 
 **Generated Code:**
 
-| Language   | Without `ref`  | With `ref`                                |
-| ---------- | -------------- | ----------------------------------------- |
-| Java       | `Node parent`  | `Node parent` with `@ForyField(ref=true)` |
-| Python     | `parent: Node` | `parent: Node = pyfory.field(ref=True)`   |
-| Go         | `Parent Node`  | `Parent *Node` with `fory:"ref"`          |
-| Rust       | `parent: Node` | `parent: Arc<Node>`                       |
-| C++        | `Node parent`  | `std::shared_ptr<Node> parent`            |
-| JavaScript | `parent: Node` | `parent: Node` (no ref distinction)       |
-| Dart       | `Node parent`  | `Node parent` with `@ForyField(ref: true)`|
+| Language   | Without `ref`  | With `ref`                                 |
+| ---------- | -------------- | ------------------------------------------ |
+| Java       | `Node parent`  | `Node parent` with `@ForyField(ref=true)`  |
+| Python     | `parent: Node` | `parent: Node = pyfory.field(ref=True)`    |
+| Go         | `Parent Node`  | `Parent *Node` with `fory:"ref"`           |
+| Rust       | `parent: Node` | `parent: Arc<Node>`                        |
+| C++        | `Node parent`  | `std::shared_ptr<Node> parent`             |
+| JavaScript | `parent: Node` | `parent: Node` (no ref distinction)        |
+| Dart       | `Node parent`  | `Node parent` with `@ForyField(ref: true)` |
 
 Rust uses `Arc` by default; use `ref(thread_safe=false)` or `ref(weak=true)`
 to customize pointer types. For protobuf option syntax, see
@@ -969,12 +969,12 @@ apply to elements. `repeated` is accepted as an alias for `list`.
 
 **List modifier mapping:**
 
-| Fory IDL                | Java                                           | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                   |
-| ----------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------ |
-| `optional list<string>` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                        |
-| `list<optional string>` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                        |
-| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`                 |
-| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListType(element: ValueType.ref())`   |
+| Fory IDL                | Java                                           | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                 |
+| ----------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| `optional list<string>` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                      |
+| `list<optional string>` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                      |
+| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`               |
+| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListType(element: ValueType.ref())` |
 
 Use `ref(thread_safe=false)` in Fory IDL (or `[(fory).thread_safe_pointer = false]` in protobuf)
 to generate `Rc` instead of `Arc` in Rust.
@@ -1254,10 +1254,10 @@ message Config {
 
 **Language Mapping:**
 
-| Fory IDL             | Java                   | Python            | Go                 | Rust                    | C++                              | JavaScript            | Dart                   |
-| -------------------- | ---------------------- | ----------------- | ------------------ | ----------------------- | -------------------------------- | --------------------- | ---------------------- |
-| `map<string, int32>` | `Map<String, Integer>` | `Dict[str, int]`  | `map[string]int32` | `HashMap<String, i32>`  | `std::map<std::string, int32_t>` | `Map<string, number>` | `Map<String, Int32>`   |
-| `map<string, User>`  | `Map<String, User>`    | `Dict[str, User]` | `map[string]User`  | `HashMap<String, User>` | `std::map<std::string, User>`    | `Map<string, User>`   | `Map<String, User>`    |
+| Fory IDL             | Java                   | Python            | Go                 | Rust                    | C++                              | JavaScript            | Dart                 |
+| -------------------- | ---------------------- | ----------------- | ------------------ | ----------------------- | -------------------------------- | --------------------- | -------------------- |
+| `map<string, int32>` | `Map<String, Integer>` | `Dict[str, int]`  | `map[string]int32` | `HashMap<String, i32>`  | `std::map<std::string, int32_t>` | `Map<string, number>` | `Map<String, Int32>` |
+| `map<string, User>`  | `Map<String, User>`    | `Dict[str, User]` | `map[string]User`  | `HashMap<String, User>` | `std::map<std::string, User>`    | `Map<string, User>`   | `Map<String, User>`  |
 
 **Key Type Restrictions:**
 

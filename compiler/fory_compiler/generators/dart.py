@@ -263,7 +263,8 @@ class DartGenerator(BaseGenerator):
             q = ".".join(parents + [message.name])
             self._qualified_names[id(message)] = q
             for field in message.fields:
-                if field.ref or field.element_ref:
+                value_ref = isinstance(field.field_type, MapType) and field.field_type.value_ref
+                if field.ref or field.element_ref or value_ref:
                     self._requires_ref_class.add(id(message))
             for enum in message.nested_enums:
                 self._qualified_names[id(enum)] = ".".join(
@@ -641,7 +642,7 @@ class DartGenerator(BaseGenerator):
             resolved = self.resolve_type(t.name, parent_stack)
             if isinstance(resolved, Enum):
                 first = resolved.values[0]
-                return f"{self.ref_name(resolved)}.{self.enum_case_name(first)}"
+                return f"{self.ref_name(resolved)}.{self.enum_case_name(resolved, first)}"
             if isinstance(resolved, Union):
                 first = resolved.fields[0]
                 case_name = self.safe_identifier(self.to_camel_case(first.name))
@@ -706,10 +707,11 @@ class DartGenerator(BaseGenerator):
             PrimitiveKind.TAGGED_UINT64: "@Uint64Type(encoding: LongEncoding.tagged)",
         }.get(field_type.kind)
 
-    def enum_case_name(self, value: EnumValue) -> str:
+    def enum_case_name(self, enum: Enum, value: EnumValue) -> str:
         name = value.name
-        if "_" in name:
-            name = name.split("_")[-1]
+        prefix = f"{enum.name}_".upper()
+        if name.upper().startswith(prefix):
+            name = name[len(prefix) :]
         return self.safe_identifier(self.to_camel_case(name.lower()))
 
     def generate_enum(self, enum: Enum, indent: int) -> List[str]:
@@ -718,7 +720,7 @@ class DartGenerator(BaseGenerator):
         for i, value in enumerate(enum.values):
             suffix = "," if i < len(enum.values) - 1 else ";"
             lines.append(
-                f"{self.indent_str * (indent + 1)}{self.enum_case_name(value)}{suffix}"
+                f"{self.indent_str * (indent + 1)}{self.enum_case_name(enum, value)}{suffix}"
             )
         lines.extend(
             [
@@ -729,7 +731,7 @@ class DartGenerator(BaseGenerator):
         )
         for value in enum.values:
             lines.append(
-                f"{self.indent_str * (indent + 2)}case {name}.{self.enum_case_name(value)}:"
+                f"{self.indent_str * (indent + 2)}case {name}.{self.enum_case_name(enum, value)}:"
             )
             lines.append(f"{self.indent_str * (indent + 3)}return {value.value};")
         lines.extend(
@@ -744,7 +746,7 @@ class DartGenerator(BaseGenerator):
         for value in enum.values:
             lines.append(f"{self.indent_str * (indent + 2)}case {value.value}:")
             lines.append(
-                f"{self.indent_str * (indent + 3)}return {name}.{self.enum_case_name(value)};"
+                f"{self.indent_str * (indent + 3)}return {name}.{self.enum_case_name(enum, value)};"
             )
         lines.extend(
             [

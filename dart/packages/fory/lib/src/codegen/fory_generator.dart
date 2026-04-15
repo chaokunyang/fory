@@ -7,13 +7,32 @@ import 'package:build/build.dart';
 import 'package:fory/fory.dart';
 import 'package:source_gen/source_gen.dart';
 
+
+class DebugGeneratedFieldTypeSpec {
+  const DebugGeneratedFieldTypeSpec({
+    required this.typeLiteral,
+    required this.typeId,
+    required this.nullable,
+    required this.ref,
+    required this.dynamic,
+    this.arguments = const <DebugGeneratedFieldTypeSpec>[],
+  });
+
+  final String typeLiteral;
+  final int typeId;
+  final bool nullable;
+  final bool ref;
+  final bool? dynamic;
+  final List<DebugGeneratedFieldTypeSpec> arguments;
+}
+
 final class ForyGenerator extends Generator {
   static final TypeChecker _foryStructChecker =
       TypeChecker.fromRuntime(ForyStruct);
   static final TypeChecker _foryFieldChecker =
       TypeChecker.fromRuntime(ForyField);
   static final TypeChecker _foryUnionChecker =
-    TypeChecker.fromRuntime(ForyUnion);
+      TypeChecker.fromRuntime(ForyUnion);
   static final TypeChecker _int32Checker = TypeChecker.fromRuntime(Int32Type);
   static final TypeChecker _int64Checker = TypeChecker.fromRuntime(Int64Type);
   static final TypeChecker _uint8Checker = TypeChecker.fromRuntime(Uint8Type);
@@ -838,6 +857,23 @@ GeneratedFieldType(
       dynamic: $dynamicLiteral,
       arguments: $argumentsLiteral,
     )''';
+  }
+
+
+
+
+  String debugConversionExpressionForType(
+    DartType type,
+    DebugGeneratedFieldTypeSpec fieldType,
+    String valueExpression, {
+    required String nullExpression,
+  }) {
+    return _conversionExpressionForType(
+      type,
+      _fromDebugFieldType(fieldType),
+      valueExpression,
+      nullExpression: nullExpression,
+    );
   }
 
   String _conversionExpression(

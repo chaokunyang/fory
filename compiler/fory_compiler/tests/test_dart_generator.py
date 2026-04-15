@@ -161,6 +161,41 @@ def test_dart_generator_emits_container_ref_annotations_for_builder_metadata():
     assert "@ForyField(id: 3, ref: true)" in file.content
 
 
+
+
+def test_dart_generator_marks_map_value_ref_messages_as_ref_capable():
+    file = generate_dart(
+        """
+        package demo;
+
+        message Node {
+            map<string, ref Node> by_name = 1;
+        }
+        """
+    )
+
+    assert "@ForyField(id: 1, valueRef: true)" in file.content
+    assert "Map<String, Node> byName = <String, Node>{};" in file.content
+
+
+def test_dart_generator_preserves_multi_word_enum_value_suffixes():
+    file = generate_dart(
+        """
+        package demo;
+
+        enum Status [id=101] {
+            STATUS_SOME_MULTI_WORD = 0;
+            STATUS_OK = 1;
+        }
+        """
+    )
+
+    assert "someMultiWord," in file.content
+    assert "ok;" in file.content
+    assert " word," not in file.content
+    assert " word;" not in file.content
+
+
 def test_dart_generator_flattens_nested_type_references_and_keeps_classes_final():
     file = generate_dart(
         """

@@ -900,41 +900,24 @@ enum Person_PhoneType {
   home,
   work;
 
-  int get rawValue {
-    return switch (this) {
-      Person_PhoneType.mobile => 0,
-      Person_PhoneType.home => 1,
-      Person_PhoneType.work => 2,
-    };
-  }
+  int get rawValue => switch (this) {
+    Person_PhoneType.mobile => 0,
+    Person_PhoneType.home => 1,
+    Person_PhoneType.work => 2,
+  };
 
-  static Person_PhoneType fromRawValue(int value) {
-    return switch (value) {
-      0 => Person_PhoneType.mobile,
-      1 => Person_PhoneType.home,
-      2 => Person_PhoneType.work,
-      _ => throw ArgumentError('Unknown raw value: $value'),
-    };
-  }
+  static Person_PhoneType fromRawValue(int value) => switch (value) {
+    0 => Person_PhoneType.mobile,
+    1 => Person_PhoneType.home,
+    2 => Person_PhoneType.work,
+    _ => throw StateError('Unknown Person_PhoneType raw value $value.'),
+  };
 }
 ```
 
 Unions generate `@ForyUnion` annotated classes with factory constructors, a case enum, and a custom serializer:
 
 ```dart
-@ForyUnion()
-final class Animal {
-  final AnimalCase _case;
-  final Object _value;
-
-  factory Animal.dog(Dog value) => Animal._(AnimalCase.dog, value);
-  factory Animal.cat(Cat value) => Animal._(AnimalCase.cat, value);
-
-  bool get isDog => _case == AnimalCase.dog;
-  Dog get dogValue => _value as Dog;
-  // ...
-}
-
 enum AnimalCase {
   dog,
   cat;
@@ -943,6 +926,21 @@ enum AnimalCase {
     AnimalCase.dog => 1,
     AnimalCase.cat => 2,
   };
+}
+
+@ForyUnion()
+final class Animal {
+  final AnimalCase _case;
+  final Object? _value;
+
+  const Animal._(this._case, this._value);
+
+  factory Animal.dog(Dog value) => Animal._(AnimalCase.dog, value);
+  factory Animal.cat(Cat value) => Animal._(AnimalCase.cat, value);
+
+  bool get isDog => _case == AnimalCase.dog;
+  Dog get dogValue => _value as Dog;
+  // ...
 }
 ```
 

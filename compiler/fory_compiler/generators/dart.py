@@ -234,23 +234,6 @@ class DartGenerator(BaseGenerator):
     def safe_type_identifier(self, name: str) -> str:
         return self.safe_identifier(name)
 
-    def namespace_components(self) -> List[str]:
-        if not self.schema.package:
-            return []
-        parts = [
-            self.safe_type_identifier(self.to_pascal_case(p))
-            for p in self.schema.package.split(".")
-            if p
-        ]
-        top = self._top_level_names()
-        if parts and parts[-1] in top:
-            parts[-1] = f"{parts[-1]}Namespace"
-        return parts
-
-    def namespace_prefix(self) -> str:
-        ns = self.namespace_components()
-        return ".".join(ns) + "." if ns else ""
-
     def _top_level_names(self) -> Set[str]:
         names: Set[str] = set()
         for defs in (self.schema.enums, self.schema.unions, self.schema.messages):
@@ -730,35 +713,28 @@ class DartGenerator(BaseGenerator):
         lines.extend(
             [
                 "",
-                f"{self.indent_str * (indent + 1)}int get rawValue {{",
-                f"{self.indent_str * (indent + 2)}switch (this) {{",
+                f"{self.indent_str * (indent + 1)}int get rawValue => switch (this) {{",
             ]
         )
         for value in enum.values:
             lines.append(
-                f"{self.indent_str * (indent + 2)}case {name}.{self.enum_case_name(enum, value)}:"
+                f"{self.indent_str * (indent + 2)}{name}.{self.enum_case_name(enum, value)} => {value.value},"
             )
-            lines.append(f"{self.indent_str * (indent + 3)}return {value.value};")
         lines.extend(
             [
-                f"{self.indent_str * (indent + 2)}}}",
-                f"{self.indent_str * (indent + 1)}}}",
+                f"{self.indent_str * (indent + 1)}}};",
                 "",
-                f"{self.indent_str * (indent + 1)}static {name} fromRawValue(int value) {{",
-                f"{self.indent_str * (indent + 2)}switch (value) {{",
+                f"{self.indent_str * (indent + 1)}static {name} fromRawValue(int value) => switch (value) {{",
             ]
         )
         for value in enum.values:
-            lines.append(f"{self.indent_str * (indent + 2)}case {value.value}:")
             lines.append(
-                f"{self.indent_str * (indent + 3)}return {name}.{self.enum_case_name(enum, value)};"
+                f"{self.indent_str * (indent + 2)}{value.value} => {name}.{self.enum_case_name(enum, value)},"
             )
         lines.extend(
             [
-                f"{self.indent_str * (indent + 2)}default:",
-                f"{self.indent_str * (indent + 3)}throw StateError('Unknown {name} raw value ${{value}}.');",
-                f"{self.indent_str * (indent + 2)}}}",
-                f"{self.indent_str * (indent + 1)}}}",
+                f"{self.indent_str * (indent + 2)}_ => throw StateError('Unknown {name} raw value ${{value}}.'),",
+                f"{self.indent_str * (indent + 1)}}};",
                 f"{self.indent_str * indent}}}",
             ]
         )
@@ -783,18 +759,15 @@ class DartGenerator(BaseGenerator):
         lines.extend(
             [
                 "",
-                f"{self.indent_str * (indent + 1)}int get id {{",
-                f"{self.indent_str * (indent + 2)}switch (this) {{",
+                f"{self.indent_str * (indent + 1)}int get id => switch (this) {{",
             ]
         )
         for field in union.fields:
             case = self.safe_identifier(self.to_camel_case(field.name))
-            lines.append(f"{self.indent_str * (indent + 2)}case {case_name}.{case}:")
-            lines.append(f"{self.indent_str * (indent + 3)}return {field.number};")
+            lines.append(f"{self.indent_str * (indent + 2)}{case_name}.{case} => {field.number},")
         lines.extend(
             [
-                f"{self.indent_str * (indent + 2)}}}",
-                f"{self.indent_str * (indent + 1)}}}",
+                f"{self.indent_str * (indent + 1)}}};",
                 f"{self.indent_str * indent}}}",
                 "",
                 f"{self.indent_str * indent}@ForyUnion()",
@@ -965,7 +938,7 @@ class DartGenerator(BaseGenerator):
         return self._field_type_literal_from_type(
             field.field_type,
             field.optional,
-            field.ref or field.element_ref,
+            field.ref,
             indent,
             parent_stack,
         )

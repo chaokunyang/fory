@@ -80,9 +80,9 @@ def test_dart_generator_keeps_enum_helpers_in_source_and_uses_generated_enum_reg
     )
 
     assert "enum Status {" in file.content
-    assert "int get rawValue {" in file.content
-    assert "return 7;" in file.content
-    assert "static Status fromRawValue(int value) {" in file.content
+    assert "int get rawValue => switch (this) {" in file.content
+    assert "Status.ok => 7," in file.content
+    assert "static Status fromRawValue(int value) => switch (value) {" in file.content
     assert "_StatusForySerializer" not in file.content
     assert (
         "DemoFory.register(fory, Status, id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);"

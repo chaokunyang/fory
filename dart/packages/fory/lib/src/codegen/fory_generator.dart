@@ -37,6 +37,10 @@ final class ForyGenerator extends Generator {
       TypeChecker.fromRuntime(ListType);
   static final TypeChecker _mapTypeChecker =
       TypeChecker.fromRuntime(MapType);
+  static final TypeChecker _refOptionChecker =
+      TypeChecker.fromRuntime(RefOption);
+  static final TypeChecker _nullableOptionChecker =
+      TypeChecker.fromRuntime(NullableOption);
   static final TypeChecker _int32Checker = TypeChecker.fromRuntime(Int32Type);
   static final TypeChecker _int64Checker = TypeChecker.fromRuntime(Int64Type);
   static final TypeChecker _uint8Checker = TypeChecker.fromRuntime(Uint8Type);
@@ -1928,11 +1932,11 @@ GeneratedFieldType(
   }
 
   _TypeSpecInfo _readTypeSpecObj(ConstantReader reader) {
-    final typeName = reader.objectValue.type?.getDisplayString() ?? '';
-    if (typeName.startsWith('ListType')) {
+    final objType = reader.objectValue.type;
+    if (objType != null && _listTypeChecker.isExactlyType(objType)) {
       return _readListTypeSpec(reader);
     }
-    if (typeName.startsWith('MapType')) {
+    if (objType != null && _mapTypeChecker.isExactlyType(objType)) {
       return _readMapTypeSpec(reader);
     }
     // ValueType or fallback
@@ -1947,10 +1951,10 @@ GeneratedFieldType(
     if (optionsReader != null && !optionsReader.isNull) {
       for (final optionObj in optionsReader.listValue) {
         final optionReader = ConstantReader(optionObj);
-        final optionType = optionObj.type?.getDisplayString() ?? '';
-        if (optionType.startsWith('RefOption')) {
+        final optionType = optionObj.type;
+        if (optionType != null && _refOptionChecker.isExactlyType(optionType)) {
           ref = optionReader.peek('tracked')?.boolValue ?? true;
-        } else if (optionType.startsWith('NullableOption')) {
+        } else if (optionType != null && _nullableOptionChecker.isExactlyType(optionType)) {
           nullable = optionReader.peek('value')?.boolValue ?? true;
         }
       }
@@ -2186,7 +2190,7 @@ GeneratedFieldType(
           .join(', ');
       return '$baseName<$typeArguments>';
     }
-    return nonNullable.getDisplayString(withNullability: false);
+    return nonNullable.getDisplayString();
   }
 
   String _typeCodeString(DartType type) {

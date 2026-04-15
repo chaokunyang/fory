@@ -23,7 +23,6 @@ library;
 
 import 'package:fory/fory.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
-import 'package:fory/src/resolver/type_resolver.dart' as resolver;
 
 import 'xlang_test_models.dart';
 
@@ -108,7 +107,7 @@ final class _MyExtSerializer extends Serializer<MyExt> {
 
 const GeneratedFieldType _refOverrideElementFieldType = GeneratedFieldType(
   type: RefOverrideElement,
-  typeId: resolver.TypeIds.compatibleStruct,
+  typeId: TypeIds.compatibleStruct,
   nullable: true,
   ref: true,
   dynamic: null,
@@ -123,7 +122,7 @@ const List<GeneratedFieldInfo> _refOverrideContainerForyFieldInfo =
     id: null,
     fieldType: GeneratedFieldType(
       type: List,
-      typeId: resolver.TypeIds.list,
+      typeId: TypeIds.list,
       nullable: false,
       ref: false,
       dynamic: null,
@@ -136,14 +135,14 @@ const List<GeneratedFieldInfo> _refOverrideContainerForyFieldInfo =
     id: null,
     fieldType: GeneratedFieldType(
       type: Map,
-      typeId: resolver.TypeIds.map,
+      typeId: TypeIds.map,
       nullable: false,
       ref: false,
       dynamic: null,
       arguments: <GeneratedFieldType>[
         GeneratedFieldType(
           type: String,
-          typeId: resolver.TypeIds.string,
+          typeId: TypeIds.string,
           nullable: true,
           ref: false,
           dynamic: null,

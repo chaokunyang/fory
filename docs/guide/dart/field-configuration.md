@@ -19,23 +19,23 @@ license: |
   limitations under the License.
 ---
 
-Use `@ForyField(...)` to override generated serializer behavior for individual fields.
+Add `@ForyField(...)` to a field inside a `@ForyStruct()` class to change how that field is serialized.
 
-## Options Overview
+## Quick Reference
 
 ```dart
 @ForyField(
-  skip: false,
-  id: 10,
-  nullable: true,
-  ref: true,
-  dynamic: false,
+  skip: false,      // exclude the field from serialization
+  id: 10,           // stable field ID for schema evolution
+  nullable: true,   // override nullability detection
+  ref: true,        // enable reference tracking for this field
+  dynamic: false,   // control whether the runtime type is written
 )
 ```
 
 ## `skip`
 
-Exclude a field from generated serialization.
+Exclude a field from serialization entirely. Useful for cached, computed, or UI-only values that should not land in a persisted or transmitted message.
 
 ```dart
 @ForyField(skip: true)
@@ -44,90 +44,81 @@ String cachedDisplayName = '';
 
 ## `id`
 
-Provides a stable field identifier for compatible structs.
+Assigns a stable identity to the field so that Fory can match it by ID after a schema change (a field rename or reorder). **If you plan to add, remove, or rename fields in the future, assign IDs to all fields now** — before you ship the first payload.
 
 ```dart
 @ForyField(id: 1)
 String name = '';
 ```
 
-In compatible mode, stable field IDs matter more than declaration order. Keep IDs fixed once payloads are shared.
+Once a payload is shared across services, never reuse an `id` for a different field.
 
 ## `nullable`
 
-Overrides inferred nullability.
+Explicitly marks a field as nullable or non-nullable, overriding what Fory infers from the Dart type. Use this when the Dart type is non-nullable but you want Fory to accept `null` on the wire (e.g., reading messages from an older producer that can omit the field).
 
 ```dart
 @ForyField(nullable: true)
 String nickname = '';
 ```
 
-`null` means "use the Dart type as written." In cross-language scenarios, make sure your nullability contract also matches peer runtimes.
+In cross-language scenarios, make sure the nullability contract also matches what peer runtimes expect.
 
 ## `ref`
 
-Enables reference tracking for that field.
+Enables reference tracking for a specific field. Use this when multiple objects in the graph can point to the same instance, or when the field type can be circular. Without `ref: true`, Fory serializes the same object value twice if it appears in two fields.
 
 ```dart
 @ForyField(ref: true)
 List<Object?> sharedNodes = <Object?>[];
 ```
 
-Basic scalar values never track references even if `ref` is set to `true`.
+Note: scalar types like `int`, `double`, and `bool` never benefit from reference tracking even if `ref: true` is set.
 
 ## `dynamic`
 
-Controls whether generated code writes runtime type metadata for the field.
+Controls whether Fory writes the concrete runtime type of the field value into the payload.
+
+- `null` (default) — Fory decides automatically based on the declared type.
+- `false` — always use the declared field type; more compact but the deserializer must know the exact type.
+- `true` — always write the actual runtime type; needed when the field is declared as `Object?` or a base class but can hold different concrete types at runtime (polymorphism).
 
 ```dart
 @ForyField(dynamic: true)
-Object? payload;
+Object? payload;  // can hold any registered type at runtime
 ```
 
-- `null`: auto
-- `false`: use the declared field type
-- `true`: write runtime type information
+## Numeric Field Annotations
 
-This is the key knob for polymorphic fields and heterogeneous object payloads.
-
-## Numeric Encoding Overrides
-
-Use numeric annotations to control the xlang wire type used for integer fields.
+Dart `int` is a 64-bit value at runtime. When exchanging messages with Java, Go, or C#, the receiving side may expect a narrower integer. Use a numeric annotation to pin the exact wire format:
 
 ```dart
 @ForyStruct()
 class Sample {
   Sample();
 
-  @Int32Type(compress: false)
+  @Int32Type(compress: false)   // always writes 4 bytes
   int fixedWidthInt = 0;
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @Int64Type(encoding: LongEncoding.tagged)  // variable-length encoding
   int compactLong = 0;
 
-  @Uint32Type(compress: true)
+  @Uint32Type(compress: true)   // variable-length unsigned
   int smallUnsigned = 0;
 }
 ```
 
-Available numeric annotations include:
+Available annotations: `@Int32Type`, `@Int64Type`, `@Uint8Type`, `@Uint16Type`, `@Uint32Type`, `@Uint64Type`.
 
-- `@Int32Type(...)`
-- `@Int64Type(...)`
-- `@Uint8Type()`
-- `@Uint16Type()`
-- `@Uint32Type(...)`
-- `@Uint64Type(...)`
+Alternatively, use the explicit wrapper types (`Int32`, `UInt32`, etc.) described in [Supported Types](supported-types.md).
 
-These should be chosen to match the intended xlang wire type and peer-language expectations.
+## Aligning Fields Across Languages
 
-## Field Alignment Across Languages
+When the same model is defined in multiple languages:
 
-Cross-language decoding depends on matching field names or stable field IDs. When models differ across languages:
-
-- keep equivalent logical fields aligned
-- prefer stable `id` values for evolving structs
-- use `dynamic: true` only when the field is genuinely polymorphic
+- Assign stable `id` values to every field that might change over time.
+- Use `dynamic: true` for fields that are genuinely polymorphic.
+- Keep the logical meaning of each field consistent across languages — Fory matches fields by name or ID, but cannot reconcile semantic differences.
 
 ## Related Topics
 

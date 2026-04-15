@@ -19,18 +19,17 @@ license: |
   limitations under the License.
 ---
 
-Use customized serializers when generated struct support is not the right fit.
+A custom serializer lets you control exactly how a type is encoded and decoded. You only need one when:
 
-## When Customized Serializers Make Sense
+- the type comes from a package you cannot modify and cannot be annotated with `@ForyStruct()`
+- you need a completely custom binary layout
+- you are implementing a union/discriminated type
 
-Typical cases include:
-
-- external types you cannot annotate
-- custom payload layouts
-- customized extension types
-- unions built on the `UnionSerializer<T>` base class
+For your own models, `@ForyStruct()` with code generation is almost always the better choice.
 
 ## Implement `Serializer<T>`
+
+Subclass `Serializer<T>` and implement `write` and `read`. Use `context.buffer` to read and write raw bytes:
 
 ```dart
 import 'package:fory/fory.dart';
@@ -60,7 +59,7 @@ final class PersonSerializer extends Serializer<Person> {
 }
 ```
 
-Register it before use:
+Register the serializer before you use it:
 
 ```dart
 final fory = Fory();
@@ -72,11 +71,9 @@ fory.registerSerializer(
 );
 ```
 
-## Use `WriteContext` and `ReadContext`
+## Writing Nested Objects
 
-Manual serializers should do nested xlang work through the context rather than calling root APIs recursively.
-
-### Write nested values with reference handling
+When your serializer has a field that is itself a Fory-managed type, use `context.writeRef` and `context.readRef` rather than calling `fory.serialize` recursively. This keeps reference tracking correct and avoids writing a full root frame inside a nested payload.
 
 ```dart
 @override
@@ -90,27 +87,15 @@ Wrapper read(ReadContext context) {
 }
 ```
 
-### Write values without seeding references
-
-`writeNonRef` writes a non-reference payload and does not seed later back-references.
+If you do not need reference identity tracking for a nested value (i.e., you know the value will never appear more than once in a graph), use `writeNonRef`:
 
 ```dart
 context.writeNonRef(value.child);
 ```
 
-### Fine-grained ref/value control
-
-Use `writeRefValueFlag` when your serializer needs explicit control over whether payload bytes follow.
-
-```dart
-if (context.writeRefValueFlag(value.payload)) {
-  context.writeNonRef(value.payload);
-}
-```
-
 ## Unions
 
-Manual union serializers should extend `UnionSerializer<T>`.
+For a discriminated/tagged union, extend `UnionSerializer<T>` instead of `Serializer<T>`. Write a discriminant value first, then the active variant; read the discriminant and dispatch accordingly.
 
 ```dart
 final class ShapeSerializer extends UnionSerializer<Shape> {
@@ -118,36 +103,34 @@ final class ShapeSerializer extends UnionSerializer<Shape> {
 
   @override
   void write(WriteContext context, Shape value) {
-    // write active alternative
+    // write active variant
   }
 
   @override
   Shape read(ReadContext context) {
-    // read active alternative
+    // read discriminant, return correct variant
     throw UnimplementedError();
   }
 }
 ```
 
-The xlang spec defines `UNION`, `TYPED_UNION`, `NAMED_UNION`, and `NONE` wire types. Use registrations that match the peers you interoperate with.
+## Circular References in Custom Serializers
 
-## Early Reference Binding During Reads
-
-If your serializer allocates an object before all nested fields are read, bind it early so back-references can resolve to that instance.
+If your serializer can encounter circular object graphs, bind the object to the reference tracker **before** reading its nested fields:
 
 ```dart
 final value = Node.empty();
-context.reference(value);
-value.next = context.readRef() as Node?;
+context.reference(value);         // register the object first
+value.next = context.readRef() as Node?;  // now nested reads can refer back to it
 return value;
 ```
 
-## Best Practices
+Skipping this step causes back-references to that object to resolve to `null`.
 
-- Keep payload code focused on the payload only.
-- Let `Fory` own the root frame and top-level reset lifecycle.
-- Prefer direct buffer access for repeated primitive IO inside hot serializers.
-- Register serializers consistently across all peers.
+## Tips
+
+- Use `context.buffer` for direct byte reads/writes in hot paths.
+- Register the serializer with the same identity (`id` or `namespace + typeName`) on every side.
 
 ## Related Topics
 

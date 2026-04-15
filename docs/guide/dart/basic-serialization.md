@@ -19,17 +19,17 @@ license: |
   limitations under the License.
 ---
 
-This page covers the root serialization APIs in Apache Fory™ Dart.
+This page shows how to serialize and deserialize values with Apache Fory™ Dart.
 
-## Create and Reuse `Fory`
+## Create a `Fory` Instance
+
+Create one instance and reuse it — creating a new `Fory` for every call wastes resources.
 
 ```dart
 import 'package:fory/fory.dart';
 
 final fory = Fory();
 ```
-
-Reuse the same runtime instance across calls. `Fory` owns the reusable `Buffer`, `WriteContext`, `ReadContext`, and `TypeResolver` services for that runtime.
 
 ## Serialize and Deserialize Annotated Types
 
@@ -65,11 +65,11 @@ void main() {
 }
 ```
 
-`deserialize<T>` uses the wire metadata first, then checks that the result is assignable to `T`.
+`deserialize<T>` returns the decoded value cast to `T`. If the payload describes a different type than `T`, it throws.
 
-## Null Root Values
+## Null Values
 
-The root xlang frame starts with a one-byte bitmap. A null root payload is encoded by the root header, so serializing `null` works directly:
+Serializing `null` is supported directly:
 
 ```dart
 final fory = Fory();
@@ -91,25 +91,27 @@ final bytes = fory.serialize(<Object?>[
 final value = fory.deserialize<List<Object?>>(bytes);
 ```
 
-For heterogeneous collections, deserialize to `Object?`, `List<Object?>`, `Map<Object?, Object?>`, or a generated struct type that matches the wire schema.
+For heterogeneous collections, deserialize to `Object?`, `List<Object?>`, or `Map<Object?, Object?>`.
 
-## Root Reference Tracking
+## Reference Tracking
 
-Use `trackRef: true` only when the root value itself is a graph or container with repeated references and there is no field metadata to request reference tracking.
+By default, Fory does not track object identity — if the same object appears twice in a list, it is serialized twice. Enable reference tracking when your data contains shared references or circular structures.
+
+For a top-level collection:
 
 ```dart
 final fory = Fory();
 final shared = String.fromCharCodes('shared'.codeUnits);
 final bytes = fory.serialize(<Object?>[shared, shared], trackRef: true);
 final roundTrip = fory.deserialize<List<Object?>>(bytes);
-print(identical(roundTrip[0], roundTrip[1]));
+print(identical(roundTrip[0], roundTrip[1])); // true
 ```
 
-Inside generated structs, prefer field-level reference metadata with `@ForyField(ref: true)`.
+For fields inside a generated struct, use `@ForyField(ref: true)` on that field instead.
 
-## Buffer-Based APIs
+## Reusing a Buffer
 
-Use `serializeTo` and `deserializeFrom` when you want explicit `Buffer` reuse.
+If you want to avoid allocating a new `Uint8List` on every call, use `serializeTo` and `deserializeFrom` with an explicit `Buffer`:
 
 ```dart
 final fory = Fory();
@@ -119,11 +121,11 @@ fory.serializeTo(Int32(42), buffer);
 final value = fory.deserializeFrom<Int32>(buffer);
 ```
 
-`serializeTo` clears the target buffer before writing. `deserializeFrom` consumes bytes from the buffer's current reader position.
+This is an optimization. For most applications the default `serialize`/`deserialize` pair is fine.
 
-## Generated Registration Before Use
+## Register Your Types Before Serializing
 
-Generated and manual user-defined types must be registered before use.
+Before you can serialize a custom class or enum, register it with `Fory`. The generated code makes this easy:
 
 ```dart
 PersonFory.register(
@@ -133,7 +135,7 @@ PersonFory.register(
 );
 ```
 
-See [Type Registration](type-registration.md) and [Code Generation](code-generation.md).
+If you skip registration, you will get a `Type ... is not registered` error at runtime. See [Type Registration](type-registration.md) and [Code Generation](code-generation.md).
 
 ## Related Topics
 

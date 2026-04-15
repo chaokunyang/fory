@@ -19,31 +19,37 @@ license: |
   limitations under the License.
 ---
 
-Apache Fory™ Dart supports cross-language serialization with other Fory runtimes.
+Apache Fory™ Dart serializes to the same binary format as the Java, Go, C#, Python, Rust, and Swift Fory runtimes. You can write a message in Dart and read it in Java — or any other direction — without any conversion layer.
 
-## Cross-Language Runtime
+## Setup
 
-The Dart runtime only supports xlang payloads, so you do not enable a separate cross-language mode.
+Create a `Fory` instance as normal. There is no separate "cross-language mode" to enable in Dart:
 
 ```dart
-final fory = Fory();
+final fory = Fory(); // or Fory(compatible: true) for schema evolution
 ```
 
-Configure only the runtime behavior that still varies, such as compatible mode and safety limits.
+The key requirement is that both sides register the same type using the same identity.
 
-## Use Stable Registration Identity
+## Registration Identity
 
-Choose one registration strategy and keep it stable across all peers.
+The most important rule: **use the same type identity on every side**. You have two options:
 
-### Numeric ID example
+### Numeric ID
+
+Simpler for small, tightly-coordinated teams:
 
 ```dart
+// Dart
 ModelsFory.register(fory, Person, id: 100);
 ```
 
-### Name-based example
+### Namespace + Type Name
+
+Better when multiple teams define types independently:
 
 ```dart
+// Dart
 ModelsFory.register(
   fory,
   Person,
@@ -51,6 +57,8 @@ ModelsFory.register(
   typeName: 'Person',
 );
 ```
+
+Do not mix the two strategies for the same type across runtimes.
 
 ## Dart to Java Example
 
@@ -146,15 +154,14 @@ _ = f.Deserialize(bytesFromDart, &person)
 
 ## Field Matching Rules
 
-The xlang spec is the source of truth, but for application authors the practical rules are:
+Fory matches fields by name or by stable field ID. For robust cross-language interop:
 
-1. Register the same logical type identity on every side.
-2. Keep field meaning aligned across languages.
-3. For evolving schemas, keep field IDs stable.
-4. Use compatible type mappings for numeric widths, timestamps, collections, and nullability.
-5. Validate real payload round trips.
-
-Dart model fields often use lowerCamelCase. Go fields are exported PascalCase. C# commonly uses PascalCase properties. What matters is that the peer runtimes agree on the logical field mapping and wire schema. Stable field IDs are the safest option when models evolve independently.
+1. Use the same type identity on every side (same numeric ID or same `namespace + typeName`).
+2. Assign stable `@ForyField(id: ...)` values to all fields before shipping the first payload.
+3. Keep field names consistent or rely on IDs, since Dart typically uses `lowerCamelCase` while Go uses `PascalCase` for exported fields and C# often uses `PascalCase` properties.
+4. Use compatible numeric types: `Int32` in Dart for Java `int`, Go `int32`, and C# `int`; `double` in Dart for 64-bit floats; `Float32` for 32-bit.
+5. Use `Timestamp` and `LocalDate` for date/time fields rather than raw `DateTime`.
+6. Validate real round trips across all languages before shipping.
 
 ## Type Mapping Notes for Dart
 
@@ -167,14 +174,13 @@ Because Dart `int` is not itself a promise about the exact xlang wire width, pre
 
 See [Supported Types](supported-types.md) and [xlang type mapping](../../specification/xlang_type_mapping.md).
 
-## Validation Advice
+## Validation
 
-Before relying on an interop contract, test the same payload through every runtime you support.
+Before relying on a cross-language contract in production, test a payload end-to-end through every runtime you support.
 
-At minimum for Dart runtime work:
+Run the Dart side:
 
 ```bash
-cd dart
 dart run build_runner build --delete-conflicting-outputs
 dart analyze
 dart test

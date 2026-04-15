@@ -26,6 +26,9 @@ excludes = [
     # Generated
     "benchmarks/java/src/main/java/org/apache/fory/benchmark/state/generated/**",
     "integration_tests/idl_tests/**/auto_id.*",
+    "integration_tests/idl_tests/dart/pubspec.yaml",
+    "integration_tests/idl_tests/dart/analysis_options.yaml",
+    "integration_tests/idl_tests/run_dart_tests.sh",
 
     # Derived
     "ci/format.sh",

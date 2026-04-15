@@ -764,7 +764,9 @@ class DartGenerator(BaseGenerator):
         )
         for field in union.fields:
             case = self.safe_identifier(self.to_camel_case(field.name))
-            lines.append(f"{self.indent_str * (indent + 2)}{case_name}.{case} => {field.number},")
+            lines.append(
+                f"{self.indent_str * (indent + 2)}{case_name}.{case} => {field.number},"
+            )
         lines.extend(
             [
                 f"{self.indent_str * (indent + 1)}}};",

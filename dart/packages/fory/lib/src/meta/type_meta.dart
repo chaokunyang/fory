@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'package:fory/src/buffer.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/meta/meta_string.dart';
+import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 
 /// Wire-level type metadata for one value.

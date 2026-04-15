@@ -724,7 +724,7 @@ List<T> readGeneratedDirectListValue<T>(
   T Function(Object? value) convert,
 ) {
   final fieldType = field.fieldType;
-  if (fieldType.typeId != resolver.TypeIds.list ||
+  if (fieldType.typeId != TypeIds.list ||
       fieldType.nullable ||
       fieldType.ref ||
       fieldType.isDynamic) {
@@ -744,7 +744,7 @@ Set<T> readGeneratedDirectSetValue<T>(
   T Function(Object? value) convert,
 ) {
   final fieldType = field.fieldType;
-  if (fieldType.typeId != resolver.TypeIds.set ||
+  if (fieldType.typeId != TypeIds.set ||
       fieldType.nullable ||
       fieldType.ref ||
       fieldType.isDynamic) {
@@ -765,7 +765,7 @@ Map<K, V> readGeneratedDirectMapValue<K, V>(
   V Function(Object? value) convertValue,
 ) {
   final fieldType = field.fieldType;
-  if (fieldType.typeId != resolver.TypeIds.map ||
+  if (fieldType.typeId != TypeIds.map ||
       fieldType.nullable ||
       fieldType.ref ||
       fieldType.isDynamic) {

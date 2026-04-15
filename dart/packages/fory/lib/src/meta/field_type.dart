@@ -1,4 +1,4 @@
-import 'package:fory/src/resolver/type_resolver.dart' show TypeIds;
+import 'package:fory/src/meta/type_ids.dart';
 
 final class FieldType {
   final Type type;

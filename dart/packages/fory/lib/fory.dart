@@ -26,7 +26,7 @@ export 'src/config.dart';
 export 'src/context/read_context.dart';
 export 'src/context/write_context.dart';
 export 'src/fory.dart';
-export 'src/resolver/type_resolver.dart' show TypeIds;
+export 'src/meta/type_ids.dart';
 export 'src/serializer/enum_serializer.dart';
 export 'src/serializer/serializer.dart';
 export 'src/serializer/union_serializer.dart';

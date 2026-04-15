@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/meta/type_def.dart';
-import 'package:fory/src/resolver/type_resolver.dart' show TypeIds;
+import 'package:fory/src/meta/type_ids.dart';
 
 const int _typeDefCompressMetaFlag = 1 << 9;
 const int _typeDefHasFieldsMetaFlag = 1 << 8;

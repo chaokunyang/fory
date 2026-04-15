@@ -33,6 +33,10 @@ final class ForyGenerator extends Generator {
       TypeChecker.fromRuntime(ForyField);
   static final TypeChecker _foryUnionChecker =
       TypeChecker.fromRuntime(ForyUnion);
+  static final TypeChecker _listTypeChecker =
+      TypeChecker.fromRuntime(ListType);
+  static final TypeChecker _mapTypeChecker =
+      TypeChecker.fromRuntime(MapType);
   static final TypeChecker _int32Checker = TypeChecker.fromRuntime(Int32Type);
   static final TypeChecker _int64Checker = TypeChecker.fromRuntime(Int64Type);
   static final TypeChecker _uint8Checker = TypeChecker.fromRuntime(Uint8Type);
@@ -133,8 +137,6 @@ final class ForyGenerator extends Generator {
     final idValue = reader?.peek('id');
     final nullableValue = reader?.peek('nullable');
     final dynamicValue = reader?.peek('dynamic');
-    final elementRefValue = reader?.peek('elementRef');
-    final valueRefValue = reader?.peek('valueRef');
     final fieldId = idValue == null || idValue.isNull ? null : idValue.intValue;
     final nullable = nullableValue == null || nullableValue.isNull
         ? _isNullable(field.type)
@@ -143,14 +145,10 @@ final class ForyGenerator extends Generator {
         ? _autoDynamic(field.type)
         : dynamicValue.boolValue;
     final ref = reader?.peek('ref')?.boolValue ?? false;
-    final elementRef =
-        elementRefValue == null || elementRefValue.isNull
-            ? false
-            : elementRefValue.boolValue;
-    final valueRef =
-        valueRefValue == null || valueRefValue.isNull
-            ? false
-            : valueRefValue.boolValue;
+
+    // Read container TypeSpec annotations (@ListType / @MapType).
+    final typeSpec = _analyzeTypeSpecAnnotation(field);
+
     return _GeneratedFieldSpec(
       name: field.name,
       type: field.type,
@@ -168,8 +166,7 @@ final class ForyGenerator extends Generator {
         nullable: nullable,
         ref: ref,
         dynamic: dynamic,
-        elementRef: elementRef,
-        valueRef: valueRef,
+        typeSpec: typeSpec,
         integerAnnotation: _analyzeIntegerAnnotation(field),
       ),
     );
@@ -180,12 +177,20 @@ final class ForyGenerator extends Generator {
     required bool nullable,
     required bool ref,
     required bool? dynamic,
-    bool elementRef = false,
-    bool valueRef = false,
+    _TypeSpecInfo? typeSpec,
     _IntegerAnnotationSpec? integerAnnotation,
   }) {
+    // If a TypeSpec annotation overrides this level, apply it.
+    if (typeSpec != null) {
+      final specRef = typeSpec.ref;
+      if (specRef != null) ref = specRef;
+      final specNullable = typeSpec.nullable;
+      if (specNullable != null) nullable = specNullable;
+    }
     if (_isList(type) || _isSet(type)) {
       final argument = (type as InterfaceType).typeArguments.single;
+      final elementSpec =
+          typeSpec is _ListTypeSpecInfo ? typeSpec.element : null;
       return _GeneratedFieldTypeSpec(
         typeLiteral: _typeReferenceLiteral(type),
         typeId: _typeIdFor(type),
@@ -196,14 +201,17 @@ final class ForyGenerator extends Generator {
           _fieldTypeForType(
             argument,
             nullable: true,
-            ref: elementRef,
+            ref: elementSpec?.ref ?? false,
             dynamic: _autoDynamic(argument),
+            typeSpec: elementSpec,
           ),
         ],
       );
     }
     if (_isMap(type)) {
       final arguments = (type as InterfaceType).typeArguments;
+      final keySpec = typeSpec is _MapTypeSpecInfo ? typeSpec.key : null;
+      final valueSpec = typeSpec is _MapTypeSpecInfo ? typeSpec.value : null;
       return _GeneratedFieldTypeSpec(
         typeLiteral: _typeReferenceLiteral(type),
         typeId: _typeIdFor(type),
@@ -214,14 +222,16 @@ final class ForyGenerator extends Generator {
           _fieldTypeForType(
             arguments[0],
             nullable: true,
-            ref: false,
+            ref: keySpec?.ref ?? false,
             dynamic: _autoDynamic(arguments[0]),
+            typeSpec: keySpec,
           ),
           _fieldTypeForType(
             arguments[1],
             nullable: true,
-            ref: valueRef,
+            ref: valueSpec?.ref ?? false,
             dynamic: _autoDynamic(arguments[1]),
+            typeSpec: valueSpec,
           ),
         ],
       );
@@ -1874,6 +1884,80 @@ GeneratedFieldType(
     return null;
   }
 
+  _TypeSpecInfo? _analyzeTypeSpecAnnotation(FieldElement field) {
+    final listAnnotation = _listTypeChecker.firstAnnotationOf(field);
+    if (listAnnotation != null) {
+      return _readListTypeSpec(ConstantReader(listAnnotation));
+    }
+    final mapAnnotation = _mapTypeChecker.firstAnnotationOf(field);
+    if (mapAnnotation != null) {
+      return _readMapTypeSpec(ConstantReader(mapAnnotation));
+    }
+    return null;
+  }
+
+  _ListTypeSpecInfo _readListTypeSpec(ConstantReader reader) {
+    final options = _readTypeOptions(reader);
+    final elementObj = reader.peek('element');
+    final element = elementObj != null && !elementObj.isNull
+        ? _readTypeSpecObj(elementObj)
+        : null;
+    return _ListTypeSpecInfo(
+      ref: options.ref,
+      nullable: options.nullable,
+      element: element,
+    );
+  }
+
+  _MapTypeSpecInfo _readMapTypeSpec(ConstantReader reader) {
+    final options = _readTypeOptions(reader);
+    final keyObj = reader.peek('key');
+    final valueObj = reader.peek('value');
+    final key = keyObj != null && !keyObj.isNull
+        ? _readTypeSpecObj(keyObj)
+        : null;
+    final value = valueObj != null && !valueObj.isNull
+        ? _readTypeSpecObj(valueObj)
+        : null;
+    return _MapTypeSpecInfo(
+      ref: options.ref,
+      nullable: options.nullable,
+      key: key,
+      value: value,
+    );
+  }
+
+  _TypeSpecInfo _readTypeSpecObj(ConstantReader reader) {
+    final typeName = reader.objectValue.type?.getDisplayString() ?? '';
+    if (typeName.startsWith('ListType')) {
+      return _readListTypeSpec(reader);
+    }
+    if (typeName.startsWith('MapType')) {
+      return _readMapTypeSpec(reader);
+    }
+    // ValueType or fallback
+    final options = _readTypeOptions(reader);
+    return _TypeSpecInfo(ref: options.ref, nullable: options.nullable);
+  }
+
+  ({bool? ref, bool? nullable}) _readTypeOptions(ConstantReader reader) {
+    bool? ref;
+    bool? nullable;
+    final optionsReader = reader.peek('options');
+    if (optionsReader != null && !optionsReader.isNull) {
+      for (final optionObj in optionsReader.listValue) {
+        final optionReader = ConstantReader(optionObj);
+        final optionType = optionObj.type?.getDisplayString() ?? '';
+        if (optionType.startsWith('RefOption')) {
+          ref = optionReader.peek('tracked')?.boolValue ?? true;
+        } else if (optionType.startsWith('NullableOption')) {
+          nullable = optionReader.peek('value')?.boolValue ?? true;
+        }
+      }
+    }
+    return (ref: ref, nullable: nullable);
+  }
+
   int _typeIdFor(DartType type, {_IntegerAnnotationSpec? integerAnnotation}) {
     if (integerAnnotation != null) {
       return integerAnnotation.typeId;
@@ -2254,4 +2338,25 @@ final class _IntegerAnnotationSpec {
   final int typeId;
 
   const _IntegerAnnotationSpec({required this.typeId});
+}
+
+/// Parsed representation of a [TypeSpec] annotation hierarchy.
+class _TypeSpecInfo {
+  final bool? ref;
+  final bool? nullable;
+
+  const _TypeSpecInfo({this.ref, this.nullable});
+}
+
+final class _ListTypeSpecInfo extends _TypeSpecInfo {
+  final _TypeSpecInfo? element;
+
+  const _ListTypeSpecInfo({super.ref, super.nullable, this.element});
+}
+
+final class _MapTypeSpecInfo extends _TypeSpecInfo {
+  final _TypeSpecInfo? key;
+  final _TypeSpecInfo? value;
+
+  const _MapTypeSpecInfo({super.ref, super.nullable, this.key, this.value});
 }

@@ -9,6 +9,7 @@ library;
 export 'src/annotation/fory_field.dart';
 export 'src/annotation/fory_struct.dart';
 export 'src/annotation/fory_union.dart';
+export 'src/annotation/type_spec.dart';
 export 'src/annotation/numeric_types.dart';
 export 'src/buffer.dart'
     hide

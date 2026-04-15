@@ -22,6 +22,7 @@ targets:
         enabled: true
         generate_for:
           - example/**.dart
+          - test/**.dart
 
 builders:
   fory_builder:

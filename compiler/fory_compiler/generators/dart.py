@@ -688,14 +688,19 @@ class DartGenerator(BaseGenerator):
             args.append(f"id: {field.tag_id}")
         if field.ref:
             args.append("ref: true")
+        if args:
+            annotations.append(f"@ForyField({', '.join(args)})")
+        # Emit container TypeSpec annotations for nested ref tracking.
         if isinstance(field.field_type, ListType) and (
             field.element_ref or field.field_type.element_ref
         ):
-            args.append("elementRef: true")
+            annotations.append(
+                "@ListType(element: ValueType.ref())"
+            )
         if isinstance(field.field_type, MapType) and field.field_type.value_ref:
-            args.append("valueRef: true")
-        if args:
-            annotations.append(f"@ForyField({', '.join(args)})")
+            annotations.append(
+                "@MapType(value: ValueType.ref())"
+            )
         return annotations
 
     def numeric_annotation(self, field_type: FieldType) -> Optional[str]:

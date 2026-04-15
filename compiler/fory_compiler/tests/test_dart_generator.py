@@ -156,8 +156,10 @@ def test_dart_generator_emits_container_ref_annotations_for_builder_metadata():
         """
     )
 
-    assert "@ForyField(id: 1, elementRef: true)" in file.content
-    assert "@ForyField(id: 2, valueRef: true)" in file.content
+    assert "@ForyField(id: 1)" in file.content
+    assert "@ListType(element: ValueType.ref())" in file.content
+    assert "@ForyField(id: 2)" in file.content
+    assert "@MapType(value: ValueType.ref())" in file.content
     assert "@ForyField(id: 3, ref: true)" in file.content
 
 
@@ -172,7 +174,8 @@ def test_dart_generator_marks_map_value_ref_messages_as_ref_capable():
         """
     )
 
-    assert "@ForyField(id: 1, valueRef: true)" in file.content
+    assert "@ForyField(id: 1)" in file.content
+    assert "@MapType(value: ValueType.ref())" in file.content
     assert "Map<String, Node> byName = <String, Node>{};" in file.content
 
 

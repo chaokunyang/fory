@@ -36,6 +36,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Add comments only when behavior is hard to understand or an algorithm is non-obvious.
 - Only add tests that verify internal behaviors or fix specific bugs; do not create unnecessary tests unless requested.
 - Do not add cleanup-sentinel tests that only pin deleted APIs or removed fields.
+- Tests must exercise the actual code you wrote or changed. Do not write tests that pass by exercising a pre-existing code path that produces similar-looking results. Before writing a test, identify the exact new code path (annotation, codegen output, new API) and verify the test would fail if that code path were removed. When the change involves codegen or annotations, the test must use those annotations on real structs, run through the codegen pipeline, and verify the generated output drives the expected runtime behavior.
 - When reading code, skip files not tracked by git by default unless you generated them yourself or the task explicitly requires them.
 - Maintain cross-language consistency while respecting language-specific idioms.
 - Do not introduce checked exceptions in new code or new APIs.

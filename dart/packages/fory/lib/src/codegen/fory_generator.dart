@@ -5,7 +5,6 @@ import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:build/build.dart';
 import 'package:fory/fory.dart';
-import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:source_gen/source_gen.dart';
 
 final class ForyGenerator extends Generator {
@@ -328,9 +327,6 @@ final class ForyGenerator extends Generator {
     final metadataListName = '_${_toCamelCase(structSpec.name)}ForyFieldInfo';
     final registrationName =
         '_${_toCamelCase(structSpec.name)}ForyRegistration';
-    final hasDirectPrimitiveFastPath = structSpec.fields.any(
-      _usesDirectGeneratedPrimitiveFastPath,
-    );
     final hasRuntimeFastPath = structSpec.fields.any(
       (field) => !_usesDirectGeneratedBasicFastPath(field),
     );
@@ -1053,9 +1049,6 @@ GeneratedFieldType(
         field.fieldType.typeId == TypeIds.map;
   }
 
-  bool _usesDirectGeneratedPrimitiveFastPath(_GeneratedFieldSpec field) {
-    return _isPrimitiveTypeId(field.fieldType.typeId);
-  }
 
   List<_DirectGeneratedWriteReservationRun>
       _directGeneratedWriteReservationRuns(

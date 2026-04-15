@@ -34,7 +34,7 @@ def parse_schema(source: str):
 
 def generate_dart(source: str):
     schema = parse_schema(source)
-    generator = DartGenerator(schema, GeneratorOptions(output_dir=Path('/tmp')))
+    generator = DartGenerator(schema, GeneratorOptions(output_dir=Path("/tmp")))
     files = generator.generate()
     assert len(files) == 1
     return files[0]
@@ -42,7 +42,7 @@ def generate_dart(source: str):
 
 def test_dart_generator_emits_annotated_structs_and_generated_part_registration():
     file = generate_dart(
-        '''
+        """
         package demo;
 
         message Scalar [id=100] {
@@ -50,43 +50,49 @@ def test_dart_generator_emits_annotated_structs_and_generated_part_registration(
             int32 varint_value = 2;
             tagged_uint64 tagged_value = 3;
         }
-        '''
+        """
     )
 
     assert "part 'demo.fory.dart';" in file.content
-    assert '@ForyStruct()' in file.content
-    assert 'final class Scalar {' in file.content
-    assert '@Int32Type(compress: false)' in file.content
-    assert '@Uint64Type(encoding: LongEncoding.tagged)' in file.content
-    assert '@ForyField(id: 1)' in file.content
-    assert 'DemoFory.register(fory, Scalar, id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);' in file.content
-    assert 'GeneratedStructRegistration<Scalar>' not in file.content
-    assert '_ScalarForySerializer' not in file.content
+    assert "@ForyStruct()" in file.content
+    assert "final class Scalar {" in file.content
+    assert "@Int32Type(compress: false)" in file.content
+    assert "@Uint64Type(encoding: LongEncoding.tagged)" in file.content
+    assert "@ForyField(id: 1)" in file.content
+    assert (
+        "DemoFory.register(fory, Scalar, id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);"
+        in file.content
+    )
+    assert "GeneratedStructRegistration<Scalar>" not in file.content
+    assert "_ScalarForySerializer" not in file.content
 
 
 def test_dart_generator_keeps_enum_helpers_in_source_and_uses_generated_enum_registration():
     file = generate_dart(
-        '''
+        """
         package demo;
 
         enum Status [id=101] {
             STATUS_UNKNOWN = 0;
             STATUS_OK = 7;
         }
-        '''
+        """
     )
 
-    assert 'enum Status {' in file.content
-    assert 'int get rawValue {' in file.content
-    assert 'return 7;' in file.content
-    assert 'static Status fromRawValue(int value) {' in file.content
-    assert '_StatusForySerializer' not in file.content
-    assert 'DemoFory.register(fory, Status, id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);' in file.content
+    assert "enum Status {" in file.content
+    assert "int get rawValue {" in file.content
+    assert "return 7;" in file.content
+    assert "static Status fromRawValue(int value) {" in file.content
+    assert "_StatusForySerializer" not in file.content
+    assert (
+        "DemoFory.register(fory, Status, id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);"
+        in file.content
+    )
 
 
 def test_dart_generator_keeps_union_serializers_direct_and_marks_union_types():
     file = generate_dart(
-        '''
+        """
         package demo;
 
         message Node [id=100] {
@@ -97,20 +103,26 @@ def test_dart_generator_keeps_union_serializers_direct_and_marks_union_types():
             Node node = 3;
             string note = 7;
         }
-        '''
+        """
     )
 
-    assert '@ForyUnion()' in file.content
-    assert 'final class Animal {' in file.content
-    assert 'factory Animal.node(Node value)' in file.content
-    assert 'final class _AnimalForySerializer extends UnionSerializer<Animal>' in file.content
-    assert 'context.writeVarUint32(value.caseId);' in file.content
-    assert 'fory.registerSerializer(Animal, const _AnimalForySerializer(), id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);' in file.content
+    assert "@ForyUnion()" in file.content
+    assert "final class Animal {" in file.content
+    assert "factory Animal.node(Node value)" in file.content
+    assert (
+        "final class _AnimalForySerializer extends UnionSerializer<Animal>"
+        in file.content
+    )
+    assert "context.writeVarUint32(value.caseId);" in file.content
+    assert (
+        "fory.registerSerializer(Animal, const _AnimalForySerializer(), id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);"
+        in file.content
+    )
 
 
 def test_dart_generator_uses_typed_lists_for_non_nullable_primitive_lists():
     file = generate_dart(
-        '''
+        """
         package demo;
 
         message Holder {
@@ -122,18 +134,18 @@ def test_dart_generator_uses_typed_lists_for_non_nullable_primitive_lists():
         union ValueUnion {
             list<uint32> values = 1;
         }
-        '''
+        """
     )
 
-    assert 'Int32List ints = Int32List(0);' in file.content
-    assert 'List<Int32?> nullableInts = <Int32?>[];' in file.content
-    assert 'Int32List? maybeInts = null;' in file.content
-    assert 'factory ValueUnion.values(Uint32List value)' in file.content
+    assert "Int32List ints = Int32List(0);" in file.content
+    assert "List<Int32?> nullableInts = <Int32?>[];" in file.content
+    assert "Int32List? maybeInts = null;" in file.content
+    assert "factory ValueUnion.values(Uint32List value)" in file.content
 
 
 def test_dart_generator_emits_container_ref_annotations_for_builder_metadata():
     file = generate_dart(
-        '''
+        """
         package demo;
 
         message Node {
@@ -141,17 +153,17 @@ def test_dart_generator_emits_container_ref_annotations_for_builder_metadata():
             map<string, ref Node> by_name = 2;
             ref Node parent = 3;
         }
-        '''
+        """
     )
 
-    assert '@ForyField(id: 1, elementRef: true)' in file.content
-    assert '@ForyField(id: 2, valueRef: true)' in file.content
-    assert '@ForyField(id: 3, ref: true)' in file.content
+    assert "@ForyField(id: 1, elementRef: true)" in file.content
+    assert "@ForyField(id: 2, valueRef: true)" in file.content
+    assert "@ForyField(id: 3, ref: true)" in file.content
 
 
 def test_dart_generator_flattens_nested_type_references_and_keeps_classes_final():
     file = generate_dart(
-        '''
+        """
         package demo;
 
         message Envelope {
@@ -172,20 +184,20 @@ def test_dart_generator_flattens_nested_type_references_and_keeps_classes_final(
             Payload payload = 1;
             Detail detail = 2;
         }
-        '''
+        """
     )
 
-    assert 'enum Envelope_Status {' in file.content
-    assert 'final class Envelope_Payload {' in file.content
-    assert 'Envelope_Status status = Envelope_Status.unknown;' in file.content
-    assert '@ForyUnion()' in file.content
-    assert 'final class Envelope_Detail {' in file.content
-    assert 'final class Envelope {' in file.content
+    assert "enum Envelope_Status {" in file.content
+    assert "final class Envelope_Payload {" in file.content
+    assert "Envelope_Status status = Envelope_Status.unknown;" in file.content
+    assert "@ForyUnion()" in file.content
+    assert "final class Envelope_Detail {" in file.content
+    assert "final class Envelope {" in file.content
 
 
 def test_dart_generator_uses_name_registration_when_auto_id_disabled():
     file = generate_dart(
-        '''
+        """
         option enable_auto_type_id = false;
         package demo;
 
@@ -194,52 +206,58 @@ def test_dart_generator_uses_name_registration_when_auto_id_disabled():
                 string note = 1;
             }
         }
-        '''
+        """
     )
 
     assert "defaultNamespace: 'demo'," in file.content
     assert "defaultTypeName: 'Envelope'," in file.content
     assert "defaultTypeName: 'Envelope.Payload'," in file.content
-    assert 'DemoFory.register(fory, Envelope_Payload, id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);' in file.content
+    assert (
+        "DemoFory.register(fory, Envelope_Payload, id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);"
+        in file.content
+    )
 
 
 def test_dart_generator_output_path_uses_package_segments_and_package_leaf():
     file = generate_dart(
-        '''
+        """
         package demo.foo;
 
         message User [id=1] {
             string name = 1;
         }
-        '''
+        """
     )
-    assert file.path == 'demo/foo/demo_foo.dart'
+    assert file.path == "demo/foo/demo_foo.dart"
 
     schema = parse_schema(
-        '''
+        """
         package any_example_pb;
 
         message AnyInner [id=300] {
             string name = 1;
         }
-        '''
+        """
     )
-    schema.source_file = '/tmp/any_example.proto'
-    generator = DartGenerator(schema, GeneratorOptions(output_dir=Path('/tmp')))
+    schema.source_file = "/tmp/any_example.proto"
+    generator = DartGenerator(schema, GeneratorOptions(output_dir=Path("/tmp")))
     file = generator.generate()[0]
-    assert file.path == 'any_example_pb/any_example_pb.dart'
+    assert file.path == "any_example_pb/any_example_pb.dart"
     assert "part 'any_example_pb.fory.dart';" in file.content
 
 
 def test_dart_generator_supports_imported_registration_calls_without_fallthrough_throw():
     repo_root = Path(__file__).resolve().parents[3]
-    idl_dir = repo_root / 'integration_tests' / 'idl_tests' / 'idl'
-    schema = resolve_imports(idl_dir / 'root.idl', [idl_dir])
-    generator = DartGenerator(schema, GeneratorOptions(output_dir=Path('/tmp')))
+    idl_dir = repo_root / "integration_tests" / "idl_tests" / "idl"
+    schema = resolve_imports(idl_dir / "root.idl", [idl_dir])
+    generator = DartGenerator(schema, GeneratorOptions(output_dir=Path("/tmp")))
     file = generator.generate()[0]
     assert "import '../addressbook/addressbook.dart' as addressbook;" in file.content
-    assert 'try {' in file.content
-    assert 'addressbook.ForyRegistration.register(fory, type, id: id, namespace: namespace, typeName: typeName);' in file.content
-    assert 'return;' in file.content
-    assert '} on ArgumentError {' in file.content
-    assert 'addressbook.AddressBook' in file.content
+    assert "try {" in file.content
+    assert (
+        "addressbook.ForyRegistration.register(fory, type, id: id, namespace: namespace, typeName: typeName);"
+        in file.content
+    )
+    assert "return;" in file.content
+    assert "} on ArgumentError {" in file.content
+    assert "addressbook.AddressBook" in file.content

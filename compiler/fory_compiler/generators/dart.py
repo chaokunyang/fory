@@ -263,7 +263,9 @@ class DartGenerator(BaseGenerator):
             q = ".".join(parents + [message.name])
             self._qualified_names[id(message)] = q
             for field in message.fields:
-                value_ref = isinstance(field.field_type, MapType) and field.field_type.value_ref
+                value_ref = (
+                    isinstance(field.field_type, MapType) and field.field_type.value_ref
+                )
                 if field.ref or field.element_ref or value_ref:
                     self._requires_ref_class.add(id(message))
             for enum in message.nested_enums:
@@ -642,7 +644,9 @@ class DartGenerator(BaseGenerator):
             resolved = self.resolve_type(t.name, parent_stack)
             if isinstance(resolved, Enum):
                 first = resolved.values[0]
-                return f"{self.ref_name(resolved)}.{self.enum_case_name(resolved, first)}"
+                return (
+                    f"{self.ref_name(resolved)}.{self.enum_case_name(resolved, first)}"
+                )
             if isinstance(resolved, Union):
                 first = resolved.fields[0]
                 case_name = self.safe_identifier(self.to_camel_case(first.name))

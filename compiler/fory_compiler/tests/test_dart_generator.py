@@ -161,8 +161,6 @@ def test_dart_generator_emits_container_ref_annotations_for_builder_metadata():
     assert "@ForyField(id: 3, ref: true)" in file.content
 
 
-
-
 def test_dart_generator_marks_map_value_ref_messages_as_ref_capable():
     file = generate_dart(
         """

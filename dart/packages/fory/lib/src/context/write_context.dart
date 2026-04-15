@@ -10,6 +10,7 @@ import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/meta/type_def.dart';
+import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/map_serializers.dart';

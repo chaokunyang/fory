@@ -34,6 +34,7 @@ from fory_compiler.generators.rust import RustGenerator
 from fory_compiler.generators.csharp import CSharpGenerator
 from fory_compiler.generators.javascript import JavaScriptGenerator
 from fory_compiler.generators.swift import SwiftGenerator
+from fory_compiler.generators.dart import DartGenerator
 from fory_compiler.ir.ast import Schema
 
 
@@ -46,6 +47,7 @@ GENERATOR_CLASSES: Tuple[Type[BaseGenerator], ...] = (
     CSharpGenerator,
     JavaScriptGenerator,
     SwiftGenerator,
+    DartGenerator,
 )
 
 

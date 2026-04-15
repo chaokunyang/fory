@@ -5,14 +5,42 @@ import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:build/build.dart';
 import 'package:fory/fory.dart';
-import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:source_gen/source_gen.dart';
+
+
+class DebugGeneratedFieldTypeSpec {
+  const DebugGeneratedFieldTypeSpec({
+    required this.typeLiteral,
+    required this.typeId,
+    required this.nullable,
+    required this.ref,
+    required this.dynamic,
+    this.arguments = const <DebugGeneratedFieldTypeSpec>[],
+  });
+
+  final String typeLiteral;
+  final int typeId;
+  final bool nullable;
+  final bool ref;
+  final bool? dynamic;
+  final List<DebugGeneratedFieldTypeSpec> arguments;
+}
 
 final class ForyGenerator extends Generator {
   static final TypeChecker _foryStructChecker =
       TypeChecker.fromRuntime(ForyStruct);
   static final TypeChecker _foryFieldChecker =
       TypeChecker.fromRuntime(ForyField);
+  static final TypeChecker _foryUnionChecker =
+      TypeChecker.fromRuntime(ForyUnion);
+  static final TypeChecker _listTypeChecker =
+      TypeChecker.fromRuntime(ListType);
+  static final TypeChecker _mapTypeChecker =
+      TypeChecker.fromRuntime(MapType);
+  static final TypeChecker _refOptionChecker =
+      TypeChecker.fromRuntime(RefOption);
+  static final TypeChecker _nullableOptionChecker =
+      TypeChecker.fromRuntime(NullableOption);
   static final TypeChecker _int32Checker = TypeChecker.fromRuntime(Int32Type);
   static final TypeChecker _int64Checker = TypeChecker.fromRuntime(Int64Type);
   static final TypeChecker _uint8Checker = TypeChecker.fromRuntime(Uint8Type);
@@ -20,8 +48,11 @@ final class ForyGenerator extends Generator {
   static final TypeChecker _uint32Checker = TypeChecker.fromRuntime(Uint32Type);
   static final TypeChecker _uint64Checker = TypeChecker.fromRuntime(Uint64Type);
 
+  final Map<String, String> _importPrefixByLibraryIdentifier = <String, String>{};
+
   @override
   FutureOr<String> generate(LibraryReader library, BuildStep buildStep) {
+    _buildImportPrefixMap(library);
     final annotatedClasses = library.classes
         .where((element) => _foryStructChecker.hasAnnotationOf(element))
         .toList(growable: false);
@@ -35,9 +66,8 @@ final class ForyGenerator extends Generator {
     );
     final generatedApiName = '${helperBaseName}Fory';
 
-    final enumSpecs = enumElements
-        .map((element) => _GeneratedEnumSpec(name: element.name))
-        .toList(growable: false);
+    final enumSpecs =
+      enumElements.map(_analyzeEnum).toList(growable: false);
     final structSpecs =
         annotatedClasses.map(_analyzeStruct).toList(growable: false);
     final output = StringBuffer()
@@ -86,6 +116,25 @@ final class ForyGenerator extends Generator {
     );
   }
 
+  void _buildImportPrefixMap(LibraryReader library) {
+    _importPrefixByLibraryIdentifier.clear();
+    for (final import in library.element.definingCompilationUnit.libraryImports) {
+      final importedLibrary = import.importedLibrary;
+      final prefix = import.prefix?.element.name;
+      if (importedLibrary == null || prefix == null || prefix.isEmpty) {
+        continue;
+      }
+      _importPrefixByLibraryIdentifier[importedLibrary.identifier] = prefix;
+    }
+  }
+
+  _GeneratedEnumSpec _analyzeEnum(EnumElement element) {
+    return _GeneratedEnumSpec(
+      name: element.name,
+      usesRawValue: _enumUsesRawValueElement(element),
+    );
+  }
+
   _GeneratedFieldSpec _analyzeField(FieldElement field) {
     final annotation = _foryFieldChecker.firstAnnotationOf(field);
     final reader = annotation == null ? null : ConstantReader(annotation);
@@ -100,10 +149,14 @@ final class ForyGenerator extends Generator {
         ? _autoDynamic(field.type)
         : dynamicValue.boolValue;
     final ref = reader?.peek('ref')?.boolValue ?? false;
+
+    // Read container TypeSpec annotations (@ListType / @MapType).
+    final typeSpec = _analyzeTypeSpecAnnotation(field);
+
     return _GeneratedFieldSpec(
       name: field.name,
       type: field.type,
-      displayType: field.type.getDisplayString(),
+      displayType: _typeCodeString(field.type),
       identifier: fieldId != null && fieldId >= 0
           ? '$fieldId'
           : _toSnakeCase(field.name),
@@ -117,6 +170,7 @@ final class ForyGenerator extends Generator {
         nullable: nullable,
         ref: ref,
         dynamic: dynamic,
+        typeSpec: typeSpec,
         integerAnnotation: _analyzeIntegerAnnotation(field),
       ),
     );
@@ -127,12 +181,22 @@ final class ForyGenerator extends Generator {
     required bool nullable,
     required bool ref,
     required bool? dynamic,
+    _TypeSpecInfo? typeSpec,
     _IntegerAnnotationSpec? integerAnnotation,
   }) {
+    // If a TypeSpec annotation overrides this level, apply it.
+    if (typeSpec != null) {
+      final specRef = typeSpec.ref;
+      if (specRef != null) ref = specRef;
+      final specNullable = typeSpec.nullable;
+      if (specNullable != null) nullable = specNullable;
+    }
     if (_isList(type) || _isSet(type)) {
       final argument = (type as InterfaceType).typeArguments.single;
+      final elementSpec =
+          typeSpec is _ListTypeSpecInfo ? typeSpec.element : null;
       return _GeneratedFieldTypeSpec(
-        typeLiteral: _typeLiteral(type),
+        typeLiteral: _typeReferenceLiteral(type),
         typeId: _typeIdFor(type),
         nullable: nullable,
         ref: ref,
@@ -141,16 +205,19 @@ final class ForyGenerator extends Generator {
           _fieldTypeForType(
             argument,
             nullable: true,
-            ref: false,
+            ref: elementSpec?.ref ?? false,
             dynamic: _autoDynamic(argument),
+            typeSpec: elementSpec,
           ),
         ],
       );
     }
     if (_isMap(type)) {
       final arguments = (type as InterfaceType).typeArguments;
+      final keySpec = typeSpec is _MapTypeSpecInfo ? typeSpec.key : null;
+      final valueSpec = typeSpec is _MapTypeSpecInfo ? typeSpec.value : null;
       return _GeneratedFieldTypeSpec(
-        typeLiteral: _typeLiteral(type),
+        typeLiteral: _typeReferenceLiteral(type),
         typeId: _typeIdFor(type),
         nullable: nullable,
         ref: ref,
@@ -159,20 +226,22 @@ final class ForyGenerator extends Generator {
           _fieldTypeForType(
             arguments[0],
             nullable: true,
-            ref: false,
+            ref: keySpec?.ref ?? false,
             dynamic: _autoDynamic(arguments[0]),
+            typeSpec: keySpec,
           ),
           _fieldTypeForType(
             arguments[1],
             nullable: true,
-            ref: false,
+            ref: valueSpec?.ref ?? false,
             dynamic: _autoDynamic(arguments[1]),
+            typeSpec: valueSpec,
           ),
         ],
       );
     }
     return _GeneratedFieldTypeSpec(
-      typeLiteral: _typeLiteral(type),
+      typeLiteral: _typeReferenceLiteral(type),
       typeId: _typeIdFor(type, integerAnnotation: integerAnnotation),
       nullable: nullable,
       ref: ref,
@@ -262,6 +331,12 @@ final class ForyGenerator extends Generator {
 
   void _writeEnum(StringBuffer output, _GeneratedEnumSpec enumSpec) {
     final serializerClassName = '_${enumSpec.name}ForySerializer';
+    final writeExpression = enumSpec.usesRawValue
+        ? 'context.writeVarInt32(value.rawValue);'
+        : 'context.writeVarUint32(value.index);';
+    final readExpression = enumSpec.usesRawValue
+        ? 'return ${enumSpec.name}.fromRawValue(context.readVarInt32());'
+        : 'return ${enumSpec.name}.values[context.readVarUint32()];';
     output
       ..writeln(
         'final class $serializerClassName extends EnumSerializer<${enumSpec.name}> {',
@@ -269,12 +344,12 @@ final class ForyGenerator extends Generator {
       ..writeln('  const $serializerClassName();')
       ..writeln('  @override')
       ..writeln('  void write(WriteContext context, ${enumSpec.name} value) {')
-      ..writeln('    context.writeVarUint32(value.index);')
+      ..writeln('    $writeExpression')
       ..writeln('  }')
       ..writeln()
       ..writeln('  @override')
       ..writeln('  ${enumSpec.name} read(ReadContext context) {')
-      ..writeln('    return ${enumSpec.name}.values[context.readVarUint32()];')
+      ..writeln('    $readExpression')
       ..writeln('  }')
       ..writeln('}')
       ..writeln();
@@ -285,9 +360,6 @@ final class ForyGenerator extends Generator {
     final metadataListName = '_${_toCamelCase(structSpec.name)}ForyFieldInfo';
     final registrationName =
         '_${_toCamelCase(structSpec.name)}ForyRegistration';
-    final hasDirectPrimitiveFastPath = structSpec.fields.any(
-      _usesDirectGeneratedPrimitiveFastPath,
-    );
     final hasRuntimeFastPath = structSpec.fields.any(
       (field) => !_usesDirectGeneratedBasicFastPath(field),
     );
@@ -421,7 +493,7 @@ final class ForyGenerator extends Generator {
       )
       ..writeln('    final slots = generatedStructWriteSlots(context);')
       ..writeln('    if (slots == null) {');
-    if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
+    if (directCursorRuns.isNotEmpty) {
       output.writeln('      final buffer = context.buffer;');
     }
     if (hasRuntimeFastPath) {
@@ -474,7 +546,7 @@ final class ForyGenerator extends Generator {
           ..writeln('    final value = ${structSpec.name}();')
           ..writeln('    context.reference(value);')
           ..writeln('    if (slots == null) {');
-        if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
+        if (directCursorRuns.isNotEmpty) {
           output.writeln('      final buffer = context.buffer;');
         }
         if (hasRuntimeFastPath) {
@@ -540,7 +612,7 @@ final class ForyGenerator extends Generator {
       case _ConstructorMode.constructor:
         output.writeln('    final slots = generatedStructReadSlots(context);');
         output.writeln('    if (slots == null) {');
-        if (hasDirectPrimitiveFastPath || directCursorRuns.isNotEmpty) {
+        if (directCursorRuns.isNotEmpty) {
           output.writeln('      final buffer = context.buffer;');
         }
         if (hasRuntimeFastPath) {
@@ -801,6 +873,38 @@ GeneratedFieldType(
     )''';
   }
 
+
+
+
+  String debugConversionExpressionForType(
+    DartType type,
+    DebugGeneratedFieldTypeSpec fieldType,
+    String valueExpression, {
+    required String nullExpression,
+  }) {
+    return _conversionExpressionForType(
+      type,
+      _fromDebugFieldType(fieldType),
+      valueExpression,
+      nullExpression: nullExpression,
+    );
+  }
+
+  _GeneratedFieldTypeSpec _fromDebugFieldType(
+    DebugGeneratedFieldTypeSpec fieldType,
+  ) {
+    return _GeneratedFieldTypeSpec(
+      typeLiteral: fieldType.typeLiteral,
+      typeId: fieldType.typeId,
+      nullable: fieldType.nullable,
+      ref: fieldType.ref,
+      dynamic: fieldType.dynamic,
+      arguments: fieldType.arguments
+          .map(_fromDebugFieldType)
+          .toList(growable: false),
+    );
+  }
+
   String _conversionExpression(
     _GeneratedFieldSpec field,
     String valueExpression,
@@ -824,6 +928,12 @@ GeneratedFieldType(
     String valueExpression, {
     required String nullExpression,
   }) {
+    if (_withoutNullability(type).isDartCoreObject) {
+      if (_isNullable(type)) {
+        return valueExpression;
+      }
+      return '$valueExpression == null ? $nullExpression : $valueExpression';
+    }
     if (_isNullable(type)) {
       final nonNullableType = _withoutNullability(type);
       final nonNullableFieldType = _nonNullableFieldType(fieldType);
@@ -855,7 +965,7 @@ GeneratedFieldType(
       final elementType = (type as InterfaceType).typeArguments.single;
       final elementFieldType = fieldType.arguments.single;
       if (_supportsDirectContainerCast(elementType, elementFieldType)) {
-        return 'List.castFrom<dynamic, ${elementType.getDisplayString()}>($valueExpression as List)';
+        return 'List.castFrom<dynamic, ${_typeCodeString(elementType)}>($valueExpression as List)';
       }
       final convertedElement = _conversionExpressionForType(
         elementType,
@@ -866,13 +976,13 @@ GeneratedFieldType(
           errorTarget: 'list item',
         ),
       );
-      return 'List<${elementType.getDisplayString()}>.of((($valueExpression as List)).map((item) => $convertedElement))';
+      return 'List<${_typeCodeString(elementType)}>.of((($valueExpression as List)).map((item) => $convertedElement))';
     }
     if (_isSet(type)) {
       final elementType = (type as InterfaceType).typeArguments.single;
       final elementFieldType = fieldType.arguments.single;
       if (_supportsDirectContainerCast(elementType, elementFieldType)) {
-        return 'Set.castFrom<dynamic, ${elementType.getDisplayString()}>($valueExpression as Set)';
+        return 'Set.castFrom<dynamic, ${_typeCodeString(elementType)}>($valueExpression as Set)';
       }
       final convertedElement = _conversionExpressionForType(
         elementType,
@@ -883,7 +993,7 @@ GeneratedFieldType(
           errorTarget: 'set item',
         ),
       );
-      return 'Set<${elementType.getDisplayString()}>.of((($valueExpression as Set)).map((item) => $convertedElement))';
+      return 'Set<${_typeCodeString(elementType)}>.of((($valueExpression as Set)).map((item) => $convertedElement))';
     }
     if (_isMap(type)) {
       final arguments = (type as InterfaceType).typeArguments;
@@ -893,7 +1003,7 @@ GeneratedFieldType(
       final valueFieldType = fieldType.arguments[1];
       if (_supportsDirectContainerCast(keyType, keyFieldType) &&
           _supportsDirectContainerCast(valueType, valueFieldType)) {
-        return 'Map.castFrom<dynamic, dynamic, ${keyType.getDisplayString()}, ${valueType.getDisplayString()}>($valueExpression as Map)';
+        return 'Map.castFrom<dynamic, dynamic, ${_typeCodeString(keyType)}, ${_typeCodeString(valueType)}>($valueExpression as Map)';
       }
       final convertedKey = _conversionExpressionForType(
         keyType,
@@ -913,7 +1023,7 @@ GeneratedFieldType(
           errorTarget: 'map value',
         ),
       );
-      return 'Map<${keyType.getDisplayString()}, ${valueType.getDisplayString()}>.of((($valueExpression as Map)).map((key, value) => MapEntry($convertedKey, $convertedValue)))';
+      return 'Map<${_typeCodeString(keyType)}, ${_typeCodeString(valueType)}>.of((($valueExpression as Map)).map((key, value) => MapEntry($convertedKey, $convertedValue)))';
     }
     if (type.isDartCoreInt) {
       if (fieldType.typeId == TypeIds.int32 ||
@@ -931,7 +1041,7 @@ GeneratedFieldType(
     if (type.isDartCoreString) {
       return '$valueExpression as String';
     }
-    return '$valueExpression as ${type.getDisplayString()}';
+    return '$valueExpression as ${_typeCodeString(type)}';
   }
 
   bool _supportsDirectContainerCast(
@@ -1004,9 +1114,6 @@ GeneratedFieldType(
         field.fieldType.typeId == TypeIds.map;
   }
 
-  bool _usesDirectGeneratedPrimitiveFastPath(_GeneratedFieldSpec field) {
-    return _isPrimitiveTypeId(field.fieldType.typeId);
-  }
 
   List<_DirectGeneratedWriteReservationRun>
       _directGeneratedWriteReservationRuns(
@@ -1144,7 +1251,7 @@ GeneratedFieldType(
       case TypeIds.float64Array:
         return 'writeGeneratedFixedArrayValue(context, $valueExpression)';
       case TypeIds.enumById:
-        return 'buffer.writeVarUint32($valueExpression.index)';
+        return _enumWriteExpression(field.type, valueExpression);
       default:
         throw StateError(
           'Unsupported generated direct write fast path for ${field.name}.',
@@ -1199,7 +1306,11 @@ GeneratedFieldType(
       case TypeIds.timestamp:
         return '$cursorExpression.writeInt64($valueExpression.seconds); $cursorExpression.writeUint32($valueExpression.nanoseconds)';
       case TypeIds.enumById:
-        return '$cursorExpression.writeVarUint32($valueExpression.index)';
+        return _enumCursorWriteExpression(
+          field.type,
+          cursorExpression,
+          valueExpression,
+        );
       default:
         throw StateError(
           'Unsupported generated direct cursor write fast path for ${field.name}.',
@@ -1291,7 +1402,7 @@ GeneratedFieldType(
       case TypeIds.float64Array:
         return 'readGeneratedTypedArrayValue<Float64List>(context, 8, (bytes) => bytes.buffer.asFloat64List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 8))';
       case TypeIds.enumById:
-        return '${field.type.getDisplayString()}.values[context.readVarUint32()]';
+        return _enumReadExpression(field.type, 'context');
       default:
         throw StateError(
           'Unsupported generated direct read fast path for ${field.name}.',
@@ -1359,7 +1470,7 @@ GeneratedFieldType(
       case TypeIds.timestamp:
         return 'Timestamp($cursorExpression.readInt64(), $cursorExpression.readUint32())';
       case TypeIds.enumById:
-        return '${field.type.getDisplayString()}.values[$cursorExpression.readVarUint32()]';
+        return _enumCursorReadExpression(field.type, cursorExpression);
       default:
         throw StateError(
           'Unsupported generated direct cursor read fast path for ${field.name}.',
@@ -1374,15 +1485,15 @@ GeneratedFieldType(
   ) {
     if (_isList(field.type)) {
       final elementType = (field.type as InterfaceType).typeArguments.single;
-      return 'readGeneratedDirectListValue<${elementType.getDisplayString()}>(context, $fieldRuntimeExpression, ${_containerElementReaderFunctionName(structName, field)})';
+      return 'readGeneratedDirectListValue<${_typeCodeString(elementType)}>(context, $fieldRuntimeExpression, ${_containerElementReaderFunctionName(structName, field)})';
     }
     if (_isSet(field.type)) {
       final elementType = (field.type as InterfaceType).typeArguments.single;
-      return 'readGeneratedDirectSetValue<${elementType.getDisplayString()}>(context, $fieldRuntimeExpression, ${_containerElementReaderFunctionName(structName, field)})';
+      return 'readGeneratedDirectSetValue<${_typeCodeString(elementType)}>(context, $fieldRuntimeExpression, ${_containerElementReaderFunctionName(structName, field)})';
     }
     if (_isMap(field.type)) {
       final arguments = (field.type as InterfaceType).typeArguments;
-      return 'readGeneratedDirectMapValue<${arguments[0].getDisplayString()}, ${arguments[1].getDisplayString()}>(context, $fieldRuntimeExpression, ${_containerKeyReaderFunctionName(structName, field)}, ${_containerValueReaderFunctionName(structName, field)})';
+      return 'readGeneratedDirectMapValue<${_typeCodeString(arguments[0])}, ${_typeCodeString(arguments[1])}>(context, $fieldRuntimeExpression, ${_containerKeyReaderFunctionName(structName, field)}, ${_containerValueReaderFunctionName(structName, field)})';
     }
     throw StateError(
       'Unsupported generated typed container read fast path for ${field.name}.',
@@ -1412,7 +1523,7 @@ GeneratedFieldType(
     required String errorTarget,
     String? fallbackExpression,
   }) {
-    final displayType = type.getDisplayString();
+    final displayType = _typeCodeString(type);
     if (_isNullable(type)) {
       return 'null as $displayType';
     }
@@ -1451,7 +1562,7 @@ GeneratedFieldType(
       );
       output
         ..writeln(
-          '${elementType.getDisplayString()} $functionName(Object? value) {',
+          '${_typeCodeString(elementType)} $functionName(Object? value) {',
         )
         ..writeln(
           '  return ${_conversionExpressionForType(elementType, elementFieldType, 'value', nullExpression: _nullExpression(elementType, errorTarget: '${field.name} item'))};',
@@ -1476,7 +1587,7 @@ GeneratedFieldType(
       );
       output
         ..writeln(
-          '${keyType.getDisplayString()} $keyFunctionName(Object? value) {',
+          '${_typeCodeString(keyType)} $keyFunctionName(Object? value) {',
         )
         ..writeln(
           '  return ${_conversionExpressionForType(keyType, keyFieldType, 'value', nullExpression: _nullExpression(keyType, errorTarget: '${field.name} map key'))};',
@@ -1484,7 +1595,7 @@ GeneratedFieldType(
         ..writeln('}')
         ..writeln()
         ..writeln(
-          '${valueType.getDisplayString()} $valueFunctionName(Object? value) {',
+          '${_typeCodeString(valueType)} $valueFunctionName(Object? value) {',
         )
         ..writeln(
           '  return ${_conversionExpressionForType(valueType, valueFieldType, 'value', nullExpression: _nullExpression(valueType, errorTarget: '${field.name} map value'))};',
@@ -1777,6 +1888,80 @@ GeneratedFieldType(
     return null;
   }
 
+  _TypeSpecInfo? _analyzeTypeSpecAnnotation(FieldElement field) {
+    final listAnnotation = _listTypeChecker.firstAnnotationOf(field);
+    if (listAnnotation != null) {
+      return _readListTypeSpec(ConstantReader(listAnnotation));
+    }
+    final mapAnnotation = _mapTypeChecker.firstAnnotationOf(field);
+    if (mapAnnotation != null) {
+      return _readMapTypeSpec(ConstantReader(mapAnnotation));
+    }
+    return null;
+  }
+
+  _ListTypeSpecInfo _readListTypeSpec(ConstantReader reader) {
+    final options = _readTypeOptions(reader);
+    final elementObj = reader.peek('element');
+    final element = elementObj != null && !elementObj.isNull
+        ? _readTypeSpecObj(elementObj)
+        : null;
+    return _ListTypeSpecInfo(
+      ref: options.ref,
+      nullable: options.nullable,
+      element: element,
+    );
+  }
+
+  _MapTypeSpecInfo _readMapTypeSpec(ConstantReader reader) {
+    final options = _readTypeOptions(reader);
+    final keyObj = reader.peek('key');
+    final valueObj = reader.peek('value');
+    final key = keyObj != null && !keyObj.isNull
+        ? _readTypeSpecObj(keyObj)
+        : null;
+    final value = valueObj != null && !valueObj.isNull
+        ? _readTypeSpecObj(valueObj)
+        : null;
+    return _MapTypeSpecInfo(
+      ref: options.ref,
+      nullable: options.nullable,
+      key: key,
+      value: value,
+    );
+  }
+
+  _TypeSpecInfo _readTypeSpecObj(ConstantReader reader) {
+    final objType = reader.objectValue.type;
+    if (objType != null && _listTypeChecker.isExactlyType(objType)) {
+      return _readListTypeSpec(reader);
+    }
+    if (objType != null && _mapTypeChecker.isExactlyType(objType)) {
+      return _readMapTypeSpec(reader);
+    }
+    // ValueType or fallback
+    final options = _readTypeOptions(reader);
+    return _TypeSpecInfo(ref: options.ref, nullable: options.nullable);
+  }
+
+  ({bool? ref, bool? nullable}) _readTypeOptions(ConstantReader reader) {
+    bool? ref;
+    bool? nullable;
+    final optionsReader = reader.peek('options');
+    if (optionsReader != null && !optionsReader.isNull) {
+      for (final optionObj in optionsReader.listValue) {
+        final optionReader = ConstantReader(optionObj);
+        final optionType = optionObj.type;
+        if (optionType != null && _refOptionChecker.isExactlyType(optionType)) {
+          ref = optionReader.peek('tracked')?.boolValue ?? true;
+        } else if (optionType != null && _nullableOptionChecker.isExactlyType(optionType)) {
+          nullable = optionReader.peek('value')?.boolValue ?? true;
+        }
+      }
+    }
+    return (ref: ref, nullable: nullable);
+  }
+
   int _typeIdFor(DartType type, {_IntegerAnnotationSpec? integerAnnotation}) {
     if (integerAnnotation != null) {
       return integerAnnotation.typeId;
@@ -1856,8 +2041,70 @@ GeneratedFieldType(
         if (nonNullable.element is EnumElement) {
           return TypeIds.enumById;
         }
+        final element = nonNullable.element;
+        if (element is ClassElement &&
+            _foryUnionChecker.hasAnnotationOf(element)) {
+          return TypeIds.typedUnion;
+        }
         return TypeIds.compatibleStruct;
     }
+  }
+
+  bool _enumUsesRawValue(DartType type) {
+    final element = _withoutNullability(type).element;
+    if (element is! EnumElement) {
+      return false;
+    }
+    return _enumUsesRawValueElement(element);
+  }
+
+  bool _enumUsesRawValueElement(EnumElement element) {
+    final getter = element.getGetter('rawValue');
+    if (getter == null || getter.isStatic || !getter.returnType.isDartCoreInt) {
+      return false;
+    }
+    final method = element.getMethod('fromRawValue');
+    if (method == null ||
+        !method.isStatic ||
+        method.parameters.length != 1 ||
+        !method.parameters.single.type.isDartCoreInt) {
+      return false;
+    }
+    return method.returnType.element == element;
+  }
+
+  String _enumWriteExpression(DartType type, String valueExpression) {
+    if (_enumUsesRawValue(type)) {
+      return 'buffer.writeVarInt32($valueExpression.rawValue)';
+    }
+    return 'buffer.writeVarUint32($valueExpression.index)';
+  }
+
+  String _enumCursorWriteExpression(
+    DartType type,
+    String cursorExpression,
+    String valueExpression,
+  ) {
+    if (_enumUsesRawValue(type)) {
+      return '$cursorExpression.writeVarInt32($valueExpression.rawValue)';
+    }
+    return '$cursorExpression.writeVarUint32($valueExpression.index)';
+  }
+
+  String _enumReadExpression(DartType type, String contextExpression) {
+    final typeDisplay = _typeReferenceLiteral(type);
+    if (_enumUsesRawValue(type)) {
+      return '$typeDisplay.fromRawValue($contextExpression.readVarInt32())';
+    }
+    return '$typeDisplay.values[$contextExpression.readVarUint32()]';
+  }
+
+  String _enumCursorReadExpression(DartType type, String cursorExpression) {
+    final typeDisplay = _typeReferenceLiteral(type);
+    if (_enumUsesRawValue(type)) {
+      return '$typeDisplay.fromRawValue($cursorExpression.readVarInt32())';
+    }
+    return '$typeDisplay.values[$cursorExpression.readVarUint32()]';
   }
 
   bool _sameType(DartType left, DartType right) =>
@@ -1926,6 +2173,31 @@ GeneratedFieldType(
     return type.getDisplayString().replaceAll('?', '');
   }
 
+  String _typeReferenceLiteral(DartType type) {
+    final nonNullable = _withoutNullability(type);
+    if (nonNullable is DynamicType || nonNullable is InvalidType) {
+      return 'Object';
+    }
+    if (nonNullable is InterfaceType) {
+      final element = nonNullable.element;
+      final prefix = _importPrefixByLibraryIdentifier[element.library.identifier];
+      final baseName = prefix == null ? element.name : '$prefix.${element.name}';
+      if (nonNullable.typeArguments.isEmpty) {
+        return baseName;
+      }
+      final typeArguments = nonNullable.typeArguments
+          .map(_typeCodeString)
+          .join(', ');
+      return '$baseName<$typeArguments>';
+    }
+    return nonNullable.getDisplayString();
+  }
+
+  String _typeCodeString(DartType type) {
+    final base = _typeReferenceLiteral(type);
+    return _isNullable(type) ? '$base?' : base;
+  }
+
   String _toPascalCase(String value) => value
       .split(RegExp(r'[_\-\s]+'))
       .where((part) => part.isNotEmpty)
@@ -1956,8 +2228,9 @@ GeneratedFieldType(
 
 final class _GeneratedEnumSpec {
   final String name;
+  final bool usesRawValue;
 
-  const _GeneratedEnumSpec({required this.name});
+  const _GeneratedEnumSpec({required this.name, required this.usesRawValue});
 }
 
 final class _GeneratedStructSpec {
@@ -2069,4 +2342,25 @@ final class _IntegerAnnotationSpec {
   final int typeId;
 
   const _IntegerAnnotationSpec({required this.typeId});
+}
+
+/// Parsed representation of a [TypeSpec] annotation hierarchy.
+class _TypeSpecInfo {
+  final bool? ref;
+  final bool? nullable;
+
+  const _TypeSpecInfo({this.ref, this.nullable});
+}
+
+final class _ListTypeSpecInfo extends _TypeSpecInfo {
+  final _TypeSpecInfo? element;
+
+  const _ListTypeSpecInfo({super.ref, super.nullable, this.element});
+}
+
+final class _MapTypeSpecInfo extends _TypeSpecInfo {
+  final _TypeSpecInfo? key;
+  final _TypeSpecInfo? value;
+
+  const _MapTypeSpecInfo({super.ref, super.nullable, this.key, this.value});
 }

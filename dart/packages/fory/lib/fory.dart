@@ -8,6 +8,8 @@ library;
 
 export 'src/annotation/fory_field.dart';
 export 'src/annotation/fory_struct.dart';
+export 'src/annotation/fory_union.dart';
+export 'src/annotation/type_spec.dart';
 export 'src/annotation/numeric_types.dart';
 export 'src/buffer.dart'
     hide
@@ -24,6 +26,7 @@ export 'src/config.dart';
 export 'src/context/read_context.dart';
 export 'src/context/write_context.dart';
 export 'src/fory.dart';
+export 'src/meta/type_ids.dart';
 export 'src/serializer/enum_serializer.dart';
 export 'src/serializer/serializer.dart';
 export 'src/serializer/union_serializer.dart';

@@ -860,6 +860,149 @@ With non-empty package and `flatten` style, the helper is prefixed too (for exam
 For schemas without explicit `[id=...]`, registration uses computed numeric IDs.
 If `option enable_auto_type_id = false;` is set, generated code uses name-based registration APIs.
 
+## Dart
+
+### Output Layout
+
+Dart output is two files per schema: a main `.dart` file with annotated types, and a `.fory.dart` part file with generated serializers and registration helpers.
+
+- `<dart_out>/package/package.dart`
+- `<dart_out>/package/package.fory.dart`
+
+### Type Generation
+
+Messages generate `@ForyStruct` annotated `final class` declarations with `@ForyField` on each field:
+
+```dart
+@ForyStruct()
+final class Person {
+  Person();
+
+  @ForyField(id: 1)
+  String name = '';
+
+  @ForyField(id: 2)
+  Int32 id = Int32(0);
+
+  @ForyField(id: 7)
+  List<Person_PhoneNumber> phones = <Person_PhoneNumber>[];
+
+  @ForyField(id: 8)
+  Animal pet = Animal._empty();
+}
+```
+
+Enums generate Dart `enum` declarations with a `rawValue` getter and `fromRawValue` factory:
+
+```dart
+enum Person_PhoneType {
+  mobile,
+  home,
+  work;
+
+  int get rawValue => switch (this) {
+    Person_PhoneType.mobile => 0,
+    Person_PhoneType.home => 1,
+    Person_PhoneType.work => 2,
+  };
+
+  static Person_PhoneType fromRawValue(int value) => switch (value) {
+    0 => Person_PhoneType.mobile,
+    1 => Person_PhoneType.home,
+    2 => Person_PhoneType.work,
+    _ => throw StateError('Unknown Person_PhoneType raw value $value.'),
+  };
+}
+```
+
+Unions generate `@ForyUnion` annotated classes with factory constructors, a case enum, and a custom serializer:
+
+```dart
+enum AnimalCase {
+  dog,
+  cat;
+
+  int get id => switch (this) {
+    AnimalCase.dog => 1,
+    AnimalCase.cat => 2,
+  };
+}
+
+@ForyUnion()
+final class Animal {
+  final AnimalCase _case;
+  final Object? _value;
+
+  const Animal._(this._case, this._value);
+
+  factory Animal.dog(Dog value) => Animal._(AnimalCase.dog, value);
+  factory Animal.cat(Cat value) => Animal._(AnimalCase.cat, value);
+
+  bool get isDog => _case == AnimalCase.dog;
+  Dog get dogValue => _value as Dog;
+  // ...
+}
+```
+
+Nested types use flat underscore naming (e.g., `Person_PhoneNumber`, `Person_PhoneType`).
+
+Non-optional, non-ref lists of primitive types use typed arrays for zero-copy performance (e.g., `list<int32>` → `Int32List`).
+
+Reference tracking on list elements or map values uses `@ListType` / `@MapType` annotations:
+
+```dart
+@ListType(element: ValueType.ref())
+@ForyField(id: 3)
+List<Node> children = <Node>[];
+
+@MapType(value: ValueType.ref())
+@ForyField(id: 2)
+Map<String, Node> byName = <String, Node>{};
+```
+
+### Registration
+
+Each schema includes a registration helper that handles all types in the file and transitively registers imported types:
+
+```dart
+abstract final class ForyRegistration {
+  static void register(
+    Fory fory,
+    Type type, {
+    int? id,
+    String? namespace,
+    String? typeName,
+  }) {
+    if (type == Person) {
+      registerGeneratedStruct(fory, _personForyRegistration, id: id, namespace: namespace, typeName: typeName);
+      return;
+    }
+    // ... other types
+  }
+}
+```
+
+### Usage
+
+```dart
+import 'package:fory/fory.dart';
+import 'generated/addressbook/addressbook.dart';
+
+void main() {
+  final fory = Fory();
+  ForyRegistration.register(fory, Person, id: 100);
+  ForyRegistration.register(fory, Dog, id: 104);
+  // ...
+
+  final person = Person()
+    ..name = 'Alice'
+    ..id = Int32(1);
+
+  final bytes = fory.serialize(person);
+  final roundTrip = fory.deserialize<Person>(bytes);
+}
+```
+
 ## Cross-Language Notes
 
 ### Type ID Behavior
@@ -880,6 +1023,7 @@ If `option enable_auto_type_id = false;` is set, generated code uses name-based 
 | C#         | `Person.PhoneNumber`           |
 | JavaScript | `Person.PhoneNumber`           |
 | Swift      | `Person.PhoneNumber`           |
+| Dart       | `Person_PhoneNumber`           |
 
 ### Byte Helper Naming
 
@@ -893,3 +1037,4 @@ If `option enable_auto_type_id = false;` is set, generated code uses name-based 
 | C#         | `ToBytes` / `FromBytes`   |
 | JavaScript | (via `fory.serialize()`)  |
 | Swift      | `toBytes` / `fromBytes`   |
+| Dart       | (via `fory.serialize()`)  |

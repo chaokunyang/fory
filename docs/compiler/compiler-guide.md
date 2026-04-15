@@ -66,6 +66,7 @@ Compile options:
 | `--csharp_out=DST_DIR`                | Generate C# code in DST_DIR                           | (none)        |
 | `--javascript_out=DST_DIR`            | Generate JavaScript code in DST_DIR                   | (none)        |
 | `--swift_out=DST_DIR`                 | Generate Swift code in DST_DIR                        | (none)        |
+| `--dart_out=DST_DIR`                  | Generate Dart code in DST_DIR                         | (none)        |
 | `--go_nested_type_style`              | Go nested type naming: `camelcase` or `underscore`    | `underscore`  |
 | `--swift_namespace_style`             | Swift namespace style: `enum` or `flatten`            | `enum`        |
 | `--emit-fdl`                          | Emit translated FDL (for non-FDL inputs)              | `false`       |
@@ -116,7 +117,7 @@ foryc schema.fdl
 **Compile for specific languages:**
 
 ```bash
-foryc schema.fdl --lang java,python,csharp,javascript,swift
+foryc schema.fdl --lang java,python,csharp,javascript,swift,dart
 ```
 
 **Specify output directory:**
@@ -169,7 +170,7 @@ foryc src/main.fdl -I libs/common,libs/types --proto_path third_party/
 foryc schema.fdl --java_out=./src/main/java
 
 # Generate multiple languages to different directories
-foryc schema.fdl --java_out=./java/gen --python_out=./python/src --go_out=./go/gen --csharp_out=./csharp/gen --javascript_out=./javascript/src --swift_out=./swift/gen
+foryc schema.fdl --java_out=./java/gen --python_out=./python/src --go_out=./go/gen --csharp_out=./csharp/gen --javascript_out=./javascript/src --swift_out=./swift/gen --dart_out=./dart/gen
 
 # Combine with import paths
 foryc schema.fdl --java_out=./gen/java -I proto/ -I common/
@@ -238,16 +239,17 @@ Compiling src/main.fdl...
 
 ## Supported Languages
 
-| Language   | Flag         | Output Extension | Description                           |
-| ---------- | ------------ | ---------------- | ------------------------------------- |
-| Java       | `java`       | `.java`          | POJOs with Fory annotations           |
-| Python     | `python`     | `.py`            | Dataclasses with type hints           |
-| Go         | `go`         | `.go`            | Structs with struct tags              |
-| Rust       | `rust`       | `.rs`            | Structs with derive macros            |
-| C++        | `cpp`        | `.h`             | Structs with FORY macros              |
-| C#         | `csharp`     | `.cs`            | Classes with Fory attributes          |
-| JavaScript | `javascript` | `.ts`            | Interfaces with registration function |
-| Swift      | `swift`      | `.swift`         | `@ForyObject` Swift models            |
+| Language   | Flag         | Output Extension | Description                            |
+| ---------- | ------------ | ---------------- | -------------------------------------- |
+| Java       | `java`       | `.java`          | POJOs with Fory annotations            |
+| Python     | `python`     | `.py`            | Dataclasses with type hints            |
+| Go         | `go`         | `.go`            | Structs with struct tags               |
+| Rust       | `rust`       | `.rs`            | Structs with derive macros             |
+| C++        | `cpp`        | `.h`             | Structs with FORY macros               |
+| C#         | `csharp`     | `.cs`            | Classes with Fory attributes           |
+| JavaScript | `javascript` | `.ts`            | Interfaces with registration function  |
+| Swift      | `swift`      | `.swift`         | `@ForyObject` Swift models             |
+| Dart       | `dart`       | `.dart`          | `@ForyStruct` classes with annotations |
 
 ## Output Structure
 
@@ -361,6 +363,21 @@ generated/
 - Union types are generated as tagged enums with associated payload values
 - Each schema includes `ForyRegistration` and `toBytes`/`fromBytes` helpers
 - Imported schemas are registered transitively by generated registration helpers
+
+### Dart
+
+```
+generated/
+└── dart/
+    └── package/
+        ├── package.dart
+        └── package.fory.dart
+```
+
+- Two files per schema: a main `.dart` file with annotated types, and a `.fory.dart` part file with generated serializers
+- Package segments map to directories (e.g., `demo.foo` → `demo/foo/`)
+- Registration helper class included in the part file
+- Typed arrays used for non-optional, non-ref primitive lists (e.g., `Int32List`)
 
 ### C# IDL Matrix Verification
 
@@ -586,6 +603,30 @@ cc_library(
 )
 ```
 
+### Dart / Flutter
+
+Add the Fory dependency to `pubspec.yaml`:
+
+```yaml
+dependencies:
+  fory: ^0.1.0
+
+dev_dependencies:
+  build_runner: ^2.4.0
+```
+
+Generate schema types with the compiler:
+
+```bash
+foryc schema.fdl --dart_out=lib/generated
+```
+
+Then run `build_runner` to generate the serializers:
+
+```bash
+dart run build_runner build
+```
+
 ## Error Handling
 
 ### Syntax Errors
@@ -755,3 +796,10 @@ fory = "x.y.z"
 ```
 
 **C++:** Ensure Fory headers are in include path.
+
+**Dart:** Ensure the fory package is in `pubspec.yaml`:
+
+```yaml
+dependencies:
+  fory: ^0.1.0
+```

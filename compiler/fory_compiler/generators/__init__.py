@@ -26,6 +26,7 @@ from fory_compiler.generators.go import GoGenerator
 from fory_compiler.generators.csharp import CSharpGenerator
 from fory_compiler.generators.javascript import JavaScriptGenerator
 from fory_compiler.generators.swift import SwiftGenerator
+from fory_compiler.generators.dart import DartGenerator
 
 GENERATORS = {
     "java": JavaGenerator,
@@ -36,6 +37,7 @@ GENERATORS = {
     "csharp": CSharpGenerator,
     "javascript": JavaScriptGenerator,
     "swift": SwiftGenerator,
+    "dart": DartGenerator,
 }
 
 __all__ = [
@@ -48,5 +50,6 @@ __all__ = [
     "CSharpGenerator",
     "JavaScriptGenerator",
     "SwiftGenerator",
+    "DartGenerator",
     "GENERATORS",
 ]

@@ -102,6 +102,7 @@ package com.example.models alias models_v1;
 | C++        | Namespace (dots to `::`)          |
 | C#         | Namespace                         |
 | JavaScript | Module name (last segment)        |
+| Dart       | Library name (package segments)   |
 
 ## File-Level Options
 
@@ -551,6 +552,7 @@ FDL does not support `option ...;` statements inside enum bodies.
 | Rust       | `#[repr(i32)] enum Status { Unknown }` |
 | C++        | `enum class Status : int32_t { ... }`  |
 | JavaScript | `export enum Status { UNKNOWN, ... }`  |
+| Dart       | `enum Status { unknown, active, ... }` |
 
 ### Enum Prefix Stripping
 
@@ -575,6 +577,7 @@ enum DeviceTier {
 | Python     | `UNKNOWN, TIER1, TIER2`                   | Scoped IntEnum |
 | Go         | `DeviceTierUnknown, DeviceTierTier1, ...` | Unscoped const |
 | JavaScript | `UNKNOWN, TIER1, TIER2`                   | Scoped enum    |
+| Dart       | `unknown, tier1, tier2`                   | Scoped enum    |
 
 **Note:** The prefix is only stripped if the remainder is a valid identifier. For example, `DEVICE_TIER_1` is kept unchanged because `1` is not a valid identifier name.
 
@@ -652,6 +655,7 @@ message Person {  // Auto-generated when enable_auto_type_id = true
 | Rust       | Struct with `#[derive(ForyObject)]` |
 | C++        | Struct with `FORY_STRUCT` macro     |
 | JavaScript | `export interface` declaration      |
+| Dart       | `@ForyStruct` `final class`         |
 
 Type IDs control cross-language registration for messages, unions, and enums. See
 [Type IDs](#type-ids) for auto-generation, aliases, and collision handling.
@@ -776,6 +780,7 @@ message OtherMessage {
 | Rust       | Nested modules (`search_response::Result`)                                        |
 | C++        | Nested classes (`SearchResponse::Result`)                                         |
 | JavaScript | Flat names (`Result`)                                                             |
+| Dart       | Flat classes with underscore (`SearchResponse_Result`)                            |
 
 **Note:** Go defaults to underscore-separated nested names; set `option go_nested_type_style = "camelcase";` to use concatenated names. Rust emits nested modules for nested types.
 
@@ -879,6 +884,7 @@ message User {
 | Rust       | `name: String`     | `name: Option<String>`                          |
 | C++        | `std::string name` | `std::optional<std::string> name`               |
 | JavaScript | `name: string`     | `name?: string \| null`                         |
+| Dart       | `String name`      | `String? email`                                 |
 
 **Default Values:**
 
@@ -907,14 +913,15 @@ message Node {
 
 **Generated Code:**
 
-| Language   | Without `ref`  | With `ref`                                |
-| ---------- | -------------- | ----------------------------------------- |
-| Java       | `Node parent`  | `Node parent` with `@ForyField(ref=true)` |
-| Python     | `parent: Node` | `parent: Node = pyfory.field(ref=True)`   |
-| Go         | `Parent Node`  | `Parent *Node` with `fory:"ref"`          |
-| Rust       | `parent: Node` | `parent: Arc<Node>`                       |
-| C++        | `Node parent`  | `std::shared_ptr<Node> parent`            |
-| JavaScript | `parent: Node` | `parent: Node` (no ref distinction)       |
+| Language   | Without `ref`  | With `ref`                                 |
+| ---------- | -------------- | ------------------------------------------ |
+| Java       | `Node parent`  | `Node parent` with `@ForyField(ref=true)`  |
+| Python     | `parent: Node` | `parent: Node = pyfory.field(ref=True)`    |
+| Go         | `Parent Node`  | `Parent *Node` with `fory:"ref"`           |
+| Rust       | `parent: Node` | `parent: Arc<Node>`                        |
+| C++        | `Node parent`  | `std::shared_ptr<Node> parent`             |
+| JavaScript | `parent: Node` | `parent: Node` (no ref distinction)        |
+| Dart       | `Node parent`  | `Node parent` with `@ForyField(ref: true)` |
 
 Rust uses `Arc` by default; use `ref(thread_safe=false)` or `ref(weak=true)`
 to customize pointer types. For protobuf option syntax, see
@@ -941,6 +948,7 @@ message Document {
 | Rust       | `Vec<String>`              |
 | C++        | `std::vector<std::string>` |
 | JavaScript | `string[]`                 |
+| Dart       | `List<String>`             |
 
 ### Combining Modifiers
 
@@ -961,12 +969,12 @@ apply to elements. `repeated` is accepted as an alias for `list`.
 
 **List modifier mapping:**
 
-| Fory IDL                | Java                                           | Python                                  | Go                      | Rust                  | C++                                       |
-| ----------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- |
-| `optional list<string>` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` |
-| `list<optional string>` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` |
-| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      |
-| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      |
+| Fory IDL                | Java                                           | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                 |
+| ----------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| `optional list<string>` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                      |
+| `list<optional string>` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                      |
+| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`               |
+| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListType(element: ValueType.ref())` |
 
 Use `ref(thread_safe=false)` in Fory IDL (or `[(fory).thread_safe_pointer = false]` in protobuf)
 to generate `Rc` instead of `Arc` in Rust.
@@ -1037,6 +1045,7 @@ collection behavior, and reference tracking (see
 | Rust       | `bool`                |                    |
 | C++        | `bool`                |                    |
 | JavaScript | `boolean`             |                    |
+| Dart       | `bool`                |                    |
 
 #### Integer Types
 
@@ -1051,12 +1060,12 @@ Fory IDL provides fixed-width signed integers (varint encoding for 32/64-bit by 
 
 **Language Mapping (Signed):**
 
-| Fory IDL | Java    | Python         | Go      | Rust  | C++       | JavaScript         |
-| -------- | ------- | -------------- | ------- | ----- | --------- | ------------------ |
-| `int8`   | `byte`  | `pyfory.int8`  | `int8`  | `i8`  | `int8_t`  | `number`           |
-| `int16`  | `short` | `pyfory.int16` | `int16` | `i16` | `int16_t` | `number`           |
-| `int32`  | `int`   | `pyfory.int32` | `int32` | `i32` | `int32_t` | `number`           |
-| `int64`  | `long`  | `pyfory.int64` | `int64` | `i64` | `int64_t` | `bigint \| number` |
+| Fory IDL | Java    | Python         | Go      | Rust  | C++       | JavaScript         | Dart    |
+| -------- | ------- | -------------- | ------- | ----- | --------- | ------------------ | ------- |
+| `int8`   | `byte`  | `pyfory.int8`  | `int8`  | `i8`  | `int8_t`  | `number`           | `Int8`  |
+| `int16`  | `short` | `pyfory.int16` | `int16` | `i16` | `int16_t` | `number`           | `Int16` |
+| `int32`  | `int`   | `pyfory.int32` | `int32` | `i32` | `int32_t` | `number`           | `Int32` |
+| `int64`  | `long`  | `pyfory.int64` | `int64` | `i64` | `int64_t` | `bigint \| number` | `int`   |
 
 Fory IDL provides fixed-width unsigned integers (varint encoding for 32/64-bit by default):
 
@@ -1069,12 +1078,12 @@ Fory IDL provides fixed-width unsigned integers (varint encoding for 32/64-bit b
 
 **Language Mapping (Unsigned):**
 
-| Fory IDL | Java    | Python          | Go       | Rust  | C++        | JavaScript         |
-| -------- | ------- | --------------- | -------- | ----- | ---------- | ------------------ |
-| `uint8`  | `short` | `pyfory.uint8`  | `uint8`  | `u8`  | `uint8_t`  | `number`           |
-| `uint16` | `int`   | `pyfory.uint16` | `uint16` | `u16` | `uint16_t` | `number`           |
-| `uint32` | `long`  | `pyfory.uint32` | `uint32` | `u32` | `uint32_t` | `number`           |
-| `uint64` | `long`  | `pyfory.uint64` | `uint64` | `u64` | `uint64_t` | `bigint \| number` |
+| Fory IDL | Java    | Python          | Go       | Rust  | C++        | JavaScript         | Dart     |
+| -------- | ------- | --------------- | -------- | ----- | ---------- | ------------------ | -------- |
+| `uint8`  | `short` | `pyfory.uint8`  | `uint8`  | `u8`  | `uint8_t`  | `number`           | `UInt8`  |
+| `uint16` | `int`   | `pyfory.uint16` | `uint16` | `u16` | `uint16_t` | `number`           | `UInt16` |
+| `uint32` | `long`  | `pyfory.uint32` | `uint32` | `u32` | `uint32_t` | `number`           | `UInt32` |
+| `uint64` | `long`  | `pyfory.uint64` | `uint64` | `u64` | `uint64_t` | `bigint \| number` | `int`    |
 
 #### Integer Encoding Variants
 
@@ -1099,10 +1108,10 @@ you need fixed-width or tagged encoding:
 
 **Language Mapping:**
 
-| Fory IDL  | Java     | Python           | Go        | Rust  | C++      | JavaScript |
-| --------- | -------- | ---------------- | --------- | ----- | -------- | ---------- |
-| `float32` | `float`  | `pyfory.float32` | `float32` | `f32` | `float`  | `number`   |
-| `float64` | `double` | `pyfory.float64` | `float64` | `f64` | `double` | `number`   |
+| Fory IDL  | Java     | Python           | Go        | Rust  | C++      | JavaScript | Dart      |
+| --------- | -------- | ---------------- | --------- | ----- | -------- | ---------- | --------- |
+| `float32` | `float`  | `pyfory.float32` | `float32` | `f32` | `float`  | `number`   | `Float32` |
+| `float64` | `double` | `pyfory.float64` | `float64` | `f64` | `double` | `number`   | `double`  |
 
 #### String Type
 
@@ -1114,6 +1123,7 @@ you need fixed-width or tagged encoding:
 | Rust       | `String`      | Owned, heap-allocated |
 | C++        | `std::string` |                       |
 | JavaScript | `string`      |                       |
+| Dart       | `String`      |                       |
 
 #### Bytes Type
 
@@ -1125,6 +1135,7 @@ you need fixed-width or tagged encoding:
 | Rust       | `Vec<u8>`              |           |
 | C++        | `std::vector<uint8_t>` |           |
 | JavaScript | `Uint8Array`           |           |
+| Dart       | `Uint8List`            |           |
 
 #### Temporal Types
 
@@ -1138,6 +1149,7 @@ you need fixed-width or tagged encoding:
 | Rust       | `chrono::NaiveDate`         | Requires `chrono` crate |
 | C++        | `fory::serialization::Date` |                         |
 | JavaScript | `Date`                      |                         |
+| Dart       | `LocalDate`                 | Fory package type       |
 
 ##### Timestamp
 
@@ -1149,6 +1161,7 @@ you need fixed-width or tagged encoding:
 | Rust       | `chrono::NaiveDateTime`          | Requires `chrono` crate |
 | C++        | `fory::serialization::Timestamp` |                         |
 | JavaScript | `Date`                           |                         |
+| Dart       | `Timestamp`                      | Fory package type       |
 
 #### Any
 
@@ -1160,6 +1173,7 @@ you need fixed-width or tagged encoding:
 | Rust       | `Box<dyn Any>` | Runtime type written |
 | C++        | `std::any`     | Runtime type written |
 | JavaScript | `any`          | Runtime type written |
+| Dart       | `Object?`      | Runtime type written |
 
 **Example:**
 
@@ -1189,6 +1203,7 @@ message Envelope [id=122] {
 | Rust       | `payload: Box<dyn Any>` |
 | C++        | `std::any payload`      |
 | JavaScript | `payload: any`          |
+| Dart       | `Object? payload`       |
 
 **Notes:**
 
@@ -1239,10 +1254,10 @@ message Config {
 
 **Language Mapping:**
 
-| Fory IDL             | Java                   | Python            | Go                 | Rust                    | C++                              | JavaScript            |
-| -------------------- | ---------------------- | ----------------- | ------------------ | ----------------------- | -------------------------------- | --------------------- |
-| `map<string, int32>` | `Map<String, Integer>` | `Dict[str, int]`  | `map[string]int32` | `HashMap<String, i32>`  | `std::map<std::string, int32_t>` | `Map<string, number>` |
-| `map<string, User>`  | `Map<String, User>`    | `Dict[str, User]` | `map[string]User`  | `HashMap<String, User>` | `std::map<std::string, User>`    | `Map<string, User>`   |
+| Fory IDL             | Java                   | Python            | Go                 | Rust                    | C++                              | JavaScript            | Dart                 |
+| -------------------- | ---------------------- | ----------------- | ------------------ | ----------------------- | -------------------------------- | --------------------- | -------------------- |
+| `map<string, int32>` | `Map<String, Integer>` | `Dict[str, int]`  | `map[string]int32` | `HashMap<String, i32>`  | `std::map<std::string, int32_t>` | `Map<string, number>` | `Map<String, Int32>` |
+| `map<string, User>`  | `Map<String, User>`    | `Dict[str, User]` | `map[string]User`  | `HashMap<String, User>` | `std::map<std::string, User>`    | `Map<string, User>`   | `Map<String, User>`  |
 
 **Key Type Restrictions:**
 

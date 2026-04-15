@@ -50,6 +50,7 @@ LANG_OUTPUTS = {
     "javascript": REPO_ROOT / "integration_tests/idl_tests/javascript/generated",
     "swift": REPO_ROOT
     / "integration_tests/idl_tests/swift/idl_package/Sources/IdlGenerated/generated",
+    "dart": REPO_ROOT / "integration_tests/idl_tests/dart/lib/generated",
 }
 
 GO_OUTPUT_OVERRIDES = {

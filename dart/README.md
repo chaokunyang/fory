@@ -1,145 +1,97 @@
 # Apache Fory™ Dart
 
-## Overview
+Apache Fory™ Dart is the Dart xlang runtime for Apache Fory™. It reads and
+writes Fory's cross-language wire format and works in both Dart and Flutter
+applications. Because Flutter prohibits `dart:mirrors`, the runtime uses static
+code generation for type handling.
 
-This PR adds Dart language support to Apache Fory™, implementing a comprehensive serialization solution for Dart and Flutter applications. Apache Fory™ Dart consists of approximately 15,000 lines of code and provides an efficient serialization mechanism that works within Flutter's reflection limitations.
-
-## Implementation Approach
-
-Dart supports reflection, but Flutter explicitly prohibits it. To address this constraint, Apache Fory™ Dart uses a combination of:
-
-1. Core serialization/deserialization logic
-2. Static code generation for type handling
-
-This approach ensures compatibility with Flutter while maintaining the performance and flexibility expected from Apache Fory™.
-
-## Features
-
-- XLANG mode support for cross-language serialization
-- Reference tracking for handling object graphs
-- Support for primitive types, collections, and custom classes
-- Serializer registration system
-- Code generation for class and enum serialization
-- Support for nested collections with automatic generic type conversion
-- Custom serializer registration
-- Support for using ByteWriter/ByteReader as serialization sources
-
-## Usage Examples
-
-### Basic Class Serialization
-
-```dart
-import 'package:fory/fory.dart';
-
-part 'example.g.dart';
-
-@foryClass
-class SomeClass with _$SomeClassFory {
-  late int id;
-  late String name;
-  late Map<String, double> map;
-
-  SomeClass(this.id, this.name, this.map);
-
-  SomeClass.noArgs();
-}
-```
-
-After annotating your class with `@foryClass`, run:
-
-```bash
-dart run build_runner build
-```
-
-This generates the necessary code in `example.g.dart` and creates the `_$SomeClassFory` mixin.
-
-### Serializing and Deserializing
-
-```dart
-Fory fory = Fory(ref: true);
-fory.register($SomeClass, typename: "example.SomeClass");
-SomeClass obj = SomeClass(1, 'SomeClass', {'a': 1.0});
-
-// Serialize
-Uint8List bytes = fory.serialize(obj);
-
-// Deserialize
-obj = fory.deserialize(bytes) as SomeClass;
-```
-
-### Enum Serialization
-
-```dart
-import 'package:fory/fory.dart';
-
-part 'example.g.dart';
-
-@foryEnum
-enum EnumFoo {
-  A,
-  B
-}
-```
-
-Registration is similar to classes:
-
-```dart
-fory.register($EnumFoo, typename: "example.EnumFoo");
-```
-
-## Type Support
-
-Apache Fory™ Dart currently supports the following type mappings in XLANG mode:
-
-| Fory Type     | Dart Type                                  |
-| ------------- | ------------------------------------------ |
-| bool          | bool                                       |
-| int8          | fory.Int8                                  |
-| int16         | fory.Int16                                 |
-| int32         | fory.Int32                                 |
-| var_int32     | fory.Int32                                 |
-| int64         | int                                        |
-| var_int64     | int                                        |
-| sli_int64     | int                                        |
-| float32       | fory.Float32                               |
-| float64       | double                                     |
-| string        | String                                     |
-| enum          | Enum                                       |
-| named_enum    | Enum                                       |
-| named_struct  | class                                      |
-| list          | List                                       |
-| set           | Set (LinkedHashSet, HashSet, SplayTreeSet) |
-| map           | Map (LinkedHashMap, HashMap, SplayTreeMap) |
-| timestamp     | fory.TimeStamp                             |
-| local_date    | fory.LocalDate                             |
-| binary        | Uint8List                                  |
-| bool_array    | BoolList                                   |
-| int8_array    | Int8List                                   |
-| int16_array   | Int16List                                  |
-| int32_array   | Int32List                                  |
-| int64_array   | Int64List                                  |
-| float32_array | Float32List                                |
-| float64_array | Float64List                                |
+The publishable package lives at `packages/fory/`. See its
+[README](packages/fory/README.md) for the full user-facing documentation
+including getting started, API reference, and code examples.
 
 ## Project Structure
 
-The implementation is organized into three main components:
+| Directory                        | Description                             |
+| -------------------------------- | --------------------------------------- |
+| `packages/fory/lib/`             | Core runtime and public API             |
+| `packages/fory/lib/src/codegen/` | Build-runner code generator             |
+| `packages/fory/example/`         | Annotated example with generated output |
+| `packages/fory/test/`            | Unit and integration tests              |
+| `test/`                          | Cross-language integration tests        |
 
-1. **Codegen**: Located at `dart/packages/fory/lib/src/codegen`
-   Handles static code generation for serialization/deserialization.
+## Type Mapping
 
-2. **ForyCore**: Located at `dart/packages/fory/lib/src`
-   Contains the core serialization and deserialization logic.
+| Fory xlang type | Dart type                |
+| --------------- | ------------------------ |
+| bool            | `bool`                   |
+| int8            | `fory.Int8` (wrapper)    |
+| int16           | `fory.Int16` (wrapper)   |
+| int32           | `fory.Int32` (wrapper)   |
+| int64           | `int`                    |
+| float16         | `fory.Float16` (wrapper) |
+| float32         | `fory.Float32` (wrapper) |
+| float64         | `double`                 |
+| string          | `String`                 |
+| binary          | `Uint8List`              |
+| local_date      | `LocalDate`              |
+| timestamp       | `Timestamp`              |
+| list            | `List`                   |
+| set             | `Set`                    |
+| map             | `Map`                    |
+| enum            | `enum`                   |
+| named_struct    | `class`                  |
+| bool_array      | `List<bool>`             |
+| int8_array      | `Int8List`               |
+| int16_array     | `Int16List`              |
+| int32_array     | `Int32List`              |
+| int64_array     | `Int64List`              |
+| float32_array   | `Float32List`            |
+| float64_array   | `Float64List`            |
 
-3. **ForyTest**: Located at `dart/fory-test`
-   Comprehensive test suite for Apache Fory™ Dart functionality.
+## Quick Start
 
-## Testing Approach
+Annotate your model and run the code generator:
 
-The test suite is inspired by Apache Fory™ Java's testing approach and includes:
+```dart
+import 'package:fory/fory.dart';
 
-- **Data Type Tests**: Validates custom data types implemented for Dart
-- **Code Generation Tests**: Ensures correctness of the generated static code
-- **Buffer Tests**: Validates correct memory handling for primitive types
-- **Cross-Language Tests**: Tests functionality against other Apache Fory™ implementations
-- **Performance Tests**: Simple benchmarks for serialization/deserialization performance
+part 'person.fory.dart';
+
+@ForyStruct()
+class Person {
+  Person();
+
+  String name = '';
+  Int32 age = Int32(0);
+}
+```
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+```
+
+Serialize and deserialize:
+
+```dart
+final fory = Fory();
+PersonFory.register(fory, Person, namespace: 'example', typeName: 'Person');
+
+final bytes = fory.serialize(Person()..name = 'Ada'..age = Int32(36));
+final roundTrip = fory.deserialize<Person>(bytes);
+```
+
+## Development
+
+Run tests from the workspace root:
+
+```bash
+cd packages/fory
+dart test
+```
+
+Run the code generator on the example:
+
+```bash
+cd packages/fory
+dart run build_runner build --delete-conflicting-outputs
+```

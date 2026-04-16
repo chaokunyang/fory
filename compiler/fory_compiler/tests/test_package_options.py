@@ -494,9 +494,15 @@ class TestJavaOuterClassname:
         assert "myapp/DescriptorProtos.java" == outer_file.path
 
         # Check content
+        assert "import org.apache.fory.annotation.ForyEnumId;" in outer_file.content
         assert "public final class DescriptorProtos" in outer_file.content
         assert "private DescriptorProtos()" in outer_file.content
         assert "public static enum Status" in outer_file.content
+        assert "UNKNOWN(0)," in outer_file.content
+        assert "ACTIVE(1);" in outer_file.content
+        assert "private final int id;" in outer_file.content
+        assert "@ForyEnumId" in outer_file.content
+        assert "public int getId()" in outer_file.content
         assert "public static class User" in outer_file.content
         assert "public static class Order" in outer_file.content
 
@@ -606,6 +612,12 @@ class TestJavaOuterClassname:
         assert "Status.java" in file_names
         assert "User.java" in file_names
         assert "MyappForyRegistration.java" in file_names
+        status_file = next(f for f in files if f.path.endswith("Status.java"))
+        assert "import org.apache.fory.annotation.ForyEnumId;" in status_file.content
+        assert "UNKNOWN(0);" in status_file.content
+        assert "private final int id;" in status_file.content
+        assert "@ForyEnumId" in status_file.content
+        assert "public int getId()" in status_file.content
 
 
 class TestJavaMultipleFiles:

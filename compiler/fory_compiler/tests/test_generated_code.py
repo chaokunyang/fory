@@ -543,6 +543,32 @@ def test_java_repeated_float16_generation_uses_float16_list():
     assert "private Float16List vals;" in java_output
 
 
+def test_java_enum_generation_uses_fory_enum_ids():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            enum Status {
+                UNKNOWN = 4096;
+                OK = 8192;
+            }
+            """
+        )
+    )
+    java_output = render_files(generate_files(schema, JavaGenerator))
+    assert "import org.apache.fory.annotation.ForyEnumId;" in java_output
+    assert "public enum Status {" in java_output
+    assert "UNKNOWN(4096)," in java_output
+    assert "OK(8192);" in java_output
+    assert "private final int id;" in java_output
+    assert "Status(int id) {" in java_output
+    assert "this.id = id;" in java_output
+    assert "@ForyEnumId" in java_output
+    assert "public int getId() {" in java_output
+    assert "return id;" in java_output
+
+
 def test_go_bfloat16_generation():
     idl = dedent(
         """

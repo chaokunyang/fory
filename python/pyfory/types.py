@@ -21,6 +21,14 @@ import typing
 from typing import TypeVar
 
 try:
+    from typing import Annotated as _Annotated
+except ImportError:
+    try:
+        from typing_extensions import Annotated as _Annotated
+    except ImportError:
+        _Annotated = None
+
+try:
     import numpy as np
 
     ndarray = np.ndarray
@@ -219,10 +227,9 @@ class Ref:
             enable = params[1]
         if not isinstance(enable, bool):
             raise TypeError("Ref enable must be a bool")
-        annotated = getattr(typing, "Annotated", None)
-        if annotated is None:
+        if _Annotated is None:
             return target
-        return annotated[target, RefMeta(enable)]
+        return _Annotated[target, RefMeta(enable)]
 
 
 _primitive_types = {

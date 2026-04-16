@@ -16,6 +16,7 @@
 # under the License.
 
 from dataclasses import dataclass
+import typing
 from typing import Any, List
 
 import pytest
@@ -25,6 +26,7 @@ from pyfory import Ref
 from pyfory import _fory as fmod
 from pyfory.resolver import REF_FLAG, REF_VALUE_FLAG
 from pyfory.serializer import ListSerializer
+from pyfory.type_util import get_type_hints, unwrap_ref
 
 
 def _roundtrip(fory, value):
@@ -218,6 +220,13 @@ def test_collection_ref_override_unsets_tracking_bit():
     reader = pyfory.Buffer(payload)
     assert reader.read_var_uint32() == 2
     assert (reader.read_int8() & 0b1) == 0
+
+
+def test_ref_annotation_preserves_override():
+    type_hints = get_type_hints(CollectionRefOverrideContainer)
+    item_type = typing.get_args(type_hints["items"])[0]
+    _, elem_ref_override = unwrap_ref(item_type)
+    assert elem_ref_override is False
 
 
 def test_collection_ref_override_disables_alias_preservation():

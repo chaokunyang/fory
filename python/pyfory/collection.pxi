@@ -56,16 +56,18 @@ cdef class CollectionSerializer(Serializer):
     def __init__(self, type_resolver, type_, elem_serializer=None, elem_tracking_ref=None):
         super().__init__(type_resolver, type_)
         self.elem_serializer = elem_serializer
+        if elem_tracking_ref is not None:
+            self.elem_tracking_ref = <int8_t>(1 if elem_tracking_ref else 0)
+        else:
+            self.elem_tracking_ref = -1
         if elem_serializer is None:
             self.elem_type = None
             self.elem_type_info = self.type_resolver.get_type_info(None)
-            self.elem_tracking_ref = -1
         else:
             self.elem_type = elem_serializer.type_
             self.elem_type_info = self.type_resolver.get_type_info(self.elem_type)
-            self.elem_tracking_ref = <int8_t>elem_serializer.need_to_write_ref
-            if elem_tracking_ref is not None:
-                self.elem_tracking_ref = <int8_t>(1 if elem_tracking_ref else 0)
+            if elem_tracking_ref is None:
+                self.elem_tracking_ref = <int8_t>elem_serializer.need_to_write_ref
 
     cdef inline TypeInfo write_header(self, WriteContext write_context, value, int8_t *collect_flag_ptr):
         cdef int8_t collect_flag = COLL_DEFAULT_FLAG

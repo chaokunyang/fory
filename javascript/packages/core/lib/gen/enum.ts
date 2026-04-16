@@ -32,15 +32,44 @@ class EnumSerializerGenerator extends BaseSerializerGenerator {
     this.typeInfo = typeInfo;
   }
 
+  private getEnumEntries(): Array<[string, string | number]> {
+    const enumProps = this.typeInfo.options?.enumProps;
+    if (!enumProps) {
+      return [];
+    }
+    return Object.entries(enumProps).filter(([key, value]) => {
+      return !(typeof value === "string" && Number.isInteger(Number(key)));
+    });
+  }
+
+  private useExplicitNumericWireValues(entries: Array<[string, string | number]>): boolean {
+    if (entries.length < 1) {
+      throw new Error("An enum must contain at least one field");
+    }
+    const seen = new Set<number>();
+    for (const [, value] of entries) {
+      if (typeof value === "string") {
+        return false;
+      }
+      if (!Number.isInteger(value) || value > MaxUInt32 || value < 0) {
+        throw new Error("Enum value must be a valid uint32");
+      }
+      if (seen.has(value)) {
+        throw new Error("Enum numeric values must be unique");
+      }
+      seen.add(value);
+    }
+    return true;
+  }
+
   write(accessor: string): string {
     if (!this.typeInfo.options?.enumProps) {
       return this.builder.writer.writeVarUInt32(accessor);
     }
-    if (Object.values(this.typeInfo.options.enumProps).length < 1) {
-      throw new Error("An enum must contain at least one field");
-    }
+    const enumEntries = this.getEnumEntries();
+    const useExplicitNumericWireValues = this.useExplicitNumericWireValues(enumEntries);
     return `
-        ${Object.values(this.typeInfo.options.enumProps).map((value, index) => {
+        ${enumEntries.map(([, value], index) => {
       if (typeof value !== "string" && typeof value !== "number") {
         throw new Error("Enum value must be string or number");
       }
@@ -50,8 +79,9 @@ class EnumSerializerGenerator extends BaseSerializerGenerator {
         }
       }
       const safeValue = typeof value === "string" ? `"${value}"` : value;
+      const wireValue = useExplicitNumericWireValues ? safeValue : index;
       return ` if (${accessor} === ${safeValue}) {
-                    ${this.builder.writer.writeVarUInt32(index)}
+                    ${this.builder.writer.writeVarUInt32(wireValue)}
                 }`;
     }).join(" else ")}
         else {
@@ -127,11 +157,13 @@ class EnumSerializerGenerator extends BaseSerializerGenerator {
     if (!this.typeInfo.options?.enumProps) {
       return accessor(this.builder.reader.readVarUInt32());
     }
+    const enumEntries = this.getEnumEntries();
+    const useExplicitNumericWireValues = this.useExplicitNumericWireValues(enumEntries);
     const enumValue = this.scope.uniqueName("enum_v");
     return `
         const ${enumValue} = ${this.builder.reader.readVarUInt32()};
         switch(${enumValue}) {
-            ${Object.values(this.typeInfo.options.enumProps).map((value, index) => {
+            ${enumEntries.map(([, value], index) => {
       if (typeof value !== "string" && typeof value !== "number") {
         throw new Error("Enum value must be string or number");
       }
@@ -141,8 +173,9 @@ class EnumSerializerGenerator extends BaseSerializerGenerator {
         }
       }
       const safeValue = typeof value === "string" ? `"${value}"` : `${value}`;
+      const wireValue = useExplicitNumericWireValues ? safeValue : `${index}`;
       return `
-                case ${index}:
+                case ${wireValue}:
                     ${accessor(safeValue)}
                     break;
                 `;

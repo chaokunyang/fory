@@ -608,24 +608,54 @@ cdef class Serializer:
 @cython.final
 cdef class EnumSerializer(Serializer):
     cdef tuple _members
-    cdef dict _ordinal_by_member
+    cdef dict _wire_value_by_member
+    cdef dict _member_by_wire_value
 
     def __init__(self, TypeResolver type_resolver, type_):
+        cdef dict explicit_wire_values
+        cdef bint use_explicit_ids
+        cdef object member
+        cdef object raw_value
+        cdef uint32_t wire_value
         super().__init__(type_resolver, type_)
         self.need_to_write_ref = False
         self._members = tuple(type_)
-        self._ordinal_by_member = {member: idx for idx, member in enumerate(self._members)}
+        self._wire_value_by_member = {member: idx for idx, member in enumerate(self._members)}
+        self._member_by_wire_value = {idx: member for idx, member in enumerate(self._members)}
+        if type_resolver.xlang:
+            explicit_wire_values = {}
+            use_explicit_ids = True
+            for member in self._members:
+                raw_value = member.value
+                if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value < 0:
+                    use_explicit_ids = False
+                    break
+                wire_value = raw_value
+                if wire_value in explicit_wire_values:
+                    use_explicit_ids = False
+                    break
+                explicit_wire_values[wire_value] = member
+            if use_explicit_ids:
+                self._wire_value_by_member = {
+                    member: int(member.value) for member in self._members
+                }
+                self._member_by_wire_value = explicit_wire_values
 
     @classmethod
     def support_subclass(cls) -> bool:
         return True
 
     cpdef inline write(self, WriteContext write_context, value):
-        write_context.write_var_uint32(self._ordinal_by_member[value])
+        write_context.write_var_uint32(self._wire_value_by_member[value])
 
     cpdef inline read(self, ReadContext read_context):
-        cdef uint32_t ordinal = read_context.read_var_uint32()
-        return self._members[ordinal]
+        cdef uint32_t wire_value = read_context.read_var_uint32()
+        cdef object value = self._member_by_wire_value.get(wire_value)
+        if value is None:
+            raise ValueError(
+                f"Unknown enum value {wire_value} for {self.type_.__qualname__}"
+            )
+        return value
 
 
 @cython.final

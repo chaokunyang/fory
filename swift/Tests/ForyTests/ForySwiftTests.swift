@@ -81,6 +81,12 @@ struct FieldIdTarget: Equatable {
 }
 
 @ForyObject
+enum SparseStatus: Int32, CaseIterable {
+    case unknown = 4096
+    case ok = 8192
+}
+
+@ForyObject
 struct EvolvingOverrideValue: Equatable {
     var f1: String = ""
 }
@@ -722,6 +728,23 @@ func macroFieldEncodingOverridesForUnsignedTypes() throws {
 
     #expect(try buffer.readUInt32() == value.u32Fixed)
     #expect(try buffer.readTaggedUInt64() == value.u64Tagged)
+}
+
+@Test
+func macroEnumUsesExplicitIntegerRawValue() throws {
+    let fory = Fory(config: .init(xlang: true, trackRef: false))
+    fory.register(SparseStatus.self, id: 302)
+
+    let data = try fory.serialize(SparseStatus.ok)
+    let buffer = ByteBuffer(data: data)
+    _ = try fory.readHead(buffer: buffer)
+    _ = try buffer.readInt8()
+    _ = try buffer.readVarUInt32()
+    _ = try buffer.readVarUInt32()
+    #expect(try buffer.readVarUInt32() == 8192)
+
+    let decoded: SparseStatus = try fory.deserialize(data)
+    #expect(decoded == .ok)
 }
 
 @Test

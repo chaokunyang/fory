@@ -196,6 +196,7 @@ private struct ParsedEnumCase {
     let name: String
     let payload: [ParsedEnumPayloadField]
     let caseID: Int?
+    let wireValue: UInt32?
 }
 
 private struct ParsedEnumDecl {
@@ -219,6 +220,7 @@ private struct ParsedForyObjectConfiguration {
 
 private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl {
     var cases: [ParsedEnumCase] = []
+    let integerRawEnum = enumDeclUsesExplicitIntegerRawValues(enumDecl)
 
     for member in enumDecl.memberBlock.members {
         guard let caseDecl = member.decl.as(EnumCaseDeclSyntax.self) else {
@@ -275,7 +277,8 @@ private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl 
                 .init(
                     name: caseName,
                     payload: payloadFields,
-                    caseID: caseConfig?.id
+                    caseID: caseConfig?.id,
+                    wireValue: integerRawEnum ? parseEnumCaseWireValue(element) : nil
                 )
             )
         }
@@ -317,15 +320,19 @@ private func buildEnumDecls(_ parsedEnum: ParsedEnumDecl, accessPrefix: String) 
 
 private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {
     let defaultCase = cases[0].name
+    let useExplicitWireValues = cases.allSatisfy { $0.wireValue != nil }
     let writeSwitchCases = cases.enumerated().map { index, enumCase in
-        """
+        let wireValue = enumCase.wireValue ?? UInt32(index)
+        return """
         case .\(enumCase.name):
-            context.buffer.writeVarUInt32(\(index))
+            context.buffer.writeVarUInt32(\(wireValue))
         """
     }.joined(separator: "\n        ")
     let readSwitchCases = cases.enumerated().map { index, enumCase in
-        "case \(index): return .\(enumCase.name)"
+        let wireValue = enumCase.wireValue ?? UInt32(index)
+        return "case \(wireValue): return .\(enumCase.name)"
     }.joined(separator: "\n        ")
+    let errorLabel = useExplicitWireValues ? "enum value" : "enum ordinal"
 
     let defaultDecl: DeclSyntax = DeclSyntax(
         stringLiteral: """
@@ -360,13 +367,43 @@ private func buildOrdinalEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: Stri
             switch ordinal {
             \(readSwitchCases)
             default:
-                throw ForyError.invalidData("unknown enum ordinal \\(ordinal)")
+                throw ForyError.invalidData("unknown \(errorLabel) \\(ordinal)")
             }
         }
         """
     )
 
     return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
+}
+
+private func enumDeclUsesExplicitIntegerRawValues(_ enumDecl: EnumDeclSyntax) -> Bool {
+    guard let inheritanceClause = enumDecl.inheritanceClause else {
+        return false
+    }
+    let inheritedTypes = inheritanceClause.inheritedTypes.map { $0.type.trimmedDescription }
+    return inheritedTypes.contains {
+        [
+            "Int",
+            "Int8",
+            "Int16",
+            "Int32",
+            "Int64",
+            "UInt",
+            "UInt8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+        ].contains($0)
+    }
+}
+
+private func parseEnumCaseWireValue(_ element: EnumCaseElementSyntax) -> UInt32? {
+    guard let rawValue = element.rawValue?.value.trimmedDescription,
+          let parsed = UInt32(rawValue)
+    else {
+        return nil
+    }
+    return parsed
 }
 
 private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {

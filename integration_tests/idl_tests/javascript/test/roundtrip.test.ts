@@ -182,8 +182,8 @@ describe('Generated types compile and construct correctly', () => {
     expect(myEnvelope.payload?.value).toBe(42);
     expect(myEnvelope.status).toBe(Status.OK);
 
-    expect(Status.UNKNOWN).toBe(0);
-    expect(Status.OK).toBe(1);
+    expect(Status.UNKNOWN).toBe(4096);
+    expect(Status.OK).toBe(8192);
 
     expect(WrapperCase.ENVELOPE).toBe(1);
     expect(WrapperCase.RAW).toBe(2);

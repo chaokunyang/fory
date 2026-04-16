@@ -366,17 +366,13 @@ class JavaGenerator(BaseGenerator):
             lines.append(f"package {java_package};")
             lines.append("")
 
-        # Enum declaration
-        lines.append(f"public enum {enum.name} {{")
-
-        # Enum values (strip prefix for scoped enums)
-        for i, value in enumerate(enum.values):
-            comma = "," if i < len(enum.values) - 1 else ";"
-            stripped_name = self.strip_enum_prefix(enum.name, value.name)
-            lines.append(f"    {stripped_name}{comma}")
-
-        lines.append("}")
+        lines.append("import org.apache.fory.annotation.ForyEnumId;")
         lines.append("")
+
+        # Enum declaration
+        lines.extend(
+            self.generate_enum_declaration(enum, f"public enum {enum.name} {{")
+        )
 
         # Build file path
         path = self.get_java_package_path()
@@ -531,7 +527,7 @@ class JavaGenerator(BaseGenerator):
         for message in self.schema.messages:
             self.collect_message_imports(message, imports)
         for enum in self.schema.enums:
-            pass  # Enums don't need special imports
+            self.collect_enum_imports(imports)
         for union in self.schema.unions:
             self.collect_union_imports(union, imports)
 
@@ -604,11 +600,18 @@ class JavaGenerator(BaseGenerator):
         if self.has_array_field_recursive(message):
             imports.add("java.util.Arrays")
 
+        for nested_enum in message.nested_enums:
+            self.collect_enum_imports(imports)
+
         # Collect imports from nested messages
         for nested_msg in message.nested_messages:
             self.collect_message_imports(nested_msg, imports)
         for nested_union in message.nested_unions:
             self.collect_union_imports(nested_union, imports)
+
+    def collect_enum_imports(self, imports: Set[str]):
+        """Collect imports required by generated Java enums."""
+        imports.add("org.apache.fory.annotation.ForyEnumId")
 
     def collect_union_imports(self, union: Union, imports: Set[str]):
         """Collect imports for a union and its cases."""
@@ -635,15 +638,30 @@ class JavaGenerator(BaseGenerator):
 
     def generate_nested_enum(self, enum: Enum) -> List[str]:
         """Generate a nested enum as a static inner class."""
-        lines = []
-        lines.append(f"public static enum {enum.name} {{")
+        return self.generate_enum_declaration(
+            enum, f"public static enum {enum.name} {{"
+        )
 
-        # Enum values (strip prefix for scoped enums)
+    def generate_enum_declaration(self, enum: Enum, header: str) -> List[str]:
+        """Generate a Java enum declaration with stable Fory enum ids."""
+        lines = [header]
+
         for i, value in enumerate(enum.values):
             comma = "," if i < len(enum.values) - 1 else ";"
             stripped_name = self.strip_enum_prefix(enum.name, value.name)
-            lines.append(f"    {stripped_name}{comma}")
+            lines.append(f"    {stripped_name}({value.value}){comma}")
 
+        lines.append("")
+        lines.append("    private final int id;")
+        lines.append("")
+        lines.append(f"    {enum.name}(int id) {{")
+        lines.append("        this.id = id;")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    @ForyEnumId")
+        lines.append("    public int getId() {")
+        lines.append("        return id;")
+        lines.append("    }")
         lines.append("}")
         lines.append("")
         return lines

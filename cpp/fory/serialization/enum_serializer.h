@@ -37,14 +37,35 @@ namespace serialization {
 
 /// Serializer specialization for enum types.
 ///
-/// Writes the enum ordinal (underlying integral value) to match the xlang
-/// specification for value-based enums.
+/// Writes enum values using xlang-compatible uint32 wire ids. Registered enums
+/// with contiguous zero-based values keep ordinal encoding; enums with sparse
+/// non-negative declared values preserve those declared values on the wire.
 template <typename E>
 struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   static constexpr TypeId type_id = TypeId::ENUM;
 
   using Metadata = meta::EnumMetadata<E>;
   using OrdinalType = typename Metadata::OrdinalType;
+  using EnumInfo = meta::EnumInfo<E>;
+
+  static constexpr bool supports_explicit_wire_values() {
+    if constexpr (!EnumInfo::defined) {
+      return true;
+    }
+    for (std::size_t i = 0; i < EnumInfo::size; ++i) {
+      const auto raw = static_cast<OrdinalType>(EnumInfo::values[i]);
+      if constexpr (std::is_signed_v<OrdinalType>) {
+        if (raw < 0) {
+          return false;
+        }
+      }
+      using Unsigned = std::make_unsigned_t<OrdinalType>;
+      if (static_cast<Unsigned>(raw) != static_cast<Unsigned>(i)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   static inline void write_type_info(WriteContext &ctx) {
     // Use compile-time type lookup for faster enum type info writing
@@ -72,6 +93,24 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
   }
 
   static inline void write_data(E value, WriteContext &ctx) {
+    if constexpr (supports_explicit_wire_values()) {
+      if constexpr (EnumInfo::defined) {
+        if (!EnumInfo::contains(value)) {
+          ctx.set_error(Error::unknown_enum("Unknown enum value"));
+          return;
+        }
+      }
+      const auto raw_value = static_cast<OrdinalType>(value);
+      if constexpr (std::is_signed_v<OrdinalType>) {
+        if (raw_value < 0) {
+          ctx.set_error(
+              Error::unknown_enum("Negative enum values are not supported"));
+          return;
+        }
+      }
+      ctx.write_var_uint32(static_cast<uint32_t>(raw_value));
+      return;
+    }
     OrdinalType ordinal{};
     if (!Metadata::to_ordinal(value, &ordinal)) {
       ctx.set_error(Error::unknown_enum("Unknown enum value"));
@@ -110,6 +149,25 @@ struct Serializer<E, std::enable_if_t<std::is_enum_v<E>>> {
     uint32_t raw_ordinal = ctx.read_var_uint32(ctx.error());
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return E{};
+    }
+    if constexpr (supports_explicit_wire_values()) {
+      if (raw_ordinal >
+          static_cast<uint32_t>(std::numeric_limits<OrdinalType>::max())) {
+        ctx.set_error(Error::unknown_enum(
+            "Invalid enum value: " +
+            std::to_string(static_cast<unsigned long long>(raw_ordinal))));
+        return E{};
+      }
+      const auto value = static_cast<E>(static_cast<OrdinalType>(raw_ordinal));
+      if constexpr (EnumInfo::defined) {
+        if (!EnumInfo::contains(value)) {
+          ctx.set_error(Error::unknown_enum(
+              "Invalid enum value: " +
+              std::to_string(static_cast<unsigned long long>(raw_ordinal))));
+          return E{};
+        }
+      }
+      return value;
     }
     OrdinalType ordinal = static_cast<OrdinalType>(raw_ordinal);
     E value{};

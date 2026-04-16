@@ -177,7 +177,7 @@ def bump_version(**kwargs):
             bump_python_version(new_version)
         elif lang == "javascript":
             _bump_version(
-                "javascript/packages/fory",
+                "javascript/packages/core",
                 "package.json",
                 _normalize_js_version(new_version),
                 _update_js_version,

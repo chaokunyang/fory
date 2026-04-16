@@ -18,8 +18,8 @@
 package auto_id;
 
 enum Status {
-    UNKNOWN = 0;
-    OK = 1;
+    UNKNOWN = 4096;
+    OK = 8192;
 }
 
 message Envelope {

@@ -16,13 +16,17 @@
 # under the License.
 
 from dataclasses import dataclass
+import typing
 from typing import Any, List
 
 import pytest
 
 import pyfory
+from pyfory import Ref
 from pyfory import _fory as fmod
 from pyfory.resolver import REF_FLAG, REF_VALUE_FLAG
+from pyfory.serializer import ListSerializer
+from pyfory.type_util import get_type_hints, unwrap_ref
 
 
 def _roundtrip(fory, value):
@@ -71,6 +75,16 @@ class FixedUint64Pair:
 @dataclass
 class Holder:
     values: List[pyfory.int64]
+
+
+@dataclass
+class CollectionRefOverrideItem:
+    value: pyfory.int32
+
+
+@dataclass
+class CollectionRefOverrideContainer:
+    items: List[Ref[CollectionRefOverrideItem, False]]
 
 
 class EvilIndex:
@@ -188,6 +202,47 @@ def test_struct_field_ref_override_controls_alias_preservation(xlang):
     assert enabled.left == shared
     assert enabled.right == shared
     assert enabled.left is enabled.right
+
+
+def test_collection_ref_override_unsets_tracking_bit():
+    fory = pyfory.Fory(xlang=True, ref=True, compatible=True)
+    fory.register_type(CollectionRefOverrideItem, typename="example.CollectionRefOverrideItem")
+
+    serializer = ListSerializer(fory.type_resolver, list, elem_tracking_ref=False)
+    shared = CollectionRefOverrideItem(7)
+    buffer = pyfory.Buffer.allocate(64)
+    write_context = fory.write_context
+    write_context.prepare(buffer)
+
+    serializer.write(write_context, [shared, shared])
+
+    payload = buffer.to_bytes(0, buffer.get_writer_index())
+    reader = pyfory.Buffer(payload)
+    assert reader.read_var_uint32() == 2
+    assert (reader.read_int8() & 0b1) == 0
+
+
+def test_ref_annotation_preserves_override():
+    type_hints = get_type_hints(CollectionRefOverrideContainer)
+    item_type = typing.get_args(type_hints["items"])[0]
+    _, elem_ref_override = unwrap_ref(item_type)
+    assert elem_ref_override is False
+
+
+def test_collection_ref_override_disables_alias_preservation():
+    fory = pyfory.Fory(xlang=True, ref=True, compatible=True)
+    fory.register_type(CollectionRefOverrideItem, typename="example.CollectionRefOverrideItem")
+    fory.register_type(CollectionRefOverrideContainer, typename="example.CollectionRefOverrideContainer")
+
+    shared = CollectionRefOverrideItem(11)
+    restored = _roundtrip(
+        fory,
+        CollectionRefOverrideContainer(items=[shared, shared]),
+    )
+
+    assert restored.items[0] == shared
+    assert restored.items[1] == shared
+    assert restored.items[0] is not restored.items[1]
 
 
 def test_struct_self_cycle_and_nested_alias_python_mode():

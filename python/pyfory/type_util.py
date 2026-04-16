@@ -25,18 +25,52 @@ from abc import ABC, abstractmethod
 
 from pyfory.types import RefMeta
 
+try:
+    from typing import Annotated as _Annotated
+except ImportError:
+    try:
+        from typing_extensions import Annotated as _Annotated
+    except ImportError:
+        _Annotated = None
+
+try:
+    from typing_extensions import get_type_hints as _typing_extensions_get_type_hints
+except ImportError:
+    _typing_extensions_get_type_hints = None
+
+try:
+    from typing_extensions import get_origin as _typing_extensions_get_origin
+    from typing_extensions import get_args as _typing_extensions_get_args
+except ImportError:
+    _typing_extensions_get_origin = None
+    _typing_extensions_get_args = None
+
+
+def _get_origin(type_):
+    if _typing_extensions_get_origin is not None:
+        return _typing_extensions_get_origin(type_)
+    return typing.get_origin(type_) if hasattr(typing, "get_origin") else getattr(type_, "__origin__", None)
+
+
+def _get_args(type_):
+    if _typing_extensions_get_args is not None:
+        return _typing_extensions_get_args(type_)
+    return typing.get_args(type_) if hasattr(typing, "get_args") else getattr(type_, "__args__", ())
+
 
 def get_type_hints(type_):
     try:
         return typing.get_type_hints(type_, include_extras=True)
     except TypeError:
+        if _typing_extensions_get_type_hints is not None:
+            return _typing_extensions_get_type_hints(type_, include_extras=True)
         return typing.get_type_hints(type_)
 
 
 def unwrap_ref(type_):
-    origin = typing.get_origin(type_) if hasattr(typing, "get_origin") else getattr(type_, "__origin__", None)
-    if origin is getattr(typing, "Annotated", None):
-        args = typing.get_args(type_) if hasattr(typing, "get_args") else getattr(type_, "__args__", ())
+    origin = _get_origin(type_)
+    if _Annotated is not None and origin is _Annotated:
+        args = _get_args(type_)
         if args:
             base = args[0]
             for meta in args[1:]:
@@ -44,7 +78,7 @@ def unwrap_ref(type_):
                     return base, meta.enable
             return base, None
     if origin is typing.Union:
-        args = typing.get_args(type_) if hasattr(typing, "get_args") else getattr(type_, "__args__", ())
+        args = _get_args(type_)
         new_args = list(args)
         ref_override = None
         for i, arg in enumerate(args):
@@ -206,9 +240,9 @@ def infer_field_types(type_, field_nullable=False):
 
 
 def is_optional_type(type_):
-    origin = typing.get_origin(type_) if hasattr(typing, "get_origin") else getattr(type_, "__origin__", None)
+    origin = _get_origin(type_)
     if origin is typing.Union:
-        args = typing.get_args(type_) if hasattr(typing, "get_args") else getattr(type_, "__args__", ())
+        args = _get_args(type_)
         return type(None) in args
     return False
 
@@ -216,7 +250,7 @@ def is_optional_type(type_):
 def unwrap_optional(type_, field_nullable=False):
     if not is_optional_type(type_):
         return type_, False or field_nullable
-    args = typing.get_args(type_) if hasattr(typing, "get_args") else getattr(type_, "__args__", ())
+    args = _get_args(type_)
     non_none_types = [arg for arg in args if arg is not type(None)]
     if len(non_none_types) == 1:
         return non_none_types[0], True
@@ -227,10 +261,10 @@ def get_homogeneous_tuple_elem_type(type_or_args):
     if isinstance(type_or_args, tuple):
         args = type_or_args
     else:
-        origin = typing.get_origin(type_or_args) if hasattr(typing, "get_origin") else getattr(type_or_args, "__origin__", None)
+        origin = _get_origin(type_or_args)
         if origin not in (tuple, typing.Tuple):
             return None
-        args = typing.get_args(type_or_args) if hasattr(typing, "get_args") else getattr(type_or_args, "__args__", ())
+        args = _get_args(type_or_args)
     if not args or args == ((),):
         return None
     if len(args) == 2 and args[1] is Ellipsis:
@@ -245,9 +279,9 @@ def infer_field(field_name, type_, visitor: TypeVisitor, types_path=None):
     types_path = list(types_path or [])
     type_, _ = unwrap_ref(type_)
     types_path.append(type_)
-    origin = typing.get_origin(type_) if hasattr(typing, "get_origin") else getattr(type_, "__origin__", type_)
+    origin = _get_origin(type_) or getattr(type_, "__origin__", type_)
     origin = origin or type_
-    args = typing.get_args(type_) if hasattr(typing, "get_args") else getattr(type_, "__args__", ())
+    args = _get_args(type_)
     if args:
         if origin is list or origin == typing.List:
             elem_type = args[0]

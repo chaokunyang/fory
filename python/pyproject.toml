@@ -50,6 +50,7 @@ classifiers = [
 ]
 keywords = ["fory", "serialization", "multi-language", "fast", "row-format", "jit", "codegen", "polymorphic", "zero-copy"]
 dependencies = [
+    "typing_extensions>=4.0; python_version < '3.9'",
 ]
 
 [project.optional-dependencies]

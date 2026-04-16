@@ -10,6 +10,7 @@ Load this file when changing `python/`, Cython serialization, or Python xlang be
 - Use `ENABLE_FORY_CYTHON_SERIALIZATION=0` first when debugging protocol behavior.
 - Python mode is the pure-Python xlang implementation and is mainly for debugging and testing.
 - Cython mode is the default high-performance implementation.
+- Keep new Python test names compact and behavior-focused; avoid sentence-length names that restate setup details already obvious from the test body.
 - `ENABLE_FORY_DEBUG_OUTPUT=1` enables detailed struct serialization and deserialization logs.
 
 ## Key Paths

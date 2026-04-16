@@ -317,9 +317,7 @@ class EnumSerializer(Serializer):
                     break
                 explicit_wire_values[wire_value] = member
             if use_explicit_ids:
-                self._wire_value_by_member = {
-                    member: int(member.value) for member in self._members
-                }
+                self._wire_value_by_member = {member: int(member.value) for member in self._members}
                 self._member_by_wire_value = explicit_wire_values
 
     @classmethod
@@ -334,9 +332,7 @@ class EnumSerializer(Serializer):
         try:
             return self._member_by_wire_value[wire_value]
         except KeyError as exc:
-            raise ValueError(
-                f"Unknown enum value {wire_value} for {self.type_.__qualname__}"
-            ) from exc
+            raise ValueError(f"Unknown enum value {wire_value} for {self.type_.__qualname__}") from exc
 
 
 class SliceSerializer(Serializer):

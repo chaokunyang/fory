@@ -68,6 +68,8 @@ struct NestedStruct {
 enum class Color { RED, GREEN, BLUE };
 enum class LegacyStatus : int32_t { NEG = -3, ZERO = 0, LARGE = 42 };
 FORY_ENUM(LegacyStatus, NEG, ZERO, LARGE);
+enum class SparseStatus : int32_t { UNKNOWN = 4096, OK = 8192 };
+FORY_ENUM(SparseStatus, UNKNOWN, OK);
 
 enum OldStatus : int32_t { OLD_NEG = -7, OLD_ZERO = 0, OLD_POS = 13 };
 FORY_ENUM(::OldStatus, OLD_NEG, OLD_ZERO, OLD_POS);
@@ -92,6 +94,7 @@ inline void register_test_types(Fory &fory) {
   // Register all enum types used in tests
   fory.register_enum<Color>(type_id++);
   fory.register_enum<LegacyStatus>(type_id++);
+  fory.register_enum<SparseStatus>(type_id++);
   fory.register_enum<OldStatus>(type_id++);
 }
 
@@ -225,6 +228,11 @@ TEST(SerializationTest, OldEnumRoundtrip) {
   test_roundtrip(OldStatus::OLD_POS);
 }
 
+TEST(SerializationTest, SparseEnumRoundtrip) {
+  test_roundtrip(SparseStatus::UNKNOWN);
+  test_roundtrip(SparseStatus::OK);
+}
+
 TEST(SerializationTest, EnumSerializesOrdinalValue) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
   fory.register_enum<LegacyStatus>(1);
@@ -306,6 +314,29 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
 
   auto decode = fory.deserialize<LegacyStatus>(bytes.data(), bytes.size());
   EXPECT_FALSE(decode.ok());
+}
+
+TEST(SerializationTest, SparseEnumSerializesExplicitValue) {
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  fory.register_enum<SparseStatus>(1);
+
+  auto bytes_result = fory.serialize(SparseStatus::OK);
+  ASSERT_TRUE(bytes_result.ok())
+      << "Serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  ASSERT_GE(bytes.size(), 1 + 1 + 1 + 1 + 2);
+  size_t offset = 1;
+  EXPECT_EQ(bytes[offset], static_cast<uint8_t>(NOT_NULL_VALUE_FLAG));
+  EXPECT_EQ(bytes[offset + 1], static_cast<uint8_t>(TypeId::ENUM));
+  EXPECT_EQ(bytes[offset + 2], 1);
+  EXPECT_EQ(bytes[offset + 3], 0x80);
+  EXPECT_EQ(bytes[offset + 4], 0x40);
+
+  auto roundtrip = fory.deserialize<SparseStatus>(bytes.data(), bytes.size());
+  ASSERT_TRUE(roundtrip.ok())
+      << "Deserialization failed: " << roundtrip.error().to_string();
+  EXPECT_EQ(roundtrip.value(), SparseStatus::OK);
 }
 
 TEST(SerializationTest, OldEnumOrdinalMappingHandlesNonZeroStart) {

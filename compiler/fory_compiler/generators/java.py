@@ -370,7 +370,9 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
 
         # Enum declaration
-        lines.extend(self.generate_enum_declaration(enum, f"public enum {enum.name} {{"))
+        lines.extend(
+            self.generate_enum_declaration(enum, f"public enum {enum.name} {{")
+        )
 
         # Build file path
         path = self.get_java_package_path()
@@ -636,7 +638,9 @@ class JavaGenerator(BaseGenerator):
 
     def generate_nested_enum(self, enum: Enum) -> List[str]:
         """Generate a nested enum as a static inner class."""
-        return self.generate_enum_declaration(enum, f"public static enum {enum.name} {{")
+        return self.generate_enum_declaration(
+            enum, f"public static enum {enum.name} {{"
+        )
 
     def generate_enum_declaration(self, enum: Enum, header: str) -> List[str]:
         """Generate a Java enum declaration with stable Fory enum ids."""

@@ -62,6 +62,18 @@ describe('enum', () => {
     expect(result).toEqual(Foo.f1)
   });
 
+  test('should preserve sparse numeric enum values', () => {
+    const Foo = {
+      unknown: 4096,
+      ok: 8192
+    };
+    const fory = new Fory({ ref: true });
+    const { serialize, deserialize } = fory.register(Type.enum("example.foo", Foo));
+    const input = serialize(Foo.ok);
+    const result = deserialize(input);
+    expect(result).toEqual(Foo.ok);
+  });
+
   test('should typescript string enum work', () => {
     enum Foo {
         f1 = "hello",
@@ -76,4 +88,3 @@ describe('enum', () => {
     expect(result).toEqual(Foo.f1)
   });
 });
-

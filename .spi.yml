@@ -16,8 +16,6 @@
 # under the License.
 
 version: 1
-external_links:
-  documentation: "https://fory.apache.org/docs/guide/swift"
 builder:
   configs:
     - platform: macos-spm

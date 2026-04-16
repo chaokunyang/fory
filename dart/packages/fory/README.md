@@ -1,8 +1,9 @@
-# Apache Fory Dart
+# Apache Fory™ Dart
 
-Apache Fory Dart is the Dart xlang runtime for Apache Fory. It reads and writes
-Fory's cross-language wire format and is designed around generated serializers
-for annotated Dart models, with customized serializers available for advanced use
+Apache Fory™ Dart is the Dart xlang runtime for
+[Apache Fory™](https://github.com/apache/fory). It reads and writes Fory's
+cross-language wire format and is designed around generated serializers for
+annotated Dart models, with customized serializers available for advanced use
 cases.
 
 ## Features
@@ -21,7 +22,7 @@ Add `fory` to your package dependencies.
 
 ```yaml
 dependencies:
-  fory: ^0.17.0-dev
+  fory: ^0.17.0
 
 dev_dependencies:
   build_runner: ^2.4.13
@@ -89,7 +90,9 @@ dart run build_runner build --delete-conflicting-outputs
 
 ## Type Registration
 
-Generated types register through the generated library namespace.
+Generated types register through the generated library namespace. The namespace
+class is named `<FileName>Fory` based on the source file that contains the
+annotated types.
 
 ```dart
 PersonFory.register(fory, Person, id: 100);
@@ -115,8 +118,6 @@ Keep the same registration identity on all runtimes that exchange the type.
 
 ## Configuration
 
-Configure the runtime through `Config`.
-
 ```dart
 final fory = Fory(
   compatible: true,
@@ -126,14 +127,13 @@ final fory = Fory(
 );
 ```
 
-Key options:
-
-- `compatible`: enables compatible struct encoding and decoding
-- `checkStructVersion`: enables struct-version validation in
-  schema-consistent mode
-- `maxDepth`: limits nesting depth for one operation
-- `maxCollectionSize`: limits collection and map payload sizes
-- `maxBinarySize`: limits binary payload size
+| Option               | Default    | Description                                             |
+| -------------------- | ---------- | ------------------------------------------------------- |
+| `compatible`         | `false`    | Enables compatible struct encoding for schema evolution |
+| `checkStructVersion` | `true`     | Validates struct version in schema-consistent mode      |
+| `maxDepth`           | `256`      | Maximum nesting depth per operation                     |
+| `maxCollectionSize`  | `1 << 20`  | Maximum collection and map payload size                 |
+| `maxBinarySize`      | `64 << 20` | Maximum binary payload size                             |
 
 ## Reference Tracking
 
@@ -157,6 +157,18 @@ class NodeList {
   List<Object?> values = <Object?>[];
 }
 ```
+
+## Field Annotations
+
+`@ForyField()` controls per-field serialization behavior:
+
+| Option     | Description                                      |
+| ---------- | ------------------------------------------------ |
+| `skip`     | Skip the field during serialization              |
+| `id`       | Stable field ID for compatible-mode evolution    |
+| `nullable` | Override nullability inference                   |
+| `ref`      | Enable reference tracking for this field         |
+| `dynamic`  | Control whether runtime type metadata is written |
 
 ## Customized Serializers
 
@@ -205,21 +217,57 @@ void main() {
 }
 ```
 
+## Type Mapping
+
+Dart has no native fixed-width 8/16/32-bit integer or single-precision float
+types. Fory Dart provides thin wrapper types (`Int8`, `Int16`, `Int32`, `UInt8`,
+`UInt16`, `UInt32`, `Float16`, `Float32`) imported from `package:fory/fory.dart`
+to represent these xlang wire types.
+
+| Fory xlang type | Dart type                |
+| --------------- | ------------------------ |
+| bool            | `bool`                   |
+| int8            | `fory.Int8` (wrapper)    |
+| int16           | `fory.Int16` (wrapper)   |
+| int32           | `fory.Int32` (wrapper)   |
+| int64           | `int`                    |
+| float16         | `fory.Float16` (wrapper) |
+| float32         | `fory.Float32` (wrapper) |
+| float64         | `double`                 |
+| string          | `String`                 |
+| binary          | `Uint8List`              |
+| local_date      | `LocalDate`              |
+| timestamp       | `Timestamp`              |
+| list            | `List`                   |
+| set             | `Set`                    |
+| map             | `Map`                    |
+| enum            | `enum`                   |
+| named_struct    | `class`                  |
+| bool_array      | `List<bool>`             |
+| int8_array      | `Int8List`               |
+| int16_array     | `Int16List`              |
+| int32_array     | `Int32List`              |
+| int64_array     | `Int64List`              |
+| float32_array   | `Float32List`            |
+| float64_array   | `Float64List`            |
+
 ## Public API
 
 The main exported API includes:
 
-- `Fory`
-- `Config`
-- `Buffer`
-- `WriteContext`
-- `ReadContext`
-- `Serializer`
-- `UnionSerializer`
-- `ForyStruct`
-- `ForyField`
-- Numeric and temporal wrappers such as `Int8`, `Int16`, `Int32`, `UInt8`,
-  `UInt16`, `UInt32`, `Float16`, `Float32`, `LocalDate`, and `Timestamp`
+- `Fory` — main serialization facade
+- `Config` — runtime configuration
+- `ForyStruct`, `ForyField` — struct annotations
+- `ForyUnion` — union type annotation
+- `Serializer`, `UnionSerializer`, `EnumSerializer` — serializer base classes
+- `Buffer`, `WriteContext`, `ReadContext` — low-level I/O
+- `TypeSpec`, `ListType`, `MapType`, `ValueType` — nested container type
+  annotations
+- `Int32Type`, `Int64Type`, `Uint32Type`, `Uint64Type` — numeric encoding
+  overrides
+- Numeric wrappers: `Int8`, `Int16`, `Int32`, `UInt8`, `UInt16`, `UInt32`,
+  `Float16`, `Float32`
+- Temporal wrappers: `LocalDate`, `Timestamp`
 
 ## Cross-Language Notes
 
@@ -230,5 +278,5 @@ The main exported API includes:
 - Use wrappers or numeric field annotations when the exact xlang wire type
   matters.
 
-For the xlang wire format and type mapping details, see the Apache Fory
-specification in the main repository.
+For the xlang wire format and type mapping details, see the
+[Apache Fory specification](https://github.com/apache/fory/tree/main/docs/specification).

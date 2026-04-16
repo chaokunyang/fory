@@ -22,7 +22,7 @@ import io
 import os
 import pickle
 import weakref
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Any, List, Dict, Optional
 
 import numpy as np
@@ -503,6 +503,11 @@ class EnumClass(Enum):
     E4 = "E4"
 
 
+class SparseIntEnum(IntEnum):
+    A = 4096
+    B = 8192
+
+
 def test_enum():
     fory = Fory(xlang=False, ref=True)
     assert ser_de(fory, EnumClass.E1) == EnumClass.E1
@@ -510,6 +515,13 @@ def test_enum():
     assert ser_de(fory, EnumClass.E3) == EnumClass.E3
     assert ser_de(fory, EnumClass.E4) == EnumClass.E4
     assert isinstance(fory.type_resolver.get_serializer(EnumClass), EnumSerializer)
+
+
+def test_xlang_enum_uses_sparse_integer_values():
+    fory = Fory(xlang=True, ref=False)
+    fory.register_type(SparseIntEnum, type_id=301)
+    assert ser_de(fory, SparseIntEnum.A) == SparseIntEnum.A
+    assert ser_de(fory, SparseIntEnum.B) == SparseIntEnum.B
 
 
 def test_duplicate_serialize():

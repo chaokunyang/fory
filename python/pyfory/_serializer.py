@@ -301,18 +301,42 @@ class EnumSerializer(Serializer):
         super().__init__(type_resolver, type_)
         self.need_to_write_ref = False
         self._members = tuple(type_)
-        self._ordinal_by_member = {member: idx for idx, member in enumerate(self._members)}
+        self._wire_value_by_member = {member: idx for idx, member in enumerate(self._members)}
+        self._member_by_wire_value = {idx: member for idx, member in enumerate(self._members)}
+        if type_resolver.xlang:
+            explicit_wire_values = {}
+            use_explicit_ids = True
+            for member in self._members:
+                raw_value = member.value
+                if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value < 0:
+                    use_explicit_ids = False
+                    break
+                wire_value = int(raw_value)
+                if wire_value in explicit_wire_values:
+                    use_explicit_ids = False
+                    break
+                explicit_wire_values[wire_value] = member
+            if use_explicit_ids:
+                self._wire_value_by_member = {
+                    member: int(member.value) for member in self._members
+                }
+                self._member_by_wire_value = explicit_wire_values
 
     @classmethod
     def support_subclass(cls) -> bool:
         return True
 
     def write(self, write_context, value):
-        write_context.write_var_uint32(self._ordinal_by_member[value])
+        write_context.write_var_uint32(self._wire_value_by_member[value])
 
     def read(self, read_context):
-        ordinal = read_context.read_var_uint32()
-        return self._members[ordinal]
+        wire_value = read_context.read_var_uint32()
+        try:
+            return self._member_by_wire_value[wire_value]
+        except KeyError as exc:
+            raise ValueError(
+                f"Unknown enum value {wire_value} for {self.type_.__qualname__}"
+            ) from exc
 
 
 class SliceSerializer(Serializer):

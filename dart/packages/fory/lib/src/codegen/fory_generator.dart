@@ -7,7 +7,6 @@ import 'package:build/build.dart';
 import 'package:fory/fory.dart';
 import 'package:source_gen/source_gen.dart';
 
-
 class DebugGeneratedFieldTypeSpec {
   const DebugGeneratedFieldTypeSpec({
     required this.typeLiteral,
@@ -27,28 +26,35 @@ class DebugGeneratedFieldTypeSpec {
 }
 
 final class ForyGenerator extends Generator {
-  static final TypeChecker _foryStructChecker =
-      TypeChecker.fromRuntime(ForyStruct);
-  static final TypeChecker _foryFieldChecker =
-      TypeChecker.fromRuntime(ForyField);
-  static final TypeChecker _foryUnionChecker =
-      TypeChecker.fromRuntime(ForyUnion);
-  static final TypeChecker _listTypeChecker =
-      TypeChecker.fromRuntime(ListType);
-  static final TypeChecker _mapTypeChecker =
-      TypeChecker.fromRuntime(MapType);
-  static final TypeChecker _refOptionChecker =
-      TypeChecker.fromRuntime(RefOption);
-  static final TypeChecker _nullableOptionChecker =
-      TypeChecker.fromRuntime(NullableOption);
-  static final TypeChecker _int32Checker = TypeChecker.fromRuntime(Int32Type);
-  static final TypeChecker _int64Checker = TypeChecker.fromRuntime(Int64Type);
-  static final TypeChecker _uint8Checker = TypeChecker.fromRuntime(Uint8Type);
-  static final TypeChecker _uint16Checker = TypeChecker.fromRuntime(Uint16Type);
-  static final TypeChecker _uint32Checker = TypeChecker.fromRuntime(Uint32Type);
-  static final TypeChecker _uint64Checker = TypeChecker.fromRuntime(Uint64Type);
+  static const TypeChecker _foryStructChecker =
+      TypeChecker.typeNamed(ForyStruct, inPackage: 'fory');
+  static const TypeChecker _foryFieldChecker =
+      TypeChecker.typeNamed(ForyField, inPackage: 'fory');
+  static const TypeChecker _foryUnionChecker =
+      TypeChecker.typeNamed(ForyUnion, inPackage: 'fory');
+  static const TypeChecker _listTypeChecker =
+      TypeChecker.typeNamed(ListType, inPackage: 'fory');
+  static const TypeChecker _mapTypeChecker =
+      TypeChecker.typeNamed(MapType, inPackage: 'fory');
+  static const TypeChecker _refOptionChecker =
+      TypeChecker.typeNamed(RefOption, inPackage: 'fory');
+  static const TypeChecker _nullableOptionChecker =
+      TypeChecker.typeNamed(NullableOption, inPackage: 'fory');
+  static const TypeChecker _int32Checker =
+      TypeChecker.typeNamed(Int32Type, inPackage: 'fory');
+  static const TypeChecker _int64Checker =
+      TypeChecker.typeNamed(Int64Type, inPackage: 'fory');
+  static const TypeChecker _uint8Checker =
+      TypeChecker.typeNamed(Uint8Type, inPackage: 'fory');
+  static const TypeChecker _uint16Checker =
+      TypeChecker.typeNamed(Uint16Type, inPackage: 'fory');
+  static const TypeChecker _uint32Checker =
+      TypeChecker.typeNamed(Uint32Type, inPackage: 'fory');
+  static const TypeChecker _uint64Checker =
+      TypeChecker.typeNamed(Uint64Type, inPackage: 'fory');
 
-  final Map<String, String> _importPrefixByLibraryIdentifier = <String, String>{};
+  final Map<String, String> _importPrefixByLibraryIdentifier =
+      <String, String>{};
 
   @override
   FutureOr<String> generate(LibraryReader library, BuildStep buildStep) {
@@ -66,8 +72,7 @@ final class ForyGenerator extends Generator {
     );
     final generatedApiName = '${helperBaseName}Fory';
 
-    final enumSpecs =
-      enumElements.map(_analyzeEnum).toList(growable: false);
+    final enumSpecs = enumElements.map(_analyzeEnum).toList(growable: false);
     final structSpecs =
         annotatedClasses.map(_analyzeStruct).toList(growable: false);
     final output = StringBuffer()
@@ -98,9 +103,7 @@ final class ForyGenerator extends Generator {
 
     final fields = element.fields
         .where(
-          (field) =>
-              !field.isStatic &&
-              !field.isSynthetic,
+          (field) => !field.isStatic && identical(field.nonSynthetic, field),
         )
         .where((field) => !_isSkipped(field))
         .map(_analyzeField)
@@ -109,7 +112,7 @@ final class ForyGenerator extends Generator {
     final sortedFields = _sortFields(fields);
     final constructorPlan = _buildConstructorPlan(element, sortedFields);
     return _GeneratedStructSpec(
-      name: element.name,
+      name: element.displayName,
       evolving: evolving,
       fields: sortedFields,
       constructorPlan: constructorPlan,
@@ -118,9 +121,9 @@ final class ForyGenerator extends Generator {
 
   void _buildImportPrefixMap(LibraryReader library) {
     _importPrefixByLibraryIdentifier.clear();
-    for (final import in library.element.definingCompilationUnit.libraryImports) {
+    for (final import in library.element.firstFragment.libraryImports) {
       final importedLibrary = import.importedLibrary;
-      final prefix = import.prefix?.element.name;
+      final prefix = import.prefix?.element.displayName;
       if (importedLibrary == null || prefix == null || prefix.isEmpty) {
         continue;
       }
@@ -130,7 +133,7 @@ final class ForyGenerator extends Generator {
 
   _GeneratedEnumSpec _analyzeEnum(EnumElement element) {
     return _GeneratedEnumSpec(
-      name: element.name,
+      name: element.displayName,
       usesRawValue: _enumUsesRawValueElement(element),
     );
   }
@@ -154,12 +157,12 @@ final class ForyGenerator extends Generator {
     final typeSpec = _analyzeTypeSpecAnnotation(field);
 
     return _GeneratedFieldSpec(
-      name: field.name,
+      name: field.displayName,
       type: field.type,
       displayType: _typeCodeString(field.type),
       identifier: fieldId != null && fieldId >= 0
           ? '$fieldId'
-          : _toSnakeCase(field.name),
+          : _toSnakeCase(field.displayName),
       id: fieldId,
       nullable: nullable,
       ref: ref,
@@ -257,7 +260,7 @@ final class ForyGenerator extends Generator {
     final unnamedConstructor = element.unnamedConstructor;
     final hasZeroArgConstructor = unnamedConstructor != null &&
         !unnamedConstructor.isFactory &&
-        unnamedConstructor.parameters
+        unnamedConstructor.formalParameters
             .every((parameter) => parameter.isOptional);
     if (hasZeroArgConstructor && fields.every((field) => field.writable)) {
       return const _ConstructorPlan.mutable();
@@ -276,12 +279,13 @@ final class ForyGenerator extends Generator {
     };
     final arguments = <_ConstructorArgumentSpec>[];
     final constructorFieldNames = <String>{};
-    for (final parameter in unnamedConstructor.parameters) {
-      final field = fieldByName[parameter.name];
+    for (final parameter in unnamedConstructor.formalParameters) {
+      final parameterName = parameter.displayName;
+      final field = fieldByName[parameterName];
       if (field == null) {
         if (parameter.isRequiredNamed || parameter.isRequiredPositional) {
           throw InvalidGenerationSourceError(
-            'Constructor parameter ${parameter.name} does not match a serializable field.',
+            'Constructor parameter $parameterName does not match a serializable field.',
             element: parameter,
           );
         }
@@ -291,7 +295,7 @@ final class ForyGenerator extends Generator {
       arguments.add(
         _ConstructorArgumentSpec(
           fieldName: field.name,
-          parameterName: parameter.name,
+          parameterName: parameterName,
           named: parameter.isNamed,
         ),
       );
@@ -313,7 +317,7 @@ final class ForyGenerator extends Generator {
     if (selfRefField != null) {
       throw InvalidGenerationSourceError(
         'Constructor-based generated serializers cannot bind self references early. '
-        'Use a writable zero-argument constructor for ${element.name}.',
+        'Use a writable zero-argument constructor for ${element.displayName}.',
         element: selfRefField.type.element,
       );
     }
@@ -768,7 +772,8 @@ final class ForyGenerator extends Generator {
         "      throw ArgumentError('Exactly one registration mode is required: id, or namespace + typeName.');",
       )
       ..writeln('    }')
-      ..writeln('    if (hasNamed && (namespace == null || typeName == null)) {')
+      ..writeln(
+          '    if (hasNamed && (namespace == null || typeName == null)) {')
       ..writeln(
         "      throw ArgumentError('Both namespace and typeName are required for named registration.');",
       )
@@ -873,9 +878,6 @@ GeneratedFieldType(
     )''';
   }
 
-
-
-
   String debugConversionExpressionForType(
     DartType type,
     DebugGeneratedFieldTypeSpec fieldType,
@@ -899,9 +901,8 @@ GeneratedFieldType(
       nullable: fieldType.nullable,
       ref: fieldType.ref,
       dynamic: fieldType.dynamic,
-      arguments: fieldType.arguments
-          .map(_fromDebugFieldType)
-          .toList(growable: false),
+      arguments:
+          fieldType.arguments.map(_fromDebugFieldType).toList(growable: false),
     );
   }
 
@@ -1113,7 +1114,6 @@ GeneratedFieldType(
         field.fieldType.typeId == TypeIds.set ||
         field.fieldType.typeId == TypeIds.map;
   }
-
 
   List<_DirectGeneratedWriteReservationRun>
       _directGeneratedWriteReservationRuns(
@@ -1917,9 +1917,8 @@ GeneratedFieldType(
     final options = _readTypeOptions(reader);
     final keyObj = reader.peek('key');
     final valueObj = reader.peek('value');
-    final key = keyObj != null && !keyObj.isNull
-        ? _readTypeSpecObj(keyObj)
-        : null;
+    final key =
+        keyObj != null && !keyObj.isNull ? _readTypeSpecObj(keyObj) : null;
     final value = valueObj != null && !valueObj.isNull
         ? _readTypeSpecObj(valueObj)
         : null;
@@ -1954,7 +1953,8 @@ GeneratedFieldType(
         final optionType = optionObj.type;
         if (optionType != null && _refOptionChecker.isExactlyType(optionType)) {
           ref = optionReader.peek('tracked')?.boolValue ?? true;
-        } else if (optionType != null && _nullableOptionChecker.isExactlyType(optionType)) {
+        } else if (optionType != null &&
+            _nullableOptionChecker.isExactlyType(optionType)) {
           nullable = optionReader.peek('value')?.boolValue ?? true;
         }
       }
@@ -2066,8 +2066,8 @@ GeneratedFieldType(
     final method = element.getMethod('fromRawValue');
     if (method == null ||
         !method.isStatic ||
-        method.parameters.length != 1 ||
-        !method.parameters.single.type.isDartCoreInt) {
+        method.formalParameters.length != 1 ||
+        !method.formalParameters.single.type.isDartCoreInt) {
       return false;
     }
     return method.returnType.element == element;
@@ -2168,7 +2168,7 @@ GeneratedFieldType(
       return 'Object';
     }
     if (type is InterfaceType) {
-      return type.element.name;
+      return type.element.displayName;
     }
     return type.getDisplayString().replaceAll('?', '');
   }
@@ -2180,14 +2180,15 @@ GeneratedFieldType(
     }
     if (nonNullable is InterfaceType) {
       final element = nonNullable.element;
-      final prefix = _importPrefixByLibraryIdentifier[element.library.identifier];
-      final baseName = prefix == null ? element.name : '$prefix.${element.name}';
+      final prefix =
+          _importPrefixByLibraryIdentifier[element.library.identifier];
+      final elementName = element.displayName;
+      final baseName = prefix == null ? elementName : '$prefix.$elementName';
       if (nonNullable.typeArguments.isEmpty) {
         return baseName;
       }
-      final typeArguments = nonNullable.typeArguments
-          .map(_typeCodeString)
-          .join(', ');
+      final typeArguments =
+          nonNullable.typeArguments.map(_typeCodeString).join(', ');
       return '$baseName<$typeArguments>';
     }
     return nonNullable.getDisplayString();

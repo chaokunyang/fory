@@ -585,7 +585,7 @@ For more details on row format, see [Row Format Specification](docs/specificatio
 | **Scala**                        | Scala integration and best practices       | [scala](docs/guide/scala)                                | [📖 View](https://fory.apache.org/docs/guide/scala/)               |
 | **Cross-Language Serialization** | Multi-language object exchange             | [xlang](docs/guide/xlang)                                | [📖 View](https://fory.apache.org/docs/guide/xlang/)               |
 | **GraalVM**                      | Native image support and AOT compilation   | [graalvm-support.md](docs/guide/java/graalvm-support.md) | [📖 View](https://fory.apache.org/docs/guide/java/graalvm_support) |
-| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/guide/DEVELOPMENT.md)              | [📖 View](https://fory.apache.org/docs/guide/development)          |
+| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/DEVELOPMENT.md)                    | [📖 View](docs/DEVELOPMENT.md)                                     |
 
 ### Protocol Specifications
 
@@ -658,7 +658,7 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 - 🧪 Add test cases
 - 📊 Share benchmarks
 
-See [Development Guide](docs/guide/DEVELOPMENT.md) for build instructions and development workflow.
+See [Development Guide](docs/DEVELOPMENT.md) for build instructions and development workflow.
 
 ## License
 

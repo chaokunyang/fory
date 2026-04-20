@@ -6,7 +6,7 @@ Load this file when changing documentation, public APIs, protocol specs, benchma
 
 - `README.md`
 - `CONTRIBUTING.md`
-- `docs/guide/DEVELOPMENT.md`
+- `docs/DEVELOPMENT.md`
 - language guides under `docs/guide/`
 - `docs/specification/**`
 - `docs/compiler/**`

@@ -41,7 +41,7 @@ Key points:
 
 ## Testing
 
-For environmental requirements, please check [DEVELOPMENT.md](./docs/guide/DEVELOPMENT.md).
+For environmental requirements, please check [DEVELOPMENT.md](./docs/DEVELOPMENT.md).
 
 ### Python
 
@@ -241,4 +241,4 @@ If you want write a blog, or update other contents about the website, please sub
 
 ## Development
 
-For more information, please refer to [Development Guide](https://fory.apache.org/docs/docs/guide/development).
+For more information, please refer to [Development Guide](./docs/DEVELOPMENT.md).

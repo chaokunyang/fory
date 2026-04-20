@@ -212,6 +212,36 @@ Fory C++ supports both CMake and Bazel build systems. See [C++ Installation Guid
 go get github.com/apache/fory/go/fory
 ```
 
+**NodeJS/JavaScript**:
+
+```bash
+npm install @apache-fory/core
+```
+
+Optional Node.js string fast-path support:
+
+```bash
+npm install @apache-fory/core @apache-fory/hps
+```
+
+**C#**:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Apache.Fory" Version="0.17.0" />
+</ItemGroup>
+```
+
+**Dart**:
+
+```yaml
+dependencies:
+  fory: ^0.17.0
+
+dev_dependencies:
+  build_runner: ^2.4.0
+```
+
 ## Quick Start
 
 This section provides quick examples for getting started with Apache Fory™. For comprehensive guides, see the [Documentation](#documentation).
@@ -342,6 +372,105 @@ int main() {
 
 For detailed C++ usage including collections, smart pointers, and error handling, see [C++ Guide](docs/guide/cpp).
 
+#### NodeJS/JavaScript Serialization
+
+JavaScript native mode uses registered schemas to generate fast serializers for repeated use in browser or Node.js applications.
+
+```ts
+import Fory, { Type } from "@apache-fory/core";
+
+const personType = Type.struct("example.person", {
+  name: Type.string(),
+  age: Type.int32(),
+});
+
+const fory = new Fory();
+const { serialize, deserialize } = fory.register(personType);
+
+const bytes = serialize({
+  name: "chaokunyang",
+  age: 28,
+});
+const person = deserialize(bytes);
+console.log(person.name, person.age); // Output: chaokunyang 28
+```
+
+For detailed JavaScript usage including schema registration, references, and cross-language support, see [JavaScript Guide](docs/guide/javascript).
+
+#### C# Serialization
+
+C# native mode provides source-generator-backed serialization for registered .NET types.
+
+```csharp
+using Apache.Fory;
+
+[ForyObject]
+public sealed class Person
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+Fory fory = Fory.Builder().Build();
+fory.Register<Person>(1);
+
+Person person = new()
+{
+    Id = 1,
+    Name = "chaokunyang",
+};
+
+byte[] bytes = fory.Serialize(person);
+Person result = fory.Deserialize<Person>(bytes);
+Console.WriteLine($"{result.Name} {result.Id}"); // Output: chaokunyang 1
+```
+
+For detailed C# usage including configuration, custom serializers, and thread-safe runtime options, see [C# Guide](docs/guide/csharp).
+
+#### Dart Serialization
+
+Dart native mode uses generated serializers for fast serialization without runtime reflection.
+
+```dart
+import 'package:fory/fory.dart';
+
+part 'person.fory.dart';
+
+@ForyStruct()
+class Person {
+  Person();
+
+  String name = '';
+  Int32 age = Int32(0);
+}
+
+void main() {
+  final fory = Fory();
+  PersonFory.register(
+    fory,
+    Person,
+    namespace: 'example',
+    typeName: 'Person',
+  );
+
+  final person = Person()
+    ..name = 'chaokunyang'
+    ..age = Int32(28);
+
+  final bytes = fory.serialize(person);
+  final result = fory.deserialize<Person>(bytes);
+  print('${result.name} ${result.age}');
+}
+```
+
+Generate the companion file before running the program:
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+```
+
+For detailed Dart usage including code generation, field configuration, and cross-language guidance, see [Dart Guide](docs/guide/dart).
+
 #### Scala Serialization
 
 Scala native mode provides optimized serialization for Scala-specific types including case classes, collections, and Option types.
@@ -406,7 +535,7 @@ For detailed Kotlin usage including null safety and default value support, see [
 
 **Only use xlang mode when you need cross-language data exchange.** Xlang mode adds type metadata overhead for cross-language compatibility and only supports types that can be mapped across all languages. For single-language use cases, always prefer native mode for better performance.
 
-The following examples demonstrate serializing a `Person` object across Java and Rust. For other languages (Python, Go, JavaScript, etc.), simply set the language mode to `XLANG` and follow the same pattern.
+The following examples demonstrate serializing a `Person` object across Java and Rust. For other languages (Python, Go, JavaScript, etc.), simply set the xlang mode to `true` and follow the same pattern.
 
 **Java**
 
@@ -419,10 +548,7 @@ public class XlangExample {
 
   public static void main(String[] args) {
     // Create Fory instance with XLANG mode
-    Fory fory = Fory.builder()
-      .withLanguage(Language.XLANG)
-      .build();
-
+    Fory fory = Fory.builder().withXlang(true).build();
     // Register with cross-language type id/name
     fory.register(Person.class, 1);
     // fory.register(Person.class, "example.Person");
@@ -447,7 +573,7 @@ struct Person {
 }
 
 fn main() -> Result<(), Error> {
-    let mut fory = Fory::default();
+    let mut fory = Fory::default().xlang(true);
     fory.register::<Person>(1)?;
     // fory.register_by_name::<Person>("example.Person")?;
     let person = Person {
@@ -582,10 +708,16 @@ For more details on row format, see [Row Format Specification](docs/specificatio
 | **Python**                       | Python-specific features and usage         | [python](docs/guide/python)                              | [📖 View](https://fory.apache.org/docs/guide/python/)              |
 | **Rust**                         | Rust implementation and patterns           | [rust](docs/guide/rust)                                  | [📖 View](https://fory.apache.org/docs/guide/rust/)                |
 | **C++**                          | C++ implementation and patterns            | [cpp](docs/guide/cpp)                                    | [📖 View](https://fory.apache.org/docs/guide/cpp/)                 |
+| **Go**                           | Go serialization and runtime usage         | [go](docs/guide/go)                                      | [📖 View](https://fory.apache.org/docs/guide/go/)                  |
+| **JavaScript/NodeJS**            | JavaScript and Node.js serialization guide | [javascript](docs/guide/javascript)                      | [📖 View](https://fory.apache.org/docs/guide/javascript/)          |
+| **C#**                           | C# serialization and .NET usage            | [csharp](docs/guide/csharp)                              | [📖 View](https://fory.apache.org/docs/guide/csharp/)              |
+| **Swift**                        | Swift implementation and patterns          | [swift](docs/guide/swift)                                | [📖 View](https://fory.apache.org/docs/guide/swift/)               |
+| **Dart**                         | Dart serialization and codegen usage       | [dart](docs/guide/dart)                                  | [📖 View](https://fory.apache.org/docs/guide/dart/)                |
 | **Scala**                        | Scala integration and best practices       | [scala](docs/guide/scala)                                | [📖 View](https://fory.apache.org/docs/guide/scala/)               |
+| **Kotlin**                       | Kotlin integration and type support        | [kotlin](docs/guide/kotlin)                              | [📖 View](https://fory.apache.org/docs/guide/kotlin/)              |
 | **Cross-Language Serialization** | Multi-language object exchange             | [xlang](docs/guide/xlang)                                | [📖 View](https://fory.apache.org/docs/guide/xlang/)               |
 | **GraalVM**                      | Native image support and AOT compilation   | [graalvm-support.md](docs/guide/java/graalvm-support.md) | [📖 View](https://fory.apache.org/docs/guide/java/graalvm_support) |
-| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/guide/DEVELOPMENT.md)              | [📖 View](https://fory.apache.org/docs/guide/development)          |
+| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/DEVELOPMENT.md)                    | [📖 View](docs/DEVELOPMENT.md)                                     |
 
 ### Protocol Specifications
 
@@ -658,7 +790,7 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 - 🧪 Add test cases
 - 📊 Share benchmarks
 
-See [Development Guide](docs/guide/DEVELOPMENT.md) for build instructions and development workflow.
+See [Development Guide](docs/DEVELOPMENT.md) for build instructions and development workflow.
 
 ## License
 

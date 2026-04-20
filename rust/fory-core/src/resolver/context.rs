@@ -243,7 +243,7 @@ impl<'a> WriteContext<'a> {
         match fory_type_id {
             TypeId::ENUM | TypeId::STRUCT | TypeId::EXT | TypeId::TYPED_UNION => {
                 let user_type_id = type_info.get_user_type_id();
-                self.writer.write_var_uint32(user_type_id);
+                self.writer.write_var_u32(user_type_id);
             }
             TypeId::COMPATIBLE_STRUCT | TypeId::NAMED_COMPATIBLE_STRUCT => {
                 // Write type meta inline using streaming protocol
@@ -437,7 +437,7 @@ impl<'a> ReadContext<'a> {
         // should be compiled to jump table generation
         match fory_type_id {
             types::ENUM | types::STRUCT | types::EXT | types::TYPED_UNION => {
-                let user_type_id = self.reader.read_var_uint32()?;
+                let user_type_id = self.reader.read_var_u32()?;
                 self.type_resolver
                     .get_user_type_info_by_id(user_type_id)
                     .ok_or_else(|| Error::type_error("ID harness not found"))

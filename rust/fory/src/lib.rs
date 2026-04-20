@@ -827,14 +827,14 @@
 //! impl Serializer for CustomType {
 //!     fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
 //!         context.writer.write_i32(self.value);
-//!         context.writer.write_var_uint32(self.name.len() as u32);
+//!         context.writer.write_var_u32(self.name.len() as u32);
 //!         context.writer.write_utf8_string(&self.name);
 //!         Ok(())
 //!     }
 //!
 //!     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
 //!         let value = context.reader.read_i32()?;
-//!         let len = context.reader.read_var_uint32()? as usize;
+//!         let len = context.reader.read_var_u32()? as usize;
 //!         let name = context.reader.read_utf8_string(len)?;
 //!         Ok(Self { value, name })
 //!     }

@@ -64,7 +64,7 @@ where
     V: Serializer,
     I: Iterator<Item = (&'a K, &'a V)>,
 {
-    context.writer.write_var_uint32(length as u32);
+    context.writer.write_var_u32(length as u32);
     if length == 0 {
         return Ok(());
     }
@@ -561,7 +561,7 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        let len = context.reader.read_var_uint32()?;
+        let len = context.reader.read_var_u32()?;
         if len == 0 {
             return Ok(HashMap::new());
         }
@@ -717,7 +717,7 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        let len = context.reader.read_var_uint32()?;
+        let len = context.reader.read_var_u32()?;
         if len == 0 {
             return Ok(BTreeMap::new());
         }

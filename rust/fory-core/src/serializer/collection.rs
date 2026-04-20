@@ -70,7 +70,7 @@ where
 {
     let iter = iter.into_iter();
     let len = iter.len();
-    context.writer.write_var_uint32(len as u32);
+    context.writer.write_var_u32(len as u32);
     if len == 0 {
         return Ok(());
     }
@@ -246,7 +246,7 @@ where
     T: Serializer + ForyDefault,
     C: FromIterator<T>,
 {
-    let len = context.reader.read_var_uint32()?;
+    let len = context.reader.read_var_u32()?;
     if len == 0 {
         return Ok(C::from_iter(std::iter::empty()));
     }
@@ -292,7 +292,7 @@ pub fn read_vec_data<T>(context: &mut ReadContext) -> Result<Vec<T>, Error>
 where
     T: Serializer + ForyDefault,
 {
-    let len = context.reader.read_var_uint32()?;
+    let len = context.reader.read_var_u32()?;
     if len == 0 {
         return Ok(Vec::new());
     }

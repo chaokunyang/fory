@@ -628,14 +628,14 @@ fn test_struct_with_generic() {
 
     impl<T: 'static + Serializer + ForyDefault> Serializer for Wrapper<T> {
         fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-            context.writer.write_var_uint32(self.value.len() as u32);
+            context.writer.write_var_u32(self.value.len() as u32);
             context.writer.write_utf8_string(&self.value);
             self.data.fory_write_data(context)?;
             Ok(())
         }
 
         fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-            let len = context.reader.read_var_uint32()? as usize;
+            let len = context.reader.read_var_u32()? as usize;
             let value = context.reader.read_utf8_string(len)?;
             let data = T::fory_read_data(context)?;
             Ok(Self {

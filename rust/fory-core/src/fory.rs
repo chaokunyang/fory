@@ -60,7 +60,6 @@ thread_local! {
 #[derive(Default)]
 pub struct ForyBuilder {
     config: Config,
-    type_resolver: TypeResolver,
 }
 
 impl ForyBuilder {
@@ -95,7 +94,6 @@ impl ForyBuilder {
         // Setting share_meta individually is not supported currently
         self.config.share_meta = compatible;
         self.config.compatible = compatible;
-        self.type_resolver.set_compatible(compatible);
         if compatible {
             self.config.check_struct_version = false;
         }
@@ -135,7 +133,6 @@ impl ForyBuilder {
         if !self.config.check_struct_version {
             self.config.check_struct_version = !self.config.compatible;
         }
-        self.type_resolver.set_xlang(xlang);
         self
     }
 
@@ -339,7 +336,7 @@ impl ForyBuilder {
 
     /// Builds a [`Fory`] runtime with the current builder configuration.
     pub fn build(self) -> Fory {
-        Fory::from_parts(self.config, self.type_resolver)
+        Fory::from_config(self.config)
     }
 }
 
@@ -409,7 +406,10 @@ impl Fory {
         ForyBuilder::default()
     }
 
-    fn from_parts(config: Config, type_resolver: TypeResolver) -> Self {
+    fn from_config(config: Config) -> Self {
+        let mut type_resolver = TypeResolver::default();
+        type_resolver.set_compatible(config.compatible);
+        type_resolver.set_xlang(config.xlang);
         Self {
             id: FORY_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             config,

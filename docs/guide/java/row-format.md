@@ -1,6 +1,6 @@
 ---
 title: Row Format
-sidebar_position: 12
+sidebar_position: 13
 id: row_format
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more

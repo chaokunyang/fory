@@ -1,6 +1,6 @@
 ---
 title: Virtual Threads
-sidebar_position: 8
+sidebar_position: 9
 id: java_virtual_threads
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more

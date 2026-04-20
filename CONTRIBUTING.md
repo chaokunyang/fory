@@ -235,7 +235,7 @@ And due to the usage of `sun.misc.Unsafe` API, which is not visible in Java 11+,
 
 Apache Fory™'s website consists of static pages hosted at https://github.com/apache/fory-site.
 
-All updates about docs under [guide](docs/guide) and [benchmarks](docs/benchmarks) will be synced to the site repo automatically.
+Updates to [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md), docs under [guide](docs/guide), and docs under [benchmarks](docs/benchmarks) will be synced to the site repo automatically.
 
 If you want write a blog, or update other contents about the website, please submit PR to the site repo.
 

@@ -576,16 +576,16 @@ For more details on row format, see [Row Format Specification](docs/specificatio
 
 ### User Guides
 
-| Guide                            | Description                                | Source                                          | Website                                                             |
-| -------------------------------- | ------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------- |
-| **Java Serialization**           | Comprehensive guide for Java serialization | [java](docs/guide/java)                         | [📖 View](https://fory.apache.org/docs/guide/java/)                 |
-| **Python**                       | Python-specific features and usage         | [python](docs/guide/python)                     | [📖 View](https://fory.apache.org/docs/guide/python/)               |
-| **Rust**                         | Rust implementation and patterns           | [rust](docs/guide/rust)                         | [📖 View](https://fory.apache.org/docs/guide/rust/)                 |
-| **C++**                          | C++ implementation and patterns            | [cpp](docs/guide/cpp)                           | [📖 View](https://fory.apache.org/docs/guide/cpp/)                  |
-| **Scala**                        | Scala integration and best practices       | [scala](docs/guide/scala)                       | [📖 View](https://fory.apache.org/docs/guide/scala/)                |
-| **Cross-Language Serialization** | Multi-language object exchange             | [xlang](docs/guide/xlang)                       | [📖 View](https://fory.apache.org/docs/guide/xlang/)                |
-| **GraalVM**                      | Native image support and AOT compilation   | [graalvm_guide.md](docs/guide/graalvm_guide.md) | [📖 View](https://fory.apache.org/docs/guide/graalvm_serialization) |
-| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/guide/DEVELOPMENT.md)     | [📖 View](https://fory.apache.org/docs/guide/development)           |
+| Guide                            | Description                                | Source                                                   | Website                                                            |
+| -------------------------------- | ------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| **Java Serialization**           | Comprehensive guide for Java serialization | [java](docs/guide/java)                                  | [📖 View](https://fory.apache.org/docs/guide/java/)                |
+| **Python**                       | Python-specific features and usage         | [python](docs/guide/python)                              | [📖 View](https://fory.apache.org/docs/guide/python/)              |
+| **Rust**                         | Rust implementation and patterns           | [rust](docs/guide/rust)                                  | [📖 View](https://fory.apache.org/docs/guide/rust/)                |
+| **C++**                          | C++ implementation and patterns            | [cpp](docs/guide/cpp)                                    | [📖 View](https://fory.apache.org/docs/guide/cpp/)                 |
+| **Scala**                        | Scala integration and best practices       | [scala](docs/guide/scala)                                | [📖 View](https://fory.apache.org/docs/guide/scala/)               |
+| **Cross-Language Serialization** | Multi-language object exchange             | [xlang](docs/guide/xlang)                                | [📖 View](https://fory.apache.org/docs/guide/xlang/)               |
+| **GraalVM**                      | Native image support and AOT compilation   | [graalvm_support.md](docs/guide/java/graalvm_support.md) | [📖 View](https://fory.apache.org/docs/guide/java/graalvm_support) |
+| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/guide/DEVELOPMENT.md)              | [📖 View](https://fory.apache.org/docs/guide/development)          |
 
 ### Protocol Specifications
 

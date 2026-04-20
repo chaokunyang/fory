@@ -834,7 +834,7 @@
 //!
 //!     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
 //!         let value = context.reader.read_i32()?;
-//!         let len = context.reader.read_varuint32()? as usize;
+//!         let len = context.reader.read_var_uint32()? as usize;
 //!         let name = context.reader.read_utf8_string(len)?;
 //!         Ok(Self { value, name })
 //!     }

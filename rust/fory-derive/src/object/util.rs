@@ -852,11 +852,11 @@ pub(super) fn get_primitive_reader_method(type_name: &str) -> &'static str {
 /// - type_id=INT32: read_i32 (fixed 4-byte)
 ///
 /// For u32 fields:
-/// - type_id=VARINT32/VAR_UINT32 (default): read_varuint32
+/// - type_id=VARINT32/VAR_UINT32 (default): read_var_uint32
 /// - type_id=INT32/UINT32: read_u32 (fixed 4-byte)
 ///
 /// For u64 fields:
-/// - type_id=VARINT32/VAR_UINT64 (default): read_varuint64
+/// - type_id=VARINT32/VAR_UINT64 (default): read_var_uint64
 /// - type_id=INT32/UINT64: read_u64 (fixed 8-byte)
 /// - type_id=TAGGED_UINT64: read_tagged_u64
 pub(super) fn get_primitive_reader_method_with_encoding(
@@ -882,7 +882,7 @@ pub(super) fn get_primitive_reader_method_with_encoding(
                 return "read_u32"; // Fixed 4-byte encoding
             }
         }
-        return "read_varuint32"; // Variable-length (default)
+        return "read_var_uint32"; // Variable-length (default)
     }
 
     // Handle u64 with type_id
@@ -894,7 +894,7 @@ pub(super) fn get_primitive_reader_method_with_encoding(
                 return "read_tagged_u64"; // Tagged variable-length
             }
         }
-        return "read_varuint64"; // Variable-length (default)
+        return "read_var_uint64"; // Variable-length (default)
     }
 
     // For other types, use the default method from PRIMITIVE_IO_METHODS

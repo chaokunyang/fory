@@ -55,7 +55,7 @@ fn test_varint32() {
         writer.write_var_uint32(data as u32);
         let binding = writer.dump();
         let mut reader = Reader::new(binding.as_slice());
-        let res = reader.read_varuint32().unwrap();
+        let res = reader.read_var_uint32().unwrap();
         assert_eq!(res, data as u32);
     }
 }
@@ -92,7 +92,7 @@ fn test_varuint36_small() {
         let buf = writer.dump();
 
         let mut reader = Reader::new(buf.as_slice());
-        let value = reader.read_varuint36small().unwrap();
+        let value = reader.read_var_uint36_small().unwrap();
         assert_eq!(value, data, "failed for data {}", data);
     }
 }
@@ -114,5 +114,5 @@ fn test_fixed_width_read_bounds_checks() {
     let mut bad_cursor = Reader::new(&[1, 2, 3, 4]);
     bad_cursor.set_cursor(10);
     assert!(bad_cursor.read_u16().is_err());
-    assert!(bad_cursor.read_varuint36small().is_err());
+    assert!(bad_cursor.read_var_uint36_small().is_err());
 }

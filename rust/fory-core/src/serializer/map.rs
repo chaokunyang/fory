@@ -561,7 +561,7 @@ impl<K: Serializer + ForyDefault + Eq + std::hash::Hash, V: Serializer + ForyDef
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        let len = context.reader.read_varuint32()?;
+        let len = context.reader.read_var_uint32()?;
         if len == 0 {
             return Ok(HashMap::new());
         }
@@ -717,7 +717,7 @@ impl<K: Serializer + ForyDefault + Ord + std::hash::Hash, V: Serializer + ForyDe
     }
 
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-        let len = context.reader.read_varuint32()?;
+        let len = context.reader.read_var_uint32()?;
         if len == 0 {
             return Ok(BTreeMap::new());
         }

@@ -141,7 +141,7 @@ impl<T0: Serializer + ForyDefault> Serializer for (T0,) {
             Ok((elem0,))
         } else {
             // Compatible mode: read collection protocol (heterogeneous)
-            let len = context.reader.read_varuint32()?;
+            let len = context.reader.read_var_uint32()?;
             let _header = context.reader.read_u8()?;
 
             let elem0 = if len > 0 {
@@ -393,7 +393,7 @@ macro_rules! impl_tuple_serializer {
                 } else {
                     // Compatible mode: read collection protocol (always heterogeneous)
                     // Handle flexible length: use defaults for missing elements, skip extras
-                    let len = context.reader.read_varuint32()?;
+                    let len = context.reader.read_var_uint32()?;
                     let _header = context.reader.read_u8()?;
 
                     // Track how many elements we've read

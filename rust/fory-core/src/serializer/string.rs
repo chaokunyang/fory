@@ -43,7 +43,7 @@ impl Serializer for String {
     #[inline(always)]
     fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
         // xlang mode: read encoding header and decode accordingly
-        let bitor = context.reader.read_varuint36small()?;
+        let bitor = context.reader.read_var_uint36_small()?;
         let len = bitor >> 2;
         let encoding = bitor & 0b11;
         let s = match encoding {

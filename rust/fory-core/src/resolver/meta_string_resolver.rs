@@ -237,7 +237,7 @@ impl MetaStringReaderResolver {
         &mut self,
         reader: &mut Reader,
     ) -> Result<&MetaStringBytes, Error> {
-        let header = reader.read_varuint32()?;
+        let header = reader.read_var_uint32()?;
         let len = (header >> 1) as usize;
 
         if (header & 0b1) == 0 {

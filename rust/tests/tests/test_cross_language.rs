@@ -92,7 +92,7 @@ fn test_buffer() {
     assert_eq!(reader.read_i64().unwrap(), i64::MAX);
     assert_eq!(reader.read_f32().unwrap(), -1.1f32);
     assert_eq!(reader.read_f64().unwrap(), -1.1f64);
-    assert_eq!(reader.read_varuint32().unwrap(), 100);
+    assert_eq!(reader.read_var_uint32().unwrap(), 100);
     let bytes_size = reader.read_i32().unwrap() as usize;
     let binary = b"ab";
     assert_eq!(reader.read_bytes(bytes_size).unwrap(), binary);
@@ -159,7 +159,7 @@ fn test_buffer_var() {
         i32::MAX,
     ];
     for &expected in &varuint32_values {
-        let value = reader.read_varuint32().unwrap();
+        let value = reader.read_var_uint32().unwrap();
         assert_eq!(expected, value as i32, "varuint32 value mismatch");
     }
     let varuint64_values = vec![
@@ -184,7 +184,7 @@ fn test_buffer_var() {
         i64::MAX as u64,
     ];
     for &expected in &varuint64_values {
-        let value = reader.read_varuint64().unwrap();
+        let value = reader.read_var_uint64().unwrap();
         assert_eq!(expected, value, "varuint64 value mismatch");
     }
     let varint64_values = vec![

@@ -437,7 +437,7 @@ impl<'a> ReadContext<'a> {
         // should be compiled to jump table generation
         match fory_type_id {
             types::ENUM | types::STRUCT | types::EXT | types::TYPED_UNION => {
-                let user_type_id = self.reader.read_varuint32()?;
+                let user_type_id = self.reader.read_var_uint32()?;
                 self.type_resolver
                     .get_user_type_info_by_id(user_type_id)
                     .ok_or_else(|| Error::type_error("ID harness not found"))

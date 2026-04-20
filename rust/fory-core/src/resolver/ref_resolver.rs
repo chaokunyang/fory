@@ -341,7 +341,7 @@ impl RefReader {
     /// The reference ID as a u32
     #[inline(always)]
     pub fn read_ref_id(&self, reader: &mut Reader) -> Result<u32, Error> {
-        reader.read_varuint32()
+        reader.read_var_uint32()
     }
 
     /// Execute all pending callbacks to resolve weak pointer references.

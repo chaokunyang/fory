@@ -95,7 +95,7 @@ impl MetaReaderResolver {
         reader: &mut Reader,
         type_resolver: &TypeResolver,
     ) -> Result<Rc<TypeInfo>, Error> {
-        let index_marker = reader.read_varuint32()?;
+        let index_marker = reader.read_var_uint32()?;
         let is_ref = (index_marker & 1) == 1;
         let index = (index_marker >> 1) as usize;
 

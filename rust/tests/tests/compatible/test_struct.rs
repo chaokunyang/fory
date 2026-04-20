@@ -635,7 +635,7 @@ fn test_struct_with_generic() {
         }
 
         fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error> {
-            let len = context.reader.read_varuint32()? as usize;
+            let len = context.reader.read_var_uint32()? as usize;
             let value = context.reader.read_utf8_string(len)?;
             let data = T::fory_read_data(context)?;
             Ok(Self {

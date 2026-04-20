@@ -156,13 +156,13 @@ impl_xlang_unsigned_num_serializer!(u16, Writer::write_u16, Reader::read_u16, Ty
 impl_xlang_unsigned_num_serializer!(
     u32,
     Writer::write_var_uint32,
-    Reader::read_varuint32,
+    Reader::read_var_uint32,
     TypeId::VAR_UINT32
 );
 impl_xlang_unsigned_num_serializer!(
     u64,
     Writer::write_var_uint64,
-    Reader::read_varuint64,
+    Reader::read_var_uint64,
     TypeId::VAR_UINT64
 );
 

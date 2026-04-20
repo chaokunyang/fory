@@ -642,7 +642,7 @@ impl<'a> Reader<'a> {
 
     #[inline(always)]
     pub fn read_varint32(&mut self) -> Result<i32, Error> {
-        let encoded = self.read_varuint32()?;
+        let encoded = self.read_var_uint32()?;
         Ok(((encoded >> 1) as i32) ^ -((encoded & 1) as i32))
     }
 
@@ -657,7 +657,7 @@ impl<'a> Reader<'a> {
 
     #[inline(always)]
     pub fn read_varint64(&mut self) -> Result<i64, Error> {
-        let encoded = self.read_varuint64()?;
+        let encoded = self.read_var_uint64()?;
         Ok(((encoded >> 1) as i64) ^ -((encoded & 1) as i64))
     }
 
@@ -722,7 +722,7 @@ impl<'a> Reader<'a> {
     // ============ VAR_UINT32 (TypeId = 12) ============
 
     #[inline(always)]
-    pub fn read_varuint32(&mut self) -> Result<u32, Error> {
+    pub fn read_var_uint32(&mut self) -> Result<u32, Error> {
         let b0 = self.value_at(self.cursor)? as u32;
         if b0 < 0x80 {
             self.move_next(1);
@@ -769,7 +769,7 @@ impl<'a> Reader<'a> {
     // ============ VAR_UINT64 (TypeId = 14) ============
 
     #[inline(always)]
-    pub fn read_varuint64(&mut self) -> Result<u64, Error> {
+    pub fn read_var_uint64(&mut self) -> Result<u64, Error> {
         let b0 = self.value_at(self.cursor)? as u64;
         if b0 < 0x80 {
             self.move_next(1);
@@ -990,8 +990,8 @@ impl<'a> Reader<'a> {
         const SIZE: usize = std::mem::size_of::<usize>();
         match SIZE {
             2 => Ok(self.read_u16()? as usize),
-            4 => Ok(self.read_varuint32()? as usize),
-            8 => Ok(self.read_varuint64()? as usize),
+            4 => Ok(self.read_var_uint32()? as usize),
+            8 => Ok(self.read_var_uint64()? as usize),
             _ => unreachable!("unsupported usize size"),
         }
     }
@@ -999,7 +999,7 @@ impl<'a> Reader<'a> {
     // ============ Other helper methods ============
 
     #[inline(always)]
-    pub fn read_varuint36small(&mut self) -> Result<u64, Error> {
+    pub fn read_var_uint36_small(&mut self) -> Result<u64, Error> {
         // Keep this API panic-free even if cursor is externally set past buffer end.
         self.check_bound(0)?;
         let start = self.cursor;
@@ -1041,7 +1041,7 @@ impl<'a> Reader<'a> {
             }
             shift += 7;
             if shift >= 36 {
-                return Err(Error::encode_error("varuint36small overflow"));
+                return Err(Error::encode_error("var_uint36_small overflow"));
             }
         }
         Ok(result)

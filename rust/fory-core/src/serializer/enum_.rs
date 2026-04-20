@@ -118,7 +118,7 @@ pub fn read_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Er
             let _type_name_msb = context.read_meta_string()?;
         }
     } else {
-        context.reader.read_varuint32()?;
+        context.reader.read_var_uint32()?;
     }
     Ok(())
 }

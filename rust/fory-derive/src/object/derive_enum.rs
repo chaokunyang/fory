@@ -770,7 +770,7 @@ fn rust_compatible_variant_read_branches(
                                 return Ok(#default_value);
                             }
                             // Read collection format (same as tuple)
-                            let len = context.reader.read_varuint32()? as usize;
+                            let len = context.reader.read_var_uint32()? as usize;
                             let _header = context.reader.read_u8()?;
 
                             #(#read_fields;)*
@@ -917,14 +917,14 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
 
     quote! {
         if context.is_xlang() {
-            let ordinal = context.reader.read_varuint32()?;
+            let ordinal = context.reader.read_var_uint32()?;
             match ordinal {
                 #(#xlang_variant_branches)*
                 #unknown_xlang_branch
             }
         } else {
             if context.is_compatible() {
-                let encoded_tag = context.reader.read_varuint32()?;
+                let encoded_tag = context.reader.read_var_uint32()?;
                 let tag = encoded_tag >> 2;
                 let variant_type = encoded_tag & 0b11;
 
@@ -941,7 +941,7 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
                     }
                 }
             } else {
-                let tag = context.reader.read_varuint32()?;
+                let tag = context.reader.read_var_uint32()?;
                 match tag {
                     #(#rust_variant_branches)*
                     _ => return Err(fory_core::error::Error::unknown_enum("unknown enum value")),

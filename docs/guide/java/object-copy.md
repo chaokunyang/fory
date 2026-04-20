@@ -287,6 +287,8 @@ When a type already uses a custom serializer, override `Serializer.copy(...)` fo
 ```java
 import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.serializer.Serializer;
 
 public final class EnvelopeSerializer extends Serializer<Envelope> {
@@ -304,12 +306,12 @@ public final class EnvelopeSerializer extends Serializer<Envelope> {
   }
 
   @Override
-  public void write(org.apache.fory.context.WriteContext writeContext, Envelope value) {
+  public void write(WriteContext writeContext, Envelope value) {
     throw new UnsupportedOperationException("omitted");
   }
 
   @Override
-  public Envelope read(org.apache.fory.context.ReadContext readContext) {
+  public Envelope read(ReadContext readContext) {
     throw new UnsupportedOperationException("omitted");
   }
 }

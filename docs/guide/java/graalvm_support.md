@@ -1,6 +1,6 @@
 ---
 title: GraalVM Support
-sidebar_position: 12
+sidebar_position: 13
 id: graalvm_support
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more

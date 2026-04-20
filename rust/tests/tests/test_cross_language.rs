@@ -92,7 +92,7 @@ fn test_buffer() {
     assert_eq!(reader.read_i64().unwrap(), i64::MAX);
     assert_eq!(reader.read_f32().unwrap(), -1.1f32);
     assert_eq!(reader.read_f64().unwrap(), -1.1f64);
-    assert_eq!(reader.read_varuint32().unwrap(), 100);
+    assert_eq!(reader.read_var_u32().unwrap(), 100);
     let bytes_size = reader.read_i32().unwrap() as usize;
     let binary = b"ab";
     assert_eq!(reader.read_bytes(bytes_size).unwrap(), binary);
@@ -106,7 +106,7 @@ fn test_buffer() {
     writer.write_i64(i64::MAX);
     writer.write_f32(-1.1);
     writer.write_f64(-1.1);
-    writer.write_var_uint32(100);
+    writer.write_var_u32(100);
     writer.write_i32(binary.len() as i32);
     writer.write_bytes(binary);
 
@@ -120,7 +120,7 @@ fn test_buffer_var() {
     let bytes = fs::read(&data_file_path).unwrap();
     let mut reader = Reader::new(bytes.as_slice());
 
-    let varint32_values = vec![
+    let var_i32_values = vec![
         i32::MIN,
         i32::MIN + 1,
         -1000000,
@@ -140,11 +140,11 @@ fn test_buffer_var() {
         i32::MAX - 1,
         i32::MAX,
     ];
-    for &expected in &varint32_values {
-        let value = reader.read_varint32().unwrap();
-        assert_eq!(expected, value, "varint32 value mismatch");
+    for &expected in &var_i32_values {
+        let value = reader.read_var_i32().unwrap();
+        assert_eq!(expected, value, "var_i32 value mismatch");
     }
-    let varuint32_values = vec![
+    let var_u32_values = vec![
         0,
         1,
         127,
@@ -158,11 +158,11 @@ fn test_buffer_var() {
         i32::MAX - 1,
         i32::MAX,
     ];
-    for &expected in &varuint32_values {
-        let value = reader.read_varuint32().unwrap();
-        assert_eq!(expected, value as i32, "varuint32 value mismatch");
+    for &expected in &var_u32_values {
+        let value = reader.read_var_u32().unwrap();
+        assert_eq!(expected, value as i32, "var_u32 value mismatch");
     }
-    let varuint64_values = vec![
+    let var_u64_values = vec![
         0u64,
         1,
         127,
@@ -183,11 +183,11 @@ fn test_buffer_var() {
         72057594037927936,
         i64::MAX as u64,
     ];
-    for &expected in &varuint64_values {
-        let value = reader.read_varuint64().unwrap();
-        assert_eq!(expected, value, "varuint64 value mismatch");
+    for &expected in &var_u64_values {
+        let value = reader.read_var_u64().unwrap();
+        assert_eq!(expected, value, "var_u64 value mismatch");
     }
-    let varint64_values = vec![
+    let var_i64_values = vec![
         i64::MIN,
         i64::MIN + 1,
         -1000000000000,
@@ -204,24 +204,24 @@ fn test_buffer_var() {
         i64::MAX - 1,
         i64::MAX,
     ];
-    for &expected in &varint64_values {
-        let value = reader.read_varint64().unwrap();
-        assert_eq!(expected, value, "varint64 value mismatch");
+    for &expected in &var_i64_values {
+        let value = reader.read_var_i64().unwrap();
+        assert_eq!(expected, value, "var_i64 value mismatch");
     }
 
     let mut buffer = vec![];
     let mut writer = Writer::from_buffer(&mut buffer);
-    for &value in &varint32_values {
-        writer.write_varint32(value);
+    for &value in &var_i32_values {
+        writer.write_var_i32(value);
     }
-    for &value in &varuint32_values {
-        writer.write_var_uint32(value as u32);
+    for &value in &var_u32_values {
+        writer.write_var_u32(value as u32);
     }
-    for &value in &varuint64_values {
-        writer.write_var_uint64(value);
+    for &value in &var_u64_values {
+        writer.write_var_u64(value);
     }
-    for &value in &varint64_values {
-        writer.write_varint64(value);
+    for &value in &var_i64_values {
+        writer.write_var_i64(value);
     }
     fs::write(data_file_path, writer.dump()).unwrap();
 }

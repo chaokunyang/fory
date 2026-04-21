@@ -187,13 +187,12 @@ final class GeneratedWriteCursor {
   }
 
   void writeTaggedUint64(int value) {
-    final unsigned = (BigInt.from(value) & _generatedCursorMask64Big).toInt();
-    if (unsigned <= 0x7fffffff) {
-      writeInt32((unsigned << 1) & 0xffffffff);
+    if (value >= 0 && value <= 0x7fffffff) {
+      writeInt32(value << 1);
       return;
     }
     writeUint8(0x01);
-    writeUint64(unsigned);
+    writeUint64(value);
   }
 
   void _writeVarUint64BigInt(BigInt value) {

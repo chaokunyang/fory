@@ -409,13 +409,12 @@ final class Buffer {
 
   /// Writes a tagged unsigned 64-bit integer.
   void writeTaggedUint64(int value) {
-    final unsigned = _toUnsigned64(value);
-    if (unsigned <= 0x7fffffff) {
-      writeInt32((unsigned << 1) & 0xffffffff);
+    if (value >= 0 && value <= 0x7fffffff) {
+      writeInt32(value << 1);
       return;
     }
     writeUint8(0x01);
-    writeUint64(unsigned);
+    writeUint64(value);
   }
 
   /// Reads an unsigned 64-bit integer written by [writeTaggedUint64].
@@ -486,8 +485,6 @@ Uint8List bufferBytes(Buffer buffer) => buffer._bytes;
 
 @internal
 ByteData bufferByteData(Buffer buffer) => buffer._view;
-
-int _toUnsigned64(int value) => (BigInt.from(value) & _mask64Big).toInt();
 
 extension on Buffer {
   void _writeVarUint64BigInt(BigInt value) {

@@ -33,8 +33,11 @@ import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
+import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
+import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/float16.dart';
+import 'package:fory/src/types/timestamp.dart';
 
 /// Read-side serializer context.
 ///
@@ -99,7 +102,7 @@ final class ReadContext {
       _readTypeMeta(expectedNamedType);
 
   @internal
-  Object readSerializerPayload(
+  Object? readSerializerPayload(
       Serializer<Object?> serializer, TypeInfo resolved,
       {required bool hasCurrentPreservedRef}) {
     final int? sentinelId;
@@ -112,7 +115,7 @@ final class ReadContext {
       sentinelId = null;
       sentinelDepth = null;
     }
-    final value = serializer.read(this) as Object;
+    final value = serializer.read(this);
     if (needsSentinel &&
         _refReader.preservedRefDepth == sentinelDepth &&
         _refReader.hasPreservedRefId &&
@@ -155,6 +158,9 @@ final class ReadContext {
 
   /// Reads a half-precision floating-point value.
   Float16 readFloat16() => _buffer.readFloat16();
+
+  /// Reads a bfloat16 floating-point value.
+  Bfloat16 readBfloat16() => _buffer.readBfloat16();
 
   /// Reads a single-precision floating-point value.
   double readFloat32() => _buffer.readFloat32();
@@ -294,6 +300,8 @@ final class ReadContext {
       return PrimitiveSerializer.readPayload(this, resolved.typeId);
     }
     switch (resolved.typeId) {
+      case TypeIds.none:
+        return null;
       case TypeIds.string:
         return StringSerializer.readPayload(this);
       case TypeIds.binary:
@@ -314,6 +322,10 @@ final class ReadContext {
         return uint32ArraySerializer.read(this);
       case TypeIds.uint64Array:
         return uint64ArraySerializer.read(this);
+      case TypeIds.float16Array:
+        return float16ArraySerializer.read(this);
+      case TypeIds.bfloat16Array:
+        return bfloat16ArraySerializer.read(this);
       case TypeIds.float32Array:
         return float32ArraySerializer.read(this);
       case TypeIds.float64Array:
@@ -324,6 +336,7 @@ final class ReadContext {
           declaredFieldType?.arguments.isEmpty ?? true
               ? null
               : declaredFieldType!.arguments.first,
+          hasPreservedRef: hasPreservedRef,
         );
       case TypeIds.set:
         return SetSerializer.readPayload(
@@ -331,6 +344,7 @@ final class ReadContext {
           declaredFieldType?.arguments.isEmpty ?? true
               ? null
               : declaredFieldType!.arguments.first,
+          hasPreservedRef: hasPreservedRef,
         );
       case TypeIds.map:
         return MapSerializer.readPayload(
@@ -341,11 +355,18 @@ final class ReadContext {
           declaredFieldType == null || declaredFieldType.arguments.length < 2
               ? null
               : declaredFieldType.arguments[1],
+          hasPreservedRef: hasPreservedRef,
         );
       case TypeIds.date:
         return const LocalDateSerializer().read(this);
+      case TypeIds.duration:
+        return const DurationSerializer().read(this);
       case TypeIds.timestamp:
-        return const TimestampSerializer().read(this);
+        if (declaredFieldType?.type == Timestamp ||
+            resolved.type == Timestamp) {
+          return const TimestampSerializer().read(this);
+        }
+        return const DateTimeSerializer().read(this);
       default:
         if (resolved.kind == RegistrationKind.struct) {
           return resolved.structSerializer!.readValue(

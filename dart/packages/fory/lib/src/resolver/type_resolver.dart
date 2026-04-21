@@ -39,13 +39,21 @@ import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/serializer/struct_serializer.dart';
+import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/serializer/union_serializer.dart';
-import 'package:fory/src/types/fixed_ints.dart';
+import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
+import 'package:fory/src/types/int16.dart';
+import 'package:fory/src/types/int32.dart';
+import 'package:fory/src/types/int8.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
+import 'package:fory/src/types/uint16.dart';
+import 'package:fory/src/types/uint32.dart';
+import 'package:fory/src/types/uint64.dart';
+import 'package:fory/src/types/uint8.dart';
 import 'package:fory/src/util/hash_util.dart';
 
 enum RegistrationKind { builtin, struct, enumType, ext, union }
@@ -119,7 +127,7 @@ final class TypeResolver {
   final ParsedTypeMetaCache _parsedTypeMetaCache = ParsedTypeMetaCache();
   final List<TypeInfo?> _lastNamedTypeByWireType =
       List<TypeInfo?>.filled(64, null);
-  final List<TypeInfo?> _builtinByTypeId = List<TypeInfo?>.filled(64, null);
+  final Map<_BuiltinKey, TypeInfo> _builtinByKey = <_BuiltinKey, TypeInfo>{};
   final List<_NamedTypeReadCacheEntry?> _namedTypeLookupCache =
       List<_NamedTypeReadCacheEntry?>.filled(128, null);
   final Map<Type, TypeInfo> _runtimeTypeValueCache = <Type, TypeInfo>{};
@@ -317,17 +325,23 @@ final class TypeResolver {
     if (value is int) {
       return _builtin(int, TypeIds.varInt64);
     }
-    if (value is UInt8) {
-      return _builtin(UInt8, TypeIds.uint8);
+    if (value is Uint8) {
+      return _builtin(Uint8, TypeIds.uint8);
     }
-    if (value is UInt16) {
-      return _builtin(UInt16, TypeIds.uint16);
+    if (value is Uint16) {
+      return _builtin(Uint16, TypeIds.uint16);
     }
-    if (value is UInt32) {
-      return _builtin(UInt32, TypeIds.uint32);
+    if (value is Uint32) {
+      return _builtin(Uint32, TypeIds.uint32);
+    }
+    if (value is Uint64) {
+      return _builtin(Uint64, TypeIds.uint64);
     }
     if (value is Float16) {
       return _builtin(Float16, TypeIds.float16);
+    }
+    if (value is Bfloat16) {
+      return _builtin(Bfloat16, TypeIds.bfloat16);
     }
     if (value is Float32) {
       return _builtin(Float32, TypeIds.float32);
@@ -362,6 +376,12 @@ final class TypeResolver {
     if (value is Uint64List) {
       return _builtin(Uint64List, TypeIds.uint64Array);
     }
+    if (value is Float16List) {
+      return _builtin(Float16List, TypeIds.float16Array);
+    }
+    if (value is Bfloat16List) {
+      return _builtin(Bfloat16List, TypeIds.bfloat16Array);
+    }
     if (value is Float32List) {
       return _builtin(Float32List, TypeIds.float32Array);
     }
@@ -383,8 +403,14 @@ final class TypeResolver {
     if (value is LocalDate) {
       return _builtin(LocalDate, TypeIds.date);
     }
+    if (value is Duration) {
+      return _builtin(Duration, TypeIds.duration);
+    }
     if (value is Timestamp) {
       return _builtin(Timestamp, TypeIds.timestamp);
+    }
+    if (value is DateTime) {
+      return _builtin(DateTime, TypeIds.timestamp);
     }
     throw StateError(
       'Type $runtimeType is not registered. Register generated types with '
@@ -410,6 +436,7 @@ final class TypeResolver {
       case TypeIds.uint64:
       case TypeIds.varUint64:
       case TypeIds.taggedUint64:
+      case TypeIds.bfloat16:
       case TypeIds.float16:
       case TypeIds.float32:
       case TypeIds.float64:
@@ -417,7 +444,9 @@ final class TypeResolver {
       case TypeIds.list:
       case TypeIds.set:
       case TypeIds.map:
+      case TypeIds.none:
       case TypeIds.binary:
+      case TypeIds.duration:
       case TypeIds.timestamp:
       case TypeIds.date:
       case TypeIds.boolArray:
@@ -430,6 +459,7 @@ final class TypeResolver {
       case TypeIds.uint32Array:
       case TypeIds.uint64Array:
       case TypeIds.float16Array:
+      case TypeIds.bfloat16Array:
       case TypeIds.float32Array:
       case TypeIds.float64Array:
         return _builtin(fieldType.type, fieldType.typeId);
@@ -804,6 +834,7 @@ final class TypeResolver {
         fieldType.typeId == TypeIds.string ||
         fieldType.typeId == TypeIds.binary ||
         fieldType.typeId == TypeIds.date ||
+        fieldType.typeId == TypeIds.duration ||
         fieldType.typeId == TypeIds.timestamp) {
       return fieldType.typeId;
     }
@@ -988,21 +1019,23 @@ final class TypeResolver {
       case TypeIds.taggedInt64:
         return _builtin(int, TypeIds.taggedInt64);
       case TypeIds.uint8:
-        return _builtin(UInt8, TypeIds.uint8);
+        return _builtin(Uint8, TypeIds.uint8);
       case TypeIds.uint16:
-        return _builtin(UInt16, TypeIds.uint16);
+        return _builtin(Uint16, TypeIds.uint16);
       case TypeIds.uint32:
-        return _builtin(UInt32, TypeIds.uint32);
+        return _builtin(Uint32, TypeIds.uint32);
       case TypeIds.varUint32:
-        return _builtin(UInt32, TypeIds.varUint32);
+        return _builtin(Uint32, TypeIds.varUint32);
       case TypeIds.uint64:
-        return _builtin(int, TypeIds.uint64);
+        return _builtin(Uint64, TypeIds.uint64);
       case TypeIds.varUint64:
-        return _builtin(int, TypeIds.varUint64);
+        return _builtin(Uint64, TypeIds.varUint64);
       case TypeIds.taggedUint64:
-        return _builtin(int, TypeIds.taggedUint64);
+        return _builtin(Uint64, TypeIds.taggedUint64);
       case TypeIds.float16:
         return _builtin(Float16, TypeIds.float16);
+      case TypeIds.bfloat16:
+        return _builtin(Bfloat16, TypeIds.bfloat16);
       case TypeIds.float32:
         return _builtin(Float32, TypeIds.float32);
       case TypeIds.float64:
@@ -1015,12 +1048,16 @@ final class TypeResolver {
         return _builtin(Set, TypeIds.set);
       case TypeIds.map:
         return _builtin(Map, TypeIds.map);
+      case TypeIds.none:
+        return _builtin(Null, TypeIds.none);
       case TypeIds.binary:
         return _builtin(Uint8List, TypeIds.binary);
       case TypeIds.date:
         return _builtin(LocalDate, TypeIds.date);
+      case TypeIds.duration:
+        return _builtin(Duration, TypeIds.duration);
       case TypeIds.timestamp:
-        return _builtin(Timestamp, TypeIds.timestamp);
+        return _builtin(DateTime, TypeIds.timestamp);
       case TypeIds.boolArray:
         return _builtin(List<bool>, TypeIds.boolArray);
       case TypeIds.int8Array:
@@ -1040,7 +1077,9 @@ final class TypeResolver {
       case TypeIds.uint64Array:
         return _builtin(Uint64List, TypeIds.uint64Array);
       case TypeIds.float16Array:
-        return _builtin(Uint16List, TypeIds.float16Array);
+        return _builtin(Float16List, TypeIds.float16Array);
+      case TypeIds.bfloat16Array:
+        return _builtin(Bfloat16List, TypeIds.bfloat16Array);
       case TypeIds.float32Array:
         return _builtin(Float32List, TypeIds.float32Array);
       case TypeIds.float64Array:
@@ -1051,7 +1090,8 @@ final class TypeResolver {
   }
 
   TypeInfo _builtin(Type type, int typeId) {
-    final cached = _builtinByTypeId[typeId];
+    final key = _BuiltinKey(type, typeId);
+    final cached = _builtinByKey[key];
     if (cached != null) {
       return cached;
     }
@@ -1060,7 +1100,7 @@ final class TypeResolver {
       kind: RegistrationKind.builtin,
       typeId: typeId,
       supportsRef: TypeIds.supportsRef(typeId),
-      serializer: _builtinSerializerFor(typeId),
+      serializer: _builtinSerializerFor(typeId, type),
       structSerializer: null,
       userTypeId: null,
       namespace: null,
@@ -1070,11 +1110,11 @@ final class TypeResolver {
       typeDef: null,
       remoteTypeDef: null,
     );
-    _builtinByTypeId[typeId] = resolved;
+    _builtinByKey[key] = resolved;
     return resolved;
   }
 
-  Serializer<Object?> _builtinSerializerFor(int typeId) {
+  Serializer<Object?> _builtinSerializerFor(int typeId, Type type) {
     switch (typeId) {
       case TypeIds.boolType:
         return boolSerializer as Serializer<Object?>;
@@ -1108,12 +1148,16 @@ final class TypeResolver {
         return taggedUint64Serializer as Serializer<Object?>;
       case TypeIds.float16:
         return float16Serializer as Serializer<Object?>;
+      case TypeIds.bfloat16:
+        return bfloat16Serializer as Serializer<Object?>;
       case TypeIds.float32:
         return float32Serializer as Serializer<Object?>;
       case TypeIds.float64:
         return float64Serializer as Serializer<Object?>;
       case TypeIds.string:
         return stringSerializer as Serializer<Object?>;
+      case TypeIds.none:
+        return noneSerializer as Serializer<Object?>;
       case TypeIds.binary:
       case TypeIds.uint8Array:
         return binarySerializer as Serializer<Object?>;
@@ -1133,6 +1177,10 @@ final class TypeResolver {
         return uint32ArraySerializer as Serializer<Object?>;
       case TypeIds.uint64Array:
         return uint64ArraySerializer as Serializer<Object?>;
+      case TypeIds.float16Array:
+        return float16ArraySerializer as Serializer<Object?>;
+      case TypeIds.bfloat16Array:
+        return bfloat16ArraySerializer as Serializer<Object?>;
       case TypeIds.float32Array:
         return float32ArraySerializer as Serializer<Object?>;
       case TypeIds.float64Array:
@@ -1145,8 +1193,13 @@ final class TypeResolver {
         return mapSerializer as Serializer<Object?>;
       case TypeIds.date:
         return localDateSerializer as Serializer<Object?>;
+      case TypeIds.duration:
+        return durationSerializer as Serializer<Object?>;
       case TypeIds.timestamp:
-        return timestampSerializer as Serializer<Object?>;
+        if (type == Timestamp) {
+          return timestampSerializer as Serializer<Object?>;
+        }
+        return dateTimeSerializer as Serializer<Object?>;
       default:
         throw StateError('Unsupported builtin type id $typeId.');
     }
@@ -1178,14 +1231,17 @@ final class TypeResolver {
     if (type == int) {
       return TypeIds.varInt64;
     }
-    if (type == UInt8) {
+    if (type == Uint8) {
       return TypeIds.uint8;
     }
-    if (type == UInt16) {
+    if (type == Uint16) {
       return TypeIds.uint16;
     }
-    if (type == UInt32) {
+    if (type == Uint32) {
       return TypeIds.uint32;
+    }
+    if (type == Uint64) {
+      return TypeIds.uint64;
     }
     if (type == Uint64List) {
       return TypeIds.uint64Array;
@@ -1193,14 +1249,26 @@ final class TypeResolver {
     if (type == Float16) {
       return TypeIds.float16;
     }
+    if (type == Bfloat16) {
+      return TypeIds.bfloat16;
+    }
     if (type == Float32) {
       return TypeIds.float32;
+    }
+    if (type == Float16List) {
+      return TypeIds.float16Array;
+    }
+    if (type == Bfloat16List) {
+      return TypeIds.bfloat16Array;
     }
     if (type == double) {
       return TypeIds.float64;
     }
     if (type == String) {
       return TypeIds.string;
+    }
+    if (type == Null) {
+      return TypeIds.none;
     }
     if (type == List) {
       return TypeIds.list;
@@ -1214,7 +1282,13 @@ final class TypeResolver {
     if (type == Uint8List) {
       return TypeIds.binary;
     }
+    if (type == Duration) {
+      return TypeIds.duration;
+    }
     if (type == Timestamp) {
+      return TypeIds.timestamp;
+    }
+    if (type == DateTime) {
       return TypeIds.timestamp;
     }
     if (type == LocalDate) {
@@ -1352,6 +1426,21 @@ final class TypeResolver {
         return false;
     }
   }
+}
+
+final class _BuiltinKey {
+  final Type type;
+  final int typeId;
+
+  const _BuiltinKey(this.type, this.typeId);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _BuiltinKey && other.type == type && other.typeId == typeId;
+
+  @override
+  int get hashCode => Object.hash(type, typeId);
 }
 
 final class _NamedTypeReadCacheEntry {

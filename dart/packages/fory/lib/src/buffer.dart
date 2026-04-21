@@ -22,6 +22,7 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
+import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/float16.dart';
 
 final BigInt _mask64Big = (BigInt.one << 64) - BigInt.one;
@@ -255,6 +256,12 @@ final class Buffer {
   /// Reads a half-precision floating-point value.
   Float16 readFloat16() => Float16.fromBits(readUint16());
 
+  /// Writes a bfloat16 floating-point value.
+  void writeBfloat16(Bfloat16 value) => writeUint16(value.toBits());
+
+  /// Reads a bfloat16 floating-point value.
+  Bfloat16 readBfloat16() => Bfloat16.fromBits(readUint16());
+
   /// Writes [value] verbatim.
   void writeBytes(List<int> value) {
     ensureWritable(value.length);
@@ -409,13 +416,12 @@ final class Buffer {
 
   /// Writes a tagged unsigned 64-bit integer.
   void writeTaggedUint64(int value) {
-    final unsigned = _toUnsigned64(value);
-    if (unsigned <= 0x7fffffff) {
-      writeInt32((unsigned << 1) & 0xffffffff);
+    if (value >= 0 && value <= 0x7fffffff) {
+      writeInt32(value << 1);
       return;
     }
     writeUint8(0x01);
-    writeUint64(unsigned);
+    writeUint64(value);
   }
 
   /// Reads an unsigned 64-bit integer written by [writeTaggedUint64].
@@ -486,8 +492,6 @@ Uint8List bufferBytes(Buffer buffer) => buffer._bytes;
 
 @internal
 ByteData bufferByteData(Buffer buffer) => buffer._view;
-
-int _toUnsigned64(int value) => (BigInt.from(value) & _mask64Big).toInt();
 
 extension on Buffer {
   void _writeVarUint64BigInt(BigInt value) {

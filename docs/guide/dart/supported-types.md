@@ -54,10 +54,16 @@ Each wrapper clamps the stored value to the target bit width.
 
 ## Floating-Point Wrappers
 
-Dart `double` maps to 64-bit float. If the peer uses a 32-bit float, use a wrapper:
+Dart `double` maps to 64-bit float. If the peer uses reduced-precision
+floating-point values, use an explicit wrapper:
 
 - `Float32` — 32-bit float (matches Java `float`, C# `float`, Go `float32`)
 - `Float16` — half-precision, for specialized numeric payloads
+- `Bfloat16` — brain floating point, useful when interoperating with ML-oriented payloads
+
+For contiguous 16-bit floating-point arrays, use `Float16List` and
+`Bfloat16List` rather than `Uint16List` when the wire type is `float16_array`
+or `bfloat16_array`.
 
 ## Time and Date Types
 
@@ -65,11 +71,17 @@ Avoid sending raw `DateTime` across languages — time zone handling and epoch d
 
 - `Timestamp` — a UTC instant with nanosecond precision (seconds + nanoseconds)
 - `LocalDate` — a calendar date without time or time zone
+- `Duration` — an elapsed time value using Dart's built-in `Duration`
 
 ```dart
 final now = Timestamp.fromDateTime(DateTime.now().toUtc());
 final birthday = LocalDate(1990, 12, 1);
+final timeout = const Duration(seconds: 30);
 ```
+
+`Duration` support in Dart is exact to microseconds. Incoming xlang duration
+payloads that use sub-microsecond nanoseconds are rejected instead of being
+silently truncated.
 
 ## Structs and Enums
 

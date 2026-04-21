@@ -21,9 +21,16 @@ import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/types/fixed_ints.dart';
+import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
+import 'package:fory/src/types/int16.dart';
+import 'package:fory/src/types/int32.dart';
+import 'package:fory/src/types/int8.dart';
+import 'package:fory/src/types/uint16.dart';
+import 'package:fory/src/types/uint32.dart';
+import 'package:fory/src/types/uint64.dart';
+import 'package:fory/src/types/uint8.dart';
 
 final class PrimitiveSerializer<T> extends Serializer<T> {
   final int typeId;
@@ -79,28 +86,31 @@ final class PrimitiveSerializer<T> extends Serializer<T> {
         buffer.writeTaggedInt64(value as int);
         return;
       case TypeIds.uint8:
-        buffer.writeUint8(value is UInt8 ? value.value : value as int);
+        buffer.writeUint8(value is Uint8 ? value.value : value as int);
         return;
       case TypeIds.uint16:
-        buffer.writeUint16(value is UInt16 ? value.value : value as int);
+        buffer.writeUint16(value is Uint16 ? value.value : value as int);
         return;
       case TypeIds.uint32:
-        buffer.writeUint32(value is UInt32 ? value.value : value as int);
+        buffer.writeUint32(value is Uint32 ? value.value : value as int);
         return;
       case TypeIds.varUint32:
-        buffer.writeVarUint32(value is UInt32 ? value.value : value as int);
+        buffer.writeVarUint32(value is Uint32 ? value.value : value as int);
         return;
       case TypeIds.uint64:
-        buffer.writeUint64(value as int);
+        buffer.writeUint64(value is Uint64 ? value.value : value as int);
         return;
       case TypeIds.varUint64:
-        buffer.writeVarUint64(value as int);
+        buffer.writeVarUint64(value is Uint64 ? value.value : value as int);
         return;
       case TypeIds.taggedUint64:
-        buffer.writeTaggedUint64(value as int);
+        buffer.writeTaggedUint64(value is Uint64 ? value.value : value as int);
         return;
       case TypeIds.float16:
         buffer.writeFloat16(value as Float16);
+        return;
+      case TypeIds.bfloat16:
+        buffer.writeBfloat16(value as Bfloat16);
         return;
       case TypeIds.float32:
         buffer.writeFloat32((value as Float32).value);
@@ -136,21 +146,23 @@ final class PrimitiveSerializer<T> extends Serializer<T> {
       case TypeIds.taggedInt64:
         return buffer.readTaggedInt64();
       case TypeIds.uint8:
-        return UInt8(buffer.readUint8());
+        return Uint8(buffer.readUint8());
       case TypeIds.uint16:
-        return UInt16(buffer.readUint16());
+        return Uint16(buffer.readUint16());
       case TypeIds.uint32:
-        return UInt32(buffer.readUint32());
+        return Uint32(buffer.readUint32());
       case TypeIds.varUint32:
-        return UInt32(buffer.readVarUint32());
+        return Uint32(buffer.readVarUint32());
       case TypeIds.uint64:
-        return buffer.readUint64();
+        return Uint64(buffer.readUint64());
       case TypeIds.varUint64:
-        return buffer.readVarUint64();
+        return Uint64(buffer.readVarUint64());
       case TypeIds.taggedUint64:
-        return buffer.readTaggedUint64();
+        return Uint64(buffer.readTaggedUint64());
       case TypeIds.float16:
         return buffer.readFloat16();
+      case TypeIds.bfloat16:
+        return buffer.readBfloat16();
       case TypeIds.float32:
         return Float32(buffer.readFloat32());
       case TypeIds.float64:
@@ -190,46 +202,52 @@ const PrimitiveSerializer<int> varInt64Serializer = PrimitiveSerializer<int>(
   TypeIds.varInt64,
   supportsRef: false,
 );
-const PrimitiveSerializer<int> taggedInt64Serializer =
-    PrimitiveSerializer<int>(
+const PrimitiveSerializer<int> taggedInt64Serializer = PrimitiveSerializer<int>(
   TypeIds.taggedInt64,
   supportsRef: false,
 );
-const PrimitiveSerializer<UInt8> uint8Serializer = PrimitiveSerializer<UInt8>(
+const PrimitiveSerializer<Uint8> uint8Serializer = PrimitiveSerializer<Uint8>(
   TypeIds.uint8,
   supportsRef: false,
 );
-const PrimitiveSerializer<UInt16> uint16Serializer =
-    PrimitiveSerializer<UInt16>(
+const PrimitiveSerializer<Uint16> uint16Serializer =
+    PrimitiveSerializer<Uint16>(
   TypeIds.uint16,
   supportsRef: false,
 );
-const PrimitiveSerializer<UInt32> uint32Serializer =
-    PrimitiveSerializer<UInt32>(
+const PrimitiveSerializer<Uint32> uint32Serializer =
+    PrimitiveSerializer<Uint32>(
   TypeIds.uint32,
   supportsRef: false,
 );
-const PrimitiveSerializer<UInt32> varUint32Serializer =
-    PrimitiveSerializer<UInt32>(
+const PrimitiveSerializer<Uint32> varUint32Serializer =
+    PrimitiveSerializer<Uint32>(
   TypeIds.varUint32,
   supportsRef: false,
 );
-const PrimitiveSerializer<int> uint64Serializer = PrimitiveSerializer<int>(
+const PrimitiveSerializer<Uint64> uint64Serializer =
+    PrimitiveSerializer<Uint64>(
   TypeIds.uint64,
   supportsRef: false,
 );
-const PrimitiveSerializer<int> varUint64Serializer = PrimitiveSerializer<int>(
+const PrimitiveSerializer<Uint64> varUint64Serializer =
+    PrimitiveSerializer<Uint64>(
   TypeIds.varUint64,
   supportsRef: false,
 );
-const PrimitiveSerializer<int> taggedUint64Serializer =
-    PrimitiveSerializer<int>(
+const PrimitiveSerializer<Uint64> taggedUint64Serializer =
+    PrimitiveSerializer<Uint64>(
   TypeIds.taggedUint64,
   supportsRef: false,
 );
 const PrimitiveSerializer<Float16> float16Serializer =
     PrimitiveSerializer<Float16>(
   TypeIds.float16,
+  supportsRef: false,
+);
+const PrimitiveSerializer<Bfloat16> bfloat16Serializer =
+    PrimitiveSerializer<Bfloat16>(
+  TypeIds.bfloat16,
   supportsRef: false,
 );
 const PrimitiveSerializer<Float32> float32Serializer =

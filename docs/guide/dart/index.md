@@ -114,9 +114,10 @@ dart run build_runner build --delete-conflicting-outputs
 - `fory.deserialize<T>(bytes)` — returns a `T`
 - `@ForyStruct()` — marks a class for code generation
 - `@ForyField(...)` — per-field options (skip, ID, nullability, references)
-- Integer wrappers: `Int8`, `Int16`, `Int32`, `UInt8`, `UInt16`, `UInt32`
-- Float wrappers: `Float16`, `Float32`
-- Time wrappers: `LocalDate`, `Timestamp`
+- Integer wrappers: `Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32`, `Uint64`
+- Float wrappers: `Float16`, `Bfloat16`, `Float32`
+- 16-bit float arrays: `Float16List`, `Bfloat16List`
+- Time types: `LocalDate`, `Timestamp`, `Duration`
 
 ## Documentation
 

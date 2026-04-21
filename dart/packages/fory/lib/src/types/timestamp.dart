@@ -32,8 +32,12 @@ final class Timestamp implements Comparable<Timestamp> {
   factory Timestamp.fromDateTime(DateTime value) {
     final utcValue = value.toUtc();
     final microseconds = utcValue.microsecondsSinceEpoch;
-    final seconds = microseconds ~/ Duration.microsecondsPerSecond;
-    final micros = microseconds % Duration.microsecondsPerSecond;
+    var seconds = microseconds ~/ Duration.microsecondsPerSecond;
+    var micros = microseconds.remainder(Duration.microsecondsPerSecond);
+    if (micros < 0) {
+      micros += Duration.microsecondsPerSecond;
+      seconds -= 1;
+    }
     return Timestamp(seconds, micros * 1000);
   }
 

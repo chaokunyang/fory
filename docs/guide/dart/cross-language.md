@@ -160,7 +160,7 @@ Fory matches fields by name or by stable field ID. For robust cross-language int
 2. Assign stable `@ForyField(id: ...)` values to all fields before shipping the first payload.
 3. Keep field names consistent or rely on IDs, since Dart typically uses `lowerCamelCase` while Go uses `PascalCase` for exported fields and C# often uses `PascalCase` properties.
 4. Use compatible numeric types: `Int32` in Dart for Java `int`, Go `int32`, and C# `int`; `double` in Dart for 64-bit floats; `Float32` for 32-bit.
-5. Use `Timestamp` and `LocalDate` for date/time fields rather than raw `DateTime`.
+5. Use `Timestamp`, `LocalDate`, and `Duration` for temporal fields rather than raw `DateTime`.
 6. Validate real round trips across all languages before shipping.
 
 ## Type Mapping Notes for Dart
@@ -169,8 +169,9 @@ Because Dart `int` is not itself a promise about the exact xlang wire width, pre
 
 - `Int32` for xlang `int32`
 - `UInt32` for xlang `uint32`
-- `Float16` and `Float32` for reduced-width floating point
-- `Timestamp` and `LocalDate` for explicit temporal semantics
+- `Float16`, `Bfloat16`, and `Float32` for reduced-width floating point
+- `Float16List` and `Bfloat16List` for 16-bit floating-point array payloads
+- `Timestamp`, `LocalDate`, and `Duration` for explicit temporal semantics
 
 See [Supported Types](supported-types.md) and [xlang type mapping](../../specification/xlang_type_mapping.md).
 

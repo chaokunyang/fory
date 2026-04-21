@@ -89,12 +89,11 @@ final class ForyGenerator extends Generator {
     final generatedApiName = '${helperBaseName}Fory';
 
     final enumSpecs = enumElements.map(_analyzeEnum).toList(growable: false);
-    final structSpecs = annotatedClasses
-        .map(_analyzeStruct)
-        .toList(growable: false);
+    final structSpecs =
+        annotatedClasses.map(_analyzeStruct).toList(growable: false);
     final output = StringBuffer()
       ..writeln(
-        '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, unused_element, unnecessary_null_comparison',
+        '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, no_leading_underscores_for_local_identifiers, unused_element, unused_element_parameter, unnecessary_null_comparison',
       )
       ..writeln();
 
@@ -215,9 +214,8 @@ final class ForyGenerator extends Generator {
     }
     if (_isList(type) || _isSet(type)) {
       final argument = (type as InterfaceType).typeArguments.single;
-      final elementSpec = typeSpec is _ListTypeSpecInfo
-          ? typeSpec.element
-          : null;
+      final elementSpec =
+          typeSpec is _ListTypeSpecInfo ? typeSpec.element : null;
       return _GeneratedFieldTypeSpec(
         typeLiteral: _typeReferenceLiteral(type),
         typeId: _typeIdFor(type),
@@ -278,8 +276,7 @@ final class ForyGenerator extends Generator {
     List<_GeneratedFieldSpec> fields,
   ) {
     final unnamedConstructor = element.unnamedConstructor;
-    final hasZeroArgConstructor =
-        unnamedConstructor != null &&
+    final hasZeroArgConstructor = unnamedConstructor != null &&
         !unnamedConstructor.isFactory &&
         unnamedConstructor.parameters.every(
           (parameter) => parameter.isOptional,
@@ -919,9 +916,8 @@ GeneratedFieldType(
       nullable: fieldType.nullable,
       ref: fieldType.ref,
       dynamic: fieldType.dynamic,
-      arguments: fieldType.arguments
-          .map(_fromDebugFieldType)
-          .toList(growable: false),
+      arguments:
+          fieldType.arguments.map(_fromDebugFieldType).toList(growable: false),
     );
   }
 
@@ -1031,13 +1027,33 @@ GeneratedFieldType(
       return 'Map<${_typeCodeString(keyType)}, ${_typeCodeString(valueType)}>.of((($valueExpression as Map)).map((key, value) => MapEntry($convertedKey, $convertedValue)))';
     }
     if (type.isDartCoreInt) {
-      if (fieldType.typeId == TypeIds.int32 ||
-          fieldType.typeId == TypeIds.varInt32) {
-        return '($valueExpression as Int32).value';
+      switch (fieldType.typeId) {
+        case TypeIds.int8:
+          return 'switch ($valueExpression) { int typed => typed, Int8 typed => typed.value, _ => throw StateError(\'Expected int or Int8.\') }';
+        case TypeIds.int16:
+          return 'switch ($valueExpression) { int typed => typed, Int16 typed => typed.value, _ => throw StateError(\'Expected int or Int16.\') }';
+        case TypeIds.int32:
+        case TypeIds.varInt32:
+          return 'switch ($valueExpression) { int typed => typed, Int32 typed => typed.value, _ => throw StateError(\'Expected int or Int32.\') }';
+        case TypeIds.uint8:
+          return 'switch ($valueExpression) { int typed => typed, Uint8 typed => typed.value, _ => throw StateError(\'Expected int or Uint8.\') }';
+        case TypeIds.uint16:
+          return 'switch ($valueExpression) { int typed => typed, Uint16 typed => typed.value, _ => throw StateError(\'Expected int or Uint16.\') }';
+        case TypeIds.uint32:
+        case TypeIds.varUint32:
+          return 'switch ($valueExpression) { int typed => typed, Uint32 typed => typed.value, _ => throw StateError(\'Expected int or Uint32.\') }';
+        case TypeIds.uint64:
+        case TypeIds.varUint64:
+        case TypeIds.taggedUint64:
+          return 'switch ($valueExpression) { int typed => typed, Uint64 typed => typed.value, _ => throw StateError(\'Expected int or Uint64.\') }';
+        default:
+          return '$valueExpression as int';
       }
-      return '$valueExpression as int';
     }
     if (type.isDartCoreDouble) {
+      if (fieldType.typeId == TypeIds.float32) {
+        return 'switch ($valueExpression) { double typed => typed, Float32 typed => typed.value, _ => throw StateError(\'Expected double or Float32.\') }';
+      }
       return '$valueExpression as double';
     }
     if (type.isDartCoreBool) {
@@ -1118,7 +1134,7 @@ GeneratedFieldType(
   }
 
   List<_DirectGeneratedWriteReservationRun>
-  _directGeneratedWriteReservationRuns(List<_GeneratedFieldSpec> fields) {
+      _directGeneratedWriteReservationRuns(List<_GeneratedFieldSpec> fields) {
     final runs = <_DirectGeneratedWriteReservationRun>[];
     int? start;
     var bytes = 0;
@@ -1161,6 +1177,7 @@ GeneratedFieldType(
       case TypeIds.int16:
       case TypeIds.uint16:
       case TypeIds.float16:
+      case TypeIds.bfloat16:
         return 2;
       case TypeIds.int32:
       case TypeIds.uint32:
@@ -1171,6 +1188,8 @@ GeneratedFieldType(
       case TypeIds.uint64:
       case TypeIds.float64:
         return 8;
+      case TypeIds.duration:
+        return 14;
       case TypeIds.timestamp:
         return 12;
       case TypeIds.varInt32:
@@ -1224,6 +1243,8 @@ GeneratedFieldType(
         return 'buffer.writeTaggedUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.float16:
         return 'buffer.writeFloat16($valueExpression)';
+      case TypeIds.bfloat16:
+        return 'buffer.writeBfloat16($valueExpression)';
       case TypeIds.float32:
         return 'buffer.writeFloat32(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.float64:
@@ -1234,8 +1255,12 @@ GeneratedFieldType(
         return 'writeGeneratedBinaryValue(context, $valueExpression)';
       case TypeIds.date:
         return 'writeGeneratedLocalDateValue(context, $valueExpression)';
+      case TypeIds.duration:
+        return 'writeGeneratedDurationValue(context, $valueExpression)';
       case TypeIds.timestamp:
-        return 'writeGeneratedTimestampValue(context, $valueExpression)';
+        return _isDateTimeType(field.type)
+            ? 'writeGeneratedDateTimeValue(context, $valueExpression)'
+            : 'writeGeneratedTimestampValue(context, $valueExpression)';
       case TypeIds.boolArray:
         return 'writeGeneratedBoolArrayValue(context, $valueExpression)';
       case TypeIds.int8Array:
@@ -1247,6 +1272,7 @@ GeneratedFieldType(
       case TypeIds.uint32Array:
       case TypeIds.uint64Array:
       case TypeIds.float16Array:
+      case TypeIds.bfloat16Array:
       case TypeIds.float32Array:
       case TypeIds.float64Array:
         return 'writeGeneratedFixedArrayValue(context, $valueExpression)';
@@ -1297,14 +1323,20 @@ GeneratedFieldType(
         return '$cursorExpression.writeTaggedUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.float16:
         return '$cursorExpression.writeFloat16($valueExpression)';
+      case TypeIds.bfloat16:
+        return '$cursorExpression.writeBfloat16($valueExpression)';
       case TypeIds.float32:
         return '$cursorExpression.writeFloat32(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.float64:
         return '$cursorExpression.writeFloat64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.date:
         return '$cursorExpression.writeInt32($valueExpression.toEpochDay())';
+      case TypeIds.duration:
+        return '$cursorExpression.writeVarInt64(generatedDurationWireSeconds($valueExpression)); $cursorExpression.writeInt32(generatedDurationWireNanoseconds($valueExpression))';
       case TypeIds.timestamp:
-        return '$cursorExpression.writeInt64($valueExpression.seconds); $cursorExpression.writeUint32($valueExpression.nanoseconds)';
+        return _isDateTimeType(field.type)
+            ? '$cursorExpression.writeInt64(generatedDateTimeWireSeconds($valueExpression)); $cursorExpression.writeUint32(generatedDateTimeWireNanoseconds($valueExpression))'
+            : '$cursorExpression.writeInt64($valueExpression.seconds); $cursorExpression.writeUint32(generatedTimestampWireNanoseconds($valueExpression))';
       case TypeIds.enumById:
         return _enumCursorWriteExpression(
           field.type,
@@ -1343,27 +1375,35 @@ GeneratedFieldType(
       case TypeIds.uint8:
         return field.type.isDartCoreInt
             ? 'buffer.readUint8()'
-            : 'UInt8(buffer.readUint8())';
+            : 'Uint8(buffer.readUint8())';
       case TypeIds.uint16:
         return field.type.isDartCoreInt
             ? 'buffer.readUint16()'
-            : 'UInt16(buffer.readUint16())';
+            : 'Uint16(buffer.readUint16())';
       case TypeIds.uint32:
         return field.type.isDartCoreInt
             ? 'buffer.readUint32()'
-            : 'UInt32(buffer.readUint32())';
+            : 'Uint32(buffer.readUint32())';
       case TypeIds.varUint32:
         return field.type.isDartCoreInt
             ? 'buffer.readVarUint32()'
-            : 'UInt32(buffer.readVarUint32())';
+            : 'Uint32(buffer.readVarUint32())';
       case TypeIds.uint64:
-        return 'buffer.readUint64()';
+        return field.type.isDartCoreInt
+            ? 'buffer.readUint64()'
+            : 'Uint64(buffer.readUint64())';
       case TypeIds.varUint64:
-        return 'buffer.readVarUint64()';
+        return field.type.isDartCoreInt
+            ? 'buffer.readVarUint64()'
+            : 'Uint64(buffer.readVarUint64())';
       case TypeIds.taggedUint64:
-        return 'buffer.readTaggedUint64()';
+        return field.type.isDartCoreInt
+            ? 'buffer.readTaggedUint64()'
+            : 'Uint64(buffer.readTaggedUint64())';
       case TypeIds.float16:
         return 'buffer.readFloat16()';
+      case TypeIds.bfloat16:
+        return 'buffer.readBfloat16()';
       case TypeIds.float32:
         return field.type.isDartCoreDouble
             ? 'buffer.readFloat32()'
@@ -1376,8 +1416,12 @@ GeneratedFieldType(
         return 'readGeneratedBinaryValue(context)';
       case TypeIds.date:
         return 'readGeneratedLocalDateValue(context)';
+      case TypeIds.duration:
+        return 'readGeneratedDurationValue(context)';
       case TypeIds.timestamp:
-        return 'readGeneratedTimestampValue(context)';
+        return _isDateTimeType(field.type)
+            ? 'readGeneratedDateTimeValue(context)'
+            : 'readGeneratedTimestampValue(context)';
       case TypeIds.boolArray:
         return 'readGeneratedBoolArrayValue(context)';
       case TypeIds.int8Array:
@@ -1391,8 +1435,11 @@ GeneratedFieldType(
       case TypeIds.uint8Array:
         return 'readGeneratedBinaryValue(context)';
       case TypeIds.uint16Array:
-      case TypeIds.float16Array:
         return 'readGeneratedTypedArrayValue<Uint16List>(context, 2, (bytes) => bytes.buffer.asUint16List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 2))';
+      case TypeIds.float16Array:
+        return 'readGeneratedTypedArrayValue<Float16List>(context, 2, (bytes) => Float16List.view(bytes.buffer, bytes.offsetInBytes, bytes.lengthInBytes ~/ 2))';
+      case TypeIds.bfloat16Array:
+        return 'readGeneratedTypedArrayValue<Bfloat16List>(context, 2, (bytes) => Bfloat16List.view(bytes.buffer, bytes.offsetInBytes, bytes.lengthInBytes ~/ 2))';
       case TypeIds.uint32Array:
         return 'readGeneratedTypedArrayValue<Uint32List>(context, 4, (bytes) => bytes.buffer.asUint32List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 4))';
       case TypeIds.uint64Array:
@@ -1438,27 +1485,35 @@ GeneratedFieldType(
       case TypeIds.uint8:
         return field.type.isDartCoreInt
             ? '$cursorExpression.readUint8()'
-            : 'UInt8($cursorExpression.readUint8())';
+            : 'Uint8($cursorExpression.readUint8())';
       case TypeIds.uint16:
         return field.type.isDartCoreInt
             ? '$cursorExpression.readUint16()'
-            : 'UInt16($cursorExpression.readUint16())';
+            : 'Uint16($cursorExpression.readUint16())';
       case TypeIds.uint32:
         return field.type.isDartCoreInt
             ? '$cursorExpression.readUint32()'
-            : 'UInt32($cursorExpression.readUint32())';
+            : 'Uint32($cursorExpression.readUint32())';
       case TypeIds.varUint32:
         return field.type.isDartCoreInt
             ? '$cursorExpression.readVarUint32()'
-            : 'UInt32($cursorExpression.readVarUint32())';
+            : 'Uint32($cursorExpression.readVarUint32())';
       case TypeIds.uint64:
-        return '$cursorExpression.readUint64()';
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readUint64()'
+            : 'Uint64($cursorExpression.readUint64())';
       case TypeIds.varUint64:
-        return '$cursorExpression.readVarUint64()';
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readVarUint64()'
+            : 'Uint64($cursorExpression.readVarUint64())';
       case TypeIds.taggedUint64:
-        return '$cursorExpression.readTaggedUint64()';
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readTaggedUint64()'
+            : 'Uint64($cursorExpression.readTaggedUint64())';
       case TypeIds.float16:
         return '$cursorExpression.readFloat16()';
+      case TypeIds.bfloat16:
+        return '$cursorExpression.readBfloat16()';
       case TypeIds.float32:
         return field.type.isDartCoreDouble
             ? '$cursorExpression.readFloat32()'
@@ -1467,8 +1522,12 @@ GeneratedFieldType(
         return '$cursorExpression.readFloat64()';
       case TypeIds.date:
         return 'LocalDate.fromEpochDay($cursorExpression.readInt32())';
+      case TypeIds.duration:
+        return 'readGeneratedDurationFromWire($cursorExpression.readVarInt64(), $cursorExpression.readInt32())';
       case TypeIds.timestamp:
-        return 'Timestamp($cursorExpression.readInt64(), $cursorExpression.readUint32())';
+        return _isDateTimeType(field.type)
+            ? 'readGeneratedDateTimeFromWire($cursorExpression.readInt64(), $cursorExpression.readUint32())'
+            : 'readGeneratedTimestampFromWire($cursorExpression.readInt64(), $cursorExpression.readUint32())';
       case TypeIds.enumById:
         return _enumCursorReadExpression(field.type, cursorExpression);
       default:
@@ -1512,6 +1571,8 @@ GeneratedFieldType(
     }
     switch (field.fieldType.typeId) {
       case TypeIds.float16:
+        return valueExpression;
+      case TypeIds.bfloat16:
         return valueExpression;
       default:
         return '$valueExpression.value';
@@ -1690,8 +1751,7 @@ GeneratedFieldType(
     if (leftCompressed != rightCompressed) {
       return leftCompressed ? 1 : -1;
     }
-    final sizeCompare =
-        _primitiveSize(right.fieldType.typeId) -
+    final sizeCompare = _primitiveSize(right.fieldType.typeId) -
         _primitiveSize(left.fieldType.typeId);
     if (sizeCompare != 0) {
       return sizeCompare;
@@ -1791,6 +1851,7 @@ GeneratedFieldType(
       case TypeIds.varUint64:
       case TypeIds.taggedUint64:
       case TypeIds.float16:
+      case TypeIds.bfloat16:
       case TypeIds.float32:
       case TypeIds.float64:
         return true;
@@ -1804,6 +1865,7 @@ GeneratedFieldType(
       case TypeIds.string:
       case TypeIds.binary:
       case TypeIds.date:
+      case TypeIds.duration:
       case TypeIds.timestamp:
       case TypeIds.boolArray:
       case TypeIds.int8Array:
@@ -1815,6 +1877,7 @@ GeneratedFieldType(
       case TypeIds.uint32Array:
       case TypeIds.uint64Array:
       case TypeIds.float16Array:
+      case TypeIds.bfloat16Array:
       case TypeIds.float32Array:
       case TypeIds.float64Array:
         return true;
@@ -1844,9 +1907,9 @@ GeneratedFieldType(
         'tagged' => TypeIds.taggedInt64,
         'fixed' => TypeIds.int64,
         _ => throw InvalidGenerationSourceError(
-          'Unsupported Int64Type encoding: $encodingValue.',
-          element: field,
-        ),
+            'Unsupported Int64Type encoding: $encodingValue.',
+            element: field,
+          ),
       };
       return _IntegerAnnotationSpec(typeId: typeId);
     }
@@ -1878,9 +1941,9 @@ GeneratedFieldType(
         'tagged' => TypeIds.taggedUint64,
         'fixed' => TypeIds.uint64,
         _ => throw InvalidGenerationSourceError(
-          'Unsupported Uint64Type encoding: $encodingValue.',
-          element: field,
-        ),
+            'Unsupported Uint64Type encoding: $encodingValue.',
+            element: field,
+          ),
       };
       return _IntegerAnnotationSpec(typeId: typeId);
     }
@@ -1916,9 +1979,8 @@ GeneratedFieldType(
     final options = _readTypeOptions(reader);
     final keyObj = reader.peek('key');
     final valueObj = reader.peek('value');
-    final key = keyObj != null && !keyObj.isNull
-        ? _readTypeSpecObj(keyObj)
-        : null;
+    final key =
+        keyObj != null && !keyObj.isNull ? _readTypeSpecObj(keyObj) : null;
     final value = valueObj != null && !valueObj.isNull
         ? _readTypeSpecObj(valueObj)
         : null;
@@ -1999,6 +2061,10 @@ GeneratedFieldType(
         return TypeIds.uint32Array;
       case 'Uint64List':
         return TypeIds.uint64Array;
+      case 'Float16List':
+        return TypeIds.float16Array;
+      case 'Bfloat16List':
+        return TypeIds.bfloat16Array;
       case 'Float32List':
         return TypeIds.float32Array;
       case 'Float64List':
@@ -2021,20 +2087,27 @@ GeneratedFieldType(
         return TypeIds.int16;
       case 'Int32':
         return TypeIds.varInt32;
-      case 'UInt8':
+      case 'Uint8':
         return TypeIds.uint8;
-      case 'UInt16':
+      case 'Uint16':
         return TypeIds.uint16;
-      case 'UInt32':
+      case 'Uint32':
         return TypeIds.uint32;
+      case 'Uint64':
+        return TypeIds.uint64;
       case 'Float16':
         return TypeIds.float16;
+      case 'Bfloat16':
+        return TypeIds.bfloat16;
       case 'Float32':
         return TypeIds.float32;
       case 'Timestamp':
+      case 'DateTime':
         return TypeIds.timestamp;
       case 'LocalDate':
         return TypeIds.date;
+      case 'Duration':
+        return TypeIds.duration;
       case 'Object':
         return TypeIds.unknown;
       default:
@@ -2156,6 +2229,13 @@ GeneratedFieldType(
   bool _isNullable(DartType type) =>
       type.nullabilitySuffix == NullabilitySuffix.question;
 
+  bool _isDateTimeType(DartType type) {
+    final nonNullable = _withoutNullability(type);
+    return nonNullable is InterfaceType &&
+        nonNullable.element.name == 'DateTime' &&
+        nonNullable.element.library.isDartCore;
+  }
+
   bool _isList(DartType type) => type.isDartCoreList;
 
   bool _isSet(DartType type) =>
@@ -2187,9 +2267,8 @@ GeneratedFieldType(
       if (nonNullable.typeArguments.isEmpty) {
         return baseName;
       }
-      final typeArguments = nonNullable.typeArguments
-          .map(_typeCodeString)
-          .join(', ');
+      final typeArguments =
+          nonNullable.typeArguments.map(_typeCodeString).join(', ');
       return '$baseName<$typeArguments>';
     }
     return nonNullable.getDisplayString();
@@ -2318,9 +2397,9 @@ final class _ConstructorPlan {
   final List<String> postConstructionFieldNames;
 
   const _ConstructorPlan.mutable()
-    : mode = _ConstructorMode.mutable,
-      arguments = const <_ConstructorArgumentSpec>[],
-      postConstructionFieldNames = const <String>[];
+      : mode = _ConstructorMode.mutable,
+        arguments = const <_ConstructorArgumentSpec>[],
+        postConstructionFieldNames = const <String>[];
 
   const _ConstructorPlan.constructor({
     required this.arguments,

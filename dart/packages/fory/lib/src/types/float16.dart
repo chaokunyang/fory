@@ -17,9 +17,15 @@
  * under the License.
  */
 
+import 'dart:collection';
 import 'dart:typed_data';
 
 /// Half-precision floating-point wrapper used by the xlang type system.
+///
+/// [Float16] stores an IEEE 754 binary16 payload exactly. Constructing from a
+/// Dart number rounds to the closest representable binary16 value, and the
+/// arithmetic operators round every result back to binary16 precision before
+/// returning a new wrapper.
 final class Float16 implements Comparable<Float16> {
   final int _bits;
 
@@ -91,9 +97,99 @@ final class Float16 implements Comparable<Float16> {
           ? (sign == 0 ? double.infinity : double.negativeInfinity)
           : double.nan;
     }
-    final value = (1.0 + mantissa / 1024.0) * (1 << (exponent - 15)).toDouble();
+    final exponentValue = exponent - 15;
+    final scale = exponentValue >= 0
+        ? (1 << exponentValue).toDouble()
+        : 1.0 / (1 << -exponentValue).toDouble();
+    final value = (1.0 + mantissa / 1024.0) * scale;
     return sign == 0 ? value : -value;
   }
+
+  /// Returns the rounded binary16 value as a Dart [double].
+  double get value => toDouble();
+
+  /// Returns a binary16-rounded sum.
+  Float16 operator +(Object other) => switch (other) {
+        Float16 otherValue => Float16(value + otherValue.value),
+        num otherValue => Float16(value + otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns a binary16-rounded difference.
+  Float16 operator -(Object other) => switch (other) {
+        Float16 otherValue => Float16(value - otherValue.value),
+        num otherValue => Float16(value - otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns a binary16-rounded product.
+  Float16 operator *(Object other) => switch (other) {
+        Float16 otherValue => Float16(value * otherValue.value),
+        num otherValue => Float16(value * otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns a binary16-rounded quotient.
+  Float16 operator /(Object other) => switch (other) {
+        Float16 otherValue => Float16(value / otherValue.value),
+        num otherValue => Float16(value / otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns a binary16-rounded remainder.
+  Float16 operator %(Object other) => switch (other) {
+        Float16 otherValue => Float16(value % otherValue.value),
+        num otherValue => Float16(value % otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns the truncated integer quotient, matching Dart `num` semantics.
+  int operator ~/(Object other) => switch (other) {
+        Float16 otherValue => value ~/ otherValue.value,
+        num otherValue => value ~/ otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns the negated binary16-rounded value.
+  Float16 operator -() => Float16(-value);
+
+  /// Returns whether this value is strictly less than [other].
+  bool operator <(Object other) => switch (other) {
+        Float16 otherValue => value < otherValue.value,
+        num otherValue => value < otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns whether this value is less than or equal to [other].
+  bool operator <=(Object other) => switch (other) {
+        Float16 otherValue => value <= otherValue.value,
+        num otherValue => value <= otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns whether this value is strictly greater than [other].
+  bool operator >(Object other) => switch (other) {
+        Float16 otherValue => value > otherValue.value,
+        num otherValue => value > otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
+
+  /// Returns whether this value is greater than or equal to [other].
+  bool operator >=(Object other) => switch (other) {
+        Float16 otherValue => value >= otherValue.value,
+        num otherValue => value >= otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
   @override
   bool operator ==(Object other) =>
@@ -102,9 +198,103 @@ final class Float16 implements Comparable<Float16> {
   @override
   int get hashCode => _bits.hashCode;
 
+  /// Compares this value with [other] after expanding both to Dart [double]s.
   @override
-  int compareTo(Float16 other) => toDouble().compareTo(other.toDouble());
+  int compareTo(Float16 other) => value.compareTo(other.value);
 
+  /// Returns the expanded Dart [double] string form of this value.
   @override
-  String toString() => toDouble().toString();
+  String toString() => value.toString();
+}
+
+/// Fixed-length contiguous storage for [Float16] values.
+///
+/// [Float16List] behaves like a typed-data-style list whose elements are
+/// [Float16] wrappers instead of Dart [double]s. Each element occupies exactly
+/// two bytes, backed by a contiguous [ByteBuffer], so serializers can write or
+/// read the list without repacking each element.
+final class Float16List extends ListBase<Float16> {
+  /// The number of bytes used by one [Float16] element.
+  static const int bytesPerElement = Uint16List.bytesPerElement;
+
+  final Uint16List _storage;
+
+  /// Creates a zero-initialized list with [length] binary16 elements.
+  Float16List(int length) : _storage = Uint16List(length);
+
+  Float16List._(this._storage);
+
+  /// Copies [values] into a new contiguous binary16 list.
+  factory Float16List.fromList(Iterable<Float16> values) {
+    final copied = values.toList(growable: false);
+    final result = Float16List(copied.length);
+    for (var index = 0; index < copied.length; index += 1) {
+      result[index] = copied[index];
+    }
+    return result;
+  }
+
+  /// Creates a zero-copy view over [buffer].
+  ///
+  /// [offsetInBytes] must be aligned to [bytesPerElement]. When [length] is
+  /// omitted, the view spans the remaining aligned binary16 values.
+  factory Float16List.view(
+    ByteBuffer buffer, [
+    int offsetInBytes = 0,
+    int? length,
+  ]) {
+    return Float16List._(Uint16List.view(buffer, offsetInBytes, length));
+  }
+
+  /// Creates a zero-copy element-range view of [data].
+  ///
+  /// [start] and [end] are measured in [Float16] elements, not bytes.
+  factory Float16List.sublistView(TypedData data, [int start = 0, int? end]) {
+    if (data.lengthInBytes % bytesPerElement != 0) {
+      throw ArgumentError.value(
+        data,
+        'data',
+        'Expected typed data aligned to $bytesPerElement-byte elements.',
+      );
+    }
+    final elementLength = data.lengthInBytes ~/ bytesPerElement;
+    final actualEnd = RangeError.checkValidRange(start, end, elementLength);
+    return Float16List.view(
+      data.buffer,
+      data.offsetInBytes + start * bytesPerElement,
+      actualEnd - start,
+    );
+  }
+
+  /// Returns the shared backing buffer for this list.
+  ByteBuffer get buffer => _storage.buffer;
+
+  /// Returns the size in bytes of each [Float16] element.
+  int get elementSizeInBytes => bytesPerElement;
+
+  /// Returns the byte length of this list view.
+  int get lengthInBytes => _storage.lengthInBytes;
+
+  /// Returns the byte offset of this view in [buffer].
+  int get offsetInBytes => _storage.offsetInBytes;
+
+  /// Returns the number of [Float16] elements in this fixed-length list.
+  @override
+  int get length => _storage.length;
+
+  /// Throws because [Float16List] has a fixed length.
+  @override
+  set length(int newLength) {
+    throw UnsupportedError('Float16List has a fixed length.');
+  }
+
+  /// Reads the element at [index].
+  @override
+  Float16 operator [](int index) => Float16.fromBits(_storage[index]);
+
+  /// Stores [value] at [index].
+  @override
+  void operator []=(int index, Float16 value) {
+    _storage[index] = value.toBits();
+  }
 }

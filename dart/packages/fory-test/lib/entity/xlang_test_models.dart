@@ -440,14 +440,14 @@ class CircularRefStruct {
 class UnsignedSchemaConsistent {
   UnsignedSchemaConsistent();
 
-  UInt8 u8Field = UInt8(0);
-  UInt16 u16Field = UInt16(0);
+  Uint8 u8Field = Uint8(0);
+  Uint16 u16Field = Uint16(0);
 
   @Uint32Type(compress: true)
-  UInt32 u32VarField = UInt32(0);
+  Uint32 u32VarField = Uint32(0);
 
   @Uint32Type(compress: false)
-  UInt32 u32FixedField = UInt32(0);
+  Uint32 u32FixedField = Uint32(0);
 
   @Uint64Type(encoding: LongEncoding.varint)
   int u64VarField = 0;
@@ -459,18 +459,18 @@ class UnsignedSchemaConsistent {
   int u64TaggedField = 0;
 
   @ForyField(nullable: true)
-  UInt8? u8NullableField;
+  Uint8? u8NullableField;
 
   @ForyField(nullable: true)
-  UInt16? u16NullableField;
+  Uint16? u16NullableField;
 
   @ForyField(nullable: true)
   @Uint32Type(compress: true)
-  UInt32? u32VarNullableField;
+  Uint32? u32VarNullableField;
 
   @ForyField(nullable: true)
   @Uint32Type(compress: false)
-  UInt32? u32FixedNullableField;
+  Uint32? u32FixedNullableField;
 
   @ForyField(nullable: true)
   @Uint64Type(encoding: LongEncoding.varint)
@@ -502,18 +502,18 @@ class UnsignedSchemaCompatible {
   UnsignedSchemaCompatible();
 
   @ForyField(nullable: true)
-  UInt8? u8Field1;
+  Uint8? u8Field1;
 
   @ForyField(nullable: true)
-  UInt16? u16Field1;
+  Uint16? u16Field1;
 
   @ForyField(nullable: true)
   @Uint32Type(compress: true)
-  UInt32? u32VarField1;
+  Uint32? u32VarField1;
 
   @ForyField(nullable: true)
   @Uint32Type(compress: false)
-  UInt32? u32FixedField1;
+  Uint32? u32FixedField1;
 
   @ForyField(nullable: true)
   @Uint64Type(encoding: LongEncoding.varint)
@@ -527,14 +527,14 @@ class UnsignedSchemaCompatible {
   @Uint64Type(encoding: LongEncoding.tagged)
   int? u64TaggedField1;
 
-  UInt8 u8Field2 = UInt8(0);
-  UInt16 u16Field2 = UInt16(0);
+  Uint8 u8Field2 = Uint8(0);
+  Uint16 u16Field2 = Uint16(0);
 
   @Uint32Type(compress: true)
-  UInt32 u32VarField2 = UInt32(0);
+  Uint32 u32VarField2 = Uint32(0);
 
   @Uint32Type(compress: false)
-  UInt32 u32FixedField2 = UInt32(0);
+  Uint32 u32FixedField2 = Uint32(0);
 
   @Uint64Type(encoding: LongEncoding.varint)
   int u64VarField2 = 0;

@@ -23,15 +23,34 @@ import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/serializer/serializer.dart';
+import 'package:fory/src/types/bfloat16.dart';
+import 'package:fory/src/types/float16.dart';
 
 void writeTypedArrayBytes(
   WriteContext context,
-  TypedData values,
+  Object values,
 ) {
-  context.buffer.writeVarUint32(values.lengthInBytes);
-  context.buffer.writeBytes(
-    values.buffer.asUint8List(values.offsetInBytes, values.lengthInBytes),
-  );
+  final bytes = switch (values) {
+    TypedData typed => typed.buffer.asUint8List(
+        typed.offsetInBytes,
+        typed.lengthInBytes,
+      ),
+    Float16List typed => typed.buffer.asUint8List(
+        typed.offsetInBytes,
+        typed.lengthInBytes,
+      ),
+    Bfloat16List typed => typed.buffer.asUint8List(
+        typed.offsetInBytes,
+        typed.lengthInBytes,
+      ),
+    _ => throw ArgumentError.value(
+        values,
+        'values',
+        'Expected a supported contiguous typed array value.',
+      ),
+  };
+  context.buffer.writeVarUint32(bytes.length);
+  context.buffer.writeBytes(bytes);
 }
 
 T readTypedArrayBytes<T>(
@@ -77,7 +96,7 @@ final class BoolArraySerializer extends Serializer<List<bool>> {
   }
 }
 
-final class TypedArraySerializer<T extends TypedData> extends Serializer<T> {
+final class TypedArraySerializer<T> extends Serializer<T> {
   final int typeId;
   final int elementSize;
   final T Function(Uint8List bytes) viewBuilder;
@@ -99,7 +118,7 @@ final class TypedArraySerializer<T extends TypedData> extends Serializer<T> {
       context.buffer.writeBytes(bytes);
       return;
     }
-    writeTypedArrayBytes(context, value);
+    writeTypedArrayBytes(context, value as Object);
   }
 
   @override
@@ -155,6 +174,18 @@ const TypedArraySerializer<Uint64List> uint64ArraySerializer =
   8,
   _asUint64List,
 );
+const TypedArraySerializer<Float16List> float16ArraySerializer =
+    TypedArraySerializer<Float16List>(
+  TypeIds.float16Array,
+  2,
+  _asFloat16List,
+);
+const TypedArraySerializer<Bfloat16List> bfloat16ArraySerializer =
+    TypedArraySerializer<Bfloat16List>(
+  TypeIds.bfloat16Array,
+  2,
+  _asBfloat16List,
+);
 const TypedArraySerializer<Float32List> float32ArraySerializer =
     TypedArraySerializer<Float32List>(
   TypeIds.float32Array,
@@ -184,6 +215,15 @@ Int64List _asInt64List(Uint8List bytes) => bytes.buffer.asInt64List(
     );
 
 Uint16List _asUint16List(Uint8List bytes) => bytes.buffer.asUint16List(
+      bytes.offsetInBytes,
+      bytes.lengthInBytes ~/ 2,
+    );
+
+Float16List _asFloat16List(Uint8List bytes) => Float16List.view(
+    bytes.buffer, bytes.offsetInBytes, bytes.lengthInBytes ~/ 2);
+
+Bfloat16List _asBfloat16List(Uint8List bytes) => Bfloat16List.view(
+      bytes.buffer,
       bytes.offsetInBytes,
       bytes.lengthInBytes ~/ 2,
     );

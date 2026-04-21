@@ -22,8 +22,17 @@ import 'package:fory/src/context/ref_writer.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/meta/field_type.dart';
+import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/serialization_field_info.dart';
+import 'package:fory/src/types/float32.dart';
+import 'package:fory/src/types/int16.dart';
+import 'package:fory/src/types/int32.dart';
+import 'package:fory/src/types/int8.dart';
+import 'package:fory/src/types/uint16.dart';
+import 'package:fory/src/types/uint32.dart';
+import 'package:fory/src/types/uint64.dart';
+import 'package:fory/src/types/uint8.dart';
 
 final class DeferredReadRef {
   final int id;
@@ -43,6 +52,37 @@ bool fieldUsesDeclaredType(
   SerializationFieldInfo field,
 ) {
   return field.usesDeclaredType(resolver);
+}
+
+Object convertPrimitiveFieldValue(Object value, FieldType fieldType) {
+  if (fieldType.type == int) {
+    switch (fieldType.typeId) {
+      case TypeIds.int8:
+        return (value as Int8).value;
+      case TypeIds.int16:
+        return (value as Int16).value;
+      case TypeIds.int32:
+      case TypeIds.varInt32:
+        return (value as Int32).value;
+      case TypeIds.uint8:
+        return (value as Uint8).value;
+      case TypeIds.uint16:
+        return (value as Uint16).value;
+      case TypeIds.uint32:
+      case TypeIds.varUint32:
+        return (value as Uint32).value;
+      case TypeIds.uint64:
+      case TypeIds.varUint64:
+      case TypeIds.taggedUint64:
+        return (value as Uint64).value;
+      default:
+        return value;
+    }
+  }
+  if (fieldType.type == double && fieldType.typeId == TypeIds.float32) {
+    return (value as Float32).value;
+  }
+  return value;
 }
 
 void writeFieldValue(
@@ -115,7 +155,10 @@ T readFieldValue<T>(
     return context.readRef() as T;
   }
   if (fieldType.isPrimitive && !fieldType.nullable) {
-    return context.readPrimitiveValue(fieldType.typeId) as T;
+    return convertPrimitiveFieldValue(
+      context.readPrimitiveValue(fieldType.typeId),
+      fieldType,
+    ) as T;
   }
   final declaredTypeInfo = fieldDeclaredTypeInfo(context.typeResolver, field);
   final usesDeclaredType = fieldUsesDeclaredType(context.typeResolver, field);
@@ -162,7 +205,10 @@ Object? readCompatibleField(
     return context.readRef();
   }
   if (fieldType.isPrimitive && !fieldType.nullable) {
-    return context.readPrimitiveValue(fieldType.typeId);
+    return convertPrimitiveFieldValue(
+      context.readPrimitiveValue(fieldType.typeId),
+      fieldType,
+    );
   }
   final declaredTypeInfo = _compatibleFieldDeclaredTypeInfo(
     context.typeResolver,

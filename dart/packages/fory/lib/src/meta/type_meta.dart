@@ -259,13 +259,16 @@ final class WireTypeMetaDecoder {
       wireTypeId == TypeIds.varUint64 ||
       wireTypeId == TypeIds.taggedUint64 ||
       wireTypeId == TypeIds.float16 ||
+      wireTypeId == TypeIds.bfloat16 ||
       wireTypeId == TypeIds.float32 ||
       wireTypeId == TypeIds.float64 ||
       wireTypeId == TypeIds.string ||
       wireTypeId == TypeIds.list ||
       wireTypeId == TypeIds.set ||
       wireTypeId == TypeIds.map ||
+      wireTypeId == TypeIds.none ||
       wireTypeId == TypeIds.binary ||
+      wireTypeId == TypeIds.duration ||
       wireTypeId == TypeIds.date ||
       wireTypeId == TypeIds.timestamp ||
       wireTypeId == TypeIds.boolArray ||
@@ -278,6 +281,7 @@ final class WireTypeMetaDecoder {
       wireTypeId == TypeIds.uint32Array ||
       wireTypeId == TypeIds.uint64Array ||
       wireTypeId == TypeIds.float16Array ||
+      wireTypeId == TypeIds.bfloat16Array ||
       wireTypeId == TypeIds.float32Array ||
       wireTypeId == TypeIds.float64Array;
 }

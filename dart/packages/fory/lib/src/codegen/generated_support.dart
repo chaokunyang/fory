@@ -34,6 +34,7 @@ import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
 import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
+import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 
 final BigInt _generatedCursorMask64Big = (BigInt.one << 64) - BigInt.one;
@@ -120,6 +121,10 @@ final class GeneratedWriteCursor {
     writeUint16(value.toBits());
   }
 
+  void writeBfloat16(Bfloat16 value) {
+    writeUint16(value.toBits());
+  }
+
   void writeFloat32(double value) {
     _view.setFloat32(_offset, value, Endian.little);
     _offset += 4;
@@ -187,13 +192,12 @@ final class GeneratedWriteCursor {
   }
 
   void writeTaggedUint64(int value) {
-    final unsigned = (BigInt.from(value) & _generatedCursorMask64Big).toInt();
-    if (unsigned <= 0x7fffffff) {
-      writeInt32((unsigned << 1) & 0xffffffff);
+    if (value >= 0 && value <= 0x7fffffff) {
+      writeInt32(value << 1);
       return;
     }
     writeUint8(0x01);
-    writeUint64(unsigned);
+    writeUint64(value);
   }
 
   void _writeVarUint64BigInt(BigInt value) {
@@ -289,6 +293,8 @@ final class GeneratedReadCursor {
   }
 
   Float16 readFloat16() => Float16.fromBits(readUint16());
+
+  Bfloat16 readBfloat16() => Bfloat16.fromBits(readUint16());
 
   double readFloat32() {
     final value = _view.getFloat32(_offset, Endian.little);
@@ -617,8 +623,63 @@ LocalDate readGeneratedLocalDateValue(ReadContext context) {
 }
 
 @internal
+int generatedDurationWireSeconds(Duration value) {
+  return durationWireSeconds(value);
+}
+
+@internal
+int generatedDurationWireNanoseconds(Duration value) {
+  return durationWireNanoseconds(value);
+}
+
+@internal
+Duration readGeneratedDurationFromWire(int seconds, int nanoseconds) {
+  return durationFromWire(seconds, nanoseconds);
+}
+
+@internal
+void writeGeneratedDurationValue(WriteContext context, Duration value) {
+  const DurationSerializer().write(context, value);
+}
+
+@internal
+Duration readGeneratedDurationValue(ReadContext context) {
+  return const DurationSerializer().read(context);
+}
+
+@internal
+int generatedTimestampWireNanoseconds(Timestamp value) {
+  return timestampWireNanoseconds(value);
+}
+
+@internal
+int generatedDateTimeWireSeconds(DateTime value) {
+  return dateTimeWireSeconds(value);
+}
+
+@internal
+int generatedDateTimeWireNanoseconds(DateTime value) {
+  return dateTimeWireNanoseconds(value);
+}
+
+@internal
+Timestamp readGeneratedTimestampFromWire(int seconds, int nanoseconds) {
+  return timestampFromWire(seconds, nanoseconds);
+}
+
+@internal
+DateTime readGeneratedDateTimeFromWire(int seconds, int nanoseconds) {
+  return dateTimeFromWire(seconds, nanoseconds);
+}
+
+@internal
 void writeGeneratedTimestampValue(WriteContext context, Timestamp value) {
   const TimestampSerializer().write(context, value);
+}
+
+@internal
+void writeGeneratedDateTimeValue(WriteContext context, DateTime value) {
+  const DateTimeSerializer().write(context, value);
 }
 
 @internal
@@ -627,7 +688,12 @@ Timestamp readGeneratedTimestampValue(ReadContext context) {
 }
 
 @internal
-void writeGeneratedFixedArrayValue(WriteContext context, TypedData value) {
+DateTime readGeneratedDateTimeValue(ReadContext context) {
+  return const DateTimeSerializer().read(context);
+}
+
+@internal
+void writeGeneratedFixedArrayValue(WriteContext context, Object value) {
   writeTypedArrayBytes(context, value);
 }
 
@@ -688,7 +754,10 @@ Object? readGeneratedStructFieldInfoValue(
       !fieldType.ref &&
       !fieldType.nullable) {
     if (fieldType.isPrimitive) {
-      return context.readPrimitiveValue(fieldType.typeId);
+      return convertPrimitiveFieldValue(
+        context.readPrimitiveValue(fieldType.typeId),
+        fieldType,
+      );
     }
     final resolved = fieldDeclaredTypeInfo(context.typeResolver, field)!;
     if (fieldUsesDeclaredType(context.typeResolver, field)) {
@@ -727,8 +796,7 @@ Object readGeneratedStructDirectValue(
   if (fieldUsesDeclaredType(context.typeResolver, field)) {
     resolved = declared;
   } else {
-    resolved =
-        context.readTypeMetaValue(declared.isNamed ? declared : null);
+    resolved = context.readTypeMetaValue(declared.isNamed ? declared : null);
   }
   context.increaseDepth();
   final value = resolved.structSerializer!.readValue(context, resolved);

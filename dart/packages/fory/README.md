@@ -13,8 +13,9 @@ cases.
 - Compatible mode for schema evolution
 - Optional reference tracking for shared and circular object graphs
 - Manual serializers for external types, custom payloads, and unions
-- Explicit xlang value wrappers such as `Int32`, `UInt32`, `Float16`,
-  `Float32`, `LocalDate`, and `Timestamp`
+- Explicit xlang value wrappers such as `Int32`, `Uint32`, `Float16`,
+  `Bfloat16`, `Float32`, `LocalDate`, and `Timestamp`, plus `Duration`
+  support
 
 ## Getting Started
 
@@ -219,37 +220,47 @@ void main() {
 
 ## Type Mapping
 
-Dart has no native fixed-width 8/16/32-bit integer or single-precision float
-types. Fory Dart provides thin wrapper types (`Int8`, `Int16`, `Int32`, `UInt8`,
-`UInt16`, `UInt32`, `Float16`, `Float32`) imported from `package:fory/fory.dart`
-to represent these xlang wire types.
+Dart has no native fixed-width 8/16/32-bit integer, unsigned 64-bit integer,
+or single-precision float types. Fory Dart provides thin wrapper types
+(`Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Float16`,
+`Bfloat16`, `Float32`) imported from `package:fory/fory.dart` to represent
+these xlang wire types. For 16-bit floating-point arrays, Dart exposes
+`Float16List` and `Bfloat16List` as contiguous fixed-length buffers.
 
-| Fory xlang type | Dart type                |
-| --------------- | ------------------------ |
-| bool            | `bool`                   |
-| int8            | `fory.Int8` (wrapper)    |
-| int16           | `fory.Int16` (wrapper)   |
-| int32           | `fory.Int32` (wrapper)   |
-| int64           | `int`                    |
-| float16         | `fory.Float16` (wrapper) |
-| float32         | `fory.Float32` (wrapper) |
-| float64         | `double`                 |
-| string          | `String`                 |
-| binary          | `Uint8List`              |
-| local_date      | `LocalDate`              |
-| timestamp       | `Timestamp`              |
-| list            | `List`                   |
-| set             | `Set`                    |
-| map             | `Map`                    |
-| enum            | `enum`                   |
-| named_struct    | `class`                  |
-| bool_array      | `List<bool>`             |
-| int8_array      | `Int8List`               |
-| int16_array     | `Int16List`              |
-| int32_array     | `Int32List`              |
-| int64_array     | `Int64List`              |
-| float32_array   | `Float32List`            |
-| float64_array   | `Float64List`            |
+| Fory xlang type | Dart type                 |
+| --------------- | ------------------------- |
+| bool            | `bool`                    |
+| int8            | `fory.Int8` (wrapper)     |
+| int16           | `fory.Int16` (wrapper)    |
+| int32           | `fory.Int32` (wrapper)    |
+| int64           | `int`                     |
+| uint8           | `fory.Uint8` (wrapper)    |
+| uint16          | `fory.Uint16` (wrapper)   |
+| uint32          | `fory.Uint32` (wrapper)   |
+| uint64          | `fory.Uint64` (wrapper)   |
+| float16         | `fory.Float16` (wrapper)  |
+| bfloat16        | `fory.Bfloat16` (wrapper) |
+| float32         | `fory.Float32` (wrapper)  |
+| float64         | `double`                  |
+| string          | `String`                  |
+| binary          | `Uint8List`               |
+| duration        | `Duration`                |
+| local_date      | `LocalDate`               |
+| timestamp       | `Timestamp`               |
+| list            | `List`                    |
+| set             | `Set`                     |
+| map             | `Map`                     |
+| enum            | `enum`                    |
+| named_struct    | `class`                   |
+| bool_array      | `List<bool>`              |
+| int8_array      | `Int8List`                |
+| int16_array     | `Int16List`               |
+| int32_array     | `Int32List`               |
+| int64_array     | `Int64List`               |
+| float16_array   | `Float16List`             |
+| bfloat16_array  | `Bfloat16List`            |
+| float32_array   | `Float32List`             |
+| float64_array   | `Float64List`             |
 
 ## Public API
 
@@ -265,9 +276,9 @@ The main exported API includes:
   annotations
 - `Int32Type`, `Int64Type`, `Uint32Type`, `Uint64Type` — numeric encoding
   overrides
-- Numeric wrappers: `Int8`, `Int16`, `Int32`, `UInt8`, `UInt16`, `UInt32`,
-  `Float16`, `Float32`
-- Temporal wrappers: `LocalDate`, `Timestamp`
+- Numeric wrappers: `Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32`,
+  `Uint64`, `Float16`, `Bfloat16`, `Float32`
+- Temporal types: `LocalDate`, `Timestamp`, `Duration`
 
 ## Cross-Language Notes
 

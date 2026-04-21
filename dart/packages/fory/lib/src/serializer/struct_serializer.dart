@@ -55,8 +55,6 @@ final class StructSerializer extends Serializer<Object?> {
       <String, SerializationFieldInfo>{
     for (final field in _localFields) field.identifier: field,
   };
-  final Expando<_CompatibleWriteLayout> _compatibleWriteLayouts =
-      Expando<_CompatibleWriteLayout>('fory_compatible_write_layout');
   final Expando<_CompatibleReadLayout> _compatibleReadLayouts =
       Expando<_CompatibleReadLayout>('fory_compatible_read_layout');
   final GeneratedStructCompatibleFactory<Object>? _compatibleFactory;
@@ -92,11 +90,7 @@ final class StructSerializer extends Serializer<Object?> {
     TypeInfo resolved,
     Object value,
   ) {
-    final layout = _compatibleWriteLayoutForValue(context, resolved, value);
-    if (layout == null) {
-      return resolved.typeDef!;
-    }
-    return layout.typeDef;
+    return resolved.typeDef!;
   }
 
   void writeValue(
@@ -144,7 +138,7 @@ final class StructSerializer extends Serializer<Object?> {
       _payloadSerializer,
       resolved,
       hasCurrentPreservedRef: hasCurrentPreservedRef,
-    );
+    ) as Object;
     internal.structReadSlots = previousReadSlots;
     _rememberRemoteMetadata(internal, resolved, value);
     return value;
@@ -155,62 +149,9 @@ final class StructSerializer extends Serializer<Object?> {
     TypeInfo resolved,
     Object value,
   ) {
-    final layout = _compatibleWriteLayoutForValue(context, resolved, value);
     final previous = context.structWriteSlots;
-    context.structWriteSlots = layout == null
-        ? null
-        : StructWriteSlots(layout.fields, _localFields.length);
+    context.structWriteSlots = null;
     return previous;
-  }
-
-  _CompatibleWriteLayout? _compatibleWriteLayoutForValue(
-    WriteContext context,
-    TypeInfo resolved,
-    Object value,
-  ) {
-    if (!_typeDef.evolving || !context.config.compatible) {
-      return null;
-    }
-    final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(value);
-    if (remoteTypeDef == null) {
-      return null;
-    }
-    final cached = _compatibleWriteLayouts[remoteTypeDef];
-    if (cached != null) {
-      return cached;
-    }
-    final orderedFields = <SerializationFieldInfo>[];
-    final usedIdentifiers = <String>{};
-    for (final remoteField in remoteTypeDef.fields) {
-      final localField = _localFieldsByIdentifier[remoteField.identifier];
-      if (localField == null) {
-        continue;
-      }
-      final mergedField = _typeResolver.serializationFieldInfo(
-        mergeCompatibleWriteField(localField.field, remoteField),
-        slot: localField.slot,
-      );
-      orderedFields.add(mergedField);
-      usedIdentifiers.add(remoteField.identifier);
-    }
-    for (final localField in _localFields) {
-      if (usedIdentifiers.add(localField.identifier)) {
-        orderedFields.add(localField);
-      }
-    }
-    final fields = List<SerializationFieldInfo>.unmodifiable(orderedFields);
-    final typeDef = context.typeResolver.typeDefForResolved(
-      resolved,
-      fields: List<FieldInfo>.unmodifiable(
-        List<FieldInfo>.generate(
-          fields.length,
-          (index) => fields[index].field,
-        ),
-      ),
-    );
-    final layout = _CompatibleWriteLayout(fields, typeDef);
-    _compatibleWriteLayouts[remoteTypeDef] = layout;
-    return layout;
   }
 
   Object _readCompatible(
@@ -272,7 +213,7 @@ final class StructSerializer extends Serializer<Object?> {
       _payloadSerializer,
       resolved,
       hasCurrentPreservedRef: hasCurrentPreservedRef,
-    );
+    ) as Object;
     context.structReadSlots = previousCompatibleFields;
     _rememberRemoteMetadata(context, resolved, value);
     return value;
@@ -320,13 +261,6 @@ final class StructSerializer extends Serializer<Object?> {
       CompatibleStructMetadata.rememberRemoteTypeDef(value, remoteTypeDef);
     }
   }
-}
-
-final class _CompatibleWriteLayout {
-  final List<SerializationFieldInfo> fields;
-  final TypeDef typeDef;
-
-  const _CompatibleWriteLayout(this.fields, this.typeDef);
 }
 
 final class _CompatibleReadLayout {

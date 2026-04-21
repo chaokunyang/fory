@@ -229,14 +229,16 @@ final class MapSerializer extends Serializer<Map> {
   static Map<Object?, Object?> readPayload(
     ReadContext context,
     FieldType? keyFieldType,
-    FieldType? valueFieldType,
-  ) {
+    FieldType? valueFieldType, {
+    bool hasPreservedRef = false,
+  }) {
     return readTypedMapPayload<Object?, Object?>(
       context,
       keyFieldType,
       valueFieldType,
       (value) => value,
       (value) => value,
+      hasPreservedRef: hasPreservedRef,
     );
   }
 }
@@ -248,8 +250,9 @@ Map<K, V> readTypedMapPayload<K, V>(
   FieldType? keyFieldType,
   FieldType? valueFieldType,
   K Function(Object? value) convertKey,
-  V Function(Object? value) convertValue,
-) {
+  V Function(Object? value) convertValue, {
+  bool hasPreservedRef = false,
+}) {
   var remaining = context.buffer.readVarUint32();
   if (remaining > context.config.maxCollectionSize) {
     throw StateError(
@@ -264,6 +267,9 @@ Map<K, V> readTypedMapPayload<K, V>(
           ? null
           : context.typeResolver.resolveFieldType(valueFieldType);
   final result = <K, V>{};
+  if (hasPreservedRef) {
+    context.reference(result);
+  }
   while (remaining > 0) {
     final header = context.buffer.readUint8();
     final keyHasNull = (header & 0x02) != 0;
@@ -296,13 +302,13 @@ Map<K, V> readTypedMapPayload<K, V>(
     final valueTypeInfo = valueDeclared ? null : context.readTypeMetaValue();
     final tracksDepth =
         ((keyDeclared ? declaredKeyTypeInfo : keyTypeInfo) != null &&
-            tracksNestedPayloadDepth(
-              keyDeclared ? declaredKeyTypeInfo! : keyTypeInfo!,
-            )) ||
-        ((valueDeclared ? declaredValueTypeInfo : valueTypeInfo) != null &&
-            tracksNestedPayloadDepth(
-              valueDeclared ? declaredValueTypeInfo! : valueTypeInfo!,
-            ));
+                tracksNestedPayloadDepth(
+                  keyDeclared ? declaredKeyTypeInfo! : keyTypeInfo!,
+                )) ||
+            ((valueDeclared ? declaredValueTypeInfo : valueTypeInfo) != null &&
+                tracksNestedPayloadDepth(
+                  valueDeclared ? declaredValueTypeInfo! : valueTypeInfo!,
+                ));
     if (tracksDepth) {
       context.increaseDepth();
     }

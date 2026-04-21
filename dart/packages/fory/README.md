@@ -13,7 +13,7 @@ cases.
 - Compatible mode for schema evolution
 - Optional reference tracking for shared and circular object graphs
 - Manual serializers for external types, custom payloads, and unions
-- Explicit xlang value wrappers such as `Int32`, `UInt32`, `Float16`,
+- Explicit xlang value wrappers such as `Int32`, `Uint32`, `Float16`,
   `Float32`, `LocalDate`, and `Timestamp`, plus `Duration` support
 
 ## Getting Started
@@ -219,10 +219,11 @@ void main() {
 
 ## Type Mapping
 
-Dart has no native fixed-width 8/16/32-bit integer or single-precision float
-types. Fory Dart provides thin wrapper types (`Int8`, `Int16`, `Int32`, `UInt8`,
-`UInt16`, `UInt32`, `Float16`, `Float32`) imported from `package:fory/fory.dart`
-to represent these xlang wire types.
+Dart has no native fixed-width 8/16/32-bit integer, unsigned 64-bit integer,
+or single-precision float types. Fory Dart provides thin wrapper types
+(`Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Float16`,
+`Float32`) imported from `package:fory/fory.dart` to represent these xlang
+wire types.
 
 | Fory xlang type | Dart type                |
 | --------------- | ------------------------ |
@@ -231,6 +232,10 @@ to represent these xlang wire types.
 | int16           | `fory.Int16` (wrapper)   |
 | int32           | `fory.Int32` (wrapper)   |
 | int64           | `int`                    |
+| uint8           | `fory.Uint8` (wrapper)   |
+| uint16          | `fory.Uint16` (wrapper)  |
+| uint32          | `fory.Uint32` (wrapper)  |
+| uint64          | `fory.Uint64` (wrapper)  |
 | float16         | `fory.Float16` (wrapper) |
 | float32         | `fory.Float32` (wrapper) |
 | float64         | `double`                 |
@@ -266,8 +271,8 @@ The main exported API includes:
   annotations
 - `Int32Type`, `Int64Type`, `Uint32Type`, `Uint64Type` — numeric encoding
   overrides
-- Numeric wrappers: `Int8`, `Int16`, `Int32`, `UInt8`, `UInt16`, `UInt32`,
-  `Float16`, `Float32`
+- Numeric wrappers: `Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32`,
+  `Uint64`, `Float16`, `Float32`
 - Temporal types: `LocalDate`, `Timestamp`, `Duration`
 
 ## Cross-Language Notes

@@ -19,7 +19,26 @@
 
 import 'dart:typed_data';
 
+double _float16OperandValue(Object other) {
+  if (other is Float16) {
+    return other.toDouble();
+  }
+  if (other is num) {
+    return other.toDouble();
+  }
+  throw ArgumentError.value(
+    other,
+    'other',
+    'Expected a num or Float16.',
+  );
+}
+
 /// Half-precision floating-point wrapper used by the xlang type system.
+///
+/// [Float16] stores an IEEE 754 binary16 payload exactly. Constructing from a
+/// Dart number rounds to the closest representable binary16 value, and the
+/// arithmetic operators round every result back to binary16 precision before
+/// returning a new wrapper.
 final class Float16 implements Comparable<Float16> {
   final int _bits;
 
@@ -91,9 +110,50 @@ final class Float16 implements Comparable<Float16> {
           ? (sign == 0 ? double.infinity : double.negativeInfinity)
           : double.nan;
     }
-    final value = (1.0 + mantissa / 1024.0) * (1 << (exponent - 15)).toDouble();
+    final exponentValue = exponent - 15;
+    final scale = exponentValue >= 0
+        ? (1 << exponentValue).toDouble()
+        : 1.0 / (1 << -exponentValue).toDouble();
+    final value = (1.0 + mantissa / 1024.0) * scale;
     return sign == 0 ? value : -value;
   }
+
+  /// Returns the rounded binary16 value as a Dart [double].
+  double get value => toDouble();
+
+  /// Returns a binary16-rounded sum.
+  Float16 operator +(Object other) =>
+      Float16(value + _float16OperandValue(other));
+
+  /// Returns a binary16-rounded difference.
+  Float16 operator -(Object other) =>
+      Float16(value - _float16OperandValue(other));
+
+  /// Returns a binary16-rounded product.
+  Float16 operator *(Object other) =>
+      Float16(value * _float16OperandValue(other));
+
+  /// Returns a binary16-rounded quotient.
+  Float16 operator /(Object other) =>
+      Float16(value / _float16OperandValue(other));
+
+  /// Returns a binary16-rounded remainder.
+  Float16 operator %(Object other) =>
+      Float16(value % _float16OperandValue(other));
+
+  /// Returns the truncated integer quotient, matching Dart `num` semantics.
+  int operator ~/(Object other) => value ~/ _float16OperandValue(other);
+
+  /// Returns the negated binary16-rounded value.
+  Float16 operator -() => Float16(-value);
+
+  bool operator <(Object other) => value < _float16OperandValue(other);
+
+  bool operator <=(Object other) => value <= _float16OperandValue(other);
+
+  bool operator >(Object other) => value > _float16OperandValue(other);
+
+  bool operator >=(Object other) => value >= _float16OperandValue(other);
 
   @override
   bool operator ==(Object other) =>

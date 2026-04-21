@@ -1029,24 +1029,31 @@ GeneratedFieldType(
     if (type.isDartCoreInt) {
       switch (fieldType.typeId) {
         case TypeIds.int8:
-          return '($valueExpression as Int8).value';
+          return 'switch ($valueExpression) { int typed => typed, Int8 typed => typed.value, _ => throw StateError(\'Expected int or Int8.\') }';
         case TypeIds.int16:
-          return '($valueExpression as Int16).value';
+          return 'switch ($valueExpression) { int typed => typed, Int16 typed => typed.value, _ => throw StateError(\'Expected int or Int16.\') }';
         case TypeIds.int32:
         case TypeIds.varInt32:
-          return '($valueExpression as Int32).value';
+          return 'switch ($valueExpression) { int typed => typed, Int32 typed => typed.value, _ => throw StateError(\'Expected int or Int32.\') }';
         case TypeIds.uint8:
-          return '($valueExpression as UInt8).value';
+          return 'switch ($valueExpression) { int typed => typed, Uint8 typed => typed.value, _ => throw StateError(\'Expected int or Uint8.\') }';
         case TypeIds.uint16:
-          return '($valueExpression as UInt16).value';
+          return 'switch ($valueExpression) { int typed => typed, Uint16 typed => typed.value, _ => throw StateError(\'Expected int or Uint16.\') }';
         case TypeIds.uint32:
         case TypeIds.varUint32:
-          return '($valueExpression as UInt32).value';
+          return 'switch ($valueExpression) { int typed => typed, Uint32 typed => typed.value, _ => throw StateError(\'Expected int or Uint32.\') }';
+        case TypeIds.uint64:
+        case TypeIds.varUint64:
+        case TypeIds.taggedUint64:
+          return 'switch ($valueExpression) { int typed => typed, Uint64 typed => typed.value, _ => throw StateError(\'Expected int or Uint64.\') }';
         default:
           return '$valueExpression as int';
       }
     }
     if (type.isDartCoreDouble) {
+      if (fieldType.typeId == TypeIds.float32) {
+        return 'switch ($valueExpression) { double typed => typed, Float32 typed => typed.value, _ => throw StateError(\'Expected double or Float32.\') }';
+      }
       return '$valueExpression as double';
     }
     if (type.isDartCoreBool) {
@@ -1362,25 +1369,31 @@ GeneratedFieldType(
       case TypeIds.uint8:
         return field.type.isDartCoreInt
             ? 'buffer.readUint8()'
-            : 'UInt8(buffer.readUint8())';
+            : 'Uint8(buffer.readUint8())';
       case TypeIds.uint16:
         return field.type.isDartCoreInt
             ? 'buffer.readUint16()'
-            : 'UInt16(buffer.readUint16())';
+            : 'Uint16(buffer.readUint16())';
       case TypeIds.uint32:
         return field.type.isDartCoreInt
             ? 'buffer.readUint32()'
-            : 'UInt32(buffer.readUint32())';
+            : 'Uint32(buffer.readUint32())';
       case TypeIds.varUint32:
         return field.type.isDartCoreInt
             ? 'buffer.readVarUint32()'
-            : 'UInt32(buffer.readVarUint32())';
+            : 'Uint32(buffer.readVarUint32())';
       case TypeIds.uint64:
-        return 'buffer.readUint64()';
+        return field.type.isDartCoreInt
+            ? 'buffer.readUint64()'
+            : 'Uint64(buffer.readUint64())';
       case TypeIds.varUint64:
-        return 'buffer.readVarUint64()';
+        return field.type.isDartCoreInt
+            ? 'buffer.readVarUint64()'
+            : 'Uint64(buffer.readVarUint64())';
       case TypeIds.taggedUint64:
-        return 'buffer.readTaggedUint64()';
+        return field.type.isDartCoreInt
+            ? 'buffer.readTaggedUint64()'
+            : 'Uint64(buffer.readTaggedUint64())';
       case TypeIds.float16:
         return 'buffer.readFloat16()';
       case TypeIds.float32:
@@ -1461,25 +1474,31 @@ GeneratedFieldType(
       case TypeIds.uint8:
         return field.type.isDartCoreInt
             ? '$cursorExpression.readUint8()'
-            : 'UInt8($cursorExpression.readUint8())';
+            : 'Uint8($cursorExpression.readUint8())';
       case TypeIds.uint16:
         return field.type.isDartCoreInt
             ? '$cursorExpression.readUint16()'
-            : 'UInt16($cursorExpression.readUint16())';
+            : 'Uint16($cursorExpression.readUint16())';
       case TypeIds.uint32:
         return field.type.isDartCoreInt
             ? '$cursorExpression.readUint32()'
-            : 'UInt32($cursorExpression.readUint32())';
+            : 'Uint32($cursorExpression.readUint32())';
       case TypeIds.varUint32:
         return field.type.isDartCoreInt
             ? '$cursorExpression.readVarUint32()'
-            : 'UInt32($cursorExpression.readVarUint32())';
+            : 'Uint32($cursorExpression.readVarUint32())';
       case TypeIds.uint64:
-        return '$cursorExpression.readUint64()';
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readUint64()'
+            : 'Uint64($cursorExpression.readUint64())';
       case TypeIds.varUint64:
-        return '$cursorExpression.readVarUint64()';
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readVarUint64()'
+            : 'Uint64($cursorExpression.readVarUint64())';
       case TypeIds.taggedUint64:
-        return '$cursorExpression.readTaggedUint64()';
+        return field.type.isDartCoreInt
+            ? '$cursorExpression.readTaggedUint64()'
+            : 'Uint64($cursorExpression.readTaggedUint64())';
       case TypeIds.float16:
         return '$cursorExpression.readFloat16()';
       case TypeIds.float32:
@@ -2047,12 +2066,14 @@ GeneratedFieldType(
         return TypeIds.int16;
       case 'Int32':
         return TypeIds.varInt32;
-      case 'UInt8':
+      case 'Uint8':
         return TypeIds.uint8;
-      case 'UInt16':
+      case 'Uint16':
         return TypeIds.uint16;
-      case 'UInt32':
+      case 'Uint32':
         return TypeIds.uint32;
+      case 'Uint64':
+        return TypeIds.uint64;
       case 'Float16':
         return TypeIds.float16;
       case 'Float32':

@@ -748,7 +748,10 @@ Object? readGeneratedStructFieldInfoValue(
       !fieldType.ref &&
       !fieldType.nullable) {
     if (fieldType.isPrimitive) {
-      return context.readPrimitiveValue(fieldType.typeId);
+      return convertPrimitiveFieldValue(
+        context.readPrimitiveValue(fieldType.typeId),
+        fieldType,
+      );
     }
     final resolved = fieldDeclaredTypeInfo(context.typeResolver, field)!;
     if (fieldUsesDeclaredType(context.typeResolver, field)) {

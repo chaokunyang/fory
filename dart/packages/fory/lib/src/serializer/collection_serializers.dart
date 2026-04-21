@@ -26,6 +26,7 @@ import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
+import 'package:fory/src/serializer/serializer_support.dart';
 
 @pragma('vm:prefer-inline')
 void _writeDirectTypeInfoValue(
@@ -192,7 +193,10 @@ T readFieldTypeValue<T>(
     return context.readRef() as T;
   }
   if (fieldType.isPrimitive && !fieldType.nullable) {
-    return context.readPrimitiveValue(fieldType.typeId) as T;
+    return convertPrimitiveFieldValue(
+      context.readPrimitiveValue(fieldType.typeId),
+      fieldType,
+    ) as T;
   }
   if (!usesDeclaredType) {
     if (fieldType.ref) {

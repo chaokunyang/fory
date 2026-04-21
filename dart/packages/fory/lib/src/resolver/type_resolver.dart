@@ -42,11 +42,17 @@ import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/serializer/union_serializer.dart';
-import 'package:fory/src/types/fixed_ints.dart';
 import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
+import 'package:fory/src/types/int16.dart';
+import 'package:fory/src/types/int32.dart';
+import 'package:fory/src/types/int8.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
+import 'package:fory/src/types/uint16.dart';
+import 'package:fory/src/types/uint32.dart';
+import 'package:fory/src/types/uint64.dart';
+import 'package:fory/src/types/uint8.dart';
 import 'package:fory/src/util/hash_util.dart';
 
 enum RegistrationKind { builtin, struct, enumType, ext, union }
@@ -318,14 +324,17 @@ final class TypeResolver {
     if (value is int) {
       return _builtin(int, TypeIds.varInt64);
     }
-    if (value is UInt8) {
-      return _builtin(UInt8, TypeIds.uint8);
+    if (value is Uint8) {
+      return _builtin(Uint8, TypeIds.uint8);
     }
-    if (value is UInt16) {
-      return _builtin(UInt16, TypeIds.uint16);
+    if (value is Uint16) {
+      return _builtin(Uint16, TypeIds.uint16);
     }
-    if (value is UInt32) {
-      return _builtin(UInt32, TypeIds.uint32);
+    if (value is Uint32) {
+      return _builtin(Uint32, TypeIds.uint32);
+    }
+    if (value is Uint64) {
+      return _builtin(Uint64, TypeIds.uint64);
     }
     if (value is Float16) {
       return _builtin(Float16, TypeIds.float16);
@@ -998,19 +1007,19 @@ final class TypeResolver {
       case TypeIds.taggedInt64:
         return _builtin(int, TypeIds.taggedInt64);
       case TypeIds.uint8:
-        return _builtin(UInt8, TypeIds.uint8);
+        return _builtin(Uint8, TypeIds.uint8);
       case TypeIds.uint16:
-        return _builtin(UInt16, TypeIds.uint16);
+        return _builtin(Uint16, TypeIds.uint16);
       case TypeIds.uint32:
-        return _builtin(UInt32, TypeIds.uint32);
+        return _builtin(Uint32, TypeIds.uint32);
       case TypeIds.varUint32:
-        return _builtin(UInt32, TypeIds.varUint32);
+        return _builtin(Uint32, TypeIds.varUint32);
       case TypeIds.uint64:
-        return _builtin(int, TypeIds.uint64);
+        return _builtin(Uint64, TypeIds.uint64);
       case TypeIds.varUint64:
-        return _builtin(int, TypeIds.varUint64);
+        return _builtin(Uint64, TypeIds.varUint64);
       case TypeIds.taggedUint64:
-        return _builtin(int, TypeIds.taggedUint64);
+        return _builtin(Uint64, TypeIds.taggedUint64);
       case TypeIds.float16:
         return _builtin(Float16, TypeIds.float16);
       case TypeIds.float32:
@@ -1202,14 +1211,17 @@ final class TypeResolver {
     if (type == int) {
       return TypeIds.varInt64;
     }
-    if (type == UInt8) {
+    if (type == Uint8) {
       return TypeIds.uint8;
     }
-    if (type == UInt16) {
+    if (type == Uint16) {
       return TypeIds.uint16;
     }
-    if (type == UInt32) {
+    if (type == Uint32) {
       return TypeIds.uint32;
+    }
+    if (type == Uint64) {
+      return TypeIds.uint64;
     }
     if (type == Uint64List) {
       return TypeIds.uint64Array;

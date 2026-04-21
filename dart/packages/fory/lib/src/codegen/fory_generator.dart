@@ -1248,7 +1248,9 @@ GeneratedFieldType(
       case TypeIds.duration:
         return 'writeGeneratedDurationValue(context, $valueExpression)';
       case TypeIds.timestamp:
-        return 'writeGeneratedTimestampValue(context, $valueExpression)';
+        return _isDateTimeType(field.type)
+            ? 'writeGeneratedDateTimeValue(context, $valueExpression)'
+            : 'writeGeneratedTimestampValue(context, $valueExpression)';
       case TypeIds.boolArray:
         return 'writeGeneratedBoolArrayValue(context, $valueExpression)';
       case TypeIds.int8Array:
@@ -1319,7 +1321,9 @@ GeneratedFieldType(
       case TypeIds.duration:
         return '$cursorExpression.writeVarInt64(generatedDurationWireSeconds($valueExpression)); $cursorExpression.writeInt32(generatedDurationWireNanoseconds($valueExpression))';
       case TypeIds.timestamp:
-        return '$cursorExpression.writeInt64($valueExpression.seconds); $cursorExpression.writeUint32(generatedTimestampWireNanoseconds($valueExpression))';
+        return _isDateTimeType(field.type)
+            ? '$cursorExpression.writeInt64(generatedDateTimeWireSeconds($valueExpression)); $cursorExpression.writeUint32(generatedDateTimeWireNanoseconds($valueExpression))'
+            : '$cursorExpression.writeInt64($valueExpression.seconds); $cursorExpression.writeUint32(generatedTimestampWireNanoseconds($valueExpression))';
       case TypeIds.enumById:
         return _enumCursorWriteExpression(
           field.type,
@@ -1394,7 +1398,9 @@ GeneratedFieldType(
       case TypeIds.duration:
         return 'readGeneratedDurationValue(context)';
       case TypeIds.timestamp:
-        return 'readGeneratedTimestampValue(context)';
+        return _isDateTimeType(field.type)
+            ? 'readGeneratedDateTimeValue(context)'
+            : 'readGeneratedTimestampValue(context)';
       case TypeIds.boolArray:
         return 'readGeneratedBoolArrayValue(context)';
       case TypeIds.int8Array:
@@ -1487,7 +1493,9 @@ GeneratedFieldType(
       case TypeIds.duration:
         return 'readGeneratedDurationFromWire($cursorExpression.readVarInt64(), $cursorExpression.readInt32())';
       case TypeIds.timestamp:
-        return 'readGeneratedTimestampFromWire($cursorExpression.readInt64(), $cursorExpression.readUint32())';
+        return _isDateTimeType(field.type)
+            ? 'readGeneratedDateTimeFromWire($cursorExpression.readInt64(), $cursorExpression.readUint32())'
+            : 'readGeneratedTimestampFromWire($cursorExpression.readInt64(), $cursorExpression.readUint32())';
       case TypeIds.enumById:
         return _enumCursorReadExpression(field.type, cursorExpression);
       default:
@@ -2050,6 +2058,7 @@ GeneratedFieldType(
       case 'Float32':
         return TypeIds.float32;
       case 'Timestamp':
+      case 'DateTime':
         return TypeIds.timestamp;
       case 'LocalDate':
         return TypeIds.date;
@@ -2175,6 +2184,13 @@ GeneratedFieldType(
 
   bool _isNullable(DartType type) =>
       type.nullabilitySuffix == NullabilitySuffix.question;
+
+  bool _isDateTimeType(DartType type) {
+    final nonNullable = _withoutNullability(type);
+    return nonNullable is InterfaceType &&
+        nonNullable.element.name == 'DateTime' &&
+        nonNullable.element.library.isDartCore;
+  }
 
   bool _isList(DartType type) => type.isDartCoreList;
 

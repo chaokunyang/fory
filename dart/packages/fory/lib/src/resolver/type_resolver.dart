@@ -121,6 +121,7 @@ final class TypeResolver {
   final List<TypeInfo?> _lastNamedTypeByWireType =
       List<TypeInfo?>.filled(64, null);
   final List<TypeInfo?> _builtinByTypeId = List<TypeInfo?>.filled(64, null);
+  final Map<_BuiltinKey, TypeInfo> _builtinByKey = <_BuiltinKey, TypeInfo>{};
   final List<_NamedTypeReadCacheEntry?> _namedTypeLookupCache =
       List<_NamedTypeReadCacheEntry?>.filled(128, null);
   final Map<Type, TypeInfo> _runtimeTypeValueCache = <Type, TypeInfo>{};
@@ -389,6 +390,9 @@ final class TypeResolver {
     }
     if (value is Timestamp) {
       return _builtin(Timestamp, TypeIds.timestamp);
+    }
+    if (value is DateTime) {
+      return _builtin(DateTime, TypeIds.timestamp);
     }
     throw StateError(
       'Type $runtimeType is not registered. Register generated types with '
@@ -1062,7 +1066,8 @@ final class TypeResolver {
   }
 
   TypeInfo _builtin(Type type, int typeId) {
-    final cached = _builtinByTypeId[typeId];
+    final key = _BuiltinKey(type, typeId);
+    final cached = _builtinByKey[key];
     if (cached != null) {
       return cached;
     }
@@ -1071,7 +1076,7 @@ final class TypeResolver {
       kind: RegistrationKind.builtin,
       typeId: typeId,
       supportsRef: TypeIds.supportsRef(typeId),
-      serializer: _builtinSerializerFor(typeId),
+      serializer: _builtinSerializerFor(typeId, type),
       structSerializer: null,
       userTypeId: null,
       namespace: null,
@@ -1081,11 +1086,15 @@ final class TypeResolver {
       typeDef: null,
       remoteTypeDef: null,
     );
-    _builtinByTypeId[typeId] = resolved;
+    _builtinByKey[key] = resolved;
+    if (_builtinByTypeId[typeId] == null ||
+        identical(_builtinByTypeId[typeId]!.type, type)) {
+      _builtinByTypeId[typeId] = resolved;
+    }
     return resolved;
   }
 
-  Serializer<Object?> _builtinSerializerFor(int typeId) {
+  Serializer<Object?> _builtinSerializerFor(int typeId, Type type) {
     switch (typeId) {
       case TypeIds.boolType:
         return boolSerializer as Serializer<Object?>;
@@ -1163,6 +1172,9 @@ final class TypeResolver {
       case TypeIds.duration:
         return durationSerializer as Serializer<Object?>;
       case TypeIds.timestamp:
+        if (type == DateTime) {
+          return dateTimeSerializer as Serializer<Object?>;
+        }
         return timestampSerializer as Serializer<Object?>;
       default:
         throw StateError('Unsupported builtin type id $typeId.');
@@ -1238,6 +1250,9 @@ final class TypeResolver {
       return TypeIds.duration;
     }
     if (type == Timestamp) {
+      return TypeIds.timestamp;
+    }
+    if (type == DateTime) {
       return TypeIds.timestamp;
     }
     if (type == LocalDate) {
@@ -1375,6 +1390,21 @@ final class TypeResolver {
         return false;
     }
   }
+}
+
+final class _BuiltinKey {
+  final Type type;
+  final int typeId;
+
+  const _BuiltinKey(this.type, this.typeId);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _BuiltinKey && other.type == type && other.typeId == typeId;
+
+  @override
+  int get hashCode => Object.hash(type, typeId);
 }
 
 final class _NamedTypeReadCacheEntry {

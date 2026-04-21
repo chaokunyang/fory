@@ -51,6 +51,15 @@ void _validateTimestampNanoseconds(int nanoseconds) {
   }
 }
 
+void _validateDateTimeNanoseconds(int nanoseconds) {
+  _validateTimestampNanoseconds(nanoseconds);
+  if (nanoseconds.remainder(1000) != 0) {
+    throw StateError(
+      'Timestamp nanoseconds $nanoseconds exceed Dart DateTime microsecond precision.',
+    );
+  }
+}
+
 int durationWireSeconds(Duration value) {
   final exact = _exactDurationWire[value];
   if (exact != null && exact.microseconds == value.inMicroseconds) {
@@ -92,9 +101,39 @@ int timestampWireNanoseconds(Timestamp value) {
   return value.nanoseconds;
 }
 
+int dateTimeWireSeconds(DateTime value) {
+  final utcValue = value.toUtc();
+  final microseconds = utcValue.microsecondsSinceEpoch;
+  var seconds = microseconds ~/ Duration.microsecondsPerSecond;
+  var micros = microseconds.remainder(Duration.microsecondsPerSecond);
+  if (micros < 0) {
+    micros += Duration.microsecondsPerSecond;
+    seconds -= 1;
+  }
+  return seconds;
+}
+
+int dateTimeWireNanoseconds(DateTime value) {
+  final utcValue = value.toUtc();
+  var micros =
+      utcValue.microsecondsSinceEpoch.remainder(Duration.microsecondsPerSecond);
+  if (micros < 0) {
+    micros += Duration.microsecondsPerSecond;
+  }
+  return micros * 1000;
+}
+
 Timestamp timestampFromWire(int seconds, int nanoseconds) {
   _validateTimestampNanoseconds(nanoseconds);
   return Timestamp(seconds, nanoseconds);
+}
+
+DateTime dateTimeFromWire(int seconds, int nanoseconds) {
+  _validateDateTimeNanoseconds(nanoseconds);
+  return DateTime.fromMicrosecondsSinceEpoch(
+    seconds * Duration.microsecondsPerSecond + nanoseconds ~/ 1000,
+    isUtc: true,
+  );
 }
 
 final class LocalDateSerializer extends Serializer<LocalDate> {
@@ -154,6 +193,28 @@ final class TimestampSerializer extends Serializer<Timestamp> {
   }
 }
 
+final class DateTimeSerializer extends Serializer<DateTime> {
+  const DateTimeSerializer();
+
+  @override
+  bool get supportsRef => false;
+
+  @override
+  void write(WriteContext context, DateTime value) {
+    context.buffer.writeInt64(dateTimeWireSeconds(value));
+    context.buffer.writeUint32(dateTimeWireNanoseconds(value));
+  }
+
+  @override
+  DateTime read(ReadContext context) {
+    return dateTimeFromWire(
+      context.buffer.readInt64(),
+      context.buffer.readUint32(),
+    );
+  }
+}
+
 const LocalDateSerializer localDateSerializer = LocalDateSerializer();
 const DurationSerializer durationSerializer = DurationSerializer();
 const TimestampSerializer timestampSerializer = TimestampSerializer();
+const DateTimeSerializer dateTimeSerializer = DateTimeSerializer();

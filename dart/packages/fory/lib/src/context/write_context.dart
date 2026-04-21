@@ -357,6 +357,12 @@ final class WriteContext {
         durationSerializer.write(this, value as Duration);
         return;
       case TypeIds.timestamp:
+        if (value is DateTime ||
+            declaredFieldType?.type == DateTime ||
+            resolved.type == DateTime) {
+          dateTimeSerializer.write(this, value as DateTime);
+          return;
+        }
         timestampSerializer.write(this, value as Timestamp);
         return;
       default:

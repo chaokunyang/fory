@@ -30,9 +30,11 @@ class TimeEnvelope {
 
   LocalDate date = const LocalDate(1970, 1, 1);
   Timestamp timestamp = const Timestamp(0, 0);
+  DateTime instant = DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true);
   Duration duration = Duration.zero;
   LocalDate? optionalDate;
   Timestamp? optionalTimestamp;
+  DateTime? optionalInstant;
   Duration? optionalDuration;
 }
 
@@ -48,9 +50,11 @@ void _registerTimeTypes(Fory fory) {
 void _expectTimeEnvelope(TimeEnvelope actual, TimeEnvelope expected) {
   expect(actual.date, equals(expected.date));
   expect(actual.timestamp, equals(expected.timestamp));
+  expect(actual.instant, equals(expected.instant));
   expect(actual.duration, equals(expected.duration));
   expect(actual.optionalDate, equals(expected.optionalDate));
   expect(actual.optionalTimestamp, equals(expected.optionalTimestamp));
+  expect(actual.optionalInstant, equals(expected.optionalInstant));
   expect(actual.optionalDuration, equals(expected.optionalDuration));
 }
 
@@ -58,11 +62,13 @@ TimeEnvelope _sampleTimeEnvelope() {
   return TimeEnvelope()
     ..date = const LocalDate(2024, 2, 29)
     ..timestamp = const Timestamp(-123456789, 987654321)
+    ..instant = DateTime.fromMicrosecondsSinceEpoch(-1, isUtc: true)
     ..duration = const Duration(days: 2, seconds: 3, microseconds: 456789)
     ..optionalDate = LocalDate.fromEpochDay(-1)
     ..optionalTimestamp = Timestamp.fromDateTime(
       DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700),
     )
+    ..optionalInstant = DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700)
     ..optionalDuration = const Duration(microseconds: -1500001);
 }
 
@@ -97,6 +103,41 @@ void main() {
         expect(
             fory.deserialize<Timestamp>(fory.serialize(value)), equals(value));
       }
+    });
+
+    test('round-trips DateTime edge cases as timestamp payloads', () {
+      final fory = Fory();
+      final cases = <DateTime>[
+        DateTime.fromMicrosecondsSinceEpoch(-1, isUtc: true),
+        DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true),
+        DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700),
+      ];
+
+      for (final value in cases) {
+        expect(
+            fory.deserialize<DateTime>(fory.serialize(value)), equals(value));
+      }
+    });
+
+    test('reads timestamp payloads directly as DateTime', () {
+      final fory = Fory();
+      final value = const Timestamp(-1, 999999000);
+
+      expect(
+        fory.deserialize<DateTime>(fory.serialize(value)),
+        equals(DateTime.fromMicrosecondsSinceEpoch(-1, isUtc: true)),
+      );
+    });
+
+    test('normalizes local DateTime values to UTC instants', () {
+      final fory = Fory();
+      final value = DateTime(2024, 1, 2, 3, 4, 5, 6, 700);
+
+      final roundTrip = fory.deserialize<DateTime?>(fory.serialize(value));
+
+      expect(roundTrip, isNotNull);
+      expect(roundTrip!.isUtc, isTrue);
+      expect(roundTrip.isAtSameMomentAs(value), isTrue);
     });
 
     test('converts negative DateTime values to Timestamp correctly', () {
@@ -185,6 +226,7 @@ void main() {
 
       expect(roundTrip.optionalDate, isNull);
       expect(roundTrip.optionalTimestamp, isNull);
+      expect(roundTrip.optionalInstant, isNull);
       expect(roundTrip.optionalDuration, isNull);
     });
 
@@ -284,6 +326,26 @@ void main() {
             (error) => error.toString(),
             'message',
             contains('out of range'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects DateTime payloads with sub-microsecond precision', () {
+      final fory = Fory();
+      final bytes = Uint8List.fromList(
+        fory.serialize(DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true)),
+      );
+      final view = ByteData.sublistView(bytes);
+      view.setUint32(bytes.length - 4, 1, Endian.little);
+
+      expect(
+        () => fory.deserialize<DateTime>(bytes),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('DateTime microsecond precision'),
           ),
         ),
       );

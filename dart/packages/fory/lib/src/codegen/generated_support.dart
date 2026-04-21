@@ -647,8 +647,23 @@ int generatedTimestampWireNanoseconds(Timestamp value) {
 }
 
 @internal
+int generatedDateTimeWireSeconds(DateTime value) {
+  return dateTimeWireSeconds(value);
+}
+
+@internal
+int generatedDateTimeWireNanoseconds(DateTime value) {
+  return dateTimeWireNanoseconds(value);
+}
+
+@internal
 Timestamp readGeneratedTimestampFromWire(int seconds, int nanoseconds) {
   return timestampFromWire(seconds, nanoseconds);
+}
+
+@internal
+DateTime readGeneratedDateTimeFromWire(int seconds, int nanoseconds) {
+  return dateTimeFromWire(seconds, nanoseconds);
 }
 
 @internal
@@ -657,8 +672,18 @@ void writeGeneratedTimestampValue(WriteContext context, Timestamp value) {
 }
 
 @internal
+void writeGeneratedDateTimeValue(WriteContext context, DateTime value) {
+  const DateTimeSerializer().write(context, value);
+}
+
+@internal
 Timestamp readGeneratedTimestampValue(ReadContext context) {
   return const TimestampSerializer().read(context);
+}
+
+@internal
+DateTime readGeneratedDateTimeValue(ReadContext context) {
+  return const DateTimeSerializer().read(context);
 }
 
 @internal

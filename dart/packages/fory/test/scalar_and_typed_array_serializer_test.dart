@@ -149,7 +149,7 @@ void main() {
       expect(ordinary, equals(Float32(-1.5)));
     });
 
-    test('round-trips LocalDate and Timestamp edge values', () {
+    test('round-trips LocalDate and decodes root timestamps as DateTime', () {
       final fory = Fory();
 
       final beforeEpoch = _roundTripRoot<LocalDate>(
@@ -160,23 +160,24 @@ void main() {
         fory,
         const LocalDate(2024, 2, 29),
       );
-      final negativeTimestamp = _roundTripRoot<Timestamp>(
+      final negativeTimestamp = _roundTripRoot<DateTime>(
         fory,
-        const Timestamp(-123, 456789123),
+        const Timestamp(-123, 456789000),
       );
-      final fromDateTime = _roundTripRoot<Timestamp>(
+      final fromDateTime = _roundTripRoot<DateTime>(
         fory,
         Timestamp.fromDateTime(DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700)),
       );
 
       expect(beforeEpoch, equals(LocalDate.fromEpochDay(-1)));
       expect(leapDay, equals(const LocalDate(2024, 2, 29)));
-      expect(negativeTimestamp, equals(const Timestamp(-123, 456789123)));
+      expect(
+        negativeTimestamp,
+        equals(const Timestamp(-123, 456789000).toDateTime()),
+      );
       expect(
         fromDateTime,
-        equals(
-          Timestamp.fromDateTime(DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700)),
-        ),
+        equals(DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700)),
       );
     });
 

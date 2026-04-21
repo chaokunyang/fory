@@ -120,7 +120,6 @@ final class TypeResolver {
   final ParsedTypeMetaCache _parsedTypeMetaCache = ParsedTypeMetaCache();
   final List<TypeInfo?> _lastNamedTypeByWireType =
       List<TypeInfo?>.filled(64, null);
-  final List<TypeInfo?> _builtinByTypeId = List<TypeInfo?>.filled(64, null);
   final Map<_BuiltinKey, TypeInfo> _builtinByKey = <_BuiltinKey, TypeInfo>{};
   final List<_NamedTypeReadCacheEntry?> _namedTypeLookupCache =
       List<_NamedTypeReadCacheEntry?>.filled(128, null);
@@ -1035,7 +1034,7 @@ final class TypeResolver {
       case TypeIds.duration:
         return _builtin(Duration, TypeIds.duration);
       case TypeIds.timestamp:
-        return _builtin(Timestamp, TypeIds.timestamp);
+        return _builtin(DateTime, TypeIds.timestamp);
       case TypeIds.boolArray:
         return _builtin(List<bool>, TypeIds.boolArray);
       case TypeIds.int8Array:
@@ -1087,10 +1086,6 @@ final class TypeResolver {
       remoteTypeDef: null,
     );
     _builtinByKey[key] = resolved;
-    if (_builtinByTypeId[typeId] == null ||
-        identical(_builtinByTypeId[typeId]!.type, type)) {
-      _builtinByTypeId[typeId] = resolved;
-    }
     return resolved;
   }
 
@@ -1172,10 +1167,10 @@ final class TypeResolver {
       case TypeIds.duration:
         return durationSerializer as Serializer<Object?>;
       case TypeIds.timestamp:
-        if (type == DateTime) {
-          return dateTimeSerializer as Serializer<Object?>;
+        if (type == Timestamp) {
+          return timestampSerializer as Serializer<Object?>;
         }
-        return timestampSerializer as Serializer<Object?>;
+        return dateTimeSerializer as Serializer<Object?>;
       default:
         throw StateError('Unsupported builtin type id $typeId.');
     }

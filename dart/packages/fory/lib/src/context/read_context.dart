@@ -36,6 +36,7 @@ import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/types/float16.dart';
+import 'package:fory/src/types/timestamp.dart';
 
 /// Read-side serializer context.
 ///
@@ -211,7 +212,7 @@ final class ReadContext {
   void setReadRef(int id, Object? value) => _refReader.setReadRef(id, value);
 
   /// Reads a nullable value using Ref semantics and wire type metadata.
-  Object? readRef({Type? preferredType}) {
+  Object? readRef() {
     final flag = _refReader.tryPreserveRefId(_buffer);
     final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
     if (flag == RefWriter.nullFlag) {
@@ -220,22 +221,7 @@ final class ReadContext {
     if (flag == RefWriter.refFlag) {
       return _refReader.getReadRef();
     }
-    var resolved = _readTypeMeta();
-    if (preferredType != null &&
-        resolved.kind == RegistrationKind.builtin &&
-        resolved.typeId == TypeIds.timestamp &&
-        preferredType == DateTime) {
-      resolved = _typeResolver.resolveFieldType(
-        FieldType(
-          type: DateTime,
-          typeId: TypeIds.timestamp,
-          nullable: true,
-          ref: false,
-          dynamic: false,
-          arguments: const <FieldType>[],
-        ),
-      );
-    }
+    final resolved = _readTypeMeta();
     final rootPreservedRefId = preservedRefId == null &&
             flag == RefWriter.notNullValueFlag &&
             _depth == 0 &&
@@ -368,10 +354,11 @@ final class ReadContext {
       case TypeIds.duration:
         return const DurationSerializer().read(this);
       case TypeIds.timestamp:
-        if (declaredFieldType?.type == DateTime || resolved.type == DateTime) {
-          return const DateTimeSerializer().read(this);
+        if (declaredFieldType?.type == Timestamp ||
+            resolved.type == Timestamp) {
+          return const TimestampSerializer().read(this);
         }
-        return const TimestampSerializer().read(this);
+        return const DateTimeSerializer().read(this);
       default:
         if (resolved.kind == RegistrationKind.struct) {
           return resolved.structSerializer!.readValue(

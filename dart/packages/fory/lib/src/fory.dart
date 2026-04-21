@@ -43,13 +43,6 @@ final class Fory {
   static const int _xlangHeaderFlag = 0x02;
   static const int _outOfBandHeaderFlag = 0x04;
 
-  static Type? _preferredRootType<T>() {
-    if (T == DateTime || T.toString() == 'DateTime?') {
-      return DateTime;
-    }
-    return null;
-  }
-
   late final Buffer _buffer;
   late final WriteContext _writeContext;
   late final ReadContext _readContext;
@@ -150,8 +143,7 @@ final class Fory {
           'Only xlang payloads are supported by the Dart runtime.',
         );
       }
-      final value =
-          _readContext.readRef(preferredType: _preferredRootType<T>());
+      final value = _readContext.readRef();
       if (value is T) {
         return value;
       }

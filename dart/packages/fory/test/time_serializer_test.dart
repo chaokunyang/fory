@@ -89,19 +89,32 @@ void main() {
       }
     });
 
-    test('round-trips Timestamp edge cases', () {
+    test('decodes root Timestamp payloads to DateTime by default', () {
       final fory = Fory();
-      final cases = <Timestamp>[
-        const Timestamp(0, 0),
-        const Timestamp(-1, 1),
-        const Timestamp(1, 999999999),
-        const Timestamp(-123456789, 987654321),
-        Timestamp.fromDateTime(DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700)),
+      final cases = <MapEntry<Timestamp, DateTime>>[
+        MapEntry(
+          const Timestamp(0, 0),
+          DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true),
+        ),
+        MapEntry(
+          const Timestamp(-1, 1000),
+          DateTime.fromMicrosecondsSinceEpoch(-999999, isUtc: true),
+        ),
+        MapEntry(
+          const Timestamp(1, 999999000),
+          DateTime.fromMicrosecondsSinceEpoch(1999999, isUtc: true),
+        ),
+        MapEntry(
+          Timestamp.fromDateTime(DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700)),
+          DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700),
+        ),
       ];
 
-      for (final value in cases) {
-        expect(
-            fory.deserialize<Timestamp>(fory.serialize(value)), equals(value));
+      for (final entry in cases) {
+        final roundTrip = fory.deserialize<Object?>(fory.serialize(entry.key));
+
+        expect(roundTrip, isA<DateTime>());
+        expect(roundTrip, equals(entry.value));
       }
     });
 
@@ -119,12 +132,30 @@ void main() {
       }
     });
 
-    test('reads timestamp payloads directly as DateTime', () {
+    test(
+        'root containers without declared element types decode timestamps as DateTime',
+        () {
       final fory = Fory();
-      final value = const Timestamp(-1, 999999000);
+      final roundTrip = fory.deserialize<List<Object?>>(
+        fory.serialize(<Object>[const Timestamp(-1, 999999000)]),
+      );
 
       expect(
-        fory.deserialize<DateTime>(fory.serialize(value)),
+        roundTrip.single,
+        isA<DateTime>().having(
+          (value) => value,
+          'value',
+          equals(DateTime.fromMicrosecondsSinceEpoch(-1, isUtc: true)),
+        ),
+      );
+    });
+
+    test('reads timestamp payloads directly as DateTime', () {
+      final fory = Fory();
+
+      expect(
+        fory.deserialize<DateTime>(
+            fory.serialize(const Timestamp(-1, 999999000))),
         equals(DateTime.fromMicrosecondsSinceEpoch(-1, isUtc: true)),
       );
     });
@@ -198,7 +229,7 @@ void main() {
     test('does not preserve references for repeated temporal values', () {
       final fory = Fory();
       final duration = Duration(microseconds: 1);
-      final timestamp = Timestamp(-1, 1);
+      final timestamp = Timestamp(-1, 1000);
       final date = LocalDate.fromEpochDay(-1);
 
       final roundTrip = fory.deserialize<List<Object?>>(
@@ -210,6 +241,7 @@ void main() {
 
       expect(roundTrip[0], equals(roundTrip[1]));
       expect(identical(roundTrip[0], roundTrip[1]), isFalse);
+      expect(roundTrip[2], isA<DateTime>());
       expect(roundTrip[2], equals(roundTrip[3]));
       expect(identical(roundTrip[2], roundTrip[3]), isFalse);
       expect(roundTrip[4], equals(roundTrip[5]));
@@ -320,7 +352,7 @@ void main() {
       view.setUint32(bytes.length - 4, 1000000000, Endian.little);
 
       expect(
-        () => fory.deserialize<Timestamp>(bytes),
+        () => fory.deserialize<Object?>(bytes),
         throwsA(
           isA<StateError>().having(
             (error) => error.toString(),

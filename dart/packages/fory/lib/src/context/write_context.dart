@@ -36,6 +36,7 @@ import 'package:fory/src/serializer/map_serializers.dart';
 import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
+import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/local_date.dart';
@@ -348,6 +349,9 @@ final class WriteContext {
         return;
       case TypeIds.date:
         localDateSerializer.write(this, value as LocalDate);
+        return;
+      case TypeIds.duration:
+        durationSerializer.write(this, value as Duration);
         return;
       case TypeIds.timestamp:
         timestampSerializer.write(this, value as Timestamp);

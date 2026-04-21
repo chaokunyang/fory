@@ -23,8 +23,6 @@ import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/string_encoding.dart';
-import 'package:fory/src/types/local_date.dart';
-import 'package:fory/src/types/timestamp.dart';
 
 final class StringSerializer extends Serializer<String> {
   const StringSerializer();
@@ -91,45 +89,5 @@ final class BinarySerializer extends Serializer<Uint8List> {
   }
 }
 
-final class LocalDateSerializer extends Serializer<LocalDate> {
-  const LocalDateSerializer();
-
-  @override
-  bool get supportsRef => false;
-
-  @override
-  void write(WriteContext context, LocalDate value) {
-    context.buffer.writeInt32(value.toEpochDay());
-  }
-
-  @override
-  LocalDate read(ReadContext context) {
-    return LocalDate.fromEpochDay(context.buffer.readInt32());
-  }
-}
-
-final class TimestampSerializer extends Serializer<Timestamp> {
-  const TimestampSerializer();
-
-  @override
-  bool get supportsRef => false;
-
-  @override
-  void write(WriteContext context, Timestamp value) {
-    context.buffer.writeInt64(value.seconds);
-    context.buffer.writeUint32(value.nanoseconds);
-  }
-
-  @override
-  Timestamp read(ReadContext context) {
-    return Timestamp(
-      context.buffer.readInt64(),
-      context.buffer.readUint32(),
-    );
-  }
-}
-
 const StringSerializer stringSerializer = StringSerializer();
 const BinarySerializer binarySerializer = BinarySerializer();
-const LocalDateSerializer localDateSerializer = LocalDateSerializer();
-const TimestampSerializer timestampSerializer = TimestampSerializer();

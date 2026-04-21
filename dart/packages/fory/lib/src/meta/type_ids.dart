@@ -54,6 +54,7 @@ abstract final class TypeIds {
   static const int typedUnion = 34;
   static const int namedUnion = 35;
   static const int none = 36;
+  static const int duration = 37;
   static const int timestamp = 38;
   static const int date = 39;
   static const int binary = 41;
@@ -110,6 +111,7 @@ abstract final class TypeIds {
       isPrimitive(typeId) ||
       typeId == string ||
       typeId == binary ||
+      typeId == duration ||
       typeId == timestamp ||
       typeId == date ||
       typeId == boolArray ||
@@ -129,7 +131,11 @@ abstract final class TypeIds {
     if (typeId == unknown) {
       return true;
     }
-    if (isPrimitive(typeId) || typeId == binary) {
+    if (isPrimitive(typeId) ||
+        typeId == binary ||
+        typeId == duration ||
+        typeId == timestamp ||
+        typeId == date) {
       return false;
     }
     switch (typeId) {

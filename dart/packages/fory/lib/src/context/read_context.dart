@@ -33,6 +33,7 @@ import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
+import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/types/float16.dart';
 
@@ -347,6 +348,8 @@ final class ReadContext {
         );
       case TypeIds.date:
         return const LocalDateSerializer().read(this);
+      case TypeIds.duration:
+        return const DurationSerializer().read(this);
       case TypeIds.timestamp:
         return const TimestampSerializer().read(this);
       default:

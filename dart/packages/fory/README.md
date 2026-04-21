@@ -14,7 +14,7 @@ cases.
 - Optional reference tracking for shared and circular object graphs
 - Manual serializers for external types, custom payloads, and unions
 - Explicit xlang value wrappers such as `Int32`, `UInt32`, `Float16`,
-  `Float32`, `LocalDate`, and `Timestamp`
+  `Float32`, `LocalDate`, and `Timestamp`, plus `Duration` support
 
 ## Getting Started
 
@@ -236,6 +236,7 @@ to represent these xlang wire types.
 | float64         | `double`                 |
 | string          | `String`                 |
 | binary          | `Uint8List`              |
+| duration        | `Duration`               |
 | local_date      | `LocalDate`              |
 | timestamp       | `Timestamp`              |
 | list            | `List`                   |
@@ -267,7 +268,7 @@ The main exported API includes:
   overrides
 - Numeric wrappers: `Int8`, `Int16`, `Int32`, `UInt8`, `UInt16`, `UInt32`,
   `Float16`, `Float32`
-- Temporal wrappers: `LocalDate`, `Timestamp`
+- Temporal types: `LocalDate`, `Timestamp`, `Duration`
 
 ## Cross-Language Notes
 

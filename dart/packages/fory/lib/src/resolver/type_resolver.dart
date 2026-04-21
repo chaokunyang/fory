@@ -39,6 +39,7 @@ import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/serializer/struct_serializer.dart';
+import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/serializer/union_serializer.dart';
 import 'package:fory/src/types/fixed_ints.dart';
@@ -383,6 +384,9 @@ final class TypeResolver {
     if (value is LocalDate) {
       return _builtin(LocalDate, TypeIds.date);
     }
+    if (value is Duration) {
+      return _builtin(Duration, TypeIds.duration);
+    }
     if (value is Timestamp) {
       return _builtin(Timestamp, TypeIds.timestamp);
     }
@@ -418,6 +422,7 @@ final class TypeResolver {
       case TypeIds.set:
       case TypeIds.map:
       case TypeIds.binary:
+      case TypeIds.duration:
       case TypeIds.timestamp:
       case TypeIds.date:
       case TypeIds.boolArray:
@@ -804,6 +809,7 @@ final class TypeResolver {
         fieldType.typeId == TypeIds.string ||
         fieldType.typeId == TypeIds.binary ||
         fieldType.typeId == TypeIds.date ||
+        fieldType.typeId == TypeIds.duration ||
         fieldType.typeId == TypeIds.timestamp) {
       return fieldType.typeId;
     }
@@ -1019,6 +1025,8 @@ final class TypeResolver {
         return _builtin(Uint8List, TypeIds.binary);
       case TypeIds.date:
         return _builtin(LocalDate, TypeIds.date);
+      case TypeIds.duration:
+        return _builtin(Duration, TypeIds.duration);
       case TypeIds.timestamp:
         return _builtin(Timestamp, TypeIds.timestamp);
       case TypeIds.boolArray:
@@ -1145,6 +1153,8 @@ final class TypeResolver {
         return mapSerializer as Serializer<Object?>;
       case TypeIds.date:
         return localDateSerializer as Serializer<Object?>;
+      case TypeIds.duration:
+        return durationSerializer as Serializer<Object?>;
       case TypeIds.timestamp:
         return timestampSerializer as Serializer<Object?>;
       default:
@@ -1213,6 +1223,9 @@ final class TypeResolver {
     }
     if (type == Uint8List) {
       return TypeIds.binary;
+    }
+    if (type == Duration) {
+      return TypeIds.duration;
     }
     if (type == Timestamp) {
       return TypeIds.timestamp;

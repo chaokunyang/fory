@@ -65,11 +65,17 @@ Avoid sending raw `DateTime` across languages — time zone handling and epoch d
 
 - `Timestamp` — a UTC instant with nanosecond precision (seconds + nanoseconds)
 - `LocalDate` — a calendar date without time or time zone
+- `Duration` — an elapsed time value using Dart's built-in `Duration`
 
 ```dart
 final now = Timestamp.fromDateTime(DateTime.now().toUtc());
 final birthday = LocalDate(1990, 12, 1);
+final timeout = const Duration(seconds: 30);
 ```
+
+`Duration` support in Dart is exact to microseconds. Incoming xlang duration
+payloads that use sub-microsecond nanoseconds are rejected instead of being
+silently truncated.
 
 ## Structs and Enums
 

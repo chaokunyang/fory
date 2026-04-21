@@ -116,7 +116,7 @@ dart run build_runner build --delete-conflicting-outputs
 - `@ForyField(...)` — per-field options (skip, ID, nullability, references)
 - Integer wrappers: `Int8`, `Int16`, `Int32`, `UInt8`, `UInt16`, `UInt32`
 - Float wrappers: `Float16`, `Float32`
-- Time wrappers: `LocalDate`, `Timestamp`
+- Time types: `LocalDate`, `Timestamp`, `Duration`
 
 ## Documentation
 

@@ -34,6 +34,7 @@ import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
 import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
+import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 
 final BigInt _generatedCursorMask64Big = (BigInt.one << 64) - BigInt.one;
@@ -616,6 +617,41 @@ LocalDate readGeneratedLocalDateValue(ReadContext context) {
 }
 
 @internal
+int generatedDurationWireSeconds(Duration value) {
+  return durationWireSeconds(value);
+}
+
+@internal
+int generatedDurationWireNanoseconds(Duration value) {
+  return durationWireNanoseconds(value);
+}
+
+@internal
+Duration readGeneratedDurationFromWire(int seconds, int nanoseconds) {
+  return durationFromWire(seconds, nanoseconds);
+}
+
+@internal
+void writeGeneratedDurationValue(WriteContext context, Duration value) {
+  const DurationSerializer().write(context, value);
+}
+
+@internal
+Duration readGeneratedDurationValue(ReadContext context) {
+  return const DurationSerializer().read(context);
+}
+
+@internal
+int generatedTimestampWireNanoseconds(Timestamp value) {
+  return timestampWireNanoseconds(value);
+}
+
+@internal
+Timestamp readGeneratedTimestampFromWire(int seconds, int nanoseconds) {
+  return timestampFromWire(seconds, nanoseconds);
+}
+
+@internal
 void writeGeneratedTimestampValue(WriteContext context, Timestamp value) {
   const TimestampSerializer().write(context, value);
 }
@@ -726,8 +762,7 @@ Object readGeneratedStructDirectValue(
   if (fieldUsesDeclaredType(context.typeResolver, field)) {
     resolved = declared;
   } else {
-    resolved =
-        context.readTypeMetaValue(declared.isNamed ? declared : null);
+    resolved = context.readTypeMetaValue(declared.isNamed ? declared : null);
   }
   context.increaseDepth();
   final value = resolved.structSerializer!.readValue(context, resolved);

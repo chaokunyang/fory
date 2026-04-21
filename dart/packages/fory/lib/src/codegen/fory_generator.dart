@@ -89,9 +89,8 @@ final class ForyGenerator extends Generator {
     final generatedApiName = '${helperBaseName}Fory';
 
     final enumSpecs = enumElements.map(_analyzeEnum).toList(growable: false);
-    final structSpecs = annotatedClasses
-        .map(_analyzeStruct)
-        .toList(growable: false);
+    final structSpecs =
+        annotatedClasses.map(_analyzeStruct).toList(growable: false);
     final output = StringBuffer()
       ..writeln(
         '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, no_leading_underscores_for_local_identifiers, unused_element, unused_element_parameter, unnecessary_null_comparison',
@@ -215,9 +214,8 @@ final class ForyGenerator extends Generator {
     }
     if (_isList(type) || _isSet(type)) {
       final argument = (type as InterfaceType).typeArguments.single;
-      final elementSpec = typeSpec is _ListTypeSpecInfo
-          ? typeSpec.element
-          : null;
+      final elementSpec =
+          typeSpec is _ListTypeSpecInfo ? typeSpec.element : null;
       return _GeneratedFieldTypeSpec(
         typeLiteral: _typeReferenceLiteral(type),
         typeId: _typeIdFor(type),
@@ -278,8 +276,7 @@ final class ForyGenerator extends Generator {
     List<_GeneratedFieldSpec> fields,
   ) {
     final unnamedConstructor = element.unnamedConstructor;
-    final hasZeroArgConstructor =
-        unnamedConstructor != null &&
+    final hasZeroArgConstructor = unnamedConstructor != null &&
         !unnamedConstructor.isFactory &&
         unnamedConstructor.parameters.every(
           (parameter) => parameter.isOptional,
@@ -919,9 +916,8 @@ GeneratedFieldType(
       nullable: fieldType.nullable,
       ref: fieldType.ref,
       dynamic: fieldType.dynamic,
-      arguments: fieldType.arguments
-          .map(_fromDebugFieldType)
-          .toList(growable: false),
+      arguments:
+          fieldType.arguments.map(_fromDebugFieldType).toList(growable: false),
     );
   }
 
@@ -1131,7 +1127,7 @@ GeneratedFieldType(
   }
 
   List<_DirectGeneratedWriteReservationRun>
-  _directGeneratedWriteReservationRuns(List<_GeneratedFieldSpec> fields) {
+      _directGeneratedWriteReservationRuns(List<_GeneratedFieldSpec> fields) {
     final runs = <_DirectGeneratedWriteReservationRun>[];
     int? start;
     var bytes = 0;
@@ -1184,6 +1180,8 @@ GeneratedFieldType(
       case TypeIds.uint64:
       case TypeIds.float64:
         return 8;
+      case TypeIds.duration:
+        return 14;
       case TypeIds.timestamp:
         return 12;
       case TypeIds.varInt32:
@@ -1247,6 +1245,8 @@ GeneratedFieldType(
         return 'writeGeneratedBinaryValue(context, $valueExpression)';
       case TypeIds.date:
         return 'writeGeneratedLocalDateValue(context, $valueExpression)';
+      case TypeIds.duration:
+        return 'writeGeneratedDurationValue(context, $valueExpression)';
       case TypeIds.timestamp:
         return 'writeGeneratedTimestampValue(context, $valueExpression)';
       case TypeIds.boolArray:
@@ -1316,8 +1316,10 @@ GeneratedFieldType(
         return '$cursorExpression.writeFloat64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.date:
         return '$cursorExpression.writeInt32($valueExpression.toEpochDay())';
+      case TypeIds.duration:
+        return '$cursorExpression.writeVarInt64(generatedDurationWireSeconds($valueExpression)); $cursorExpression.writeInt32(generatedDurationWireNanoseconds($valueExpression))';
       case TypeIds.timestamp:
-        return '$cursorExpression.writeInt64($valueExpression.seconds); $cursorExpression.writeUint32($valueExpression.nanoseconds)';
+        return '$cursorExpression.writeInt64($valueExpression.seconds); $cursorExpression.writeUint32(generatedTimestampWireNanoseconds($valueExpression))';
       case TypeIds.enumById:
         return _enumCursorWriteExpression(
           field.type,
@@ -1389,6 +1391,8 @@ GeneratedFieldType(
         return 'readGeneratedBinaryValue(context)';
       case TypeIds.date:
         return 'readGeneratedLocalDateValue(context)';
+      case TypeIds.duration:
+        return 'readGeneratedDurationValue(context)';
       case TypeIds.timestamp:
         return 'readGeneratedTimestampValue(context)';
       case TypeIds.boolArray:
@@ -1480,8 +1484,10 @@ GeneratedFieldType(
         return '$cursorExpression.readFloat64()';
       case TypeIds.date:
         return 'LocalDate.fromEpochDay($cursorExpression.readInt32())';
+      case TypeIds.duration:
+        return 'readGeneratedDurationFromWire($cursorExpression.readVarInt64(), $cursorExpression.readInt32())';
       case TypeIds.timestamp:
-        return 'Timestamp($cursorExpression.readInt64(), $cursorExpression.readUint32())';
+        return 'readGeneratedTimestampFromWire($cursorExpression.readInt64(), $cursorExpression.readUint32())';
       case TypeIds.enumById:
         return _enumCursorReadExpression(field.type, cursorExpression);
       default:
@@ -1703,8 +1709,7 @@ GeneratedFieldType(
     if (leftCompressed != rightCompressed) {
       return leftCompressed ? 1 : -1;
     }
-    final sizeCompare =
-        _primitiveSize(right.fieldType.typeId) -
+    final sizeCompare = _primitiveSize(right.fieldType.typeId) -
         _primitiveSize(left.fieldType.typeId);
     if (sizeCompare != 0) {
       return sizeCompare;
@@ -1817,6 +1822,7 @@ GeneratedFieldType(
       case TypeIds.string:
       case TypeIds.binary:
       case TypeIds.date:
+      case TypeIds.duration:
       case TypeIds.timestamp:
       case TypeIds.boolArray:
       case TypeIds.int8Array:
@@ -1857,9 +1863,9 @@ GeneratedFieldType(
         'tagged' => TypeIds.taggedInt64,
         'fixed' => TypeIds.int64,
         _ => throw InvalidGenerationSourceError(
-          'Unsupported Int64Type encoding: $encodingValue.',
-          element: field,
-        ),
+            'Unsupported Int64Type encoding: $encodingValue.',
+            element: field,
+          ),
       };
       return _IntegerAnnotationSpec(typeId: typeId);
     }
@@ -1891,9 +1897,9 @@ GeneratedFieldType(
         'tagged' => TypeIds.taggedUint64,
         'fixed' => TypeIds.uint64,
         _ => throw InvalidGenerationSourceError(
-          'Unsupported Uint64Type encoding: $encodingValue.',
-          element: field,
-        ),
+            'Unsupported Uint64Type encoding: $encodingValue.',
+            element: field,
+          ),
       };
       return _IntegerAnnotationSpec(typeId: typeId);
     }
@@ -1929,9 +1935,8 @@ GeneratedFieldType(
     final options = _readTypeOptions(reader);
     final keyObj = reader.peek('key');
     final valueObj = reader.peek('value');
-    final key = keyObj != null && !keyObj.isNull
-        ? _readTypeSpecObj(keyObj)
-        : null;
+    final key =
+        keyObj != null && !keyObj.isNull ? _readTypeSpecObj(keyObj) : null;
     final value = valueObj != null && !valueObj.isNull
         ? _readTypeSpecObj(valueObj)
         : null;
@@ -2048,6 +2053,8 @@ GeneratedFieldType(
         return TypeIds.timestamp;
       case 'LocalDate':
         return TypeIds.date;
+      case 'Duration':
+        return TypeIds.duration;
       case 'Object':
         return TypeIds.unknown;
       default:
@@ -2200,9 +2207,8 @@ GeneratedFieldType(
       if (nonNullable.typeArguments.isEmpty) {
         return baseName;
       }
-      final typeArguments = nonNullable.typeArguments
-          .map(_typeCodeString)
-          .join(', ');
+      final typeArguments =
+          nonNullable.typeArguments.map(_typeCodeString).join(', ');
       return '$baseName<$typeArguments>';
     }
     return nonNullable.getDisplayString();
@@ -2331,9 +2337,9 @@ final class _ConstructorPlan {
   final List<String> postConstructionFieldNames;
 
   const _ConstructorPlan.mutable()
-    : mode = _ConstructorMode.mutable,
-      arguments = const <_ConstructorArgumentSpec>[],
-      postConstructionFieldNames = const <String>[];
+      : mode = _ConstructorMode.mutable,
+        arguments = const <_ConstructorArgumentSpec>[],
+        postConstructionFieldNames = const <String>[];
 
   const _ConstructorPlan.constructor({
     required this.arguments,

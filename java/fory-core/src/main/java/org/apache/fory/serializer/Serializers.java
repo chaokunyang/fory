@@ -645,8 +645,8 @@ public class Serializers {
     resolver.registerInternalSerializer(Class.class, new ClassSerializer(config));
     resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(config));
     resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(config));
-    resolver.registerInternalSerializer(BigInteger.class, new DecimalSerializer.BigIntegerSerializer(config));
-    resolver.registerInternalSerializer(BigDecimal.class, new DecimalSerializer.BigDecimalSerializer(config));
+    resolver.registerInternalSerializer(BigInteger.class, new BigIntegerSerializer(config));
+    resolver.registerInternalSerializer(BigDecimal.class, new DecimalSerializer(config));
     resolver.registerInternalSerializer(AtomicBoolean.class, new AtomicBooleanSerializer(config));
     resolver.registerInternalSerializer(AtomicInteger.class, new AtomicIntegerSerializer(config));
     resolver.registerInternalSerializer(AtomicLong.class, new AtomicLongSerializer(config));

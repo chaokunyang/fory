@@ -122,8 +122,7 @@ public class SerializersTest extends ForyTestBase {
       MemoryBuffer buffer = MemoryUtils.buffer(64);
       DecimalSerializer.writeXlangDecimal(buffer, value.scale(), value.unscaledValue());
       buffer.readerIndex(0);
-      DecimalSerializer.DecimalParts parts = DecimalSerializer.readXlangDecimal(buffer);
-      assertEquals(new BigDecimal(parts.unscaled, parts.scale), value);
+      assertEquals(DecimalSerializer.readXlangDecimal(buffer), value);
     }
   }
 
@@ -153,17 +152,13 @@ public class SerializersTest extends ForyTestBase {
     Fory xlangFory =
         Fory.builder().withLanguage(Language.XLANG).requireClassRegistration(false).build();
     assertEquals(
-        nativeFory.getSerializer(BigDecimal.class).getClass(),
-        DecimalSerializer.BigDecimalSerializer.class);
+        nativeFory.getSerializer(BigDecimal.class).getClass(), DecimalSerializer.class);
     assertEquals(
-        xlangFory.getSerializer(BigDecimal.class).getClass(),
-        DecimalSerializer.XlangBigDecimalSerializer.class);
+        xlangFory.getSerializer(BigDecimal.class).getClass(), DecimalSerializer.class);
     assertEquals(
-        nativeFory.getSerializer(BigInteger.class).getClass(),
-        DecimalSerializer.BigIntegerSerializer.class);
+        nativeFory.getSerializer(BigInteger.class).getClass(), BigIntegerSerializer.class);
     assertEquals(
-        xlangFory.getSerializer(BigInteger.class).getClass(),
-        DecimalSerializer.XlangBigIntegerSerializer.class);
+        xlangFory.getSerializer(BigInteger.class).getClass(), BigIntegerSerializer.class);
   }
 
   @Test(dataProvider = "javaFory")

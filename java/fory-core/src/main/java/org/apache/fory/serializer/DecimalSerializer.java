@@ -27,21 +27,59 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 
-/** Serializers for decimal types in native and xlang modes. */
-public final class DecimalSerializer {
+/** Serializer for {@link BigDecimal} in native and xlang modes. */
+public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> implements Shareable {
   private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
   private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
+  private final boolean xlang;
 
-  private DecimalSerializer() {}
+  public DecimalSerializer(Config config) {
+    super(config, BigDecimal.class);
+    xlang = config.isXlang();
+  }
 
-  static final class DecimalParts {
-    final int scale;
-    final BigInteger unscaled;
-
-    DecimalParts(int scale, BigInteger unscaled) {
-      this.scale = scale;
-      this.unscaled = unscaled;
+  @Override
+  public void write(WriteContext writeContext, BigDecimal value) {
+    if (xlang) {
+      writeXlang(writeContext, value);
+    } else {
+      writeNative(writeContext, value);
     }
+  }
+
+  @Override
+  public BigDecimal read(ReadContext readContext) {
+    if (xlang) {
+      return readXlang(readContext);
+    }
+    return readNative(readContext);
+  }
+
+  private void writeNative(WriteContext writeContext, BigDecimal value) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+    byte[] bytes = value.unscaledValue().toByteArray();
+    buffer.writeVarUint32Small7(value.scale());
+    buffer.writeVarUint32Small7(value.precision());
+    buffer.writeVarUint32Small7(bytes.length);
+    buffer.writeBytes(bytes);
+  }
+
+  private BigDecimal readNative(ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    int scale = buffer.readVarUint32Small7();
+    int precision = buffer.readVarUint32Small7();
+    int len = buffer.readVarUint32Small7();
+    byte[] bytes = buffer.readBytes(len);
+    BigInteger bigInteger = new BigInteger(bytes);
+    return new BigDecimal(bigInteger, scale, new MathContext(precision));
+  }
+
+  private void writeXlang(WriteContext writeContext, BigDecimal value) {
+    writeXlangDecimal(writeContext.getBuffer(), value.scale(), value.unscaledValue());
+  }
+
+  private BigDecimal readXlang(ReadContext readContext) {
+    return readXlangDecimal(readContext.getBuffer());
   }
 
   static void writeXlangDecimal(MemoryBuffer buffer, int scale, BigInteger unscaled) {
@@ -61,126 +99,44 @@ public final class DecimalSerializer {
     buffer.writeBytes(payload);
   }
 
-  static DecimalParts readXlangDecimal(MemoryBuffer buffer) {
+  static BigDecimal readXlangDecimal(MemoryBuffer buffer) {
     int scale = buffer.readVarInt32();
+    return new BigDecimal(readXlangUnscaled(buffer), scale);
+  }
+
+  static BigInteger readXlangBigInteger(MemoryBuffer buffer) {
+    int scale = buffer.readVarInt32();
+    BigInteger unscaled = readXlangUnscaled(buffer);
+    if (scale != 0) {
+      throw new IllegalArgumentException(
+          "Cannot deserialize xlang decimal with scale " + scale + " into BigInteger");
+    }
+    return unscaled;
+  }
+
+  private static BigInteger readXlangUnscaled(MemoryBuffer buffer) {
     long header = buffer.readVarUint64();
-    BigInteger unscaled;
     if ((header & 1L) == 0L) {
-      unscaled = BigInteger.valueOf(decodeZigZag64(header >>> 1));
-    } else {
-      long meta = header >>> 1;
-      int sign = (int) (meta & 1L);
-      long lenLong = meta >>> 1;
-      if (lenLong <= 0 || lenLong > Integer.MAX_VALUE) {
-        throw new IllegalArgumentException(
-            "Invalid decimal magnitude length " + lenLong + " in xlang payload");
-      }
-      int len = (int) lenLong;
-      byte[] payload = buffer.readBytes(len);
-      if (payload[len - 1] == 0) {
-        throw new IllegalArgumentException("Non-canonical decimal payload: trailing zero byte");
-      }
-      byte[] magnitude = toBigEndian(payload);
-      BigInteger abs = new BigInteger(1, magnitude);
-      if (abs.signum() == 0) {
-        throw new IllegalArgumentException("Big decimal encoding must not represent zero");
-      }
-      unscaled = sign == 0 ? abs : abs.negate();
+      return BigInteger.valueOf(decodeZigZag64(header >>> 1));
     }
-    return new DecimalParts(scale, unscaled);
-  }
-
-  public static final class BigDecimalSerializer extends ImmutableSerializer<BigDecimal>
-      implements Shareable {
-    public BigDecimalSerializer(Config config) {
-      super(config, BigDecimal.class);
+    long meta = header >>> 1;
+    int sign = (int) (meta & 1L);
+    long lenLong = meta >>> 1;
+    if (lenLong <= 0 || lenLong > Integer.MAX_VALUE) {
+      throw new IllegalArgumentException(
+          "Invalid decimal magnitude length " + lenLong + " in xlang payload");
     }
-
-    @Override
-    public void write(WriteContext writeContext, BigDecimal value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      final byte[] bytes = value.unscaledValue().toByteArray();
-      buffer.writeVarUint32Small7(value.scale());
-      buffer.writeVarUint32Small7(value.precision());
-      buffer.writeVarUint32Small7(bytes.length);
-      buffer.writeBytes(bytes);
+    int len = (int) lenLong;
+    byte[] payload = buffer.readBytes(len);
+    if (payload[len - 1] == 0) {
+      throw new IllegalArgumentException("Non-canonical decimal payload: trailing zero byte");
     }
-
-    @Override
-    public BigDecimal read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      int scale = buffer.readVarUint32Small7();
-      int precision = buffer.readVarUint32Small7();
-      int len = buffer.readVarUint32Small7();
-      byte[] bytes = buffer.readBytes(len);
-      final BigInteger bigInteger = new BigInteger(bytes);
-      return new BigDecimal(bigInteger, scale, new MathContext(precision));
+    byte[] magnitude = toBigEndian(payload);
+    BigInteger abs = new BigInteger(1, magnitude);
+    if (abs.signum() == 0) {
+      throw new IllegalArgumentException("Big decimal encoding must not represent zero");
     }
-  }
-
-  public static final class XlangBigDecimalSerializer extends ImmutableSerializer<BigDecimal>
-      implements Shareable {
-    public XlangBigDecimalSerializer(Config config) {
-      super(config, BigDecimal.class);
-    }
-
-    @Override
-    public void write(WriteContext writeContext, BigDecimal value) {
-      writeXlangDecimal(writeContext.getBuffer(), value.scale(), value.unscaledValue());
-    }
-
-    @Override
-    public BigDecimal read(ReadContext readContext) {
-      DecimalParts parts = readXlangDecimal(readContext.getBuffer());
-      return new BigDecimal(parts.unscaled, parts.scale);
-    }
-  }
-
-  public static final class BigIntegerSerializer extends ImmutableSerializer<BigInteger>
-      implements Shareable {
-    public BigIntegerSerializer(Config config) {
-      super(config, BigInteger.class);
-    }
-
-    @Override
-    public void write(WriteContext writeContext, BigInteger value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
-      final byte[] bytes = value.toByteArray();
-      buffer.writeVarUint32Small7(bytes.length);
-      buffer.writeBytes(bytes);
-    }
-
-    @Override
-    public BigInteger read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
-      int len = buffer.readVarUint32Small7();
-      byte[] bytes = buffer.readBytes(len);
-      return new BigInteger(bytes);
-    }
-  }
-
-  public static final class XlangBigIntegerSerializer extends ImmutableSerializer<BigInteger>
-      implements Shareable {
-    public XlangBigIntegerSerializer(Config config) {
-      super(config, BigInteger.class);
-    }
-
-    @Override
-    public void write(WriteContext writeContext, BigInteger value) {
-      writeXlangDecimal(writeContext.getBuffer(), 0, value);
-    }
-
-    @Override
-    public BigInteger read(ReadContext readContext) {
-      DecimalParts parts = readXlangDecimal(readContext.getBuffer());
-      if (parts.scale != 0) {
-        throw new IllegalArgumentException(
-            "Cannot deserialize xlang decimal with scale "
-                + parts.scale
-                + " into BigInteger");
-      }
-      return parts.unscaled;
-    }
+    return sign == 0 ? abs : abs.negate();
   }
 
   private static boolean canUseSmallEncoding(BigInteger value) {

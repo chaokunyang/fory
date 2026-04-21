@@ -77,6 +77,7 @@ import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
+import org.apache.fory.serializer.BigIntegerSerializer;
 import org.apache.fory.serializer.DecimalSerializer;
 import org.apache.fory.serializer.DeferedLazySerializer;
 import org.apache.fory.serializer.DeferedLazySerializer.DeferredLazyObjectSerializer;
@@ -959,10 +960,8 @@ public class XtypeResolver extends TypeResolver {
     registerType(Types.DATE, LocalDate.class, new TimeSerializers.LocalDateSerializer(config));
 
     // Decimal types
-    registerType(
-        Types.DECIMAL, BigDecimal.class, new DecimalSerializer.XlangBigDecimalSerializer(config));
-    registerType(
-        Types.DECIMAL, BigInteger.class, new DecimalSerializer.XlangBigIntegerSerializer(config));
+    registerType(Types.DECIMAL, BigDecimal.class, new DecimalSerializer(config));
+    registerType(Types.DECIMAL, BigInteger.class, new BigIntegerSerializer(config));
 
     // Binary types
     registerType(Types.BINARY, byte[].class, new ArraySerializers.ByteArraySerializer(this));

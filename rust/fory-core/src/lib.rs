@@ -31,7 +31,7 @@
 //! - **`serializer`**: Type-specific serialization implementations
 //! - **`resolver`**: Type resolution and metadata management
 //! - **`meta`**: Metadata handling for schema evolution
-//! - **`types`**: Runtime value carriers such as decimal and float16
+//! - **`types`**: Runtime value carriers such as decimal, float16, and weak refs
 //! - **`wire`**: Wire-format IDs, flags, and protocol helpers
 //! - **`error`**: Error handling and result types
 //! - **`util`**: Utility functions and helpers
@@ -198,8 +198,7 @@ pub use crate::error::Error;
 pub use crate::fory::{Fory, ForyBuilder};
 pub use crate::resolver::context::{ReadContext, WriteContext};
 pub use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
-pub use crate::serializer::weak::{ArcWeak, RcWeak};
 pub use crate::serializer::{read_data, write_data, ForyDefault, Serializer, StructSerializer};
 pub use crate::types::float16::float16 as Float16;
-pub use crate::types::Decimal;
+pub use crate::types::{ArcWeak, Decimal, RcWeak};
 pub use crate::wire::{RefFlag, RefMode, TypeId};

@@ -19,7 +19,7 @@
 
 use fory_core::buffer::Writer;
 use fory_core::resolver::ref_resolver::{RefReader, RefWriter};
-use fory_core::serializer::weak::{ArcWeak, RcWeak};
+use fory_core::{ArcWeak, RcWeak};
 use std::rc::Rc;
 use std::sync::Arc;
 

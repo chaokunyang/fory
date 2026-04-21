@@ -17,5 +17,7 @@
 
 pub mod decimal;
 pub mod float16;
+pub mod weak;
 
 pub use decimal::Decimal;
+pub use weak::{ArcWeak, RcWeak};

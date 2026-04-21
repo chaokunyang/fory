@@ -19,20 +19,6 @@
 
 import 'dart:typed_data';
 
-double _float32OperandValue(Object other) {
-  if (other is Float32) {
-    return other.toDouble();
-  }
-  if (other is num) {
-    return other.toDouble();
-  }
-  throw ArgumentError.value(
-    other,
-    'other',
-    'Expected a num or Float32.',
-  );
-}
-
 /// Single-precision floating-point wrapper used by the xlang type system.
 ///
 /// [Float32] stores an IEEE 754 binary32 payload exactly. Constructing from a
@@ -67,38 +53,83 @@ final class Float32 implements Comparable<Float32> {
   double get value => toDouble();
 
   /// Returns a binary32-rounded sum.
-  Float32 operator +(Object other) =>
-      Float32(value + _float32OperandValue(other));
+  Float32 operator +(Object other) => switch (other) {
+        Float32 otherValue => Float32(value + otherValue.value),
+        num otherValue => Float32(value + otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
   /// Returns a binary32-rounded difference.
-  Float32 operator -(Object other) =>
-      Float32(value - _float32OperandValue(other));
+  Float32 operator -(Object other) => switch (other) {
+        Float32 otherValue => Float32(value - otherValue.value),
+        num otherValue => Float32(value - otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
   /// Returns a binary32-rounded product.
-  Float32 operator *(Object other) =>
-      Float32(value * _float32OperandValue(other));
+  Float32 operator *(Object other) => switch (other) {
+        Float32 otherValue => Float32(value * otherValue.value),
+        num otherValue => Float32(value * otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
   /// Returns a binary32-rounded quotient.
-  Float32 operator /(Object other) =>
-      Float32(value / _float32OperandValue(other));
+  Float32 operator /(Object other) => switch (other) {
+        Float32 otherValue => Float32(value / otherValue.value),
+        num otherValue => Float32(value / otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
   /// Returns a binary32-rounded remainder.
-  Float32 operator %(Object other) =>
-      Float32(value % _float32OperandValue(other));
+  Float32 operator %(Object other) => switch (other) {
+        Float32 otherValue => Float32(value % otherValue.value),
+        num otherValue => Float32(value % otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
   /// Returns the truncated integer quotient, matching Dart `num` semantics.
-  int operator ~/(Object other) => value ~/ _float32OperandValue(other);
+  int operator ~/(Object other) => switch (other) {
+        Float32 otherValue => value ~/ otherValue.value,
+        num otherValue => value ~/ otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
   /// Returns the negated binary32-rounded value.
   Float32 operator -() => Float32(-value);
 
-  bool operator <(Object other) => value < _float32OperandValue(other);
+  bool operator <(Object other) => switch (other) {
+        Float32 otherValue => value < otherValue.value,
+        num otherValue => value < otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
-  bool operator <=(Object other) => value <= _float32OperandValue(other);
+  bool operator <=(Object other) => switch (other) {
+        Float32 otherValue => value <= otherValue.value,
+        num otherValue => value <= otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
-  bool operator >(Object other) => value > _float32OperandValue(other);
+  bool operator >(Object other) => switch (other) {
+        Float32 otherValue => value > otherValue.value,
+        num otherValue => value > otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
-  bool operator >=(Object other) => value >= _float32OperandValue(other);
+  bool operator >=(Object other) => switch (other) {
+        Float32 otherValue => value >= otherValue.value,
+        num otherValue => value >= otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float32.'),
+      };
 
   @override
   int compareTo(Float32 other) => value.compareTo(other.value);

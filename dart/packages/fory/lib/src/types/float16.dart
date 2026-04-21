@@ -19,20 +19,6 @@
 
 import 'dart:typed_data';
 
-double _float16OperandValue(Object other) {
-  if (other is Float16) {
-    return other.toDouble();
-  }
-  if (other is num) {
-    return other.toDouble();
-  }
-  throw ArgumentError.value(
-    other,
-    'other',
-    'Expected a num or Float16.',
-  );
-}
-
 /// Half-precision floating-point wrapper used by the xlang type system.
 ///
 /// [Float16] stores an IEEE 754 binary16 payload exactly. Constructing from a
@@ -122,38 +108,83 @@ final class Float16 implements Comparable<Float16> {
   double get value => toDouble();
 
   /// Returns a binary16-rounded sum.
-  Float16 operator +(Object other) =>
-      Float16(value + _float16OperandValue(other));
+  Float16 operator +(Object other) => switch (other) {
+        Float16 otherValue => Float16(value + otherValue.value),
+        num otherValue => Float16(value + otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
   /// Returns a binary16-rounded difference.
-  Float16 operator -(Object other) =>
-      Float16(value - _float16OperandValue(other));
+  Float16 operator -(Object other) => switch (other) {
+        Float16 otherValue => Float16(value - otherValue.value),
+        num otherValue => Float16(value - otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
   /// Returns a binary16-rounded product.
-  Float16 operator *(Object other) =>
-      Float16(value * _float16OperandValue(other));
+  Float16 operator *(Object other) => switch (other) {
+        Float16 otherValue => Float16(value * otherValue.value),
+        num otherValue => Float16(value * otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
   /// Returns a binary16-rounded quotient.
-  Float16 operator /(Object other) =>
-      Float16(value / _float16OperandValue(other));
+  Float16 operator /(Object other) => switch (other) {
+        Float16 otherValue => Float16(value / otherValue.value),
+        num otherValue => Float16(value / otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
   /// Returns a binary16-rounded remainder.
-  Float16 operator %(Object other) =>
-      Float16(value % _float16OperandValue(other));
+  Float16 operator %(Object other) => switch (other) {
+        Float16 otherValue => Float16(value % otherValue.value),
+        num otherValue => Float16(value % otherValue.toDouble()),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
   /// Returns the truncated integer quotient, matching Dart `num` semantics.
-  int operator ~/(Object other) => value ~/ _float16OperandValue(other);
+  int operator ~/(Object other) => switch (other) {
+        Float16 otherValue => value ~/ otherValue.value,
+        num otherValue => value ~/ otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
   /// Returns the negated binary16-rounded value.
   Float16 operator -() => Float16(-value);
 
-  bool operator <(Object other) => value < _float16OperandValue(other);
+  bool operator <(Object other) => switch (other) {
+        Float16 otherValue => value < otherValue.value,
+        num otherValue => value < otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
-  bool operator <=(Object other) => value <= _float16OperandValue(other);
+  bool operator <=(Object other) => switch (other) {
+        Float16 otherValue => value <= otherValue.value,
+        num otherValue => value <= otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
-  bool operator >(Object other) => value > _float16OperandValue(other);
+  bool operator >(Object other) => switch (other) {
+        Float16 otherValue => value > otherValue.value,
+        num otherValue => value > otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
-  bool operator >=(Object other) => value >= _float16OperandValue(other);
+  bool operator >=(Object other) => switch (other) {
+        Float16 otherValue => value >= otherValue.value,
+        num otherValue => value >= otherValue.toDouble(),
+        _ => throw ArgumentError.value(
+            other, 'other', 'Expected a num or Float16.'),
+      };
 
   @override
   bool operator ==(Object other) =>
@@ -163,8 +194,8 @@ final class Float16 implements Comparable<Float16> {
   int get hashCode => _bits.hashCode;
 
   @override
-  int compareTo(Float16 other) => toDouble().compareTo(other.toDouble());
+  int compareTo(Float16 other) => value.compareTo(other.value);
 
   @override
-  String toString() => toDouble().toString();
+  String toString() => value.toString();
 }

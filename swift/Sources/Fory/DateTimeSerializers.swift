@@ -19,6 +19,11 @@ import Foundation
 
 private let nanosPerSecond: Int64 = 1_000_000_000
 private let secondsPerDay = 86_400.0
+private let localDateCalendar: Calendar = {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    return calendar
+}()
 
 @inline(__always)
 private func normalizeTimestampComponents(for date: Date) -> (seconds: Int64, nanos: UInt32) {
@@ -56,6 +61,11 @@ private func localDateDaysSinceEpoch(for date: Date) throws -> Int32 {
 @inline(__always)
 private func localDateFromDaysSinceEpoch(_ daysSinceEpoch: Int32) -> Date {
     Date(timeIntervalSince1970: Double(daysSinceEpoch) * secondsPerDay)
+}
+
+@inline(__always)
+private func localDateComponents(_ daysSinceEpoch: Int32) -> DateComponents {
+    localDateCalendar.dateComponents([.year, .month, .day], from: localDateFromDaysSinceEpoch(daysSinceEpoch))
 }
 
 @inline(__always)
@@ -159,19 +169,43 @@ private func readTypeID(_ context: ReadContext, expectedTypeIDs: [TypeId]) throw
     throw ForyError.invalidData("expected one of type ids [\(expectedList)], got \(rawTypeID)")
 }
 
-public struct LocalDate: Serializer, Equatable, Hashable {
+public struct LocalDate: Serializer, Equatable, Hashable, Comparable {
     public var daysSinceEpoch: Int32
 
     public init(daysSinceEpoch: Int32 = 0) {
         self.daysSinceEpoch = daysSinceEpoch
     }
 
+    public static func fromEpochDay(_ epochDay: Int32) -> LocalDate {
+        .init(daysSinceEpoch: epochDay)
+    }
+
     public init(date: Date) throws {
         self.daysSinceEpoch = try localDateDaysSinceEpoch(for: date)
     }
 
+    public func toEpochDay() -> Int32 {
+        daysSinceEpoch
+    }
+
     public func toDate() -> Date {
         localDateFromDaysSinceEpoch(daysSinceEpoch)
+    }
+
+    public var year: Int {
+        localDateComponents(daysSinceEpoch).year ?? 1970
+    }
+
+    public var month: Int {
+        localDateComponents(daysSinceEpoch).month ?? 1
+    }
+
+    public var day: Int {
+        localDateComponents(daysSinceEpoch).day ?? 1
+    }
+
+    public static func < (lhs: LocalDate, rhs: LocalDate) -> Bool {
+        lhs.daysSinceEpoch < rhs.daysSinceEpoch
     }
 
     public static func foryDefault() -> LocalDate {

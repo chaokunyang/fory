@@ -89,6 +89,16 @@ void main() {
       }
     });
 
+    test('LocalDate convenience methods bridge DateTime and epoch-day forms',
+        () {
+      final value = LocalDate.fromDateTime(DateTime.utc(2024, 1, 2, 3, 4, 5));
+
+      expect(value, equals(const LocalDate(2024, 1, 2)));
+      expect(
+          value.toEpochDay(), equals(const LocalDate(2024, 1, 2).toEpochDay()));
+      expect(value.toDateTime(), equals(DateTime.utc(2024, 1, 2)));
+    });
+
     test('decodes root Timestamp payloads to DateTime by default', () {
       final fory = Fory();
       final cases = <MapEntry<Timestamp, DateTime>>[

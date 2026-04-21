@@ -183,6 +183,32 @@ void main() {
       expect(identical(mapRoundTrip['a'], mapRoundTrip['b']), isTrue);
     });
 
+    test('trackRef true preserves self-referential root lists', () {
+      final fory = Fory();
+      final value = <Object?>[];
+      value.add(value);
+
+      final roundTrip = fory.deserialize<Object?>(
+        fory.serialize(value, trackRef: true),
+      ) as List;
+
+      expect(roundTrip, hasLength(1));
+      expect(identical(roundTrip, roundTrip[0]), isTrue);
+    });
+
+    test('trackRef true preserves self-referential root maps', () {
+      final fory = Fory();
+      final value = <Object?, Object?>{};
+      value['self'] = value;
+
+      final roundTrip = fory.deserialize<Object?>(
+        fory.serialize(value, trackRef: true),
+      ) as Map;
+
+      expect(roundTrip.keys, contains('self'));
+      expect(identical(roundTrip, roundTrip['self']), isTrue);
+    });
+
     test('round-trips large list, set, and map payloads', () {
       final fory = Fory();
       final largeList = List<Object?>.generate(600, (index) => 'item-$index',

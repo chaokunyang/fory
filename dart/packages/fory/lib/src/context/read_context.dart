@@ -324,6 +324,7 @@ final class ReadContext {
           declaredFieldType?.arguments.isEmpty ?? true
               ? null
               : declaredFieldType!.arguments.first,
+          hasPreservedRef: hasPreservedRef,
         );
       case TypeIds.set:
         return SetSerializer.readPayload(
@@ -331,6 +332,7 @@ final class ReadContext {
           declaredFieldType?.arguments.isEmpty ?? true
               ? null
               : declaredFieldType!.arguments.first,
+          hasPreservedRef: hasPreservedRef,
         );
       case TypeIds.map:
         return MapSerializer.readPayload(
@@ -341,6 +343,7 @@ final class ReadContext {
           declaredFieldType == null || declaredFieldType.arguments.length < 2
               ? null
               : declaredFieldType.arguments[1],
+          hasPreservedRef: hasPreservedRef,
         );
       case TypeIds.date:
         return const LocalDateSerializer().read(this);

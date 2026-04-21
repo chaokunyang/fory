@@ -432,10 +432,14 @@ final class ListSerializer extends Serializer<List> {
 
   static List<Object?> readPayload(
     ReadContext context,
-    FieldType? elementFieldType,
-  ) {
+    FieldType? elementFieldType, {
+    bool hasPreservedRef = false,
+  }) {
     final state = _prepareListRead(context, elementFieldType);
     final result = List<Object?>.filled(state.size, null, growable: false);
+    if (hasPreservedRef) {
+      context.reference(result);
+    }
     if (state.size == 0) {
       return result;
     }
@@ -472,10 +476,16 @@ final class SetSerializer extends Serializer<Set> {
 
   static Set<Object?> readPayload(
     ReadContext context,
-    FieldType? elementFieldType,
-  ) {
+    FieldType? elementFieldType, {
+    bool hasPreservedRef = false,
+  }) {
     return Set<Object?>.of(
-        ListSerializer.readPayload(context, elementFieldType));
+      ListSerializer.readPayload(
+        context,
+        elementFieldType,
+        hasPreservedRef: hasPreservedRef,
+      ),
+    );
   }
 }
 

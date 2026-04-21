@@ -15,16 +15,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use num_bigint::BigInt;
+package basic;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Decimal {
-    pub unscaled: BigInt,
-    pub scale: i32,
+message Money [id=130] {
+    decimal amount = 1;
+    string currency = 2;
 }
 
-impl Decimal {
-    pub fn new(unscaled: BigInt, scale: i32) -> Self {
-        Self { unscaled, scale }
-    }
+union BasicValue [id=131] {
+    decimal amount = 1;
+    string note = 2;
+    Money money = 3;
+}
+
+message BasicEnvelope [id=132] {
+    Money money = 1;
+    BasicValue value = 2;
+    optional decimal nullable_amount = 3;
 }

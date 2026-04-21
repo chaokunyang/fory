@@ -445,7 +445,9 @@ public final class ReadContext {
         case .timestamp:
             value = try Date.foryRead(self, refMode: .none, readTypeInfo: false)
         case .date:
-            value = try ForyDate.foryRead(self, refMode: .none, readTypeInfo: false)
+            value = try LocalDate.foryRead(self, refMode: .none, readTypeInfo: false)
+        case .decimal:
+            value = try Decimal.foryRead(self, refMode: .none, readTypeInfo: false)
         case .binary, .uint8Array:
             value = try Data.foryRead(self, refMode: .none, readTypeInfo: false)
         case .boolArray:

@@ -1253,6 +1253,8 @@ GeneratedFieldType(
         return 'context.writeString($valueExpression)';
       case TypeIds.binary:
         return 'writeGeneratedBinaryValue(context, $valueExpression)';
+      case TypeIds.decimal:
+        return 'writeGeneratedDecimalValue(context, $valueExpression)';
       case TypeIds.date:
         return 'writeGeneratedLocalDateValue(context, $valueExpression)';
       case TypeIds.duration:
@@ -1414,6 +1416,8 @@ GeneratedFieldType(
         return 'context.readString()';
       case TypeIds.binary:
         return 'readGeneratedBinaryValue(context)';
+      case TypeIds.decimal:
+        return 'readGeneratedDecimalValue(context)';
       case TypeIds.date:
         return 'readGeneratedLocalDateValue(context)';
       case TypeIds.duration:
@@ -1864,6 +1868,7 @@ GeneratedFieldType(
     switch (typeId) {
       case TypeIds.string:
       case TypeIds.binary:
+      case TypeIds.decimal:
       case TypeIds.date:
       case TypeIds.duration:
       case TypeIds.timestamp:
@@ -2101,6 +2106,8 @@ GeneratedFieldType(
         return TypeIds.bfloat16;
       case 'Float32':
         return TypeIds.float32;
+      case 'Decimal':
+        return TypeIds.decimal;
       case 'Timestamp':
       case 'DateTime':
         return TypeIds.timestamp;

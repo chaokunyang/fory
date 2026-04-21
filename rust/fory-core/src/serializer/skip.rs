@@ -15,16 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::context::ReadContext;
 use crate::ensure;
 use crate::error::Error;
 use crate::meta::FieldType;
-use crate::resolver::context::ReadContext;
 use crate::serializer::collection::{DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE};
 use crate::serializer::util;
 use crate::serializer::Serializer;
+use crate::type_id as types;
 use crate::util::ENABLE_FORY_DEBUG_OUTPUT;
-use crate::wire as types;
-use crate::wire::RefFlag;
+use crate::RefFlag;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use std::rc::Rc;
 

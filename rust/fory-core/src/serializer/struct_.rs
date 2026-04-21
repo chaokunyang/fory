@@ -15,12 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::context::{ReadContext, WriteContext};
 use crate::ensure;
 use crate::error::Error;
-use crate::resolver::context::{ReadContext, WriteContext};
+use crate::resolver::{RefFlag, RefMode};
 use crate::serializer::{Serializer, StructSerializer};
+use crate::type_id::TypeId;
 use crate::util::ENABLE_FORY_DEBUG_OUTPUT;
-use crate::wire::{RefFlag, RefMode, TypeId};
 use std::any::Any;
 
 #[inline(always)]
@@ -61,7 +62,7 @@ pub fn read_type_info_fast<T: StructSerializer>(context: &mut ReadContext) -> Re
         .get_type_resolver()
         .get_type_id_by_index(T::fory_type_index())?;
     let local_type_id_u32 = local_type_id as u32;
-    if !crate::wire::needs_user_type_id(local_type_id_u32) {
+    if !crate::type_id::needs_user_type_id(local_type_id_u32) {
         return read_type_info::<T>(context);
     }
     let remote_type_id = context.reader.read_u8()? as u32;

@@ -18,13 +18,13 @@
 use crate::types::float16::float16;
 
 use crate::buffer::{Reader, Writer};
+use crate::context::ReadContext;
+use crate::context::WriteContext;
 use crate::error::Error;
-use crate::resolver::context::ReadContext;
-use crate::resolver::context::WriteContext;
-use crate::resolver::type_resolver::TypeResolver;
+use crate::resolver::TypeResolver;
 use crate::serializer::util::read_basic_type_info;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::wire::TypeId;
+use crate::type_id::TypeId;
 
 macro_rules! impl_num_serializer {
     ($ty:ty, $writer:expr, $reader:expr, $field_type:expr) => {

@@ -16,13 +16,13 @@
 // under the License.
 
 use crate::buffer::{Reader, Writer};
+use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
-use crate::resolver::context::{ReadContext, WriteContext};
-use crate::resolver::type_resolver::TypeResolver;
+use crate::resolver::TypeResolver;
 use crate::serializer::util::read_basic_type_info;
 use crate::serializer::{ForyDefault, Serializer};
+use crate::type_id::TypeId;
 use crate::types::Decimal;
-use crate::wire::TypeId;
 use num_bigint::{BigInt, Sign};
 use std::convert::TryFrom;
 

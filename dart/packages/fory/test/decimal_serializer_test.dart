@@ -28,7 +28,7 @@ part 'decimal_serializer_test.fory.dart';
 class DecimalEnvelope {
   DecimalEnvelope();
 
-  Decimal amount = const Decimal.zero();
+  Decimal amount = Decimal.zero();
   String note = '';
 }
 
@@ -50,8 +50,8 @@ void main() {
     test('round-trips root decimal edge cases', () {
       final fory = Fory();
       final values = <Decimal>[
-        const Decimal.zero(),
-        const Decimal.zero(3),
+        Decimal.zero(),
+        Decimal.zero(3),
         Decimal.fromInt(1),
         Decimal.fromInt(-1),
         Decimal.fromInt(12345, scale: 2),
@@ -66,10 +66,7 @@ void main() {
       ];
 
       for (final value in values) {
-        expect(
-          fory.deserialize<Decimal>(fory.serialize(value)),
-          equals(value),
-        );
+        expect(fory.deserialize<Decimal>(fory.serialize(value)), equals(value));
       }
     });
 
@@ -81,7 +78,9 @@ void main() {
         ..amount = _decimal('123456789012345678901234567890123456789', 37)
         ..note = 'principal';
 
-      final roundTrip = fory.deserialize<DecimalEnvelope>(fory.serialize(value));
+      final roundTrip = fory.deserialize<DecimalEnvelope>(
+        fory.serialize(value),
+      );
       expect(roundTrip.amount, equals(value.amount));
       expect(roundTrip.note, equals('principal'));
     });

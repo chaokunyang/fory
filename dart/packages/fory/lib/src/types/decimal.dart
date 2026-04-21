@@ -29,7 +29,9 @@ final class Decimal {
   const Decimal(this.unscaledValue, this.scale);
 
   /// Creates a zero decimal with the given [scale].
-  const Decimal.zero([this.scale = 0]) : unscaledValue = BigInt.zero;
+  factory Decimal.zero([int scale = 0]) {
+    return Decimal(BigInt.zero, scale);
+  }
 
   /// Creates a decimal from a small integer value and optional [scale].
   factory Decimal.fromInt(int value, {int scale = 0}) {

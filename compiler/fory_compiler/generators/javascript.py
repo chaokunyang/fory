@@ -599,11 +599,17 @@ class JavaScriptGenerator(BaseGenerator):
                 if uses_field_type(field.field_type):
                     return True
             for nested_union in message.nested_unions:
-                if any(uses_field_type(field.field_type) for field in nested_union.fields):
+                if any(
+                    uses_field_type(field.field_type) for field in nested_union.fields
+                ):
                     return True
             return any(uses_message(nested) for nested in message.nested_messages)
 
-        if any(uses_field_type(field.field_type) for union in self.schema.unions for field in union.fields):
+        if any(
+            uses_field_type(field.field_type)
+            for union in self.schema.unions
+            for field in union.fields
+        ):
             return True
         return any(uses_message(message) for message in self.schema.messages)
 

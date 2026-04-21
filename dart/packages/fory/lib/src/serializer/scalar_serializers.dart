@@ -25,6 +25,9 @@ import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/string_encoding.dart';
 import 'package:fory/src/types/decimal.dart';
 
+// The small form reserves the low header bit to distinguish small/big
+// encodings, so the zigzag value itself must still fit in 63 bits before the
+// final << 1.
 final BigInt _decimalSmallMin = -(BigInt.one << 62);
 final BigInt _decimalSmallMax = (BigInt.one << 62) - BigInt.one;
 
@@ -160,8 +163,7 @@ final class DecimalSerializer extends Serializer<Decimal> {
       return;
     }
 
-    final payload =
-        _decimalMagnitudeToCanonicalLittleEndian(unscaled.abs());
+    final payload = _decimalMagnitudeToCanonicalLittleEndian(unscaled.abs());
     final sign = unscaled.isNegative ? 1 : 0;
     final meta = (payload.length << 1) | sign;
     buffer.writeVarUint64((meta << 1) | 1);

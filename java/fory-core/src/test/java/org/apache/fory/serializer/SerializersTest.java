@@ -151,14 +151,10 @@ public class SerializersTest extends ForyTestBase {
         Fory.builder().withLanguage(Language.JAVA).requireClassRegistration(false).build();
     Fory xlangFory =
         Fory.builder().withLanguage(Language.XLANG).requireClassRegistration(false).build();
-    assertEquals(
-        nativeFory.getSerializer(BigDecimal.class).getClass(), DecimalSerializer.class);
-    assertEquals(
-        xlangFory.getSerializer(BigDecimal.class).getClass(), DecimalSerializer.class);
-    assertEquals(
-        nativeFory.getSerializer(BigInteger.class).getClass(), BigIntegerSerializer.class);
-    assertEquals(
-        xlangFory.getSerializer(BigInteger.class).getClass(), BigIntegerSerializer.class);
+    assertEquals(nativeFory.getSerializer(BigDecimal.class).getClass(), DecimalSerializer.class);
+    assertEquals(xlangFory.getSerializer(BigDecimal.class).getClass(), DecimalSerializer.class);
+    assertEquals(nativeFory.getSerializer(BigInteger.class).getClass(), BigIntegerSerializer.class);
+    assertEquals(xlangFory.getSerializer(BigInteger.class).getClass(), BigIntegerSerializer.class);
   }
 
   @Test(dataProvider = "javaFory")

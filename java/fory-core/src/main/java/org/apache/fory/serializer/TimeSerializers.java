@@ -43,7 +43,6 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
-import org.apache.fory.util.DateTimeUtils;
 
 /** Serializers for all time related types. */
 public class TimeSerializers {

@@ -25,6 +25,7 @@ import marshal
 import os
 import pickle
 import types
+from typing import Tuple
 
 from pyfory.serialization import Buffer
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
@@ -182,7 +183,7 @@ def _can_use_small_decimal_encoding(unscaled: int) -> bool:
     return _encode_zigzag64(unscaled) <= _MAX_SMALL_ZIGZAG
 
 
-def _decimal_parts(value: decimal.Decimal) -> tuple[int, int]:
+def _decimal_parts(value: decimal.Decimal) -> Tuple[int, int]:
     if not value.is_finite():
         raise ValueError(f"Decimal value must be finite, got {value!r}")
     sign, digits, exponent = value.as_tuple()
@@ -229,7 +230,7 @@ def _write_var_uint64(write_context, value: int):
         write_context.write_var_uint64(value - _UINT64_MOD)
 
 
-def _read_decimal_parts(read_context) -> tuple[int, int]:
+def _read_decimal_parts(read_context) -> Tuple[int, int]:
     scale = read_context.read_varint32()
     header = read_context.read_var_uint64()
     if header < 0:

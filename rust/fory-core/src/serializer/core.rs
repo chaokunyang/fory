@@ -20,7 +20,7 @@ use crate::meta::FieldInfo;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeInfo;
 use crate::serializer::{bool, struct_};
-use crate::types::{RefFlag, RefMode, TypeId};
+use crate::wire::{RefFlag, RefMode, TypeId};
 use crate::TypeResolver;
 use std::any::Any;
 use std::rc::Rc;

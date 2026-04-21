@@ -23,7 +23,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::RefMode;
+use crate::wire::RefMode;
 use crate::RefFlag;
 use crate::TypeId;
 use std::rc::Rc;
@@ -231,7 +231,7 @@ macro_rules! register_trait_type {
 
             #[inline(always)]
             fn fory_reserved_space() -> usize {
-                $crate::types::SIZE_OF_REF_AND_TYPE
+                $crate::wire::SIZE_OF_REF_AND_TYPE
             }
 
             #[inline(always)]

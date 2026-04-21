@@ -45,7 +45,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{RefMode, TypeId};
+use crate::wire::{RefMode, TypeId};
 use std::rc::Rc;
 use std::sync::Mutex;
 

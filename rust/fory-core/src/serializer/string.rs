@@ -21,7 +21,7 @@ use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::util::read_basic_type_info;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::TypeId;
+use crate::wire::TypeId;
 use std::mem;
 
 #[allow(dead_code)]

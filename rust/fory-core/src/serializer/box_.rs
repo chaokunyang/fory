@@ -20,7 +20,7 @@ use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::TypeId;
+use crate::wire::TypeId;
 use std::rc::Rc;
 
 impl<T: Serializer + ForyDefault> Serializer for Box<T> {

@@ -21,7 +21,7 @@ use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::primitive_list;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::TypeId;
+use crate::wire::TypeId;
 use std::collections::{LinkedList, VecDeque};
 use std::mem;
 

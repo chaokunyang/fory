@@ -19,8 +19,8 @@ use crate::ensure;
 use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::Serializer;
-use crate::types::TypeId;
-use crate::types::{is_user_type, ENUM, NAMED_ENUM, UNION};
+use crate::wire::TypeId;
+use crate::wire::{is_user_type, ENUM, NAMED_ENUM, UNION};
 
 #[inline(always)]
 pub(crate) fn read_basic_type_info<T: Serializer>(context: &mut ReadContext) -> Result<(), Error> {

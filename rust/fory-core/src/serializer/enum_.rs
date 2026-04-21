@@ -20,7 +20,7 @@ use crate::error::Error;
 use crate::meta::FieldInfo;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{RefFlag, RefMode, TypeId};
+use crate::wire::{RefFlag, RefMode, TypeId};
 use crate::TypeResolver;
 
 #[inline(always)]

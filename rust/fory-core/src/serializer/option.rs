@@ -20,7 +20,7 @@ use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{RefFlag, RefMode, TypeId};
+use crate::wire::{RefFlag, RefMode, TypeId};
 use std::rc::Rc;
 
 impl<T: Serializer + ForyDefault> Serializer for Option<T> {

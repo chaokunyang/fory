@@ -21,7 +21,7 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::util::write_dyn_data_generic;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{RefFlag, RefMode, TypeId};
+use crate::wire::{RefFlag, RefMode, TypeId};
 use std::any::Any;
 use std::rc::Rc;
 use std::sync::Arc;

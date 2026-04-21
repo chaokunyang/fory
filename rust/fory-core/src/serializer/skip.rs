@@ -22,9 +22,9 @@ use crate::resolver::context::ReadContext;
 use crate::serializer::collection::{DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE};
 use crate::serializer::util;
 use crate::serializer::Serializer;
-use crate::types;
-use crate::types::RefFlag;
 use crate::util::ENABLE_FORY_DEBUG_OUTPUT;
+use crate::wire as types;
+use crate::wire::RefFlag;
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use std::rc::Rc;
 
@@ -541,7 +541,7 @@ fn skip_value(
 
         // ============ FLOAT16 (TypeId = 17) ============
         types::FLOAT16 => {
-            <crate::float16::float16 as Serializer>::fory_read_data(context)?;
+            <crate::types::float16::float16 as Serializer>::fory_read_data(context)?;
         }
 
         // ============ FLOAT32 (TypeId = 17) ============
@@ -705,7 +705,7 @@ fn skip_value(
 
         // ============ FLOAT16_ARRAY (TypeId = 53) ============
         types::FLOAT16_ARRAY => {
-            <Vec<crate::float16::float16> as Serializer>::fory_read_data(context)?;
+            <Vec<crate::types::float16::float16> as Serializer>::fory_read_data(context)?;
         }
 
         // ============ FLOAT32_ARRAY (TypeId = 51) ============

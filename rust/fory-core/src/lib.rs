@@ -31,7 +31,8 @@
 //! - **`serializer`**: Type-specific serialization implementations
 //! - **`resolver`**: Type resolution and metadata management
 //! - **`meta`**: Metadata handling for schema evolution
-//! - **`types`**: Core type definitions and constants
+//! - **`types`**: Runtime value carriers such as decimal and float16
+//! - **`wire`**: Wire-format IDs, flags, and protocol helpers
 //! - **`error`**: Error handling and result types
 //! - **`util`**: Utility functions and helpers
 //!
@@ -179,15 +180,14 @@
 pub mod buffer;
 pub mod config;
 pub mod error;
-pub mod float16;
 pub mod fory;
 pub mod meta;
 pub mod resolver;
 pub mod row;
 pub mod serializer;
 pub mod types;
-pub use float16::float16 as Float16;
 pub mod util;
+pub mod wire;
 
 // Re-export paste for use in macros
 pub use paste;
@@ -199,6 +199,7 @@ pub use crate::fory::{Fory, ForyBuilder};
 pub use crate::resolver::context::{ReadContext, WriteContext};
 pub use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 pub use crate::serializer::weak::{ArcWeak, RcWeak};
-pub use crate::serializer::Decimal;
 pub use crate::serializer::{read_data, write_data, ForyDefault, Serializer, StructSerializer};
-pub use crate::types::{RefFlag, RefMode, TypeId};
+pub use crate::types::float16::float16 as Float16;
+pub use crate::types::Decimal;
+pub use crate::wire::{RefFlag, RefMode, TypeId};

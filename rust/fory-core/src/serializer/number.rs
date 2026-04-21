@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::float16::float16;
+use crate::types::float16::float16;
 
 use crate::buffer::{Reader, Writer};
 use crate::error::Error;
@@ -24,7 +24,7 @@ use crate::resolver::context::WriteContext;
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::util::read_basic_type_info;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::TypeId;
+use crate::wire::TypeId;
 
 macro_rules! impl_num_serializer {
     ($ty:ty, $writer:expr, $reader:expr, $field_type:expr) => {

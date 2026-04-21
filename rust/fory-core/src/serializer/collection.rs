@@ -20,7 +20,7 @@ use crate::error::Error;
 use crate::resolver::context::ReadContext;
 use crate::resolver::context::WriteContext;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{need_to_write_type_for_field, RefFlag, RefMode, PRIMITIVE_ARRAY_TYPES};
+use crate::wire::{need_to_write_type_for_field, RefFlag, RefMode, PRIMITIVE_ARRAY_TYPES};
 
 const TRACKING_REF: u8 = 0b1;
 

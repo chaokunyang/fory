@@ -25,7 +25,7 @@ use crate::serializer::collection::{
 };
 
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::TypeId;
+use crate::wire::TypeId;
 use std::collections::{BTreeSet, HashSet};
 use std::mem;
 

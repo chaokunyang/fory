@@ -22,11 +22,11 @@ use crate::meta::{
     FIELD_NAME_ENCODER, NAMESPACE_DECODER, TYPE_NAME_DECODER,
 };
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
-use crate::types::{
+use crate::util::to_snake_case;
+use crate::wire::{
     TypeId, BINARY, COMPATIBLE_STRUCT, ENUM, EXT, INT8_ARRAY, NAMED_COMPATIBLE_STRUCT, NAMED_ENUM,
     NAMED_EXT, NAMED_STRUCT, PRIMITIVE_TYPES, STRUCT, UINT8_ARRAY, UNKNOWN,
 };
-use crate::util::to_snake_case;
 
 /// Normalizes a type ID for comparison purposes in cross-language schema evolution.
 /// This treats all struct variants (STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT,
@@ -717,7 +717,7 @@ impl TypeMeta {
                 set_fields.push(field_info);
             } else if TypeId::MAP as u32 == type_id {
                 map_fields.push(field_info);
-            } else if crate::types::is_internal_type(type_id) {
+            } else if crate::wire::is_internal_type(type_id) {
                 internal_type_fields.push(field_info);
             } else {
                 other_fields.push(field_info);

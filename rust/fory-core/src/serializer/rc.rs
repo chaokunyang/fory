@@ -19,7 +19,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{RefFlag, RefMode, TypeId};
+use crate::wire::{RefFlag, RefMode, TypeId};
 use std::rc::Rc;
 
 impl<T: Serializer + ForyDefault + 'static> Serializer for Rc<T> {

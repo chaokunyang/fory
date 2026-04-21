@@ -21,21 +21,10 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::util::read_basic_type_info;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::TypeId;
+use crate::types::Decimal;
+use crate::wire::TypeId;
 use num_bigint::{BigInt, Sign};
 use std::convert::TryFrom;
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Decimal {
-    pub unscaled: BigInt,
-    pub scale: i32,
-}
-
-impl Decimal {
-    pub fn new(unscaled: BigInt, scale: i32) -> Self {
-        Self { unscaled, scale }
-    }
-}
 
 impl Serializer for Decimal {
     #[inline(always)]

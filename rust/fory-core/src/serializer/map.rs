@@ -21,7 +21,7 @@ use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::{TypeInfo, TypeResolver};
 use crate::serializer::util::read_basic_type_info;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{need_to_write_type_for_field, RefMode, TypeId, SIZE_OF_REF_AND_TYPE};
+use crate::wire::{need_to_write_type_for_field, RefMode, TypeId, SIZE_OF_REF_AND_TYPE};
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 

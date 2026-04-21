@@ -1202,7 +1202,7 @@
 
 pub use fory_core::{
     error::Error, fory::Fory, fory::ForyBuilder, register_trait_type, row::from_row, row::to_row,
-    types::TypeId, ArcWeak, ForyDefault, RcWeak, ReadContext, Reader, Serializer, TypeResolver,
+    ArcWeak, ForyDefault, RcWeak, ReadContext, Reader, Serializer, TypeId, TypeResolver,
     WriteContext, Writer,
 };
 pub use fory_derive::{ForyObject, ForyRow};

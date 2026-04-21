@@ -16,7 +16,7 @@
 // under the License.
 
 use fory_core::buffer::Reader;
-use fory_core::types::config_flags::IS_CROSS_LANGUAGE_FLAG;
+use fory_core::wire::config_flags::IS_CROSS_LANGUAGE_FLAG;
 use fory_core::{Decimal, Fory, RefFlag, TypeId};
 use num_bigint::BigInt;
 

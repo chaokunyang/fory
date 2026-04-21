@@ -17,7 +17,7 @@
 
 use crate::buffer::{Reader, Writer};
 use crate::error::Error;
-use crate::types::RefFlag;
+use crate::wire::RefFlag;
 use std::any::Any;
 use std::collections::HashMap;
 use std::rc::Rc;

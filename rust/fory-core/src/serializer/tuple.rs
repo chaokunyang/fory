@@ -21,7 +21,7 @@ use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::collection::{read_collection_type_info, write_collection_type_info};
 use crate::serializer::skip::skip_any_value;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::{RefMode, TypeId};
+use crate::wire::{RefMode, TypeId};
 use std::mem;
 
 // Unit type () implementation - represents an empty/unit value with no data

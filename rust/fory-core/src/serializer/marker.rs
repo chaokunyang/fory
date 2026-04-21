@@ -21,7 +21,7 @@ use crate::error::Error;
 use crate::resolver::context::{ReadContext, WriteContext};
 use crate::resolver::type_resolver::TypeResolver;
 use crate::serializer::{ForyDefault, Serializer};
-use crate::types::TypeId;
+use crate::wire::TypeId;
 use std::marker::PhantomData;
 
 impl<T: 'static> Serializer for PhantomData<T> {

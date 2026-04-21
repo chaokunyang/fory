@@ -421,6 +421,7 @@ final class TypeResolver {
       case TypeIds.list:
       case TypeIds.set:
       case TypeIds.map:
+      case TypeIds.none:
       case TypeIds.binary:
       case TypeIds.duration:
       case TypeIds.timestamp:
@@ -1021,6 +1022,8 @@ final class TypeResolver {
         return _builtin(Set, TypeIds.set);
       case TypeIds.map:
         return _builtin(Map, TypeIds.map);
+      case TypeIds.none:
+        return _builtin(Null, TypeIds.none);
       case TypeIds.binary:
         return _builtin(Uint8List, TypeIds.binary);
       case TypeIds.date:
@@ -1122,6 +1125,8 @@ final class TypeResolver {
         return float64Serializer as Serializer<Object?>;
       case TypeIds.string:
         return stringSerializer as Serializer<Object?>;
+      case TypeIds.none:
+        return noneSerializer as Serializer<Object?>;
       case TypeIds.binary:
       case TypeIds.uint8Array:
         return binarySerializer as Serializer<Object?>;
@@ -1141,6 +1146,8 @@ final class TypeResolver {
         return uint32ArraySerializer as Serializer<Object?>;
       case TypeIds.uint64Array:
         return uint64ArraySerializer as Serializer<Object?>;
+      case TypeIds.float16Array:
+        return float16ArraySerializer as Serializer<Object?>;
       case TypeIds.float32Array:
         return float32ArraySerializer as Serializer<Object?>;
       case TypeIds.float64Array:
@@ -1211,6 +1218,9 @@ final class TypeResolver {
     }
     if (type == String) {
       return TypeIds.string;
+    }
+    if (type == Null) {
+      return TypeIds.none;
     }
     if (type == List) {
       return TypeIds.list;

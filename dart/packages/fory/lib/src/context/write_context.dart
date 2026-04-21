@@ -305,6 +305,9 @@ final class WriteContext {
       case TypeIds.uint64Array:
         uint64ArraySerializer.write(this, value as Uint64List);
         return;
+      case TypeIds.float16Array:
+        float16ArraySerializer.write(this, value as Uint16List);
+        return;
       case TypeIds.float32Array:
         float32ArraySerializer.write(this, value as Float32List);
         return;

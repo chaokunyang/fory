@@ -24,6 +24,16 @@ import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
 
 const int _nanosecondsPerSecond = 1000000000;
+final Expando<_ExactDurationWire> _exactDurationWire =
+    Expando<_ExactDurationWire>('fory_exact_duration_wire');
+
+final class _ExactDurationWire {
+  final int seconds;
+  final int nanoseconds;
+  final int microseconds;
+
+  const _ExactDurationWire(this.seconds, this.nanoseconds, this.microseconds);
+}
 
 void _validateDurationNanoseconds(int nanoseconds) {
   if (nanoseconds < -999999999 || nanoseconds > 999999999) {
@@ -42,24 +52,39 @@ void _validateTimestampNanoseconds(int nanoseconds) {
 }
 
 int durationWireSeconds(Duration value) {
+  final exact = _exactDurationWire[value];
+  if (exact != null && exact.microseconds == value.inMicroseconds) {
+    return exact.seconds;
+  }
   return value.inMicroseconds ~/ Duration.microsecondsPerSecond;
 }
 
 int durationWireNanoseconds(Duration value) {
+  final exact = _exactDurationWire[value];
+  if (exact != null && exact.microseconds == value.inMicroseconds) {
+    return exact.nanoseconds;
+  }
   return value.inMicroseconds.remainder(Duration.microsecondsPerSecond) * 1000;
 }
 
 Duration durationFromWire(int seconds, int nanoseconds) {
   _validateDurationNanoseconds(nanoseconds);
-  if (nanoseconds.remainder(1000) != 0) {
+  if ((seconds > 0 && nanoseconds < 0) || (seconds < 0 && nanoseconds > 0)) {
     throw StateError(
-      'Duration nanoseconds $nanoseconds exceed Dart Duration microsecond precision.',
+      'Duration wire value has inconsistent signs: seconds=$seconds, nanoseconds=$nanoseconds.',
     );
   }
-  return Duration(
-    microseconds:
-        seconds * Duration.microsecondsPerSecond + nanoseconds ~/ 1000,
-  );
+  final totalNanoseconds = seconds * _nanosecondsPerSecond + nanoseconds;
+  final microseconds = totalNanoseconds ~/ 1000;
+  final value = Duration(microseconds: microseconds);
+  if (nanoseconds.remainder(1000) != 0) {
+    _exactDurationWire[value] = _ExactDurationWire(
+      seconds,
+      nanoseconds,
+      microseconds,
+    );
+  }
+  return value;
 }
 
 int timestampWireNanoseconds(Timestamp value) {

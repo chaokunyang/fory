@@ -112,15 +112,13 @@ final class TestUnionSerializer extends UnionSerializer<TestUnion> {
   const TestUnionSerializer();
 
   @override
-  void write(WriteContext context, TestUnion value) {
-    context.buffer.writeVarUint32(value.index);
-    context.writeRef(value.value);
-  }
+  int caseId(TestUnion value) => value.index;
 
   @override
-  TestUnion read(ReadContext context) {
-    final index = context.buffer.readVarUint32();
-    final value = context.readRef();
+  Object caseValue(TestUnion value) => value.value;
+
+  @override
+  TestUnion buildValue(int index, Object? value) {
     if (index == 0 && value is String) {
       return TestUnion.ofString(value);
     }

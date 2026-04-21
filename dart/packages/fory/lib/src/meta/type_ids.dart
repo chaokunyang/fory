@@ -109,6 +109,7 @@ abstract final class TypeIds {
 
   static bool isBasicValue(int typeId) =>
       isPrimitive(typeId) ||
+      typeId == none ||
       typeId == string ||
       typeId == binary ||
       typeId == duration ||
@@ -132,6 +133,7 @@ abstract final class TypeIds {
       return true;
     }
     if (isPrimitive(typeId) ||
+        typeId == none ||
         typeId == binary ||
         typeId == duration ||
         typeId == timestamp ||

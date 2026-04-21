@@ -24,6 +24,21 @@ import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/string_encoding.dart';
 
+final class NoneSerializer extends Serializer<Null> {
+  const NoneSerializer();
+
+  @override
+  bool get supportsRef => false;
+
+  @override
+  void write(WriteContext context, Null value) {}
+
+  @override
+  Null read(ReadContext context) {
+    return null;
+  }
+}
+
 final class StringSerializer extends Serializer<String> {
   const StringSerializer();
 
@@ -89,5 +104,6 @@ final class BinarySerializer extends Serializer<Uint8List> {
   }
 }
 
+const NoneSerializer noneSerializer = NoneSerializer();
 const StringSerializer stringSerializer = StringSerializer();
 const BinarySerializer binarySerializer = BinarySerializer();

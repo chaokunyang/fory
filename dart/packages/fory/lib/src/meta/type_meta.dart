@@ -265,6 +265,7 @@ final class WireTypeMetaDecoder {
       wireTypeId == TypeIds.list ||
       wireTypeId == TypeIds.set ||
       wireTypeId == TypeIds.map ||
+      wireTypeId == TypeIds.none ||
       wireTypeId == TypeIds.binary ||
       wireTypeId == TypeIds.duration ||
       wireTypeId == TypeIds.date ||

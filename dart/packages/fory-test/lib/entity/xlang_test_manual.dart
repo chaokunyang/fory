@@ -70,17 +70,13 @@ final class _Union2Serializer extends UnionSerializer<Union2> {
   const _Union2Serializer();
 
   @override
-  void write(WriteContext context, Union2 value) {
-    final buffer = context.buffer;
-    buffer.writeVarUint32(value.index);
-    context.writeRef(value.value);
-  }
+  int caseId(Union2 value) => value.index;
 
   @override
-  Union2 read(ReadContext context) {
-    final buffer = context.buffer;
-    final index = buffer.readVarUint32();
-    final value = context.readRef();
+  Object caseValue(Union2 value) => value.value;
+
+  @override
+  Union2 buildValue(int index, Object? value) {
     if (index == 0 && value is String) {
       return Union2.ofString(value);
     }

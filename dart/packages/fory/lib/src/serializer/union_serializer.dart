@@ -17,9 +17,42 @@
  * under the License.
  */
 
+import 'package:fory/src/context/read_context.dart';
+import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/serializer/serializer.dart';
+import 'package:meta/meta.dart';
 
 /// Union-specific serializer base used by manual union serializers.
+///
+/// The runtime owns the xlang wire contract:
+/// `case_id (varuint32) | case_value (Any-style payload)`.
 abstract class UnionSerializer<T> extends Serializer<T> {
   const UnionSerializer();
+
+  /// Returns the active union case identifier for [value].
+  int caseId(T value);
+
+  /// Returns the active case payload for [value].
+  Object? caseValue(T value);
+
+  /// Rebuilds a union value from a decoded [caseId] and [value].
+  T buildValue(int caseId, Object? value);
+
+  @nonVirtual
+  @override
+  void write(WriteContext context, T value) {
+    final activeCaseId = caseId(value);
+    if (activeCaseId < 0) {
+      throw StateError('Union case id must be non-negative: $activeCaseId.');
+    }
+    context.buffer.writeVarUint32(activeCaseId);
+    context.writeRef(caseValue(value));
+  }
+
+  @nonVirtual
+  @override
+  T read(ReadContext context) {
+    final activeCaseId = context.buffer.readVarUint32();
+    return buildValue(activeCaseId, context.readRef());
+  }
 }

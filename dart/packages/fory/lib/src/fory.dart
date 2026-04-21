@@ -41,6 +41,7 @@ import 'package:fory/src/serializer/serializer.dart';
 final class Fory {
   static const int _nullHeaderFlag = 0x01;
   static const int _xlangHeaderFlag = 0x02;
+  static const int _outOfBandHeaderFlag = 0x04;
 
   late final Buffer _buffer;
   late final WriteContext _writeContext;
@@ -129,6 +130,11 @@ final class Fory {
     _readContext.prepare(buffer);
     try {
       final header = buffer.readUint8();
+      if ((header & _outOfBandHeaderFlag) != 0) {
+        throw StateError(
+          'Out-of-band buffers are not supported by the Dart runtime.',
+        );
+      }
       if ((header & _nullHeaderFlag) != 0) {
         return null as T;
       }

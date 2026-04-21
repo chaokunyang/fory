@@ -155,6 +155,12 @@ const TypedArraySerializer<Uint64List> uint64ArraySerializer =
   8,
   _asUint64List,
 );
+const TypedArraySerializer<Uint16List> float16ArraySerializer =
+    TypedArraySerializer<Uint16List>(
+  TypeIds.float16Array,
+  2,
+  _asUint16List,
+);
 const TypedArraySerializer<Float32List> float32ArraySerializer =
     TypedArraySerializer<Float32List>(
   TypeIds.float32Array,

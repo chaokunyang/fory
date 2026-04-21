@@ -188,22 +188,19 @@ void main() {
       expect(roundTrip.optionalDuration, isNull);
     });
 
-    test('rejects duration payloads with sub-microsecond precision', () {
+    test('preserves sub-microsecond duration wire precision on round-trip', () {
       final fory = Fory();
-      final bytes = Uint8List.fromList(fory.serialize(Duration.zero));
-      final view = ByteData.sublistView(bytes);
-      view.setInt32(bytes.length - 4, 1, Endian.little);
 
-      expect(
-        () => fory.deserialize<Duration>(bytes),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('microsecond precision'),
-          ),
-        ),
-      );
+      for (final nanoseconds in <int>[1, -1]) {
+        final bytes = Uint8List.fromList(fory.serialize(Duration.zero));
+        final view = ByteData.sublistView(bytes);
+        view.setInt32(bytes.length - 4, nanoseconds, Endian.little);
+
+        final roundTrip = fory.deserialize<Duration>(bytes);
+
+        expect(roundTrip, equals(Duration.zero));
+        expect(fory.serialize(roundTrip), orderedEquals(bytes));
+      }
     });
 
     test('rejects duration payloads with nanoseconds outside spec range', () {
@@ -221,6 +218,38 @@ void main() {
               (error) => error.toString(),
               'message',
               contains('out of range'),
+            ),
+          ),
+        );
+      }
+    });
+
+    test('rejects duration payloads with inconsistent signs', () {
+      final fory = Fory();
+      final positive =
+          Uint8List.fromList(fory.serialize(const Duration(seconds: 1)));
+      final negative =
+          Uint8List.fromList(fory.serialize(const Duration(seconds: -1)));
+
+      ByteData.sublistView(positive).setInt32(
+        positive.length - 4,
+        -1,
+        Endian.little,
+      );
+      ByteData.sublistView(negative).setInt32(
+        negative.length - 4,
+        1,
+        Endian.little,
+      );
+
+      for (final bytes in <Uint8List>[positive, negative]) {
+        expect(
+          () => fory.deserialize<Duration>(bytes),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.toString(),
+              'message',
+              contains('inconsistent signs'),
             ),
           ),
         );

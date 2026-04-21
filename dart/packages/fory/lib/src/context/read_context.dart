@@ -100,7 +100,7 @@ final class ReadContext {
       _readTypeMeta(expectedNamedType);
 
   @internal
-  Object readSerializerPayload(
+  Object? readSerializerPayload(
       Serializer<Object?> serializer, TypeInfo resolved,
       {required bool hasCurrentPreservedRef}) {
     final int? sentinelId;
@@ -113,7 +113,7 @@ final class ReadContext {
       sentinelId = null;
       sentinelDepth = null;
     }
-    final value = serializer.read(this) as Object;
+    final value = serializer.read(this);
     if (needsSentinel &&
         _refReader.preservedRefDepth == sentinelDepth &&
         _refReader.hasPreservedRefId &&
@@ -295,6 +295,8 @@ final class ReadContext {
       return PrimitiveSerializer.readPayload(this, resolved.typeId);
     }
     switch (resolved.typeId) {
+      case TypeIds.none:
+        return null;
       case TypeIds.string:
         return StringSerializer.readPayload(this);
       case TypeIds.binary:

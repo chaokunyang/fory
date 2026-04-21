@@ -219,7 +219,8 @@ void main() {
   });
 
   group('compatible generated structs', () {
-    test('match fields by stable ids across rename, reorder, and missing fields',
+    test(
+        'match fields by stable ids across rename, reorder, and missing fields',
         () {
       final writer = Fory(compatible: true);
       final reader = Fory(compatible: true);
@@ -260,6 +261,38 @@ void main() {
       expect(roundTripBack.payload, isA<SharedLeaf>());
       expect((roundTripBack.payload as SharedLeaf).label, equals('shared'));
       expect(identical(roundTripBack.first, roundTripBack.second), isTrue);
+    });
+
+    test('reserializes compatible structs with local TypeDef ordering', () {
+      final writer = Fory(compatible: true);
+      final reader = Fory(compatible: true);
+      _registerV1Types(writer);
+      _registerV2Types(reader);
+
+      final migratedShared = SharedLeaf()..label = 'shared';
+      final migrated = reader.deserialize<CompatibleEnvelopeV2>(
+        writer.serialize(
+          CompatibleEnvelopeV1()
+            ..name = 'Ada'
+            ..age = 36
+            ..payload = migratedShared
+            ..first = migratedShared
+            ..second = migratedShared,
+        ),
+      );
+
+      final localShared = SharedLeaf()..label = 'shared';
+      final local = CompatibleEnvelopeV2()
+        ..displayName = 'Ada'
+        ..city = 'unknown'
+        ..payload = localShared
+        ..original = localShared
+        ..duplicate = localShared;
+
+      expect(
+        reader.serialize(migrated),
+        orderedEquals(reader.serialize(local)),
+      );
     });
   });
 }

@@ -35,6 +35,7 @@ import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
+import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/timestamp.dart';
 
@@ -157,6 +158,9 @@ final class ReadContext {
 
   /// Reads a half-precision floating-point value.
   Float16 readFloat16() => _buffer.readFloat16();
+
+  /// Reads a bfloat16 floating-point value.
+  Bfloat16 readBfloat16() => _buffer.readBfloat16();
 
   /// Reads a single-precision floating-point value.
   double readFloat32() => _buffer.readFloat32();
@@ -318,6 +322,10 @@ final class ReadContext {
         return uint32ArraySerializer.read(this);
       case TypeIds.uint64Array:
         return uint64ArraySerializer.read(this);
+      case TypeIds.float16Array:
+        return float16ArraySerializer.read(this);
+      case TypeIds.bfloat16Array:
+        return bfloat16ArraySerializer.read(this);
       case TypeIds.float32Array:
         return float32ArraySerializer.read(this);
       case TypeIds.float64Array:

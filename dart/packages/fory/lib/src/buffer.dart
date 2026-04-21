@@ -22,6 +22,7 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
+import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/float16.dart';
 
 final BigInt _mask64Big = (BigInt.one << 64) - BigInt.one;
@@ -254,6 +255,12 @@ final class Buffer {
 
   /// Reads a half-precision floating-point value.
   Float16 readFloat16() => Float16.fromBits(readUint16());
+
+  /// Writes a bfloat16 floating-point value.
+  void writeBfloat16(Bfloat16 value) => writeUint16(value.toBits());
+
+  /// Reads a bfloat16 floating-point value.
+  Bfloat16 readBfloat16() => Bfloat16.fromBits(readUint16());
 
   /// Writes [value] verbatim.
   void writeBytes(List<int> value) {

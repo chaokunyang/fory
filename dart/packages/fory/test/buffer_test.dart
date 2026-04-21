@@ -24,9 +24,10 @@ import 'package:test/test.dart';
 
 void main() {
   group('Buffer', () {
-    test('round-trips fixed-width primitives, float16, and bytes', () {
+    test('round-trips fixed-width primitives, 16-bit floats, and bytes', () {
       final buffer = Buffer();
       final half = Float16(-2.5);
+      final brain = Bfloat16(-3.5);
 
       buffer.writeBool(false);
       buffer.writeBool(true);
@@ -39,6 +40,7 @@ void main() {
       buffer.writeInt64(-0x8000000000000000);
       buffer.writeUint64(0xffffffffffffffff);
       buffer.writeFloat16(half);
+      buffer.writeBfloat16(brain);
       buffer.writeFloat32(1.5);
       buffer.writeFloat64(2.5);
       buffer.writeBytes([1, 2, 3, 4]);
@@ -54,6 +56,7 @@ void main() {
       expect(buffer.readInt64(), equals(-0x8000000000000000));
       expect(buffer.readUint64(), equals(0xffffffffffffffff));
       expect(buffer.readFloat16(), equals(half));
+      expect(buffer.readBfloat16(), equals(brain));
       expect(buffer.readFloat32(), closeTo(1.5, 0.0001));
       expect(buffer.readFloat64(), equals(2.5));
       expect(buffer.readBytes(4), orderedEquals([1, 2, 3, 4]));
@@ -375,6 +378,7 @@ void main() {
       buffer.writeInt64(-0x1234567890abcdef);
       buffer.writeUint64(0xfedcba9876543210);
       buffer.writeFloat16(Float16(1.5));
+      buffer.writeBfloat16(Bfloat16(2.5));
       buffer.writeFloat32(3.25);
       buffer.writeFloat64(-9.5);
       buffer.writeVarUint32(0xffffffff);
@@ -395,6 +399,7 @@ void main() {
       cursor.writeInt64(-0x1234567890abcdef);
       cursor.writeUint64(0xfedcba9876543210);
       cursor.writeFloat16(Float16(1.5));
+      cursor.writeBfloat16(Bfloat16(2.5));
       cursor.writeFloat32(3.25);
       cursor.writeFloat64(-9.5);
       cursor.writeVarUint32(0xffffffff);
@@ -420,6 +425,7 @@ void main() {
       expect(readCursor.readInt64(), equals(-0x1234567890abcdef));
       expect(readCursor.readUint64(), equals(0xfedcba9876543210));
       expect(readCursor.readFloat16(), equals(Float16(1.5)));
+      expect(readCursor.readBfloat16(), equals(Bfloat16(2.5)));
       expect(readCursor.readFloat32(), closeTo(3.25, 0.0001));
       expect(readCursor.readFloat64(), equals(-9.5));
       expect(readCursor.readVarUint32(), equals(0xffffffff));

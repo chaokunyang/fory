@@ -121,6 +121,10 @@ final class GeneratedWriteCursor {
     writeUint16(value.toBits());
   }
 
+  void writeBfloat16(Bfloat16 value) {
+    writeUint16(value.toBits());
+  }
+
   void writeFloat32(double value) {
     _view.setFloat32(_offset, value, Endian.little);
     _offset += 4;
@@ -289,6 +293,8 @@ final class GeneratedReadCursor {
   }
 
   Float16 readFloat16() => Float16.fromBits(readUint16());
+
+  Bfloat16 readBfloat16() => Bfloat16.fromBits(readUint16());
 
   double readFloat32() {
     final value = _view.getFloat32(_offset, Endian.little);
@@ -687,7 +693,7 @@ DateTime readGeneratedDateTimeValue(ReadContext context) {
 }
 
 @internal
-void writeGeneratedFixedArrayValue(WriteContext context, TypedData value) {
+void writeGeneratedFixedArrayValue(WriteContext context, Object value) {
   writeTypedArrayBytes(context, value);
 }
 

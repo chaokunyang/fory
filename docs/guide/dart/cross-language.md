@@ -169,7 +169,8 @@ Because Dart `int` is not itself a promise about the exact xlang wire width, pre
 
 - `Int32` for xlang `int32`
 - `UInt32` for xlang `uint32`
-- `Float16` and `Float32` for reduced-width floating point
+- `Float16`, `Bfloat16`, and `Float32` for reduced-width floating point
+- `Float16List` and `Bfloat16List` for 16-bit floating-point array payloads
 - `Timestamp`, `LocalDate`, and `Duration` for explicit temporal semantics
 
 See [Supported Types](supported-types.md) and [xlang type mapping](../../specification/xlang_type_mapping.md).

@@ -54,10 +54,16 @@ Each wrapper clamps the stored value to the target bit width.
 
 ## Floating-Point Wrappers
 
-Dart `double` maps to 64-bit float. If the peer uses a 32-bit float, use a wrapper:
+Dart `double` maps to 64-bit float. If the peer uses reduced-precision
+floating-point values, use an explicit wrapper:
 
 - `Float32` — 32-bit float (matches Java `float`, C# `float`, Go `float32`)
 - `Float16` — half-precision, for specialized numeric payloads
+- `Bfloat16` — brain floating point, useful when interoperating with ML-oriented payloads
+
+For contiguous 16-bit floating-point arrays, use `Float16List` and
+`Bfloat16List` rather than `Uint16List` when the wire type is `float16_array`
+or `bfloat16_array`.
 
 ## Time and Date Types
 

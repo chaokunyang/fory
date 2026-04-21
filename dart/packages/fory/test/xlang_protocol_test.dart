@@ -41,9 +41,32 @@ void main() {
       );
       bytes[2] = TypeIds.float16Array;
 
+      final values = fory.deserialize<Float16List>(bytes);
+
       expect(
-        fory.deserialize<Uint16List>(bytes).toList(),
+        values.map((value) => value.toBits()).toList(),
         orderedEquals(<int>[0x3c00, 0xc000, 0x7e00]),
+      );
+    });
+
+    test('deserializes BFLOAT16 and BFLOAT16_ARRAY wire values', () {
+      final fory = Fory();
+      final scalarBytes = Uint8List.fromList(fory.serialize(Uint16(0xbf60)));
+      scalarBytes[2] = TypeIds.bfloat16;
+      final arrayBytes = Uint8List.fromList(
+        fory.serialize(
+          Uint16List.fromList(<int>[0x3f80, 0xbf80, 0x7fc1]),
+        ),
+      );
+      arrayBytes[2] = TypeIds.bfloat16Array;
+
+      expect(fory.deserialize<Bfloat16>(scalarBytes).toBits(), equals(0xbf60));
+      expect(
+        fory
+            .deserialize<Bfloat16List>(arrayBytes)
+            .map((value) => value.toBits())
+            .toList(),
+        orderedEquals(<int>[0x3f80, 0xbf80, 0x7fc1]),
       );
     });
 

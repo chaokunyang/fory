@@ -17,6 +17,8 @@
  * under the License.
  */
 
+import 'dart:typed_data';
+
 import 'package:fory/fory.dart';
 import 'package:test/test.dart';
 
@@ -34,10 +36,12 @@ class NumericWrappersEnvelope {
   Uint32 u32 = Uint32(0);
   Uint64 u64 = Uint64(0);
   Float16 half = Float16(0);
+  Bfloat16 brain = Bfloat16(0);
   Float32 single = Float32(0);
   Int8? optionalI8;
   Uint64? optionalU64;
   Float16? optionalHalf;
+  Bfloat16? optionalBrain;
   Float32? optionalSingle;
 }
 
@@ -63,10 +67,12 @@ NumericWrappersEnvelope _sampleEnvelope() {
     ..u32 = Uint32(0xffffffff)
     ..u64 = Uint64(0xffffffffffffffff)
     ..half = Float16.fromBits(0x3555)
+    ..brain = Bfloat16.fromBits(0x3eab)
     ..single = Float32.fromBits(0x40490fdb)
     ..optionalI8 = Int8(126)
     ..optionalU64 = Uint64(0x8000000000000000)
     ..optionalHalf = Float16.fromBits(0x8000)
+    ..optionalBrain = Bfloat16.fromBits(0x8000)
     ..optionalSingle = Float32.fromBits(0x80000000);
 }
 
@@ -82,11 +88,14 @@ void _expectEnvelopeEquals(
   expect(actual.u32, equals(expected.u32));
   expect(actual.u64, equals(expected.u64));
   expect(actual.half.toBits(), equals(expected.half.toBits()));
+  expect(actual.brain.toBits(), equals(expected.brain.toBits()));
   expect(actual.single.toBits(), equals(expected.single.toBits()));
   expect(actual.optionalI8, equals(expected.optionalI8));
   expect(actual.optionalU64, equals(expected.optionalU64));
   expect(
       actual.optionalHalf?.toBits(), equals(expected.optionalHalf?.toBits()));
+  expect(
+      actual.optionalBrain?.toBits(), equals(expected.optionalBrain?.toBits()));
   expect(
     actual.optionalSingle?.toBits(),
     equals(expected.optionalSingle?.toBits()),
@@ -154,6 +163,39 @@ void main() {
       expect(Float16.fromBits(0x3555).value, closeTo(0.333251953125, 1e-12));
     });
 
+    test('Bfloat16 arithmetic rounds back to bfloat16 precision', () {
+      expect((Bfloat16(1.5) + 2).toBits(), equals(Bfloat16(3.5).toBits()));
+      expect(
+        (Bfloat16(7) - Bfloat16(2.5)).toBits(),
+        equals(Bfloat16(4.5).toBits()),
+      );
+      expect((Bfloat16(1) / 3).toBits(), equals(Bfloat16(1 / 3).toBits()));
+      expect((Bfloat16(7.5) % 2).toBits(), equals(Bfloat16(1.5).toBits()));
+      expect(Bfloat16(7.5) ~/ 2, equals(3));
+      expect((-Bfloat16(1.5)).toBits(), equals(Bfloat16(-1.5).toBits()));
+      expect(Bfloat16(-1) < 0, isTrue);
+      expect(Bfloat16(3.5) >= Bfloat16(3.5), isTrue);
+      expect(Bfloat16.fromBits(0x3eab).value, closeTo(0.333984375, 1e-12));
+    });
+
+    test(
+        'Bfloat16.fromDouble rounds directly from float64 and preserves NaN sign payload bits',
+        () {
+      final subnormalSource = ByteData(8)
+        ..setUint64(0, 0x37da834f7e281cc1, Endian.little);
+      final trickySubnormal = subnormalSource.getFloat64(0, Endian.little);
+      final nanSource = ByteData(8)
+        ..setUint64(0, 0xfff123456789abcd, Endian.little);
+      final payloadNaN = nanSource.getFloat64(0, Endian.little);
+      final convertedNaN = Bfloat16.fromDouble(payloadNaN);
+
+      expect(Bfloat16.fromDouble(trickySubnormal).toBits(), equals(0x0007));
+      expect(convertedNaN.toBits() & 0x8000, equals(0x8000));
+      expect(convertedNaN.toBits() & 0x7f80, equals(0x7f80));
+      expect(convertedNaN.toBits() & 0x0040, equals(0x0040));
+      expect(convertedNaN.toBits() & 0x003f, isNot(0));
+    });
+
     test('Float32 arithmetic rounds back to binary32 precision', () {
       expect((Float32(1.5) + 2).toBits(), equals(Float32(3.5).toBits()));
       expect(
@@ -198,6 +240,24 @@ void main() {
       for (final value in cases) {
         expect(
             _roundTrip<Float16>(fory, value).toBits(), equals(value.toBits()));
+      }
+    });
+
+    test('round-trips root Bfloat16 payloads with exact bits', () {
+      final fory = Fory();
+      final cases = <Bfloat16>[
+        Bfloat16.fromBits(0x0000),
+        Bfloat16.fromBits(0x8000),
+        Bfloat16.fromBits(0x3eab),
+        Bfloat16.fromBits(0x7f80),
+        Bfloat16.fromBits(0x7fc0),
+      ];
+
+      for (final value in cases) {
+        expect(
+          _roundTrip<Bfloat16>(fory, value).toBits(),
+          equals(value.toBits()),
+        );
       }
     });
 
@@ -253,6 +313,7 @@ void main() {
       expect(roundTrip.optionalI8, isNull);
       expect(roundTrip.optionalU64, isNull);
       expect(roundTrip.optionalHalf, isNull);
+      expect(roundTrip.optionalBrain, isNull);
       expect(roundTrip.optionalSingle, isNull);
     });
   });

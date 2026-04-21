@@ -49,6 +49,7 @@ export 'src/meta/type_ids.dart';
 export 'src/serializer/enum_serializer.dart';
 export 'src/serializer/serializer.dart';
 export 'src/serializer/union_serializer.dart';
+export 'src/types/bfloat16.dart';
 export 'src/types/float16.dart';
 export 'src/types/float32.dart';
 export 'src/types/int16.dart';

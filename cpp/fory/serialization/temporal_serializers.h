@@ -55,7 +55,8 @@ struct Date {
 // ============================================================================
 
 /// Serializer for Duration (std::chrono::nanoseconds)
-/// Per xlang spec: serialized as int64 nanosecond count
+/// Per xlang spec: serialized as signed varint64 seconds + signed int32
+/// nanoseconds
 template <> struct Serializer<Duration> {
   static constexpr TypeId type_id = TypeId::DURATION;
 
@@ -85,8 +86,10 @@ template <> struct Serializer<Duration> {
   }
 
   static inline void write_data(const Duration &duration, WriteContext &ctx) {
-    int64_t nanos = duration.count();
-    ctx.write_bytes(&nanos, sizeof(int64_t));
+    auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration);
+    auto remainder = duration - seconds;
+    ctx.write_var_int64(seconds.count());
+    ctx.buffer().write_int32(static_cast<int32_t>(remainder.count()));
   }
 
   static inline void write_data_generic(const Duration &duration,
@@ -115,9 +118,13 @@ template <> struct Serializer<Duration> {
   }
 
   static inline Duration read_data(ReadContext &ctx) {
-    int64_t nanos;
-    ctx.read_bytes(&nanos, sizeof(int64_t), ctx.error());
-    return Duration(nanos);
+    int64_t seconds = ctx.read_var_int64(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Duration(0);
+    }
+    int32_t nanos = ctx.read_int32(ctx.error());
+    return std::chrono::duration_cast<Duration>(std::chrono::seconds(seconds)) +
+           Duration(nanos);
   }
 
   static inline Duration read_with_type_info(ReadContext &ctx, RefMode ref_mode,

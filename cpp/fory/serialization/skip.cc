@@ -549,8 +549,13 @@ void skip_field_value(ReadContext &ctx, const FieldType &field_type,
     return;
 
   case TypeId::DURATION: {
-    // Duration is stored as fixed 8-byte nanosecond count.
-    constexpr uint32_t k_bytes = static_cast<uint32_t>(sizeof(int64_t));
+    // Duration is stored as signed varint64 seconds + signed int32
+    // nanoseconds.
+    skip_varint(ctx);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+    constexpr uint32_t k_bytes = static_cast<uint32_t>(sizeof(int32_t));
     ctx.buffer().increase_reader_index(k_bytes, ctx.error());
     return;
   }

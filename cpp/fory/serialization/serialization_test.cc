@@ -19,8 +19,10 @@
 
 #include "fory/serialization/fory.h"
 #include "fory/serialization/ref_resolver.h"
+#include "fory/serialization/skip.h"
 #include "gtest/gtest.h"
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <map>
@@ -96,6 +98,11 @@ inline void register_test_types(Fory &fory) {
   fory.register_enum<LegacyStatus>(type_id++);
   fory.register_enum<SparseStatus>(type_id++);
   fory.register_enum<OldStatus>(type_id++);
+}
+
+inline std::vector<uint8_t> buffer_bytes(Buffer &buffer) {
+  return std::vector<uint8_t>(buffer.data(),
+                              buffer.data() + buffer.writer_index());
 }
 
 template <typename T>
@@ -180,6 +187,79 @@ TEST(SerializationTest, StringRoundtrip) {
   test_roundtrip(std::string("Hello, World!"));
   test_roundtrip(std::string("The quick brown fox jumps over the lazy dog"));
   test_roundtrip(std::string("UTF-8: 你好世界"));
+}
+
+TEST(SerializationTest, DurationRoundtrip) {
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  std::vector<Duration> values = {
+      Duration(0),
+      std::chrono::seconds(12) + Duration(345678901),
+      -std::chrono::seconds(7) - std::chrono::milliseconds(45) - Duration(67),
+      Duration(-1),
+  };
+
+  for (const Duration &original : values) {
+    auto serialize_result = fory.serialize(original);
+    ASSERT_TRUE(serialize_result.ok())
+        << "Serialization failed: " << serialize_result.error().to_string();
+
+    std::vector<uint8_t> bytes = std::move(serialize_result).value();
+    auto deserialize_result =
+        fory.deserialize<Duration>(bytes.data(), bytes.size());
+    ASSERT_TRUE(deserialize_result.ok())
+        << "Deserialization failed: " << deserialize_result.error().to_string();
+    EXPECT_EQ(deserialize_result.value(), original);
+  }
+}
+
+TEST(SerializationTest, DurationUsesSecondsAndNanosecondsPayload) {
+  struct TestCase {
+    Duration value;
+    int64_t expected_seconds;
+    int32_t expected_nanos;
+  };
+
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  std::vector<TestCase> cases = {
+      {Duration(1234567890), 1, 234567890},
+      {Duration(-1234567890), -1, -234567890},
+      {Duration(-1), 0, -1},
+  };
+
+  for (const TestCase &test_case : cases) {
+    WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
+    Serializer<Duration>::write_data(test_case.value, write_ctx);
+    ASSERT_FALSE(write_ctx.has_error()) << write_ctx.error().to_string();
+
+    Buffer expected;
+    expected.write_var_int64(test_case.expected_seconds);
+    expected.write_int32(test_case.expected_nanos);
+    EXPECT_EQ(buffer_bytes(write_ctx.buffer()), buffer_bytes(expected));
+
+    ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+    read_ctx.attach(write_ctx.buffer());
+    Duration decoded = Serializer<Duration>::read_data(read_ctx);
+    ASSERT_FALSE(read_ctx.has_error()) << read_ctx.error().to_string();
+    EXPECT_EQ(decoded, test_case.value);
+    EXPECT_EQ(read_ctx.buffer().reader_index(),
+              write_ctx.buffer().writer_index());
+  }
+}
+
+TEST(SerializationTest, DurationSkipConsumesSecondsAndNanosecondsPayload) {
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
+  Serializer<Duration>::write_data(Duration(-1), write_ctx);
+  ASSERT_FALSE(write_ctx.has_error()) << write_ctx.error().to_string();
+
+  ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+  read_ctx.attach(write_ctx.buffer());
+  skip_field_value(read_ctx,
+                   FieldType(static_cast<uint32_t>(TypeId::DURATION), false),
+                   RefMode::None);
+  ASSERT_FALSE(read_ctx.has_error()) << read_ctx.error().to_string();
+  EXPECT_EQ(read_ctx.buffer().reader_index(),
+            write_ctx.buffer().writer_index());
 }
 
 // ============================================================================

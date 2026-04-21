@@ -22,6 +22,7 @@ private let typeMetaSizeMask = 0xFF
 public final class ReadContext {
     public let buffer: ByteBuffer
     let typeResolver: TypeResolver
+    public let xlang: Bool
     public let trackRef: Bool
     public let compatible: Bool
     public let checkClassVersion: Bool
@@ -40,6 +41,7 @@ public final class ReadContext {
     init(
         buffer: ByteBuffer,
         typeResolver: TypeResolver,
+        xlang: Bool = false,
         trackRef: Bool,
         compatible: Bool = false,
         checkClassVersion: Bool = true,
@@ -49,6 +51,7 @@ public final class ReadContext {
     ) {
         self.buffer = buffer
         self.typeResolver = typeResolver
+        self.xlang = xlang
         self.trackRef = trackRef
         self.compatible = compatible
         self.checkClassVersion = checkClassVersion

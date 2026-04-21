@@ -212,6 +212,62 @@ TEST(SerializationTest, DurationRoundtrip) {
   }
 }
 
+TEST(SerializationTest, DateExposesDaysSinceEpochAccessorAndRoundTrips) {
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  Date original(-1);
+
+  EXPECT_EQ(original.days_since_epoch(), -1);
+
+  auto serialize_result = fory.serialize(original);
+  ASSERT_TRUE(serialize_result.ok())
+      << "Serialization failed: " << serialize_result.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(serialize_result).value();
+  Buffer expected;
+  expected.write_uint8(0b10);
+  expected.write_int8(NOT_NULL_VALUE_FLAG);
+  expected.write_uint8(static_cast<uint8_t>(TypeId::DATE));
+  expected.write_var_int64(-1);
+  EXPECT_EQ(bytes, buffer_bytes(expected));
+  auto deserialize_result = fory.deserialize<Date>(bytes.data(), bytes.size());
+  ASSERT_TRUE(deserialize_result.ok())
+      << "Deserialization failed: " << deserialize_result.error().to_string();
+  EXPECT_EQ(deserialize_result.value(), original);
+  EXPECT_EQ(deserialize_result.value().days_since_epoch(), -1);
+}
+
+TEST(SerializationTest, DateRejectsXlangDayCountsOutsideInt32Range) {
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
+  write_ctx.write_var_int64(
+      static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1);
+  ASSERT_FALSE(write_ctx.has_error()) << write_ctx.error().to_string();
+
+  ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+  read_ctx.attach(write_ctx.buffer());
+  Date decoded = Serializer<Date>::read_data(read_ctx);
+  (void)decoded;
+  ASSERT_TRUE(read_ctx.has_error());
+  EXPECT_NE(read_ctx.error().to_string().find("exceeds int32_t range"),
+            std::string::npos);
+}
+
+TEST(SerializationTest, DateSkipConsumesVarInt64DayCount) {
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
+  Serializer<Date>::write_data(Date(18954), write_ctx);
+  ASSERT_FALSE(write_ctx.has_error()) << write_ctx.error().to_string();
+
+  ReadContext read_ctx(fory.config(), fory.type_resolver().clone());
+  read_ctx.attach(write_ctx.buffer());
+  skip_field_value(read_ctx,
+                   FieldType(static_cast<uint32_t>(TypeId::DATE), false),
+                   RefMode::None);
+  ASSERT_FALSE(read_ctx.has_error()) << read_ctx.error().to_string();
+  EXPECT_EQ(read_ctx.buffer().reader_index(),
+            write_ctx.buffer().writer_index());
+}
+
 TEST(SerializationTest, DurationUsesSecondsAndNanosecondsPayload) {
   struct TestCase {
     Duration value;

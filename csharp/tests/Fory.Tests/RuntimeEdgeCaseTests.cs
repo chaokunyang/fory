@@ -169,6 +169,20 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
+    public void DateOnlyUsesVarInt64Days()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        byte[] payload = fory.Serialize(new DateOnly(2021, 11, 23));
+
+        ByteReader reader = new(payload);
+        Assert.False(fory.ReadHead(reader));
+        Assert.Equal((sbyte)RefFlag.NotNullValue, reader.ReadInt8());
+        Assert.Equal((uint)TypeId.Date, reader.ReadUInt8());
+        Assert.Equal(18_954L, reader.ReadVarInt64());
+        Assert.Equal(0, reader.Remaining);
+    }
+
+    [Fact]
     public void DecimalRoundTripEdgeCases()
     {
         ForyRuntime fory = ForyRuntime.Builder().Build();

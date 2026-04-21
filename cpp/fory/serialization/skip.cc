@@ -568,9 +568,8 @@ void skip_field_value(ReadContext &ctx, const FieldType &field_type,
   }
 
   case TypeId::DATE: {
-    // Date is stored as fixed 4-byte day count.
-    constexpr uint32_t k_bytes = static_cast<uint32_t>(sizeof(int32_t));
-    ctx.buffer().increase_reader_index(k_bytes, ctx.error());
+    // Date is stored as a signed varint64 day count.
+    ctx.read_var_int64(ctx.error());
     return;
   }
 

@@ -20,6 +20,7 @@
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/meta/type_ids.dart';
 import 'package:test/test.dart';
 
 part 'time_serializer_test.fory.dart';
@@ -87,6 +88,15 @@ void main() {
         expect(
             fory.deserialize<LocalDate>(fory.serialize(value)), equals(value));
       }
+    });
+
+    test('encodes LocalDate as signed varint64 in xlang payloads', () {
+      final fory = Fory();
+      final value = LocalDate.fromEpochDay(-1);
+
+      final bytes = fory.serialize(value);
+      expect(bytes, equals(Uint8List.fromList([0x02, 0xff, TypeIds.date, 0x01])));
+      expect(fory.deserialize<LocalDate>(bytes), equals(value));
     });
 
     test('LocalDate convenience methods bridge DateTime and epoch-day forms',

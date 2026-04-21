@@ -85,26 +85,62 @@ func localDateConvenienceMethodsExposeEpochAndCalendarViews() throws {
 
 @Test
 func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
-    let writeBuffer = ByteBuffer()
-    let typeResolver = TypeResolver(trackRef: false)
-    let writeContext = WriteContext(
-        buffer: writeBuffer,
-        typeResolver: typeResolver,
+    let xlangWriteBuffer = ByteBuffer()
+    let xlangTypeResolver = TypeResolver(trackRef: false)
+    let xlangWriteContext = WriteContext(
+        buffer: xlangWriteBuffer,
+        typeResolver: xlangTypeResolver,
+        xlang: true,
         trackRef: false,
         compatible: true,
         checkClassVersion: true,
         maxDepth: 5
     )
 
-    let localDate = localDate(20_001)
-    let instant = Date(timeIntervalSince1970: 123_456.000_001)
+    let xlangLocalDate = localDate(-1)
+    try xlangWriteContext.writeLocalDate(xlangLocalDate, refMode: .nullOnly, writeTypeInfo: true)
+    #expect(
+        Array(xlangWriteBuffer.copyToData()) == [
+            UInt8(bitPattern: RefFlag.notNullValue.rawValue),
+            UInt8(LocalDate.staticTypeId.rawValue),
+            0x01,
+        ]
+    )
+
+    let xlangReadContext = ReadContext(
+        buffer: ByteBuffer(data: xlangWriteBuffer.copyToData()),
+        typeResolver: xlangTypeResolver,
+        xlang: true,
+        trackRef: false,
+        compatible: true,
+        checkClassVersion: true,
+        maxCollectionSize: 1_000_000,
+        maxBinarySize: 64 * 1024 * 1024,
+        maxDepth: 5
+    )
+    let xlangLocalDateDecoded = try xlangReadContext.readLocalDate(refMode: RefMode.nullOnly, readTypeInfo: true)
+    #expect(xlangLocalDateDecoded == xlangLocalDate)
+
+    let writeBuffer = ByteBuffer()
+    let typeResolver = TypeResolver(trackRef: false)
+    let writeContext = WriteContext(
+        buffer: writeBuffer,
+        typeResolver: typeResolver,
+        xlang: false,
+        trackRef: false,
+        compatible: true,
+        checkClassVersion: true,
+        maxDepth: 5
+    )
+
+    let localDate = localDate(-1)
 
     try writeContext.writeLocalDate(localDate, refMode: .nullOnly, writeTypeInfo: true)
-    try writeContext.writeTimestamp(instant, refMode: .nullOnly, writeTypeInfo: true)
 
     let readContext = ReadContext(
         buffer: ByteBuffer(data: writeBuffer.copyToData()),
         typeResolver: typeResolver,
+        xlang: false,
         trackRef: false,
         compatible: true,
         checkClassVersion: true,
@@ -114,9 +150,42 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
     )
 
     let localDateDecoded = try readContext.readLocalDate(refMode: RefMode.nullOnly, readTypeInfo: true)
-    let timestampDecoded = try readContext.readTimestamp(refMode: RefMode.nullOnly, readTypeInfo: true)
 
     #expect(localDateDecoded == localDate)
+    #expect(Array(writeBuffer.copyToData()) == [
+        UInt8(bitPattern: RefFlag.notNullValue.rawValue),
+        UInt8(LocalDate.staticTypeId.rawValue),
+        0xFF,
+        0xFF,
+        0xFF,
+        0xFF,
+    ])
+
+    let timestampBuffer = ByteBuffer()
+    let timestampWriteContext = WriteContext(
+        buffer: timestampBuffer,
+        typeResolver: typeResolver,
+        xlang: false,
+        trackRef: false,
+        compatible: true,
+        checkClassVersion: true,
+        maxDepth: 5
+    )
+    let instant = Date(timeIntervalSince1970: 123_456.000_001)
+    try timestampWriteContext.writeTimestamp(instant, refMode: .nullOnly, writeTypeInfo: true)
+
+    let timestampReadContext = ReadContext(
+        buffer: ByteBuffer(data: timestampBuffer.copyToData()),
+        typeResolver: typeResolver,
+        xlang: false,
+        trackRef: false,
+        compatible: true,
+        checkClassVersion: true,
+        maxCollectionSize: 1_000_000,
+        maxBinarySize: 64 * 1024 * 1024,
+        maxDepth: 5
+    )
+    let timestampDecoded = try timestampReadContext.readTimestamp(refMode: RefMode.nullOnly, readTypeInfo: true)
     #expect(abs(timestampDecoded.timeIntervalSince1970 - instant.timeIntervalSince1970) < 0.000_001)
 }
 

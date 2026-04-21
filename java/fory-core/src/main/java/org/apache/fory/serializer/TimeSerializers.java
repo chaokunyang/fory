@@ -131,11 +131,14 @@ public class TimeSerializers {
     public void write(WriteContext writeContext, LocalDate value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       if (config.isXlang()) {
-        // TODO use java encoding to support larger range.
-        buffer.writeInt32(DateTimeUtils.localDateToDays(value));
+        writeXlangLocalDate(buffer, value);
       } else {
         writeLocalDate(buffer, value);
       }
+    }
+
+    public static void writeXlangLocalDate(MemoryBuffer buffer, LocalDate value) {
+      buffer.writeVarInt64(value.toEpochDay());
     }
 
     public static void writeLocalDate(MemoryBuffer buffer, LocalDate value) {
@@ -148,9 +151,13 @@ public class TimeSerializers {
     public LocalDate read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       if (config.isXlang()) {
-        return DateTimeUtils.daysToLocalDate(buffer.readInt32());
+        return readXlangLocalDate(buffer);
       }
       return readLocalDate(buffer);
+    }
+
+    public static LocalDate readXlangLocalDate(MemoryBuffer buffer) {
+      return LocalDate.ofEpochDay(buffer.readVarInt64());
     }
 
     public static LocalDate readLocalDate(MemoryBuffer buffer) {

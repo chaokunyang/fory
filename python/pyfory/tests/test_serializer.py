@@ -172,6 +172,22 @@ def test_basic_serializer(xlang):
     assert ser_de(fory, set_) == set_
 
 
+@pytest.mark.parametrize("xlang", [True, False])
+def test_date_serializer_uses_xlang_varint64_and_native_int32(xlang):
+    fory = Fory(xlang=xlang, ref=False)
+    day = datetime.date(1969, 12, 31)
+    payload = fory.serialize(day)
+    buffer = Buffer(payload)
+    assert buffer.read_uint8() == 2
+    assert buffer.read_int8() == -1
+    assert buffer.read_uint8() == TypeId.DATE
+    if xlang:
+        assert buffer.read_varint64() == -1
+    else:
+        assert buffer.read_int32() == -1
+    assert buffer.get_reader_index() == len(payload)
+
+
 @pytest.mark.parametrize("xlang", [False, True])
 def test_decimal_round_trip(xlang):
     fory = Fory(xlang=xlang, ref=False)

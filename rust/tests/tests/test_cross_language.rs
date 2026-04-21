@@ -20,6 +20,7 @@ use fory_core::buffer::{Reader, Writer};
 use fory_core::error::Error;
 use fory_core::resolver::TypeResolver;
 use fory_core::serializer::{ForyDefault, Serializer};
+use fory_core::type_id::TypeId;
 use fory_core::util::murmurhash3_x64_128;
 use fory_core::{read_data, write_data, Decimal, Fory};
 use fory_core::{ReadContext, WriteContext};
@@ -112,6 +113,38 @@ fn test_buffer() {
     writer.write_bytes(binary);
 
     fs::write(&data_file_path, writer.dump()).unwrap();
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_naive_date_uses_var_i64_day_count() {
+    let fory = Fory::builder().xlang(true).track_ref(false).build();
+    let day = NaiveDate::from_ymd_opt(1969, 12, 31).unwrap();
+    let mut buf = Vec::new();
+    fory.serialize_to(&mut buf, &day).unwrap();
+
+    let mut reader = Reader::new(buf.as_slice());
+    assert_eq!(reader.read_u8().unwrap(), 2);
+    assert_eq!(reader.read_i8().unwrap(), -1);
+    assert_eq!(reader.read_u8().unwrap(), TypeId::DATE as u8);
+    assert_eq!(reader.read_var_i64().unwrap(), -1);
+    assert_eq!(reader.get_cursor(), buf.len());
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_naive_date_uses_i32_day_count_in_native_mode() {
+    let fory = Fory::builder().xlang(false).track_ref(false).build();
+    let day = NaiveDate::from_ymd_opt(1969, 12, 31).unwrap();
+    let mut buf = Vec::new();
+    fory.serialize_to(&mut buf, &day).unwrap();
+
+    let mut reader = Reader::new(buf.as_slice());
+    assert_eq!(reader.read_u8().unwrap(), 0);
+    assert_eq!(reader.read_i8().unwrap(), -1);
+    assert_eq!(reader.read_u8().unwrap(), TypeId::DATE as u8);
+    assert_eq!(reader.read_i32().unwrap(), -1);
+    assert_eq!(reader.get_cursor(), buf.len());
 }
 
 #[test]

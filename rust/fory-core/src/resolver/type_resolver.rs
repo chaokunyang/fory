@@ -741,6 +741,7 @@ impl TypeResolver {
         self.register_internal_serializer::<String>(TypeId::STRING)?;
         self.register_internal_serializer::<NaiveDateTime>(TypeId::TIMESTAMP)?;
         self.register_internal_serializer::<NaiveDate>(TypeId::DATE)?;
+        self.register_internal_serializer::<crate::serializer::Decimal>(TypeId::DECIMAL)?;
 
         self.register_internal_serializer::<Vec<bool>>(TypeId::BOOL_ARRAY)?;
         self.register_internal_serializer::<Vec<i8>>(TypeId::INT8_ARRAY)?;

@@ -648,6 +648,11 @@ fn skip_value(
             <NaiveDate as Serializer>::fory_read_data(context)?;
         }
 
+        // ============ DECIMAL (TypeId = 38) ============
+        types::DECIMAL => {
+            <crate::Decimal as Serializer>::fory_read_data(context)?;
+        }
+
         // ============ BINARY (TypeId = 39) ============
         types::BINARY => {
             <Vec<u8> as Serializer>::fory_read_data(context)?;

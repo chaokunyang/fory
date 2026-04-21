@@ -22,8 +22,9 @@ use fory_core::meta::murmurhash3_x64_128;
 use fory_core::resolver::context::{ReadContext, WriteContext};
 use fory_core::serializer::{ForyDefault, Serializer};
 use fory_core::TypeResolver;
-use fory_core::{read_data, write_data, Fory};
+use fory_core::{read_data, write_data, Decimal, Fory};
 use fory_derive::ForyObject;
+use num_bigint::BigInt;
 use std::collections::{HashMap, HashSet};
 use std::{fs, vec};
 
@@ -629,6 +630,47 @@ fn test_integer() {
     fory.serialize_to(&mut buf, &remote_f4).unwrap();
     fory.serialize_to(&mut buf, &remote_f5).unwrap();
     fory.serialize_to(&mut buf, &remote_f6).unwrap();
+    fs::write(&data_file_path, buf).unwrap();
+}
+
+fn decimal_value(unscaled: &str, scale: i32) -> Decimal {
+    Decimal::new(
+        BigInt::parse_bytes(unscaled.as_bytes(), 10).expect("invalid decimal"),
+        scale,
+    )
+}
+
+#[test]
+#[ignore]
+fn test_decimal() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+    let mut reader = Reader::new(bytes.as_slice());
+    let fory = Fory::builder().compatible(true).xlang(true).build();
+    let values = vec![
+        decimal_value("0", 0),
+        decimal_value("0", 3),
+        decimal_value("1", 0),
+        decimal_value("-1", 0),
+        decimal_value("12345", 2),
+        decimal_value("9223372036854775807", 0),
+        decimal_value("-9223372036854775808", 0),
+        decimal_value("4611686018427387903", 0),
+        decimal_value("-4611686018427387904", 0),
+        decimal_value("9223372036854775808", 0),
+        decimal_value("-9223372036854775809", 0),
+        decimal_value("123456789012345678901234567890123456789", 37),
+        decimal_value("-123456789012345678901234567890123456789", -17),
+    ];
+    for expected in &values {
+        let actual: Decimal = fory.deserialize_from(&mut reader).unwrap();
+        assert_eq!(&actual, expected);
+    }
+
+    let mut buf = Vec::new();
+    for value in &values {
+        fory.serialize_to(&mut buf, value).unwrap();
+    }
     fs::write(&data_file_path, buf).unwrap();
 }
 

@@ -94,7 +94,7 @@ final class ForyGenerator extends Generator {
         .toList(growable: false);
     final output = StringBuffer()
       ..writeln(
-        '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, unused_element, unnecessary_null_comparison',
+        '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, no_leading_underscores_for_local_identifiers, unused_element, unused_element_parameter, unnecessary_null_comparison',
       )
       ..writeln();
 
@@ -1031,11 +1031,24 @@ GeneratedFieldType(
       return 'Map<${_typeCodeString(keyType)}, ${_typeCodeString(valueType)}>.of((($valueExpression as Map)).map((key, value) => MapEntry($convertedKey, $convertedValue)))';
     }
     if (type.isDartCoreInt) {
-      if (fieldType.typeId == TypeIds.int32 ||
-          fieldType.typeId == TypeIds.varInt32) {
-        return '($valueExpression as Int32).value';
+      switch (fieldType.typeId) {
+        case TypeIds.int8:
+          return '($valueExpression as Int8).value';
+        case TypeIds.int16:
+          return '($valueExpression as Int16).value';
+        case TypeIds.int32:
+        case TypeIds.varInt32:
+          return '($valueExpression as Int32).value';
+        case TypeIds.uint8:
+          return '($valueExpression as UInt8).value';
+        case TypeIds.uint16:
+          return '($valueExpression as UInt16).value';
+        case TypeIds.uint32:
+        case TypeIds.varUint32:
+          return '($valueExpression as UInt32).value';
+        default:
+          return '$valueExpression as int';
       }
-      return '$valueExpression as int';
     }
     if (type.isDartCoreDouble) {
       return '$valueExpression as double';

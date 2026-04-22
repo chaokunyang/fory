@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "fory/util/bfloat16.h"
 #include "fory/util/bit_util.h"
 #include "fory/util/error.h"
 #include "fory/util/float16.h"
@@ -763,6 +764,14 @@ public:
     increase_writer_index(2);
   }
 
+  /// Write bfloat16_t as fixed 2 bytes (raw IEEE 754 bits, little-endian).
+  /// Automatically grows buffer and advances writer index.
+  FORY_ALWAYS_INLINE void write_bf16(bfloat16_t value) {
+    grow(2);
+    unsafe_put<uint16_t>(writer_index_, value.to_bits());
+    increase_writer_index(2);
+  }
+
   /// write uint32_t value as varint to buffer at current writer index.
   /// Automatically grows buffer and advances writer index.
   FORY_ALWAYS_INLINE void write_var_uint32(uint32_t value) {
@@ -972,6 +981,17 @@ public:
       return float16_t::from_bits(0);
     }
     float16_t value = float16_t::from_bits(unsafe_get<uint16_t>(reader_index_));
+    reader_index_ += 2;
+    return value;
+  }
+
+  /// Read bfloat16_t from buffer. Sets error on bounds violation.
+  FORY_ALWAYS_INLINE bfloat16_t read_bf16(Error &error) {
+    if (FORY_PREDICT_FALSE(!ensure_readable(2, error))) {
+      return bfloat16_t::from_bits(0);
+    }
+    bfloat16_t value =
+        bfloat16_t::from_bits(unsafe_get<uint16_t>(reader_index_));
     reader_index_ += 2;
     return value;
   }

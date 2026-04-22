@@ -544,6 +544,11 @@ fn skip_value(
             <crate::types::float16::float16 as Serializer>::fory_read_data(context)?;
         }
 
+        // ============ BFLOAT16 (TypeId = 18) ============
+        types::BFLOAT16 => {
+            <crate::types::bfloat16::bfloat16 as Serializer>::fory_read_data(context)?;
+        }
+
         // ============ FLOAT32 (TypeId = 17) ============
         types::FLOAT32 => {
             <f32 as Serializer>::fory_read_data(context)?;
@@ -706,6 +711,11 @@ fn skip_value(
         // ============ FLOAT16_ARRAY (TypeId = 53) ============
         types::FLOAT16_ARRAY => {
             <Vec<crate::types::float16::float16> as Serializer>::fory_read_data(context)?;
+        }
+
+        // ============ BFLOAT16_ARRAY (TypeId = 54) ============
+        types::BFLOAT16_ARRAY => {
+            <Vec<crate::types::bfloat16::bfloat16> as Serializer>::fory_read_data(context)?;
         }
 
         // ============ FLOAT32_ARRAY (TypeId = 51) ============

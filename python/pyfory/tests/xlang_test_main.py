@@ -187,6 +187,14 @@ class TwoStringFieldStruct:
     f2: str = ""
 
 
+@dataclass
+class ReducedPrecisionFloatStruct:
+    float16_value: pyfory.float16 = None
+    bfloat16_value: pyfory.bfloat16 = None
+    float16_array: pyfory.float16array = None
+    bfloat16_array: pyfory.bfloat16array = None
+
+
 class TestEnum(enum.Enum):
     VALUE_A = 0
     VALUE_B = 1
@@ -804,6 +812,47 @@ def test_schema_evolution_compatible_reverse():
     # Set f2 to empty string for serialization (match Go behavior)
     if obj.f2 is None:
         obj.f2 = ""
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def _assert_reduced_precision_float_struct(obj: ReducedPrecisionFloatStruct):
+    assert obj.float16_value.to_bits() == 0x3E00, f"float16_value bits: {obj.float16_value.to_bits():#06x}"
+    assert obj.bfloat16_value.to_bits() == 0x3FC0, f"bfloat16_value bits: {obj.bfloat16_value.to_bits():#06x}"
+    assert list(obj.float16_array.to_buffer()) == [0x0000, 0x3C00, 0xBC00], f"float16_array bits: {list(obj.float16_array.to_buffer())}"
+    assert list(obj.bfloat16_array.to_buffer()) == [0x0000, 0x3F80, 0xBF80], f"bfloat16_array bits: {list(obj.bfloat16_array.to_buffer())}"
+
+
+def test_reduced_precision_float_struct():
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=False)
+    fory.register_type(ReducedPrecisionFloatStruct, type_id=213)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized: {obj}")
+    _assert_reduced_precision_float_struct(obj)
+
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_reduced_precision_float_struct_compatible_skip():
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True, meta_compressor=NoOpMetaCompressor())
+    fory.register_type(EmptyStruct, type_id=213)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized empty struct: {obj}")
+    assert isinstance(obj, EmptyStruct)
 
     new_bytes = fory.serialize(obj)
     with open(data_file, "wb") as f:

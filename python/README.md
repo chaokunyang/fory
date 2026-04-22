@@ -25,6 +25,7 @@
 - **Polymorphism support** for customized types with automatic type dispatching
 - **Schema evolution** support for backward/forward compatibility when using dataclasses in cross-language mode
 - **Out-of-band buffer support** for zero-copy serialization of large data structures like NumPy arrays and Pandas DataFrames, compatible with pickle protocol 5
+- **Cython-only reduced-precision carriers** for `float16`, `float16array`, `bfloat16`, and `bfloat16array` via the compiled `pyfory.serialization` extension; there is no pure-Python fallback
 
 ### ⚡ **Blazing Fast Performance**
 

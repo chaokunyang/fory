@@ -109,18 +109,43 @@ class TypedData:
     double_value: pyfory.float64 # 64-bit float
 ```
 
+## Reduced-Precision Types
+
+`pyfory.serialization` exports Cython-only carrier types for xlang reduced-precision values:
+
+- `float16` and `float16array`
+- `bfloat16` and `bfloat16array`
+
+These names are compiled into the `pyfory.serialization` extension and re-exported from `pyfory`. There is no pure-Python fallback module for them.
+
+The scalar wrappers behave like reduced-precision numeric value types. They support arithmetic and
+ordering with Python numeric operands, and each operation quantizes the result back to the wrapper's
+own format (`pyfory.float16` or `pyfory.bfloat16`).
+
+The array wrappers are value-oriented public APIs. Construct them from Python numeric values with
+`pyfory.float16array([...])`, `pyfory.float16array.from_values([...])`,
+`pyfory.bfloat16array([...])`, or `pyfory.bfloat16array.from_values([...])`. Use
+`from_buffer(...)` and `to_buffer()` only when you already need packed little-endian `uint16`
+storage and want the raw-buffer fast path. Both array carriers also implement the CPython buffer
+protocol, so `memoryview(pyfory.float16array(...))` and `memoryview(pyfory.bfloat16array(...))`
+expose the packed `uint16` storage directly.
+
 ## Type Mapping
 
-| Python           | Java     | Rust      | Go        |
-| ---------------- | -------- | --------- | --------- |
-| `str`            | `String` | `String`  | `string`  |
-| `int`            | `long`   | `i64`     | `int64`   |
-| `pyfory.int32`   | `int`    | `i32`     | `int32`   |
-| `pyfory.int64`   | `long`   | `i64`     | `int64`   |
-| `float`          | `double` | `f64`     | `float64` |
-| `pyfory.float32` | `float`  | `f32`     | `float32` |
-| `list`           | `List`   | `Vec`     | `[]T`     |
-| `dict`           | `Map`    | `HashMap` | `map[K]V` |
+| Python                 | Java           | Rust            | Go                    |
+| ---------------------- | -------------- | --------------- | --------------------- |
+| `str`                  | `String`       | `String`        | `string`              |
+| `int`                  | `long`         | `i64`           | `int64`               |
+| `pyfory.int32`         | `int`          | `i32`           | `int32`               |
+| `pyfory.int64`         | `long`         | `i64`           | `int64`               |
+| `float`                | `double`       | `f64`           | `float64`             |
+| `pyfory.float32`       | `float`        | `f32`           | `float32`             |
+| `pyfory.float16`       | `Float16`      | `Float16`       | `float16.Float16`     |
+| `pyfory.bfloat16`      | `BFloat16`     | `BFloat16`      | `bfloat16.BFloat16`   |
+| `pyfory.float16array`  | `Float16List`  | `Vec<Float16>`  | `[]float16.Float16`   |
+| `pyfory.bfloat16array` | `BFloat16List` | `Vec<BFloat16>` | `[]bfloat16.BFloat16` |
+| `list`                 | `List`         | `Vec`           | `[]T`                 |
+| `dict`                 | `Map`          | `HashMap`       | `map[K]V`             |
 
 ## Differences from Python Native Mode
 

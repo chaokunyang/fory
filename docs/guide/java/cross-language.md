@@ -158,6 +158,8 @@ Not all Java types have equivalents in other languages. When using xlang mode:
 
 - Use **primitive types** (`int`, `long`, `double`, `String`) for maximum compatibility
 - Use **standard collections** (`List`, `Map`, `Set`) instead of language-specific ones
+- Use **reduced-precision carriers** (`Float16`, `BFloat16`, `Float16List`, `BFloat16List`) for 16-bit float payloads
+- Treat `Float16[]` and `BFloat16[]` as xlang `list` carriers; use `Float16List` and `BFloat16List` when the wire type must be `float16_array` or `bfloat16_array`
 - Avoid **Java-specific types** like `Optional`, `BigDecimal` (unless the target language supports them)
 - See [Type Mapping Guide](../../specification/xlang_type_mapping.md) for complete compatibility matrix
 

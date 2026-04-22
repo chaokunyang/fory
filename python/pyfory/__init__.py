@@ -31,7 +31,7 @@ from pyfory.registry import TypeInfo
 if ENABLE_FORY_CYTHON_SERIALIZATION:
     from pyfory.serialization import Fory, TypeInfo  # noqa: F401,F811
 
-from pyfory.serialization import Buffer  # noqa: F401 # pylint: disable=unused-import
+from pyfory.serialization import Buffer, bfloat16, bfloat16array, float16, float16array  # noqa: F401 # pylint: disable=unused-import
 
 from pyfory.serializer import (  # noqa: F401 # pylint: disable=unused-import
     Serializer,
@@ -50,6 +50,8 @@ from pyfory.serializer import (  # noqa: F401 # pylint: disable=unused-import
     Uint64Serializer,
     VarUint64Serializer,
     TaggedUint64Serializer,
+    Float16Serializer,
+    Float16ArraySerializer,
     Float32Serializer,
     Float64Serializer,
     StringSerializer,
@@ -68,6 +70,8 @@ from pyfory.serializer import (  # noqa: F401 # pylint: disable=unused-import
     MethodSerializer,
     ReduceSerializer,
     StatefulSerializer,
+    BFloat16Serializer,
+    BFloat16ArraySerializer,
 )
 from pyfory.struct import DataClassSerializer
 from pyfory.field import dataclass, field  # noqa: F401 # pylint: disable=unused-import
@@ -127,6 +131,14 @@ __all__ = [
     "ThreadSafeFory",
     "TypeInfo",
     "Buffer",
+    "float16",
+    "float16array",
+    "bfloat16",
+    "bfloat16array",
+    "Float16Serializer",
+    "Float16ArraySerializer",
+    "BFloat16Serializer",
+    "BFloat16ArraySerializer",
     "DeserializationPolicy",
     # Field metadata
     "field",

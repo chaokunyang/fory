@@ -799,7 +799,7 @@ bool numeric_sorter(const FieldInfo &a, const FieldInfo &b) {
   int32_t size_b = get_primitive_type_size(b_id);
 
   // Sort by: nullable (false first), compress (false first), size (larger
-  // first), type_id (descending to match Java), field_name
+  // first), type_id (ascending), field_name
   if (a_nullable != b_nullable)
     return !a_nullable; // non-nullable first
   if (compress_a != compress_b)
@@ -807,7 +807,7 @@ bool numeric_sorter(const FieldInfo &a, const FieldInfo &b) {
   if (size_a != size_b)
     return size_a > size_b; // larger size first
   if (a_id != b_id)
-    return a_id > b_id; // type_id descending to match Java
+    return a_id < b_id; // type_id ascending
   std::string a_key = field_sort_key(a);
   std::string b_key = field_sort_key(b);
   if (a_key != b_key) {

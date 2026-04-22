@@ -174,14 +174,14 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		}
 	}
 
-	// Sort fixedFields: size desc, typeId desc, name asc
+	// Sort fixedFields: size desc, typeId asc, name asc
 	sort.SliceStable(g.FixedFields, func(i, j int) bool {
 		fi, fj := &g.FixedFields[i], &g.FixedFields[j]
 		if fi.Meta.FixedSize != fj.Meta.FixedSize {
 			return fi.Meta.FixedSize > fj.Meta.FixedSize // size descending
 		}
 		if fi.Meta.TypeId != fj.Meta.TypeId {
-			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
+			return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 		}
 		return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
 	})
@@ -200,8 +200,8 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		g.FixedSize += g.FixedFields[i].Meta.FixedSize
 	}
 
-	// Sort varintFields: underlying type size desc, typeId desc, name asc
-	// Note: Java uses primitive type size (8 for long, 4 for int), not encoding max size
+	// Sort varintFields: underlying type size desc, typeId asc, name asc
+	// Note: xlang uses primitive type size (8 for long, 4 for int), not encoding max size
 	sort.SliceStable(g.VarintFields, func(i, j int) bool {
 		fi, fj := &g.VarintFields[i], &g.VarintFields[j]
 		sizeI := getUnderlyingTypeSize(fi.DispatchId)
@@ -210,7 +210,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 			return sizeI > sizeJ // size descending
 		}
 		if fi.Meta.TypeId != fj.Meta.TypeId {
-			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
+			return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 		}
 		return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
 	})
@@ -229,7 +229,8 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 	}
 
 	// Sort remainingFields: nullable primitives first (by primitiveComparator),
-	// then other internal types (typeId, name), then lists, sets, maps, other (by name)
+	// then built-in scalar types (typeId, name), then lists, sets, maps,
+	// then primitive arrays and other fields by sort key.
 	sort.SliceStable(g.RemainingFields, func(i, j int) bool {
 		fi, fj := &g.RemainingFields[i], &g.RemainingFields[j]
 		catI, catJ := getFieldCategory(fi), getFieldCategory(fj)
@@ -240,7 +241,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if catI == 0 {
 			return comparePrimitiveFields(fi, fj)
 		}
-		// Within internal/build-in or collection categories, sort by typeId then sort key.
+		// Within built-in scalar or collection categories, sort by typeId then sort key.
 		if catI == 1 || catI == 2 || catI == 3 {
 			if fi.Meta.TypeId != fj.Meta.TypeId {
 				return fi.Meta.TypeId < fj.Meta.TypeId
@@ -283,7 +284,7 @@ func isEnumField(field *FieldInfo) bool {
 
 // getFieldCategory returns the category for sorting remainingFields:
 // 0: nullable primitives (sorted by primitiveComparator)
-// 1: internal build-in types (sorted by typeId, then sort key)
+// 1: internal built-in non-container types, including primitive arrays (sorted by typeId, then sort key)
 // 2: list/set collections (sorted by typeId, then sort key)
 // 3: map collections (sorted by typeId, then sort key)
 // 4: struct, enum, and all other types (sorted by sort key)
@@ -304,27 +305,30 @@ func getFieldCategory(field *FieldInfo) int {
 	if typeId == MAP {
 		return 3
 	}
-	// Internal build-in types: sorted by typeId, then sort key (matches Java build-in group)
+	if isPrimitiveArrayType(typeId) {
+		return 1
+	}
+	// Internal built-in non-container types: sorted by typeId, then sort key.
 	return 1
 }
 
 // comparePrimitiveFields compares two nullable primitive fields using Java's primitiveComparator logic:
-// fixed before varint, then underlying type size desc, typeId desc, name asc
+// fixed before varint, then underlying type size desc, typeId asc, name asc
 func comparePrimitiveFields(fi, fj *FieldInfo) bool {
 	iFixed := isNullableFixedSizePrimitive(fi.DispatchId)
 	jFixed := isNullableFixedSizePrimitive(fj.DispatchId)
 	if iFixed != jFixed {
 		return iFixed // fixed before varint
 	}
-	// Same category: compare by underlying type size desc, typeId desc, name asc
-	// Note: Java uses primitive type size (8, 4, 2, 1), not encoding size
+	// Same category: compare by underlying type size desc, typeId asc, name asc
+	// Note: xlang uses primitive type size (8, 4, 2, 1), not encoding size
 	sizeI := getUnderlyingTypeSize(fi.DispatchId)
 	sizeJ := getUnderlyingTypeSize(fj.DispatchId)
 	if sizeI != sizeJ {
 		return sizeI > sizeJ // size descending
 	}
 	if fi.Meta.TypeId != fj.Meta.TypeId {
-		return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
+		return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 	}
 	return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
 }
@@ -686,7 +690,7 @@ func sortFields(
 				primitives = append(primitives, t)
 			}
 		case isPrimitiveArrayType(t.typeID):
-			// Primitive arrays: built-in non-container types (sorted by typeId then name)
+			// Primitive arrays are built-in non-container types in xlang field ordering.
 			otherInternalTypeFields = append(otherInternalTypeFields, t)
 		case isListType(t.typeID), isSetType(t.typeID):
 			// LIST, SET: collection group
@@ -704,7 +708,7 @@ func sortFields(
 		}
 	}
 	// Sort primitives (non-nullable) - same logic as boxed
-	// Java sorts by: compressed (varint) types last, then by size (largest first), then by type ID (descending)
+	// Xlang sorts by: compressed (varint) types last, then by size (largest first), then by type ID (ascending)
 	// Fixed types: BOOL, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT32, FLOAT64
 	// Varint types: VARINT32, VARINT64, VAR_UINT32, VAR_UINT64, TAGGED_INT64, TAGGED_UINT64
 	isVarintTypeId := func(typeID TypeId) bool {
@@ -724,9 +728,9 @@ func sortFields(
 			if szI != szJ {
 				return szI > szJ
 			}
-			// Tie-breaker: type ID descending (higher type ID first), then field name
+			// Tie-breaker: type ID ascending (lower type ID first), then field name
 			if ai.typeID != aj.typeID {
-				return ai.typeID > aj.typeID
+				return ai.typeID < aj.typeID
 			}
 			return ai.getSortKey() < aj.getSortKey()
 		})
@@ -751,11 +755,11 @@ func sortFields(
 	sortByTypeIDThenName(otherInternalTypeFields)
 	sortByTypeIDThenName(listSet)
 	sortByTypeIDThenName(maps)
-	// Merge all category 2 fields (primitive arrays, userDefined, others) and sort by name
-	// This matches GroupFields' getFieldCategory which sorts all category 4 fields together
+	// Merge primitive arrays, user-defined types, and unknown types into the same
+	// sort-key-ordered tail group.
 	otherGroup := make([]triple, 0, len(userDefined)+len(others))
-	otherGroup = append(otherGroup, userDefined...) // structs, enums, ext
-	otherGroup = append(otherGroup, others...)      // unknown types
+	otherGroup = append(otherGroup, userDefined...)
+	otherGroup = append(otherGroup, others...)
 	sortTuple(otherGroup)
 
 	// Order: primitives, boxed, built-in non-container, list/set, map, other (by name)
@@ -763,7 +767,7 @@ func sortFields(
 	all := make([]triple, 0, len(fieldNames))
 	all = append(all, primitives...)
 	all = append(all, boxed...)
-	all = append(all, otherInternalTypeFields...) // STRING, BINARY, primitive arrays, time, unions, etc.
+	all = append(all, otherInternalTypeFields...) // STRING, BINARY, time, unions, etc.
 	all = append(all, listSet...)
 	all = append(all, maps...)
 	all = append(all, otherGroup...)
@@ -922,6 +926,12 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 		case reflect.Int16:
 			return INT16_ARRAY
 		case reflect.Uint16:
+			if type_.Elem() == float16Type {
+				return FLOAT16_ARRAY
+			}
+			if type_.Elem() == bfloat16Type {
+				return BFLOAT16_ARRAY
+			}
 			return UINT16_ARRAY
 		case reflect.Int32:
 			return INT32_ARRAY
@@ -952,6 +962,12 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 		case reflect.Int16:
 			return INT16_ARRAY
 		case reflect.Uint16:
+			if type_.Elem() == float16Type {
+				return FLOAT16_ARRAY
+			}
+			if type_.Elem() == bfloat16Type {
+				return BFLOAT16_ARRAY
+			}
 			return UINT16_ARRAY
 		case reflect.Int32:
 			return INT32_ARRAY

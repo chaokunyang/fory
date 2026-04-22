@@ -133,16 +133,22 @@ See [xlang_type_mapping.md](../../specification/xlang_type_mapping.md) for compl
 
 ### Common Type Mappings
 
-| Rust           | Java         | Python        |
-| -------------- | ------------ | ------------- |
-| `i32`          | `int`        | `int32`       |
-| `i64`          | `long`       | `int64`       |
-| `f32`          | `float`      | `float32`     |
-| `f64`          | `double`     | `float64`     |
-| `String`       | `String`     | `str`         |
-| `Vec<T>`       | `List<T>`    | `List[T]`     |
-| `HashMap<K,V>` | `Map<K,V>`   | `Dict[K,V]`   |
-| `Option<T>`    | nullable `T` | `Optional[T]` |
+| Rust            | Java           | Python          |
+| --------------- | -------------- | --------------- |
+| `i32`           | `int`          | `int32`         |
+| `i64`           | `long`         | `int64`         |
+| `f32`           | `float`        | `float32`       |
+| `f64`           | `double`       | `float64`       |
+| `Float16`       | `Float16`      | `float16`       |
+| `BFloat16`      | `BFloat16`     | `bfloat16`      |
+| `String`        | `String`       | `str`           |
+| `Vec<T>`        | `List<T>`      | `List[T]`       |
+| `Vec<Float16>`  | `Float16List`  | `float16array`  |
+| `Vec<BFloat16>` | `BFloat16List` | `bfloat16array` |
+| `[Float16; N]`  | `Float16List`  | `float16array`  |
+| `[BFloat16; N]` | `BFloat16List` | `bfloat16array` |
+| `HashMap<K,V>`  | `Map<K,V>`     | `Dict[K,V]`     |
+| `Option<T>`     | nullable `T`   | `Optional[T]`   |
 
 ## Best Practices
 

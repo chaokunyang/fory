@@ -200,6 +200,19 @@ public class PythonXlangTest extends XlangTestBase {
 
   @Override
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testReducedPrecisionFloatStruct(boolean enableCodegen) throws IOException {
+    super.testReducedPrecisionFloatStruct(enableCodegen);
+  }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testReducedPrecisionFloatStructCompatibleFieldSkip(boolean enableCodegen)
+      throws IOException {
+    super.testReducedPrecisionFloatStructCompatibleFieldSkip(enableCodegen);
+  }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testPolymorphicList(boolean enableCodegen) throws IOException {
     super.testPolymorphicList(enableCodegen);
   }

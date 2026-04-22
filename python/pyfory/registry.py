@@ -56,8 +56,12 @@ from pyfory.serializer import (
     Uint64Serializer,
     VarUint64Serializer,
     TaggedUint64Serializer,
+    Float16Serializer,
+    Float16ArraySerializer,
     Float32Serializer,
     Float64Serializer,
+    BFloat16Serializer,
+    BFloat16ArraySerializer,
     StringSerializer,
     DecimalSerializer,
     DateSerializer,
@@ -82,6 +86,13 @@ from pyfory.serializer import (
     NativeFuncMethodSerializer,
     PickleBufferSerializer,
     UnionSerializer,
+)
+from pyfory.serialization import (
+    Serializer as CythonSerializer,
+    bfloat16,
+    bfloat16array,
+    float16,
+    float16array,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
@@ -146,8 +157,10 @@ _NO_REF_NUMERIC_TYPE_IDS = frozenset(
         TypeId.UINT64,
         TypeId.VAR_UINT64,
         TypeId.TAGGED_UINT64,
+        TypeId.FLOAT16,
         TypeId.FLOAT32,
         TypeId.FLOAT64,
+        TypeId.BFLOAT16,
     }
 )
 
@@ -161,7 +174,7 @@ def _accepts_n_positional_args(factory, nargs: int) -> bool:
             signature = inspect.signature(factory.__init__)
             parameters = tuple(signature.parameters.values())[1:]
         except (AttributeError, TypeError, ValueError):
-            if inspect.isclass(factory) and issubclass(factory, Serializer):
+            if inspect.isclass(factory) and issubclass(factory, (Serializer, CythonSerializer)):
                 return nargs == 2
             raise TypeError(f"Unable to inspect serializer constructor for {factory!r}")
     min_args = 0
@@ -443,11 +456,27 @@ class TypeResolver:
             serializer=Float64Serializer,
         )
         register(float, type_id=TypeId.FLOAT64, serializer=Float64Serializer)
+        register(
+            float16,
+            type_id=TypeId.FLOAT16,
+            serializer=Float16Serializer,
+        )
+        register(bfloat16, type_id=TypeId.BFLOAT16, serializer=BFloat16Serializer)
         register(str, type_id=TypeId.STRING, serializer=StringSerializer)
         register(decimal.Decimal, type_id=TypeId.DECIMAL, serializer=DecimalSerializer)
         register(datetime.datetime, type_id=TypeId.TIMESTAMP, serializer=TimestampSerializer)
         register(datetime.date, type_id=TypeId.DATE, serializer=DateSerializer)
         register(bytes, type_id=TypeId.BINARY, serializer=BytesSerializer)
+        register(
+            float16array,
+            type_id=TypeId.FLOAT16_ARRAY,
+            serializer=Float16ArraySerializer,
+        )
+        register(
+            bfloat16array,
+            type_id=TypeId.BFLOAT16_ARRAY,
+            serializer=BFloat16ArraySerializer,
+        )
         for itemsize, ftype, typeid in PyArraySerializer.typecode_dict.values():
             register(
                 ftype,

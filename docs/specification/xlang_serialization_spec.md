@@ -76,8 +76,10 @@ This specification defines the Fory xlang binary format. The format is dynamic r
 - date: a naive date without timezone, encoded as a signed varint64 count of days since the Unix epoch.
 - decimal: an exact decimal value encoded as a signed `scale` and an exact `unscaled` integer.
 - binary: an variable-length array of bytes.
-- array: only allow 1d numeric components. Other arrays will be taken as List. The implementation should support the
-  interoperability between array and list.
+- array: in current xlang, only one-dimensional primitive/numeric arrays have dedicated wire types. Other arrays are
+  taken as `list`, and implementations should support interoperability between array and list carriers. Internal type
+  ID `ARRAY (42)` is reserved for a future dedicated multi-dimensional array encoding and is not emitted by the current
+  xlang format.
   - bool_array: one dimensional bool array.
   - int8_array: one dimensional int8 array.
   - int16_array: one dimensional int16 array.
@@ -162,65 +164,65 @@ Named types (`NAMED_*`) do not embed a user ID; their names are carried in metad
 
 #### Internal Type ID Table
 
-| Type ID | Name                    | Description                                         |
-| ------- | ----------------------- | --------------------------------------------------- |
-| 0       | UNKNOWN                 | Unknown type, used for dynamic typing               |
-| 1       | BOOL                    | Boolean value                                       |
-| 2       | INT8                    | 8-bit signed integer                                |
-| 3       | INT16                   | 16-bit signed integer                               |
-| 4       | INT32                   | 32-bit signed integer                               |
-| 5       | VARINT32                | Variable-length encoded 32-bit signed integer       |
-| 6       | INT64                   | 64-bit signed integer                               |
-| 7       | VARINT64                | Variable-length encoded 64-bit signed integer       |
-| 8       | TAGGED_INT64            | Hybrid encoded 64-bit signed integer                |
-| 9       | UINT8                   | 8-bit unsigned integer                              |
-| 10      | UINT16                  | 16-bit unsigned integer                             |
-| 11      | UINT32                  | 32-bit unsigned integer                             |
-| 12      | VAR_UINT32              | Variable-length encoded 32-bit unsigned integer     |
-| 13      | UINT64                  | 64-bit unsigned integer                             |
-| 14      | VAR_UINT64              | Variable-length encoded 64-bit unsigned integer     |
-| 15      | TAGGED_UINT64           | Hybrid encoded 64-bit unsigned integer              |
-| 16      | FLOAT8                  | 8-bit floating point (float8)                       |
-| 17      | FLOAT16                 | 16-bit floating point (half precision)              |
-| 18      | BFLOAT16                | 16-bit brain floating point                         |
-| 19      | FLOAT32                 | 32-bit floating point (single precision)            |
-| 20      | FLOAT64                 | 64-bit floating point (double precision)            |
-| 21      | STRING                  | UTF-8/UTF-16/Latin1 encoded string                  |
-| 22      | LIST                    | Ordered collection (List, Array, Vector)            |
-| 23      | SET                     | Unordered collection of unique elements             |
-| 24      | MAP                     | Key-value mapping                                   |
-| 25      | ENUM                    | Enum registered by numeric ID                       |
-| 26      | NAMED_ENUM              | Enum registered by namespace + type name            |
-| 27      | STRUCT                  | Struct registered by numeric ID (schema consistent) |
-| 28      | COMPATIBLE_STRUCT       | Struct with schema evolution support (by ID)        |
-| 29      | NAMED_STRUCT            | Struct registered by namespace + type name          |
-| 30      | NAMED_COMPATIBLE_STRUCT | Struct with schema evolution (by name)              |
-| 31      | EXT                     | Extension type registered by numeric ID             |
-| 32      | NAMED_EXT               | Extension type registered by namespace + type name  |
-| 33      | UNION                   | Union value, schema identity not embedded           |
-| 34      | TYPED_UNION             | Union value with registered numeric type ID         |
-| 35      | NAMED_UNION             | Union value with embedded type name/TypeDef         |
-| 36      | NONE                    | Empty/unit type (no data)                           |
-| 37      | DURATION                | Time duration (seconds + nanoseconds)               |
-| 38      | TIMESTAMP               | Point in time (seconds + nanoseconds since epoch)   |
-| 39      | DATE                    | Date without timezone (signed varint64 days)        |
-| 40      | DECIMAL                 | Arbitrary precision decimal (scale + unscaled)      |
-| 41      | BINARY                  | Raw binary data                                     |
-| 42      | ARRAY                   | Generic array type                                  |
-| 43      | BOOL_ARRAY              | 1D boolean array                                    |
-| 44      | INT8_ARRAY              | 1D int8 array                                       |
-| 45      | INT16_ARRAY             | 1D int16 array                                      |
-| 46      | INT32_ARRAY             | 1D int32 array                                      |
-| 47      | INT64_ARRAY             | 1D int64 array                                      |
-| 48      | UINT8_ARRAY             | 1D uint8 array                                      |
-| 49      | UINT16_ARRAY            | 1D uint16 array                                     |
-| 50      | UINT32_ARRAY            | 1D uint32 array                                     |
-| 51      | UINT64_ARRAY            | 1D uint64 array                                     |
-| 52      | FLOAT8_ARRAY            | 1D float8 array                                     |
-| 53      | FLOAT16_ARRAY           | 1D float16 array                                    |
-| 54      | BFLOAT16_ARRAY          | 1D bfloat16 array                                   |
-| 55      | FLOAT32_ARRAY           | 1D float32 array                                    |
-| 56      | FLOAT64_ARRAY           | 1D float64 array                                    |
+| Type ID | Name                    | Description                                            |
+| ------- | ----------------------- | ------------------------------------------------------ |
+| 0       | UNKNOWN                 | Unknown type, used for dynamic typing                  |
+| 1       | BOOL                    | Boolean value                                          |
+| 2       | INT8                    | 8-bit signed integer                                   |
+| 3       | INT16                   | 16-bit signed integer                                  |
+| 4       | INT32                   | 32-bit signed integer                                  |
+| 5       | VARINT32                | Variable-length encoded 32-bit signed integer          |
+| 6       | INT64                   | 64-bit signed integer                                  |
+| 7       | VARINT64                | Variable-length encoded 64-bit signed integer          |
+| 8       | TAGGED_INT64            | Hybrid encoded 64-bit signed integer                   |
+| 9       | UINT8                   | 8-bit unsigned integer                                 |
+| 10      | UINT16                  | 16-bit unsigned integer                                |
+| 11      | UINT32                  | 32-bit unsigned integer                                |
+| 12      | VAR_UINT32              | Variable-length encoded 32-bit unsigned integer        |
+| 13      | UINT64                  | 64-bit unsigned integer                                |
+| 14      | VAR_UINT64              | Variable-length encoded 64-bit unsigned integer        |
+| 15      | TAGGED_UINT64           | Hybrid encoded 64-bit unsigned integer                 |
+| 16      | FLOAT8                  | 8-bit floating point (float8)                          |
+| 17      | FLOAT16                 | 16-bit floating point (half precision)                 |
+| 18      | BFLOAT16                | 16-bit brain floating point                            |
+| 19      | FLOAT32                 | 32-bit floating point (single precision)               |
+| 20      | FLOAT64                 | 64-bit floating point (double precision)               |
+| 21      | STRING                  | UTF-8/UTF-16/Latin1 encoded string                     |
+| 22      | LIST                    | Ordered collection (List, Array, Vector)               |
+| 23      | SET                     | Unordered collection of unique elements                |
+| 24      | MAP                     | Key-value mapping                                      |
+| 25      | ENUM                    | Enum registered by numeric ID                          |
+| 26      | NAMED_ENUM              | Enum registered by namespace + type name               |
+| 27      | STRUCT                  | Struct registered by numeric ID (schema consistent)    |
+| 28      | COMPATIBLE_STRUCT       | Struct with schema evolution support (by ID)           |
+| 29      | NAMED_STRUCT            | Struct registered by namespace + type name             |
+| 30      | NAMED_COMPATIBLE_STRUCT | Struct with schema evolution (by name)                 |
+| 31      | EXT                     | Extension type registered by numeric ID                |
+| 32      | NAMED_EXT               | Extension type registered by namespace + type name     |
+| 33      | UNION                   | Union value, schema identity not embedded              |
+| 34      | TYPED_UNION             | Union value with registered numeric type ID            |
+| 35      | NAMED_UNION             | Union value with embedded type name/TypeDef            |
+| 36      | NONE                    | Empty/unit type (no data)                              |
+| 37      | DURATION                | Time duration (seconds + nanoseconds)                  |
+| 38      | TIMESTAMP               | Point in time (seconds + nanoseconds since epoch)      |
+| 39      | DATE                    | Date without timezone (signed varint64 days)           |
+| 40      | DECIMAL                 | Arbitrary precision decimal (scale + unscaled)         |
+| 41      | BINARY                  | Raw binary data                                        |
+| 42      | ARRAY                   | Reserved for future dedicated multi-dimensional arrays |
+| 43      | BOOL_ARRAY              | 1D boolean array                                       |
+| 44      | INT8_ARRAY              | 1D int8 array                                          |
+| 45      | INT16_ARRAY             | 1D int16 array                                         |
+| 46      | INT32_ARRAY             | 1D int32 array                                         |
+| 47      | INT64_ARRAY             | 1D int64 array                                         |
+| 48      | UINT8_ARRAY             | 1D uint8 array                                         |
+| 49      | UINT16_ARRAY            | 1D uint16 array                                        |
+| 50      | UINT32_ARRAY            | 1D uint32 array                                        |
+| 51      | UINT64_ARRAY            | 1D uint64 array                                        |
+| 52      | FLOAT8_ARRAY            | 1D float8 array                                        |
+| 53      | FLOAT16_ARRAY           | 1D float16 array                                       |
+| 54      | BFLOAT16_ARRAY          | 1D bfloat16 array                                      |
+| 55      | FLOAT32_ARRAY           | 1D float32 array                                       |
+| 56      | FLOAT64_ARRAY           | 1D float64 array                                       |
 
 #### Type ID Encoding for User Types
 
@@ -424,7 +426,10 @@ After the type ID:
   - If meta share is disabled, write `namespace` and `type_name` as meta strings.
   - If meta share is enabled, write a shared TypeDef entry (see below).
 - **UNION**: no extra bytes at this layer.
-- **LIST / SET / MAP / ARRAY / primitives**: no extra bytes at this layer.
+- **LIST / SET / MAP / primitives**: no extra bytes at this layer.
+
+`ARRAY (42)` is reserved for a future xlang extension for dedicated multi-dimensional arrays and
+is not used in current xlang streams.
 
 Unregistered types are serialized as named types:
 
@@ -482,7 +487,9 @@ The 8-byte header is a little-endian uint64:
   - If meta size >= 0xFF, the low 8 bits are set to 0xFF and an extra
     `varuint32(meta_size - 0xFF)` follows immediately after the header.
 - Bit 8: `HAS_FIELDS_META` (1 = fields metadata present).
-- Bit 9: `COMPRESS_META` (1 = body is compressed; decompress before parsing).
+- Bit 9: `COMPRESS_META` is reserved for a future xlang metadata-compression extension.
+  Current xlang writers MUST leave this bit unset and current xlang readers MUST treat a set bit
+  as unsupported.
 - Bits 10-13: reserved for future extension (must be zero).
 - High 50 bits: hash of the TypeDef body.
 
@@ -1026,14 +1033,30 @@ Format:
 ```
 
 - `seconds`: Number of seconds in the duration, encoded as a signed varint64. Can be positive or negative.
-- `nanoseconds`: Nanosecond adjustment to the duration, encoded as a signed int32. Value range is [0, 999,999,999] for positive durations, and [-999,999,999, 0] for negative durations.
+- `nanoseconds`: Nanosecond adjustment to the duration, encoded as a signed int32.
 
 Notes:
 
 - The duration is stored as two separate fields to maintain precision and avoid overflow issues.
 - Seconds are encoded using varint64 for compact representation of common duration values.
 - Nanoseconds are stored as a fixed int32 since the range is limited.
-- The sign of the duration is determined by the seconds field. When seconds is 0, the sign is determined by nanoseconds.
+
+#### Canonical Rules
+
+- Writers MUST normalize durations so `nanoseconds` is always in `[0, 1_000_000_000)`.
+- Zero MUST be encoded as `seconds = 0` and `nanoseconds = 0`.
+- Negative sub-second durations MUST borrow one second and use a positive nanosecond adjustment.
+  Example: `-0.5s` is encoded as `seconds = -1`, `nanoseconds = 500_000_000`.
+- More generally, the encoded pair MUST satisfy:
+  - `duration = seconds + nanoseconds / 1_000_000_000`
+  - `0 <= nanoseconds < 1_000_000_000`
+
+#### Final Value
+
+After decoding `seconds` and `nanoseconds`, the duration value is reconstructed as the exact
+duration represented by:
+
+`seconds + nanoseconds / 1_000_000_000`
 
 ### collection/list
 
@@ -1142,8 +1165,10 @@ Float array specifics:
 
 #### Multi-dimensional arrays
 
-Xlang does not define a dedicated tensor encoding. Multi-dimensional arrays are serialized as
-nested lists, while one-dimensional primitive arrays use the `*_ARRAY` type IDs.
+Current xlang does not define a dedicated multi-dimensional array/tensor encoding. Multi-dimensional
+arrays are serialized as nested lists, while one-dimensional primitive arrays use the `*_ARRAY`
+type IDs. Internal type ID `ARRAY (42)` is reserved for a future dedicated multi-dimensional array
+encoding and is not used in current xlang streams.
 
 #### object array
 
@@ -1229,12 +1254,15 @@ The implementation can accumulate read count with map size to decide whether to 
 
 ### enum
 
-Enums are serialized as an unsigned var int tag. For plain enums, this tag is typically the
-declaration ordinal. Some implementations or generated enum forms may instead use an explicit
-stable enum value or variant ID. If the encoding relies on declaration order, reordering enum
-values can change the deserialized result. In such cases, users should prefer an explicit stable
-ID-based encoding or register a custom enum serializer that writes a stable string representation
-with unique hash disabled.
+Enums are serialized as an unsigned varint enum ID.
+
+- If the enum definition provides an explicit enum ID / variant ID / stable numeric tag for a
+  value, that ID MUST be used.
+- If no explicit enum ID is specified, the declaration ordinal is used as the enum ID by default.
+
+This means the wire contract is always an enum ID. When the enum ID comes from declaration order,
+reordering enum values changes the wire IDs and can change the deserialized result. For
+cross-language or long-lived schemas, users should prefer explicit stable enum IDs.
 
 ### timestamp
 
@@ -1373,7 +1401,7 @@ Within each group, apply the following sort keys in order until a difference is 
 1. **Compression category**: fixed-size numeric and boolean types first, then compressed numeric
    types (`VARINT32`, `VAR_UINT32`, `VARINT64`, `VAR_UINT64`, `TAGGED_INT64`, `TAGGED_UINT64`).
 2. **Primitive size** (descending): 8-byte > 4-byte > 2-byte > 1-byte.
-3. **Internal type ID** (descending) as a tie-breaker for equal sizes.
+3. **Internal type ID** (ascending) as a tie-breaker for equal sizes.
 4. **Field identifier** (lexicographic ascending).
 
 **Built-in / Collection / Map groups (3-5):**

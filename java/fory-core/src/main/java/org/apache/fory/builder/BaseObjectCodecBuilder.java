@@ -138,6 +138,7 @@ import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.serializer.collection.CollectionFlags;
 import org.apache.fory.serializer.collection.CollectionLikeSerializer;
 import org.apache.fory.serializer.collection.MapLikeSerializer;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Float16;
@@ -551,6 +552,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         return new Invoke(buffer, "writeFloat64", inputObject);
       case DispatchId.FLOAT16:
         return new Invoke(buffer, "writeInt16", new Invoke(inputObject, "toBits", SHORT_TYPE));
+      case DispatchId.BFLOAT16:
+        return new Invoke(buffer, "writeInt16", new Invoke(inputObject, "toBits", SHORT_TYPE));
       default:
         throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
     }
@@ -714,7 +717,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             descriptor, d -> DispatchId.getDispatchId(typeResolver, d));
     Class<?> rawType = descriptor.getRawType();
     Preconditions.checkArgument(
-        TypeUtils.unwrap(rawType).isPrimitive() || dispatchId == DispatchId.FLOAT16);
+        TypeUtils.unwrap(rawType).isPrimitive()
+            || dispatchId == DispatchId.FLOAT16
+            || dispatchId == DispatchId.BFLOAT16);
     return dispatchId;
   }
 
@@ -722,7 +727,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     if (isPrimitive(rawType) || isBoxed(rawType)) {
       return true;
     }
-    return rawType == Float16.class;
+    return rawType == Float16.class || rawType == BFloat16.class;
   }
 
   /**
@@ -2149,6 +2154,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       case DispatchId.FLOAT16:
         return new StaticInvoke(
             Float16.class, "fromBits", TypeRef.of(Float16.class), readInt16(buffer));
+      case DispatchId.BFLOAT16:
+        return new StaticInvoke(
+            BFloat16.class, "fromBits", TypeRef.of(BFloat16.class), readInt16(buffer));
       default:
         throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
     }

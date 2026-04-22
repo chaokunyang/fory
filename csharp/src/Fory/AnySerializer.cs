@@ -255,6 +255,12 @@ public static class DynamicAnyCodec
             case ulong:
                 context.Writer.WriteUInt8((byte)TypeId.VarUInt64);
                 return true;
+            case Half:
+                context.Writer.WriteUInt8((byte)TypeId.Float16);
+                return true;
+            case BFloat16:
+                context.Writer.WriteUInt8((byte)TypeId.BFloat16);
+                return true;
             case float:
                 context.Writer.WriteUInt8((byte)TypeId.Float32);
                 return true;
@@ -290,6 +296,12 @@ public static class DynamicAnyCodec
                 return true;
             case ulong[]:
                 context.Writer.WriteUInt8((byte)TypeId.UInt64Array);
+                return true;
+            case Half[]:
+                context.Writer.WriteUInt8((byte)TypeId.Float16Array);
+                return true;
+            case BFloat16[]:
+                context.Writer.WriteUInt8((byte)TypeId.BFloat16Array);
                 return true;
             case float[]:
                 context.Writer.WriteUInt8((byte)TypeId.Float32Array);
@@ -342,6 +354,12 @@ public static class DynamicAnyCodec
                 return true;
             case ulong v:
                 context.Writer.WriteVarUInt64(v);
+                return true;
+            case Half v:
+                context.Writer.WriteUInt16(BitConverter.HalfToUInt16Bits(v));
+                return true;
+            case BFloat16 v:
+                context.Writer.WriteUInt16(v.ToBits());
                 return true;
             case float v:
                 context.Writer.WriteFloat32(v);
@@ -422,6 +440,20 @@ public static class DynamicAnyCodec
                 for (int i = 0; i < v.Length; i++)
                 {
                     context.Writer.WriteUInt64(v[i]);
+                }
+                return true;
+            case Half[] v:
+                context.Writer.WriteVarUInt32((uint)(v.Length * 2));
+                for (int i = 0; i < v.Length; i++)
+                {
+                    context.Writer.WriteUInt16(BitConverter.HalfToUInt16Bits(v[i]));
+                }
+                return true;
+            case BFloat16[] v:
+                context.Writer.WriteVarUInt32((uint)(v.Length * 2));
+                for (int i = 0; i < v.Length; i++)
+                {
+                    context.Writer.WriteUInt16(v[i].ToBits());
                 }
                 return true;
             case float[] v:

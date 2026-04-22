@@ -177,6 +177,40 @@ public sealed class UInt64Serializer : Serializer<ulong>
     }
 }
 
+public sealed class Float16Serializer : Serializer<Half>
+{
+
+    public override Half DefaultValue => default;
+
+    public override void WriteData(WriteContext context, in Half value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        context.Writer.WriteUInt16(BitConverter.HalfToUInt16Bits(value));
+    }
+
+    public override Half ReadData(ReadContext context)
+    {
+        return BitConverter.UInt16BitsToHalf(context.Reader.ReadUInt16());
+    }
+}
+
+public sealed class BFloat16Serializer : Serializer<BFloat16>
+{
+
+    public override BFloat16 DefaultValue => default;
+
+    public override void WriteData(WriteContext context, in BFloat16 value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        context.Writer.WriteUInt16(value.ToBits());
+    }
+
+    public override BFloat16 ReadData(ReadContext context)
+    {
+        return BFloat16.FromBits(context.Reader.ReadUInt16());
+    }
+}
+
 public sealed class Float32Serializer : Serializer<float>
 {
 

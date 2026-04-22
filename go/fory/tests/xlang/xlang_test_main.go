@@ -26,6 +26,8 @@ import (
 	"runtime"
 
 	"github.com/apache/fory/go/fory"
+	"github.com/apache/fory/go/fory/bfloat16"
+	"github.com/apache/fory/go/fory/float16"
 )
 
 // ============================================================================
@@ -113,6 +115,17 @@ func getTwoEnumFieldStruct(obj any) TwoEnumFieldStruct {
 		return *v
 	default:
 		panic(fmt.Sprintf("expected TwoEnumFieldStruct, got %T", obj))
+	}
+}
+
+func getReducedPrecisionFloatStruct(obj any) ReducedPrecisionFloatStruct {
+	switch v := obj.(type) {
+	case ReducedPrecisionFloatStruct:
+		return v
+	case *ReducedPrecisionFloatStruct:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected ReducedPrecisionFloatStruct, got %T", obj))
 	}
 }
 
@@ -275,6 +288,13 @@ type FixedOverrideStruct struct {
 
 func (FixedOverrideStruct) ForyEvolving() bool {
 	return false
+}
+
+type ReducedPrecisionFloatStruct struct {
+	Float16Value  float16.Float16
+	Bfloat16Value bfloat16.BFloat16
+	Float16Array  []float16.Float16
+	Bfloat16Array []bfloat16.BFloat16
 }
 
 type StructWithList struct {
@@ -1483,6 +1503,70 @@ func testSchemaEvolutionCompatibleReverse() {
 	writeFile(dataFile, serialized)
 }
 
+func testReducedPrecisionFloatStruct() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.RegisterStruct(ReducedPrecisionFloatStruct{}, 213)
+
+	buf := fory.NewByteBuffer(data)
+	var obj any
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getReducedPrecisionFloatStruct(obj)
+	if result.Float16Value.Bits() != 0x3E00 {
+		panic(fmt.Sprintf("float16_value mismatch: expected 0x3E00, got 0x%04x", result.Float16Value.Bits()))
+	}
+	if result.Bfloat16Value.Bits() != 0x3FC0 {
+		panic(fmt.Sprintf("bfloat16_value mismatch: expected 0x3FC0, got 0x%04x", result.Bfloat16Value.Bits()))
+	}
+	if len(result.Float16Array) != 3 ||
+		result.Float16Array[0].Bits() != 0x0000 ||
+		result.Float16Array[1].Bits() != 0x3C00 ||
+		result.Float16Array[2].Bits() != 0xBC00 {
+		panic(fmt.Sprintf("float16_array mismatch: got %#v", result.Float16Array))
+	}
+	if len(result.Bfloat16Array) != 3 ||
+		result.Bfloat16Array[0].Bits() != 0x0000 ||
+		result.Bfloat16Array[1].Bits() != 0x3F80 ||
+		result.Bfloat16Array[2].Bits() != 0xBF80 {
+		panic(fmt.Sprintf("bfloat16_array mismatch: got %#v", result.Bfloat16Array))
+	}
+
+	serialized, err := f.Serialize(&result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testReducedPrecisionFloatStructCompatibleSkip() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterStruct(EmptyStruct{}, 213)
+
+	buf := fory.NewByteBuffer(data)
+	var obj any
+	err := f.DeserializeWithCallbackBuffers(buf, &obj, nil)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize as EmptyStruct: %v", err))
+	}
+
+	serialized, err := f.Serialize(obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
 // Enum field tests
 func testOneEnumFieldSchemaConsistent() {
 	dataFile := getDataFile()
@@ -2601,6 +2685,10 @@ func main() {
 		testSchemaEvolutionCompatible()
 	case "test_schema_evolution_compatible_reverse":
 		testSchemaEvolutionCompatibleReverse()
+	case "test_reduced_precision_float_struct":
+		testReducedPrecisionFloatStruct()
+	case "test_reduced_precision_float_struct_compatible_skip":
+		testReducedPrecisionFloatStructCompatibleSkip()
 	case "test_one_enum_field_schema":
 		testOneEnumFieldSchemaConsistent()
 	case "test_one_enum_field_compatible":

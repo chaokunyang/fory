@@ -563,6 +563,16 @@ void _runCase(String caseName) {
       registerXlangType(fory, UnsignedSchemaCompatible, id: 502);
       _roundTripFory(fory);
       return;
+    case 'test_reduced_precision_float_struct':
+      final fory = _newFory();
+      registerXlangType(fory, ReducedPrecisionFloatStruct, id: 213);
+      _roundTripFory(fory);
+      return;
+    case 'test_reduced_precision_float_struct_compatible_skip':
+      final fory = _newFory(compatible: true);
+      registerXlangType(fory, EmptyStruct, id: 213);
+      _roundTripFory(fory);
+      return;
     default:
       throw UnsupportedError('Unknown Dart xlang case: $caseName');
   }

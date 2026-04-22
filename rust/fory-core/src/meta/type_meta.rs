@@ -796,7 +796,7 @@ impl TypeMeta {
                 .cmp(&b_nullable) // non-nullable first
                 .then_with(|| compress_a.cmp(&compress_b)) // fixed-size (false) first, then variable-size (true) last
                 .then_with(|| size_b.cmp(&size_a)) // when same compress status: larger size first
-                .then_with(|| b_id.cmp(&a_id)) // when same size: larger type id first
+                .then_with(|| a_id.cmp(&b_id)) // when same size: smaller type id first
                 .then_with(|| a_field_name.cmp(b_field_name)) // when same id: lexicographic name
         }
         fn type_then_name_sorter(a: &FieldInfo, b: &FieldInfo) -> std::cmp::Ordering {

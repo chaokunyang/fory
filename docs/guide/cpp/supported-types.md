@@ -25,22 +25,23 @@ This page documents all types supported by Fory C++ serialization.
 
 All C++ primitive types are supported with efficient binary encoding:
 
-| Type       | Size   | Fory TypeId | Notes                 |
-| ---------- | ------ | ----------- | --------------------- |
-| `bool`     | 1 byte | BOOL        | True/false            |
-| `int8_t`   | 1 byte | INT8        | Signed byte           |
-| `uint8_t`  | 1 byte | INT8        | Unsigned byte         |
-| `int16_t`  | 2 byte | INT16       | Signed short          |
-| `uint16_t` | 2 byte | INT16       | Unsigned short        |
-| `int32_t`  | 4 byte | INT32       | Signed integer        |
-| `uint32_t` | 4 byte | INT32       | Unsigned integer      |
-| `int64_t`  | 8 byte | INT64       | Signed long           |
-| `uint64_t` | 8 byte | INT64       | Unsigned long         |
-| `float`    | 4 byte | FLOAT32     | IEEE 754 single       |
-| `double`   | 8 byte | FLOAT64     | IEEE 754 double       |
-| `char`     | 1 byte | INT8        | Character (as signed) |
-| `char16_t` | 2 byte | INT16       | 16-bits characters    |
-| `char32_t` | 4 byte | INT32       | 32-bits characters    |
+| Type               | Size   | Fory TypeId | Notes                 |
+| ------------------ | ------ | ----------- | --------------------- |
+| `bool`             | 1 byte | BOOL        | True/false            |
+| `int8_t`           | 1 byte | INT8        | Signed byte           |
+| `uint8_t`          | 1 byte | INT8        | Unsigned byte         |
+| `int16_t`          | 2 byte | INT16       | Signed short          |
+| `uint16_t`         | 2 byte | INT16       | Unsigned short        |
+| `int32_t`          | 4 byte | INT32       | Signed integer        |
+| `uint32_t`         | 4 byte | INT32       | Unsigned integer      |
+| `int64_t`          | 8 byte | INT64       | Signed long           |
+| `uint64_t`         | 8 byte | INT64       | Unsigned long         |
+| `float`            | 4 byte | FLOAT32     | IEEE 754 single       |
+| `double`           | 8 byte | FLOAT64     | IEEE 754 double       |
+| `fory::bfloat16_t` | 2 byte | BFLOAT16    | IEEE 754 bfloat16     |
+| `char`             | 1 byte | INT8        | Character (as signed) |
+| `char16_t`         | 2 byte | INT16       | 16-bits characters    |
+| `char32_t`         | 4 byte | INT32       | 32-bits characters    |
 
 ```cpp
 int32_t value = 42;
@@ -70,6 +71,8 @@ assert(text == decoded);
 ### Vector / List
 
 `std::vector<T>` for any serializable element type:
+
+`std::vector<fory::bfloat16_t>` is the dense array carrier for xlang `bfloat16_array`.
 
 ```cpp
 std::vector<int32_t> numbers{1, 2, 3, 4, 5};

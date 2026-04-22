@@ -137,15 +137,17 @@ print(f"Timestamp: {msg.timestamp}")
 
 ### Primitive Types
 
-| C++ Type  | Java Type | Python Type | Go Type   | Rust Type |
-| --------- | --------- | ----------- | --------- | --------- |
-| `bool`    | `boolean` | `bool`      | `bool`    | `bool`    |
-| `int8_t`  | `byte`    | `int`       | `int8`    | `i8`      |
-| `int16_t` | `short`   | `int`       | `int16`   | `i16`     |
-| `int32_t` | `int`     | `int`       | `int32`   | `i32`     |
-| `int64_t` | `long`    | `int`       | `int64`   | `i64`     |
-| `float`   | `float`   | `float`     | `float32` | `f32`     |
-| `double`  | `double`  | `float`     | `float64` | `f64`     |
+| C++ Type           | Java Type  | Python Type       | Go Type             | Rust Type  |
+| ------------------ | ---------- | ----------------- | ------------------- | ---------- |
+| `bool`             | `boolean`  | `bool`            | `bool`              | `bool`     |
+| `int8_t`           | `byte`     | `int`             | `int8`              | `i8`       |
+| `int16_t`          | `short`    | `int`             | `int16`             | `i16`      |
+| `int32_t`          | `int`      | `int`             | `int32`             | `i32`      |
+| `int64_t`          | `long`     | `int`             | `int64`             | `i64`      |
+| `float`            | `float`    | `float`           | `float32`           | `f32`      |
+| `double`           | `double`   | `float`           | `float64`           | `f64`      |
+| `fory::float16_t`  | `Float16`  | `pyfory.float16`  | `float16.Float16`   | `Float16`  |
+| `fory::bfloat16_t` | `BFloat16` | `pyfory.bfloat16` | `bfloat16.BFloat16` | `BFloat16` |
 
 ### String Types
 
@@ -155,11 +157,13 @@ print(f"Timestamp: {msg.timestamp}")
 
 ### Collection Types
 
-| C++ Type         | Java Type  | Python Type | Go Type          |
-| ---------------- | ---------- | ----------- | ---------------- |
-| `std::vector<T>` | `List<T>`  | `list`      | `[]T`            |
-| `std::set<T>`    | `Set<T>`   | `set`       | `map[T]struct{}` |
-| `std::map<K,V>`  | `Map<K,V>` | `dict`      | `map[K]V`        |
+| C++ Type                        | Java Type      | Python Type     | Go Type               | Rust Type       |
+| ------------------------------- | -------------- | --------------- | --------------------- | --------------- |
+| `std::vector<T>`                | `List<T>`      | `list`          | `[]T`                 | `Vec<T>`        |
+| `std::vector<fory::float16_t>`  | `Float16List`  | `float16array`  | `[]float16.Float16`   | `Vec<Float16>`  |
+| `std::vector<fory::bfloat16_t>` | `BFloat16List` | `bfloat16array` | `[]bfloat16.BFloat16` | `Vec<BFloat16>` |
+| `std::set<T>`                   | `Set<T>`       | `set`           | `map[T]struct{}`      | `HashSet<T>`    |
+| `std::map<K,V>`                 | `Map<K,V>`     | `dict`          | `map[K]V`             | `HashMap<K,V>`  |
 
 ### Temporal Types
 

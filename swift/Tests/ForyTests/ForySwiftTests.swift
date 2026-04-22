@@ -54,6 +54,14 @@ struct EncodedNumberFields: Equatable {
 }
 
 @ForyObject
+struct ReducedPrecisionMacroFields: Equatable {
+    var float16Value: Float16
+    var bfloat16Value: BFloat16
+    var float16Array: [Float16]
+    var bfloat16Array: [BFloat16]
+}
+
+@ForyObject
 struct FieldIdConfigured: Equatable {
     @ForyField(id: 2)
     var stableID: Int32
@@ -893,6 +901,19 @@ func macroFieldEncodingOverridesCompatibleTypeMeta() throws {
     #expect(fields[0].fieldType.typeID == TypeId.uint32.rawValue)
     #expect(fields[1].fieldName == "u64Tagged")
     #expect(fields[1].fieldType.typeID == TypeId.taggedUInt64.rawValue)
+}
+
+@Test
+func macroReducedPrecisionFieldsUseXlangTypeIDs() {
+    let fields = ReducedPrecisionMacroFields.foryFieldsInfo(trackRef: false)
+    #expect(fields.count == 4)
+    #expect(fields.map(\.fieldName) == ["float16Value", "bfloat16Value", "float16Array", "bfloat16Array"])
+    #expect(fields.map(\.fieldType.typeID) == [
+        TypeId.float16.rawValue,
+        TypeId.bfloat16.rawValue,
+        TypeId.float16Array.rawValue,
+        TypeId.bfloat16Array.rawValue
+    ])
 }
 
 @Test

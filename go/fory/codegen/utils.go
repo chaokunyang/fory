@@ -455,12 +455,12 @@ func sortFields(fields []*FieldInfo) {
 	})
 }
 
-// Field group constants for sorting
+// Field group constants for sorting.
 // This matches reflection's field ordering in field_info.go:
-// primitives → internal built-in → list/set → map → other
+// primitives → built-in non-container (including primitive arrays) → list/set → map → other
 const (
 	groupPrimitive       = 0 // primitive and nullable primitive fields
-	groupInternalBuiltin = 1 // built-in types (STRING/BINARY/arrays/etc.) sorted by typeId then name
+	groupInternalBuiltin = 1 // built-in non-container types sorted by typeId then name
 	groupListSet         = 2 // LIST/SET sorted by typeId then name
 	groupMap             = 3 // MAP sorted by typeId then name
 	groupOther           = 4 // structs, enums, and unknown types - sorted by name

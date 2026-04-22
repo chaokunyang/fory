@@ -28,6 +28,6 @@ public class TypesTest {
   public void testGetClassForFloatTypeIds() {
     assertSame(Types.getClassForTypeId(Types.FLOAT8), Float.class);
     assertSame(Types.getClassForTypeId(Types.FLOAT16), Float16.class);
-    assertSame(Types.getClassForTypeId(Types.BFLOAT16), Float.class);
+    assertSame(Types.getClassForTypeId(Types.BFLOAT16), BFloat16.class);
   }
 }

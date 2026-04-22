@@ -217,6 +217,8 @@ internal static class Program
             "test_two_string_field_compatible" => CaseTwoStringFieldCompatible(input),
             "test_schema_evolution_compatible" => CaseSchemaEvolutionCompatible(input),
             "test_schema_evolution_compatible_reverse" => CaseSchemaEvolutionCompatibleReverse(input),
+            "test_reduced_precision_float_struct" => CaseReducedPrecisionFloatStruct(input),
+            "test_reduced_precision_float_struct_compatible_skip" => CaseReducedPrecisionFloatStructCompatibleSkip(input),
             "test_one_enum_field_schema" => CaseOneEnumFieldSchema(input),
             "test_one_enum_field_compatible" => CaseOneEnumFieldCompatible(input),
             "test_two_enum_field_compatible" => CaseTwoEnumFieldCompatible(input),
@@ -781,6 +783,38 @@ internal static class Program
         return RoundTripSingle<OneStringFieldStruct>(input, fory);
     }
 
+    private static byte[] CaseReducedPrecisionFloatStruct(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: false);
+        fory.Register<ReducedPrecisionFloatStruct>(213);
+
+        ReadOnlySequence<byte> sequence = new(input);
+        ReducedPrecisionFloatStruct value = fory.Deserialize<ReducedPrecisionFloatStruct>(ref sequence);
+        EnsureConsumed(sequence, nameof(CaseReducedPrecisionFloatStruct));
+        Ensure(BitConverter.HalfToUInt16Bits(value.Float16Value) == 0x3E00, "float16_value mismatch");
+        Ensure(value.BFloat16Value.Bits == 0x3FC0, "bfloat16_value mismatch");
+        Ensure(
+            value.Float16Array is { Length: 3 }
+            && BitConverter.HalfToUInt16Bits(value.Float16Array[0]) == 0x0000
+            && BitConverter.HalfToUInt16Bits(value.Float16Array[1]) == 0x3C00
+            && BitConverter.HalfToUInt16Bits(value.Float16Array[2]) == 0xBC00,
+            "float16_array mismatch");
+        Ensure(
+            value.BFloat16Array is { Length: 3 }
+            && value.BFloat16Array[0].Bits == 0x0000
+            && value.BFloat16Array[1].Bits == 0x3F80
+            && value.BFloat16Array[2].Bits == 0xBF80,
+            "bfloat16_array mismatch");
+        return fory.Serialize<object?>(value);
+    }
+
+    private static byte[] CaseReducedPrecisionFloatStructCompatibleSkip(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: true);
+        fory.Register<EmptyStruct>(213);
+        return RoundTripSingle<EmptyStruct>(input, fory);
+    }
+
     private static byte[] CaseOneEnumFieldSchema(byte[] input)
     {
         ForyRuntime fory = BuildFory(compatible: false);
@@ -1173,6 +1207,20 @@ public sealed class TwoStringFieldStruct
 {
     public string F1 { get; set; } = string.Empty;
     public string F2 { get; set; } = string.Empty;
+}
+
+[ForyObject]
+public sealed class EmptyStruct
+{
+}
+
+[ForyObject]
+public sealed class ReducedPrecisionFloatStruct
+{
+    public Half Float16Value { get; set; }
+    public BFloat16 BFloat16Value { get; set; }
+    public Half[] Float16Array { get; set; } = [];
+    public BFloat16[] BFloat16Array { get; set; } = [];
 }
 
 [ForyObject]

@@ -274,6 +274,56 @@ internal sealed class ListULongSerializer : Serializer<List<ulong>>
     }
 }
 
+internal sealed class ListHalfSerializer : Serializer<List<Half>>
+{
+    private static readonly ListSerializer<Half> Fallback = new();
+
+
+
+
+    public override List<Half> DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in List<Half> value, bool hasGenerics)
+    {
+        List<Half> list = value ?? [];
+        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.Float16, false);
+        for (int i = 0; i < list.Count; i++)
+        {
+            context.Writer.WriteUInt16(BitConverter.HalfToUInt16Bits(list[i]));
+        }
+    }
+
+    public override List<Half> ReadData(ReadContext context)
+    {
+        return Fallback.ReadData(context);
+    }
+}
+
+internal sealed class ListBFloat16Serializer : Serializer<List<BFloat16>>
+{
+    private static readonly ListSerializer<BFloat16> Fallback = new();
+
+
+
+
+    public override List<BFloat16> DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in List<BFloat16> value, bool hasGenerics)
+    {
+        List<BFloat16> list = value ?? [];
+        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.BFloat16, false);
+        for (int i = 0; i < list.Count; i++)
+        {
+            context.Writer.WriteUInt16(list[i].ToBits());
+        }
+    }
+
+    public override List<BFloat16> ReadData(ReadContext context)
+    {
+        return Fallback.ReadData(context);
+    }
+}
+
 internal sealed class ListFloatSerializer : Serializer<List<float>>
 {
     private static readonly ListSerializer<float> Fallback = new();

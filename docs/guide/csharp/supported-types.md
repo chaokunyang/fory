@@ -29,6 +29,7 @@ This page summarizes built-in and generated type support in Apache Fory™ C#.
 | `sbyte`, `short`, `int`, `long`          | Supported |
 | `byte`, `ushort`, `uint`, `ulong`        | Supported |
 | `float`, `double`                        | Supported |
+| `Half`, `BFloat16`                       | Supported |
 | `string`                                 | Supported |
 | `byte[]`                                 | Supported |
 | Nullable primitives (for example `int?`) | Supported |
@@ -36,6 +37,8 @@ This page summarizes built-in and generated type support in Apache Fory™ C#.
 ## Arrays
 
 - Primitive numeric arrays (`bool[]`, `int[]`, `ulong[]`, etc.)
+- `Half[]`, `List<Half>` for `float16_array`
+- `BFloat16[]`, `List<BFloat16>` for `bfloat16_array`
 - `byte[]`
 - General arrays (`T[]`) through collection serializers
 

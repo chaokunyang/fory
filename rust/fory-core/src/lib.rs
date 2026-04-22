@@ -32,7 +32,7 @@
 //! - **`serializer`**: Type-specific serialization implementations
 //! - **`resolver`**: Type resolution and metadata management
 //! - **`meta`**: Metadata handling for schema evolution
-//! - **`types`**: Runtime value carriers such as decimal, float16, and weak refs
+//! - **`types`**: Runtime value carriers such as decimal, Float16, BFloat16, and weak refs
 //! - **`type_id`**: Type IDs and protocol header helpers
 //! - **`error`**: Error handling and result types
 //! - **`util`**: Utility functions and helpers
@@ -203,5 +203,6 @@ pub use crate::meta::{compute_field_hash, compute_struct_hash};
 pub use crate::resolver::{RefFlag, RefMode, TypeInfo, TypeResolver};
 pub use crate::serializer::{read_data, write_data, ForyDefault, Serializer, StructSerializer};
 pub use crate::type_id::TypeId;
+pub use crate::types::bfloat16::bfloat16 as BFloat16;
 pub use crate::types::float16::float16 as Float16;
 pub use crate::types::{ArcWeak, Decimal, RcWeak};

@@ -630,33 +630,13 @@ void skip_field_value(ReadContext &ctx, const FieldType &field_type,
         return;
       }
     }
-    // Read array length
-    uint32_t len = ctx.read_var_uint32(ctx.error());
+    // Typed primitive arrays encode payload size in bytes, not element count.
+    uint32_t payload_size = ctx.read_var_uint32(ctx.error());
     if (FORY_PREDICT_FALSE(ctx.has_error())) {
       return;
     }
 
-    // Calculate element size
-    size_t elem_size = 1;
-    switch (tid) {
-    case TypeId::INT16_ARRAY:
-    case TypeId::FLOAT16_ARRAY:
-    case TypeId::BFLOAT16_ARRAY:
-      elem_size = 2;
-      break;
-    case TypeId::INT32_ARRAY:
-    case TypeId::FLOAT32_ARRAY:
-      elem_size = 4;
-      break;
-    case TypeId::INT64_ARRAY:
-    case TypeId::FLOAT64_ARRAY:
-      elem_size = 8;
-      break;
-    default:
-      break;
-    }
-
-    ctx.buffer().increase_reader_index(len * elem_size, ctx.error());
+    ctx.buffer().increase_reader_index(payload_size, ctx.error());
     return;
   }
 

@@ -50,21 +50,25 @@ public class DispatchId {
   public static final int VAR_UINT32 = 15;
   public static final int UINT64 = 16;
   public static final int FLOAT16 = 17;
-  public static final int VAR_UINT64 = 18;
-  public static final int TAGGED_UINT64 = 19;
-  public static final int EXT_UINT8 = 20;
-  public static final int EXT_UINT16 = 21;
-  public static final int EXT_UINT32 = 22;
-  public static final int EXT_VAR_UINT32 = 23;
-  public static final int EXT_UINT64 = 24;
-  public static final int EXT_VAR_UINT64 = 25;
-  public static final int STRING = 26;
+  public static final int BFLOAT16 = 18;
+  public static final int VAR_UINT64 = 19;
+  public static final int TAGGED_UINT64 = 20;
+  public static final int EXT_UINT8 = 21;
+  public static final int EXT_UINT16 = 22;
+  public static final int EXT_UINT32 = 23;
+  public static final int EXT_VAR_UINT32 = 24;
+  public static final int EXT_UINT64 = 25;
+  public static final int EXT_VAR_UINT64 = 26;
+  public static final int STRING = 27;
 
   public static int getDispatchId(TypeResolver resolver, Descriptor d) {
     int typeId = Types.getDescriptorTypeId(resolver, d);
     Class<?> rawType = d.getTypeRef().getRawType();
     if (rawType == Float16.class) {
       return FLOAT16;
+    }
+    if (rawType == BFloat16.class) {
+      return BFLOAT16;
     }
     if (resolver.isCrossLanguage()) {
       return adjustUnsignedDispatchId(typeId, rawType, xlangTypeIdToDispatchId(typeId));
@@ -107,6 +111,8 @@ public class DispatchId {
         return TAGGED_UINT64;
       case Types.FLOAT16:
         return FLOAT16;
+      case Types.BFLOAT16:
+        return BFLOAT16;
       case Types.FLOAT32:
         return FLOAT32;
       case Types.FLOAT64:

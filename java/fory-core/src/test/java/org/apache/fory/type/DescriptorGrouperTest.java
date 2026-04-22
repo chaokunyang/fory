@@ -37,6 +37,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.config.Language;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
@@ -161,6 +162,25 @@ public class DescriptorGrouperTest extends ForyTestBase {
             long.class,
             int.class);
     assertEquals(classes, expected);
+  }
+
+  @Test
+  public void testXlangPrimitiveComparatorUsesAscendingTypeIdTieBreaker() {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).build();
+    List<Descriptor> descriptors = new ArrayList<>();
+    descriptors.add(
+        createDescriptor(TypeRef.of(Short.class), "shortValue", -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(TypeRef.of(Float16.class), "float16Value", -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(TypeRef.of(BFloat16.class), "bfloat16Value", -1, "TestClass", false));
+
+    Collections.shuffle(descriptors, new Random(11));
+    descriptors.sort(fory.getTypeResolver().getPrimitiveComparator());
+
+    List<? extends Class<?>> classes =
+        descriptors.stream().map(Descriptor::getRawType).collect(Collectors.toList());
+    assertEquals(classes, Arrays.asList(Short.class, Float16.class, BFloat16.class));
   }
 
   @Test

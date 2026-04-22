@@ -259,3 +259,45 @@ fn test_struct_with_float16_fields() {
     assert_eq!(obj2.arr_field[1].to_bits(), float16::MAX.to_bits());
     assert_eq!(obj2.arr_field[2].to_bits(), float16::ZERO.to_bits());
 }
+
+#[test]
+fn test_struct_with_bfloat16_fields() {
+    use fory_core::types::bfloat16::bfloat16;
+
+    #[derive(ForyObject, Debug)]
+    struct BFloat16Data {
+        scalar: bfloat16,
+        vec_field: Vec<bfloat16>,
+        arr_field: [bfloat16; 3],
+    }
+
+    let mut fory = Fory::default();
+    fory.register::<BFloat16Data>(201).unwrap();
+
+    let obj = BFloat16Data {
+        scalar: bfloat16::from_f32(1.5),
+        vec_field: vec![
+            bfloat16::from_f32(1.0),
+            bfloat16::from_f32(2.0),
+            bfloat16::INFINITY,
+        ],
+        arr_field: [bfloat16::from_f32(-1.0), bfloat16::MAX, bfloat16::ZERO],
+    };
+
+    let bin = fory.serialize(&obj).unwrap();
+    let obj2: BFloat16Data = fory.deserialize(&bin).expect("deserialize BFloat16Data");
+
+    assert_eq!(obj2.scalar.to_bits(), bfloat16::from_f32(1.5).to_bits());
+    assert_eq!(obj2.vec_field.len(), 3);
+    assert_eq!(
+        obj2.vec_field[0].to_bits(),
+        bfloat16::from_f32(1.0).to_bits()
+    );
+    assert!(obj2.vec_field[2].is_infinite() && !obj2.vec_field[2].is_sign_negative());
+    assert_eq!(
+        obj2.arr_field[0].to_bits(),
+        bfloat16::from_f32(-1.0).to_bits()
+    );
+    assert_eq!(obj2.arr_field[1].to_bits(), bfloat16::MAX.to_bits());
+    assert_eq!(obj2.arr_field[2].to_bits(), bfloat16::ZERO.to_bits());
+}

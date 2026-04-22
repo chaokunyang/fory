@@ -1219,8 +1219,16 @@ func (r *TypeResolver) getTypeInfo(value reflect.Value, create bool) (*TypeInfo,
 				serializer = int32ArraySerializer{arrayType: type_}
 			}
 		case reflect.Uint16:
-			arrayTypeID = UINT16_ARRAY
-			serializer = uint16ArraySerializer{arrayType: type_}
+			if type_.Elem() == float16Type {
+				arrayTypeID = FLOAT16_ARRAY
+				serializer = float16ArraySerializer{arrayType: type_}
+			} else if type_.Elem() == bfloat16Type {
+				arrayTypeID = BFLOAT16_ARRAY
+				serializer = bfloat16ArraySerializer{arrayType: type_}
+			} else {
+				arrayTypeID = UINT16_ARRAY
+				serializer = uint16ArraySerializer{arrayType: type_}
+			}
 		case reflect.Uint32:
 			arrayTypeID = UINT32_ARRAY
 			serializer = uint32ArraySerializer{arrayType: type_}
@@ -1900,6 +1908,14 @@ func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, e
 		return int64SliceSerializer{}, nil
 	case reflect.Uint8:
 		return byteSliceSerializer{}, nil
+	case reflect.Uint16:
+		if elemType == float16Type {
+			return float16SliceSerializer{}, nil
+		}
+		if elemType == bfloat16Type {
+			return bfloat16SliceSerializer{}, nil
+		}
+		return uint16SliceSerializer{}, nil
 	case reflect.Float32:
 		return float32SliceSerializer{}, nil
 	case reflect.Float64:
@@ -1948,6 +1964,14 @@ func (r *TypeResolver) GetArraySerializer(arrayType reflect.Type) (Serializer, e
 		return int64ArraySerializer{arrayType: arrayType}, nil
 	case reflect.Uint8:
 		return uint8ArraySerializer{arrayType: arrayType}, nil
+	case reflect.Uint16:
+		if elemType == float16Type {
+			return float16ArraySerializer{arrayType: arrayType}, nil
+		}
+		if elemType == bfloat16Type {
+			return bfloat16ArraySerializer{arrayType: arrayType}, nil
+		}
+		return uint16ArraySerializer{arrayType: arrayType}, nil
 	case reflect.Float32:
 		return float32ArraySerializer{arrayType: arrayType}, nil
 	case reflect.Float64:

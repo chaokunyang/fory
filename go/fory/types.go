@@ -381,6 +381,7 @@ const (
 	Float32SliceDispatchId
 	Float64SliceDispatchId
 	Float16SliceDispatchId
+	BFloat16SliceDispatchId
 	BoolSliceDispatchId
 	StringSliceDispatchId
 
@@ -461,6 +462,9 @@ func GetDispatchId(t reflect.Type) DispatchId {
 			// Check if it's float16 slice
 			if t.Elem().Name() == "Float16" && (t.Elem().PkgPath() == "github.com/apache/fory/go/fory/float16" || strings.HasSuffix(t.Elem().PkgPath(), "/float16")) {
 				return Float16SliceDispatchId
+			}
+			if t.Elem().Name() == "BFloat16" && (t.Elem().PkgPath() == "github.com/apache/fory/go/fory/bfloat16" || strings.HasSuffix(t.Elem().PkgPath(), "/bfloat16")) {
+				return BFloat16SliceDispatchId
 			}
 			return Uint16SliceDispatchId
 		case reflect.Uint32:

@@ -229,7 +229,7 @@ public class Float16SerializerTest extends ForyTestBase {
 
     Float16[] array = new Float16[] {Float16.ONE, Float16.valueOf(-0.5f), Float16.MIN_VALUE};
     bytes = fory.serialize(array);
-    Float16[] arrayResult = (Float16[]) fory.deserialize(bytes);
+    Float16[] arrayResult = fory.deserialize(bytes, Float16[].class);
     assertEquals(arrayResult.length, array.length);
     for (int i = 0; i < array.length; i++) {
       assertEquals(arrayResult[i].toBits(), array[i].toBits(), "Index " + i + " should match");
@@ -237,17 +237,8 @@ public class Float16SerializerTest extends ForyTestBase {
 
     Float16List list = buildFloat16List();
     bytes = fory.serialize(list);
-    Object listResult = fory.deserialize(bytes);
-    if (listResult instanceof Float16List) {
-      assertFloat16ListBits(list, (Float16List) listResult);
-    } else {
-      Float16[] arrayResultFromList = (Float16[]) listResult;
-      assertEquals(arrayResultFromList.length, list.size());
-      for (int i = 0; i < arrayResultFromList.length; i++) {
-        assertEquals(
-            arrayResultFromList[i].toBits(), list.getShort(i), "Index " + i + " should match");
-      }
-    }
+    Float16List listResult = (Float16List) fory.deserialize(bytes);
+    assertFloat16ListBits(list, listResult);
   }
 
   @Test

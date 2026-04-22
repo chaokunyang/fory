@@ -243,6 +243,13 @@ _primitive_types = {
     float64,
 }
 
+
+def _is_special_compiled_primitive_type(type_) -> bool:
+    from pyfory.serialization import bfloat16, float16
+
+    return type_ is float16 or type_ is bfloat16
+
+
 _primitive_types_ids = {
     TypeId.BOOL,
     # Signed integers
@@ -276,7 +283,7 @@ _primitive_types_ids = {
 def is_primitive_type(type_) -> bool:
     if type(type_) is int:
         return type_ in _primitive_types_ids
-    return type_ in _primitive_types
+    return type_ in _primitive_types or _is_special_compiled_primitive_type(type_)
 
 
 _primitive_type_sizes = {
@@ -375,6 +382,12 @@ _np_array_types = {
 _primitive_array_types = _py_array_types.union(_np_array_types)
 
 
+def _is_special_compiled_primitive_array_type(type_) -> bool:
+    from pyfory.serialization import bfloat16array, float16array
+
+    return type_ is float16array or type_ is bfloat16array
+
+
 def is_py_array_type(type_) -> bool:
     return type_ in _py_array_types
 
@@ -389,6 +402,8 @@ _primitive_array_type_ids = {
     TypeId.UINT16_ARRAY,
     TypeId.UINT32_ARRAY,
     TypeId.UINT64_ARRAY,
+    TypeId.FLOAT16_ARRAY,
+    TypeId.BFLOAT16_ARRAY,
     TypeId.FLOAT32_ARRAY,
     TypeId.FLOAT64_ARRAY,
 }
@@ -397,7 +412,7 @@ _primitive_array_type_ids = {
 def is_primitive_array_type(type_) -> bool:
     if type(type_) is int:
         return type_ in _primitive_array_type_ids
-    return type_ in _primitive_array_types
+    return type_ in _primitive_array_types or _is_special_compiled_primitive_array_type(type_)
 
 
 def is_list_type(type_):

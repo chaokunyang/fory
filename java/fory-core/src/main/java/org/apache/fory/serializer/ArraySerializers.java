@@ -35,6 +35,7 @@ import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionFlags;
 import org.apache.fory.serializer.collection.ForyArrayAsListSerializer;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
@@ -944,6 +945,69 @@ public class ArraySerializers {
     }
   }
 
+  public static final class BFloat16ArraySerializer extends PrimitiveArraySerializer<BFloat16[]> {
+    public BFloat16ArraySerializer(TypeResolver typeResolver) {
+      super(typeResolver, BFloat16[].class);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, BFloat16[] value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      int length = value.length;
+      for (int i = 0; i < length; i++) {
+        if (value[i] == null) {
+          throw new IllegalArgumentException(
+              "BFloat16[] doesn't support null elements at index " + i);
+        }
+      }
+      writeNonNull(buffer, value, length);
+    }
+
+    private void writeNonNull(MemoryBuffer buffer, BFloat16[] value, int length) {
+      int size = length * 2;
+      buffer.writeVarUint32Small7(size);
+
+      if (Platform.IS_LITTLE_ENDIAN) {
+        int writerIndex = buffer.writerIndex();
+        buffer.ensure(writerIndex + size);
+        for (int i = 0; i < length; i++) {
+          buffer._unsafePutInt16(writerIndex + i * 2, value[i].toBits());
+        }
+        buffer._unsafeWriterIndex(writerIndex + size);
+      } else {
+        for (int i = 0; i < length; i++) {
+          buffer.writeInt16(value[i].toBits());
+        }
+      }
+    }
+
+    @Override
+    public BFloat16[] copy(CopyContext copyContext, BFloat16[] originArray) {
+      return Arrays.copyOf(originArray, originArray.length);
+    }
+
+    @Override
+    public BFloat16[] read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      int size = buffer.readVarUint32Small7();
+      int numElements = size / 2;
+      BFloat16[] values = new BFloat16[numElements];
+      if (Platform.IS_LITTLE_ENDIAN) {
+        int readerIndex = buffer.readerIndex();
+        buffer.checkReadableBytes(size);
+        for (int i = 0; i < numElements; i++) {
+          values[i] = BFloat16.fromBits(buffer._unsafeGetInt16(readerIndex + i * 2));
+        }
+        buffer._increaseReaderIndexUnsafe(size);
+      } else {
+        for (int i = 0; i < numElements; i++) {
+          values[i] = BFloat16.fromBits(buffer.readInt16());
+        }
+      }
+      return values;
+    }
+  }
+
   public static final class StringArraySerializer extends Serializer<String[]> {
     private final Config config;
     private final ForyArrayAsListSerializer collectionSerializer;
@@ -1072,6 +1136,7 @@ public class ArraySerializers {
     resolver.registerInternalSerializer(
         Double[].class, new ObjectArraySerializer<>(resolver, Double[].class));
     resolver.registerInternalSerializer(Float16[].class, new Float16ArraySerializer(resolver));
+    resolver.registerInternalSerializer(BFloat16[].class, new BFloat16ArraySerializer(resolver));
     resolver.registerInternalSerializer(boolean[].class, new BooleanArraySerializer(resolver));
     resolver.registerInternalSerializer(
         Boolean[].class, new ObjectArraySerializer<>(resolver, Boolean[].class));

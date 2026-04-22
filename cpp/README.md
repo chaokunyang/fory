@@ -13,6 +13,7 @@ The C++ implementation provides high-performance serialization with compile-time
 - **Type-Safe**: Compile-time type checking with template specialization
 - **Shared References**: Automatic tracking of shared and circular references
 - **Schema Evolution**: Compatible mode for independent schema changes
+- **Reduced-Precision Types**: `fory::float16_t` and `fory::bfloat16_t` scalars with dense `std::vector<...>` array carriers
 - **Two Formats**: Object graph serialization and zero-copy row-based format
 - **Modern C++17**: Clean API using modern C++ features
 

@@ -245,6 +245,48 @@ internal readonly struct UInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCo
     }
 }
 
+internal readonly struct Float16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<Half>
+{
+    public static TypeId WireTypeId => TypeId.Float16;
+
+    public static bool IsNullable => false;
+
+    public static Half DefaultValue => default;
+
+    public static bool IsNone(Half value) => false;
+
+    public static void Write(WriteContext context, Half value)
+    {
+        context.Writer.WriteUInt16(BitConverter.HalfToUInt16Bits(value));
+    }
+
+    public static Half Read(ReadContext context)
+    {
+        return BitConverter.UInt16BitsToHalf(context.Reader.ReadUInt16());
+    }
+}
+
+internal readonly struct BFloat16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<BFloat16>
+{
+    public static TypeId WireTypeId => TypeId.BFloat16;
+
+    public static bool IsNullable => false;
+
+    public static BFloat16 DefaultValue => default;
+
+    public static bool IsNone(BFloat16 value) => false;
+
+    public static void Write(WriteContext context, BFloat16 value)
+    {
+        context.Writer.WriteUInt16(value.ToBits());
+    }
+
+    public static BFloat16 Read(ReadContext context)
+    {
+        return BFloat16.FromBits(context.Reader.ReadUInt16());
+    }
+}
+
 internal readonly struct Float32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<float>
 {
     public static TypeId WireTypeId => TypeId.Float32;

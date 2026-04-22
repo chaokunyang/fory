@@ -22,7 +22,7 @@ use fory_core::resolver::TypeResolver;
 use fory_core::serializer::{ForyDefault, Serializer};
 use fory_core::type_id::TypeId;
 use fory_core::util::murmurhash3_x64_128;
-use fory_core::{read_data, write_data, Decimal, Fory};
+use fory_core::{read_data, write_data, BFloat16, Decimal, Float16, Fory};
 use fory_core::{ReadContext, WriteContext};
 use fory_derive::ForyObject;
 use num_bigint::BigInt;
@@ -878,6 +878,14 @@ struct TwoStringFieldStruct {
     f2: String,
 }
 
+#[derive(ForyObject, Debug, PartialEq)]
+struct ReducedPrecisionFloatStruct {
+    float16_value: Float16,
+    bfloat16_value: BFloat16,
+    float16_array: Vec<Float16>,
+    bfloat16_array: Vec<BFloat16>,
+}
+
 #[allow(non_camel_case_types)]
 #[derive(ForyObject, Debug, PartialEq, Default, Clone)]
 enum TestEnum {
@@ -1278,6 +1286,54 @@ fn test_schema_evolution_compatible_reverse() {
     assert_eq!(value.f2, String::default()); // Empty string for missing non-nullable field
 
     // Serialize back
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_reduced_precision_float_struct() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::builder().compatible(false).xlang(true).build();
+    fory.register::<ReducedPrecisionFloatStruct>(213).unwrap();
+
+    let value: ReducedPrecisionFloatStruct = fory.deserialize(&bytes).unwrap();
+    assert_eq!(value.float16_value.to_bits(), 0x3E00);
+    assert_eq!(value.bfloat16_value.to_bits(), 0x3FC0);
+    assert_eq!(
+        value
+            .float16_array
+            .iter()
+            .map(|v| v.to_bits())
+            .collect::<Vec<_>>(),
+        vec![0x0000, 0x3C00, 0xBC00]
+    );
+    assert_eq!(
+        value
+            .bfloat16_array
+            .iter()
+            .map(|v| v.to_bits())
+            .collect::<Vec<_>>(),
+        vec![0x0000, 0x3F80, 0xBF80]
+    );
+
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_reduced_precision_float_struct_compatible_skip() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::builder().compatible(true).xlang(true).build();
+    fory.register::<EmptyStructEvolution>(213).unwrap();
+
+    let value: EmptyStructEvolution = fory.deserialize(&bytes).unwrap();
+
     let new_bytes = fory.serialize(&value).unwrap();
     fs::write(&data_file_path, new_bytes).unwrap();
 }

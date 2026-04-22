@@ -852,7 +852,7 @@ export class TypeMeta {
 
     // Sort functions
     const primitiveComparator = (a: T, b: T) => {
-      // Sort by type_id descending, then by name ascending
+      // Sort by type_id ascending, then by name ascending
       const t1Compress = TypeId.isCompressedType(a.typeId);
       const t2Compress = TypeId.isCompressedType(b.typeId);
 
@@ -863,7 +863,7 @@ export class TypeMeta {
 
         let c = sizeb - sizea;
         if (c === 0) {
-          c = b.typeId - a.typeId;
+          c = a.typeId - b.typeId;
           // noinspection Duplicates
           if (c == 0) {
             return nameSorter(a, b);

@@ -246,6 +246,17 @@ public class GoXlangTest extends XlangTestBase {
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testReducedPrecisionFloatStruct(boolean enableCodegen) throws java.io.IOException {
+    super.testReducedPrecisionFloatStruct(enableCodegen);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testReducedPrecisionFloatStructCompatibleFieldSkip(boolean enableCodegen)
+      throws java.io.IOException {
+    super.testReducedPrecisionFloatStructCompatibleFieldSkip(enableCodegen);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testOneEnumFieldSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
     super.testOneEnumFieldSchemaConsistent(enableCodegen);
   }

@@ -19,7 +19,6 @@
 
 package org.apache.fory.resolver;
 
-import static org.apache.fory.type.TypeUtils.getSizeOfPrimitiveType;
 import static org.apache.fory.type.Types.INVALID_USER_TYPE_ID;
 
 import java.lang.reflect.AnnotatedType;
@@ -399,6 +398,11 @@ public abstract class TypeResolver {
 
   protected DescriptorGrouper configureDescriptorGrouper(DescriptorGrouper descriptorGrouper) {
     return descriptorGrouper;
+  }
+
+  public boolean usesPrimitiveFieldOrdering(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getRawType();
+    return TypeUtils.isPrimitive(rawType) || TypeUtils.isBoxed(rawType);
   }
 
   public abstract boolean isMonomorphic(Descriptor descriptor);
@@ -1355,6 +1359,7 @@ public abstract class TypeResolver {
       Function<Descriptor, Descriptor> descriptorUpdator) {
     return configureDescriptorGrouper(
             DescriptorGrouper.createDescriptorGrouper(
+                this::usesPrimitiveFieldOrdering,
                 this::isBuildIn,
                 descriptors,
                 descriptorsGroupedOrdered,
@@ -1446,16 +1451,14 @@ public abstract class TypeResolver {
    */
   public Comparator<Descriptor> getPrimitiveComparator() {
     return (d1, d2) -> {
-      Class<?> t1 = TypeUtils.unwrap(d1.getRawType());
-      Class<?> t2 = TypeUtils.unwrap(d2.getRawType());
       int typeId1 = Types.getDescriptorTypeId(this, d1);
       int typeId2 = Types.getDescriptorTypeId(this, d2);
       boolean t1Compress = Types.isCompressedType(typeId1);
       boolean t2Compress = Types.isCompressedType(typeId2);
       if ((t1Compress && t2Compress) || (!t1Compress && !t2Compress)) {
-        int c = getSizeOfPrimitiveType(t2) - getSizeOfPrimitiveType(t1);
+        int c = getPrimitiveFieldSize(d2) - getPrimitiveFieldSize(d1);
         if (c == 0) {
-          c = typeId2 - typeId1;
+          c = isCrossLanguage() ? typeId1 - typeId2 : typeId2 - typeId1;
           // noinspection Duplicates
           if (c == 0) {
             c = getFieldSortKey(d1).compareTo(getFieldSortKey(d2));
@@ -1479,6 +1482,14 @@ public abstract class TypeResolver {
       // t2 compress
       return -1;
     };
+  }
+
+  private int getPrimitiveFieldSize(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getRawType();
+    if (TypeUtils.isPrimitive(rawType) || TypeUtils.isBoxed(rawType)) {
+      return TypeUtils.getSizeOfPrimitiveType(TypeUtils.unwrap(rawType));
+    }
+    return Types.getPrimitiveTypeSize(Types.getDescriptorTypeId(this, descriptor));
   }
 
   /**

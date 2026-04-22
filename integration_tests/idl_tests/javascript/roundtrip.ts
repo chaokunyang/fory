@@ -30,8 +30,8 @@ import * as assert from "assert/strict";
 import * as fs from "fs";
 
 import Fory, { Type } from "@apache-fory/core";
-import { AnyHelper } from "@apache-fory/core/lib/gen/any";
-import { ConfigFlags, RefFlags, type Serializer } from "@apache-fory/core/lib/type";
+import { AnyHelper } from "@apache-fory/core/dist/lib/gen/any";
+import { ConfigFlags, RefFlags, type Serializer } from "@apache-fory/core/dist/lib/type";
 
 import {
   AddressBook,

@@ -531,8 +531,12 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
                     "i32" => quote! { fory_core::type_id::TypeId::INT32_ARRAY as u32 },
                     "i64" => quote! { fory_core::type_id::TypeId::INT64_ARRAY as u32 },
                     "i128" => quote! { fory_core::type_id::TypeId::INT128_ARRAY as u32 },
-                    "float16" | "Float16" => quote! { fory_core::type_id::TypeId::FLOAT16_ARRAY as u32 },
-                    "bfloat16" | "BFloat16" => quote! { fory_core::type_id::TypeId::BFLOAT16_ARRAY as u32 },
+                    "float16" | "Float16" => {
+                        quote! { fory_core::type_id::TypeId::FLOAT16_ARRAY as u32 }
+                    }
+                    "bfloat16" | "BFloat16" => {
+                        quote! { fory_core::type_id::TypeId::BFLOAT16_ARRAY as u32 }
+                    }
                     "f32" => quote! { fory_core::type_id::TypeId::FLOAT32_ARRAY as u32 },
                     "f64" => quote! { fory_core::type_id::TypeId::FLOAT64_ARRAY as u32 },
                     "u8" => quote! { fory_core::type_id::TypeId::BINARY as u32 },
@@ -699,8 +703,8 @@ fn extract_option_inner(s: &str) -> Option<&str> {
 }
 
 const PRIMITIVE_TYPE_NAMES: [&str; 17] = [
-    "bool", "i8", "i16", "i32", "i64", "i128", "float16", "Float16", "bfloat16", "BFloat16",
-    "f32", "f64", "u8", "u16", "u32", "u64", "u128",
+    "bool", "i8", "i16", "i32", "i64", "i128", "float16", "Float16", "bfloat16", "BFloat16", "f32",
+    "f64", "u8", "u16", "u32", "u64", "u128",
 ];
 
 fn is_java_style_internal_float16_type(type_id: u32) -> bool {

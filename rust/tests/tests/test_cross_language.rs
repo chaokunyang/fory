@@ -1303,11 +1303,16 @@ fn test_reduced_precision_float_struct() {
     assert_eq!(value.float16_value.to_bits(), 0x3E00);
     assert_eq!(value.bfloat16_value.to_bits(), 0x3FC0);
     assert_eq!(
-        value.float16_array.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+        value
+            .float16_array
+            .iter()
+            .map(|v| v.to_bits())
+            .collect::<Vec<_>>(),
         vec![0x0000, 0x3C00, 0xBC00]
     );
     assert_eq!(
-        value.bfloat16_array
+        value
+            .bfloat16_array
             .iter()
             .map(|v| v.to_bits())
             .collect::<Vec<_>>(),

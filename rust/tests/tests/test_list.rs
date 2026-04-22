@@ -222,7 +222,9 @@ fn test_vec_bfloat16_special_values() {
         bfloat16::MIN_POSITIVE_SUBNORMAL,
     ];
     let bin = fory.serialize(&vec).unwrap();
-    let obj: Vec<bfloat16> = fory.deserialize(&bin).expect("deserialize bfloat16 special");
+    let obj: Vec<bfloat16> = fory
+        .deserialize(&bin)
+        .expect("deserialize bfloat16 special");
     assert_eq!(vec.len(), obj.len());
     assert!(obj[0].is_infinite() && !obj[0].is_sign_negative());
     assert!(obj[1].is_infinite() && obj[1].is_sign_negative());

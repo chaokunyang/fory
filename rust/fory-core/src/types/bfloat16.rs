@@ -126,31 +126,42 @@ impl bfloat16 {
         self.0 == other.0
     }
 
+    /// Add two `bfloat16` values (via `f32`).
     #[inline(always)]
+    #[allow(clippy::should_implement_trait)]
     pub fn add(self, rhs: Self) -> Self {
         Self::from_f32(self.to_f32() + rhs.to_f32())
     }
 
+    /// Subtract two `bfloat16` values (via `f32`).
     #[inline(always)]
+    #[allow(clippy::should_implement_trait)]
     pub fn sub(self, rhs: Self) -> Self {
         Self::from_f32(self.to_f32() - rhs.to_f32())
     }
 
+    /// Multiply two `bfloat16` values (via `f32`).
     #[inline(always)]
+    #[allow(clippy::should_implement_trait)]
     pub fn mul(self, rhs: Self) -> Self {
         Self::from_f32(self.to_f32() * rhs.to_f32())
     }
 
+    /// Divide two `bfloat16` values (via `f32`).
     #[inline(always)]
+    #[allow(clippy::should_implement_trait)]
     pub fn div(self, rhs: Self) -> Self {
         Self::from_f32(self.to_f32() / rhs.to_f32())
     }
 
+    /// Negate this `bfloat16` value.
     #[inline(always)]
+    #[allow(clippy::should_implement_trait)]
     pub fn neg(self) -> Self {
         Self(self.0 ^ SIGN_MASK)
     }
 
+    /// Absolute value.
     #[inline(always)]
     pub fn abs(self) -> Self {
         Self(self.0 & !SIGN_MASK)

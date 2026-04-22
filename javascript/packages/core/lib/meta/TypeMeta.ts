@@ -515,9 +515,14 @@ export class TypeMeta {
     }
 
     const localNameById = new Map<number, string>();
+    const localNameByNormalized = new Map<string, string>();
     for (const [fieldName, typeInfo] of Object.entries(localProps)) {
       if (typeof typeInfo.id === "number") {
         localNameById.set(typeInfo.id, fieldName);
+      }
+      const normalized = TypeMeta.toSnakeCase(fieldName);
+      if (!localNameByNormalized.has(normalized)) {
+        localNameByNormalized.set(normalized, fieldName);
       }
     }
 
@@ -530,6 +535,12 @@ export class TypeMeta {
         }
       } else if (localProps[resolvedName]) {
         resolvedName = fieldInfo.getFieldName();
+      } else {
+        const normalized = TypeMeta.toSnakeCase(resolvedName);
+        const localName = localNameByNormalized.get(normalized);
+        if (localName) {
+          resolvedName = localName;
+        }
       }
       if (resolvedName === fieldInfo.getFieldName()) {
         return fieldInfo;

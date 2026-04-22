@@ -499,6 +499,21 @@ export class ReadContext {
       case TypeId.SET:
         return Type.set(this.fieldInfoToTypeInfo(fieldInfo.options!.key!, fallbackTypeInfo?.options?.key));
       default: {
+        // Remote TypeMeta only carries the nested user-defined type kind, not the
+        // concrete named type or custom serializer identity. Reuse the local field
+        // declaration when available. When the local field is absent, still prefer
+        // any generic serializer available for that kind (for example enums) before
+        // falling back to `any`.
+        if (TypeId.userDefinedType(fieldInfo.typeId)) {
+          if (fallbackTypeInfo) {
+            return fallbackTypeInfo.clone();
+          }
+          const serializer = this.typeResolver.getSerializerById(fieldInfo.typeId, fieldInfo.userTypeId);
+          if (serializer) {
+            return serializer.getTypeInfo().clone();
+          }
+          return Type.any();
+        }
         const serializer = this.typeResolver.getSerializerById(fieldInfo.typeId, fieldInfo.userTypeId);
         if (serializer) {
           return serializer.getTypeInfo().clone();

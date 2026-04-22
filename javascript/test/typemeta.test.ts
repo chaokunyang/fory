@@ -123,4 +123,183 @@ describe('typemeta', () => {
       bar2: 123,
     });
   });
+
+  test('remaps regenerated compatible field names onto local snake_case properties', () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    class WriterHolder {
+      animalMap = new Map<string, number>();
+      marker = 0;
+    }
+    Type.struct(7004, {
+      animalMap: Type.map(Type.string(), Type.any()),
+      marker: Type.int32(),
+    })(WriterHolder);
+
+    class ReaderHolder {
+      animal_map = new Map<string, number>();
+    }
+    Type.struct(7004, {
+      animal_map: Type.map(Type.string(), Type.any()),
+    })(ReaderHolder);
+
+    const writerReg = writerFory.register(WriterHolder);
+    const readerReg = readerFory.register(ReaderHolder);
+
+    const value = new WriterHolder();
+    value.animalMap.set('dog', 7);
+    value.marker = 99;
+
+    const result = readerReg.deserialize(writerReg.serialize(value));
+
+    expect(result).toBeInstanceOf(ReaderHolder);
+    expect(result.animal_map.get('dog')).toBe(7);
+    expect((result as ReaderHolder & { animalMap?: Map<string, number> }).animalMap).toBeUndefined();
+    expect((result as ReaderHolder & { marker?: number }).marker).toBe(99);
+  });
+
+  test('skips unknown named custom fields by falling back to any when no local field exists', () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    class MyExt {
+      id = 0;
+    }
+    Type.ext('my_ext')(MyExt);
+
+    const customSerializer = {
+      write: (writeContext: any, value: MyExt) => {
+        writeContext.writeVarInt32(value.id);
+      },
+      read: (readContext: any, result: MyExt) => {
+        result.id = readContext.readVarInt32();
+      },
+    };
+
+    writerFory.register(MyExt, customSerializer);
+    readerFory.register(MyExt, customSerializer);
+
+    class WriterWrapper {
+      note = '';
+      myExt = new MyExt();
+    }
+    Type.struct('example.wrapper', {
+      note: Type.string(),
+      myExt: Type.ext('my_ext'),
+    })(WriterWrapper);
+
+    class EmptyWrapper {}
+    Type.struct('example.wrapper', {})(EmptyWrapper);
+
+    const writerReg = writerFory.register(WriterWrapper);
+    const readerReg = readerFory.register(EmptyWrapper);
+
+    const value = new WriterWrapper();
+    value.note = 'hello';
+    value.myExt.id = 42;
+
+    const result = readerReg.deserialize(writerReg.serialize(value));
+
+    expect(result).toBeInstanceOf(EmptyWrapper);
+  });
+
+  test('skips unknown compatible enum fields when regenerating an empty reader', () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const TestEnum = {
+      VALUE_A: 0,
+      VALUE_B: 1,
+      VALUE_C: 2,
+    };
+    writerFory.register(Type.enum(7101, TestEnum));
+    readerFory.register(Type.enum(7101, TestEnum));
+
+    class WriterStruct {
+      f1 = TestEnum.VALUE_A;
+      f2 = TestEnum.VALUE_B;
+    }
+    Type.struct(7102, {
+      f1: Type.enum(7101, TestEnum),
+      f2: Type.enum(7101, TestEnum),
+    })(WriterStruct);
+
+    class EmptyStruct {}
+    Type.struct(7102, {})(EmptyStruct);
+
+    const writerReg = writerFory.register(WriterStruct);
+    const readerReg = readerFory.register(EmptyStruct);
+
+    const value = new WriterStruct();
+    const result = readerReg.deserialize(writerReg.serialize(value));
+
+    expect(result).toBeInstanceOf(EmptyStruct);
+  });
+
+  test('skips unknown enum and named custom fields together during compatible regeneration', () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const Color = {
+      Green: 0,
+      Red: 1,
+      Blue: 2,
+      White: 3,
+    };
+    writerFory.register(Type.enum('color', Color));
+    readerFory.register(Type.enum('color', Color));
+
+    class MyExt {
+      id = 0;
+    }
+    Type.ext('my_ext')(MyExt);
+
+    const customSerializer = {
+      write: (writeContext: any, value: MyExt) => {
+        writeContext.writeVarInt32(value.id);
+      },
+      read: (readContext: any, result: MyExt) => {
+        result.id = readContext.readVarInt32();
+      },
+    };
+
+    writerFory.register(MyExt, customSerializer);
+    readerFory.register(MyExt, customSerializer);
+
+    class MyStruct {
+      id = 0;
+    }
+    Type.struct('my_struct', {
+      id: Type.varInt32(),
+    })(MyStruct);
+
+    writerFory.register(MyStruct);
+    readerFory.register(MyStruct);
+
+    class WriterWrapper {
+      color = Color.White;
+      myStruct = new MyStruct();
+      myExt = new MyExt();
+    }
+    Type.struct('my_wrapper', {
+      color: Type.enum('color', Color),
+      myStruct: Type.struct('my_struct'),
+      myExt: Type.ext('my_ext'),
+    })(WriterWrapper);
+
+    class EmptyWrapper {}
+    Type.struct('my_wrapper', {})(EmptyWrapper);
+
+    const writerReg = writerFory.register(WriterWrapper);
+    const readerReg = readerFory.register(EmptyWrapper);
+
+    const value = new WriterWrapper();
+    value.myStruct.id = 42;
+    value.myExt.id = 43;
+
+    const result = readerReg.deserialize(writerReg.serialize(value));
+
+    expect(result).toBeInstanceOf(EmptyWrapper);
+  });
 });

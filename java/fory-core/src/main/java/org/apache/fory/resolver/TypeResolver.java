@@ -1456,9 +1456,9 @@ public abstract class TypeResolver {
       boolean t1Compress = Types.isCompressedType(typeId1);
       boolean t2Compress = Types.isCompressedType(typeId2);
       if ((t1Compress && t2Compress) || (!t1Compress && !t2Compress)) {
-        int c = Types.getPrimitiveTypeSize(typeId2) - Types.getPrimitiveTypeSize(typeId1);
+        int c = getPrimitiveFieldSize(d2) - getPrimitiveFieldSize(d1);
         if (c == 0) {
-          c = typeId1 - typeId2;
+          c = isCrossLanguage() ? typeId1 - typeId2 : typeId2 - typeId1;
           // noinspection Duplicates
           if (c == 0) {
             c = getFieldSortKey(d1).compareTo(getFieldSortKey(d2));
@@ -1482,6 +1482,14 @@ public abstract class TypeResolver {
       // t2 compress
       return -1;
     };
+  }
+
+  private int getPrimitiveFieldSize(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getRawType();
+    if (TypeUtils.isPrimitive(rawType) || TypeUtils.isBoxed(rawType)) {
+      return TypeUtils.getSizeOfPrimitiveType(TypeUtils.unwrap(rawType));
+    }
+    return Types.getPrimitiveTypeSize(Types.getDescriptorTypeId(this, descriptor));
   }
 
   /**

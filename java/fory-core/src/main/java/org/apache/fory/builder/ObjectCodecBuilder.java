@@ -65,6 +65,7 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Float16;
+import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.SerializableSupplier;
@@ -469,7 +470,14 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   private int getTotalSizeOfPrimitives(List<List<Descriptor>> primitiveGroups) {
     return primitiveGroups.stream()
         .flatMap(Collection::stream)
-        .mapToInt(d -> Types.getPrimitiveTypeSize(Types.getDescriptorTypeId(typeResolver, d)))
+        .mapToInt(
+            d -> {
+              Class<?> rawType = d.getRawType();
+              if (TypeUtils.isPrimitive(rawType) || TypeUtils.isBoxed(rawType)) {
+                return TypeUtils.getSizeOfPrimitiveType(TypeUtils.unwrap(rawType));
+              }
+              return Types.getPrimitiveTypeSize(Types.getDescriptorTypeId(typeResolver, d));
+            })
         .sum();
   }
 

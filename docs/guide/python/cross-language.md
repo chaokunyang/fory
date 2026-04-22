@@ -118,6 +118,10 @@ class TypedData:
 
 These names are compiled into the `pyfory.serialization` extension and re-exported from `pyfory`. There is no pure-Python fallback module for them.
 
+The scalar wrappers behave like reduced-precision numeric value types. They support arithmetic and
+ordering with Python numeric operands, and each operation quantizes the result back to the wrapper's
+own format (`pyfory.float16` or `pyfory.bfloat16`).
+
 ## Type Mapping
 
 | Python                 | Java           | Rust            | Go                    |

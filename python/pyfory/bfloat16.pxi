@@ -43,9 +43,17 @@ cdef inline float _bfloat16_bits_to_float(uint16_t bits):
     return value
 
 
+cdef inline bint _bfloat16_try_coerce_float(object value, float* out_value):
+    try:
+        out_value[0] = float(value)
+        return True
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 @cython.final
 cdef class bfloat16:
-    """Exact IEEE 754 bfloat16 value carrier."""
+    """Exact IEEE 754 bfloat16 value carrier with reduced-precision arithmetic operators."""
 
     cdef uint16_t bits
 
@@ -87,6 +95,81 @@ cdef class bfloat16:
         if isinstance(other, bfloat16):
             return self.bits == (<bfloat16>other).bits
         return self.to_float() == float(other)
+
+    def __lt__(self, other):
+        cdef float rhs
+        if not _bfloat16_try_coerce_float(other, &rhs):
+            return NotImplemented
+        return _bfloat16_bits_to_float(self.bits) < rhs
+
+    def __le__(self, other):
+        cdef float rhs
+        if not _bfloat16_try_coerce_float(other, &rhs):
+            return NotImplemented
+        return _bfloat16_bits_to_float(self.bits) <= rhs
+
+    def __gt__(self, other):
+        cdef float rhs
+        if not _bfloat16_try_coerce_float(other, &rhs):
+            return NotImplemented
+        return _bfloat16_bits_to_float(self.bits) > rhs
+
+    def __ge__(self, other):
+        cdef float rhs
+        if not _bfloat16_try_coerce_float(other, &rhs):
+            return NotImplemented
+        return _bfloat16_bits_to_float(self.bits) >= rhs
+
+    def __add__(self, other):
+        cdef float rhs
+        if not _bfloat16_try_coerce_float(other, &rhs):
+            return NotImplemented
+        return bfloat16(_bfloat16_bits_to_float(self.bits) + rhs)
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __sub__(self, other):
+        cdef float rhs
+        if not _bfloat16_try_coerce_float(other, &rhs):
+            return NotImplemented
+        return bfloat16(_bfloat16_bits_to_float(self.bits) - rhs)
+
+    def __rsub__(self, other):
+        cdef float lhs
+        if not _bfloat16_try_coerce_float(other, &lhs):
+            return NotImplemented
+        return bfloat16(lhs - _bfloat16_bits_to_float(self.bits))
+
+    def __mul__(self, other):
+        cdef float rhs
+        if not _bfloat16_try_coerce_float(other, &rhs):
+            return NotImplemented
+        return bfloat16(_bfloat16_bits_to_float(self.bits) * rhs)
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __truediv__(self, other):
+        cdef float rhs
+        if not _bfloat16_try_coerce_float(other, &rhs):
+            return NotImplemented
+        return bfloat16(_bfloat16_bits_to_float(self.bits) / rhs)
+
+    def __rtruediv__(self, other):
+        cdef float lhs
+        if not _bfloat16_try_coerce_float(other, &lhs):
+            return NotImplemented
+        return bfloat16(lhs / _bfloat16_bits_to_float(self.bits))
+
+    def __neg__(self):
+        return bfloat16.from_bits(self.bits ^ 0x8000)
+
+    def __pos__(self):
+        return bfloat16.from_bits(self.bits)
+
+    def __abs__(self):
+        return bfloat16.from_bits(self.bits & 0x7FFF)
 
 
 cdef inline uint16_t _coerce_bfloat16_bits(value):

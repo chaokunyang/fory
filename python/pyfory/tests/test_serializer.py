@@ -194,6 +194,54 @@ def test_bfloat16_round_trip():
     assert decoded.to_bits() == 0x3FC0
 
 
+def test_float16_arithmetic():
+    value = pyfory.float16(1.5)
+    half = pyfory.float16(0.5)
+
+    assert isinstance(value + half, pyfory.float16)
+    assert (value + half).to_bits() == 0x4000
+    assert (value - half).to_bits() == 0x3C00
+    assert (value * 2).to_bits() == 0x4200
+    assert (3 + half).to_bits() == 0x4300
+    assert (value / half).to_bits() == 0x4200
+    with pytest.raises(ZeroDivisionError):
+        _ = value / 0.0
+    assert (-value).to_bits() == 0xBE00
+    assert (+value).to_bits() == value.to_bits()
+    assert abs(pyfory.float16(-1.5)).to_bits() == 0x3E00
+    assert pyfory.float16(1.5) < 2.0
+    assert pyfory.float16(1.5) <= pyfory.float16(1.5)
+    assert pyfory.float16(1.5) > 1.0
+    assert pyfory.float16(1.5) >= pyfory.float16(1.5)
+    assert not (pyfory.float16.from_bits(0x7E00) < 1.0)
+    with pytest.raises(TypeError):
+        _ = value + "x"
+
+
+def test_bfloat16_arithmetic():
+    value = pyfory.bfloat16(1.5)
+    half = pyfory.bfloat16(0.5)
+
+    assert isinstance(value + half, pyfory.bfloat16)
+    assert (value + half).to_bits() == 0x4000
+    assert (value - half).to_bits() == 0x3F80
+    assert (value * 2).to_bits() == 0x4040
+    assert (3 + half).to_bits() == 0x4060
+    assert (value / half).to_bits() == 0x4040
+    with pytest.raises(ZeroDivisionError):
+        _ = value / 0.0
+    assert (-value).to_bits() == 0xBFC0
+    assert (+value).to_bits() == value.to_bits()
+    assert abs(pyfory.bfloat16(-1.5)).to_bits() == 0x3FC0
+    assert pyfory.bfloat16(1.5) < 2.0
+    assert pyfory.bfloat16(1.5) <= pyfory.bfloat16(1.5)
+    assert pyfory.bfloat16(1.5) > 1.0
+    assert pyfory.bfloat16(1.5) >= pyfory.bfloat16(1.5)
+    assert not (pyfory.bfloat16.from_bits(0x7FC0) < 1.0)
+    with pytest.raises(TypeError):
+        _ = value + "x"
+
+
 def test_float16_array_round_trip():
     fory = Fory(xlang=True, ref=False)
     values = pyfory.float16array.from_bits([0x0000, 0x3C00, 0x7C01])

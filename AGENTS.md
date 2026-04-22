@@ -67,7 +67,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Preserve protocol compatibility across languages.
 - Read and respect `docs/specification/xlang_type_mapping.md` when changing cross-language type behavior.
 - Handle byte order correctly for cross-platform compatibility.
-- The Java implementation is not always right. Do not tweak another language's correct implementation to align with a wrong Java implementation just to make tests pass; fix the runtime that diverged from the spec.
+- If the reference implementation is not right, do not tweak another language's correct implementation to align with a wrong reference implementation just to make tests pass; fix the runtime that diverged from the spec.
 
 ## Git And Review Rules
 

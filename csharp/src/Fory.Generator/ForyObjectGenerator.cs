@@ -1733,8 +1733,12 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
         if (type is IArrayTypeSymbol arrayType)
         {
-            uint typeId = TryResolvePackedArrayTypeIdForElement(arrayType.ElementType) ?? 22;
-            return new TypeClassification(typeId, false, true, true, false, false, 0);
+            if (TryResolvePackedArrayTypeIdForElement(arrayType.ElementType) is uint packedArrayTypeId)
+            {
+                return new TypeClassification(packedArrayTypeId, false, true, false, false, false, 0);
+            }
+
+            return new TypeClassification(22, false, true, true, false, false, 0);
         }
 
         if (TryGetListElementType(type, out _))

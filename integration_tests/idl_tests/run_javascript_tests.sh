@@ -20,12 +20,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 python "${SCRIPT_DIR}/generate_idl.py" --lang javascript
+
+cd "${ROOT_DIR}/java"
+ENABLE_FORY_DEBUG_OUTPUT=1 mvn -T16 --no-transfer-progress install -DskipTests
 
 cd "${SCRIPT_DIR}/javascript"
 npm install
 ENABLE_FORY_DEBUG_OUTPUT=1 npx jest --ci
-
-IDL_PEER_LANG=javascript "${SCRIPT_DIR}/run_java_tests.sh"
-

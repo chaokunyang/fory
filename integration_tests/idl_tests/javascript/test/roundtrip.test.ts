@@ -22,11 +22,11 @@
  *
  * These tests verify that:
  * 1. Generated JavaScript types compile correctly
- * 2. Objects can be constructed conforming to the generated interfaces
- * 3. Roundtrip serialization works via the Fory JS runtime
+ * 2. Java writes IDL payloads, JavaScript roundtrips them, and Java verifies
  */
 
-import Fory, { Type } from '@apache-fory/core';
+import * as path from 'path';
+import { spawnSync } from 'child_process';
 import {
   AddressBook,
   Person,
@@ -34,22 +34,15 @@ import {
   AnimalCase,
   Dog,
   Cat,
-  
-  
-  registerAddressbookTypes,
 } from '../generated/addressbook';
 import {
   AllOptionalTypes,
-  registerOptionalTypesTypes,
 } from '../generated/optional_types';
 import { TreeNode } from '../generated/tree';
 import {
   Envelope,
-  
   Status,
-  
   WrapperCase,
-  registerAutoIdTypes,
 } from '../generated/auto_id';
 
 // ---------------------------------------------------------------------------
@@ -193,99 +186,73 @@ describe('Generated types compile and construct correctly', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// 2. Serialization roundtrip tests using the Fory JS runtime
-//    We manually build TypeInfo objects matching the generated interfaces.
-// ---------------------------------------------------------------------------
-
-describe('Serialization roundtrip', () => {
-  test('dog struct roundtrip', () => {
-    const fory = new Fory();
-    registerAddressbookTypes(fory, Type);
-    const serializer = fory.typeResolver.getSerializerByTypeInfo(
-      Type.struct(104), 
-    );
-
-    const dog: Dog = builddog();
-    const bytes = fory.serialize(dog, serializer);
-    const result = fory.deserialize(bytes, serializer) as Dog;
-
-    expect(result).toEqual(dog);
-  });
-
-  test('cat struct roundtrip', () => {
-    const fory = new Fory();
-    registerAddressbookTypes(fory, Type);
-    const serializer = fory.typeResolver.getSerializerByTypeInfo(
-      Type.struct(105),
-    );
-
-    const cat: Cat = buildcat();
-    const bytes = fory.serialize(cat, serializer);
-    const result = fory.deserialize(bytes, serializer) as Cat;
-
-    expect(result).toEqual(cat);
-  });
-
-  test('person.phoneNumber struct roundtrip', () => {
-    const fory = new Fory();
-    registerAddressbookTypes(fory, Type);
-    const serializer = fory.typeResolver.getSerializerByTypeInfo(
-      Type.struct(102),
-    );
-
-    const phone: Person.PhoneNumber = buildPersonPhoneNumber('555-0100', Person.PhoneType.MOBILE);
-    const bytes = fory.serialize(phone, serializer);
-    const result = fory.deserialize(bytes, serializer) as Person.PhoneNumber;
-
-    expect(result).toEqual(phone);
-  });
-
-  test('envelope.payload (autoId) struct roundtrip', () => {
-    const fory = new Fory();
-    registerAutoIdTypes(fory, Type);
-    const serializer = fory.typeResolver.getSerializerByTypeInfo(
-      Type.struct(2862577837),
-    );
-
-    const payload: Envelope.Payload = { value: 42 };
-    const bytes = fory.serialize(payload, serializer);
-    const result = fory.deserialize(bytes, serializer) as Envelope.Payload;
-
-    expect(result).toEqual(payload);
-  });
+test('allOptionalTypes type construction', () => {
+  const full: AllOptionalTypes = {
+    boolValue: true,
+    int32Value: 42,
+    stringValue: 'hello',
+  };
+  const sparse: AllOptionalTypes = {};
+  expect(full.stringValue).toBe('hello');
+  expect(sparse.stringValue).toBeUndefined();
 });
 
-// ---------------------------------------------------------------------------
-// 3. Optional field tests — use generated registration helpers, not manual
-//    TypeInfo construction, so we validate the generated code end-to-end.
-// ---------------------------------------------------------------------------
+function runJavaRoundTripTests(testPattern: string) {
+  const idlRoot = path.resolve(__dirname, '..', '..');
+  const script = path.join(idlRoot, 'run_java_tests.sh');
+  const result = spawnSync(
+    'bash',
+    [script],
+    {
+      cwd: idlRoot,
+      encoding: 'utf8',
+      maxBuffer: 20 * 1024 * 1024,
+      env: {
+        ...process.env,
+        ENABLE_FORY_DEBUG_OUTPUT: '1',
+        IDL_PEER_LANG: 'javascript',
+        IDL_JAVA_TEST_PATTERN: testPattern,
+      },
+    },
+  );
 
-describe('Optional field handling', () => {
-  test('allOptionalTypes roundtrip with present and absent optional fields', () => {
-    const fory = new Fory();
-    registerOptionalTypesTypes(fory, Type);
-    const serializer = fory.typeResolver.getSerializerByTypeInfo(
-      Type.struct(120),
-    );
+  if (result.status !== 0) {
+    const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+    throw new Error(`Java IDL roundtrip tests failed for pattern ${testPattern}\n${output}`);
+  }
+}
 
-    // All optional fields set
-    const full: AllOptionalTypes = {
-      boolValue: true,
-      int32Value: 42,
-      stringValue: 'hello',
-    };
-    const bytes1 = fory.serialize(full, serializer);
-    const result1 = fory.deserialize(bytes1, serializer) as AllOptionalTypes;
-    expect(result1.boolValue).toBe(true);
-    expect(result1.int32Value).toBe(42);
-    expect(result1.stringValue).toBe('hello');
+const JAVA_JS_ROUNDTRIP_GROUPS: Array<{ title: string; testPattern: string }> = [
+  {
+    title: 'covers schema and compatible value cases through IdlRoundTripTest',
+    testPattern: [
+      'IdlRoundTripTest#testAddressBookRoundTripCompatible',
+      'testAddressBookRoundTripSchemaConsistent',
+      'testAutoIdRoundTripCompatible',
+      'testAutoIdRoundTripSchemaConsistent',
+      'testPrimitiveTypesRoundTripCompatible',
+      'testPrimitiveTypesRoundTripSchemaConsistent',
+      'testCollectionRoundTripCompatible',
+      'testCollectionRoundTripSchemaConsistent',
+      'testOptionalTypesRoundTripCompatible',
+      'testOptionalTypesRoundTripSchemaConsistent',
+      'testFlatbuffersRoundTripCompatible',
+      'testFlatbuffersRoundTripSchemaConsistent',
+    ].join('+'),
+  },
+  {
+    title: 'covers ref-tracking cases through IdlRoundTripTest',
+    testPattern: [
+      'IdlRoundTripTest#testTreeRoundTripCompatible',
+      'testTreeRoundTripSchemaConsistent',
+      'testGraphRoundTripCompatible',
+      'testGraphRoundTripSchemaConsistent',
+    ].join('+'),
+  },
+];
 
-    // Optional fields absent (undefined)
-    const sparse: AllOptionalTypes = {};
-    const bytes2 = fory.serialize(sparse, serializer);
-    const result2 = fory.deserialize(bytes2, serializer) as AllOptionalTypes;
-    expect(result2.stringValue).toBeNull();
-    expect(result2.int32Value).toBeNull();
-  });
+describe('Java-JavaScript roundtrip', () => {
+  test.each(JAVA_JS_ROUNDTRIP_GROUPS)('$title', ({ testPattern }) => {
+    runJavaRoundTripTests(testPattern);
+  }, 240000);
 });

@@ -20,25 +20,9 @@
 /**
  * Cross-language roundtrip program for JavaScript IDL tests.
  *
- * This script is invoked by the Java IdlRoundTripTest as a peer process.
- * It reads binary data files (written by Java), deserializes them,
- * re-serializes the objects, and writes the bytes back to the same files.
- * Java then reads the files back and verifies the roundtrip integrity.
- *
- * Environment variables:
- *   IDL_COMPATIBLE  - "true" for compatible mode, "false" for schema_consistent
- *   DATA_FILE       - AddressBook binary data file path
- *   DATA_FILE_AUTO_ID - Envelope (auto-id) binary data file path
- *   DATA_FILE_PRIMITIVES - PrimitiveTypes binary data file path
- *   DATA_FILE_COLLECTION - NumericCollections binary data file path
- *   DATA_FILE_COLLECTION_UNION - NumericCollectionUnion binary data file path
- *   DATA_FILE_COLLECTION_ARRAY - NumericCollectionsArray binary data file path
- *   DATA_FILE_COLLECTION_ARRAY_UNION - NumericCollectionArrayUnion binary data file path
- *   DATA_FILE_OPTIONAL_TYPES - OptionalHolder binary data file path
- *   DATA_FILE_TREE - TreeNode binary data file path (ref tracking)
- *   DATA_FILE_GRAPH - Graph binary data file path (ref tracking)
- *   DATA_FILE_FLATBUFFERS_MONSTER - Monster binary data file path
- *   DATA_FILE_FLATBUFFERS_TEST2 - Container binary data file path
+ * This script is invoked by the existing Java `IdlRoundTripTest` peer flow.
+ * It reads Java-written files from the environment, deserializes them with
+ * JavaScript, re-serializes them, and writes the roundtripped bytes back.
  */
 
 import * as fs from "fs";
@@ -54,106 +38,109 @@ import { registerGraphTypes } from "./generated/graph";
 import { registerMonsterTypes } from "./generated/monster";
 import { registerComplexFbsTypes } from "./generated/complex_fbs";
 
-const compatible = process.env["IDL_COMPATIBLE"] === "true";
+type RoundTripCase = {
+  envVar: string;
+  rootTypeId: number;
+  registerFn: (fory: any, type: any) => void;
+  refTracking?: boolean;
+  union?: boolean;
+};
 
-// ---------------------------------------------------------------------------
-// Roundtrip helper: read file, deserialize, re-serialize, write back
-// ---------------------------------------------------------------------------
+const ROUND_TRIP_CASES: ReadonlyArray<RoundTripCase> = [
+  {
+    envVar: "DATA_FILE",
+    rootTypeId: 103,
+    registerFn: registerAddressbookTypes,
+  },
+  {
+    envVar: "DATA_FILE_AUTO_ID",
+    rootTypeId: 3022445236,
+    registerFn: registerAutoIdTypes,
+  },
+  {
+    envVar: "DATA_FILE_PRIMITIVES",
+    rootTypeId: 200,
+    registerFn: registerComplexPbTypes,
+  },
+  {
+    envVar: "DATA_FILE_COLLECTION",
+    rootTypeId: 210,
+    registerFn: registerCollectionTypes,
+  },
+  {
+    envVar: "DATA_FILE_COLLECTION_UNION",
+    rootTypeId: 211,
+    registerFn: registerCollectionTypes,
+    union: true,
+  },
+  {
+    envVar: "DATA_FILE_COLLECTION_ARRAY",
+    rootTypeId: 212,
+    registerFn: registerCollectionTypes,
+  },
+  {
+    envVar: "DATA_FILE_COLLECTION_ARRAY_UNION",
+    rootTypeId: 213,
+    registerFn: registerCollectionTypes,
+    union: true,
+  },
+  {
+    envVar: "DATA_FILE_OPTIONAL_TYPES",
+    rootTypeId: 122,
+    registerFn: registerOptionalTypesTypes,
+  },
+  {
+    envVar: "DATA_FILE_TREE",
+    rootTypeId: 2251833438,
+    registerFn: registerTreeTypes,
+    refTracking: true,
+  },
+  {
+    envVar: "DATA_FILE_GRAPH",
+    rootTypeId: 2373163777,
+    registerFn: registerGraphTypes,
+    refTracking: true,
+  },
+  {
+    envVar: "DATA_FILE_FLATBUFFERS_MONSTER",
+    rootTypeId: 438716985,
+    registerFn: registerMonsterTypes,
+  },
+  {
+    envVar: "DATA_FILE_FLATBUFFERS_TEST2",
+    rootTypeId: 372413680,
+    registerFn: registerComplexFbsTypes,
+  },
+];
 
-function fileRoundTrip(
-  envVar: string,
-  rootTypeId: number,
-  registerFn: (fory: any, type: any) => void,
-  foryOptions: { refTracking?: boolean | null; compatible?: boolean; union?: boolean }
-): void {
-  const filePath = process.env[envVar];
-  if (!filePath) {
-    return;
-  }
-
-  console.log(`Processing ${envVar}: ${filePath}`);
-
+function roundTripFile(spec: RoundTripCase, filePath: string, compatible: boolean) {
   const fory = new Fory({
-    compatible: foryOptions.compatible ?? false,
-    ref: foryOptions.refTracking ?? false,
+    compatible,
+    ref: spec.refTracking ?? false,
   });
 
-  registerFn(fory, Type);
-
-  const rootTypeInfo = foryOptions.union
-    ? Type.union(rootTypeId)
-    : Type.struct(rootTypeId);
+  spec.registerFn(fory, Type);
+  const rootTypeInfo = spec.union
+    ? Type.union(spec.rootTypeId)
+    : Type.struct(spec.rootTypeId);
   const serializer = fory.typeResolver.getSerializerByTypeInfo(rootTypeInfo);
 
-  // Read binary data
-  const data = fs.readFileSync(filePath);
-  const bytes = new Uint8Array(data);
-
-  // Deserialize
-  const obj = fory.deserialize(bytes, serializer);
-
-  // Re-serialize
-  const result = fory.serialize(obj, serializer);
-
-  // Write back
-  fs.writeFileSync(filePath, result);
-  console.log(`  OK: roundtrip complete for ${envVar}`);
+  const bytes = new Uint8Array(fs.readFileSync(filePath));
+  const value = fory.deserialize(bytes, serializer);
+  const roundTripBytes = fory.serialize(value, serializer);
+  fs.writeFileSync(filePath, roundTripBytes);
 }
 
-// ---------------------------------------------------------------------------
-// Process each data file type using generated code
-// ---------------------------------------------------------------------------
+const compatible = process.env["IDL_COMPATIBLE"] === "true";
 
-
-fileRoundTrip("DATA_FILE", 103, registerAddressbookTypes, { compatible });
-
-
-fileRoundTrip("DATA_FILE_AUTO_ID", 3022445236, registerAutoIdTypes, { compatible });
-
-
-fileRoundTrip("DATA_FILE_PRIMITIVES", 200, registerComplexPbTypes, { compatible });
-
-
-fileRoundTrip("DATA_FILE_COLLECTION", 210, registerCollectionTypes, { compatible });
-
-// DATA_FILE_COLLECTION_UNION: NumericCollectionUnion (type ID 211)
-fileRoundTrip("DATA_FILE_COLLECTION_UNION", 211, registerCollectionTypes, { compatible, union: true });
-
-// DATA_FILE_COLLECTION_ARRAY: NumericCollectionsArray (type ID 212)
-fileRoundTrip("DATA_FILE_COLLECTION_ARRAY", 212, registerCollectionTypes, { compatible });
-
-// DATA_FILE_COLLECTION_ARRAY_UNION: NumericCollectionArrayUnion (type ID 213)
-fileRoundTrip("DATA_FILE_COLLECTION_ARRAY_UNION", 213, registerCollectionTypes, { compatible, union: true });
-
-
-fileRoundTrip("DATA_FILE_OPTIONAL_TYPES", 122, registerOptionalTypesTypes, { compatible });
-
-
-fileRoundTrip("DATA_FILE_TREE", 2251833438, registerTreeTypes, {
-  refTracking: true,
-  compatible,
-});
-
-
-fileRoundTrip("DATA_FILE_GRAPH", 2373163777, registerGraphTypes, {
-  refTracking: true,
-  compatible,
-});
-
-
-fileRoundTrip(
-  "DATA_FILE_FLATBUFFERS_MONSTER",
-  438716985,
-  registerMonsterTypes,
-  { compatible }
-);
-
-
-fileRoundTrip(
-  "DATA_FILE_FLATBUFFERS_TEST2",
-  372413680,
-  registerComplexFbsTypes,
-  { compatible }
-);
+for (const spec of ROUND_TRIP_CASES) {
+  const filePath = process.env[spec.envVar];
+  if (!filePath) {
+    continue;
+  }
+  console.log(`Processing ${spec.envVar}: ${filePath}`);
+  roundTripFile(spec, filePath, compatible);
+  console.log(`  OK: roundtrip complete for ${spec.envVar}`);
+}
 
 console.log("JavaScript roundtrip finished.");

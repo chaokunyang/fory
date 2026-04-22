@@ -18,59 +18,93 @@
  */
 
 import Fory, { Type } from '../packages/core/index';
-import {describe, expect, test} from '@jest/globals';
-import * as beautify from 'js-beautify';
+import { TypeMeta } from '../packages/core/lib/meta/TypeMeta';
+import { describe, expect, test } from '@jest/globals';
 
+const HAS_FIELDS_META_FLAG = 1n << 8n;
+const COMPRESS_META_FLAG = 1n << 9n;
+const META_SIZE_MASK = 0xFFn;
+const HASH_SHIFT_BITS = 14n;
 
 describe('typemeta', () => {
-  test('should evaluation scheme work', () => {
-    
-    const fory = new Fory({
-        compatible: true
-    });    
+  test('writes TypeMeta header bits in the xlang layout', () => {
+    const typeInfo = Type.struct(7001, {
+      fullName: Type.string().setId(1),
+      age: Type.int32().setId(2),
+    });
 
-    @Type.struct("example.foo")
-    class Foo {
-        @Type.string()
-        bar: string;
+    const bytes = TypeMeta.fromTypeInfo(typeInfo).toBytes();
+    const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0, true);
 
-        @Type.int32()
-        bar2: number;
+    expect(Number(header & META_SIZE_MASK)).toBe(bytes.length - 8);
+    expect((header & HAS_FIELDS_META_FLAG) !== 0n).toBe(true);
+    expect((header & COMPRESS_META_FLAG) !== 0n).toBe(false);
+    expect(header >> HASH_SHIFT_BITS).toBeGreaterThan(0n);
+  });
 
-        setBar(bar: string) {
-            this.bar = bar;
-            return this;
-        }
+  test('regenerates compatible named serializers when schema changes but field count stays the same', () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
 
-        setBar2(bar2: number) {
-            this.bar2 = bar2;
-            return this;
-        }
-    }
+    const writerType = Type.struct('example.item', {
+      value: Type.string(),
+    });
+    const readerType = Type.struct('example.item', {
+      value: Type.int32(),
+    });
 
-    const { serialize } = fory.register(Foo);
-    const bin = serialize(new Foo().setBar("hello").setBar2(123));
+    const bytes = writerFory.register(writerType).serialize({ value: 'hello' });
+    const result = readerFory.register(readerType).deserialize(bytes);
 
+    expect(result).toEqual({ value: 'hello' });
+  });
 
-    @Type.struct("example.foo")
-    class Foo2 {
-        @Type.string()
-        bar: string;
-    }
+  test('remaps compatible tag-id fields onto local property names during regeneration', () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
 
-    const fory2 = new Fory({
-        compatible: true,
-        hooks: {
-            afterCodeGenerated: (code: string) => {
-                return beautify.js(code, { indent_size: 2, space_in_empty_paren: true, indent_empty_lines: true });
-              }        
-            }
-    });    
-    const { deserialize  } = fory2.register(Foo2);
-    const r = deserialize(bin);
-    expect(r).toEqual({
-        bar: "hello",
-        bar2: 123,
-    })
+    const writerType = Type.struct(7002, {
+      fullName: Type.string().setId(1),
+      note: Type.string().setId(2),
+    });
+    const readerType = Type.struct(7002, {
+      name: Type.string().setId(1),
+      alias: Type.int32().setId(2),
+    });
+
+    const bytes = writerFory.register(writerType).serialize({
+      fullName: 'Alice',
+      note: 'ally',
+    });
+    const result = readerFory.register(readerType).deserialize(bytes);
+
+    expect(result).toEqual({
+      name: 'Alice',
+      alias: 'ally',
+    });
+  });
+
+  test('keeps compatible named schema evolution working when field count differs', () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const writerType = Type.struct('example.foo', {
+      bar: Type.string(),
+      bar2: Type.int32(),
+    });
+    const readerType = Type.struct('example.foo', {
+      bar: Type.string(),
+    });
+
+    const bytes = writerFory.register(writerType).serialize({
+      bar: 'hello',
+      bar2: 123,
+    });
+    const result = readerFory.register(readerType).deserialize(bytes);
+
+    expect(result).toEqual({
+      bar: 'hello',
+      bar2: 123,
+    });
   });
 });

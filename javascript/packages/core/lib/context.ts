@@ -387,7 +387,6 @@ export class ReadContext {
   readonly metaStringReader: MetaStringReader;
 
   private typeMeta: TypeMeta[] = [];
-  private typeMetaCount = 0;
   /** Persistent cross-message cache keyed by 8-byte type meta header. */
   private typeMetaCache: Map<bigint, TypeMeta> = new Map();
   private _depth = 0;
@@ -411,7 +410,7 @@ export class ReadContext {
     this.reader.reset(bytes);
     this.refReader.reset();
     this.metaStringReader.reset();
-    this.typeMetaCount = 0;
+    this.typeMeta = [];
     this._depth = 0;
   }
 
@@ -466,43 +465,46 @@ export class ReadContext {
   readTypeMeta(): TypeMeta {
     const idOrLen = this.reader.readVarUInt32();
     if (idOrLen & 1) {
-      return this.typeMeta[idOrLen >> 1];
+      const typeMeta = this.typeMeta[idOrLen >> 1];
+      if (!typeMeta) {
+        throw new Error(`missing TypeMeta reference ${idOrLen >> 1}`);
+      }
+      return typeMeta;
     }
+    const dynamicTypeId = idOrLen >> 1;
     // Read the 8-byte header to check the cross-message cache.
-    const [headerLong, metaSize] = TypeMeta.readHeader(this.reader);
-    const cached = this.typeMetaCache.get(headerLong);
+    const header = TypeMeta.readHeader(this.reader);
+    const cached = this.typeMetaCache.get(header);
     let typeMeta: TypeMeta;
     if (cached) {
-      TypeMeta.skipBody(this.reader, metaSize);
+      TypeMeta.skipBody(this.reader, header);
       typeMeta = cached;
     } else {
-      typeMeta = TypeMeta.fromBytesAfterHeader(this.reader);
-      this.typeMetaCache.set(headerLong, typeMeta);
+      typeMeta = TypeMeta.fromBytesAfterHeader(this.reader, header);
+      this.typeMetaCache.set(header, typeMeta);
     }
-    if (this.typeMetaCount < this.typeMeta.length) {
-      this.typeMeta[this.typeMetaCount] = typeMeta;
-    } else {
-      this.typeMeta.push(typeMeta);
-    }
-    this.typeMetaCount++;
+    this.typeMeta[dynamicTypeId] = typeMeta;
     return typeMeta;
   }
 
-  private fieldInfoToTypeInfo(fieldInfo: InnerFieldInfo): TypeInfo {
+  private fieldInfoToTypeInfo(fieldInfo: InnerFieldInfo, fallbackTypeInfo?: TypeInfo): TypeInfo {
     switch (fieldInfo.typeId) {
       case TypeId.MAP:
         return Type.map(
-          this.fieldInfoToTypeInfo(fieldInfo.options!.key!),
-          this.fieldInfoToTypeInfo(fieldInfo.options!.value!)
+          this.fieldInfoToTypeInfo(fieldInfo.options!.key!, fallbackTypeInfo?.options?.key),
+          this.fieldInfoToTypeInfo(fieldInfo.options!.value!, fallbackTypeInfo?.options?.value)
         );
       case TypeId.LIST:
-        return Type.array(this.fieldInfoToTypeInfo(fieldInfo.options!.inner!));
+        return Type.array(this.fieldInfoToTypeInfo(fieldInfo.options!.inner!, fallbackTypeInfo?.options?.inner));
       case TypeId.SET:
-        return Type.set(this.fieldInfoToTypeInfo(fieldInfo.options!.key!));
+        return Type.set(this.fieldInfoToTypeInfo(fieldInfo.options!.key!, fallbackTypeInfo?.options?.key));
       default: {
         const serializer = this.typeResolver.getSerializerById(fieldInfo.typeId, fieldInfo.userTypeId);
         if (serializer) {
           return serializer.getTypeInfo().clone();
+        }
+        if (fallbackTypeInfo) {
+          return fallbackTypeInfo.clone();
         }
         return Type.any();
       }
@@ -514,6 +516,14 @@ export class ReadContext {
     if (!TypeId.structType(typeId)) {
       throw new Error("only support reconstructor struct type");
     }
+    if (!original) {
+      if (TypeId.isNamedType(typeId)) {
+        const named = `${typeMeta.getNs()}$${typeMeta.getTypeName()}`;
+        original = this.typeResolver.getSerializerByName(named);
+      } else {
+        original = this.typeResolver.getSerializerById(typeId, typeMeta.getUserTypeId());
+      }
+    }
     let typeInfo: TypeInfo;
     if (original) {
       typeInfo = original.getTypeInfo().clone();
@@ -522,8 +532,10 @@ export class ReadContext {
     } else {
       typeInfo = Type.struct({ typeName: typeMeta.getTypeName(), namespace: typeMeta.getNs() });
     }
-    const props = Object.fromEntries(typeMeta.getFieldInfo().map((fieldInfo) => {
-      const fieldTypeInfo = this.fieldInfoToTypeInfo(fieldInfo)
+    const localProps = original?.getTypeInfo().options?.props;
+    const props = Object.fromEntries(typeMeta.remapFieldNames(localProps).map((fieldInfo) => {
+      const localFieldTypeInfo = localProps?.[fieldInfo.getFieldName()];
+      const fieldTypeInfo = this.fieldInfoToTypeInfo(fieldInfo, localFieldTypeInfo)
         .setNullable(fieldInfo.nullable)
         .setTrackingRef(fieldInfo.trackingRef)
         .setId(fieldInfo.fieldId);

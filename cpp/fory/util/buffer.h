@@ -27,8 +27,8 @@
 #include <utility>
 #include <vector>
 
-#include "fory/util/bit_util.h"
 #include "fory/util/bfloat16.h"
+#include "fory/util/bit_util.h"
 #include "fory/util/error.h"
 #include "fory/util/float16.h"
 #include "fory/util/logging.h"
@@ -990,7 +990,8 @@ public:
     if (FORY_PREDICT_FALSE(!ensure_readable(2, error))) {
       return bfloat16_t::from_bits(0);
     }
-    bfloat16_t value = bfloat16_t::from_bits(unsafe_get<uint16_t>(reader_index_));
+    bfloat16_t value =
+        bfloat16_t::from_bits(unsafe_get<uint16_t>(reader_index_));
     reader_index_ += 2;
     return value;
   }

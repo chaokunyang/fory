@@ -1219,8 +1219,8 @@ public sealed class ReducedPrecisionFloatStruct
 {
     public Half Float16Value { get; set; }
     public BFloat16 BFloat16Value { get; set; }
-    public BFloat16[] BFloat16Array { get; set; } = [];
     public Half[] Float16Array { get; set; } = [];
+    public BFloat16[] BFloat16Array { get; set; } = [];
 }
 
 [ForyObject]

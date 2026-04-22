@@ -44,6 +44,8 @@ import org.apache.fory.annotation.Uint16Type;
 import org.apache.fory.annotation.Uint32Type;
 import org.apache.fory.annotation.Uint64Type;
 import org.apache.fory.annotation.Uint8Type;
+import org.apache.fory.collection.BFloat16List;
+import org.apache.fory.collection.Float16List;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
 import org.apache.fory.config.LongEncoding;
@@ -1524,28 +1526,20 @@ public abstract class XlangTestBase extends ForyTestBase {
 
   @Data
   static class ReducedPrecisionFloatStruct {
-    BFloat16[] bfloat16Array;
-    BFloat16 bfloat16Value;
-    Float16[] float16Array;
     Float16 float16Value;
+    BFloat16 bfloat16Value;
+    Float16List float16Array;
+    BFloat16List bfloat16Array;
   }
 
   protected static ReducedPrecisionFloatStruct newReducedPrecisionFloatStruct() {
     ReducedPrecisionFloatStruct value = new ReducedPrecisionFloatStruct();
-    value.bfloat16Array =
-        new BFloat16[] {
-          BFloat16.fromBits((short) 0x0000),
-          BFloat16.fromBits((short) 0x3F80),
-          BFloat16.fromBits((short) 0xBF80)
-        };
+    value.float16Value = Float16.fromBits((short) 0x3E00);
     value.bfloat16Value = BFloat16.fromBits((short) 0x3FC0);
     value.float16Array =
-        new Float16[] {
-          Float16.fromBits((short) 0x0000),
-          Float16.fromBits((short) 0x3C00),
-          Float16.fromBits((short) 0xBC00)
-        };
-    value.float16Value = Float16.fromBits((short) 0x3E00);
+        new Float16List(new short[] {(short) 0x0000, (short) 0x3C00, (short) 0xBC00});
+    value.bfloat16Array =
+        new BFloat16List(new short[] {(short) 0x0000, (short) 0x3F80, (short) 0xBF80});
     return value;
   }
 
@@ -1557,14 +1551,14 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertEquals(value.bfloat16Value.toBits(), (short) 0x3FC0);
     Assert.assertNotNull(value.float16Array);
     Assert.assertNotNull(value.bfloat16Array);
-    Assert.assertEquals(value.float16Array.length, 3);
-    Assert.assertEquals(value.bfloat16Array.length, 3);
-    Assert.assertEquals(value.float16Array[0].toBits(), (short) 0x0000);
-    Assert.assertEquals(value.float16Array[1].toBits(), (short) 0x3C00);
-    Assert.assertEquals(value.float16Array[2].toBits(), (short) 0xBC00);
-    Assert.assertEquals(value.bfloat16Array[0].toBits(), (short) 0x0000);
-    Assert.assertEquals(value.bfloat16Array[1].toBits(), (short) 0x3F80);
-    Assert.assertEquals(value.bfloat16Array[2].toBits(), (short) 0xBF80);
+    Assert.assertEquals(value.float16Array.size(), 3);
+    Assert.assertEquals(value.bfloat16Array.size(), 3);
+    Assert.assertEquals(value.float16Array.getShort(0), (short) 0x0000);
+    Assert.assertEquals(value.float16Array.getShort(1), (short) 0x3C00);
+    Assert.assertEquals(value.float16Array.getShort(2), (short) 0xBC00);
+    Assert.assertEquals(value.bfloat16Array.getShort(0), (short) 0x0000);
+    Assert.assertEquals(value.bfloat16Array.getShort(1), (short) 0x3F80);
+    Assert.assertEquals(value.bfloat16Array.getShort(2), (short) 0xBF80);
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")

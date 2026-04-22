@@ -85,6 +85,7 @@ public class FieldGroups {
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator) {
     return DescriptorGrouper.createDescriptorGrouper(
+            typeResolver::usesPrimitiveFieldOrdering,
             typeResolver::isBuildIn,
             descriptors,
             descriptorsGroupedOrdered,

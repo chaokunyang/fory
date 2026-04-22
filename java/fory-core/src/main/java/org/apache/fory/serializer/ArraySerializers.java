@@ -945,8 +945,7 @@ public class ArraySerializers {
     }
   }
 
-  public static final class BFloat16ArraySerializer
-      extends PrimitiveArraySerializer<BFloat16[]> {
+  public static final class BFloat16ArraySerializer extends PrimitiveArraySerializer<BFloat16[]> {
     public BFloat16ArraySerializer(TypeResolver typeResolver) {
       super(typeResolver, BFloat16[].class);
     }

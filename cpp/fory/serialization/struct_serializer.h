@@ -1149,16 +1149,6 @@ template <typename T> struct CompileTimeFieldHelpers {
             tid <= static_cast<uint32_t>(TypeId::FLOAT64_ARRAY));
   }
 
-  static constexpr bool is_java_style_internal_float16_type(uint32_t tid) {
-    return tid == static_cast<uint32_t>(TypeId::FLOAT16) ||
-           tid == static_cast<uint32_t>(TypeId::BFLOAT16);
-  }
-
-  static constexpr bool is_java_style_list_array_type(uint32_t tid) {
-    return tid == static_cast<uint32_t>(TypeId::FLOAT16_ARRAY) ||
-           tid == static_cast<uint32_t>(TypeId::BFLOAT16_ARRAY);
-  }
-
   static constexpr int group_rank(size_t index) {
     if constexpr (FieldCount == 0) {
       return 6;
@@ -1166,13 +1156,8 @@ template <typename T> struct CompileTimeFieldHelpers {
       uint32_t tid = type_ids[index];
       bool nullable = nullable_flags[index];
       if (is_primitive_type_id(tid)) {
-        if (is_java_style_internal_float16_type(tid) && !nullable) {
-          return 2;
-        }
         return nullable ? 1 : 0;
       }
-      if (is_java_style_list_array_type(tid))
-        return 3;
       // Check LIST/SET/MAP BEFORE is_internal_type_id since they fall
       // within the internal type range (STRING=12 to DECIMAL=27) but
       // need their own groups for proper field ordering.
@@ -1234,7 +1219,7 @@ template <typename T> struct CompileTimeFieldHelpers {
         if (sa != sb)
           return sa > sb;
         if (a_tid != b_tid)
-          return a_tid > b_tid; // type_id descending to match Java
+          return a_tid < b_tid; // type_id ascending
         int cmp = compare_identifier(a, b);
         if (cmp != 0) {
           return cmp < 0;

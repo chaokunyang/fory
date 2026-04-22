@@ -55,9 +55,7 @@ import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.serializer.UnknownClass;
-import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Descriptor;
-import org.apache.fory.type.Float16;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
@@ -649,9 +647,9 @@ public class FieldTypes {
       case Types.FLOAT32_ARRAY:
         return float[].class;
       case Types.FLOAT16_ARRAY:
-        return Float16[].class;
+        return Float16List.class;
       case Types.BFLOAT16_ARRAY:
-        return BFloat16[].class;
+        return BFloat16List.class;
       case Types.FLOAT64_ARRAY:
         return double[].class;
       default:

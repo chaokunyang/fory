@@ -29,8 +29,9 @@ namespace fory {
 
 /// Public carrier for xlang bfloat16 values.
 ///
-/// Use `from_bits()` and `to_bits()` for exact wire control, or `from_float()` and `to_float()`
-/// for numeric conversion. The canonical dense array carrier is `std::vector<bfloat16_t>`.
+/// Use `from_bits()` and `to_bits()` for exact wire control, or `from_float()`
+/// and `to_float()` for numeric conversion. The canonical dense array carrier
+/// is `std::vector<bfloat16_t>`.
 struct bfloat16_t {
   uint16_t bits;
 

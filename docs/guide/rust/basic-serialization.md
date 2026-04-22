@@ -81,13 +81,13 @@ assert_eq!(person, decoded);
 
 ### Primitive Types
 
-| Rust Type                 | Description     |
-| ------------------------- | --------------- |
-| `bool`                    | Boolean         |
-| `i8`, `i16`, `i32`, `i64` | Signed integers |
-| `f32`, `f64`              | Floating point  |
+| Rust Type                 | Description                 |
+| ------------------------- | --------------------------- |
+| `bool`                    | Boolean                     |
+| `i8`, `i16`, `i32`, `i64` | Signed integers             |
+| `f32`, `f64`              | Floating point              |
 | `BFloat16`                | 16-bit brain floating point |
-| `String`                  | UTF-8 string    |
+| `String`                  | UTF-8 string                |
 
 ### Collections
 

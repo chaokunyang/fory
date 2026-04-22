@@ -295,16 +295,16 @@ struct TwoStringFieldStruct {
 struct ReducedPrecisionFloatStruct {
   fory::float16_t float16_value;
   fory::bfloat16_t bfloat16_value;
-  std::vector<fory::bfloat16_t> bfloat16_array;
   std::vector<fory::float16_t> float16_array;
+  std::vector<fory::bfloat16_t> bfloat16_array;
   bool operator==(const ReducedPrecisionFloatStruct &other) const {
     return float16_value == other.float16_value &&
            bfloat16_value == other.bfloat16_value &&
-           bfloat16_array == other.bfloat16_array &&
-           float16_array == other.float16_array;
+           float16_array == other.float16_array &&
+           bfloat16_array == other.bfloat16_array;
   }
   FORY_STRUCT(ReducedPrecisionFloatStruct, float16_value, bfloat16_value,
-              bfloat16_array, float16_array);
+              float16_array, bfloat16_array);
 };
 
 enum class TestEnum : int32_t { VALUE_A = 0, VALUE_B = 1, VALUE_C = 2 };
@@ -1038,7 +1038,8 @@ int main(int argc, char **argv) {
       run_test_schema_evolution_compatible_reverse(data_file);
     } else if (case_name == "test_reduced_precision_float_struct") {
       run_test_reduced_precision_float_struct(data_file);
-    } else if (case_name == "test_reduced_precision_float_struct_compatible_skip") {
+    } else if (case_name ==
+               "test_reduced_precision_float_struct_compatible_skip") {
       run_test_reduced_precision_float_struct_compatible_skip(data_file);
     } else if (case_name == "test_one_enum_field_schema") {
       run_test_one_enum_field_schema(data_file);

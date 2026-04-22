@@ -724,13 +724,7 @@ impl TypeMeta {
                 continue;
             }
 
-            if type_id == TypeId::FLOAT16 as u32 || type_id == TypeId::BFLOAT16 as u32 {
-                internal_type_fields.push(field_info);
-            } else if type_id == TypeId::FLOAT16_ARRAY as u32
-                || type_id == TypeId::BFLOAT16_ARRAY as u32
-            {
-                list_fields.push(field_info);
-            } else if PRIMITIVE_TYPES.contains(&type_id) {
+            if PRIMITIVE_TYPES.contains(&type_id) {
                 primitive_fields.push(field_info);
             } else if TypeId::LIST as u32 == type_id {
                 list_fields.push(field_info);
@@ -802,7 +796,7 @@ impl TypeMeta {
                 .cmp(&b_nullable) // non-nullable first
                 .then_with(|| compress_a.cmp(&compress_b)) // fixed-size (false) first, then variable-size (true) last
                 .then_with(|| size_b.cmp(&size_a)) // when same compress status: larger size first
-                .then_with(|| b_id.cmp(&a_id)) // when same size: larger type id first
+                .then_with(|| a_id.cmp(&b_id)) // when same size: smaller type id first
                 .then_with(|| a_field_name.cmp(b_field_name)) // when same id: lexicographic name
         }
         fn type_then_name_sorter(a: &FieldInfo, b: &FieldInfo) -> std::cmp::Ordering {

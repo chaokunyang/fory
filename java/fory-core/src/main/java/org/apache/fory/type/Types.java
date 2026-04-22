@@ -349,6 +349,37 @@ public class Types {
     }
   }
 
+  public static int getPrimitiveTypeSize(int typeId) {
+    switch (typeId) {
+      case BOOL:
+      case INT8:
+      case UINT8:
+      case FLOAT8:
+        return 1;
+      case INT16:
+      case UINT16:
+      case FLOAT16:
+      case BFLOAT16:
+        return 2;
+      case INT32:
+      case VARINT32:
+      case UINT32:
+      case VAR_UINT32:
+      case FLOAT32:
+        return 4;
+      case INT64:
+      case VARINT64:
+      case TAGGED_INT64:
+      case UINT64:
+      case VAR_UINT64:
+      case TAGGED_UINT64:
+      case FLOAT64:
+        return 8;
+      default:
+        throw new IllegalArgumentException("Type id " + typeId + " must be primitive");
+    }
+  }
+
   public static int getDescriptorTypeId(TypeResolver resolver, Field field) {
     Annotation annotation = Descriptor.getAnnotation(field);
     Class<?> rawType = field.getType();

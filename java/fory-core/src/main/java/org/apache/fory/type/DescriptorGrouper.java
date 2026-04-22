@@ -56,6 +56,7 @@ import org.apache.fory.util.record.RecordUtils;
 public class DescriptorGrouper {
 
   private final Collection<Descriptor> descriptors;
+  private final Predicate<Descriptor> usesPrimitiveFieldOrdering;
   private final Predicate<Descriptor> isBuildIn;
   private final Function<Descriptor, Descriptor> descriptorUpdater;
   private final boolean descriptorsGroupedOrdered;
@@ -81,12 +82,14 @@ public class DescriptorGrouper {
    * @param comparator comparator for non-primitive fields.
    */
   private DescriptorGrouper(
+      Predicate<Descriptor> usesPrimitiveFieldOrdering,
       Predicate<Descriptor> isBuildIn,
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdater,
       Comparator<Descriptor> primitiveComparator,
       Comparator<Descriptor> comparator) {
+    this.usesPrimitiveFieldOrdering = usesPrimitiveFieldOrdering;
     this.descriptors = descriptors;
     this.isBuildIn = isBuildIn;
     this.descriptorUpdater = descriptorUpdater;
@@ -116,13 +119,7 @@ public class DescriptorGrouper {
       return this;
     }
     for (Descriptor descriptor : descriptors) {
-      if (TypeUtils.isPrimitive(descriptor.getRawType())) {
-        if (!descriptor.isNullable()) {
-          primitiveDescriptors.add(descriptorUpdater.apply(descriptor));
-        } else {
-          boxedDescriptors.add(descriptorUpdater.apply(descriptor));
-        }
-      } else if (TypeUtils.isBoxed(descriptor.getRawType())) {
+      if (usesPrimitiveFieldOrdering.test(descriptor)) {
         if (!descriptor.isNullable()) {
           primitiveDescriptors.add(descriptorUpdater.apply(descriptor));
         } else {
@@ -203,7 +200,28 @@ public class DescriptorGrouper {
       Function<Descriptor, Descriptor> descriptorUpdator,
       Comparator<Descriptor> primitiveComparator,
       Comparator<Descriptor> comparator) {
+    return createDescriptorGrouper(
+        descriptor ->
+            TypeUtils.isPrimitive(descriptor.getRawType())
+                || TypeUtils.isBoxed(descriptor.getRawType()),
+        isBuildIn,
+        descriptors,
+        descriptorsGroupedOrdered,
+        descriptorUpdator,
+        primitiveComparator,
+        comparator);
+  }
+
+  public static DescriptorGrouper createDescriptorGrouper(
+      Predicate<Descriptor> usesPrimitiveFieldOrdering,
+      Predicate<Descriptor> isBuildIn,
+      Collection<Descriptor> descriptors,
+      boolean descriptorsGroupedOrdered,
+      Function<Descriptor, Descriptor> descriptorUpdator,
+      Comparator<Descriptor> primitiveComparator,
+      Comparator<Descriptor> comparator) {
     return new DescriptorGrouper(
+        usesPrimitiveFieldOrdering,
         isBuildIn,
         descriptors,
         descriptorsGroupedOrdered,

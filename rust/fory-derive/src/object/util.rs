@@ -707,14 +707,6 @@ const PRIMITIVE_TYPE_NAMES: [&str; 17] = [
     "f64", "u8", "u16", "u32", "u64", "u128",
 ];
 
-fn is_java_style_internal_float16_type(type_id: u32) -> bool {
-    type_id == TypeId::FLOAT16 as u32 || type_id == TypeId::BFLOAT16 as u32
-}
-
-fn is_java_style_list_array_type(type_id: u32) -> bool {
-    type_id == TypeId::FLOAT16_ARRAY as u32 || type_id == TypeId::BFLOAT16_ARRAY as u32
-}
-
 fn get_primitive_type_id(ty: &str) -> u32 {
     match ty {
         "bool" => TypeId::BOOL as u32,
@@ -1198,11 +1190,7 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
                 let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
 
                 // Categorize based on type_id
-                if is_java_style_internal_float16_type(type_id) && meta.nullable != Some(true) {
-                    internal_type_fields.push((ident, sort_key, type_id));
-                } else if is_java_style_list_array_type(type_id) {
-                    list_fields.push((ident, sort_key, type_id));
-                } else if is_primitive {
+                if is_primitive {
                     primitive_fields.push((ident, sort_key, type_id));
                 } else if is_internal_type_id(type_id) {
                     internal_type_fields.push((ident, sort_key, type_id));
@@ -1243,8 +1231,7 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
         compress_a
             .cmp(&compress_b)
             .then_with(|| size_b.cmp(&size_a))
-            // Use descending type_id order to match Java's COMPARATOR_BY_PRIMITIVE_TYPE_ID
-            .then_with(|| b.2.cmp(&a.2))
+            .then_with(|| a.2.cmp(&b.2))
             // Field identifier (tag ID or name) as tie-breaker
             .then_with(|| a.1.cmp(&b.1))
             // Deterministic fallback for duplicate identifiers

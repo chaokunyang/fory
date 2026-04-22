@@ -174,18 +174,14 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		}
 	}
 
-	// Sort fixedFields: size desc, typeId desc, name asc
+	// Sort fixedFields: size desc, typeId asc, name asc
 	sort.SliceStable(g.FixedFields, func(i, j int) bool {
 		fi, fj := &g.FixedFields[i], &g.FixedFields[j]
 		if fi.Meta.FixedSize != fj.Meta.FixedSize {
 			return fi.Meta.FixedSize > fj.Meta.FixedSize // size descending
 		}
-		if isReducedPrecisionFloatType(fi.Meta.TypeId) && isReducedPrecisionFloatType(fj.Meta.TypeId) &&
-			fi.Meta.TypeId != fj.Meta.TypeId {
-			return fi.Meta.TypeId < fj.Meta.TypeId
-		}
 		if fi.Meta.TypeId != fj.Meta.TypeId {
-			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
+			return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 		}
 		return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
 	})
@@ -204,8 +200,8 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		g.FixedSize += g.FixedFields[i].Meta.FixedSize
 	}
 
-	// Sort varintFields: underlying type size desc, typeId desc, name asc
-	// Note: Java uses primitive type size (8 for long, 4 for int), not encoding max size
+	// Sort varintFields: underlying type size desc, typeId asc, name asc
+	// Note: xlang uses primitive type size (8 for long, 4 for int), not encoding max size
 	sort.SliceStable(g.VarintFields, func(i, j int) bool {
 		fi, fj := &g.VarintFields[i], &g.VarintFields[j]
 		sizeI := getUnderlyingTypeSize(fi.DispatchId)
@@ -214,7 +210,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 			return sizeI > sizeJ // size descending
 		}
 		if fi.Meta.TypeId != fj.Meta.TypeId {
-			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
+			return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 		}
 		return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
 	})
@@ -317,32 +313,24 @@ func getFieldCategory(field *FieldInfo) int {
 }
 
 // comparePrimitiveFields compares two nullable primitive fields using Java's primitiveComparator logic:
-// fixed before varint, then underlying type size desc, typeId desc, name asc
+// fixed before varint, then underlying type size desc, typeId asc, name asc
 func comparePrimitiveFields(fi, fj *FieldInfo) bool {
 	iFixed := isNullableFixedSizePrimitive(fi.DispatchId)
 	jFixed := isNullableFixedSizePrimitive(fj.DispatchId)
 	if iFixed != jFixed {
 		return iFixed // fixed before varint
 	}
-	// Same category: compare by underlying type size desc, typeId desc, name asc
-	// Note: Java uses primitive type size (8, 4, 2, 1), not encoding size
+	// Same category: compare by underlying type size desc, typeId asc, name asc
+	// Note: xlang uses primitive type size (8, 4, 2, 1), not encoding size
 	sizeI := getUnderlyingTypeSize(fi.DispatchId)
 	sizeJ := getUnderlyingTypeSize(fj.DispatchId)
 	if sizeI != sizeJ {
 		return sizeI > sizeJ // size descending
 	}
-	if isReducedPrecisionFloatType(fi.Meta.TypeId) && isReducedPrecisionFloatType(fj.Meta.TypeId) &&
-		fi.Meta.TypeId != fj.Meta.TypeId {
-		return fi.Meta.TypeId < fj.Meta.TypeId
-	}
 	if fi.Meta.TypeId != fj.Meta.TypeId {
-		return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
+		return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 	}
 	return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
-}
-
-func isReducedPrecisionFloatType(typeId TypeId) bool {
-	return typeId == FLOAT16 || typeId == BFLOAT16
 }
 
 // getNullableFixedSize returns the fixed size for nullable fixed primitives
@@ -720,7 +708,7 @@ func sortFields(
 		}
 	}
 	// Sort primitives (non-nullable) - same logic as boxed
-	// Java sorts by: compressed (varint) types last, then by size (largest first), then by type ID (descending)
+	// Xlang sorts by: compressed (varint) types last, then by size (largest first), then by type ID (ascending)
 	// Fixed types: BOOL, INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT32, FLOAT64
 	// Varint types: VARINT32, VARINT64, VAR_UINT32, VAR_UINT64, TAGGED_INT64, TAGGED_UINT64
 	isVarintTypeId := func(typeID TypeId) bool {
@@ -740,13 +728,9 @@ func sortFields(
 			if szI != szJ {
 				return szI > szJ
 			}
-			if isReducedPrecisionFloatType(ai.typeID) && isReducedPrecisionFloatType(aj.typeID) &&
-				ai.typeID != aj.typeID {
-				return ai.typeID < aj.typeID
-			}
-			// Tie-breaker: type ID descending (higher type ID first), then field name
+			// Tie-breaker: type ID ascending (lower type ID first), then field name
 			if ai.typeID != aj.typeID {
-				return ai.typeID > aj.typeID
+				return ai.typeID < aj.typeID
 			}
 			return ai.getSortKey() < aj.getSortKey()
 		})

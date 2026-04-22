@@ -246,7 +246,9 @@ _primitive_types = {
 
 def _is_special_compiled_primitive_type(type_) -> bool:
     from pyfory.serialization import bfloat16, float16
+
     return type_ is float16 or type_ is bfloat16
+
 
 _primitive_types_ids = {
     TypeId.BOOL,
@@ -382,6 +384,7 @@ _primitive_array_types = _py_array_types.union(_np_array_types)
 
 def _is_special_compiled_primitive_array_type(type_) -> bool:
     from pyfory.serialization import bfloat16array, float16array
+
     return type_ is float16array or type_ is bfloat16array
 
 

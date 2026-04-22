@@ -24,10 +24,10 @@ import java.io.Serializable;
 /**
  * Public carrier for xlang {@code bfloat16} values.
  *
- * <p>This type stores the exact 16-bit wire representation and converts to and from
- * {@code float} using round-to-nearest-even semantics. Use {@link #fromBits(short)} and
- * {@link #toBits()} when you need bit-preserving behavior, or {@link #valueOf(float)} and
- * {@link #toFloat()} when you want numeric conversion.
+ * <p>This type stores the exact 16-bit wire representation and converts to and from {@code float}
+ * using round-to-nearest-even semantics. Use {@link #fromBits(short)} and {@link #toBits()} when
+ * you need bit-preserving behavior, or {@link #valueOf(float)} and {@link #toFloat()} when you want
+ * numeric conversion.
  */
 public final class BFloat16 extends Number implements Comparable<BFloat16>, Serializable {
   private static final long serialVersionUID = 1L;

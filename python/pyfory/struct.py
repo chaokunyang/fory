@@ -749,15 +749,7 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
         if is_union_type(type_id):
             type_id = TypeId.UNION
         is_nullable = nullable_map.get(field_name, False)
-        if type_id in {TypeId.FLOAT16, TypeId.BFLOAT16}:
-            # Match Java xlang ordering: non-nullable float16/bfloat16 are part of the
-            # built-in/internal group, while nullable forms follow boxed primitive handling.
-            container = nullable_boxed_types if is_nullable else internal_types
-        elif type_id in {TypeId.FLOAT16_ARRAY, TypeId.BFLOAT16_ARRAY}:
-            # Java treats object arrays such as Float16[]/BFloat16[] as list-group fields when
-            # ordering struct layouts, even though the wire type IDs stay on the typed-array path.
-            container = collection_types
-        elif is_primitive_type(type_id):
+        if is_primitive_type(type_id):
             container = nullable_boxed_types if is_nullable else boxed_types
         elif type_id == TypeId.SET:
             container = set_types
@@ -790,9 +782,8 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
             TypeId.VAR_UINT64,
             TypeId.TAGGED_UINT64,
         }
-        # Sort by: compress flag, -size (largest first), -type_id (higher type ID first), field_name
-        # Java sorts by size (largest first), then by primitive type ID (descending)
-        return int(compress), -get_primitive_type_size(id_), -id_, item[3]
+        # Sort by: compress flag, -size (largest first), type_id (lower first), field_name
+        return int(compress), -get_primitive_type_size(id_), id_, item[3]
 
     boxed_types = sorted(boxed_types, key=numeric_sorter)
     nullable_boxed_types = sorted(nullable_boxed_types, key=numeric_sorter)

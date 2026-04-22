@@ -880,10 +880,10 @@ struct TwoStringFieldStruct {
 
 #[derive(ForyObject, Debug, PartialEq)]
 struct ReducedPrecisionFloatStruct {
-    bfloat16_array: Vec<BFloat16>,
+    float16_value: Float16,
     bfloat16_value: BFloat16,
     float16_array: Vec<Float16>,
-    float16_value: Float16,
+    bfloat16_array: Vec<BFloat16>,
 }
 
 #[allow(non_camel_case_types)]

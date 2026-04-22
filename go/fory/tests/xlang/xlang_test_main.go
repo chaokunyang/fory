@@ -293,8 +293,8 @@ func (FixedOverrideStruct) ForyEvolving() bool {
 type ReducedPrecisionFloatStruct struct {
 	Float16Value  float16.Float16
 	Bfloat16Value bfloat16.BFloat16
-	Bfloat16Array []bfloat16.BFloat16
 	Float16Array  []float16.Float16
+	Bfloat16Array []bfloat16.BFloat16
 }
 
 type StructWithList struct {
@@ -1524,17 +1524,17 @@ func testReducedPrecisionFloatStruct() {
 	if result.Bfloat16Value.Bits() != 0x3FC0 {
 		panic(fmt.Sprintf("bfloat16_value mismatch: expected 0x3FC0, got 0x%04x", result.Bfloat16Value.Bits()))
 	}
-	if len(result.Bfloat16Array) != 3 ||
-		result.Bfloat16Array[0].Bits() != 0x0000 ||
-		result.Bfloat16Array[1].Bits() != 0x3F80 ||
-		result.Bfloat16Array[2].Bits() != 0xBF80 {
-		panic(fmt.Sprintf("bfloat16_array mismatch: got %#v", result.Bfloat16Array))
-	}
 	if len(result.Float16Array) != 3 ||
 		result.Float16Array[0].Bits() != 0x0000 ||
 		result.Float16Array[1].Bits() != 0x3C00 ||
 		result.Float16Array[2].Bits() != 0xBC00 {
 		panic(fmt.Sprintf("float16_array mismatch: got %#v", result.Float16Array))
+	}
+	if len(result.Bfloat16Array) != 3 ||
+		result.Bfloat16Array[0].Bits() != 0x0000 ||
+		result.Bfloat16Array[1].Bits() != 0x3F80 ||
+		result.Bfloat16Array[2].Bits() != 0xBF80 {
+		panic(fmt.Sprintf("bfloat16_array mismatch: got %#v", result.Bfloat16Array))
 	}
 
 	serialized, err := f.Serialize(&result)

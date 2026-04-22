@@ -666,8 +666,7 @@ public class PrimitiveListSerializers {
     }
   }
 
-  public static final class BFloat16ListSerializer
-      extends PrimitiveListSerializer<BFloat16List> {
+  public static final class BFloat16ListSerializer extends PrimitiveListSerializer<BFloat16List> {
     public BFloat16ListSerializer(TypeResolver typeResolver) {
       super(typeResolver, BFloat16List.class);
     }

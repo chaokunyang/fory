@@ -89,7 +89,6 @@ When reading type IDs:
 | date                    | 39           | LocalDate       | datetime.date            | Date                           | fory::serialization::Date                           | fory.Date                                      | chrono::NaiveDate                 |
 | decimal                 | 40           | BigDecimal      | Decimal                  | Decimal                        | /                                                   | fory.Decimal                                   | fory::Decimal                     |
 | binary                  | 41           | byte[]          | bytes                    | /                              | `uint8_t[n]/vector<T>`                              | `[n]uint8/[]T`                                 | `Vec<uint8_t>`                    |
-| array                   | 42           | array           | np.ndarray               | /                              | /                                                   | array/slice                                    | Vec                               |
 | bool_array              | 43           | bool[]          | ndarray(np.bool\_)       | /                              | `bool[n]`                                           | `[n]bool/[]T`                                  | `Vec<bool>`                       |
 | int8_array              | 44           | byte[]          | ndarray(int8)            | /                              | `int8_t[n]/vector<T>`                               | `[n]int8/[]T`                                  | `Vec<i8>`                         |
 | int16_array             | 45           | short[]         | ndarray(int16)           | /                              | `int16_t[n]/vector<T>`                              | `[n]int16/[]T`                                 | `Vec<i16>`                        |
@@ -105,10 +104,14 @@ When reading type IDs:
 | float32_array           | 55           | float[]         | ndarray(float32)         | /                              | `float[n]/vector<T>`                                | `[n]float32/[]T`                               | `Vec<f32>`                        |
 | float64_array           | 56           | double[]        | ndarray(float64)         | /                              | `double[n]/vector<T>`                               | `[n]float64/[]T`                               | `Vec<f64>`                        |
 
-Java note:
+Notes:
 
 - `Float16List` and `BFloat16List` are the xlang `float16_array` and `bfloat16_array` carriers.
 - `Float16[]` and `BFloat16[]` remain object arrays in xlang mode and serialize with the `list` wire type.
+- `ARRAY (42)` is reserved for a future dedicated multi-dimensional array encoding and is not part
+  of the current xlang type-mapping surface.
+- Current xlang uses `*_ARRAY` for one-dimensional primitive arrays and nested `list` for
+  multi-dimensional arrays.
 
 ## Type info
 

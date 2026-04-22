@@ -1264,21 +1264,17 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         bool javaInternalReducedPrecisionScalar =
             !isOptional &&
             (classification.TypeId == 17 || classification.TypeId == 18);
-        bool javaCollectionReducedPrecisionArray =
-            classification.TypeId == 53 || classification.TypeId == 54;
         int group = javaInternalReducedPrecisionScalar
             ? 3
-            : javaCollectionReducedPrecisionArray
-                ? 4
-                : classification.IsPrimitive
-                    ? (isOptional ? 2 : 1)
-                    : classification.IsMap
-                        ? 5
-                        : classification.IsCollection
-                            ? 4
-                            : classification.IsBuiltIn
-                                ? 3
-                                : 6;
+            : classification.IsPrimitive
+                ? (isOptional ? 2 : 1)
+                : classification.IsMap
+                    ? 5
+                    : classification.IsCollection
+                        ? 4
+                        : classification.IsBuiltIn
+                            ? 3
+                            : 6;
 
         int index = int.MaxValue;
         Location? sourceLocation = memberSymbol.Locations.FirstOrDefault(loc => loc.IsInSource);
@@ -1504,7 +1500,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             {
                 if (m.Group is 1 or 2)
                 {
-                    return (int)(uint.MaxValue - m.Classification.TypeId);
+                    return (int)m.Classification.TypeId;
                 }
 
                 if (m.Group is 3 or 5)

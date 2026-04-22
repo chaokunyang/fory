@@ -526,10 +526,10 @@ public class XtypeResolver extends TypeResolver {
     if (type == BFloat16.class) {
       return Types.BFLOAT16;
     }
-    if (type == Float16[].class || type == Float16List.class) {
+    if (type == Float16List.class) {
       return Types.FLOAT16_ARRAY;
     }
-    if (type == BFloat16[].class || type == BFloat16List.class) {
+    if (type == BFloat16List.class) {
       return Types.BFLOAT16_ARRAY;
     }
     if (type.isArray()) {
@@ -1004,13 +1004,6 @@ public class XtypeResolver extends TypeResolver {
         Types.FLOAT32_ARRAY, float[].class, new ArraySerializers.FloatArraySerializer(this));
     registerType(
         Types.FLOAT64_ARRAY, double[].class, new ArraySerializers.DoubleArraySerializer(this));
-    registerType(
-        Types.FLOAT16_ARRAY, Float16[].class, new ArraySerializers.Float16ArraySerializer(this));
-    registerType(
-        Types.BFLOAT16_ARRAY,
-        BFloat16[].class,
-        new ArraySerializers.BFloat16ArraySerializer(this));
-
     // Primitive lists
     registerType(
         Types.BOOL_ARRAY, BoolList.class, new PrimitiveListSerializers.BoolListSerializer(this));
@@ -1297,6 +1290,15 @@ public class XtypeResolver extends TypeResolver {
   protected DescriptorGrouper configureDescriptorGrouper(DescriptorGrouper descriptorGrouper) {
     return descriptorGrouper.setOtherDescriptorComparator(
         Comparator.comparing(TypeResolver::getFieldSortKey));
+  }
+
+  @Override
+  public boolean usesPrimitiveFieldOrdering(Descriptor descriptor) {
+    if (super.usesPrimitiveFieldOrdering(descriptor)) {
+      return true;
+    }
+    int typeId = Types.getDescriptorTypeId(this, descriptor);
+    return typeId == Types.FLOAT16 || typeId == Types.BFLOAT16;
   }
 
   private byte getInternalTypeId(Descriptor descriptor) {

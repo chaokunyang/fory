@@ -485,7 +485,7 @@ func TestSetFieldTypeId(t *testing.T) {
 	}
 }
 
-func TestReducedPrecisionPrimitiveArraysUseSortKeyOrdering(t *testing.T) {
+func TestReducedPrecisionPrimitiveArraysUseBuiltInOrdering(t *testing.T) {
 	type TestStruct struct {
 		Float16Value  float16.Float16
 		Bfloat16Value bfloat16.BFloat16
@@ -508,8 +508,8 @@ func TestReducedPrecisionPrimitiveArraysUseSortKeyOrdering(t *testing.T) {
 	require.Equal(t, "bfloat16_value", structSer.fieldGroup.FixedFields[1].Meta.Name)
 
 	require.Len(t, structSer.fieldGroup.RemainingFields, 2)
-	require.Equal(t, "bfloat16_array", structSer.fieldGroup.RemainingFields[0].Meta.Name)
-	require.Equal(t, "float16_array", structSer.fieldGroup.RemainingFields[1].Meta.Name)
+	require.Equal(t, "float16_array", structSer.fieldGroup.RemainingFields[0].Meta.Name)
+	require.Equal(t, "bfloat16_array", structSer.fieldGroup.RemainingFields[1].Meta.Name)
 }
 
 func TestCompatibleSkipReducedPrecisionArrays(t *testing.T) {

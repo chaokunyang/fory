@@ -288,10 +288,10 @@ func isEnumField(field *FieldInfo) bool {
 
 // getFieldCategory returns the category for sorting remainingFields:
 // 0: nullable primitives (sorted by primitiveComparator)
-// 1: internal built-in scalar types (sorted by typeId, then sort key)
+// 1: internal built-in non-container types, including primitive arrays (sorted by typeId, then sort key)
 // 2: list/set collections (sorted by typeId, then sort key)
 // 3: map collections (sorted by typeId, then sort key)
-// 4: primitive arrays, struct, enum, and all other types (sorted by sort key)
+// 4: struct, enum, and all other types (sorted by sort key)
 func getFieldCategory(field *FieldInfo) int {
 	if isNullableFixedSizePrimitive(field.DispatchId) || isNullableVarintPrimitive(field.DispatchId) {
 		return 0
@@ -310,9 +310,9 @@ func getFieldCategory(field *FieldInfo) int {
 		return 3
 	}
 	if isPrimitiveArrayType(typeId) {
-		return 4
+		return 1
 	}
-	// Internal built-in scalar types: sorted by typeId, then sort key.
+	// Internal built-in non-container types: sorted by typeId, then sort key.
 	return 1
 }
 
@@ -702,8 +702,8 @@ func sortFields(
 				primitives = append(primitives, t)
 			}
 		case isPrimitiveArrayType(t.typeID):
-			// Primitive arrays follow the same sort-key ordering as Java's "other" group.
-			userDefined = append(userDefined, t)
+			// Primitive arrays are built-in non-container types in xlang field ordering.
+			otherInternalTypeFields = append(otherInternalTypeFields, t)
 		case isListType(t.typeID), isSetType(t.typeID):
 			// LIST, SET: collection group
 			listSet = append(listSet, t)

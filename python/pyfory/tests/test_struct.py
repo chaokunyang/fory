@@ -186,9 +186,8 @@ def test_sort_fields():
     fory = Fory(xlang=True, ref=True)
     serializer = DataClassSerializer(fory.type_resolver, TestClass)
     # Sorting order:
-    # 1. Non-compressed primitives (compress=0) by -size, then name:
-    #    float64(8), float32(4), bool(1), int8(1) => f13, f5, f11, f7
-    #    (f11 < f7 alphabetically since '1' < '7')
+    # 1. Non-compressed primitives (compress=0) by -size, then ascending type_id, then name:
+    #    float64(8), float32(4), bool(1), int8(1) => f13, f5, f7, f11
     # 2. Compressed primitives (compress=1) by -size, then name:
     #    int64(8), int32(4) => f12, f1
     # 3. Internal types by type_id, then name: str, datetime, bytes => f4, f15, f6
@@ -196,7 +195,7 @@ def test_sort_fields():
     # 5. Set types by type_id, then name: set => f14
     # 6. Map types by type_id, then name: dict => f3, f9
     # 7. Other types (polymorphic/any) by name: any => f8
-    assert serializer._field_names == ["f13", "f5", "f11", "f7", "f12", "f1", "f4", "f15", "f6", "f10", "f2", "f14", "f3", "f9", "f8"]
+    assert serializer._field_names == ["f13", "f5", "f7", "f11", "f12", "f1", "f4", "f15", "f6", "f10", "f2", "f14", "f3", "f9", "f8"]
 
 
 @pytest.mark.parametrize(

@@ -821,8 +821,8 @@ def test_schema_evolution_compatible_reverse():
 def _assert_reduced_precision_float_struct(obj: ReducedPrecisionFloatStruct):
     assert obj.float16_value.to_bits() == 0x3E00, f"float16_value bits: {obj.float16_value.to_bits():#06x}"
     assert obj.bfloat16_value.to_bits() == 0x3FC0, f"bfloat16_value bits: {obj.bfloat16_value.to_bits():#06x}"
-    assert list(obj.float16_array.to_bits()) == [0x0000, 0x3C00, 0xBC00], f"float16_array bits: {list(obj.float16_array.to_bits())}"
-    assert list(obj.bfloat16_array.to_bits()) == [0x0000, 0x3F80, 0xBF80], f"bfloat16_array bits: {list(obj.bfloat16_array.to_bits())}"
+    assert list(obj.float16_array.to_buffer()) == [0x0000, 0x3C00, 0xBC00], f"float16_array bits: {list(obj.float16_array.to_buffer())}"
+    assert list(obj.bfloat16_array.to_buffer()) == [0x0000, 0x3F80, 0xBF80], f"bfloat16_array bits: {list(obj.bfloat16_array.to_buffer())}"
 
 
 def test_reduced_precision_float_struct():

@@ -87,7 +87,13 @@ from pyfory.serializer import (
     PickleBufferSerializer,
     UnionSerializer,
 )
-from pyfory.serialization import bfloat16, bfloat16array, float16, float16array
+from pyfory.serialization import (
+    Serializer as CythonSerializer,
+    bfloat16,
+    bfloat16array,
+    float16,
+    float16array,
+)
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
 from pyfory.context import EncodedMetaString
@@ -168,7 +174,7 @@ def _accepts_n_positional_args(factory, nargs: int) -> bool:
             signature = inspect.signature(factory.__init__)
             parameters = tuple(signature.parameters.values())[1:]
         except (AttributeError, TypeError, ValueError):
-            if inspect.isclass(factory) and issubclass(factory, Serializer):
+            if inspect.isclass(factory) and issubclass(factory, (Serializer, CythonSerializer)):
                 return nargs == 2
             raise TypeError(f"Unable to inspect serializer constructor for {factory!r}")
     min_args = 0
@@ -440,11 +446,6 @@ class TypeResolver:
         register(tagged_uint64, type_id=TypeId.TAGGED_UINT64, serializer=TaggedUint64Serializer)
         # Floats
         register(
-            float16,
-            type_id=TypeId.FLOAT16,
-            serializer=Float16Serializer,
-        )
-        register(
             float32,
             type_id=TypeId.FLOAT32,
             serializer=Float32Serializer,
@@ -455,6 +456,11 @@ class TypeResolver:
             serializer=Float64Serializer,
         )
         register(float, type_id=TypeId.FLOAT64, serializer=Float64Serializer)
+        register(
+            float16,
+            type_id=TypeId.FLOAT16,
+            serializer=Float16Serializer,
+        )
         register(bfloat16, type_id=TypeId.BFLOAT16, serializer=BFloat16Serializer)
         register(str, type_id=TypeId.STRING, serializer=StringSerializer)
         register(decimal.Decimal, type_id=TypeId.DECIMAL, serializer=DecimalSerializer)

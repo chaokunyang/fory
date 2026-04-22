@@ -244,24 +244,60 @@ def test_bfloat16_arithmetic():
 
 def test_float16_array_round_trip():
     fory = Fory(xlang=True, ref=False)
-    values = pyfory.float16array.from_bits([0x0000, 0x3C00, 0x7C01])
+    values = pyfory.float16array.from_values([0.0, 1.0, -2.0])
     typeinfo = fory.type_resolver.get_type_info(pyfory.float16array)
     assert isinstance(typeinfo.serializer, pyfory.Float16ArraySerializer)
     assert typeinfo.type_id == TypeId.FLOAT16_ARRAY
     decoded = ser_de(fory, values)
     assert isinstance(decoded, pyfory.float16array)
-    assert list(decoded.to_bits()) == [0x0000, 0x3C00, 0x7C01]
+    assert list(decoded.to_buffer()) == [0x0000, 0x3C00, 0xC000]
+
+
+def test_float16_array_from_values():
+    values = pyfory.float16array.from_values([0.0, 1.0, -2.0])
+    assert list(values.to_buffer()) == [0x0000, 0x3C00, 0xC000]
+
+
+def test_float16_array_from_buffer():
+    values = pyfory.float16array.from_buffer(memoryview(bytes.fromhex("0000003c00c0")))
+    assert list(values.to_buffer()) == [0x0000, 0x3C00, 0xC000]
+
+
+def test_float16_array_buffer_protocol():
+    values = pyfory.float16array.from_values([0.0, 1.0, -2.0])
+    view = memoryview(values)
+    assert view.format in ("H", "@H")
+    assert view.itemsize == 2
+    assert list(pyfory.float16array.from_buffer(view).to_buffer()) == [0x0000, 0x3C00, 0xC000]
 
 
 def test_bfloat16_array_round_trip():
     fory = Fory(xlang=True, ref=False)
-    values = pyfory.bfloat16array.from_bits([0x0000, 0x3F80, 0x7FC1])
+    values = pyfory.bfloat16array.from_values([0.0, 1.0, -2.0])
     typeinfo = fory.type_resolver.get_type_info(pyfory.bfloat16array)
     assert isinstance(typeinfo.serializer, pyfory.BFloat16ArraySerializer)
     assert typeinfo.type_id == TypeId.BFLOAT16_ARRAY
     decoded = ser_de(fory, values)
     assert isinstance(decoded, pyfory.bfloat16array)
-    assert list(decoded.to_bits()) == [0x0000, 0x3F80, 0x7FC1]
+    assert list(decoded.to_buffer()) == [0x0000, 0x3F80, 0xC000]
+
+
+def test_bfloat16_array_from_values():
+    values = pyfory.bfloat16array.from_values([0.0, 1.0, -2.0])
+    assert list(values.to_buffer()) == [0x0000, 0x3F80, 0xC000]
+
+
+def test_bfloat16_array_from_buffer():
+    values = pyfory.bfloat16array.from_buffer(memoryview(bytes.fromhex("0000803f00c0")))
+    assert list(values.to_buffer()) == [0x0000, 0x3F80, 0xC000]
+
+
+def test_bfloat16_array_buffer_protocol():
+    values = pyfory.bfloat16array.from_values([0.0, 1.0, -2.0])
+    view = memoryview(values)
+    assert view.format in ("H", "@H")
+    assert view.itemsize == 2
+    assert list(pyfory.bfloat16array.from_buffer(view).to_buffer()) == [0x0000, 0x3F80, 0xC000]
 
 
 @pytest.mark.parametrize("xlang", [True, False])

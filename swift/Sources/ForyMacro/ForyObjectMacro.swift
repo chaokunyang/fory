@@ -966,7 +966,7 @@ private func sortFields(_ fields: [ParsedField]) -> [ParsedField] {
                 return lhs.primitiveSize > rhs.primitiveSize
             }
             if lhs.typeID != rhs.typeID {
-                return lhs.typeID > rhs.typeID
+                return lhs.typeID < rhs.typeID
             }
             if let identifierOrder = compareFieldIdentifier(lhs, rhs) {
                 return identifierOrder

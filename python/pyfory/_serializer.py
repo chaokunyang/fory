@@ -19,11 +19,14 @@ import datetime
 import logging
 import platform
 import time
+import array
 from abc import ABC
 
 from pyfory._fory import NOT_NULL_INT64_FLAG
 from pyfory.resolver import NOT_NULL_VALUE_FLAG, NULL_FLAG
+from pyfory.serialization import bfloat16, bfloat16array, float16, float16array
 from pyfory.types import is_primitive_type
+from pyfory.utils import is_little_endian
 
 try:
     import numpy as np
@@ -237,6 +240,72 @@ class Float64Serializer(Serializer):
 
     def read(self, read_context):
         return read_context.read_float64()
+
+
+def _coerce_float16_bits(value):
+    if isinstance(value, float16):
+        return value.to_bits()
+    return float16(value).to_bits()
+
+
+def _coerce_bfloat16_bits(value):
+    if isinstance(value, bfloat16):
+        return value.to_bits()
+    return bfloat16(value).to_bits()
+
+
+class Float16Serializer(Serializer):
+    def write(self, write_context, value):
+        write_context.write_uint16(_coerce_float16_bits(value))
+
+    def read(self, read_context):
+        return float16.from_bits(read_context.read_uint16())
+
+
+class Float16ArraySerializer(Serializer):
+    def write(self, write_context, value):
+        safe = float16array() if value is None else value
+        buffer = safe.to_buffer()
+        write_context.write_var_uint32(len(buffer) * 2)
+        if is_little_endian:
+            write_context.buffer.write_buffer(buffer)
+        else:
+            swapped = array.array("H", buffer)
+            swapped.byteswap()
+            write_context.buffer.write_buffer(swapped)
+
+    def read(self, read_context):
+        payload_size = read_context.read_var_uint32()
+        if payload_size & 1:
+            raise ValueError("float16 array payload size mismatch")
+        return float16array.from_buffer(read_context.read_bytes(payload_size))
+
+
+class BFloat16Serializer(Serializer):
+    def write(self, write_context, value):
+        write_context.write_uint16(_coerce_bfloat16_bits(value))
+
+    def read(self, read_context):
+        return bfloat16.from_bits(read_context.read_uint16())
+
+
+class BFloat16ArraySerializer(Serializer):
+    def write(self, write_context, value):
+        safe = bfloat16array() if value is None else value
+        buffer = safe.to_buffer()
+        write_context.write_var_uint32(len(buffer) * 2)
+        if is_little_endian:
+            write_context.buffer.write_buffer(buffer)
+        else:
+            swapped = array.array("H", buffer)
+            swapped.byteswap()
+            write_context.buffer.write_buffer(swapped)
+
+    def read(self, read_context):
+        payload_size = read_context.read_var_uint32()
+        if payload_size & 1:
+            raise ValueError("bfloat16 array payload size mismatch")
+        return bfloat16array.from_buffer(read_context.read_bytes(payload_size))
 
 
 class StringSerializer(Serializer):

@@ -105,6 +105,14 @@ private struct TwoStringFieldStruct {
 }
 
 @ForyObject
+private struct ReducedPrecisionFloatStruct {
+    var float16Value: Float16 = 0
+    var bfloat16Value: BFloat16 = .init()
+    var float16Array: [Float16] = []
+    var bfloat16Array: [BFloat16] = []
+}
+
+@ForyObject
 private struct OneEnumFieldStruct {
     var f1: PeerTestEnum = .valueA
 }
@@ -973,6 +981,18 @@ private func handleUnsignedSchemaCompatible(_ bytes: [UInt8]) throws -> [UInt8] 
     return try roundTripSingle(bytes, fory: fory, as: UnsignedSchemaCompatible.self)
 }
 
+private func handleReducedPrecisionFloatStruct(_ bytes: [UInt8]) throws -> [UInt8] {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
+    fory.register(ReducedPrecisionFloatStruct.self, id: 213)
+    return try roundTripSingle(bytes, fory: fory, as: ReducedPrecisionFloatStruct.self)
+}
+
+private func handleReducedPrecisionFloatStructCompatibleSkip(_ bytes: [UInt8]) throws -> [UInt8] {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    fory.register(EmptyStructEvolution.self, id: 213)
+    return try roundTripSingle(bytes, fory: fory, as: EmptyStructEvolution.self)
+}
+
 private func rewritePayload(caseName: String, bytes: [UInt8]) throws -> [UInt8] {
     switch caseName {
     case "test_buffer", "test_buffer_var":
@@ -1059,6 +1079,10 @@ private func rewritePayload(caseName: String, bytes: [UInt8]) throws -> [UInt8] 
         return try handleUnsignedSchemaConsistent(bytes)
     case "test_unsigned_schema_compatible":
         return try handleUnsignedSchemaCompatible(bytes)
+    case "test_reduced_precision_float_struct":
+        return try handleReducedPrecisionFloatStruct(bytes)
+    case "test_reduced_precision_float_struct_compatible_skip":
+        return try handleReducedPrecisionFloatStructCompatibleSkip(bytes)
     default:
         throw PeerError.unsupportedCase(caseName)
     }

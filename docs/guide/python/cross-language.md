@@ -122,6 +122,14 @@ The scalar wrappers behave like reduced-precision numeric value types. They supp
 ordering with Python numeric operands, and each operation quantizes the result back to the wrapper's
 own format (`pyfory.float16` or `pyfory.bfloat16`).
 
+The array wrappers are value-oriented public APIs. Construct them from Python numeric values with
+`pyfory.float16array([...])`, `pyfory.float16array.from_values([...])`,
+`pyfory.bfloat16array([...])`, or `pyfory.bfloat16array.from_values([...])`. Use
+`from_buffer(...)` and `to_buffer()` only when you already need packed little-endian `uint16`
+storage and want the raw-buffer fast path. Both array carriers also implement the CPython buffer
+protocol, so `memoryview(pyfory.float16array(...))` and `memoryview(pyfory.bfloat16array(...))`
+expose the packed `uint16` storage directly.
+
 ## Type Mapping
 
 | Python                 | Java           | Rust            | Go                    |

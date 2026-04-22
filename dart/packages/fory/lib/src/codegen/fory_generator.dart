@@ -1761,7 +1761,7 @@ GeneratedFieldType(
     if (sizeCompare != 0) {
       return sizeCompare;
     }
-    final typeCompare = right.fieldType.typeId - left.fieldType.typeId;
+    final typeCompare = left.fieldType.typeId - right.fieldType.typeId;
     if (typeCompare != 0) {
       return typeCompare;
     }

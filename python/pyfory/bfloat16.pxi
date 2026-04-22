@@ -23,7 +23,9 @@ pure-Python fallback module for the bfloat16 API surface.
 """
 
 import array as _py_array
+from cpython.buffer cimport Py_buffer, PyBuffer_Release, PyObject_GetBuffer
 from libc.string cimport memcpy
+from pyfory.utils import is_little_endian
 
 
 cdef inline uint16_t _bfloat16_float_to_bits(float value):
@@ -189,10 +191,32 @@ cdef class bfloat16array:
         self.extend(values)
 
     @staticmethod
-    def from_bits(bits_iterable):
+    def from_values(values):
+        return bfloat16array(values)
+
+    @staticmethod
+    def from_buffer(buffer):
         cdef bfloat16array value = bfloat16array.__new__(bfloat16array)
-        value._data = _py_array.array("H", ((int(bits) & 0xFFFF) for bits in bits_iterable))
-        return value
+        cdef object data = buffer
+        value._data = _py_array.array("H")
+        if isinstance(data, memoryview):
+            if data.itemsize == 2 and data.format in ("H", "@H"):
+                value._data = _py_array.array("H", data)
+                return value
+            data = data.tobytes()
+        if isinstance(data, (bytes, bytearray)):
+            if len(data) & 1:
+                raise ValueError("bfloat16 bits payload size mismatch")
+            value._data.frombytes(data)
+            if not is_little_endian and len(data) > 0:
+                value._data.byteswap()
+            return value
+        if isinstance(data, _py_array.array) and data.typecode == "H":
+            value._data = _py_array.array("H", data)
+            return value
+        raise TypeError(
+            f"bfloat16array.from_buffer expects a buffer-compatible value, got {type(buffer)!r}"
+        )
 
     def append(self, value):
         self._data.append(_coerce_bfloat16_bits(value))
@@ -201,7 +225,7 @@ cdef class bfloat16array:
         for value in values:
             self.append(value)
 
-    def to_bits(self):
+    def to_buffer(self):
         return _py_array.array("H", self._data)
 
     def tolist(self):
@@ -216,8 +240,15 @@ cdef class bfloat16array:
 
     def __getitem__(self, index):
         if isinstance(index, slice):
-            return bfloat16array.from_bits(self._data[index])
+            return bfloat16array.from_buffer(self._data[index])
         return bfloat16.from_bits(self._data[index])
+
+    def __getbuffer__(self, Py_buffer *buffer, int flags):
+        if PyObject_GetBuffer(self._data, buffer, flags) < 0:
+            raise BufferError("bfloat16array failed to export buffer")
+
+    def __releasebuffer__(self, Py_buffer *buffer):
+        PyBuffer_Release(buffer)
 
     def __repr__(self):
         return f"bfloat16array({self.tolist()!r})"
@@ -248,22 +279,26 @@ cdef class BFloat16ArraySerializer(Serializer):
 
     cpdef write(self, WriteContext write_context, value):
         cdef bfloat16array safe
-        cdef object bits
+        cdef object swapped
         if value is None:
             safe = bfloat16array()
         else:
             safe = value
         write_context.write_var_uint32(len(safe) * 2)
-        for bits in safe._data:
-            write_context.write_uint16(bits)
+        if is_little_endian:
+            write_context.write_buffer(safe._data)
+        else:
+            swapped = _py_array.array("H", safe._data)
+            swapped.byteswap()
+            write_context.write_buffer(swapped)
 
     cpdef read(self, ReadContext read_context):
         cdef uint32_t payload_size = read_context.read_var_uint32()
-        cdef uint32_t i
         cdef bfloat16array values
         if payload_size & 1:
             raise ValueError("bfloat16 array payload size mismatch")
         values = bfloat16array()
-        for i in range(payload_size // 2):
-            values._data.append(read_context.read_uint16())
+        values._data.frombytes(read_context.read_bytes(payload_size))
+        if not is_little_endian and payload_size > 0:
+            values._data.byteswap()
         return values

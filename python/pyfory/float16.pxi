@@ -16,7 +16,9 @@
 # under the License.
 
 import array as _py_array
+from cpython.buffer cimport Py_buffer, PyBuffer_Release, PyObject_GetBuffer
 from libc.string cimport memcpy
+from pyfory.utils import is_little_endian
 
 
 cdef inline uint16_t _float16_float_to_bits(float value):
@@ -248,6 +250,8 @@ cdef inline uint16_t _coerce_float16_bits(value):
 
 @cython.final
 cdef class float16array:
+    """Packed one-dimensional carrier for xlang ``float16_array`` payloads."""
+
     cdef object _data
 
     def __cinit__(self, values=()):
@@ -255,10 +259,30 @@ cdef class float16array:
         self.extend(values)
 
     @staticmethod
-    def from_bits(bits_iterable):
+    def from_values(values):
+        return float16array(values)
+
+    @staticmethod
+    def from_buffer(buffer):
         cdef float16array value = float16array.__new__(float16array)
-        value._data = _py_array.array("H", ((int(bits) & 0xFFFF) for bits in bits_iterable))
-        return value
+        cdef object data = buffer
+        value._data = _py_array.array("H")
+        if isinstance(data, memoryview):
+            if data.itemsize == 2 and data.format in ("H", "@H"):
+                value._data = _py_array.array("H", data)
+                return value
+            data = data.tobytes()
+        if isinstance(data, (bytes, bytearray)):
+            if len(data) & 1:
+                raise ValueError("float16 bits payload size mismatch")
+            value._data.frombytes(data)
+            if not is_little_endian and len(data) > 0:
+                value._data.byteswap()
+            return value
+        if isinstance(data, _py_array.array) and data.typecode == "H":
+            value._data = _py_array.array("H", data)
+            return value
+        raise TypeError(f"float16array.from_buffer expects a buffer-compatible value, got {type(buffer)!r}")
 
     def append(self, value):
         self._data.append(_coerce_float16_bits(value))
@@ -267,7 +291,7 @@ cdef class float16array:
         for value in values:
             self.append(value)
 
-    def to_bits(self):
+    def to_buffer(self):
         return _py_array.array("H", self._data)
 
     def tolist(self):
@@ -282,8 +306,15 @@ cdef class float16array:
 
     def __getitem__(self, index):
         if isinstance(index, slice):
-            return float16array.from_bits(self._data[index])
+            return float16array.from_buffer(self._data[index])
         return float16.from_bits(self._data[index])
+
+    def __getbuffer__(self, Py_buffer *buffer, int flags):
+        if PyObject_GetBuffer(self._data, buffer, flags) < 0:
+            raise BufferError("float16array failed to export buffer")
+
+    def __releasebuffer__(self, Py_buffer *buffer):
+        PyBuffer_Release(buffer)
 
     def __repr__(self):
         return f"float16array({self.tolist()!r})"
@@ -310,22 +341,26 @@ cdef class Float16Serializer(Serializer):
 cdef class Float16ArraySerializer(Serializer):
     cpdef write(self, WriteContext write_context, value):
         cdef float16array safe
-        cdef object bits
+        cdef object swapped
         if value is None:
             safe = float16array()
         else:
             safe = value
         write_context.write_var_uint32(len(safe) * 2)
-        for bits in safe._data:
-            write_context.write_uint16(bits)
+        if is_little_endian:
+            write_context.write_buffer(safe._data)
+        else:
+            swapped = _py_array.array("H", safe._data)
+            swapped.byteswap()
+            write_context.write_buffer(swapped)
 
     cpdef read(self, ReadContext read_context):
         cdef uint32_t payload_size = read_context.read_var_uint32()
-        cdef uint32_t i
         cdef float16array values
         if payload_size & 1:
             raise ValueError("float16 array payload size mismatch")
         values = float16array()
-        for i in range(payload_size // 2):
-            values._data.append(read_context.read_uint16())
+        values._data.frombytes(read_context.read_bytes(payload_size))
+        if not is_little_endian and payload_size > 0:
+            values._data.byteswap()
         return values

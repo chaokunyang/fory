@@ -1373,7 +1373,7 @@ Within each group, apply the following sort keys in order until a difference is 
 1. **Compression category**: fixed-size numeric and boolean types first, then compressed numeric
    types (`VARINT32`, `VAR_UINT32`, `VARINT64`, `VAR_UINT64`, `TAGGED_INT64`, `TAGGED_UINT64`).
 2. **Primitive size** (descending): 8-byte > 4-byte > 2-byte > 1-byte.
-3. **Internal type ID** (descending) as a tie-breaker for equal sizes.
+3. **Internal type ID** (ascending) as a tie-breaker for equal sizes.
 4. **Field identifier** (lexicographic ascending).
 
 **Built-in / Collection / Map groups (3-5):**

@@ -19,6 +19,7 @@
 
 import Fory, { Type } from '../packages/core/index';
 import { TypeMeta } from '../packages/core/lib/meta/TypeMeta';
+import { BinaryReader } from '../packages/core/lib/reader';
 import { describe, expect, test } from '@jest/globals';
 
 const HAS_FIELDS_META_FLAG = 1n << 8n;
@@ -40,6 +41,21 @@ describe('typemeta', () => {
     expect((header & HAS_FIELDS_META_FLAG) !== 0n).toBe(true);
     expect((header & COMPRESS_META_FLAG) !== 0n).toBe(false);
     expect(header >> HASH_SHIFT_BITS).toBeGreaterThan(0n);
+  });
+
+  test('writes the zero size extension when the TypeMeta body is exactly 0xFF bytes', () => {
+    const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7003, {})) as any;
+    const body = new Uint8Array(0xFF);
+    const bytes = typeMeta.prependHeader(body, false, false) as Uint8Array;
+    const reader = new BinaryReader({});
+
+    expect(bytes).toHaveLength(8 + 1 + body.length);
+    expect(bytes[8]).toBe(0);
+
+    reader.reset(bytes);
+    const header = TypeMeta.readHeader(reader);
+    TypeMeta.skipBody(reader, header);
+    expect(reader.readGetCursor()).toBe(bytes.length);
   });
 
   test('regenerates compatible named serializers when schema changes but field count stays the same', () => {

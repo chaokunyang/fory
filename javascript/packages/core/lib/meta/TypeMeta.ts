@@ -745,7 +745,7 @@ export class TypeMeta {
     const writer = new BinaryWriter({});
     writer.writeUint64(header);
 
-    if (metaSize > META_SIZE_MASKS) {
+    if (metaSize >= META_SIZE_MASKS) {
       writer.writeVarUInt32(metaSize - META_SIZE_MASKS);
     }
 

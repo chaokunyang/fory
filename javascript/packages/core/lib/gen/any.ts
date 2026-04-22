@@ -73,8 +73,19 @@ export class AnyHelper {
           serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
         }
         break;
-      case TypeId.NAMED_STRUCT:
       case TypeId.NAMED_EXT:
+        if (readContext.isCompatible()) {
+          const typeMeta = readContext.readTypeMeta();
+          const ns = typeMeta.getNs();
+          const typeName = typeMeta.getTypeName();
+          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+        } else {
+          const ns = readContext.readNamespace();
+          const typeName = readContext.readTypeName();
+          serializer = typeResolver.getSerializerByName(buildNamedTypeKey(ns, typeName));
+        }
+        break;
+      case TypeId.NAMED_STRUCT:
       case TypeId.NAMED_COMPATIBLE_STRUCT:
         if (readContext.isCompatible() || typeId === TypeId.NAMED_COMPATIBLE_STRUCT) {
           const typeMeta = readContext.readTypeMeta();

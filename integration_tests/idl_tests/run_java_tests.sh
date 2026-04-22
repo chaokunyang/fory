@@ -21,8 +21,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+JAVA_TEST_PATTERN="${IDL_JAVA_TEST_PATTERN:-}"
 
 python "${SCRIPT_DIR}/generate_idl.py" --lang java
 
 cd "${ROOT_DIR}/java"
-ENABLE_FORY_DEBUG_OUTPUT=1 mvn -T16 --no-transfer-progress test -f "${ROOT_DIR}/integration_tests/idl_tests/java/pom.xml"
+MAVEN_ARGS=(-T16 --no-transfer-progress)
+if [[ -n "${JAVA_TEST_PATTERN}" ]]; then
+  MAVEN_ARGS+=("-Dtest=${JAVA_TEST_PATTERN}")
+fi
+MAVEN_ARGS+=(test -f "${ROOT_DIR}/integration_tests/idl_tests/java/pom.xml")
+ENABLE_FORY_DEBUG_OUTPUT=1 mvn "${MAVEN_ARGS[@]}"

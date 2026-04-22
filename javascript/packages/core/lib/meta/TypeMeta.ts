@@ -46,8 +46,9 @@ const typeNameDecoder = new MetaStringDecoder("$", ".");
 // so NAMED_COMPATIBLE_STRUCT output is byte-compatible cross-binding.
 const COMPRESS_META_FLAG = 1n << 9n;
 const HAS_FIELDS_META_FLAG = 1n << 8n;
-const META_SIZE_MASKS = 0xFF;
+const META_SIZE_MASKS = 0xFF; // low 8 bits
 const NUM_HASH_BITS = 50;
+const HASH_SHIFT_BITS = 64n - BigInt(NUM_HASH_BITS);
 const BIG_NAME_THRESHOLD = 0b111111;
 
 const PRIMITIVE_TYPE_IDS = [
@@ -210,16 +211,26 @@ const pkgNameEncoding = [Encoding.UTF_8, Encoding.ALL_TO_LOWER_SPECIAL, Encoding
 const fieldNameEncoding = [Encoding.UTF_8, Encoding.ALL_TO_LOWER_SPECIAL, Encoding.LOWER_UPPER_DIGIT_SPECIAL];
 const typeNameEncoding = [Encoding.UTF_8, Encoding.ALL_TO_LOWER_SPECIAL, Encoding.LOWER_UPPER_DIGIT_SPECIAL, Encoding.FIRST_TO_LOWER_SPECIAL];
 export class TypeMeta {
+  private headerHash: number | null;
+  private readonly hasFieldsMeta: boolean;
+  private readonly compressed: boolean;
+
   private constructor(private fields: FieldInfo[], private type: {
     typeId: number;
     typeName: string;
     namespace: string;
     userTypeId: number;
-  }) {
+  }, headerHash?: number, hasFieldsMeta?: boolean, compressed = false) {
+    this.headerHash = headerHash ?? null;
+    this.hasFieldsMeta = hasFieldsMeta ?? fields.length > 0;
+    this.compressed = compressed;
   }
 
   getHash() {
-    return this.fields.length;
+    if (this.headerHash === null) {
+      this.toBytes();
+    }
+    return this.headerHash!;
   }
 
   computeStructFingerprint(fields: FieldInfo[]) {
@@ -230,7 +241,7 @@ export class TypeMeta {
         typeId = TypeId.UNKNOWN;
       }
       let fieldIdentifier = "";
-      if (field.getFieldId()) {
+      if (field.hasFieldId()) {
         fieldIdentifier = `${field.getFieldId()}`;
       } else {
         fieldIdentifier = TypeMeta.toSnakeCase(field.getFieldName());
@@ -292,37 +303,37 @@ export class TypeMeta {
 
   /**
    * Read the 8-byte type meta header and extract the body size.
-   * Returns [headerLong, metaSize] without advancing past the body.
+   * Returns the raw header without advancing past the body.
    */
-  static readHeader(reader: BinaryReader): [bigint, number] {
-    const headerLong = reader.readInt64();
-    let metaSize = Number(headerLong & BigInt(META_SIZE_MASKS));
-    if (metaSize === META_SIZE_MASKS) {
-      metaSize += reader.readVarUInt32();
-    }
-    return [headerLong, metaSize];
+  static readHeader(reader: BinaryReader): bigint {
+    return reader.readUint64();
   }
 
   /**
    * Skip the type meta body bytes after the header has already been read.
    */
-  static skipBody(reader: BinaryReader, metaSize: number) {
-    reader.readSkip(metaSize);
+  static skipBody(reader: BinaryReader, header: bigint) {
+    reader.readSkip(TypeMeta.readMetaSize(reader, header));
   }
 
   static fromBytes(reader: BinaryReader): TypeMeta {
-    // Read header with hash and flags
-    const [headerLong, metaSize] = TypeMeta.readHeader(reader);
-    void headerLong;
-    void metaSize;
-    return TypeMeta.fromBytesAfterHeader(reader);
+    return TypeMeta.fromBytesAfterHeader(reader, TypeMeta.readHeader(reader));
   }
 
   /**
    * Parse the type meta body after the header has already been consumed
    * by readHeader(). Used by ReadContext to avoid re-reading the header.
    */
-  static fromBytesAfterHeader(reader: BinaryReader): TypeMeta {
+  static fromBytesAfterHeader(reader: BinaryReader, header: bigint): TypeMeta {
+    const compressed = (header & COMPRESS_META_FLAG) !== 0n;
+    if (compressed) {
+      throw new Error("compressed TypeMeta is not supported yet");
+    }
+    const hasFieldsMeta = (header & HAS_FIELDS_META_FLAG) !== 0n;
+    const metaSize = TypeMeta.readMetaSize(reader, header);
+    const headerHash = Number(header >> HASH_SHIFT_BITS);
+
+    const bodyStart = reader.readGetCursor();
     // Read class header
     const classHeader = reader.readUint8();
     let numFields = classHeader & SMALL_NUM_FIELDS_THRESHOLD;
@@ -361,7 +372,26 @@ export class TypeMeta {
       userTypeId,
     };
 
-    return new TypeMeta(fields, typeInfo);
+    const consumed = reader.readGetCursor() - bodyStart;
+    if (consumed !== metaSize) {
+      throw new Error(`unexpected TypeMeta body size: expected ${metaSize}, consumed ${consumed}`);
+    }
+
+    return new TypeMeta(
+      fields,
+      typeInfo,
+      headerHash,
+      hasFieldsMeta,
+      compressed
+    );
+  }
+
+  private static readMetaSize(reader: BinaryReader, header: bigint): number {
+    let metaSize = Number(header & BigInt(META_SIZE_MASKS));
+    if (metaSize === META_SIZE_MASKS) {
+      metaSize += reader.readVarUInt32();
+    }
+    return metaSize;
   }
 
   private static readFieldInfo(reader: BinaryReader): FieldInfo {
@@ -376,12 +406,13 @@ export class TypeMeta {
     }
 
     // Read type ID
-    const { typeId, userTypeId, options, fieldId } = this.readTypeId(reader);
+    const { typeId, userTypeId, options } = this.readTypeId(reader);
 
     let fieldName: string;
+    let fieldId: number | undefined;
     if (encodingFlags === 3) {
-      // TAG_ID encoding - field name is the size value
-      fieldName = size.toString();
+      fieldId = size;
+      fieldName = `$tag${fieldId}`;
     } else {
       // Read field name
       const encoding = FieldInfo.u8ToEncoding(encodingFlags);
@@ -478,7 +509,59 @@ export class TypeMeta {
     return this.fields;
   }
 
+  remapFieldNames(localProps: Record<string, TypeInfo> | undefined): FieldInfo[] {
+    if (!localProps) {
+      return this.fields;
+    }
+
+    const localNameById = new Map<number, string>();
+    const localNameByNormalized = new Map<string, string>();
+    for (const [fieldName, typeInfo] of Object.entries(localProps)) {
+      if (typeof typeInfo.id === "number") {
+        localNameById.set(typeInfo.id, fieldName);
+      }
+      const normalized = TypeMeta.toSnakeCase(fieldName);
+      if (!localNameByNormalized.has(normalized)) {
+        localNameByNormalized.set(normalized, fieldName);
+      }
+    }
+
+    return this.fields.map((fieldInfo) => {
+      let resolvedName = fieldInfo.getFieldName();
+      if (fieldInfo.hasFieldId()) {
+        const localName = localNameById.get(fieldInfo.getFieldId()!);
+        if (localName) {
+          resolvedName = localName;
+        }
+      } else if (localProps[resolvedName]) {
+        resolvedName = fieldInfo.getFieldName();
+      } else {
+        const normalized = TypeMeta.toSnakeCase(resolvedName);
+        const localName = localNameByNormalized.get(normalized);
+        if (localName) {
+          resolvedName = localName;
+        }
+      }
+      if (resolvedName === fieldInfo.getFieldName()) {
+        return fieldInfo;
+      }
+      return new FieldInfo(
+        resolvedName,
+        fieldInfo.typeId,
+        fieldInfo.userTypeId,
+        fieldInfo.trackingRef,
+        fieldInfo.nullable,
+        fieldInfo.options,
+        fieldInfo.fieldId
+      );
+    });
+  }
+
   toBytes() {
+    if (this.compressed) {
+      throw new Error("compressed TypeMeta is not supported yet");
+    }
+
     const writer = new BinaryWriter({});
     writer.writeUint8(-1); // placeholder for header, update later
     let currentClassHeader = this.fields.length;
@@ -552,7 +635,7 @@ export class TypeMeta {
   private writeFieldsInfo(writer: BinaryWriter, fields: FieldInfo[]) {
     for (const fieldInfo of fields) {
       // header: 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag
-      let header = fieldInfo.trackingRef ? 1 : 0; // Simplified - no ref tracking or nullability for now
+      let header = fieldInfo.trackingRef ? 1 : 0;
       header |= fieldInfo.nullable ? 0b10 : 0b00;
       let size: number;
       let encodingFlags: number;
@@ -649,8 +732,7 @@ export class TypeMeta {
     return result;
   }
 
-  private prependHeader(buffer: Uint8Array, isCompressed: boolean, hasFieldsMeta: boolean): Uint8Array {
-    const metaSize = buffer.length;
+  private static buildHeader(buffer: Uint8Array, isCompressed: boolean, hasFieldsMeta: boolean) {
     const hash = x64hash128(buffer, 47);
     // Read the high 64 bits of the 128-bit MurmurHash3 as a SIGNED
     // int64 to match pyfory (`hash_buffer()[0]` unpacks `int64_t[0]`),
@@ -672,19 +754,28 @@ export class TypeMeta {
       header = -header;
     }
     header = header & 0x7FFFFFFFFFFFFFFFn;
-
     if (isCompressed) {
       header |= COMPRESS_META_FLAG;
     }
     if (hasFieldsMeta) {
       header |= HAS_FIELDS_META_FLAG;
     }
-    header |= BigInt(Math.min(metaSize, META_SIZE_MASKS));
+    header |= BigInt(Math.min(buffer.length, META_SIZE_MASKS));
+    return {
+      header: BigInt.asUintN(64, header),
+      headerHash: Number(header >> HASH_SHIFT_BITS),
+    };
+  }
+
+  private prependHeader(buffer: Uint8Array, isCompressed: boolean, hasFieldsMeta: boolean): Uint8Array {
+    const metaSize = buffer.length;
+    const { header, headerHash } = TypeMeta.buildHeader(buffer, isCompressed, hasFieldsMeta);
+    this.headerHash = headerHash;
 
     const writer = new BinaryWriter({});
-    writer.writeInt64(header);
+    writer.writeUint64(header);
 
-    if (metaSize > META_SIZE_MASKS) {
+    if (metaSize >= META_SIZE_MASKS) {
       writer.writeVarUInt32(metaSize - META_SIZE_MASKS);
     }
 

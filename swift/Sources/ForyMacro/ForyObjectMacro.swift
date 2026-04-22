@@ -1591,6 +1591,10 @@ private func classifyType(
         return .init(typeID: 12, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: true, primitiveSize: 4)
     case "UInt64", "UInt":
         return .init(typeID: 14, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: true, primitiveSize: 8)
+    case "Float16":
+        return .init(typeID: 17, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 2)
+    case "BFloat16":
+        return .init(typeID: 18, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 2)
     case "Float":
         return .init(typeID: 19, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 4)
     case "Double":
@@ -1667,6 +1671,18 @@ private func classifyType(
         if elem.typeID == 14 {
             return .init(
                 typeID: 51, isPrimitive: false, isBuiltIn: true, isCollection: false, isMap: false,
+                isCompressedNumeric: false, primitiveSize: 0
+            )
+        }
+        if elem.typeID == 17 {
+            return .init(
+                typeID: 53, isPrimitive: false, isBuiltIn: true, isCollection: false, isMap: false,
+                isCompressedNumeric: false, primitiveSize: 0
+            )
+        }
+        if elem.typeID == 18 {
+            return .init(
+                typeID: 54, isPrimitive: false, isBuiltIn: true, isCollection: false, isMap: false,
                 isCompressedNumeric: false, primitiveSize: 0
             )
         }

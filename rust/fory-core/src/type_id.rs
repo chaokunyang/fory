@@ -272,7 +272,7 @@ pub static PRIMITIVE_ARRAY_TYPES: [u32; 19] = [
     TypeId::USIZE_ARRAY as u32,
     TypeId::ISIZE_ARRAY as u32,
 ];
-pub static BASIC_TYPE_NAMES: [&str; 19] = [
+pub static BASIC_TYPE_NAMES: [&str; 20] = [
     "bool",
     "i8",
     "i16",
@@ -289,6 +289,7 @@ pub static BASIC_TYPE_NAMES: [&str; 19] = [
     "u32",
     "u64",
     "float16",
+    "bfloat16",
     "u128",
     "usize",
     "isize",
@@ -309,6 +310,7 @@ pub static PRIMITIVE_ARRAY_TYPE_MAP: &[(&str, u32, &str)] = &[
     ("u32", TypeId::UINT32_ARRAY as u32, "Vec<u32>"),
     ("u64", TypeId::UINT64_ARRAY as u32, "Vec<u64>"),
     ("float16", TypeId::FLOAT16_ARRAY as u32, "Vec<float16>"),
+    ("bfloat16", TypeId::BFLOAT16_ARRAY as u32, "Vec<bfloat16>"),
     ("f32", TypeId::FLOAT32_ARRAY as u32, "Vec<f32>"),
     ("f64", TypeId::FLOAT64_ARRAY as u32, "Vec<f64>"),
     // Rust-specific

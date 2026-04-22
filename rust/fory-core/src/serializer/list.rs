@@ -44,6 +44,7 @@ pub(super) fn get_primitive_type_id<T: Serializer>() -> TypeId {
         // Handle INT64, VARINT64, and TAGGED_INT64 (i64 uses VARINT64 in xlang mode)
         TypeId::INT64 | TypeId::VARINT64 | TypeId::TAGGED_INT64 => TypeId::INT64_ARRAY,
         TypeId::FLOAT16 => TypeId::FLOAT16_ARRAY,
+        TypeId::BFLOAT16 => TypeId::BFLOAT16_ARRAY,
         TypeId::FLOAT32 => TypeId::FLOAT32_ARRAY,
         TypeId::FLOAT64 => TypeId::FLOAT64_ARRAY,
         TypeId::UINT8 => TypeId::BINARY,
@@ -77,6 +78,7 @@ pub(super) fn is_primitive_type<T: Serializer>() -> bool {
             | TypeId::TAGGED_INT64
             | TypeId::INT128
             | TypeId::FLOAT16
+            | TypeId::BFLOAT16
             | TypeId::FLOAT32
             | TypeId::FLOAT64
             | TypeId::UINT8

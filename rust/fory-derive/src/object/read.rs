@@ -168,6 +168,14 @@ fn need_declared_by_option(field: &Field) -> bool {
     type_name == "Option" || !is_primitive_type(type_name.as_str())
 }
 
+fn is_float16_like(type_name: &str) -> bool {
+    type_name == "float16" || type_name == "Float16"
+}
+
+fn is_bfloat16_like(type_name: &str) -> bool {
+    type_name == "bfloat16" || type_name == "BFloat16"
+}
+
 pub(crate) fn declare_var(source_fields: &[SourceField<'_>]) -> Vec<TokenStream> {
     source_fields
         .iter()
@@ -186,9 +194,13 @@ pub(crate) fn declare_var(source_fields: &[SourceField<'_>]) -> Vec<TokenStream>
                         quote! {
                             let mut #var_name: Option<#ty> = None;
                         }
-                    } else if extract_type_name(&field.ty) == "float16" {
+                    } else if is_float16_like(extract_type_name(&field.ty).as_str()) {
                         quote! {
                             let mut #var_name: fory_core::types::float16::float16 = fory_core::types::float16::float16::ZERO;
+                        }
+                    } else if is_bfloat16_like(extract_type_name(&field.ty).as_str()) {
+                        quote! {
+                            let mut #var_name: fory_core::types::bfloat16::bfloat16 = fory_core::types::bfloat16::bfloat16::ZERO;
                         }
                     } else if extract_type_name(&field.ty) == "bool" {
                         quote! {

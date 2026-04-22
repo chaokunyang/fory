@@ -39,6 +39,16 @@ from pyfory._fory import (
     NOT_NULL_INT64_FLAG,
     BufferObject,
 )
+from pyfory.serialization import (
+    BFloat16ArraySerializer,
+    BFloat16Serializer,
+    Float16ArraySerializer,
+    Float16Serializer,
+    bfloat16,
+    bfloat16array,
+    float16,
+    float16array,
+)
 
 _WINDOWS = os.name == "nt"
 
@@ -82,6 +92,10 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         MapSerializer,
         EnumSerializer,
         SliceSerializer,
+        bfloat16,
+        bfloat16array,
+        BFloat16Serializer,
+        BFloat16ArraySerializer,
     )
     from pyfory.union import UnionSerializer  # noqa: F401
 else:
@@ -1419,8 +1433,16 @@ __all__ = [
     "Uint64Serializer",
     "VarUint64Serializer",
     "TaggedUint64Serializer",
+    "float16",
+    "float16array",
+    "Float16Serializer",
+    "Float16ArraySerializer",
     "Float32Serializer",
     "Float64Serializer",
+    "bfloat16",
+    "bfloat16array",
+    "BFloat16Serializer",
+    "BFloat16ArraySerializer",
     "StringSerializer",
     "DateSerializer",
     "TimestampSerializer",

@@ -64,6 +64,7 @@ from pyfory.type_util import (
 )
 from pyfory.serialization import Buffer
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
+from pyfory.serialization import bfloat16, float16
 from pyfory.error import TypeNotCompatibleError
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
 from pyfory.field import (
@@ -615,6 +616,8 @@ basic_types = {
     fixed_uint64,
     tagged_uint64,
     # Floats
+    float16,
+    bfloat16,
     float32,
     float64,
     # Python native types
@@ -746,7 +749,15 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
         if is_union_type(type_id):
             type_id = TypeId.UNION
         is_nullable = nullable_map.get(field_name, False)
-        if is_primitive_type(type_id):
+        if type_id in {TypeId.FLOAT16, TypeId.BFLOAT16}:
+            # Match Java xlang ordering: non-nullable float16/bfloat16 are part of the
+            # built-in/internal group, while nullable forms follow boxed primitive handling.
+            container = nullable_boxed_types if is_nullable else internal_types
+        elif type_id in {TypeId.FLOAT16_ARRAY, TypeId.BFLOAT16_ARRAY}:
+            # Java treats object arrays such as Float16[]/BFloat16[] as list-group fields when
+            # ordering struct layouts, even though the wire type IDs stay on the typed-array path.
+            container = collection_types
+        elif is_primitive_type(type_id):
             container = nullable_boxed_types if is_nullable else boxed_types
         elif type_id == TypeId.SET:
             container = set_types
@@ -785,10 +796,10 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
 
     boxed_types = sorted(boxed_types, key=numeric_sorter)
     nullable_boxed_types = sorted(nullable_boxed_types, key=numeric_sorter)
-    collection_types = sorted(collection_types, key=sorter)
-    set_types = sorted(set_types, key=sorter)
+    collection_types = sorted(collection_types, key=lambda item: item[3])
+    set_types = sorted(set_types, key=lambda item: item[3])
     internal_types = sorted(internal_types, key=sorter)
-    map_types = sorted(map_types, key=sorter)
+    map_types = sorted(map_types, key=lambda item: item[3])
     other_types = sorted(other_types, key=lambda item: item[3])
     return (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types)
 

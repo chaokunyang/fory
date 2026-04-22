@@ -724,7 +724,13 @@ impl TypeMeta {
                 continue;
             }
 
-            if PRIMITIVE_TYPES.contains(&type_id) {
+            if type_id == TypeId::FLOAT16 as u32 || type_id == TypeId::BFLOAT16 as u32 {
+                internal_type_fields.push(field_info);
+            } else if type_id == TypeId::FLOAT16_ARRAY as u32
+                || type_id == TypeId::BFLOAT16_ARRAY as u32
+            {
+                list_fields.push(field_info);
+            } else if PRIMITIVE_TYPES.contains(&type_id) {
                 primitive_fields.push(field_info);
             } else if TypeId::LIST as u32 == type_id {
                 list_fields.push(field_info);

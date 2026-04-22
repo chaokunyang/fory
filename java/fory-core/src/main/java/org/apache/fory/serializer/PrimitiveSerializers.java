@@ -30,6 +30,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 import org.apache.fory.util.Preconditions;
 
@@ -325,6 +326,23 @@ public class PrimitiveSerializers {
     }
   }
 
+  public static final class BFloat16Serializer extends ImmutableSerializer<BFloat16>
+      implements Shareable {
+    public BFloat16Serializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, BFloat16 value) {
+      writeContext.getBuffer().writeInt16(value.toBits());
+    }
+
+    @Override
+    public BFloat16 read(ReadContext readContext) {
+      return BFloat16.fromBits(readContext.getBuffer().readInt16());
+    }
+  }
+
   public static void registerDefaultSerializers(TypeResolver resolver) {
     // primitive types will be boxed.
     Config config = resolver.getConfig();
@@ -349,5 +367,7 @@ public class PrimitiveSerializers {
     resolver.registerInternalSerializer(Double.class, new DoubleSerializer(config, Double.class));
     resolver.registerInternalSerializer(
         Float16.class, new Float16Serializer(config, Float16.class));
+    resolver.registerInternalSerializer(
+        BFloat16.class, new BFloat16Serializer(config, BFloat16.class));
   }
 }

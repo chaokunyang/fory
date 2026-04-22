@@ -142,6 +142,9 @@ FORY_ALWAYS_INLINE uint32_t put_primitive_at(T value, Buffer &buffer,
   } else if constexpr (std::is_same_v<T, float16_t>) {
     buffer.unsafe_put<uint16_t>(offset, value.to_bits());
     return 2;
+  } else if constexpr (std::is_same_v<T, bfloat16_t>) {
+    buffer.unsafe_put<uint16_t>(offset, value.to_bits());
+    return 2;
   } else if constexpr (std::is_same_v<T, float>) {
     buffer.unsafe_put<float>(offset, value);
     return 4;
@@ -179,6 +182,8 @@ FORY_ALWAYS_INLINE void put_fixed_primitive_at(T value, Buffer &buffer,
                        std::is_same_v<T, long long>) {
     buffer.unsafe_put<int64_t>(offset, static_cast<int64_t>(value));
   } else if constexpr (std::is_same_v<T, float16_t>) {
+    buffer.unsafe_put<uint16_t>(offset, value.to_bits());
+  } else if constexpr (std::is_same_v<T, bfloat16_t>) {
     buffer.unsafe_put<uint16_t>(offset, value.to_bits());
   } else if constexpr (std::is_same_v<T, float>) {
     buffer.unsafe_put<float>(offset, value);
@@ -774,6 +779,7 @@ template <typename T> struct CompileTimeFieldHelpers {
              std::is_same_v<FieldType, int16_t> ||
              std::is_same_v<FieldType, uint16_t> ||
              std::is_same_v<FieldType, float16_t> ||
+             std::is_same_v<FieldType, bfloat16_t> ||
              std::is_same_v<FieldType, float> ||
              std::is_same_v<FieldType, double>;
     }
@@ -814,7 +820,8 @@ template <typename T> struct CompileTimeFieldHelpers {
         return 1;
       } else if constexpr (std::is_same_v<FieldType, int16_t> ||
                            std::is_same_v<FieldType, uint16_t> ||
-                           std::is_same_v<FieldType, float16_t>) {
+                           std::is_same_v<FieldType, float16_t> ||
+                           std::is_same_v<FieldType, bfloat16_t>) {
         return 2;
       } else if constexpr (is_configurable_int_v<FieldType>) {
         return configurable_int_fixed_size_bytes<FieldType, T, Index>();
@@ -1142,6 +1149,16 @@ template <typename T> struct CompileTimeFieldHelpers {
             tid <= static_cast<uint32_t>(TypeId::FLOAT64_ARRAY));
   }
 
+  static constexpr bool is_java_style_internal_float16_type(uint32_t tid) {
+    return tid == static_cast<uint32_t>(TypeId::FLOAT16) ||
+           tid == static_cast<uint32_t>(TypeId::BFLOAT16);
+  }
+
+  static constexpr bool is_java_style_list_array_type(uint32_t tid) {
+    return tid == static_cast<uint32_t>(TypeId::FLOAT16_ARRAY) ||
+           tid == static_cast<uint32_t>(TypeId::BFLOAT16_ARRAY);
+  }
+
   static constexpr int group_rank(size_t index) {
     if constexpr (FieldCount == 0) {
       return 6;
@@ -1149,8 +1166,13 @@ template <typename T> struct CompileTimeFieldHelpers {
       uint32_t tid = type_ids[index];
       bool nullable = nullable_flags[index];
       if (is_primitive_type_id(tid)) {
+        if (is_java_style_internal_float16_type(tid) && !nullable) {
+          return 2;
+        }
         return nullable ? 1 : 0;
       }
+      if (is_java_style_list_array_type(tid))
+        return 3;
       // Check LIST/SET/MAP BEFORE is_internal_type_id since they fall
       // within the internal type range (STRING=12 to DECIMAL=27) but
       // need their own groups for proper field ordering.
@@ -2068,6 +2090,7 @@ template <> struct is_raw_primitive<uint32_t> : std::true_type {};
 template <> struct is_raw_primitive<int64_t> : std::true_type {};
 template <> struct is_raw_primitive<uint64_t> : std::true_type {};
 template <> struct is_raw_primitive<float16_t> : std::true_type {};
+template <> struct is_raw_primitive<bfloat16_t> : std::true_type {};
 template <> struct is_raw_primitive<float> : std::true_type {};
 template <> struct is_raw_primitive<double> : std::true_type {};
 template <typename T>
@@ -2148,6 +2171,16 @@ FORY_ALWAYS_INLINE float16_t read_primitive_by_type_id<float16_t>(
       read_primitive_by_type_id<float>(ctx, type_id, error));
 }
 
+template <>
+FORY_ALWAYS_INLINE bfloat16_t read_primitive_by_type_id<bfloat16_t>(
+    ReadContext &ctx, uint32_t type_id, Error &error) {
+  if (static_cast<TypeId>(type_id) == TypeId::BFLOAT16) {
+    return ctx.read_bf16(error);
+  }
+  return bfloat16_t::from_float(
+      read_primitive_by_type_id<float>(ctx, type_id, error));
+}
+
 /// Helper to read a primitive field directly using Error* pattern.
 /// This bypasses Serializer<FieldType>::read for better performance.
 /// Returns the read value; sets error on failure.
@@ -2188,6 +2221,8 @@ FORY_ALWAYS_INLINE FieldType read_primitive_field_direct(ReadContext &ctx,
     return static_cast<uint64_t>(ctx.read_int64(error));
   } else if constexpr (std::is_same_v<FieldType, float16_t>) {
     return ctx.read_f16(error);
+  } else if constexpr (std::is_same_v<FieldType, bfloat16_t>) {
+    return ctx.read_bf16(error);
   } else if constexpr (std::is_same_v<FieldType, float>) {
     return ctx.read_float(error);
   } else if constexpr (std::is_same_v<FieldType, double>) {
@@ -2554,7 +2589,8 @@ template <typename T> constexpr size_t fixed_primitive_size() {
     return 1;
   } else if constexpr (std::is_same_v<T, int16_t> ||
                        std::is_same_v<T, uint16_t> ||
-                       std::is_same_v<T, float16_t>) {
+                       std::is_same_v<T, float16_t> ||
+                       std::is_same_v<T, bfloat16_t>) {
     return 2;
   } else if constexpr (std::is_same_v<T, uint32_t> ||
                        std::is_same_v<T, int32_t> || std::is_same_v<T, int> ||
@@ -2607,6 +2643,8 @@ FORY_ALWAYS_INLINE T read_fixed_primitive_at(Buffer &buffer, uint32_t offset) {
     return static_cast<T>(buffer.unsafe_get<uint32_t>(offset));
   } else if constexpr (std::is_same_v<T, float16_t>) {
     return float16_t::from_bits(buffer.unsafe_get<uint16_t>(offset));
+  } else if constexpr (std::is_same_v<T, bfloat16_t>) {
+    return bfloat16_t::from_bits(buffer.unsafe_get<uint16_t>(offset));
   } else if constexpr (std::is_same_v<T, float>) {
     return buffer.unsafe_get<float>(offset);
   } else if constexpr (std::is_same_v<T, uint64_t> ||

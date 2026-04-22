@@ -1056,6 +1056,8 @@ cdef class Fory:
         self.reset_read()
 
 include "primitive.pxi"
+include "float16.pxi"
+include "bfloat16.pxi"
 include "collection.pxi"
 include "struct.pxi"
 

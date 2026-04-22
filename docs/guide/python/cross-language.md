@@ -109,6 +109,15 @@ class TypedData:
     double_value: pyfory.float64 # 64-bit float
 ```
 
+## Reduced-Precision Types
+
+`pyfory.serialization` exports Cython-only carrier types for xlang reduced-precision values:
+
+- `float16` and `float16array`
+- `bfloat16` and `bfloat16array`
+
+These names are compiled into the `pyfory.serialization` extension and re-exported from `pyfory`. There is no pure-Python fallback module for them.
+
 ## Type Mapping
 
 | Python           | Java     | Rust      | Go        |
@@ -119,6 +128,10 @@ class TypedData:
 | `pyfory.int64`   | `long`   | `i64`     | `int64`   |
 | `float`          | `double` | `f64`     | `float64` |
 | `pyfory.float32` | `float`  | `f32`     | `float32` |
+| `pyfory.float16` | `Float16` | `Float16` | /         |
+| `pyfory.bfloat16` | `BFloat16` | `BFloat16` | /       |
+| `pyfory.float16array` | `Float16List` | `Vec<Float16>` | / |
+| `pyfory.bfloat16array` | `BFloat16List` | `Vec<BFloat16>` | / |
 | `list`           | `List`   | `Vec`     | `[]T`     |
 | `dict`           | `Map`    | `HashMap` | `map[K]V` |
 

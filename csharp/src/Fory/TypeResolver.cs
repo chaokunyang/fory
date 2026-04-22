@@ -61,6 +61,8 @@ public sealed class TypeResolver
         (typeof(int), typeof(Int32PrimitiveDictionaryCodec)),
         (typeof(long), typeof(Int64PrimitiveDictionaryCodec)),
         (typeof(bool), typeof(BoolPrimitiveDictionaryCodec)),
+        (typeof(Half), typeof(Float16PrimitiveDictionaryCodec)),
+        (typeof(BFloat16), typeof(BFloat16PrimitiveDictionaryCodec)),
         (typeof(double), typeof(Float64PrimitiveDictionaryCodec)),
         (typeof(float), typeof(Float32PrimitiveDictionaryCodec)),
         (typeof(uint), typeof(UInt32PrimitiveDictionaryCodec)),
@@ -84,6 +86,8 @@ public sealed class TypeResolver
         (typeof(ushort), typeof(UInt16PrimitiveDictionaryCodec)),
         (typeof(uint), typeof(UInt32PrimitiveDictionaryCodec)),
         (typeof(ulong), typeof(UInt64PrimitiveDictionaryCodec)),
+        (typeof(Half), typeof(Float16PrimitiveDictionaryCodec)),
+        (typeof(BFloat16), typeof(BFloat16PrimitiveDictionaryCodec)),
         (typeof(float), typeof(Float32PrimitiveDictionaryCodec)),
         (typeof(double), typeof(Float64PrimitiveDictionaryCodec)));
 
@@ -95,6 +99,8 @@ public sealed class TypeResolver
         (typeof(ushort), typeof(UInt16PrimitiveDictionaryCodec)),
         (typeof(uint), typeof(UInt32PrimitiveDictionaryCodec)),
         (typeof(ulong), typeof(UInt64PrimitiveDictionaryCodec)),
+        (typeof(Half), typeof(Float16PrimitiveDictionaryCodec)),
+        (typeof(BFloat16), typeof(BFloat16PrimitiveDictionaryCodec)),
         (typeof(float), typeof(Float32PrimitiveDictionaryCodec)),
         (typeof(double), typeof(Float64PrimitiveDictionaryCodec)));
 
@@ -986,6 +992,8 @@ public sealed class TypeResolver
             TypeId.UInt16 => GetTypeInfo<ushort>().WithWireTypeInfo(wireTypeId),
             TypeId.UInt32 or TypeId.VarUInt32 => GetTypeInfo<uint>().WithWireTypeInfo(wireTypeId),
             TypeId.UInt64 or TypeId.VarUInt64 or TypeId.TaggedUInt64 => GetTypeInfo<ulong>().WithWireTypeInfo(wireTypeId),
+            TypeId.Float16 => GetTypeInfo<Half>().WithWireTypeInfo(wireTypeId),
+            TypeId.BFloat16 => GetTypeInfo<BFloat16>().WithWireTypeInfo(wireTypeId),
             TypeId.Float32 => GetTypeInfo<float>().WithWireTypeInfo(wireTypeId),
             TypeId.Float64 => GetTypeInfo<double>().WithWireTypeInfo(wireTypeId),
             TypeId.String => GetTypeInfo<string>().WithWireTypeInfo(wireTypeId),
@@ -1002,6 +1010,8 @@ public sealed class TypeResolver
             TypeId.UInt16Array => GetTypeInfo<ushort[]>().WithWireTypeInfo(wireTypeId),
             TypeId.UInt32Array => GetTypeInfo<uint[]>().WithWireTypeInfo(wireTypeId),
             TypeId.UInt64Array => GetTypeInfo<ulong[]>().WithWireTypeInfo(wireTypeId),
+            TypeId.Float16Array => GetTypeInfo<Half[]>().WithWireTypeInfo(wireTypeId),
+            TypeId.BFloat16Array => GetTypeInfo<BFloat16[]>().WithWireTypeInfo(wireTypeId),
             TypeId.Float32Array => GetTypeInfo<float[]>().WithWireTypeInfo(wireTypeId),
             TypeId.Float64Array => GetTypeInfo<double[]>().WithWireTypeInfo(wireTypeId),
             TypeId.List => GetTypeInfo<List<object?>>().WithWireTypeInfo(wireTypeId),
@@ -1443,6 +1453,16 @@ public sealed class TypeResolver
             return TypeInfo.Create(type, new Float32Serializer());
         }
 
+        if (type == typeof(Half))
+        {
+            return TypeInfo.Create(type, new Float16Serializer());
+        }
+
+        if (type == typeof(BFloat16))
+        {
+            return TypeInfo.Create(type, new BFloat16Serializer());
+        }
+
         if (type == typeof(double))
         {
             return TypeInfo.Create(type, new Float64Serializer());
@@ -1506,6 +1526,16 @@ public sealed class TypeResolver
         if (type == typeof(float[]))
         {
             return TypeInfo.Create(type, new Float32ArraySerializer());
+        }
+
+        if (type == typeof(Half[]))
+        {
+            return TypeInfo.Create(type, new Float16ArraySerializer());
+        }
+
+        if (type == typeof(BFloat16[]))
+        {
+            return TypeInfo.Create(type, new BFloat16ArraySerializer());
         }
 
         if (type == typeof(double[]))
@@ -1581,6 +1611,16 @@ public sealed class TypeResolver
         if (type == typeof(List<float>))
         {
             return TypeInfo.Create(type, new ListFloatSerializer());
+        }
+
+        if (type == typeof(List<Half>))
+        {
+            return TypeInfo.Create(type, new ListHalfSerializer());
+        }
+
+        if (type == typeof(List<BFloat16>))
+        {
+            return TypeInfo.Create(type, new ListBFloat16Serializer());
         }
 
         if (type == typeof(List<double>))

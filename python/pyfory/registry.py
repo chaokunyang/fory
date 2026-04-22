@@ -56,8 +56,12 @@ from pyfory.serializer import (
     Uint64Serializer,
     VarUint64Serializer,
     TaggedUint64Serializer,
+    Float16Serializer,
+    Float16ArraySerializer,
     Float32Serializer,
     Float64Serializer,
+    BFloat16Serializer,
+    BFloat16ArraySerializer,
     StringSerializer,
     DecimalSerializer,
     DateSerializer,
@@ -83,6 +87,7 @@ from pyfory.serializer import (
     PickleBufferSerializer,
     UnionSerializer,
 )
+from pyfory.serialization import bfloat16, bfloat16array, float16, float16array
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
 from pyfory.context import EncodedMetaString
@@ -146,8 +151,10 @@ _NO_REF_NUMERIC_TYPE_IDS = frozenset(
         TypeId.UINT64,
         TypeId.VAR_UINT64,
         TypeId.TAGGED_UINT64,
+        TypeId.FLOAT16,
         TypeId.FLOAT32,
         TypeId.FLOAT64,
+        TypeId.BFLOAT16,
     }
 )
 
@@ -433,6 +440,11 @@ class TypeResolver:
         register(tagged_uint64, type_id=TypeId.TAGGED_UINT64, serializer=TaggedUint64Serializer)
         # Floats
         register(
+            float16,
+            type_id=TypeId.FLOAT16,
+            serializer=Float16Serializer,
+        )
+        register(
             float32,
             type_id=TypeId.FLOAT32,
             serializer=Float32Serializer,
@@ -443,11 +455,22 @@ class TypeResolver:
             serializer=Float64Serializer,
         )
         register(float, type_id=TypeId.FLOAT64, serializer=Float64Serializer)
+        register(bfloat16, type_id=TypeId.BFLOAT16, serializer=BFloat16Serializer)
         register(str, type_id=TypeId.STRING, serializer=StringSerializer)
         register(decimal.Decimal, type_id=TypeId.DECIMAL, serializer=DecimalSerializer)
         register(datetime.datetime, type_id=TypeId.TIMESTAMP, serializer=TimestampSerializer)
         register(datetime.date, type_id=TypeId.DATE, serializer=DateSerializer)
         register(bytes, type_id=TypeId.BINARY, serializer=BytesSerializer)
+        register(
+            float16array,
+            type_id=TypeId.FLOAT16_ARRAY,
+            serializer=Float16ArraySerializer,
+        )
+        register(
+            bfloat16array,
+            type_id=TypeId.BFLOAT16_ARRAY,
+            serializer=BFloat16ArraySerializer,
+        )
         for itemsize, ftype, typeid in PyArraySerializer.typecode_dict.values():
             register(
                 ftype,

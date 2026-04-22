@@ -305,6 +305,18 @@ public sealed class TypeInfo
             return true;
         }
 
+        if (type == typeof(Half))
+        {
+            typeId = TypeId.Float16;
+            return true;
+        }
+
+        if (type == typeof(BFloat16))
+        {
+            typeId = TypeId.BFloat16;
+            return true;
+        }
+
         if (type == typeof(double))
         {
             typeId = TypeId.Float64;
@@ -380,6 +392,18 @@ public sealed class TypeInfo
         if (type == typeof(float[]))
         {
             typeId = TypeId.Float32Array;
+            return true;
+        }
+
+        if (type == typeof(Half[]))
+        {
+            typeId = TypeId.Float16Array;
+            return true;
+        }
+
+        if (type == typeof(BFloat16[]))
+        {
+            typeId = TypeId.BFloat16Array;
             return true;
         }
 

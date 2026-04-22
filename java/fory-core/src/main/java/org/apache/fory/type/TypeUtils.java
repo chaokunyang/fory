@@ -67,6 +67,7 @@ import java.util.TimeZone;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 import org.apache.fory.annotation.Ref;
+import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
 import org.apache.fory.collection.Float32List;
@@ -712,6 +713,7 @@ public class TypeUtils {
         || cls == Uint32List.class
         || cls == Uint64List.class
         || cls == Float16List.class
+        || cls == BFloat16List.class
         || cls == Float32List.class
         || cls == Float64List.class;
   }

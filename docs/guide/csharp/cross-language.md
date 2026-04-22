@@ -93,6 +93,8 @@ value = fory.deserialize(payload_from_csharp)
 
 See [xlang guide](../xlang/index.md) for complete mapping.
 
+For reduced-precision numeric payloads, use `Half` / `Half[]` or `List<Half>` for xlang `float16`, and `BFloat16` / `BFloat16[]` or `List<BFloat16>` for xlang `bfloat16`.
+
 ## Best Practices
 
 1. Keep type IDs stable and documented.

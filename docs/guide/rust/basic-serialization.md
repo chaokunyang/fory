@@ -86,6 +86,7 @@ assert_eq!(person, decoded);
 | `bool`                    | Boolean         |
 | `i8`, `i16`, `i32`, `i64` | Signed integers |
 | `f32`, `f64`              | Floating point  |
+| `BFloat16`                | 16-bit brain floating point |
 | `String`                  | UTF-8 string    |
 
 ### Collections
@@ -101,6 +102,8 @@ assert_eq!(person, decoded);
 | `BTreeSet<T>`    | Ordered set        |
 | `BinaryHeap<T>`  | Binary heap        |
 | `Option<T>`      | Optional value     |
+
+`Vec<BFloat16>` is the dense xlang carrier for `bfloat16_array` payloads.
 
 ### Smart Pointers
 

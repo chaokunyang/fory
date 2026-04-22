@@ -531,7 +531,8 @@ pub(super) fn generic_tree_to_tokens(node: &TypeNode) -> TokenStream {
                     "i32" => quote! { fory_core::type_id::TypeId::INT32_ARRAY as u32 },
                     "i64" => quote! { fory_core::type_id::TypeId::INT64_ARRAY as u32 },
                     "i128" => quote! { fory_core::type_id::TypeId::INT128_ARRAY as u32 },
-                    "float16" => quote! { fory_core::type_id::TypeId::FLOAT16_ARRAY as u32 },
+                    "float16" | "Float16" => quote! { fory_core::type_id::TypeId::FLOAT16_ARRAY as u32 },
+                    "bfloat16" | "BFloat16" => quote! { fory_core::type_id::TypeId::BFLOAT16_ARRAY as u32 },
                     "f32" => quote! { fory_core::type_id::TypeId::FLOAT32_ARRAY as u32 },
                     "f64" => quote! { fory_core::type_id::TypeId::FLOAT64_ARRAY as u32 },
                     "u8" => quote! { fory_core::type_id::TypeId::BINARY as u32 },
@@ -697,10 +698,18 @@ fn extract_option_inner(s: &str) -> Option<&str> {
     s.strip_prefix("Option<")?.strip_suffix(">")
 }
 
-const PRIMITIVE_TYPE_NAMES: [&str; 14] = [
-    "bool", "i8", "i16", "i32", "i64", "i128", "float16", "f32", "f64", "u8", "u16", "u32", "u64",
-    "u128",
+const PRIMITIVE_TYPE_NAMES: [&str; 17] = [
+    "bool", "i8", "i16", "i32", "i64", "i128", "float16", "Float16", "bfloat16", "BFloat16",
+    "f32", "f64", "u8", "u16", "u32", "u64", "u128",
 ];
+
+fn is_java_style_internal_float16_type(type_id: u32) -> bool {
+    type_id == TypeId::FLOAT16 as u32 || type_id == TypeId::BFLOAT16 as u32
+}
+
+fn is_java_style_list_array_type(type_id: u32) -> bool {
+    type_id == TypeId::FLOAT16_ARRAY as u32 || type_id == TypeId::BFLOAT16_ARRAY as u32
+}
 
 fn get_primitive_type_id(ty: &str) -> u32 {
     match ty {
@@ -711,7 +720,8 @@ fn get_primitive_type_id(ty: &str) -> u32 {
         "i32" => TypeId::VARINT32 as u32,
         // Use VARINT64 for i64 to match Java xlang mode and Rust type resolver registration
         "i64" => TypeId::VARINT64 as u32,
-        "float16" => TypeId::FLOAT16 as u32,
+        "float16" | "Float16" => TypeId::FLOAT16 as u32,
+        "bfloat16" | "BFloat16" => TypeId::BFLOAT16 as u32,
         "f32" => TypeId::FLOAT32 as u32,
         "f64" => TypeId::FLOAT64 as u32,
         "u8" => TypeId::UINT8 as u32,
@@ -986,7 +996,8 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
         "Vec<i32>" => return TypeId::INT32_ARRAY as u32,
         "Vec<i64>" => return TypeId::INT64_ARRAY as u32,
         "Vec<i128>" => return TypeId::INT128_ARRAY as u32,
-        "Vec<float16>" => return TypeId::FLOAT16_ARRAY as u32,
+        "Vec<float16>" | "Vec<Float16>" => return TypeId::FLOAT16_ARRAY as u32,
+        "Vec<bfloat16>" | "Vec<BFloat16>" => return TypeId::BFLOAT16_ARRAY as u32,
         "Vec<f32>" => return TypeId::FLOAT32_ARRAY as u32,
         "Vec<f64>" => return TypeId::FLOAT64_ARRAY as u32,
         "Vec<u16>" => return TypeId::UINT16_ARRAY as u32,
@@ -1008,7 +1019,8 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
                 "i32" => return TypeId::INT32_ARRAY as u32,
                 "i64" => return TypeId::INT64_ARRAY as u32,
                 "i128" => return TypeId::INT128_ARRAY as u32,
-                "float16" => return TypeId::FLOAT16_ARRAY as u32,
+                "float16" | "Float16" => return TypeId::FLOAT16_ARRAY as u32,
+                "bfloat16" | "BFloat16" => return TypeId::BFLOAT16_ARRAY as u32,
                 "f32" => return TypeId::FLOAT32_ARRAY as u32,
                 "f64" => return TypeId::FLOAT64_ARRAY as u32,
                 "u16" => return TypeId::UINT16_ARRAY as u32,
@@ -1182,7 +1194,11 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
                 let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
 
                 // Categorize based on type_id
-                if is_primitive {
+                if is_java_style_internal_float16_type(type_id) && meta.nullable != Some(true) {
+                    internal_type_fields.push((ident, sort_key, type_id));
+                } else if is_java_style_list_array_type(type_id) {
+                    list_fields.push((ident, sort_key, type_id));
+                } else if is_primitive {
                     primitive_fields.push((ident, sort_key, type_id));
                 } else if is_internal_type_id(type_id) {
                     internal_type_fields.push((ident, sort_key, type_id));

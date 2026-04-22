@@ -102,7 +102,8 @@ public class FieldGroups {
     Collection<Descriptor> buildIn = grouper.getBuildInDescriptors();
     List<Descriptor> regularBuildIn = new ArrayList<>(buildIn.size());
     for (Descriptor d : buildIn) {
-      if (DispatchId.getDispatchId(typeResolver, d) == DispatchId.FLOAT16) {
+      int dispatchId = DispatchId.getDispatchId(typeResolver, d);
+      if (dispatchId == DispatchId.FLOAT16 || dispatchId == DispatchId.BFLOAT16) {
         if (d.isNullable()) {
           boxed.add(d);
         } else {

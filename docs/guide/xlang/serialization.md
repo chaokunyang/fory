@@ -25,6 +25,13 @@ This page demonstrates cross-language serialization patterns with examples in al
 
 Common types can be serialized automatically without registration: primitive numeric types, string, binary, array, list, map, and more.
 
+Reduced-precision floating-point values are also part of the built-in xlang type system:
+
+- `float16` and `float16_array`
+- `bfloat16` and `bfloat16_array`
+
+Use the language-specific carrier types documented in the type mapping reference. Python exposes the Cython-only `float16`, `float16array`, `bfloat16`, and `bfloat16array` names from `pyfory.serialization`; Java, C++, Rust, and C# provide their own dedicated scalar and array carriers.
+
 ### Java
 
 ```java

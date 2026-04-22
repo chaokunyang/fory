@@ -16,6 +16,7 @@
 // under the License.
 
 use crate::error::Error;
+use crate::types::bfloat16::bfloat16;
 use crate::types::float16::float16;
 use crate::util::buffer_rw_string::read_latin1_simd;
 use byteorder::{ByteOrder, LittleEndian};
@@ -394,6 +395,12 @@ impl<'a> Writer<'a> {
     // ============ FLOAT16 (TypeId = 16) ============
     #[inline(always)]
     pub fn write_f16(&mut self, value: float16) {
+        self.write_u16(value.to_bits());
+    }
+
+    // ============ BFLOAT16 (TypeId = 18) ============
+    #[inline(always)]
+    pub fn write_bf16(&mut self, value: bfloat16) {
         self.write_u16(value.to_bits());
     }
 
@@ -874,6 +881,14 @@ impl<'a> Reader<'a> {
         let bits = LittleEndian::read_u16(&self.bf[self.cursor..self.cursor + 2]);
         self.cursor += 2;
         Ok(float16::from_bits(bits))
+    }
+
+    #[inline(always)]
+    pub fn read_bf16(&mut self) -> Result<bfloat16, Error> {
+        self.check_bound(2)?;
+        let bits = LittleEndian::read_u16(&self.bf[self.cursor..self.cursor + 2]);
+        self.cursor += 2;
+        Ok(bfloat16::from_bits(bits))
     }
 
     pub fn read_f64(&mut self) -> Result<f64, Error> {

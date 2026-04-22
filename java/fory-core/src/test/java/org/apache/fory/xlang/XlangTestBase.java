@@ -56,6 +56,8 @@ import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.TestUtils;
+import org.apache.fory.type.BFloat16;
+import org.apache.fory.type.Float16;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.MurmurHash3;
 import org.testng.Assert;
@@ -1520,6 +1522,51 @@ public abstract class XlangTestBase extends ForyTestBase {
     String f2;
   }
 
+  @Data
+  static class ReducedPrecisionFloatStruct {
+    BFloat16[] bfloat16Array;
+    BFloat16 bfloat16Value;
+    Float16[] float16Array;
+    Float16 float16Value;
+  }
+
+  protected static ReducedPrecisionFloatStruct newReducedPrecisionFloatStruct() {
+    ReducedPrecisionFloatStruct value = new ReducedPrecisionFloatStruct();
+    value.bfloat16Array =
+        new BFloat16[] {
+          BFloat16.fromBits((short) 0x0000),
+          BFloat16.fromBits((short) 0x3F80),
+          BFloat16.fromBits((short) 0xBF80)
+        };
+    value.bfloat16Value = BFloat16.fromBits((short) 0x3FC0);
+    value.float16Array =
+        new Float16[] {
+          Float16.fromBits((short) 0x0000),
+          Float16.fromBits((short) 0x3C00),
+          Float16.fromBits((short) 0xBC00)
+        };
+    value.float16Value = Float16.fromBits((short) 0x3E00);
+    return value;
+  }
+
+  protected static void assertReducedPrecisionFloatStruct(ReducedPrecisionFloatStruct value) {
+    Assert.assertNotNull(value);
+    Assert.assertNotNull(value.float16Value);
+    Assert.assertNotNull(value.bfloat16Value);
+    Assert.assertEquals(value.float16Value.toBits(), (short) 0x3E00);
+    Assert.assertEquals(value.bfloat16Value.toBits(), (short) 0x3FC0);
+    Assert.assertNotNull(value.float16Array);
+    Assert.assertNotNull(value.bfloat16Array);
+    Assert.assertEquals(value.float16Array.length, 3);
+    Assert.assertEquals(value.bfloat16Array.length, 3);
+    Assert.assertEquals(value.float16Array[0].toBits(), (short) 0x0000);
+    Assert.assertEquals(value.float16Array[1].toBits(), (short) 0x3C00);
+    Assert.assertEquals(value.float16Array[2].toBits(), (short) 0xBC00);
+    Assert.assertEquals(value.bfloat16Array[0].toBits(), (short) 0x0000);
+    Assert.assertEquals(value.bfloat16Array[1].toBits(), (short) 0x3F80);
+    Assert.assertEquals(value.bfloat16Array[2].toBits(), (short) 0xBF80);
+  }
+
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testOneStringFieldSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
     String caseName = "test_one_string_field_schema";
@@ -1666,6 +1713,65 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertTrue(
         result2.f2 == null || result2.f2.isEmpty(),
         "Expected null or empty string but got: " + result2.f2);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testReducedPrecisionFloatStruct(boolean enableCodegen) throws java.io.IOException {
+    String caseName = "test_reduced_precision_float_struct";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withCodegen(enableCodegen)
+            .build();
+    fory.register(ReducedPrecisionFloatStruct.class, 213);
+
+    ReducedPrecisionFloatStruct obj = newReducedPrecisionFloatStruct();
+    assertReducedPrecisionFloatStruct((ReducedPrecisionFloatStruct) xserDe(fory, obj));
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    ReducedPrecisionFloatStruct result = (ReducedPrecisionFloatStruct) fory.deserialize(buffer2);
+    assertReducedPrecisionFloatStruct(result);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testReducedPrecisionFloatStructCompatibleFieldSkip(boolean enableCodegen)
+      throws java.io.IOException {
+    String caseName = "test_reduced_precision_float_struct_compatible_skip";
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(enableCodegen)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    fory.register(ReducedPrecisionFloatStruct.class, 213);
+
+    Fory foryEmpty =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withCodegen(enableCodegen)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    foryEmpty.register(EmptyStruct.class, 213);
+
+    ReducedPrecisionFloatStruct obj = newReducedPrecisionFloatStruct();
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
+    fory.serialize(buffer, obj);
+
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    EmptyStruct result = (EmptyStruct) foryEmpty.deserialize(buffer2);
+    Assert.assertNotNull(result);
   }
 
   // Enum field structs for testing

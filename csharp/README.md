@@ -13,6 +13,7 @@ The C# implementation provides high-performance object graph serialization for .
 - Source-generator-based serializers for `[ForyObject]` types
 - Optional shared/circular reference tracking (`TrackRef(true)`)
 - Compatible mode for schema evolution
+- Reduced-precision carriers for `Half` / `BFloat16` scalars and `Half[]` / `List<Half>` / `BFloat16[]` / `List<BFloat16>` array payloads
 - Thread-safe runtime wrapper (`ThreadSafeFory`) for concurrent workloads
 - Dynamic object serialization APIs for heterogeneous payloads
 

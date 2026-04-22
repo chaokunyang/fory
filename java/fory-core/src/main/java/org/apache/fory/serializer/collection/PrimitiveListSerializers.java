@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.collection;
 
 import java.util.Collection;
+import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
 import org.apache.fory.collection.Float32List;
@@ -665,6 +666,50 @@ public class PrimitiveListSerializers {
     }
   }
 
+  public static final class BFloat16ListSerializer
+      extends PrimitiveListSerializer<BFloat16List> {
+    public BFloat16ListSerializer(TypeResolver typeResolver) {
+      super(typeResolver, BFloat16List.class);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, BFloat16List value) {
+      MemoryBuffer buffer = writeContext.getBuffer();
+      int size = value.size();
+      int byteSize = size * 2;
+      buffer.writeVarUint32Small7(byteSize);
+      short[] array = value.getArray();
+      if (Platform.IS_LITTLE_ENDIAN) {
+        buffer.writePrimitiveArray(array, Platform.SHORT_ARRAY_OFFSET, byteSize);
+      } else {
+        for (int i = 0; i < size; i++) {
+          buffer.writeInt16(array[i]);
+        }
+      }
+    }
+
+    @Override
+    public BFloat16List read(ReadContext readContext) {
+      MemoryBuffer buffer = readContext.getBuffer();
+      int byteSize = buffer.readVarUint32Small7();
+      int size = byteSize / 2;
+      short[] array = new short[size];
+      if (Platform.IS_LITTLE_ENDIAN) {
+        buffer.readToUnsafe(array, Platform.SHORT_ARRAY_OFFSET, byteSize);
+      } else {
+        for (int i = 0; i < size; i++) {
+          array[i] = buffer.readInt16();
+        }
+      }
+      return new BFloat16List(array);
+    }
+
+    @Override
+    public BFloat16List copy(CopyContext copyContext, BFloat16List value) {
+      return new BFloat16List(value.copyArray());
+    }
+  }
+
   public static void registerDefaultSerializers(TypeResolver resolver) {
     resolver.registerInternalSerializer(BoolList.class, new BoolListSerializer(resolver));
     resolver.registerInternalSerializer(Int8List.class, new Int8ListSerializer(resolver));
@@ -678,5 +723,6 @@ public class PrimitiveListSerializers {
     resolver.registerInternalSerializer(Float32List.class, new Float32ListSerializer(resolver));
     resolver.registerInternalSerializer(Float64List.class, new Float64ListSerializer(resolver));
     resolver.registerInternalSerializer(Float16List.class, new Float16ListSerializer(resolver));
+    resolver.registerInternalSerializer(BFloat16List.class, new BFloat16ListSerializer(resolver));
   }
 }

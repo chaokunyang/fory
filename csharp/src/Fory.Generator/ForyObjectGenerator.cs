@@ -187,6 +187,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("            global::Apache.Fory.TypeId.UInt64 or");
         sb.AppendLine("            global::Apache.Fory.TypeId.VarUInt64 or");
         sb.AppendLine("            global::Apache.Fory.TypeId.TaggedUInt64 or");
+        sb.AppendLine("            global::Apache.Fory.TypeId.Float16 or");
+        sb.AppendLine("            global::Apache.Fory.TypeId.BFloat16 or");
         sb.AppendLine("            global::Apache.Fory.TypeId.Float32 or");
         sb.AppendLine("            global::Apache.Fory.TypeId.Float64 or");
         sb.AppendLine("            global::Apache.Fory.TypeId.String => true,");
@@ -213,6 +215,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("            global::Apache.Fory.TypeId.UInt64 => context.Reader.ReadUInt64(),");
         sb.AppendLine("            global::Apache.Fory.TypeId.VarUInt64 => context.Reader.ReadVarUInt64(),");
         sb.AppendLine("            global::Apache.Fory.TypeId.TaggedUInt64 => context.Reader.ReadTaggedUInt64(),");
+        sb.AppendLine("            global::Apache.Fory.TypeId.Float16 => global::System.BitConverter.UInt16BitsToHalf(context.Reader.ReadUInt16()),");
+        sb.AppendLine("            global::Apache.Fory.TypeId.BFloat16 => global::Apache.Fory.BFloat16.FromBits(context.Reader.ReadUInt16()),");
         sb.AppendLine("            global::Apache.Fory.TypeId.Float32 => context.Reader.ReadFloat32(),");
         sb.AppendLine("            global::Apache.Fory.TypeId.Float64 => context.Reader.ReadFloat64(),");
         sb.AppendLine("            global::Apache.Fory.TypeId.String => global::Apache.Fory.StringSerializer.ReadString(context),");
@@ -906,6 +910,12 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             case 15:
                 writeCode = $"context.Writer.WriteTaggedUInt64({valueExpr});";
                 return true;
+            case 17:
+                writeCode = $"context.Writer.WriteUInt16(global::System.BitConverter.HalfToUInt16Bits({valueExpr}));";
+                return true;
+            case 18:
+                writeCode = $"context.Writer.WriteUInt16({valueExpr}.ToBits());";
+                return true;
             case 19:
                 writeCode = $"context.Writer.WriteFloat32({valueExpr});";
                 return true;
@@ -969,6 +979,12 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                 return true;
             case 15:
                 readExpr = "context.Reader.ReadTaggedUInt64()";
+                return true;
+            case 17:
+                readExpr = "global::System.BitConverter.UInt16BitsToHalf(context.Reader.ReadUInt16())";
+                return true;
+            case 18:
+                readExpr = "global::Apache.Fory.BFloat16.FromBits(context.Reader.ReadUInt16())";
                 return true;
             case 19:
                 readExpr = "context.Reader.ReadFloat32()";
@@ -1053,7 +1069,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             sb.Append(piece);
         }
 
-        return sb.ToString();
+        return sb.ToString().Replace("b_float16", "bfloat16");
     }
 
     private static string BuildTypeMetaExpression(TypeMetaFieldTypeModel model, string trackRefExpr)
@@ -1245,15 +1261,24 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         }
 
         TypeClassification classification = resolution.Classification;
-        int group = classification.IsPrimitive
-            ? (isOptional ? 2 : 1)
-            : classification.IsMap
-                ? 5
-                : classification.IsCollection
-                    ? 4
-                    : classification.IsBuiltIn
-                        ? 3
-                        : 6;
+        bool javaInternalReducedPrecisionScalar =
+            !isOptional &&
+            (classification.TypeId == 17 || classification.TypeId == 18);
+        bool javaCollectionReducedPrecisionArray =
+            classification.TypeId == 53 || classification.TypeId == 54;
+        int group = javaInternalReducedPrecisionScalar
+            ? 3
+            : javaCollectionReducedPrecisionArray
+                ? 4
+                : classification.IsPrimitive
+                    ? (isOptional ? 2 : 1)
+                    : classification.IsMap
+                        ? 5
+                        : classification.IsCollection
+                            ? 4
+                            : classification.IsBuiltIn
+                                ? 3
+                                : 6;
 
         int index = int.MaxValue;
         Location? sourceLocation = memberSymbol.Locations.FirstOrDefault(loc => loc.IsInSource);
@@ -1482,7 +1507,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                     return (int)(uint.MaxValue - m.Classification.TypeId);
                 }
 
-                if (m.Group is 3 or 4 or 5)
+                if (m.Group is 3 or 5)
                 {
                     return (int)m.Classification.TypeId;
                 }
@@ -1673,6 +1698,16 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         if (type.SpecialType == SpecialType.System_Single)
         {
             return new TypeClassification(19, true, true, false, false, false, 4);
+        }
+
+        if (string.Equals(type.ToDisplayString(), "System.Half", StringComparison.Ordinal))
+        {
+            return new TypeClassification(17, true, true, false, false, false, 2);
+        }
+
+        if (string.Equals(type.ToDisplayString(), "Apache.Fory.BFloat16", StringComparison.Ordinal))
+        {
+            return new TypeClassification(18, true, true, false, false, false, 2);
         }
 
         if (type.SpecialType == SpecialType.System_Double)
@@ -1883,6 +1918,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             10 => 49, // ushort -> uint16 array
             12 => 50, // uint -> uint32 array
             14 => 51, // ulong -> uint64 array
+            17 => 53, // Half -> float16 array
+            18 => 54, // BFloat16 -> bfloat16 array
             19 => 55, // float -> float32 array
             20 => 56, // double -> float64 array
             _ => null,
@@ -1926,7 +1963,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                 {
                     bool prevUpper = char.IsUpper(name[i - 1]);
                     bool nextUpperOrEnd = i + 1 >= name.Length || char.IsUpper(name[i + 1]);
-                    if (!prevUpper || !nextUpperOrEnd)
+                    bool leadingPascalBoundary = i == 1 && prevUpper && !nextUpperOrEnd;
+                    if ((!prevUpper || !nextUpperOrEnd) && !leadingPascalBoundary)
                     {
                         sb.Append('_');
                     }

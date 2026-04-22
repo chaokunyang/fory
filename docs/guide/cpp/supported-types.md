@@ -38,6 +38,7 @@ All C++ primitive types are supported with efficient binary encoding:
 | `uint64_t` | 8 byte | INT64       | Unsigned long         |
 | `float`    | 4 byte | FLOAT32     | IEEE 754 single       |
 | `double`   | 8 byte | FLOAT64     | IEEE 754 double       |
+| `fory::bfloat16_t` | 2 byte | BFLOAT16 | IEEE 754 bfloat16 |
 | `char`     | 1 byte | INT8        | Character (as signed) |
 | `char16_t` | 2 byte | INT16       | 16-bits characters    |
 | `char32_t` | 4 byte | INT32       | 32-bits characters    |
@@ -70,6 +71,8 @@ assert(text == decoded);
 ### Vector / List
 
 `std::vector<T>` for any serializable element type:
+
+`std::vector<fory::bfloat16_t>` is the dense array carrier for xlang `bfloat16_array`.
 
 ```cpp
 std::vector<int32_t> numbers{1, 2, 3, 4, 5};

@@ -35,6 +35,7 @@ import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.serializer.UnknownClass.UnknownStruct;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.Generics;
 import org.apache.fory.type.Types;
@@ -185,6 +186,17 @@ public final class WriteContext {
    * performance.
    */
   public void writeFloat16(Float16 value) {
+    buffer.writeInt16(value.toBits());
+  }
+
+  /**
+   * Writes a 16-bit bfloat16 value encoded through its raw IEEE 754 bfloat16 bits.
+   *
+   * <p>If a caller needs multiple primitive writes, fetch the buffer once through {@link
+   * #getBuffer()} and invoke {@link MemoryBuffer#writeInt16(short)} directly for better
+   * performance.
+   */
+  public void writeBFloat16(BFloat16 value) {
     buffer.writeInt16(value.toBits());
   }
 

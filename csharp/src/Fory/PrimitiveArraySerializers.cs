@@ -295,6 +295,78 @@ internal sealed class UInt64ArraySerializer : Serializer<ulong[]>
     }
 }
 
+internal sealed class Float16ArraySerializer : Serializer<Half[]>
+{
+
+
+
+    public override Half[] DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in Half[] value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        Half[] safe = value ?? [];
+        context.Writer.WriteVarUInt32((uint)(safe.Length * 2));
+        for (int i = 0; i < safe.Length; i++)
+        {
+            context.Writer.WriteUInt16(BitConverter.HalfToUInt16Bits(safe[i]));
+        }
+    }
+
+    public override Half[] ReadData(ReadContext context)
+    {
+        int payloadSize = checked((int)context.Reader.ReadVarUInt32());
+        if ((payloadSize & 1) != 0)
+        {
+            throw new InvalidDataException("float16 array payload size mismatch");
+        }
+
+        Half[] values = new Half[payloadSize / 2];
+        for (int i = 0; i < values.Length; i++)
+        {
+            values[i] = BitConverter.UInt16BitsToHalf(context.Reader.ReadUInt16());
+        }
+
+        return values;
+    }
+}
+
+internal sealed class BFloat16ArraySerializer : Serializer<BFloat16[]>
+{
+
+
+
+    public override BFloat16[] DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in BFloat16[] value, bool hasGenerics)
+    {
+        _ = hasGenerics;
+        BFloat16[] safe = value ?? [];
+        context.Writer.WriteVarUInt32((uint)(safe.Length * 2));
+        for (int i = 0; i < safe.Length; i++)
+        {
+            context.Writer.WriteUInt16(safe[i].ToBits());
+        }
+    }
+
+    public override BFloat16[] ReadData(ReadContext context)
+    {
+        int payloadSize = checked((int)context.Reader.ReadVarUInt32());
+        if ((payloadSize & 1) != 0)
+        {
+            throw new InvalidDataException("bfloat16 array payload size mismatch");
+        }
+
+        BFloat16[] values = new BFloat16[payloadSize / 2];
+        for (int i = 0; i < values.Length; i++)
+        {
+            values[i] = BFloat16.FromBits(context.Reader.ReadUInt16());
+        }
+
+        return values;
+    }
+}
+
 internal sealed class Float32ArraySerializer : Serializer<float[]>
 {
 

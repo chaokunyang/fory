@@ -66,6 +66,14 @@ public static class FieldSkipper
                 return context.TypeResolver.GetSerializer<int>().Read(context, refMode, false);
             case (uint)TypeId.VarInt64:
                 return context.TypeResolver.GetSerializer<long>().Read(context, refMode, false);
+            case (uint)TypeId.Float16:
+                return context.TypeResolver.GetSerializer<Half>().Read(context, refMode, false);
+            case (uint)TypeId.BFloat16:
+                return context.TypeResolver.GetSerializer<BFloat16>().Read(context, refMode, false);
+            case (uint)TypeId.Float16Array:
+                return context.TypeResolver.GetSerializer<Half[]>().Read(context, refMode, false);
+            case (uint)TypeId.BFloat16Array:
+                return context.TypeResolver.GetSerializer<BFloat16[]>().Read(context, refMode, false);
             case (uint)TypeId.Float32:
                 return context.TypeResolver.GetSerializer<float>().Read(context, refMode, false);
             case (uint)TypeId.Float64:

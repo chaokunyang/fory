@@ -33,6 +33,7 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StringSerializer;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.Generics;
 import org.apache.fory.type.Types;
@@ -189,6 +190,16 @@ public final class ReadContext {
    */
   public Float16 readFloat16() {
     return Float16.fromBits(buffer.readInt16());
+  }
+
+  /**
+   * Reads a 16-bit bfloat16 value encoded through its raw IEEE 754 bfloat16 bits.
+   *
+   * <p>If a caller needs multiple primitive reads, fetch the buffer once through {@link
+   * #getBuffer()} and invoke {@link MemoryBuffer#readInt16()} directly for better performance.
+   */
+  public BFloat16 readBFloat16() {
+    return BFloat16.fromBits(buffer.readInt16());
   }
 
   /**

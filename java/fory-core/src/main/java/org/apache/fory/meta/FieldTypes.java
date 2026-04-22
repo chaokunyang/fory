@@ -32,6 +32,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.Objects;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
 import org.apache.fory.collection.Float32List;
@@ -54,6 +55,7 @@ import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.serializer.UnknownClass;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.GenericType;
@@ -648,6 +650,8 @@ public class FieldTypes {
         return float[].class;
       case Types.FLOAT16_ARRAY:
         return Float16[].class;
+      case Types.BFLOAT16_ARRAY:
+        return BFloat16[].class;
       case Types.FLOAT64_ARRAY:
         return double[].class;
       default:
@@ -679,6 +683,8 @@ public class FieldTypes {
         return Float32List.class;
       case Types.FLOAT16_ARRAY:
         return Float16List.class;
+      case Types.BFLOAT16_ARRAY:
+        return BFloat16List.class;
       case Types.FLOAT64_ARRAY:
         return Float64List.class;
       default:

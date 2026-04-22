@@ -45,6 +45,7 @@ import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
+import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.DispatchId;
@@ -466,6 +467,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.FLOAT16:
         buffer.writeInt16(((Float16) fieldValue).toBits());
         return;
+      case DispatchId.BFLOAT16:
+        buffer.writeInt16(((BFloat16) fieldValue).toBits());
+        return;
       default:
         writeField(
             writeContext, typeResolver, refWriter, fieldInfo, RefMode.NONE, buffer, fieldValue);
@@ -726,6 +730,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         return buffer.readFloat64();
       case DispatchId.FLOAT16:
         return Float16.fromBits(buffer.readInt16());
+      case DispatchId.BFLOAT16:
+        return BFloat16.fromBits(buffer.readInt16());
       case DispatchId.STRING:
         return readContext.readString();
       default:
@@ -949,6 +955,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.FLOAT16:
         fieldAccessor.putObject(targetObject, Float16.fromBits(buffer.readInt16()));
         return;
+      case DispatchId.BFLOAT16:
+        fieldAccessor.putObject(targetObject, BFloat16.fromBits(buffer.readInt16()));
+        return;
       case DispatchId.STRING:
         fieldAccessor.putObject(targetObject, readContext.readString());
         return;
@@ -1109,6 +1118,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.FLOAT32:
       case DispatchId.FLOAT64:
       case DispatchId.FLOAT16:
+      case DispatchId.BFLOAT16:
       case DispatchId.STRING:
         Platform.putObject(newObj, fieldOffset, Platform.getObject(originObj, fieldOffset));
         break;
@@ -1175,6 +1185,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case DispatchId.TAGGED_UINT64:
       case DispatchId.FLOAT64:
       case DispatchId.FLOAT16:
+      case DispatchId.BFLOAT16:
       case DispatchId.STRING:
         return Platform.getObject(targetObject, fieldOffset);
       default:

@@ -16,6 +16,7 @@ The Rust implementation provides versatile and high-performance serialization wi
 - **🔄 Circular References**: Automatic tracking of shared and circular references with `Rc`/`Arc` and weak pointers
 - **🧬 Polymorphic**: Serialize trait objects with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
 - **📦 Schema Evolution**: Compatible mode for independent schema changes
+- **🔢 Reduced-Precision Types**: `Float16` and `BFloat16` scalars with `Vec<Float16>` / `Vec<BFloat16>` arrays
 - **⚡ Two Formats**: Object graph serialization and zero-copy row-based format
 
 ## 📦 Crates

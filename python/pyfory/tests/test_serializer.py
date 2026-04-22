@@ -172,6 +172,50 @@ def test_basic_serializer(xlang):
     assert ser_de(fory, set_) == set_
 
 
+def test_float16_round_trip():
+    fory = Fory(xlang=True, ref=False)
+    value = pyfory.float16.from_bits(0x3C00)
+    typeinfo = fory.type_resolver.get_type_info(pyfory.float16)
+    assert isinstance(typeinfo.serializer, pyfory.Float16Serializer)
+    assert typeinfo.type_id == TypeId.FLOAT16
+    decoded = ser_de(fory, value)
+    assert isinstance(decoded, pyfory.float16)
+    assert decoded.to_bits() == 0x3C00
+
+
+def test_bfloat16_round_trip():
+    fory = Fory(xlang=True, ref=False)
+    value = pyfory.bfloat16.from_bits(0x3FC0)
+    typeinfo = fory.type_resolver.get_type_info(pyfory.bfloat16)
+    assert isinstance(typeinfo.serializer, pyfory.BFloat16Serializer)
+    assert typeinfo.type_id == TypeId.BFLOAT16
+    decoded = ser_de(fory, value)
+    assert isinstance(decoded, pyfory.bfloat16)
+    assert decoded.to_bits() == 0x3FC0
+
+
+def test_float16_array_round_trip():
+    fory = Fory(xlang=True, ref=False)
+    values = pyfory.float16array.from_bits([0x0000, 0x3C00, 0x7C01])
+    typeinfo = fory.type_resolver.get_type_info(pyfory.float16array)
+    assert isinstance(typeinfo.serializer, pyfory.Float16ArraySerializer)
+    assert typeinfo.type_id == TypeId.FLOAT16_ARRAY
+    decoded = ser_de(fory, values)
+    assert isinstance(decoded, pyfory.float16array)
+    assert list(decoded.to_bits()) == [0x0000, 0x3C00, 0x7C01]
+
+
+def test_bfloat16_array_round_trip():
+    fory = Fory(xlang=True, ref=False)
+    values = pyfory.bfloat16array.from_bits([0x0000, 0x3F80, 0x7FC1])
+    typeinfo = fory.type_resolver.get_type_info(pyfory.bfloat16array)
+    assert isinstance(typeinfo.serializer, pyfory.BFloat16ArraySerializer)
+    assert typeinfo.type_id == TypeId.BFLOAT16_ARRAY
+    decoded = ser_de(fory, values)
+    assert isinstance(decoded, pyfory.bfloat16array)
+    assert list(decoded.to_bits()) == [0x0000, 0x3F80, 0x7FC1]
+
+
 @pytest.mark.parametrize("xlang", [True, False])
 def test_date_serializer_uses_xlang_varint64_and_native_int32(xlang):
     fory = Fory(xlang=xlang, ref=False)

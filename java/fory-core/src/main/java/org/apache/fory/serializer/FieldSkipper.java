@@ -79,6 +79,7 @@ public class FieldSkipper {
       case DispatchId.UINT16:
       case DispatchId.EXT_UINT16:
       case DispatchId.FLOAT16:
+      case DispatchId.BFLOAT16:
         buffer.increaseReaderIndex(2);
         break;
       case DispatchId.INT32:

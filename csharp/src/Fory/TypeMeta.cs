@@ -103,7 +103,7 @@ internal static class TypeMetaUtils
             }
         }
 
-        return sb.ToString();
+        return sb.ToString().Replace("b_float16", "bfloat16");
     }
 }
 

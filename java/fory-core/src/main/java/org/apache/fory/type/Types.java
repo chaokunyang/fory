@@ -84,7 +84,7 @@ public class Types {
   /** float16: a 16-bit floating point number. */
   public static final int FLOAT16 = 17;
 
-  /** bfloat16: a 16-bit brain floating point number. */
+  /** BFloat16: a 16-bit brain floating point number. */
   public static final int BFLOAT16 = 18;
 
   /** float32: a 32-bit floating point number. */
@@ -211,7 +211,7 @@ public class Types {
   /** One dimensional float16 array. */
   public static final int FLOAT16_ARRAY = 53;
 
-  /** One dimensional bfloat16 array. */
+  /** One dimensional BFloat16 array. */
   public static final int BFLOAT16_ARRAY = 54;
 
   /** One dimensional float32 array. */
@@ -448,8 +448,9 @@ public class Types {
       case TAGGED_UINT64:
         return Long.class;
       case FLOAT8:
-      case BFLOAT16:
         return Float.class;
+      case BFLOAT16:
+        return BFloat16.class;
       case FLOAT16:
         return Float16.class;
       case FLOAT32:

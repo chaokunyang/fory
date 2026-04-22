@@ -146,6 +146,7 @@ print(f"Timestamp: {msg.timestamp}")
 | `int64_t` | `long`    | `int`       | `int64`   | `i64`     |
 | `float`   | `float`   | `float`     | `float32` | `f32`     |
 | `double`  | `double`  | `float`     | `float64` | `f64`     |
+| `fory::bfloat16_t` | `BFloat16` | `pyfory.bfloat16` | / | `BFloat16` |
 
 ### String Types
 
@@ -155,11 +156,12 @@ print(f"Timestamp: {msg.timestamp}")
 
 ### Collection Types
 
-| C++ Type         | Java Type  | Python Type | Go Type          |
-| ---------------- | ---------- | ----------- | ---------------- |
-| `std::vector<T>` | `List<T>`  | `list`      | `[]T`            |
-| `std::set<T>`    | `Set<T>`   | `set`       | `map[T]struct{}` |
-| `std::map<K,V>`  | `Map<K,V>` | `dict`      | `map[K]V`        |
+| C++ Type                         | Java Type      | Python Type      | Go Type          | Rust Type       |
+| -------------------------------- | -------------- | ---------------- | ---------------- | --------------- |
+| `std::vector<T>`                 | `List<T>`      | `list`           | `[]T`            | `Vec<T>`        |
+| `std::vector<fory::bfloat16_t>`  | `BFloat16List` | `bfloat16array`  | /                | `Vec<BFloat16>` |
+| `std::set<T>`                    | `Set<T>`       | `set`            | `map[T]struct{}` | `HashSet<T>`    |
+| `std::map<K,V>`                  | `Map<K,V>`     | `dict`           | `map[K]V`        | `HashMap<K,V>`  |
 
 ### Temporal Types
 

@@ -271,11 +271,8 @@ struct AnimalMapHolder {
 // ============================================================================
 
 struct EmptyStructEvolution {
-  bool placeholder = false; // C++ templates require at least one field
-  bool operator==(const EmptyStructEvolution &other) const {
-    return placeholder == other.placeholder;
-  }
-  FORY_STRUCT(EmptyStructEvolution, placeholder);
+  bool operator==(const EmptyStructEvolution &) const { return true; }
+  FORY_STRUCT(EmptyStructEvolution);
 };
 
 struct OneStringFieldStruct {
@@ -293,6 +290,21 @@ struct TwoStringFieldStruct {
     return f1 == other.f1 && f2 == other.f2;
   }
   FORY_STRUCT(TwoStringFieldStruct, f1, f2);
+};
+
+struct ReducedPrecisionFloatStruct {
+  fory::float16_t float16_value;
+  fory::bfloat16_t bfloat16_value;
+  std::vector<fory::bfloat16_t> bfloat16_array;
+  std::vector<fory::float16_t> float16_array;
+  bool operator==(const ReducedPrecisionFloatStruct &other) const {
+    return float16_value == other.float16_value &&
+           bfloat16_value == other.bfloat16_value &&
+           bfloat16_array == other.bfloat16_array &&
+           float16_array == other.float16_array;
+  }
+  FORY_STRUCT(ReducedPrecisionFloatStruct, float16_value, bfloat16_value,
+              bfloat16_array, float16_array);
 };
 
 enum class TestEnum : int32_t { VALUE_A = 0, VALUE_B = 1, VALUE_C = 2 };
@@ -923,6 +935,9 @@ void run_test_one_string_field_compatible(const std::string &data_file);
 void run_test_two_string_field_compatible(const std::string &data_file);
 void run_test_schema_evolution_compatible(const std::string &data_file);
 void run_test_schema_evolution_compatible_reverse(const std::string &data_file);
+void run_test_reduced_precision_float_struct(const std::string &data_file);
+void run_test_reduced_precision_float_struct_compatible_skip(
+    const std::string &data_file);
 void run_test_one_enum_field_schema(const std::string &data_file);
 void run_test_one_enum_field_compatible(const std::string &data_file);
 void run_test_two_enum_field_compatible(const std::string &data_file);
@@ -1021,6 +1036,10 @@ int main(int argc, char **argv) {
       run_test_schema_evolution_compatible(data_file);
     } else if (case_name == "test_schema_evolution_compatible_reverse") {
       run_test_schema_evolution_compatible_reverse(data_file);
+    } else if (case_name == "test_reduced_precision_float_struct") {
+      run_test_reduced_precision_float_struct(data_file);
+    } else if (case_name == "test_reduced_precision_float_struct_compatible_skip") {
+      run_test_reduced_precision_float_struct_compatible_skip(data_file);
     } else if (case_name == "test_one_enum_field_schema") {
       run_test_one_enum_field_schema(data_file);
     } else if (case_name == "test_one_enum_field_compatible") {
@@ -2186,6 +2205,54 @@ void run_test_schema_evolution_compatible_reverse(
   }
 
   // Serialize back
+  std::vector<uint8_t> out;
+  append_serialized(fory, value, out);
+  write_file(data_file, out);
+}
+
+void run_test_reduced_precision_float_struct(const std::string &data_file) {
+  auto bytes = read_file(data_file);
+  auto fory = build_fory(false, true);
+  ensure_ok(fory.register_struct<ReducedPrecisionFloatStruct>(213),
+            "register ReducedPrecisionFloatStruct");
+
+  Buffer buffer = make_buffer(bytes);
+  auto value = read_next<ReducedPrecisionFloatStruct>(fory, buffer);
+
+  if (value.float16_value.to_bits() != 0x3E00u) {
+    fail("ReducedPrecisionFloatStruct float16_value mismatch");
+  }
+  if (value.bfloat16_value.to_bits() != 0x3FC0u) {
+    fail("ReducedPrecisionFloatStruct bfloat16_value mismatch");
+  }
+  if (value.float16_array.size() != 3 ||
+      value.float16_array[0].to_bits() != 0x0000u ||
+      value.float16_array[1].to_bits() != 0x3C00u ||
+      value.float16_array[2].to_bits() != 0xBC00u) {
+    fail("ReducedPrecisionFloatStruct float16_array mismatch");
+  }
+  if (value.bfloat16_array.size() != 3 ||
+      value.bfloat16_array[0].to_bits() != 0x0000u ||
+      value.bfloat16_array[1].to_bits() != 0x3F80u ||
+      value.bfloat16_array[2].to_bits() != 0xBF80u) {
+    fail("ReducedPrecisionFloatStruct bfloat16_array mismatch");
+  }
+
+  std::vector<uint8_t> out;
+  append_serialized(fory, value, out);
+  write_file(data_file, out);
+}
+
+void run_test_reduced_precision_float_struct_compatible_skip(
+    const std::string &data_file) {
+  auto bytes = read_file(data_file);
+  auto fory = build_fory(true, true);
+  ensure_ok(fory.register_struct<EmptyStructEvolution>(213),
+            "register EmptyStructEvolution for reduced precision skip");
+
+  Buffer buffer = make_buffer(bytes);
+  auto value = read_next<EmptyStructEvolution>(fory, buffer);
+
   std::vector<uint8_t> out;
   append_serialized(fory, value, out);
   write_file(data_file, out);

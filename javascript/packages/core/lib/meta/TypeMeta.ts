@@ -36,13 +36,19 @@ const pkgDecoder = new MetaStringDecoder(".", "_");
 const typeNameEncoder = new MetaStringEncoder("$", ".");
 const typeNameDecoder = new MetaStringDecoder("$", ".");
 
-// Constants from the xlang TypeDef header layout.
+// Constants shared with python/java/rust/go 0.17+. See e.g.
+// python/pyfory/meta/typedef.py, java/.../TypeDef.java,
+// rust/fory-core/src/meta/type_meta.rs, go/fory/type_def.go. The
+// JavaScript binding previously placed COMPRESS_META_FLAG at bit 63
+// and HAS_FIELDS_META_FLAG at bit 62, and used NUM_HASH_BITS = 41,
+// producing an 8-byte TypeMeta preamble that no other xlang binding
+// could decode. Aligning with the constants every other binding uses
+// so NAMED_COMPATIBLE_STRUCT output is byte-compatible cross-binding.
 const COMPRESS_META_FLAG = 1n << 9n;
 const HAS_FIELDS_META_FLAG = 1n << 8n;
 const META_SIZE_MASKS = 0xFF; // low 8 bits
 const NUM_HASH_BITS = 50;
 const HASH_SHIFT_BITS = 64n - BigInt(NUM_HASH_BITS);
-const MIN_INT64 = -(1n << 63n);
 const BIG_NAME_THRESHOLD = 0b111111;
 
 const PRIMITIVE_TYPE_IDS = [
@@ -717,13 +723,26 @@ export class TypeMeta {
 
   private static buildHeader(buffer: Uint8Array, isCompressed: boolean, hasFieldsMeta: boolean) {
     const hash = x64hash128(buffer, 47);
-    const bodyHash = hash.getBigUint64(0, false);
-    let shifted = BigInt.asIntN(64, bodyHash << HASH_SHIFT_BITS);
-    if (shifted !== MIN_INT64 && shifted < 0n) {
-      shifted = -shifted;
+    // Read the high 64 bits of the 128-bit MurmurHash3 as a SIGNED
+    // int64 to match pyfory (`hash_buffer()[0]` unpacks `int64_t[0]`),
+    // java (`murmurhash3_x64_128(...)[0]` returns `long`), and rust
+    // (`.0 as i64`). Reading the same bytes as unsigned via two
+    // uint32 halves produces a different value after
+    // `<< (64 - NUM_HASH_BITS); abs()` whenever the hash's high bit
+    // is set -- unsigned BigInt can't go negative, so its sign-check
+    // is always false and the abs is a no-op. Signed int64 here
+    // matches the canonical behaviour of the other xlang bindings.
+    let header = hash.getBigInt64(0, false);
+    header = header << BigInt(64 - NUM_HASH_BITS);
+    // Arbitrary-precision abs + mask to 63 bits, matching pyfory's
+    // `abs(hash) & 0x7FFFFFFFFFFFFFFF`. The mask clears the sign bit
+    // so the COMPRESS_META_FLAG (bit 9) / HAS_FIELDS_META_FLAG
+    // (bit 8) / metaSize (low 8 bits) ORs below don't collide with
+    // residual hash bits.
+    if (header < 0n) {
+      header = -header;
     }
-
-    let header = BigInt.asUintN(64, shifted);
+    header = header & 0x7FFFFFFFFFFFFFFFn;
     if (isCompressed) {
       header |= COMPRESS_META_FLAG;
     }
@@ -732,7 +751,7 @@ export class TypeMeta {
     }
     header |= BigInt(Math.min(buffer.length, META_SIZE_MASKS));
     return {
-      header,
+      header: BigInt.asUintN(64, header),
       headerHash: Number(header >> HASH_SHIFT_BITS),
     };
   }

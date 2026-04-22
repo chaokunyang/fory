@@ -21,7 +21,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/string_encoding.dart';
+import 'package:fory/src/util/string_util.dart';
 import 'package:test/test.dart';
 
 void main() {

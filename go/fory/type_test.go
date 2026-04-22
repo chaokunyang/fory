@@ -156,3 +156,44 @@ func TestCreateSerializerArrayTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestGetSliceSerializerReducedPrecisionTypes(t *testing.T) {
+	fory := NewFory()
+	r := newTypeResolver(fory)
+
+	serializer, err := r.GetSliceSerializer(reflect.TypeOf([]float16.Float16{}))
+	require.NoError(t, err)
+	require.IsType(t, float16SliceSerializer{}, serializer)
+
+	serializer, err = r.GetSliceSerializer(reflect.TypeOf([]bfloat16.BFloat16{}))
+	require.NoError(t, err)
+	require.IsType(t, bfloat16SliceSerializer{}, serializer)
+}
+
+func TestGetArraySerializerReducedPrecisionTypes(t *testing.T) {
+	fory := NewFory()
+	r := newTypeResolver(fory)
+
+	serializer, err := r.GetArraySerializer(reflect.TypeOf([4]float16.Float16{}))
+	require.NoError(t, err)
+	require.IsType(t, float16ArraySerializer{}, serializer)
+
+	serializer, err = r.GetArraySerializer(reflect.TypeOf([4]bfloat16.BFloat16{}))
+	require.NoError(t, err)
+	require.IsType(t, bfloat16ArraySerializer{}, serializer)
+}
+
+func TestGetTypeInfoReducedPrecisionArrayTypeIDs(t *testing.T) {
+	fory := NewFory(WithXlang(true))
+	r := newTypeResolver(fory)
+
+	float16Info, err := r.GetTypeInfo(reflect.ValueOf([2]float16.Float16{}), true)
+	require.NoError(t, err)
+	require.Equal(t, uint32(FLOAT16_ARRAY), float16Info.TypeID)
+	require.IsType(t, float16ArraySerializer{}, float16Info.Serializer)
+
+	bfloat16Info, err := r.GetTypeInfo(reflect.ValueOf([2]bfloat16.BFloat16{}), true)
+	require.NoError(t, err)
+	require.Equal(t, uint32(BFLOAT16_ARRAY), bfloat16Info.TypeID)
+	require.IsType(t, bfloat16ArraySerializer{}, bfloat16Info.Serializer)
+}

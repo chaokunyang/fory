@@ -180,6 +180,10 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if fi.Meta.FixedSize != fj.Meta.FixedSize {
 			return fi.Meta.FixedSize > fj.Meta.FixedSize // size descending
 		}
+		if isReducedPrecisionFloatType(fi.Meta.TypeId) && isReducedPrecisionFloatType(fj.Meta.TypeId) &&
+			fi.Meta.TypeId != fj.Meta.TypeId {
+			return fi.Meta.TypeId < fj.Meta.TypeId
+		}
 		if fi.Meta.TypeId != fj.Meta.TypeId {
 			return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
 		}
@@ -229,7 +233,8 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 	}
 
 	// Sort remainingFields: nullable primitives first (by primitiveComparator),
-	// then other internal types (typeId, name), then lists, sets, maps, other (by name)
+	// then built-in scalar types (typeId, name), then lists, sets, maps,
+	// then primitive arrays and other fields by sort key.
 	sort.SliceStable(g.RemainingFields, func(i, j int) bool {
 		fi, fj := &g.RemainingFields[i], &g.RemainingFields[j]
 		catI, catJ := getFieldCategory(fi), getFieldCategory(fj)
@@ -240,7 +245,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if catI == 0 {
 			return comparePrimitiveFields(fi, fj)
 		}
-		// Within internal/build-in or collection categories, sort by typeId then sort key.
+		// Within built-in scalar or collection categories, sort by typeId then sort key.
 		if catI == 1 || catI == 2 || catI == 3 {
 			if fi.Meta.TypeId != fj.Meta.TypeId {
 				return fi.Meta.TypeId < fj.Meta.TypeId
@@ -283,10 +288,10 @@ func isEnumField(field *FieldInfo) bool {
 
 // getFieldCategory returns the category for sorting remainingFields:
 // 0: nullable primitives (sorted by primitiveComparator)
-// 1: internal build-in types (sorted by typeId, then sort key)
+// 1: internal built-in scalar types (sorted by typeId, then sort key)
 // 2: list/set collections (sorted by typeId, then sort key)
 // 3: map collections (sorted by typeId, then sort key)
-// 4: struct, enum, and all other types (sorted by sort key)
+// 4: primitive arrays, struct, enum, and all other types (sorted by sort key)
 func getFieldCategory(field *FieldInfo) int {
 	if isNullableFixedSizePrimitive(field.DispatchId) || isNullableVarintPrimitive(field.DispatchId) {
 		return 0
@@ -304,7 +309,10 @@ func getFieldCategory(field *FieldInfo) int {
 	if typeId == MAP {
 		return 3
 	}
-	// Internal build-in types: sorted by typeId, then sort key (matches Java build-in group)
+	if isPrimitiveArrayType(typeId) {
+		return 4
+	}
+	// Internal built-in scalar types: sorted by typeId, then sort key.
 	return 1
 }
 
@@ -323,10 +331,18 @@ func comparePrimitiveFields(fi, fj *FieldInfo) bool {
 	if sizeI != sizeJ {
 		return sizeI > sizeJ // size descending
 	}
+	if isReducedPrecisionFloatType(fi.Meta.TypeId) && isReducedPrecisionFloatType(fj.Meta.TypeId) &&
+		fi.Meta.TypeId != fj.Meta.TypeId {
+		return fi.Meta.TypeId < fj.Meta.TypeId
+	}
 	if fi.Meta.TypeId != fj.Meta.TypeId {
 		return fi.Meta.TypeId > fj.Meta.TypeId // typeId descending
 	}
 	return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
+}
+
+func isReducedPrecisionFloatType(typeId TypeId) bool {
+	return typeId == FLOAT16 || typeId == BFLOAT16
 }
 
 // getNullableFixedSize returns the fixed size for nullable fixed primitives
@@ -686,8 +702,8 @@ func sortFields(
 				primitives = append(primitives, t)
 			}
 		case isPrimitiveArrayType(t.typeID):
-			// Primitive arrays: built-in non-container types (sorted by typeId then name)
-			otherInternalTypeFields = append(otherInternalTypeFields, t)
+			// Primitive arrays follow the same sort-key ordering as Java's "other" group.
+			userDefined = append(userDefined, t)
 		case isListType(t.typeID), isSetType(t.typeID):
 			// LIST, SET: collection group
 			listSet = append(listSet, t)
@@ -724,6 +740,10 @@ func sortFields(
 			if szI != szJ {
 				return szI > szJ
 			}
+			if isReducedPrecisionFloatType(ai.typeID) && isReducedPrecisionFloatType(aj.typeID) &&
+				ai.typeID != aj.typeID {
+				return ai.typeID < aj.typeID
+			}
 			// Tie-breaker: type ID descending (higher type ID first), then field name
 			if ai.typeID != aj.typeID {
 				return ai.typeID > aj.typeID
@@ -751,11 +771,11 @@ func sortFields(
 	sortByTypeIDThenName(otherInternalTypeFields)
 	sortByTypeIDThenName(listSet)
 	sortByTypeIDThenName(maps)
-	// Merge all category 2 fields (primitive arrays, userDefined, others) and sort by name
-	// This matches GroupFields' getFieldCategory which sorts all category 4 fields together
+	// Merge primitive arrays, user-defined types, and unknown types into the same
+	// sort-key-ordered tail group.
 	otherGroup := make([]triple, 0, len(userDefined)+len(others))
-	otherGroup = append(otherGroup, userDefined...) // structs, enums, ext
-	otherGroup = append(otherGroup, others...)      // unknown types
+	otherGroup = append(otherGroup, userDefined...)
+	otherGroup = append(otherGroup, others...)
 	sortTuple(otherGroup)
 
 	// Order: primitives, boxed, built-in non-container, list/set, map, other (by name)
@@ -763,7 +783,7 @@ func sortFields(
 	all := make([]triple, 0, len(fieldNames))
 	all = append(all, primitives...)
 	all = append(all, boxed...)
-	all = append(all, otherInternalTypeFields...) // STRING, BINARY, primitive arrays, time, unions, etc.
+	all = append(all, otherInternalTypeFields...) // STRING, BINARY, time, unions, etc.
 	all = append(all, listSet...)
 	all = append(all, maps...)
 	all = append(all, otherGroup...)
@@ -922,6 +942,12 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 		case reflect.Int16:
 			return INT16_ARRAY
 		case reflect.Uint16:
+			if type_.Elem() == float16Type {
+				return FLOAT16_ARRAY
+			}
+			if type_.Elem() == bfloat16Type {
+				return BFLOAT16_ARRAY
+			}
 			return UINT16_ARRAY
 		case reflect.Int32:
 			return INT32_ARRAY
@@ -952,6 +978,12 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 		case reflect.Int16:
 			return INT16_ARRAY
 		case reflect.Uint16:
+			if type_.Elem() == float16Type {
+				return FLOAT16_ARRAY
+			}
+			if type_.Elem() == bfloat16Type {
+				return BFLOAT16_ARRAY
+			}
 			return UINT16_ARRAY
 		case reflect.Int32:
 			return INT32_ARRAY

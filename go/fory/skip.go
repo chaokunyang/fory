@@ -613,23 +613,23 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		}
 		_ = ctx.buffer.ReadBinary(length, err)
 	case INT16_ARRAY, UINT16_ARRAY, FLOAT16_ARRAY, BFLOAT16_ARRAY:
-		length := ctx.ReadBinaryLength()
+		size := ctx.ReadBinaryLength()
 		if ctx.HasError() {
 			return
 		}
-		_ = ctx.buffer.ReadBinary(length*2, err)
+		_ = ctx.buffer.ReadBinary(size, err)
 	case INT32_ARRAY, UINT32_ARRAY, FLOAT32_ARRAY:
-		length := ctx.ReadBinaryLength()
+		size := ctx.ReadBinaryLength()
 		if ctx.HasError() {
 			return
 		}
-		_ = ctx.buffer.ReadBinary(length*4, err)
+		_ = ctx.buffer.ReadBinary(size, err)
 	case INT64_ARRAY, UINT64_ARRAY, FLOAT64_ARRAY:
-		length := ctx.ReadBinaryLength()
+		size := ctx.ReadBinaryLength()
 		if ctx.HasError() {
 			return
 		}
-		_ = ctx.buffer.ReadBinary(length*8, err)
+		_ = ctx.buffer.ReadBinary(size, err)
 
 	// Date/Time types
 	case DATE:

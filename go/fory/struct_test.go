@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/apache/fory/go/fory/bfloat16"
 	"github.com/apache/fory/go/fory/float16"
 	"github.com/apache/fory/go/fory/optional"
 	"github.com/stretchr/testify/require"
@@ -482,6 +483,69 @@ func TestSetFieldTypeId(t *testing.T) {
 			require.NotNil(t, field.Serializer, "MapField serializer should not be nil")
 		}
 	}
+}
+
+func TestReducedPrecisionPrimitiveArraysUseSortKeyOrdering(t *testing.T) {
+	type TestStruct struct {
+		Float16Value  float16.Float16
+		Bfloat16Value bfloat16.BFloat16
+		Bfloat16Array []bfloat16.BFloat16
+		Float16Array  []float16.Float16
+	}
+
+	f := New(WithXlang(true), WithCompatible(false))
+	require.NoError(t, f.RegisterStruct(TestStruct{}, 1004))
+
+	typeInfo, err := f.typeResolver.getTypeInfo(reflect.ValueOf(TestStruct{}), false)
+	require.NoError(t, err)
+
+	structSer, ok := typeInfo.Serializer.(*structSerializer)
+	require.True(t, ok)
+	require.NoError(t, structSer.initialize(f.typeResolver))
+
+	require.Len(t, structSer.fieldGroup.FixedFields, 2)
+	require.Equal(t, "float16_value", structSer.fieldGroup.FixedFields[0].Meta.Name)
+	require.Equal(t, "bfloat16_value", structSer.fieldGroup.FixedFields[1].Meta.Name)
+
+	require.Len(t, structSer.fieldGroup.RemainingFields, 2)
+	require.Equal(t, "bfloat16_array", structSer.fieldGroup.RemainingFields[0].Meta.Name)
+	require.Equal(t, "float16_array", structSer.fieldGroup.RemainingFields[1].Meta.Name)
+}
+
+func TestCompatibleSkipReducedPrecisionArrays(t *testing.T) {
+	type Source struct {
+		Float16Value  float16.Float16
+		Bfloat16Value bfloat16.BFloat16
+		Bfloat16Array []bfloat16.BFloat16
+		Float16Array  []float16.Float16
+	}
+	type Empty struct{}
+
+	writer := New(WithXlang(true), WithCompatible(true))
+	require.NoError(t, writer.RegisterStruct(Source{}, 1005))
+
+	data, err := writer.Serialize(&Source{
+		Float16Value:  float16.Float16FromBits(0x3E00),
+		Bfloat16Value: bfloat16.BFloat16FromBits(0x3FC0),
+		Bfloat16Array: []bfloat16.BFloat16{
+			bfloat16.BFloat16FromBits(0x0000),
+			bfloat16.BFloat16FromBits(0x3F80),
+			bfloat16.BFloat16FromBits(0xBF80),
+		},
+		Float16Array: []float16.Float16{
+			float16.Float16FromBits(0x0000),
+			float16.Float16FromBits(0x3C00),
+			float16.Float16FromBits(0xBC00),
+		},
+	})
+	require.NoError(t, err)
+
+	reader := New(WithXlang(true), WithCompatible(true))
+	require.NoError(t, reader.RegisterStruct(Empty{}, 1005))
+
+	var out any
+	require.NoError(t, testDeserialize(t, reader, data, &out))
+	require.NotNil(t, out)
 }
 
 func TestSkipAnyValueReadsSharedTypeMeta(t *testing.T) {

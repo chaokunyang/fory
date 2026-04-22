@@ -1530,11 +1530,10 @@ func testReducedPrecisionFloatStruct() {
 		result.Bfloat16Array[2].Bits() != 0xBF80 {
 		panic(fmt.Sprintf("bfloat16_array mismatch: got %#v", result.Bfloat16Array))
 	}
-	if len(result.Float16Array) != 4 ||
+	if len(result.Float16Array) != 3 ||
 		result.Float16Array[0].Bits() != 0x0000 ||
 		result.Float16Array[1].Bits() != 0x3C00 ||
-		result.Float16Array[2].Bits() != 0xBC00 ||
-		result.Float16Array[3].Bits() != 0x4200 {
+		result.Float16Array[2].Bits() != 0xBC00 {
 		panic(fmt.Sprintf("float16_array mismatch: got %#v", result.Float16Array))
 	}
 

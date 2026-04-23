@@ -865,17 +865,14 @@ final class TypeResolver {
       return wireTypeMetaForResolved(sharedTypes[index]);
     }
     final header = TypeHeader(buffer.readInt64());
-    final cached =
-        config.compatible ? null : _parsedTypeMetaCache.lookup(header);
+    final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       header.skipRemaining(buffer);
       sharedTypes.add(cached);
       return wireTypeMetaForResolved(cached);
     }
     final resolved = _readTypeDefWithHeader(buffer, header);
-    if (!config.compatible) {
-      _parsedTypeMetaCache.remember(header, resolved);
-    }
+    _parsedTypeMetaCache.remember(header, resolved);
     sharedTypes.add(resolved);
     return wireTypeMetaForResolved(resolved);
   }

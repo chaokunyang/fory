@@ -62,6 +62,7 @@ class CppGenerator(BaseGenerator):
         PrimitiveKind.VAR_UINT64: "uint64_t",
         PrimitiveKind.TAGGED_UINT64: "uint64_t",
         PrimitiveKind.FLOAT16: "fory::float16_t",
+        PrimitiveKind.BFLOAT16: "fory::bfloat16_t",
         PrimitiveKind.FLOAT32: "float",
         PrimitiveKind.FLOAT64: "double",
         PrimitiveKind.STRING: "std::string",
@@ -69,6 +70,7 @@ class CppGenerator(BaseGenerator):
         PrimitiveKind.DECIMAL: "fory::serialization::Decimal",
         PrimitiveKind.DATE: "fory::serialization::Date",
         PrimitiveKind.TIMESTAMP: "fory::serialization::Timestamp",
+        PrimitiveKind.DURATION: "fory::serialization::Duration",
         PrimitiveKind.ANY: "std::any",
     }
     NUMERIC_PRIMITIVES = {
@@ -88,6 +90,7 @@ class CppGenerator(BaseGenerator):
         PrimitiveKind.VAR_UINT64,
         PrimitiveKind.TAGGED_UINT64,
         PrimitiveKind.FLOAT16,
+        PrimitiveKind.BFLOAT16,
         PrimitiveKind.FLOAT32,
         PrimitiveKind.FLOAT64,
     }
@@ -1691,17 +1694,17 @@ class CppGenerator(BaseGenerator):
 
         elif isinstance(field_type, MapType):
             key_type = self.generate_type(
-                field_type.key_type, False, False, False, False, parent_stack
+                field_type.key_type,
+                nullable=False,
+                ref=False,
+                parent_stack=parent_stack,
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                False,
-                field_type.value_ref,
-                False,
-                False,
-                weak_ref and field_type.value_ref,
-                False,
-                parent_stack,
+                nullable=field_type.value_optional,
+                ref=field_type.value_ref,
+                weak_ref=weak_ref and field_type.value_ref,
+                parent_stack=parent_stack,
             )
             map_type = f"std::map<{key_type}, {value_type}>"
             if ref:
@@ -1782,12 +1785,18 @@ class CppGenerator(BaseGenerator):
                 includes.add("<vector>")
             elif field_type.kind == PrimitiveKind.DECIMAL:
                 includes.add('"fory/serialization/decimal_serializers.h"')
-            elif field_type.kind in (PrimitiveKind.DATE, PrimitiveKind.TIMESTAMP):
+            elif field_type.kind in (
+                PrimitiveKind.DATE,
+                PrimitiveKind.TIMESTAMP,
+                PrimitiveKind.DURATION,
+            ):
                 includes.add('"fory/serialization/temporal_serializers.h"')
             elif field_type.kind == PrimitiveKind.ANY:
                 includes.add("<any>")
             elif field_type.kind == PrimitiveKind.FLOAT16:
                 includes.add('"fory/util/float16.h"')
+            elif field_type.kind == PrimitiveKind.BFLOAT16:
+                includes.add('"fory/util/bfloat16.h"')
 
         elif isinstance(field_type, ListType):
             includes.add("<vector>")
@@ -1811,7 +1820,7 @@ class CppGenerator(BaseGenerator):
             self.collect_includes(field_type.key_type, False, False, includes)
             self.collect_includes(
                 field_type.value_type,
-                False,
+                field_type.value_optional,
                 field_type.value_ref,
                 includes,
                 False,

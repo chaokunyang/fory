@@ -978,7 +978,11 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
         "String" => return TypeId::STRING as u32,
         "NaiveDate" => return TypeId::DATE as u32,
         "NaiveDateTime" => return TypeId::TIMESTAMP as u32,
-        "Duration" => return TypeId::DURATION as u32,
+        "Duration"
+        | "chrono::Duration"
+        | "TimeDelta"
+        | "chrono::TimeDelta"
+        | "std::time::Duration" => return TypeId::DURATION as u32,
         "Decimal" => return TypeId::DECIMAL as u32,
         "Vec<u8>" | "bytes" => return TypeId::BINARY as u32,
         _ => {}

@@ -67,6 +67,7 @@ class SwiftGenerator(BaseGenerator):
         PrimitiveKind.BYTES: "Data",
         PrimitiveKind.DATE: "LocalDate",
         PrimitiveKind.TIMESTAMP: "Date",
+        PrimitiveKind.DURATION: "Duration",
         PrimitiveKind.DECIMAL: "Decimal",
         PrimitiveKind.ANY: "Any",
     }
@@ -608,7 +609,7 @@ class SwiftGenerator(BaseGenerator):
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                nullable=False,
+                nullable=field_type.value_optional,
                 parent_stack=parent_stack,
             )
             result = f"[{key_type}: {value_type}]"

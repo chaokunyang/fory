@@ -59,8 +59,8 @@ class CSharpGenerator(BaseGenerator):
         PrimitiveKind.UINT64: "ulong",
         PrimitiveKind.VAR_UINT64: "ulong",
         PrimitiveKind.TAGGED_UINT64: "ulong",
-        PrimitiveKind.FLOAT16: "float",
-        PrimitiveKind.BFLOAT16: "float",
+        PrimitiveKind.FLOAT16: "Half",
+        PrimitiveKind.BFLOAT16: "BFloat16",
         PrimitiveKind.FLOAT32: "float",
         PrimitiveKind.FLOAT64: "double",
         PrimitiveKind.STRING: "string",
@@ -68,7 +68,7 @@ class CSharpGenerator(BaseGenerator):
         PrimitiveKind.DATE: "DateOnly",
         PrimitiveKind.TIMESTAMP: "DateTimeOffset",
         PrimitiveKind.DURATION: "TimeSpan",
-        PrimitiveKind.DECIMAL: "decimal",
+        PrimitiveKind.DECIMAL: "ForyDecimal",
         PrimitiveKind.ANY: "object",
     }
 
@@ -536,7 +536,7 @@ class CSharpGenerator(BaseGenerator):
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                nullable=False,
+                nullable=field_type.value_optional,
                 parent_stack=parent_stack,
             )
             map_type = f"Dictionary<{key_type}, {value_type}>"

@@ -18,6 +18,7 @@
 import Foundation
 
 private let nanosPerSecond: Int64 = 1_000_000_000
+private let attosecondsPerNanosecond: Int64 = 1_000_000_000
 private let secondsPerDay = 86_400.0
 private let localDateCalendar: Calendar = {
     var calendar = Calendar(identifier: .gregorian)
@@ -47,6 +48,27 @@ private func normalizeTimestampComponents(seconds: Int64, nanos: Int64) -> (seco
 @inline(__always)
 private func timestampDate(seconds: Int64, nanos: UInt32) -> Date {
     Date(timeIntervalSince1970: Double(seconds) + Double(nanos) / Double(nanosPerSecond))
+}
+
+@inline(__always)
+private func normalizeDurationComponents(_ duration: Duration) throws -> (seconds: Int64, nanos: Int32) {
+    let components = duration.components
+    let nanos = components.attoseconds / attosecondsPerNanosecond
+    let remainder = components.attoseconds % attosecondsPerNanosecond
+    if remainder != 0 {
+        throw ForyError.encodingError("Duration precision finer than nanoseconds is not supported")
+    }
+
+    var normalizedSeconds = components.seconds
+    var normalizedNanos = nanos
+    if normalizedNanos < 0 {
+        guard normalizedSeconds > Int64.min else {
+            throw ForyError.encodingError("Duration seconds are out of Int64 range after normalization")
+        }
+        normalizedSeconds -= 1
+        normalizedNanos += nanosPerSecond
+    }
+    return (normalizedSeconds, Int32(normalizedNanos))
 }
 
 @inline(__always)
@@ -363,14 +385,9 @@ extension Duration: Serializer {
 
     public func foryWriteData(_ context: WriteContext, hasGenerics: Bool) throws {
         _ = hasGenerics
-        let components = self.components
-        let nanos = components.attoseconds / 1_000_000_000
-        let remainder = components.attoseconds % 1_000_000_000
-        if remainder != 0 {
-            throw ForyError.encodingError("Duration precision finer than nanoseconds is not supported")
-        }
+        let components = try normalizeDurationComponents(self)
         context.buffer.writeVarInt64(components.seconds)
-        context.buffer.writeInt32(Int32(nanos))
+        context.buffer.writeInt32(components.nanos)
     }
 
     public static func foryReadData(_ context: ReadContext) throws -> Duration {

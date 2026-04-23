@@ -60,13 +60,14 @@ class DartGenerator(BaseGenerator):
         PrimitiveKind.VAR_UINT64: "int",
         PrimitiveKind.TAGGED_UINT64: "int",
         PrimitiveKind.FLOAT16: "Float16",
-        PrimitiveKind.BFLOAT16: "Float16",
+        PrimitiveKind.BFLOAT16: "Bfloat16",
         PrimitiveKind.FLOAT32: "Float32",
         PrimitiveKind.FLOAT64: "double",
         PrimitiveKind.STRING: "String",
         PrimitiveKind.BYTES: "Uint8List",
         PrimitiveKind.DATE: "LocalDate",
         PrimitiveKind.TIMESTAMP: "Timestamp",
+        PrimitiveKind.DURATION: "Duration",
         PrimitiveKind.DECIMAL: "Decimal",
         PrimitiveKind.ANY: "Object?",
     }
@@ -490,7 +491,9 @@ class DartGenerator(BaseGenerator):
             return f"List<{element_type}>.of((({value_expr} as List)).map((item) => {converted_item}))"
         if isinstance(field_type, MapType):
             key_type = self.dart_type(field_type.key_type, False, parent_stack)
-            value_type = self.dart_type(field_type.value_type, False, parent_stack)
+            value_type = self.dart_type(
+                field_type.value_type, field_type.value_optional, parent_stack
+            )
             if self._supports_direct_container_cast(
                 field_type.key_type, parent_stack
             ) and self._supports_direct_container_cast(
@@ -506,7 +509,7 @@ class DartGenerator(BaseGenerator):
             converted_value = self._conversion_expression(
                 field_type.value_type,
                 "mapValue",
-                False,
+                field_type.value_optional,
                 parent_stack,
             )
             return f"Map<{key_type}, {value_type}>.of((({value_expr} as Map)).map((key, mapValue) => MapEntry({converted_key}, {converted_value})))"
@@ -526,7 +529,7 @@ class DartGenerator(BaseGenerator):
         elif isinstance(field_type, MapType):
             base = (
                 f"Map<{self.dart_type(field_type.key_type, parent_stack=parent_stack)}, "
-                f"{self.dart_type(field_type.value_type, parent_stack=parent_stack)}>"
+                f"{self.dart_type(field_type.value_type, field_type.value_optional, parent_stack)}>"
             )
         elif isinstance(field_type, NamedType):
             resolved = self.resolve_type(field_type.name, parent_stack)
@@ -568,6 +571,8 @@ class DartGenerator(BaseGenerator):
                 PrimitiveKind.UINT64: "Uint64List",
                 PrimitiveKind.VAR_UINT64: "Uint64List",
                 PrimitiveKind.TAGGED_UINT64: "Uint64List",
+                PrimitiveKind.FLOAT16: "Float16List",
+                PrimitiveKind.BFLOAT16: "Bfloat16List",
                 PrimitiveKind.FLOAT32: "Float32List",
                 PrimitiveKind.FLOAT64: "Float64List",
             }
@@ -603,15 +608,16 @@ class DartGenerator(BaseGenerator):
                 PrimitiveKind.UINT64: "0",
                 PrimitiveKind.VAR_UINT64: "0",
                 PrimitiveKind.TAGGED_UINT64: "0",
-                PrimitiveKind.FLOAT16: "Float16.zero",
-                PrimitiveKind.BFLOAT16: "Float16.zero",
+                PrimitiveKind.FLOAT16: "const Float16.fromBits(0)",
+                PrimitiveKind.BFLOAT16: "const Bfloat16.fromBits(0)",
                 PrimitiveKind.FLOAT32: "Float32(0)",
                 PrimitiveKind.FLOAT64: "0.0",
                 PrimitiveKind.STRING: "''",
                 PrimitiveKind.BYTES: "Uint8List(0)",
                 PrimitiveKind.DATE: "const LocalDate(1970, 1, 1)",
                 PrimitiveKind.TIMESTAMP: "Timestamp(0, 0)",
-                PrimitiveKind.DECIMAL: "const Decimal.zero()",
+                PrimitiveKind.DURATION: "Duration.zero",
+                PrimitiveKind.DECIMAL: "Decimal.zero()",
                 PrimitiveKind.ANY: "null",
             }[t.kind]
         if isinstance(t, ListType):
@@ -623,7 +629,9 @@ class DartGenerator(BaseGenerator):
             )
         if isinstance(t, MapType):
             key_type = self.dart_type(t.key_type, parent_stack=parent_stack)
-            value_type = self.dart_type(t.value_type, parent_stack=parent_stack)
+            value_type = self.dart_type(
+                t.value_type, t.value_optional, parent_stack=parent_stack
+            )
             return f"<{key_type}, {value_type}>{{}}"
         if isinstance(t, NamedType):
             resolved = self.resolve_type(t.name, parent_stack)
@@ -985,7 +993,7 @@ class DartGenerator(BaseGenerator):
             args.append(
                 self._field_type_literal_from_type(
                     field_type.value_type,
-                    False,
+                    field_type.value_optional,
                     field_type.value_ref,
                     indent + 2,
                     parent_stack,
@@ -1045,13 +1053,14 @@ class DartGenerator(BaseGenerator):
                 PrimitiveKind.VAR_UINT64: ("int", "TypeIds.varUint64"),
                 PrimitiveKind.TAGGED_UINT64: ("int", "TypeIds.taggedUint64"),
                 PrimitiveKind.FLOAT16: ("Float16", "TypeIds.float16"),
-                PrimitiveKind.BFLOAT16: ("Float16", "TypeIds.float16"),
+                PrimitiveKind.BFLOAT16: ("Bfloat16", "TypeIds.bfloat16"),
                 PrimitiveKind.FLOAT32: ("Float32", "TypeIds.float32"),
                 PrimitiveKind.FLOAT64: ("double", "TypeIds.float64"),
                 PrimitiveKind.STRING: ("String", "TypeIds.string"),
                 PrimitiveKind.BYTES: ("Uint8List", "TypeIds.binary"),
                 PrimitiveKind.DATE: ("LocalDate", "TypeIds.date"),
                 PrimitiveKind.TIMESTAMP: ("Timestamp", "TypeIds.timestamp"),
+                PrimitiveKind.DURATION: ("Duration", "TypeIds.duration"),
                 PrimitiveKind.ANY: ("Object", "TypeIds.unknown"),
             }[field_type.kind]
         if isinstance(field_type, ListType):
@@ -1070,6 +1079,8 @@ class DartGenerator(BaseGenerator):
                     "Uint16List": "TypeIds.uint16Array",
                     "Uint32List": "TypeIds.uint32Array",
                     "Uint64List": "TypeIds.uint64Array",
+                    "Float16List": "TypeIds.float16Array",
+                    "Bfloat16List": "TypeIds.bfloat16Array",
                     "Float32List": "TypeIds.float32Array",
                     "Float64List": "TypeIds.float64Array",
                 }[arr]

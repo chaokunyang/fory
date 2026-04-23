@@ -60,13 +60,15 @@ class RustGenerator(BaseGenerator):
         PrimitiveKind.UINT64: "u64",
         PrimitiveKind.VAR_UINT64: "u64",
         PrimitiveKind.TAGGED_UINT64: "u64",
-        PrimitiveKind.FLOAT16: "f32",
+        PrimitiveKind.FLOAT16: "fory::Float16",
+        PrimitiveKind.BFLOAT16: "fory::BFloat16",
         PrimitiveKind.FLOAT32: "f32",
         PrimitiveKind.FLOAT64: "f64",
         PrimitiveKind.STRING: "String",
         PrimitiveKind.BYTES: "Vec<u8>",
         PrimitiveKind.DATE: "chrono::NaiveDate",
         PrimitiveKind.TIMESTAMP: "chrono::NaiveDateTime",
+        PrimitiveKind.DURATION: "chrono::Duration",
         PrimitiveKind.DECIMAL: "fory::Decimal",
         PrimitiveKind.ANY: "Box<dyn Any>",
     }
@@ -741,7 +743,7 @@ class RustGenerator(BaseGenerator):
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                nullable=False,
+                nullable=field_type.value_optional,
                 ref=field_type.value_ref,
                 parent_stack=parent_stack,
                 pointer_type=pointer_type,
@@ -785,7 +787,11 @@ class RustGenerator(BaseGenerator):
     def collect_uses(self, field_type: FieldType, uses: Set[str]):
         """Collect required use statements for a field type."""
         if isinstance(field_type, PrimitiveType):
-            if field_type.kind in (PrimitiveKind.DATE, PrimitiveKind.TIMESTAMP):
+            if field_type.kind in (
+                PrimitiveKind.DATE,
+                PrimitiveKind.TIMESTAMP,
+                PrimitiveKind.DURATION,
+            ):
                 uses.add("use chrono")
             if field_type.kind == PrimitiveKind.ANY:
                 uses.add("use std::any::Any")

@@ -168,11 +168,13 @@ class FDLEmitter:
             return f"list<{' '.join(parts)}>"
         if isinstance(field_type, MapType):
             key = self._emit_type(field_type.key_type)
-            value = self._emit_type(field_type.value_type)
+            value_parts: List[str] = []
+            if field_type.value_optional:
+                value_parts.append("optional")
             if field_type.value_ref:
-                value = (
-                    f"{self._emit_ref_modifier(field_type.value_ref_options)} {value}"
-                )
+                value_parts.append(self._emit_ref_modifier(field_type.value_ref_options))
+            value_parts.append(self._emit_type(field_type.value_type))
+            value = " ".join(value_parts)
             return f"map<{key}, {value}>"
         return "unknown"
 

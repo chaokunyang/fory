@@ -467,7 +467,7 @@ export type HintInput<T> = T extends {
   : T extends {
     type: typeof TypeId.DURATION;
   }
-  ? Date
+  ? number
   : T extends {
     type: typeof TypeId.DECIMAL;
   }

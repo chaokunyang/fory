@@ -197,6 +197,7 @@ class GoGenerator(BaseGenerator):
         PrimitiveKind.BYTES: "[]byte",
         PrimitiveKind.DATE: "fory.Date",
         PrimitiveKind.TIMESTAMP: "time.Time",
+        PrimitiveKind.DURATION: "time.Duration",
         PrimitiveKind.DECIMAL: "fory.Decimal",
         PrimitiveKind.ANY: "any",
     }
@@ -661,17 +662,48 @@ class GoGenerator(BaseGenerator):
                 PrimitiveKind.VAR_UINT64: "fory.VAR_UINT64",
                 PrimitiveKind.TAGGED_UINT64: "fory.TAGGED_UINT64",
                 PrimitiveKind.FLOAT16: "fory.FLOAT16",
+                PrimitiveKind.BFLOAT16: "fory.BFLOAT16",
                 PrimitiveKind.FLOAT32: "fory.FLOAT32",
                 PrimitiveKind.FLOAT64: "fory.FLOAT64",
                 PrimitiveKind.STRING: "fory.STRING",
                 PrimitiveKind.BYTES: "fory.BINARY",
                 PrimitiveKind.DATE: "fory.DATE",
                 PrimitiveKind.TIMESTAMP: "fory.TIMESTAMP",
+                PrimitiveKind.DURATION: "fory.DURATION",
                 PrimitiveKind.DECIMAL: "fory.DECIMAL",
                 PrimitiveKind.ANY: "fory.UNKNOWN",
             }
             return primitive_type_ids.get(kind, "fory.UNKNOWN")
         if isinstance(field.field_type, ListType):
+            if (
+                isinstance(field.field_type.element_type, PrimitiveType)
+                and not field.field_type.element_optional
+                and not field.field_type.element_ref
+            ):
+                array_type_ids = {
+                    PrimitiveKind.BOOL: "fory.BOOL_ARRAY",
+                    PrimitiveKind.INT8: "fory.INT8_ARRAY",
+                    PrimitiveKind.INT16: "fory.INT16_ARRAY",
+                    PrimitiveKind.INT32: "fory.INT32_ARRAY",
+                    PrimitiveKind.VARINT32: "fory.INT32_ARRAY",
+                    PrimitiveKind.INT64: "fory.INT64_ARRAY",
+                    PrimitiveKind.VARINT64: "fory.INT64_ARRAY",
+                    PrimitiveKind.TAGGED_INT64: "fory.INT64_ARRAY",
+                    PrimitiveKind.UINT8: "fory.UINT8_ARRAY",
+                    PrimitiveKind.UINT16: "fory.UINT16_ARRAY",
+                    PrimitiveKind.UINT32: "fory.UINT32_ARRAY",
+                    PrimitiveKind.VAR_UINT32: "fory.UINT32_ARRAY",
+                    PrimitiveKind.UINT64: "fory.UINT64_ARRAY",
+                    PrimitiveKind.VAR_UINT64: "fory.UINT64_ARRAY",
+                    PrimitiveKind.TAGGED_UINT64: "fory.UINT64_ARRAY",
+                    PrimitiveKind.FLOAT16: "fory.FLOAT16_ARRAY",
+                    PrimitiveKind.BFLOAT16: "fory.BFLOAT16_ARRAY",
+                    PrimitiveKind.FLOAT32: "fory.FLOAT32_ARRAY",
+                    PrimitiveKind.FLOAT64: "fory.FLOAT64_ARRAY",
+                }
+                array_type_id = array_type_ids.get(field.field_type.element_type.kind)
+                if array_type_id is not None:
+                    return array_type_id
             return "fory.LIST"
         if isinstance(field.field_type, MapType):
             return "fory.MAP"
@@ -940,7 +972,12 @@ class GoGenerator(BaseGenerator):
             if field.field_type.kind == PrimitiveKind.ANY:
                 return False
             base_type = self.PRIMITIVE_MAP[field.field_type.kind]
-            return base_type not in ("[]byte", "time.Time", "fory.Date")
+            return base_type not in (
+                "[]byte",
+                "time.Time",
+                "time.Duration",
+                "fory.Date",
+            )
         if isinstance(field.field_type, NamedType):
             named_type = self.schema.get_type(field.field_type.name)
             return isinstance(named_type, Enum)
@@ -965,7 +1002,7 @@ class GoGenerator(BaseGenerator):
                 if (
                     use_option
                     and not ref
-                    and base_type not in ("time.Time", "fory.Date")
+                    and base_type not in ("time.Time", "time.Duration", "fory.Date")
                 ):
                     return f"optional.Optional[{base_type}]"
                 return f"*{base_type}"
@@ -1017,11 +1054,12 @@ class GoGenerator(BaseGenerator):
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                False,
+                field_type.value_optional,
                 field_type.value_ref,
                 False,
                 False,
                 parent_stack,
+                use_option=False,
             )
             return f"map[{key_type}]{value_type}"
 
@@ -1089,7 +1127,11 @@ class GoGenerator(BaseGenerator):
     def collect_imports(self, field_type: FieldType, imports: Set[str]):
         """Collect required imports for a field type."""
         if isinstance(field_type, PrimitiveType):
-            if field_type.kind in (PrimitiveKind.DATE, PrimitiveKind.TIMESTAMP):
+            if field_type.kind in (
+                PrimitiveKind.DATE,
+                PrimitiveKind.TIMESTAMP,
+                PrimitiveKind.DURATION,
+            ):
                 imports.add('"time"')
             elif field_type.kind == PrimitiveKind.FLOAT16:
                 imports.add('float16 "github.com/apache/fory/go/fory/float16"')

@@ -262,11 +262,11 @@ func fieldHasNonPrimitiveSerializer(field *FieldInfo) bool {
 	if field.Serializer == nil {
 		return false
 	}
-	// ENUM (numeric ID), NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT
+	// ENUM (numeric ID), temporal values, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT
 	// all require special serialization and should not use the primitive fast path
 	// Note: ENUM uses unsigned VarUint32Small7 for ordinals, not signed zigzag varint
 	switch TypeId(field.Meta.TypeId) {
-	case ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
+	case ENUM, DURATION, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
 		return true
 	default:
 		return false
@@ -490,8 +490,8 @@ func isStructField(t reflect.Type) bool {
 	if isUnionType(t) {
 		return false
 	}
-	// Date/Timestamp are built-in types with dedicated encodings, not user structs.
-	if t == dateType || t == timestampType || t == decimalType {
+	// Date/Duration/Timestamp are built-in types with dedicated encodings, not user structs.
+	if t == dateType || t == durationType || t == timestampType || t == decimalType {
 		return false
 	}
 	if t.Kind() == reflect.Struct {
@@ -881,6 +881,9 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 	}
 	if type_ == dateType {
 		return DATE
+	}
+	if type_ == durationType {
+		return DURATION
 	}
 	if type_ == timestampType {
 		return TIMESTAMP

@@ -18,6 +18,7 @@
 import array
 import builtins
 import dataclasses
+import datetime
 import decimal
 import importlib
 import inspect
@@ -274,6 +275,25 @@ class DecimalSerializer(Serializer):
     def read(self, read_context):
         scale, unscaled = _read_decimal_parts(read_context)
         return _decimal_from_parts(scale, unscaled)
+
+
+class DurationSerializer(Serializer):
+    def write(self, write_context, value: datetime.timedelta):
+        if not isinstance(value, datetime.timedelta):
+            raise TypeError("{} should be {} instead of {}".format(value, datetime.timedelta, type(value)))
+        seconds = value.days * 86400 + value.seconds
+        nanos = value.microseconds * 1000
+        write_context.write_varint64(seconds)
+        write_context.write_int32(nanos)
+
+    def read(self, read_context):
+        seconds = read_context.read_varint64()
+        nanos = read_context.read_int32()
+        if nanos < 0 or nanos >= 1_000_000_000:
+            raise ValueError(f"Duration nanoseconds {nanos} are outside [0, 1_000_000_000)")
+        if nanos % 1000 != 0:
+            raise ValueError(f"Duration nanoseconds {nanos} cannot be represented with datetime.timedelta microsecond precision")
+        return datetime.timedelta(seconds=seconds, microseconds=nanos // 1000)
 
 
 class PandasRangeIndexSerializer(Serializer):

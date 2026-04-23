@@ -72,19 +72,19 @@ class DurationSerializerGenerator extends BaseSerializerGenerator {
       const ${msVar} = ${accessor};
       const ${secondsVar} = Math.floor(${msVar} / 1000);
       const ${nanosVar} = (${msVar} - ${secondsVar} * 1000) * 1000000;
-      ${this.builder.writer.writeInt64(`${secondsVar}`)}
-      ${this.builder.writer.writeUint32(`${nanosVar}`)}
+      ${this.builder.writer.writeVarInt64(`${secondsVar}`)}
+      ${this.builder.writer.writeInt32(`${nanosVar}`)}
       `;
   }
 
   read(accessor: (expr: string) => string): string {
-    const seconds = this.builder.reader.readInt64();
-    const nanos = this.builder.reader.readUint32();
+    const seconds = this.builder.reader.readVarInt64();
+    const nanos = this.builder.reader.readInt32();
     return accessor(`Number(${seconds}) * 1000 + Math.floor(${nanos} / 1000000)`);
   }
 
   getFixedSize(): number {
-    return 7;
+    return 15;
   }
 }
 

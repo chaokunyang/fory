@@ -29,6 +29,15 @@ private struct DateMacroHolder {
     var timestamp: Date = .foryDefault()
 }
 
+@ForyObject
+private struct DurationMacroHolder: Equatable {
+    var label: String = ""
+    var elapsed: Duration = .zero
+    var maybeElapsed: Duration?
+    var qualifiedElapsed: Swift.Duration = .zero
+    var day: LocalDate = .foryDefault()
+}
+
 private func midnightUTC(daysSinceEpoch: Int32) -> Date {
     Date(timeIntervalSince1970: Double(daysSinceEpoch) * secondsPerDay)
 }
@@ -37,11 +46,41 @@ private func localDate(_ daysSinceEpoch: Int32) -> LocalDate {
     .init(daysSinceEpoch: daysSinceEpoch)
 }
 
+private func encodedDurationComponents(_ duration: Duration) throws -> (seconds: Int64, nanos: Int32) {
+    let buffer = ByteBuffer()
+    let context = WriteContext(
+        buffer: buffer,
+        typeResolver: TypeResolver(trackRef: false),
+        xlang: true,
+        trackRef: false,
+        compatible: true,
+        checkClassVersion: true,
+        maxDepth: 5
+    )
+    try duration.foryWriteData(context, hasGenerics: false)
+
+    let readBuffer = ByteBuffer(data: buffer.copyToData())
+    return (try readBuffer.readVarInt64(), try readBuffer.readInt32())
+}
+
 @Test
 func dateAndTimestampTypeIds() {
     #expect(Duration.staticTypeId == .duration)
     #expect(LocalDate.staticTypeId == .date)
     #expect(Date.staticTypeId == .timestamp)
+}
+
+@Test
+func durationWritesCanonicalXlangComponents() throws {
+    let negativeSubsecond = try encodedDurationComponents(.nanoseconds(-500_000_000))
+    #expect(negativeSubsecond.seconds == -1)
+    #expect(negativeSubsecond.nanos == 500_000_000)
+
+    let negativeWithPositiveAdjustment = try encodedDurationComponents(
+        .seconds(-2) + .nanoseconds(123_456_789)
+    )
+    #expect(negativeWithPositiveAdjustment.seconds == -2)
+    #expect(negativeWithPositiveAdjustment.nanos == 123_456_789)
 }
 
 @Test
@@ -103,7 +142,7 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
         Array(xlangWriteBuffer.copyToData()) == [
             UInt8(bitPattern: RefFlag.notNullValue.rawValue),
             UInt8(LocalDate.staticTypeId.rawValue),
-            0x01,
+            0x01
         ]
     )
 
@@ -158,7 +197,7 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
         0xFF,
         0xFF,
         0xFF,
-        0xFF,
+        0xFF
     ])
 
     let timestampBuffer = ByteBuffer()
@@ -187,6 +226,37 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
     )
     let timestampDecoded = try timestampReadContext.readTimestamp(refMode: RefMode.nullOnly, readTypeInfo: true)
     #expect(abs(timestampDecoded.timeIntervalSince1970 - instant.timeIntervalSince1970) < 0.000_001)
+}
+
+@Test
+func durationMacroFieldsUseXlangTypeId() throws {
+    let fields = DurationMacroHolder.foryFieldsInfo(trackRef: false)
+    #expect(fields.map(\.fieldName) == ["label", "elapsed", "maybeElapsed", "qualifiedElapsed", "day"])
+    #expect(fields.map(\.fieldType.typeID) == [
+        TypeId.string.rawValue,
+        TypeId.duration.rawValue,
+        TypeId.duration.rawValue,
+        TypeId.duration.rawValue,
+        TypeId.date.rawValue
+    ])
+    #expect(!fields[1].fieldType.nullable)
+    #expect(fields[2].fieldType.nullable)
+    #expect(!fields[3].fieldType.nullable)
+
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    fory.register(DurationMacroHolder.self, id: 902)
+
+    let value = DurationMacroHolder(
+        label: "elapsed",
+        elapsed: .nanoseconds(-500_000_000),
+        maybeElapsed: .seconds(4) + .nanoseconds(5),
+        qualifiedElapsed: .seconds(-2) + .nanoseconds(123_456_789),
+        day: localDate(20_001)
+    )
+    let data = try fory.serialize(value)
+    let decoded: DurationMacroHolder = try fory.deserialize(data)
+
+    #expect(decoded == value)
 }
 
 @Test

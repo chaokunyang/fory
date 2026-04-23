@@ -64,7 +64,7 @@ mixin _BufferMixin {
     if (required <= _bytes.length) {
       return;
     }
-    var newLength = _bytes.length;
+    var newLength = _bytes.isEmpty ? 1 : _bytes.length;
     while (newLength < required) {
       newLength *= 2;
     }

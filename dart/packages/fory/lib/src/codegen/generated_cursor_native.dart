@@ -55,43 +55,30 @@ final class GeneratedWriteCursor with _GeneratedWriteCursorMixin {
 
   @pragma('vm:prefer-inline')
   void writeUint64(Uint64 value) {
-    _view.setUint32(_offset, value.low32, Endian.little);
-    _view.setUint32(_offset + 4, value.high32Unsigned, Endian.little);
+    _view.setInt64(_offset, value.value, Endian.little);
     _offset += 8;
   }
 
   @pragma('vm:prefer-inline')
   void writeUint64FromInt(int value) {
-    _view.setUint32(_offset, value & 0xffffffff, Endian.little);
-    _view.setUint32(_offset + 4, (value >> 32) & 0xffffffff, Endian.little);
+    _view.setInt64(_offset, value.toSigned(64), Endian.little);
     _offset += 8;
   }
 
   @pragma('vm:prefer-inline')
   @override
   void writeVarUint64(Uint64 value) {
-    var remaining = value;
-    for (var shift = 0; shift < 56 && remaining > 0x7f; shift += 7) {
-      _bytes[_offset] = (remaining.low32 & 0x7f) | 0x80;
-      _offset += 1;
-      remaining = remaining >> 7;
-    }
-    _bytes[_offset] = remaining.toInt();
-    _offset += 1;
+    _writeVarUint64Int(value.value);
   }
 
   @pragma('vm:prefer-inline')
   void writeVarUint64FromInt(int value) {
-    if (value < 0) {
-      writeVarUint64(Uint64(value));
-      return;
-    }
-    _writeVarUint64Int(value);
+    _writeVarUint64Int(value.toSigned(64));
   }
 
   @pragma('vm:prefer-inline')
   void writeVarInt64(Int64 value) {
-    writeVarUint64(Uint64((value << 1) ^ (value >> 63)));
+    _writeVarUint64Int((value << 1) ^ (value >> 63));
   }
 
   @pragma('vm:prefer-inline')
@@ -182,10 +169,7 @@ final class GeneratedReadCursor with _GeneratedReadCursorMixin {
 
   @pragma('vm:prefer-inline')
   Uint64 readUint64() {
-    final value = Uint64.fromWords(
-      _view.getUint32(_offset, Endian.little),
-      _view.getUint32(_offset + 4, Endian.little),
-    );
+    final value = Uint64(_view.getInt64(_offset, Endian.little));
     _offset += 8;
     return value;
   }
@@ -193,6 +177,11 @@ final class GeneratedReadCursor with _GeneratedReadCursorMixin {
   @pragma('vm:prefer-inline')
   int readUint64AsInt() {
     final value = _view.getUint64(_offset, Endian.little);
+    if ((_view.getUint32(_offset + 4, Endian.little) & 0x80000000) != 0) {
+      throw StateError(
+        'Uint64 value $value is not representable as a native int.',
+      );
+    }
     _offset += 8;
     return value;
   }
@@ -225,7 +214,14 @@ final class GeneratedReadCursor with _GeneratedReadCursorMixin {
       }
       shift += 7;
     }
-    return result | (readUint8() << 56);
+    final byte = readUint8();
+    final value = result | (byte << 56);
+    if ((byte & 0x80) != 0) {
+      throw StateError(
+        'Uint64 value $value is not representable as a native int.',
+      );
+    }
+    return value;
   }
 
   @pragma('vm:prefer-inline')
@@ -236,7 +232,17 @@ final class GeneratedReadCursor with _GeneratedReadCursorMixin {
 
   @pragma('vm:prefer-inline')
   int readVarInt64AsInt() {
-    final encoded = readVarUint64AsInt();
+    var shift = 0;
+    var encoded = 0;
+    while (shift < 56) {
+      final byte = readUint8();
+      encoded |= (byte & 0x7f) << shift;
+      if ((byte & 0x80) == 0) {
+        return (encoded >>> 1) ^ -(encoded & 1);
+      }
+      shift += 7;
+    }
+    encoded |= readUint8() << 56;
     return (encoded >>> 1) ^ -(encoded & 1);
   }
 
@@ -274,10 +280,7 @@ final class GeneratedReadCursor with _GeneratedReadCursorMixin {
       _offset = readIndex + 4;
       return Uint64(first >>> 1);
     }
-    final value = Uint64.fromWords(
-      _view.getUint32(readIndex + 1, Endian.little),
-      _view.getUint32(readIndex + 5, Endian.little),
-    );
+    final value = Uint64(_view.getInt64(readIndex + 1, Endian.little));
     _offset = readIndex + 9;
     return value;
   }
@@ -291,6 +294,11 @@ final class GeneratedReadCursor with _GeneratedReadCursorMixin {
       return first >>> 1;
     }
     final value = _view.getUint64(readIndex + 1, Endian.little);
+    if ((_view.getUint32(readIndex + 5, Endian.little) & 0x80000000) != 0) {
+      throw StateError(
+        'Uint64 value $value is not representable as a native int.',
+      );
+    }
     _offset = readIndex + 9;
     return value;
   }

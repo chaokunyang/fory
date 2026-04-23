@@ -91,6 +91,16 @@ void main() {
       expect(buffer.toBytes().last, equals(7));
     });
 
+    test('grows from zero-capacity storage', () {
+      final buffer = Buffer(0);
+      buffer.writeBytes([1, 2, 3]);
+      expect(buffer.toBytes(), orderedEquals([1, 2, 3]));
+
+      final wrapped = Buffer.wrap(Uint8List(0));
+      wrapped.writeUint8(4);
+      expect(wrapped.toBytes(), orderedEquals([4]));
+    });
+
     test(
       'wrap constructor, wrap method, read views, copyBytes, skip, and clear manage indices',
       () {
@@ -378,6 +388,40 @@ void main() {
       }
     });
 
+    test(
+        'uint64 cursor int helpers match Uint64 wrapper encodings at safe boundaries',
+        () {
+      const cases = <int>[
+        0,
+        1,
+        0x7fffffff,
+        0x80000000,
+        0xffffffff,
+        _jsSafeIntMax,
+      ];
+
+      for (final value in cases) {
+        _expectUint64CursorIntHelperMatchesWrapper(
+          value: value,
+          cursorWriteInt: (cursor, value) => cursor.writeUint64FromInt(value),
+          cursorWriteWrapper: (cursor, value) => cursor.writeUint64(value),
+        );
+        _expectUint64CursorIntHelperMatchesWrapper(
+          value: value,
+          cursorWriteInt: (cursor, value) =>
+              cursor.writeVarUint64FromInt(value),
+          cursorWriteWrapper: (cursor, value) => cursor.writeVarUint64(value),
+        );
+        _expectUint64CursorIntHelperMatchesWrapper(
+          value: value,
+          cursorWriteInt: (cursor, value) =>
+              cursor.writeTaggedUint64FromInt(value),
+          cursorWriteWrapper: (cursor, value) =>
+              cursor.writeTaggedUint64(value),
+        );
+      }
+    });
+
     test('web rejects JS-unsafe int64 int helper values', () {
       if (!identical(1, 1.0)) {
         final buffer = Buffer();
@@ -420,6 +464,53 @@ void main() {
             .readTaggedInt64AsInt(),
         throwsA(isA<StateError>()),
       );
+    });
+
+    test('web rejects unsafe uint64 cursor int helper values', () {
+      if (!identical(1, 1.0)) {
+        for (final value in <int>[-1, _jsUnsafeInt]) {
+          _expectUint64CursorIntHelperMatchesWrapper(
+            value: value,
+            cursorWriteInt: (cursor, value) => cursor.writeUint64FromInt(value),
+            cursorWriteWrapper: (cursor, value) => cursor.writeUint64(value),
+          );
+          _expectUint64CursorIntHelperMatchesWrapper(
+            value: value,
+            cursorWriteInt: (cursor, value) =>
+                cursor.writeVarUint64FromInt(value),
+            cursorWriteWrapper: (cursor, value) => cursor.writeVarUint64(value),
+          );
+          _expectUint64CursorIntHelperMatchesWrapper(
+            value: value,
+            cursorWriteInt: (cursor, value) =>
+                cursor.writeTaggedUint64FromInt(value),
+            cursorWriteWrapper: (cursor, value) =>
+                cursor.writeTaggedUint64(value),
+          );
+        }
+        return;
+      }
+
+      for (final value in <int>[-1, _jsUnsafeInt]) {
+        expect(
+          () => _writeWithCursor((cursor) => cursor.writeUint64FromInt(value)),
+          throwsA(isA<StateError>()),
+          reason: 'fixed $value',
+        );
+        expect(
+          () =>
+              _writeWithCursor((cursor) => cursor.writeVarUint64FromInt(value)),
+          throwsA(isA<StateError>()),
+          reason: 'varint $value',
+        );
+        expect(
+          () => _writeWithCursor(
+            (cursor) => cursor.writeTaggedUint64FromInt(value),
+          ),
+          throwsA(isA<StateError>()),
+          reason: 'tagged $value',
+        );
+      }
     });
 
     test('round-trips small varuint helpers', () {
@@ -585,6 +676,32 @@ void _expectInt64IntHelperMatchesWrapper({
   expect(cursorReadInt(cursorRead), equals(value));
   cursorRead.finish();
   expect(cursorReadBuffer.readableBytes, equals(0));
+}
+
+void _expectUint64CursorIntHelperMatchesWrapper({
+  required int value,
+  required void Function(GeneratedWriteCursor cursor, int value) cursorWriteInt,
+  required void Function(GeneratedWriteCursor cursor, Uint64 value)
+      cursorWriteWrapper,
+}) {
+  final intBuffer = Buffer();
+  final intCursor = GeneratedWriteCursor.reserve(intBuffer, 10);
+  cursorWriteInt(intCursor, value);
+  intCursor.finish();
+
+  final wrapperBuffer = Buffer();
+  final wrapperCursor = GeneratedWriteCursor.reserve(wrapperBuffer, 10);
+  cursorWriteWrapper(wrapperCursor, Uint64(value));
+  wrapperCursor.finish();
+
+  expect(intBuffer.toBytes(), orderedEquals(wrapperBuffer.toBytes()));
+}
+
+void _writeWithCursor(void Function(GeneratedWriteCursor cursor) write) {
+  final buffer = Buffer();
+  final cursor = GeneratedWriteCursor.reserve(buffer, 10);
+  write(cursor);
+  cursor.finish();
 }
 
 void _expectEncodedIntRoundTrip({

@@ -17,6 +17,8 @@
  * under the License.
  */
 
+import 'dart:typed_data';
+
 import 'package:fory/fory.dart';
 import 'package:test/test.dart';
 
@@ -320,6 +322,29 @@ void main() {
         reason: 'unsafe negative boundary',
       );
     });
+
+    test('list sublistView respects source typed-data element ranges', () {
+      final bytes = Uint8List(24);
+      final data = ByteData.sublistView(bytes);
+      data.setUint32(8, 0x76543210, Endian.little);
+      data.setUint32(12, 0x01234567, Endian.little);
+
+      final byteView = Int64List.sublistView(bytes, 8, 16);
+      expect(byteView.length, equals(1));
+      expect(byteView[0], equals(Int64.fromWords(0x76543210, 0x01234567)));
+
+      byteView[0] = Int64.fromWords(0x89abcdef, 0x76543210);
+      expect(data.getUint32(8, Endian.little), equals(0x89abcdef));
+      expect(data.getUint32(12, Endian.little), equals(0x76543210));
+
+      final wordView =
+          Int64List.sublistView(Uint32List.view(bytes.buffer), 2, 4);
+      expect(wordView.length, equals(1));
+      expect(wordView[0], equals(Int64.fromWords(0x89abcdef, 0x76543210)));
+
+      expect(() => Int64List.sublistView(bytes, 1, 9), throwsArgumentError);
+      expect(() => Int64List.sublistView(bytes, 8, 15), throwsArgumentError);
+    });
   });
 
   group('Uint64', () {
@@ -530,6 +555,29 @@ void main() {
         _mask64,
         reason: 'max boundary',
       );
+    });
+
+    test('list sublistView respects source typed-data element ranges', () {
+      final bytes = Uint8List(24);
+      final data = ByteData.sublistView(bytes);
+      data.setUint32(8, 0xfedcba98, Endian.little);
+      data.setUint32(12, 0x01234567, Endian.little);
+
+      final byteView = Uint64List.sublistView(bytes, 8, 16);
+      expect(byteView.length, equals(1));
+      expect(byteView[0], equals(Uint64.fromWords(0xfedcba98, 0x01234567)));
+
+      byteView[0] = Uint64.fromWords(0x76543210, 0xfedcba98);
+      expect(data.getUint32(8, Endian.little), equals(0x76543210));
+      expect(data.getUint32(12, Endian.little), equals(0xfedcba98));
+
+      final wordView =
+          Uint64List.sublistView(Uint32List.view(bytes.buffer), 2, 4);
+      expect(wordView.length, equals(1));
+      expect(wordView[0], equals(Uint64.fromWords(0x76543210, 0xfedcba98)));
+
+      expect(() => Uint64List.sublistView(bytes, 1, 9), throwsArgumentError);
+      expect(() => Uint64List.sublistView(bytes, 8, 15), throwsArgumentError);
     });
   });
 }

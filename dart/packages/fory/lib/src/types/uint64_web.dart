@@ -375,12 +375,21 @@ final class Uint64List extends IterableBase<Uint64> {
 
   /// Creates a zero-copy element-range view of [data].
   factory Uint64List.sublistView(td.TypedData data, [int start = 0, int? end]) {
-    final totalLength = data.lengthInBytes ~/ bytesPerElement;
-    final endIndex = RangeError.checkValidRange(start, end, totalLength);
+    final elementCount = data.lengthInBytes ~/ data.elementSizeInBytes;
+    final endIndex = RangeError.checkValidRange(start, end, elementCount);
+    final byteOffset = data.offsetInBytes + start * data.elementSizeInBytes;
+    final byteLength = (endIndex - start) * data.elementSizeInBytes;
+    if (byteOffset % bytesPerElement != 0 ||
+        byteLength % bytesPerElement != 0) {
+      throw ArgumentError(
+        'The selected byte range must align to $bytesPerElement-byte '
+        'Uint64 elements.',
+      );
+    }
     return Uint64List.view(
       data.buffer,
-      data.offsetInBytes + start * bytesPerElement,
-      endIndex - start,
+      byteOffset,
+      byteLength ~/ bytesPerElement,
     );
   }
 

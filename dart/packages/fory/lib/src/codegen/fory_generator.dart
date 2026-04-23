@@ -426,12 +426,14 @@ final class ForyGenerator extends Generator {
     output.writeln();
     for (var index = 0; index < structSpec.fields.length; index += 1) {
       final field = structSpec.fields[index];
+      final fieldValue =
+          _generatedFieldInfoWriteValueExpression(field, 'value.${field.name}');
       output
         ..writeln(
           'void _write${structSpec.name}Field$index(WriteContext context, GeneratedStructFieldInfo field, ${structSpec.name} value) {',
         )
         ..writeln(
-          '  writeGeneratedStructFieldInfoValue(context, field, value.${field.name});',
+          '  writeGeneratedStructFieldInfoValue(context, field, $fieldValue);',
         )
         ..writeln('}')
         ..writeln();
@@ -541,8 +543,12 @@ final class ForyGenerator extends Generator {
           '      ${_directGeneratedWriteStatement(field, 'value.${field.name}')};',
         );
       } else {
+        final fieldValue = _generatedFieldInfoWriteValueExpression(
+          field,
+          'value.${field.name}',
+        );
         output.writeln(
-          '      writeGeneratedStructFieldInfoValue(context, fields[$index], value.${field.name});',
+          '      writeGeneratedStructFieldInfoValue(context, fields[$index], $fieldValue);',
         );
       }
       final directCursorEndRun = directCursorRunByEnd[index];
@@ -1652,6 +1658,28 @@ GeneratedFieldType(
     }
   }
 
+  String _generatedFieldInfoWriteValueExpression(
+    _GeneratedFieldSpec field,
+    String valueExpression,
+  ) {
+    if (!_withoutNullability(field.type).isDartCoreInt) {
+      return valueExpression;
+    }
+    final wrapper = switch (field.fieldType.typeId) {
+      TypeIds.int8 => 'Int8',
+      TypeIds.int16 => 'Int16',
+      TypeIds.int32 || TypeIds.varInt32 => 'Int32',
+      _ => null,
+    };
+    if (wrapper == null) {
+      return valueExpression;
+    }
+    if (_isNullable(field.type)) {
+      return '$valueExpression == null ? null : $wrapper($valueExpression!)';
+    }
+    return '$wrapper($valueExpression)';
+  }
+
   String _nullExpression(
     DartType type, {
     required String errorTarget,
@@ -2167,9 +2195,9 @@ GeneratedFieldType(
       case 'Uint16':
         return TypeIds.uint16;
       case 'Uint32':
-        return TypeIds.uint32;
+        return TypeIds.varUint32;
       case 'Uint64':
-        return TypeIds.uint64;
+        return TypeIds.varUint64;
       case 'Int64':
         return TypeIds.varInt64;
       case 'Float16':

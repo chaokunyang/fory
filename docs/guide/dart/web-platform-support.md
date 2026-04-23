@@ -19,18 +19,23 @@ license: |
   limitations under the License.
 ---
 
-Fory Dart supports browser and Flutter web builds through generated serializers
-and platform-specific runtime implementations. The public API is the same as VM
-builds, but web builds have stricter integer precision rules because Dart `int`
-is represented by JavaScript numbers.
+Fory Dart supports Dart VM/AOT, Flutter, browser, and Flutter web builds
+through generated serializers and platform-specific runtime implementations.
+The public API and registration flow are the same across these platforms, but
+web builds have stricter integer precision rules because Dart `int` is
+represented by JavaScript numbers.
 
-## Supported Web Targets
+## Supported Targets
 
 The Dart runtime supports:
 
+- Dart VM/JIT applications.
+- Dart AOT/native applications.
+- Flutter mobile and desktop applications.
 - Dart applications compiled to JavaScript for browsers.
 - Flutter web applications.
-- Generated `@ForyStruct` serializers and manually registered serializers.
+- Generated `@ForyStruct` serializers and manually registered serializers on
+  all supported targets.
 
 ## Code Generation Is Required
 
@@ -73,9 +78,9 @@ cd dart/packages/fory
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-The registration call is the same on VM and web. Manual serializers use
-`registerSerializer(...)`; generated structs use the generated `register`
-wrapper.
+The registration call is the same on VM/AOT, Flutter, and web. Manual
+serializers use `registerSerializer(...)`; generated structs use the generated
+`register` wrapper.
 
 ## 64-Bit Integer Rules
 
@@ -133,7 +138,7 @@ class StorageExtent {
 ## Custom Serializers
 
 Custom serializers can use the same `Buffer`, `WriteContext`, and `ReadContext`
-APIs on VM and web. For 64-bit values:
+APIs on VM/AOT, Flutter, and web. For 64-bit values:
 
 - Use `buffer.writeInt64(Int64(...))` and `buffer.readInt64()` for full-range
   signed 64-bit values.

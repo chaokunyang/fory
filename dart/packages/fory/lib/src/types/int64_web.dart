@@ -443,12 +443,21 @@ final class Int64List extends IterableBase<Int64> {
 
   /// Creates a zero-copy element-range view of [data].
   factory Int64List.sublistView(td.TypedData data, [int start = 0, int? end]) {
-    final totalLength = data.lengthInBytes ~/ bytesPerElement;
-    final endIndex = RangeError.checkValidRange(start, end, totalLength);
+    final elementCount = data.lengthInBytes ~/ data.elementSizeInBytes;
+    final endIndex = RangeError.checkValidRange(start, end, elementCount);
+    final byteOffset = data.offsetInBytes + start * data.elementSizeInBytes;
+    final byteLength = (endIndex - start) * data.elementSizeInBytes;
+    if (byteOffset % bytesPerElement != 0 ||
+        byteLength % bytesPerElement != 0) {
+      throw ArgumentError(
+        'The selected byte range must align to $bytesPerElement-byte '
+        'Int64 elements.',
+      );
+    }
     return Int64List.view(
       data.buffer,
-      data.offsetInBytes + start * bytesPerElement,
-      endIndex - start,
+      byteOffset,
+      byteLength ~/ bytesPerElement,
     );
   }
 

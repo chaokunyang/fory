@@ -83,17 +83,13 @@ final class Buffer with _BufferMixin {
   /// Writes an unsigned little-endian 64-bit integer.
   void writeUint64(Uint64 value) {
     ensureWritable(8);
-    _view.setUint32(_writerIndex, value.low32, Endian.little);
-    _view.setUint32(_writerIndex + 4, value.high32Unsigned, Endian.little);
+    _view.setInt64(_writerIndex, value.value, Endian.little);
     _writerIndex += 8;
   }
 
   /// Reads an unsigned little-endian 64-bit integer.
   Uint64 readUint64() {
-    final value = Uint64.fromWords(
-      _view.getUint32(_readerIndex, Endian.little),
-      _view.getUint32(_readerIndex + 4, Endian.little),
-    );
+    final value = Uint64(_view.getInt64(_readerIndex, Endian.little));
     _readerIndex += 8;
     return value;
   }
@@ -102,14 +98,7 @@ final class Buffer with _BufferMixin {
   @override
   void writeVarUint64(Uint64 value) {
     ensureWritable(10);
-    var remaining = value;
-    for (var shift = 0; shift < 56 && remaining > 0x7f; shift += 7) {
-      _bytes[_writerIndex] = (remaining.low32 & 0x7f) | 0x80;
-      _writerIndex += 1;
-      remaining = remaining >> 7;
-    }
-    _bytes[_writerIndex] = remaining.toInt();
-    _writerIndex += 1;
+    _writeVarUint64Int(value.value);
   }
 
   /// Reads an unsigned 64-bit varint.
@@ -133,7 +122,8 @@ final class Buffer with _BufferMixin {
 
   /// Writes a zig-zag encoded signed 64-bit varint.
   void writeVarInt64(Int64 value) {
-    writeVarUint64(Uint64((value << 1) ^ (value >> 63)));
+    ensureWritable(10);
+    _writeVarUint64Int((value << 1) ^ (value >> 63));
   }
 
   /// Writes a zig-zag encoded signed 64-bit varint from a Dart [int].
@@ -221,10 +211,7 @@ final class Buffer with _BufferMixin {
       _readerIndex = readIndex + 4;
       return Uint64(first >>> 1);
     }
-    final value = Uint64.fromWords(
-      _view.getUint32(readIndex + 1, Endian.little),
-      _view.getUint32(readIndex + 5, Endian.little),
-    );
+    final value = Uint64(_view.getInt64(readIndex + 1, Endian.little));
     _readerIndex = readIndex + 9;
     return value;
   }

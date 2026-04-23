@@ -228,6 +228,17 @@ final class ReadContext {
 
   /// Reads a nullable value using Ref semantics and wire type metadata.
   Object? readRef() {
+    return _readRefWithResolved((resolved) => resolved);
+  }
+
+  /// Reads a root value using Ref semantics and expected root type [T].
+  Object? readRefAs<T>() {
+    return _readRefWithResolved(
+      (resolved) => _typeResolver.resolveExpectedRootWireType<T>(resolved),
+    );
+  }
+
+  Object? _readRefWithResolved(TypeInfo Function(TypeInfo) resolveRootType) {
     final flag = _refReader.tryPreserveRefId(_buffer);
     final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
     if (flag == RefWriter.nullFlag) {
@@ -236,7 +247,7 @@ final class ReadContext {
     if (flag == RefWriter.refFlag) {
       return _refReader.getReadRef();
     }
-    final resolved = _readTypeMeta();
+    final resolved = resolveRootType(_readTypeMeta());
     final rootPreservedRefId = preservedRefId == null &&
             flag == RefWriter.notNullValueFlag &&
             _depth == 0 &&

@@ -324,11 +324,12 @@ final class TypeResolver {
     if (value is Int32) {
       return _builtin(Int32, TypeIds.varInt32);
     }
-    // The native extension type is represented as `int`, but web needs this
-    // branch to keep explicit Int64 wrapper values distinct from plain ints.
+    // Native Int64 is represented as `int`; web still needs this branch to
+    // keep explicit wrapper values on the Int64 API while using varint64 wire
+    // format by default, the same as plain Dart int.
     // ignore: unnecessary_type_check
     if (value is Int64 && value is! int) {
-      return _builtin(Int64, TypeIds.int64);
+      return _builtin(Int64, TypeIds.varInt64);
     }
     if (value is int) {
       return _builtin(int, TypeIds.varInt64);
@@ -340,10 +341,10 @@ final class TypeResolver {
       return _builtin(Uint16, TypeIds.uint16);
     }
     if (value is Uint32) {
-      return _builtin(Uint32, TypeIds.uint32);
+      return _builtin(Uint32, TypeIds.varUint32);
     }
     if (value is Uint64) {
-      return _builtin(Uint64, TypeIds.uint64);
+      return _builtin(Uint64, TypeIds.varUint64);
     }
     if (value is Float16) {
       return _builtin(Float16, TypeIds.float16);
@@ -1115,6 +1116,14 @@ final class TypeResolver {
     }
   }
 
+  TypeInfo resolveExpectedRootWireType<T>(TypeInfo resolved) {
+    if ((_isType<T, Int64>() || _isType<T, Int64?>()) &&
+        resolved.typeId == TypeIds.varInt64) {
+      return _builtin(Int64, TypeIds.varInt64);
+    }
+    return resolved;
+  }
+
   TypeInfo _builtin(Type type, int typeId) {
     final key = _BuiltinKey(type, typeId);
     final cached = _builtinByKey[key];
@@ -1269,10 +1278,10 @@ final class TypeResolver {
       return TypeIds.uint16;
     }
     if (type == Uint32) {
-      return TypeIds.uint32;
+      return TypeIds.varUint32;
     }
     if (type == Uint64) {
-      return TypeIds.uint64;
+      return TypeIds.varUint64;
     }
     if (type == Uint64List) {
       return TypeIds.uint64Array;
@@ -1498,6 +1507,8 @@ final class TypeResolver {
     }
   }
 }
+
+bool _isType<T, U>() => T == U;
 
 final class _BuiltinKey {
   final Type type;

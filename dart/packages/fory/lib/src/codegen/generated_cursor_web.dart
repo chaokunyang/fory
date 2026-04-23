@@ -64,6 +64,7 @@ final class GeneratedWriteCursor with _GeneratedWriteCursorMixin {
 
   @pragma('vm:prefer-inline')
   void writeUint64FromInt(int value) {
+    _checkUint64IntRange(value);
     _writeUint64Words(_offset, Uint64(value));
     _offset += 8;
   }
@@ -83,6 +84,7 @@ final class GeneratedWriteCursor with _GeneratedWriteCursorMixin {
 
   @pragma('vm:prefer-inline')
   void writeVarUint64FromInt(int value) {
+    _checkUint64IntRange(value);
     writeVarUint64(Uint64(value));
   }
 
@@ -133,6 +135,7 @@ final class GeneratedWriteCursor with _GeneratedWriteCursorMixin {
       writeInt32(value << 1);
       return;
     }
+    _checkUint64IntRange(value);
     writeUint8(0x01);
     writeUint64FromInt(value);
   }
@@ -301,6 +304,17 @@ void _checkInt64IntRange(int value) {
 Int64 _int64FromInt(int value) {
   _checkInt64IntRange(value);
   return Int64(value);
+}
+
+@pragma('vm:prefer-inline')
+void _checkUint64IntRange(int value) {
+  if (value < 0 || value > _jsSafeIntMax) {
+    throw StateError(
+      'Dart int value $value is outside the JS-safe unsigned uint64 int '
+      'field range [0, $_jsSafeIntMax]. Use Uint64 for full unsigned '
+      '64-bit values on web.',
+    );
+  }
 }
 
 @pragma('vm:prefer-inline')

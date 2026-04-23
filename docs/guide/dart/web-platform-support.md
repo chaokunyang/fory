@@ -31,17 +31,12 @@ The Dart runtime supports:
 - Dart applications compiled to JavaScript for browsers.
 - Flutter web applications.
 - Generated `@ForyStruct` serializers and manually registered serializers.
-- Cross-language (`xlang`) payloads produced by other Fory runtimes.
-
-The Dart runtime does not support Fory native-mode payloads. If a peer runtime
-is Java, Go, C++, Rust, Python, C#, JavaScript, or another Fory implementation,
-configure that peer to write xlang-compatible payloads before sending data to
-Dart.
 
 ## Code Generation Is Required
 
-Web and Flutter builds cannot rely on `dart:mirrors`. Register generated
-serializers explicitly:
+Fory Dart uses explicit registration instead of runtime reflection. For
+annotated structs, run code generation and register the generated serializer
+before serializing or deserializing values:
 
 ```dart
 import 'package:fory/fory.dart';
@@ -78,8 +73,9 @@ cd dart/packages/fory
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-The registration call is the same on VM and web. Do not call private generated
-helpers directly.
+The registration call is the same on VM and web. Manual serializers use
+`registerSerializer(...)`; generated structs use the generated `register`
+wrapper.
 
 ## 64-Bit Integer Rules
 

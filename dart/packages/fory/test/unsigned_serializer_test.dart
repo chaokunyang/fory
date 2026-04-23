@@ -102,6 +102,42 @@ void _registerUnsignedMetadataReader(Fory fory) {
   );
 }
 
+UnsignedFields _smallUnsignedFields() {
+  return UnsignedFields()
+    ..u8 = 0
+    ..u16 = 1
+    ..u32Var = 0
+    ..u32Fixed = 1
+    ..u64Var = Uint64(0)
+    ..u64Fixed = Uint64(1)
+    ..u64Tagged = Uint64(0)
+    ..u8Nullable = 1
+    ..u16Nullable = 0
+    ..u32VarNullable = 1
+    ..u32FixedNullable = 0
+    ..u64VarNullable = Uint64(1)
+    ..u64FixedNullable = Uint64(0)
+    ..u64TaggedNullable = Uint64(1);
+}
+
+UnsignedFields _taggedBoundaryUnsignedFields() {
+  return UnsignedFields()
+    ..u8 = 0x7f
+    ..u16 = 0x7fff
+    ..u32Var = 0x7fffffff
+    ..u32Fixed = 0x80000000
+    ..u64Var = Uint64(0x7fffffff)
+    ..u64Fixed = Uint64(0x80000000)
+    ..u64Tagged = Uint64(0x7fffffff)
+    ..u8Nullable = 0x80
+    ..u16Nullable = 0x8000
+    ..u32VarNullable = 0x80000000
+    ..u32FixedNullable = 0x7fffffff
+    ..u64VarNullable = Uint64(0x80000000)
+    ..u64FixedNullable = Uint64(0x7fffffff)
+    ..u64TaggedNullable = Uint64(0x80000000);
+}
+
 UnsignedFields _midpointUnsignedFields() {
   return UnsignedFields()
     ..u8 = 0x80
@@ -156,7 +192,8 @@ UnsignedFields _nullUnsignedFields() {
     ..u64TaggedNullable = null;
 }
 
-void _expectUnsignedFieldsEqual(UnsignedFields actual, UnsignedFields expected) {
+void _expectUnsignedFieldsEqual(
+    UnsignedFields actual, UnsignedFields expected) {
   expect(actual.u8, equals(expected.u8));
   expect(actual.u16, equals(expected.u16));
   expect(actual.u32Var, equals(expected.u32Var));
@@ -193,16 +230,19 @@ bool _remoteFieldNullable(Object value, String identifier) {
 
 void main() {
   group('unsigned generated fields', () {
-    test('round trips midpoint, max, and null boundary cases', () {
+    test('round trips small, threshold, midpoint, max, and null cases', () {
       final fory = Fory();
       _registerUnsignedFields(fory);
 
       for (final value in <UnsignedFields>[
+        _smallUnsignedFields(),
+        _taggedBoundaryUnsignedFields(),
         _midpointUnsignedFields(),
         _maxUnsignedFields(),
         _nullUnsignedFields(),
       ]) {
-        final roundTrip = fory.deserialize<UnsignedFields>(fory.serialize(value));
+        final roundTrip =
+            fory.deserialize<UnsignedFields>(fory.serialize(value));
         _expectUnsignedFieldsEqual(roundTrip, value);
       }
     });
@@ -221,10 +261,14 @@ void main() {
 
       expect(_remoteFieldTypeId(roundTrip, 'u8'), equals(TypeIds.uint8));
       expect(_remoteFieldTypeId(roundTrip, 'u16'), equals(TypeIds.uint16));
-      expect(_remoteFieldTypeId(roundTrip, 'u32_var'), equals(TypeIds.varUint32));
-      expect(_remoteFieldTypeId(roundTrip, 'u32_fixed'), equals(TypeIds.uint32));
-      expect(_remoteFieldTypeId(roundTrip, 'u64_var'), equals(TypeIds.varUint64));
-      expect(_remoteFieldTypeId(roundTrip, 'u64_fixed'), equals(TypeIds.uint64));
+      expect(
+          _remoteFieldTypeId(roundTrip, 'u32_var'), equals(TypeIds.varUint32));
+      expect(
+          _remoteFieldTypeId(roundTrip, 'u32_fixed'), equals(TypeIds.uint32));
+      expect(
+          _remoteFieldTypeId(roundTrip, 'u64_var'), equals(TypeIds.varUint64));
+      expect(
+          _remoteFieldTypeId(roundTrip, 'u64_fixed'), equals(TypeIds.uint64));
       expect(
         _remoteFieldTypeId(roundTrip, 'u64_tagged'),
         equals(TypeIds.taggedUint64),

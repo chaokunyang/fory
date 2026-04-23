@@ -30,6 +30,10 @@ Int64 _i64Pow2(int shift) => Int64(1) << shift;
 
 Uint64 _u64Pow2(int shift) => Uint64(1) << shift;
 
+const int _jsSafeIntMax = 9007199254740991;
+const int _jsSafeIntMin = -9007199254740991;
+const int _jsUnsafeInt = 9007199254740992;
+
 void main() {
   group('Buffer', () {
     test('round-trips fixed-width primitives, 16-bit floats, and bytes', () {
@@ -324,6 +328,100 @@ void main() {
       },
     );
 
+    test('int64 int helpers match Int64 wrapper encodings at safe boundaries',
+        () {
+      const cases = <int>[
+        _jsSafeIntMin,
+        -0x40000001,
+        -0x40000000,
+        -1,
+        0,
+        1,
+        0x3fffffff,
+        0x40000000,
+        _jsSafeIntMax,
+      ];
+
+      for (final value in cases) {
+        _expectInt64IntHelperMatchesWrapper(
+          value: value,
+          writeInt: (buffer, value) => buffer.writeInt64FromInt(value),
+          writeWrapper: (buffer, value) => buffer.writeInt64(Int64(value)),
+          readInt: (buffer) => buffer.readInt64AsInt(),
+          cursorWriteInt: (cursor, value) => cursor.writeInt64FromInt(value),
+          cursorWriteWrapper: (cursor, value) =>
+              cursor.writeInt64(Int64(value)),
+          cursorReadInt: (cursor) => cursor.readInt64AsInt(),
+        );
+        _expectInt64IntHelperMatchesWrapper(
+          value: value,
+          writeInt: (buffer, value) => buffer.writeVarInt64FromInt(value),
+          writeWrapper: (buffer, value) => buffer.writeVarInt64(Int64(value)),
+          readInt: (buffer) => buffer.readVarInt64AsInt(),
+          cursorWriteInt: (cursor, value) => cursor.writeVarInt64FromInt(value),
+          cursorWriteWrapper: (cursor, value) =>
+              cursor.writeVarInt64(Int64(value)),
+          cursorReadInt: (cursor) => cursor.readVarInt64AsInt(),
+        );
+        _expectInt64IntHelperMatchesWrapper(
+          value: value,
+          writeInt: (buffer, value) => buffer.writeTaggedInt64FromInt(value),
+          writeWrapper: (buffer, value) =>
+              buffer.writeTaggedInt64(Int64(value)),
+          readInt: (buffer) => buffer.readTaggedInt64AsInt(),
+          cursorWriteInt: (cursor, value) =>
+              cursor.writeTaggedInt64FromInt(value),
+          cursorWriteWrapper: (cursor, value) =>
+              cursor.writeTaggedInt64(Int64(value)),
+          cursorReadInt: (cursor) => cursor.readTaggedInt64AsInt(),
+        );
+      }
+    });
+
+    test('web rejects JS-unsafe int64 int helper values', () {
+      if (!identical(1, 1.0)) {
+        final buffer = Buffer();
+        buffer.writeInt64FromInt(_jsUnsafeInt);
+        buffer.writeVarInt64FromInt(_jsUnsafeInt);
+        buffer.writeTaggedInt64FromInt(_jsUnsafeInt);
+        expect(buffer.readInt64AsInt(), equals(_jsUnsafeInt));
+        expect(buffer.readVarInt64AsInt(), equals(_jsUnsafeInt));
+        expect(buffer.readTaggedInt64AsInt(), equals(_jsUnsafeInt));
+        return;
+      }
+
+      expect(
+        () => Buffer().writeInt64FromInt(_jsUnsafeInt),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        () => Buffer().writeVarInt64FromInt(_jsUnsafeInt),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        () => Buffer().writeTaggedInt64FromInt(_jsUnsafeInt),
+        throwsA(isA<StateError>()),
+      );
+
+      final fixed = Buffer()..writeInt64(Int64(_jsUnsafeInt));
+      final varint = Buffer()..writeVarInt64(Int64(_jsUnsafeInt));
+      final tagged = Buffer()..writeTaggedInt64(Int64(_jsUnsafeInt));
+      expect(
+        () => Buffer.wrap(Uint8List.fromList(fixed.toBytes())).readInt64AsInt(),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        () => Buffer.wrap(Uint8List.fromList(varint.toBytes()))
+            .readVarInt64AsInt(),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        () => Buffer.wrap(Uint8List.fromList(tagged.toBytes()))
+            .readTaggedInt64AsInt(),
+        throwsA(isA<StateError>()),
+      );
+    });
+
     test('round-trips small varuint helpers', () {
       const small7Cases = <({int bytes, int value})>[
         (bytes: 1, value: 0),
@@ -447,6 +545,46 @@ void main() {
       expect(readBuffer.readableBytes, equals(0));
     });
   });
+}
+
+void _expectInt64IntHelperMatchesWrapper({
+  required int value,
+  required void Function(Buffer buffer, int value) writeInt,
+  required void Function(Buffer buffer, int value) writeWrapper,
+  required int Function(Buffer buffer) readInt,
+  required void Function(GeneratedWriteCursor cursor, int value) cursorWriteInt,
+  required void Function(GeneratedWriteCursor cursor, int value)
+      cursorWriteWrapper,
+  required int Function(GeneratedReadCursor cursor) cursorReadInt,
+}) {
+  final intBuffer = Buffer();
+  writeInt(intBuffer, value);
+
+  final wrapperBuffer = Buffer();
+  writeWrapper(wrapperBuffer, value);
+  expect(intBuffer.toBytes(), orderedEquals(wrapperBuffer.toBytes()));
+
+  final readBuffer = Buffer.wrap(Uint8List.fromList(intBuffer.toBytes()));
+  expect(readInt(readBuffer), equals(value));
+  expect(readBuffer.readableBytes, equals(0));
+
+  final cursorIntBuffer = Buffer();
+  final cursorInt = GeneratedWriteCursor.reserve(cursorIntBuffer, 10);
+  cursorWriteInt(cursorInt, value);
+  cursorInt.finish();
+  expect(cursorIntBuffer.toBytes(), orderedEquals(wrapperBuffer.toBytes()));
+
+  final cursorWrapperBuffer = Buffer();
+  final cursorWrapper = GeneratedWriteCursor.reserve(cursorWrapperBuffer, 10);
+  cursorWriteWrapper(cursorWrapper, value);
+  cursorWrapper.finish();
+  expect(cursorWrapperBuffer.toBytes(), orderedEquals(wrapperBuffer.toBytes()));
+
+  final cursorReadBuffer = Buffer.wrap(Uint8List.fromList(intBuffer.toBytes()));
+  final cursorRead = GeneratedReadCursor.start(cursorReadBuffer);
+  expect(cursorReadInt(cursorRead), equals(value));
+  cursorRead.finish();
+  expect(cursorReadBuffer.readableBytes, equals(0));
 }
 
 void _expectEncodedIntRoundTrip({

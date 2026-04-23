@@ -196,7 +196,7 @@ final class Buffer with _BufferMixin {
     final first = _view.getInt32(readIndex, Endian.little);
     if ((first & 1) == 0) {
       _readerIndex = readIndex + 4;
-      return first >> 1;
+      return first.toSigned(32) ~/ 2;
     }
     final value = _view.getInt64(readIndex + 1, Endian.little);
     _readerIndex = readIndex + 9;

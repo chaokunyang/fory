@@ -236,7 +236,7 @@ final class GeneratedReadCursor with _GeneratedReadCursorMixin {
     final first = _view.getInt32(readIndex, Endian.little);
     if ((first & 1) == 0) {
       _offset = readIndex + 4;
-      return first >> 1;
+      return first.toSigned(32) ~/ 2;
     }
     final value = _int64ToInt(_readInt64Words(readIndex + 1));
     _offset = readIndex + 9;

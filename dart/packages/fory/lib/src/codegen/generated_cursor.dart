@@ -17,5 +17,5 @@
  * under the License.
  */
 
-export 'uint64_native.dart'
-    if (dart.library.js_interop) 'uint64_web.dart';
+export 'generated_cursor_native.dart'
+    if (dart.library.js_interop) 'generated_cursor_web.dart';

@@ -71,7 +71,11 @@ Object? readTypeInfoValue(
   bool hasPreservedRef = false,
 }) {
   if (TypeIds.isPrimitive(typeInfo.typeId)) {
-    return PrimitiveSerializer.readPayload(context, typeInfo.typeId);
+    return convertResolvedPrimitiveValue(
+      PrimitiveSerializer.readPayload(context, typeInfo.typeId),
+      typeInfo,
+      fieldType,
+    );
   }
   if (typeInfo.typeId == TypeIds.string) {
     return StringSerializer.readPayload(context);
@@ -400,6 +404,7 @@ final class SetSerializer extends Serializer<Set> {
 const ListSerializer listSerializer = ListSerializer();
 const SetSerializer setSerializer = SetSerializer();
 
+@pragma('vm:prefer-inline')
 List<T> readTypedListPayload<T>(
   ReadContext context,
   FieldType? elementFieldType,
@@ -411,6 +416,45 @@ List<T> readTypedListPayload<T>(
   }
   if (state.tracksDepth) {
     context.increaseDepth();
+  }
+  final directTypeInfo = state.declaredTypeInfo ?? state.sameTypeInfo;
+  if (directTypeInfo != null && !state.trackRef && !state.hasNull) {
+    final directFieldType =
+        state.declaredTypeInfo != null ? state.elementFieldType : null;
+    if (directTypeInfo.type == T &&
+        directTypeInfo.kind == RegistrationKind.struct) {
+      final structSerializer = directTypeInfo.structSerializer!;
+      final result = List<T>.generate(
+        state.size,
+        (_) => structSerializer.readValue(context, directTypeInfo) as T,
+        growable: false,
+      );
+      if (state.tracksDepth) {
+        context.decreaseDepth();
+      }
+      return result;
+    }
+    if (directTypeInfo.type == T && directTypeInfo.typeId == TypeIds.string) {
+      final result = List<T>.generate(
+        state.size,
+        (_) => StringSerializer.readPayload(context) as T,
+        growable: false,
+      );
+      if (state.tracksDepth) {
+        context.decreaseDepth();
+      }
+      return result;
+    }
+    final result = List<T>.generate(
+      state.size,
+      (_) =>
+          convert(readTypeInfoValue(context, directTypeInfo, directFieldType)),
+      growable: false,
+    );
+    if (state.tracksDepth) {
+      context.decreaseDepth();
+    }
+    return result;
   }
   final result = List<T>.generate(
     state.size,
@@ -574,6 +618,7 @@ final class _PreparedListRead {
   });
 }
 
+@pragma('vm:prefer-inline')
 _PreparedListRead _prepareListRead(
   ReadContext context,
   FieldType? elementFieldType,
@@ -602,13 +647,16 @@ _PreparedListRead _prepareListRead(
   final usesDeclaredType =
       (header & CollectionFlags.isDeclaredElementType) != 0;
   final sameType = (header & CollectionFlags.isSameType) != 0;
-  final declaredTypeInfo = usesDeclaredType && elementFieldType != null
-      ? context.typeResolver.resolveFieldType(
-          elementFieldType.withRootOverrides(nullable: hasNull, ref: trackRef),
-        )
+  final needsExpectedElementType = elementFieldType != null &&
+      (usesDeclaredType ||
+          (sameType && TypeIds.isUserType(elementFieldType.typeId)));
+  final expectedElementTypeInfo = needsExpectedElementType
+      ? context.typeResolver.tryResolveFieldType(elementFieldType)
       : null;
-  final sameTypeInfo =
-      (!usesDeclaredType && sameType) ? context.readTypeMetaValue() : null;
+  final declaredTypeInfo = usesDeclaredType ? expectedElementTypeInfo : null;
+  final sameTypeInfo = (!usesDeclaredType && sameType)
+      ? context.readTypeMetaValue(expectedElementTypeInfo)
+      : null;
   final tracksDepth = (declaredTypeInfo != null &&
           tracksNestedPayloadDepth(declaredTypeInfo)) ||
       (sameTypeInfo != null && tracksNestedPayloadDepth(sameTypeInfo));

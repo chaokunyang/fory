@@ -82,7 +82,7 @@ final timeout = const Duration(seconds: 30);
 The temporal wrappers expose conversion helpers:
 
 - `Timestamp.fromDateTime(...)` and `timestamp.toDateTime()`
-- `LocalDate.fromEpochDay(...)`, `date.toEpochDay()`
+- `LocalDate.fromEpochDay(Int64(...))`, `date.toEpochDay()` returns `Int64`
 - `LocalDate.fromDateTime(...)` and `date.toDateTime()`
 
 `Duration` support in Dart is exact to microseconds. Incoming xlang duration

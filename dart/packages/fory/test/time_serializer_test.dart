@@ -67,7 +67,7 @@ TimeEnvelope _sampleTimeEnvelope() {
     ..timestamp = _timestamp(-123456789, 987654321)
     ..instant = DateTime.fromMicrosecondsSinceEpoch(-1, isUtc: true)
     ..duration = const Duration(days: 2, seconds: 3, microseconds: 456789)
-    ..optionalDate = LocalDate.fromEpochDay(-1)
+    ..optionalDate = LocalDate.fromEpochDay(Int64(-1))
     ..optionalTimestamp = Timestamp.fromDateTime(
       DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700),
     )
@@ -80,8 +80,8 @@ void main() {
     test('round-trips LocalDate edge cases', () {
       final fory = Fory();
       final cases = <LocalDate>[
-        LocalDate.fromEpochDay(-1),
-        LocalDate.fromEpochDay(0),
+        LocalDate.fromEpochDay(Int64(-1)),
+        LocalDate.fromEpochDay(Int64(0)),
         const LocalDate(2024, 2, 29),
         const LocalDate(9999, 12, 31),
       ];
@@ -94,10 +94,11 @@ void main() {
 
     test('encodes LocalDate as signed varint64 in xlang payloads', () {
       final fory = Fory();
-      final value = LocalDate.fromEpochDay(-1);
+      final value = LocalDate.fromEpochDay(Int64(-1));
 
       final bytes = fory.serialize(value);
-      expect(bytes, equals(Uint8List.fromList([0x02, 0xff, TypeIds.date, 0x01])));
+      expect(
+          bytes, equals(Uint8List.fromList([0x02, 0xff, TypeIds.date, 0x01])));
       expect(fory.deserialize<LocalDate>(bytes), equals(value));
     });
 
@@ -106,8 +107,8 @@ void main() {
       final value = LocalDate.fromDateTime(DateTime.utc(2024, 1, 2, 3, 4, 5));
 
       expect(value, equals(const LocalDate(2024, 1, 2)));
-      expect(
-          value.toEpochDay(), equals(const LocalDate(2024, 1, 2).toEpochDay()));
+      final Int64 epochDay = value.toEpochDay();
+      expect(epochDay, equals(const LocalDate(2024, 1, 2).toEpochDay()));
       expect(value.toDateTime(), equals(DateTime.utc(2024, 1, 2)));
     });
 
@@ -176,8 +177,7 @@ void main() {
       final fory = Fory();
 
       expect(
-        fory.deserialize<DateTime>(
-            fory.serialize(_timestamp(-1, 999999000))),
+        fory.deserialize<DateTime>(fory.serialize(_timestamp(-1, 999999000))),
         equals(DateTime.fromMicrosecondsSinceEpoch(-1, isUtc: true)),
       );
     });
@@ -252,7 +252,7 @@ void main() {
       final fory = Fory();
       final duration = Duration(microseconds: 1);
       final timestamp = _timestamp(-1, 1000);
-      final date = LocalDate.fromEpochDay(-1);
+      final date = LocalDate.fromEpochDay(Int64(-1));
 
       final roundTrip = fory.deserialize<List<Object?>>(
         fory.serialize(

@@ -86,7 +86,7 @@ Duration durationFromWire(Int64 seconds, int nanoseconds) {
   }
   final totalNanoseconds =
       seconds.toBigInt() * BigInt.from(_nanosecondsPerSecond) +
-      BigInt.from(nanoseconds);
+          BigInt.from(nanoseconds);
   final microseconds = (totalNanoseconds ~/ BigInt.from(1000)).toInt();
   final value = Duration(microseconds: microseconds);
   if (nanoseconds.remainder(1000) != 0) {
@@ -133,9 +133,9 @@ Timestamp timestampFromWire(Int64 seconds, int nanoseconds) {
 
 DateTime dateTimeFromWire(Int64 seconds, int nanoseconds) {
   _validateDateTimeNanoseconds(nanoseconds);
-  final microseconds = seconds.toBigInt() *
-      BigInt.from(Duration.microsecondsPerSecond) +
-      BigInt.from(nanoseconds ~/ 1000);
+  final microseconds =
+      seconds.toBigInt() * BigInt.from(Duration.microsecondsPerSecond) +
+          BigInt.from(nanoseconds ~/ 1000);
   return DateTime.fromMicrosecondsSinceEpoch(
     microseconds.toInt(),
     isUtc: true,
@@ -150,12 +150,12 @@ final class LocalDateSerializer extends Serializer<LocalDate> {
 
   @override
   void write(WriteContext context, LocalDate value) {
-    context.buffer.writeVarInt64(Int64(value.toEpochDay()));
+    context.buffer.writeVarInt64(value.toEpochDay());
   }
 
   @override
   LocalDate read(ReadContext context) {
-    return LocalDate.fromEpochDay(context.buffer.readVarInt64().toInt());
+    return LocalDate.fromEpochDay(context.buffer.readVarInt64());
   }
 }
 

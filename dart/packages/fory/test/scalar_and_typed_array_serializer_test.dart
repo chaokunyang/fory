@@ -90,7 +90,7 @@ ScalarAndArrayEnvelope _sampleEnvelope() {
     ..half = const Float16.fromBits(0x8000)
     ..brain = const Bfloat16.fromBits(0x7fc0)
     ..single = Float32(3.5)
-    ..date = LocalDate.fromEpochDay(-1)
+    ..date = LocalDate.fromEpochDay(Int64(-1))
     ..timestamp = _timestamp(-123, 456789123);
 }
 
@@ -200,7 +200,7 @@ void main() {
 
       final beforeEpoch = _roundTripRoot<LocalDate>(
         fory,
-        LocalDate.fromEpochDay(-1),
+        LocalDate.fromEpochDay(Int64(-1)),
       );
       final leapDay = _roundTripRoot<LocalDate>(
         fory,
@@ -215,7 +215,7 @@ void main() {
         Timestamp.fromDateTime(DateTime.utc(2024, 1, 2, 3, 4, 5, 6, 700)),
       );
 
-      expect(beforeEpoch, equals(LocalDate.fromEpochDay(-1)));
+      expect(beforeEpoch, equals(LocalDate.fromEpochDay(Int64(-1))));
       expect(leapDay, equals(const LocalDate(2024, 2, 29)));
       expect(
         negativeTimestamp,

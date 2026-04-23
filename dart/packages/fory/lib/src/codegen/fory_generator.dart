@@ -1344,7 +1344,7 @@ GeneratedFieldType(
       case TypeIds.float64:
         return '$cursorExpression.writeFloat64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.date:
-        return '$cursorExpression.writeVarInt64(Int64($valueExpression.toEpochDay()))';
+        return '$cursorExpression.writeVarInt64($valueExpression.toEpochDay())';
       case TypeIds.duration:
         return '$cursorExpression.writeVarInt64(generatedDurationWireSeconds($valueExpression)); $cursorExpression.writeInt32(generatedDurationWireNanoseconds($valueExpression))';
       case TypeIds.timestamp:
@@ -1549,7 +1549,7 @@ GeneratedFieldType(
       case TypeIds.float64:
         return '$cursorExpression.readFloat64()';
       case TypeIds.date:
-        return 'LocalDate.fromEpochDay($cursorExpression.readVarInt64().toInt())';
+        return 'LocalDate.fromEpochDay($cursorExpression.readVarInt64())';
       case TypeIds.duration:
         return 'readGeneratedDurationFromWire($cursorExpression.readVarInt64(), $cursorExpression.readInt32())';
       case TypeIds.timestamp:

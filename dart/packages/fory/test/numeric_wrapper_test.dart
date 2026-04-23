@@ -24,6 +24,15 @@ import 'package:test/test.dart';
 
 part 'numeric_wrapper_test.fory.dart';
 
+Uint64 _u64Hex(String value) => Uint64.parseHex(value);
+
+double _float64FromWords(int low32, int high32) {
+  final bytes = ByteData(8)
+    ..setUint32(0, low32, Endian.little)
+    ..setUint32(4, high32, Endian.little);
+  return bytes.getFloat64(0, Endian.little);
+}
+
 @ForyStruct()
 class NumericWrappersEnvelope {
   NumericWrappersEnvelope();
@@ -65,12 +74,12 @@ NumericWrappersEnvelope _sampleEnvelope() {
     ..u8 = Uint8(0xff)
     ..u16 = Uint16(0xffff)
     ..u32 = Uint32(0xffffffff)
-    ..u64 = Uint64(0xffffffffffffffff)
+    ..u64 = _u64Hex('ffffffffffffffff')
     ..half = Float16.fromBits(0x3555)
     ..brain = Bfloat16.fromBits(0x3eab)
     ..single = Float32.fromBits(0x40490fdb)
     ..optionalI8 = Int8(126)
-    ..optionalU64 = Uint64(0x8000000000000000)
+    ..optionalU64 = _u64Hex('8000000000000000')
     ..optionalHalf = Float16.fromBits(0x8000)
     ..optionalBrain = Bfloat16.fromBits(0x8000)
     ..optionalSingle = Float32.fromBits(0x80000000);
@@ -143,10 +152,12 @@ void main() {
       expect(
           Uint32(0xf0f0f0f0) & Uint32(0x0ff00ff0), equals(Uint32(0x00f000f0)));
 
-      expect(Uint64(0xffffffffffffffff) + 1, equals(Uint64(0)));
-      expect(Uint64(0) - 1, equals(Uint64(0xffffffffffffffff)));
+      expect(_u64Hex('ffffffffffffffff') + 1, equals(Uint64(0)));
+      expect(Uint64(0) - 1, equals(_u64Hex('ffffffffffffffff')));
       expect(
-          Uint64(0x123456789abcdef0) >> 4, equals(Uint64(0x0123456789abcdef)));
+        _u64Hex('123456789abcdef0') >> 4,
+        equals(_u64Hex('0123456789abcdef')),
+      );
       expect(Uint64(0xff).toInt(), equals(0xff));
     });
 
@@ -181,12 +192,8 @@ void main() {
     test(
         'Bfloat16.fromDouble rounds directly from float64 and preserves NaN sign payload bits',
         () {
-      final subnormalSource = ByteData(8)
-        ..setUint64(0, 0x37da834f7e281cc1, Endian.little);
-      final trickySubnormal = subnormalSource.getFloat64(0, Endian.little);
-      final nanSource = ByteData(8)
-        ..setUint64(0, 0xfff123456789abcd, Endian.little);
-      final payloadNaN = nanSource.getFloat64(0, Endian.little);
+      final trickySubnormal = _float64FromWords(0x7e281cc1, 0x37da834f);
+      final payloadNaN = _float64FromWords(0x6789abcd, 0xfff12345);
       final convertedNaN = Bfloat16.fromDouble(payloadNaN);
 
       expect(Bfloat16.fromDouble(trickySubnormal).toBits(), equals(0x0007));
@@ -223,7 +230,7 @@ void main() {
       expect(_roundTrip<Uint32>(fory, Uint32(-1)), equals(Uint32(0xffffffff)));
       expect(
         _roundTrip<Uint64>(fory, Uint64(-1)),
-        equals(Uint64(0xffffffffffffffff)),
+        equals(_u64Hex('ffffffffffffffff')),
       );
     });
 

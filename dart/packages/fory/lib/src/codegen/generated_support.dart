@@ -36,13 +36,7 @@ import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
-
-final BigInt _generatedCursorMask64Big = (BigInt.one << 64) - BigInt.one;
-final BigInt _generatedCursorSevenBitMaskBig = BigInt.from(0x7f);
-final BigInt _generatedCursorByteMaskBig = BigInt.from(0xff);
-const bool _generatedCursorUseBigIntVarint64 =
-    bool.fromEnvironment('dart.library.js_interop') ||
-        bool.fromEnvironment('dart.library.js_util');
+import 'package:fory/src/util/int64_codec.dart';
 
 @internal
 final class GeneratedWriteCursor {
@@ -107,13 +101,13 @@ final class GeneratedWriteCursor {
     _offset += 4;
   }
 
-  void writeInt64(int value) {
-    _view.setInt64(_offset, value, Endian.little);
+  void writeInt64(Int64 value) {
+    writeInt64LittleEndian(_view, _offset, value);
     _offset += 8;
   }
 
-  void writeUint64(int value) {
-    _view.setUint64(_offset, value, Endian.little);
+  void writeUint64(Uint64 value) {
+    writeUint64LittleEndian(_view, _offset, value);
     _offset += 8;
   }
 
@@ -147,74 +141,36 @@ final class GeneratedWriteCursor {
   }
 
   void writeVarInt32(int value) {
-    writeVarUint32((value << 1) ^ (value >> 31));
+    writeVarUint32(((value << 1) ^ (value >> 31)).toUnsigned(32));
   }
 
-  void writeVarUint64(int value) {
-    if (!_generatedCursorUseBigIntVarint64) {
-      var remaining = value;
-      for (var index = 0; index < 8; index += 1) {
-        final chunk = remaining & 0x7f;
-        remaining = remaining >>> 7;
-        if (remaining == 0) {
-          _bytes[_offset] = chunk;
-          _offset += 1;
-          return;
-        }
-        _bytes[_offset] = chunk | 0x80;
-        _offset += 1;
-      }
-      _bytes[_offset] = remaining & 0xff;
+  void writeVarUint64(Uint64 value) {
+    writeVarUint64Bytes(value, (byte) {
+      _bytes[_offset] = byte;
       _offset += 1;
-      return;
-    }
-    _writeVarUint64BigInt(BigInt.from(value) & _generatedCursorMask64Big);
+    });
   }
 
-  void writeVarInt64(int value) {
-    if (!_generatedCursorUseBigIntVarint64) {
-      writeVarUint64((value << 1) ^ (value >> 63));
-      return;
-    }
-    final signed = BigInt.from(value);
-    final zigZag =
-        ((signed << 1) ^ BigInt.from(value >> 63)) & _generatedCursorMask64Big;
-    _writeVarUint64BigInt(zigZag);
+  void writeVarInt64(Int64 value) {
+    writeVarUint64(zigZagEncodeInt64(value));
   }
 
-  void writeTaggedInt64(int value) {
+  void writeTaggedInt64(Int64 value) {
     if (value >= -0x40000000 && value <= 0x3fffffff) {
-      writeInt32(value << 1);
+      writeInt32((value.toInt() << 1).toSigned(32));
       return;
     }
     writeUint8(0x01);
     writeInt64(value);
   }
 
-  void writeTaggedUint64(int value) {
+  void writeTaggedUint64(Uint64 value) {
     if (value >= 0 && value <= 0x7fffffff) {
-      writeInt32(value << 1);
+      writeInt32(value.toInt() << 1);
       return;
     }
     writeUint8(0x01);
     writeUint64(value);
-  }
-
-  void _writeVarUint64BigInt(BigInt value) {
-    var remaining = value & _generatedCursorMask64Big;
-    for (var index = 0; index < 8; index += 1) {
-      final chunk = (remaining & _generatedCursorSevenBitMaskBig).toInt();
-      remaining >>= 7;
-      if (remaining == BigInt.zero) {
-        _bytes[_offset] = chunk;
-        _offset += 1;
-        return;
-      }
-      _bytes[_offset] = chunk | 0x80;
-      _offset += 1;
-    }
-    _bytes[_offset] = (remaining & _generatedCursorByteMaskBig).toInt();
-    _offset += 1;
   }
 }
 
@@ -280,14 +236,14 @@ final class GeneratedReadCursor {
     return value;
   }
 
-  int readInt64() {
-    final value = _view.getInt64(_offset, Endian.little);
+  Int64 readInt64() {
+    final value = readInt64LittleEndian(_view, _offset);
     _offset += 8;
     return value;
   }
 
-  int readUint64() {
-    final value = _view.getUint64(_offset, Endian.little);
+  Uint64 readUint64() {
+    final value = readUint64LittleEndian(_view, _offset);
     _offset += 8;
     return value;
   }
@@ -323,82 +279,46 @@ final class GeneratedReadCursor {
 
   int readVarInt32() {
     final value = readVarUint32();
-    return (value >>> 1) ^ -(value & 1);
+    return ((value >>> 1) ^ -(value & 1)).toSigned(32);
   }
 
-  int readVarUint64() {
-    if (!_generatedCursorUseBigIntVarint64) {
-      var shift = 0;
-      var result = 0;
-      while (shift < 56) {
-        final byte = readUint8();
-        result |= (byte & 0x7f) << shift;
-        if ((byte & 0x80) == 0) {
-          return result;
-        }
-        shift += 7;
-      }
-      return result | (readUint8() << 56);
-    }
-    return _readVarUint64BigInt().toInt();
+  Uint64 readVarUint64() {
+    return readVarUint64Bytes(readUint8);
   }
 
-  int readVarInt64() {
-    if (!_generatedCursorUseBigIntVarint64) {
-      final encoded = readVarUint64();
-      return (encoded >>> 1) ^ -(encoded & 1);
-    }
-    final encoded = _readVarUint64BigInt();
-    final magnitude = (encoded >> 1).toInt();
-    if ((encoded & BigInt.one) == BigInt.zero) {
-      return magnitude;
-    }
-    return -magnitude - 1;
+  Int64 readVarInt64() {
+    return zigZagDecodeInt64(readVarUint64());
   }
 
-  int readTaggedInt64() {
+  Int64 readTaggedInt64() {
     final readIndex = _offset;
     final first = _view.getInt32(readIndex, Endian.little);
     if ((first & 1) == 0) {
       _offset = readIndex + 4;
-      return first >> 1;
+      return Int64(first.toSigned(32) ~/ 2);
     }
-    final value = _view.getInt64(readIndex + 1, Endian.little);
+    final value = readInt64LittleEndian(_view, readIndex + 1);
     _offset = readIndex + 9;
     return value;
   }
 
-  int readTaggedUint64() {
+  Uint64 readTaggedUint64() {
     final readIndex = _offset;
     final first = _view.getUint32(readIndex, Endian.little);
     if ((first & 1) == 0) {
       _offset = readIndex + 4;
-      return first >>> 1;
+      return Uint64(first >>> 1);
     }
-    final value = _view.getUint64(readIndex + 1, Endian.little);
+    final value = readUint64LittleEndian(_view, readIndex + 1);
     _offset = readIndex + 9;
     return value;
-  }
-
-  BigInt _readVarUint64BigInt() {
-    var shift = 0;
-    var result = BigInt.zero;
-    while (shift < 56) {
-      final byte = readUint8();
-      result |= BigInt.from(byte & 0x7f) << shift;
-      if ((byte & 0x80) == 0) {
-        return result;
-      }
-      shift += 7;
-    }
-    return result |
-        ((BigInt.from(readUint8()) & _generatedCursorByteMaskBig) << 56);
   }
 }
 
 @internal
 final class GeneratedFieldType {
   final Type type;
+  final String? declaredTypeName;
   final int typeId;
   final bool nullable;
   final bool ref;
@@ -407,6 +327,7 @@ final class GeneratedFieldType {
 
   const GeneratedFieldType({
     required this.type,
+    this.declaredTypeName,
     required this.typeId,
     required this.nullable,
     required this.ref,
@@ -417,6 +338,7 @@ final class GeneratedFieldType {
   meta_types.FieldType toFieldType() {
     return meta_types.FieldType(
       type: type,
+      declaredTypeName: declaredTypeName,
       typeId: typeId,
       nullable: nullable,
       ref: ref,
@@ -633,7 +555,7 @@ Decimal readGeneratedDecimalValue(ReadContext context) {
 }
 
 @internal
-int generatedDurationWireSeconds(Duration value) {
+Int64 generatedDurationWireSeconds(Duration value) {
   return durationWireSeconds(value);
 }
 
@@ -643,7 +565,7 @@ int generatedDurationWireNanoseconds(Duration value) {
 }
 
 @internal
-Duration readGeneratedDurationFromWire(int seconds, int nanoseconds) {
+Duration readGeneratedDurationFromWire(Int64 seconds, int nanoseconds) {
   return durationFromWire(seconds, nanoseconds);
 }
 
@@ -663,7 +585,7 @@ int generatedTimestampWireNanoseconds(Timestamp value) {
 }
 
 @internal
-int generatedDateTimeWireSeconds(DateTime value) {
+Int64 generatedDateTimeWireSeconds(DateTime value) {
   return dateTimeWireSeconds(value);
 }
 
@@ -673,12 +595,12 @@ int generatedDateTimeWireNanoseconds(DateTime value) {
 }
 
 @internal
-Timestamp readGeneratedTimestampFromWire(int seconds, int nanoseconds) {
+Timestamp readGeneratedTimestampFromWire(Int64 seconds, int nanoseconds) {
   return timestampFromWire(seconds, nanoseconds);
 }
 
 @internal
-DateTime readGeneratedDateTimeFromWire(int seconds, int nanoseconds) {
+DateTime readGeneratedDateTimeFromWire(Int64 seconds, int nanoseconds) {
   return dateTimeFromWire(seconds, nanoseconds);
 }
 

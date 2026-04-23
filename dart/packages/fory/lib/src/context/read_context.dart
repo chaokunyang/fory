@@ -32,12 +32,15 @@ import 'package:fory/src/serializer/map_serializers.dart';
 import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
+import 'package:fory/src/serializer/serializer_support.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/float16.dart';
+import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/types/timestamp.dart';
+import 'package:fory/src/types/uint64.dart';
 
 /// Read-side serializer context.
 ///
@@ -124,7 +127,7 @@ final class ReadContext {
     }
     return value;
   }
-  
+
   int get depth => _depth;
 
   /// Records entry into one more nested read frame.
@@ -156,7 +159,7 @@ final class ReadContext {
   int readInt32() => _buffer.readInt32();
 
   /// Reads a signed little-endian 64-bit integer.
-  int readInt64() => _buffer.readInt64();
+  Int64 readInt64() => _buffer.readInt64();
 
   /// Reads a half-precision floating-point value.
   Float16 readFloat16() => _buffer.readFloat16();
@@ -177,16 +180,16 @@ final class ReadContext {
   int readVarUint32() => _buffer.readVarUint32();
 
   /// Reads a zig-zag encoded signed 64-bit varint.
-  int readVarInt64() => _buffer.readVarInt64();
+  Int64 readVarInt64() => _buffer.readVarInt64();
 
   /// Reads a tagged signed 64-bit integer.
-  int readTaggedInt64() => _buffer.readTaggedInt64();
+  Int64 readTaggedInt64() => _buffer.readTaggedInt64();
 
   /// Reads an unsigned 64-bit varint.
-  int readVarUint64() => _buffer.readVarUint64();
+  Uint64 readVarUint64() => _buffer.readVarUint64();
 
   /// Reads a tagged unsigned 64-bit integer.
-  int readTaggedUint64() => _buffer.readTaggedUint64();
+  Uint64 readTaggedUint64() => _buffer.readTaggedUint64();
 
   /// Binds [value] to the most recently preserved Ref slot.
   void reference(Object? value) {
@@ -299,7 +302,11 @@ final class ReadContext {
     required bool hasPreservedRef,
   }) {
     if (TypeIds.isPrimitive(resolved.typeId)) {
-      return PrimitiveSerializer.readPayload(this, resolved.typeId);
+      return convertResolvedPrimitiveValue(
+        PrimitiveSerializer.readPayload(this, resolved.typeId),
+        resolved,
+        declaredFieldType,
+      );
     }
     switch (resolved.typeId) {
       case TypeIds.none:

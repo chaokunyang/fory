@@ -55,6 +55,7 @@ export 'src/types/float16.dart';
 export 'src/types/float32.dart';
 export 'src/types/int16.dart';
 export 'src/types/int32.dart';
+export 'src/types/int64.dart';
 export 'src/types/int8.dart';
 export 'src/types/local_date.dart';
 export 'src/types/timestamp.dart';

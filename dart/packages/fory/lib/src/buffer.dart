@@ -24,13 +24,9 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/float16.dart';
-
-final BigInt _mask64Big = (BigInt.one << 64) - BigInt.one;
-final BigInt _sevenBitMaskBig = BigInt.from(0x7f);
-final BigInt _byteMaskBig = BigInt.from(0xff);
-const bool _useBigIntVarint64 =
-    bool.fromEnvironment('dart.library.js_interop') ||
-        bool.fromEnvironment('dart.library.js_util');
+import 'package:fory/src/types/int64.dart';
+import 'package:fory/src/types/uint64.dart';
+import 'package:fory/src/util/int64_codec.dart';
 
 /// A reusable byte buffer with explicit reader and writer indices.
 ///
@@ -195,29 +191,29 @@ final class Buffer {
   }
 
   /// Writes a signed little-endian 64-bit integer.
-  void writeInt64(int value) {
+  void writeInt64(Int64 value) {
     ensureWritable(8);
-    _view.setInt64(_writerIndex, value, Endian.little);
+    writeInt64LittleEndian(_view, _writerIndex, value);
     _writerIndex += 8;
   }
 
   /// Reads a signed little-endian 64-bit integer.
-  int readInt64() {
-    final value = _view.getInt64(_readerIndex, Endian.little);
+  Int64 readInt64() {
+    final value = readInt64LittleEndian(_view, _readerIndex);
     _readerIndex += 8;
     return value;
   }
 
   /// Writes an unsigned little-endian 64-bit integer.
-  void writeUint64(int value) {
+  void writeUint64(Uint64 value) {
     ensureWritable(8);
-    _view.setUint64(_writerIndex, value, Endian.little);
+    writeUint64LittleEndian(_view, _writerIndex, value);
     _writerIndex += 8;
   }
 
   /// Reads an unsigned little-endian 64-bit integer.
-  int readUint64() {
-    final value = _view.getUint64(_readerIndex, Endian.little);
+  Uint64 readUint64() {
+    final value = readUint64LittleEndian(_view, _readerIndex);
     _readerIndex += 8;
     return value;
   }
@@ -318,83 +314,42 @@ final class Buffer {
   }
 
   /// Writes a zig-zag encoded signed 32-bit varint.
-  void writeVarInt32(int value) => writeVarUint32((value << 1) ^ (value >> 31));
+  void writeVarInt32(int value) =>
+      writeVarUint32(((value << 1) ^ (value >> 31)).toUnsigned(32));
 
   /// Reads a zig-zag encoded signed 32-bit varint.
   int readVarInt32() {
     final value = readVarUint32();
-    return (value >>> 1) ^ -(value & 1);
+    return ((value >>> 1) ^ -(value & 1)).toSigned(32);
   }
 
   /// Writes an unsigned 64-bit varint.
-  void writeVarUint64(int value) {
-    if (!_useBigIntVarint64) {
-      var remaining = value;
-      for (var index = 0; index < 8; index += 1) {
-        final chunk = remaining & 0x7f;
-        remaining = remaining >>> 7;
-        if (remaining == 0) {
-          writeUint8(chunk);
-          return;
-        }
-        writeUint8(chunk | 0x80);
-      }
-      writeUint8(remaining & 0xff);
-      return;
-    }
-    _writeVarUint64BigInt(BigInt.from(value) & _mask64Big);
+  void writeVarUint64(Uint64 value) {
+    writeVarUint64Bytes(value, writeUint8);
   }
 
   /// Reads an unsigned 64-bit varint.
-  int readVarUint64() {
-    if (!_useBigIntVarint64) {
-      var shift = 0;
-      var result = 0;
-      while (shift < 56) {
-        final byte = readUint8();
-        result |= (byte & 0x7f) << shift;
-        if ((byte & 0x80) == 0) {
-          return result;
-        }
-        shift += 7;
-      }
-      return result | (readUint8() << 56);
-    }
-    return _readVarUint64BigInt().toInt();
+  Uint64 readVarUint64() {
+    return readVarUint64Bytes(readUint8);
   }
 
   /// Writes a zig-zag encoded signed 64-bit varint.
-  void writeVarInt64(int value) {
-    if (!_useBigIntVarint64) {
-      writeVarUint64((value << 1) ^ (value >> 63));
-      return;
-    }
-    final signed = BigInt.from(value);
-    final zigZag = ((signed << 1) ^ BigInt.from(value >> 63)) & _mask64Big;
-    _writeVarUint64BigInt(zigZag);
+  void writeVarInt64(Int64 value) {
+    writeVarUint64(zigZagEncodeInt64(value));
   }
 
   /// Reads a zig-zag encoded signed 64-bit varint.
-  int readVarInt64() {
-    if (!_useBigIntVarint64) {
-      final encoded = readVarUint64();
-      return (encoded >>> 1) ^ -(encoded & 1);
-    }
-    final encoded = _readVarUint64BigInt();
-    final magnitude = (encoded >> 1).toInt();
-    if ((encoded & BigInt.one) == BigInt.zero) {
-      return magnitude;
-    }
-    return -magnitude - 1;
+  Int64 readVarInt64() {
+    return zigZagDecodeInt64(readVarUint64());
   }
 
   /// Writes a tagged signed 64-bit integer.
   ///
   /// Small values use four bytes. Larger values use a tag byte plus eight data
   /// bytes.
-  void writeTaggedInt64(int value) {
+  void writeTaggedInt64(Int64 value) {
     if (value >= -0x40000000 && value <= 0x3fffffff) {
-      writeInt32(value << 1);
+      writeInt32((value.toInt() << 1).toSigned(32));
       return;
     }
     writeUint8(0x01);
@@ -402,22 +357,22 @@ final class Buffer {
   }
 
   /// Reads a signed 64-bit integer written by [writeTaggedInt64].
-  int readTaggedInt64() {
+  Int64 readTaggedInt64() {
     final readIndex = _readerIndex;
     final first = _view.getInt32(readIndex, Endian.little);
     if ((first & 1) == 0) {
       _readerIndex = readIndex + 4;
-      return first >> 1;
+      return Int64(first.toSigned(32) ~/ 2);
     }
-    final value = _view.getInt64(readIndex + 1, Endian.little);
+    final value = readInt64LittleEndian(_view, readIndex + 1);
     _readerIndex = readIndex + 9;
     return value;
   }
 
   /// Writes a tagged unsigned 64-bit integer.
-  void writeTaggedUint64(int value) {
+  void writeTaggedUint64(Uint64 value) {
     if (value >= 0 && value <= 0x7fffffff) {
-      writeInt32(value << 1);
+      writeInt32(value.toInt() << 1);
       return;
     }
     writeUint8(0x01);
@@ -425,14 +380,14 @@ final class Buffer {
   }
 
   /// Reads an unsigned 64-bit integer written by [writeTaggedUint64].
-  int readTaggedUint64() {
+  Uint64 readTaggedUint64() {
     final readIndex = _readerIndex;
     final first = _view.getUint32(readIndex, Endian.little);
     if ((first & 1) == 0) {
       _readerIndex = readIndex + 4;
-      return first >>> 1;
+      return Uint64(first >>> 1);
     }
-    final value = _view.getUint64(readIndex + 1, Endian.little);
+    final value = readUint64LittleEndian(_view, readIndex + 1);
     _readerIndex = readIndex + 9;
     return value;
   }
@@ -452,10 +407,10 @@ final class Buffer {
   int readVarUint32Small14() => readVarUint32();
 
   /// Writes a small unsigned integer using the 64-bit varint path.
-  void writeVarUint36Small(int value) => writeVarUint64(value);
+  void writeVarUint36Small(int value) => writeVarUint64(Uint64(value));
 
   /// Reads a small unsigned integer written by [writeVarUint36Small].
-  int readVarUint36Small() => readVarUint64();
+  int readVarUint36Small() => readVarUint64().toInt();
 }
 
 @internal
@@ -492,33 +447,3 @@ Uint8List bufferBytes(Buffer buffer) => buffer._bytes;
 
 @internal
 ByteData bufferByteData(Buffer buffer) => buffer._view;
-
-extension on Buffer {
-  void _writeVarUint64BigInt(BigInt value) {
-    var remaining = value & _mask64Big;
-    for (var index = 0; index < 8; index += 1) {
-      final chunk = (remaining & _sevenBitMaskBig).toInt();
-      remaining >>= 7;
-      if (remaining == BigInt.zero) {
-        writeUint8(chunk);
-        return;
-      }
-      writeUint8(chunk | 0x80);
-    }
-    writeUint8((remaining & _byteMaskBig).toInt());
-  }
-
-  BigInt _readVarUint64BigInt() {
-    var shift = 0;
-    var result = BigInt.zero;
-    while (shift < 56) {
-      final byte = readUint8();
-      result |= BigInt.from(byte & 0x7f) << shift;
-      if ((byte & 0x80) == 0) {
-        return result;
-      }
-      shift += 7;
-    }
-    return result | ((BigInt.from(readUint8()) & _byteMaskBig) << 56);
-  }
-}

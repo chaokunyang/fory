@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/meta/type_def.dart';
 import 'package:fory/src/meta/type_ids.dart';
+import 'package:fory/src/types/int64.dart';
 
 const int _typeDefCompressMetaFlag = 1 << 9;
 const int _typeDefHasFieldsMetaFlag = 1 << 8;
@@ -136,16 +137,16 @@ final BigInt _c2Big = BigInt.parse('4cf5ad432745937f', radix: 16);
   return (h1, h2);
 }
 
-int metaStringHash(List<int> bytes, {int encoding = 0}) {
+Int64 metaStringHash(List<int> bytes, {int encoding = 0}) {
   var hash = _absSigned64(murmurHash3X64_128(bytes).$1);
   if (hash == 0) {
     hash += 0x100;
   }
   hash = (BigInt.from(hash) & _metaStringHashMaskBig).toInt();
-  return hash | (encoding & 0xff);
+  return Int64(hash | (encoding & 0xff));
 }
 
-int typeDefHeader(
+Int64 typeDefHeader(
   List<int> bytes, {
   required bool hasFieldsMeta,
   bool compressed = false,
@@ -160,7 +161,7 @@ int typeDefHeader(
   }
   header |=
       bytes.length > _typeDefMetaSizeMask ? _typeDefMetaSizeMask : bytes.length;
-  return _toSigned64(header);
+  return Int64(_toSigned64(header));
 }
 
 int schemaHash(TypeDef typeDef) {

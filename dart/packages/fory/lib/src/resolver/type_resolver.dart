@@ -48,6 +48,7 @@ import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
 import 'package:fory/src/types/int16.dart';
 import 'package:fory/src/types/int32.dart';
+import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/types/int8.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
@@ -323,6 +324,9 @@ final class TypeResolver {
     if (value is Int32) {
       return _builtin(Int32, TypeIds.varInt32);
     }
+    if (value is Int64 && value is! int) {
+      return _builtin(Int64, TypeIds.int64);
+    }
     if (value is int) {
       return _builtin(int, TypeIds.varInt64);
     }
@@ -467,7 +471,7 @@ final class TypeResolver {
       case TypeIds.bfloat16Array:
       case TypeIds.float32Array:
       case TypeIds.float64Array:
-        return _builtin(fieldType.type, fieldType.typeId);
+        return _builtin(_builtinTypeForFieldType(fieldType), fieldType.typeId);
       default:
         return _registeredByType[fieldType.type];
     }
@@ -858,14 +862,17 @@ final class TypeResolver {
       return wireTypeMetaForResolved(sharedTypes[index]);
     }
     final header = TypeHeader(buffer.readInt64());
-    final cached = _parsedTypeMetaCache.lookup(header);
+    final cached =
+        config.compatible ? null : _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       header.skipRemaining(buffer);
       sharedTypes.add(cached);
       return wireTypeMetaForResolved(cached);
     }
     final resolved = _readTypeDefWithHeader(buffer, header);
-    _parsedTypeMetaCache.remember(header, resolved);
+    if (!config.compatible) {
+      _parsedTypeMetaCache.remember(header, resolved);
+    }
     sharedTypes.add(resolved);
     return wireTypeMetaForResolved(resolved);
   }
@@ -988,6 +995,7 @@ final class TypeResolver {
     }
     return FieldType(
       type: Object,
+      declaredTypeName: null,
       typeId: typeId,
       nullable: nullable,
       ref: ref,
@@ -1019,11 +1027,11 @@ final class TypeResolver {
       case TypeIds.varInt32:
         return _builtin(Int32, TypeIds.varInt32);
       case TypeIds.int64:
-        return _builtin(int, TypeIds.int64);
+        return _builtin(Int64, TypeIds.int64);
       case TypeIds.varInt64:
         return _builtin(int, TypeIds.varInt64);
       case TypeIds.taggedInt64:
-        return _builtin(int, TypeIds.taggedInt64);
+        return _builtin(Int64, TypeIds.taggedInt64);
       case TypeIds.uint8:
         return _builtin(Uint8, TypeIds.uint8);
       case TypeIds.uint16:
@@ -1238,8 +1246,11 @@ final class TypeResolver {
     if (type == Int32) {
       return TypeIds.varInt32;
     }
-    if (type == int) {
+    if (type == Int64) {
       return TypeIds.varInt64;
+    }
+    if (type == Int64List) {
+      return TypeIds.int64Array;
     }
     if (type == Uint8) {
       return TypeIds.uint8;
@@ -1420,6 +1431,30 @@ final class TypeResolver {
       }
     }
     return true;
+  }
+
+  Type _builtinTypeForFieldType(FieldType fieldType) {
+    final declaredTypeName = fieldType.declaredTypeName;
+    if (declaredTypeName != null) {
+      if (_matchesDeclaredTypeName(declaredTypeName, 'Int64')) {
+        return Int64;
+      }
+      if (_matchesDeclaredTypeName(declaredTypeName, 'Uint64')) {
+        return Uint64;
+      }
+      if (_matchesDeclaredTypeName(declaredTypeName, 'Int64List')) {
+        return Int64List;
+      }
+      if (_matchesDeclaredTypeName(declaredTypeName, 'Uint64List')) {
+        return Uint64List;
+      }
+    }
+    return fieldType.type;
+  }
+
+  bool _matchesDeclaredTypeName(String declaredTypeName, String typeName) {
+    return declaredTypeName == typeName ||
+        declaredTypeName.endsWith('.$typeName');
   }
 
   bool _matchesNamedWireType(TypeInfo resolved, int wireTypeId) {

@@ -24,6 +24,7 @@ import 'package:fory/src/config.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
+import 'package:fory/src/types/int64.dart';
 
 /// Wire-level type metadata for one value.
 final class WireTypeMeta {
@@ -52,12 +53,12 @@ final class WireTypeMeta {
 }
 
 final class TypeHeader {
-  final int value;
+  final Int64 value;
 
   const TypeHeader(this.value);
 
   int readMetaSize(Buffer buffer) {
-    final lowBits = value & 0xff;
+    final lowBits = (value & 0xff).toInt();
     if (lowBits == 0xff) {
       return 0xff + buffer.readVarUint32Small14();
     }
@@ -72,8 +73,8 @@ final class TypeHeader {
 final class ParsedTypeMetaCache {
   static const int maxEntries = 8192;
 
-  final LinkedHashMap<int, TypeInfo> _entries = LinkedHashMap<int, TypeInfo>();
-  int? _lastHeader;
+  final LinkedHashMap<Int64, TypeInfo> _entries = LinkedHashMap<Int64, TypeInfo>();
+  Int64? _lastHeader;
   TypeInfo? _lastResolved;
 
   TypeInfo? lookup(TypeHeader header) {

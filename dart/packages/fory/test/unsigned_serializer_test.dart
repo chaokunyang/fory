@@ -24,8 +24,8 @@ import 'package:test/test.dart';
 part 'unsigned_serializer_test.fory.dart';
 
 const int _uint32Midpoint = 0x80000000;
-const int _uint64Midpoint = 0x8000000000000000;
-const int _uint64Max = 0xffffffffffffffff;
+final Uint64 _uint64Midpoint = Uint64.parseHex('8000000000000000');
+final Uint64 _uint64Max = Uint64.parseHex('ffffffffffffffff');
 
 @ForyStruct()
 class UnsignedFields {
@@ -44,13 +44,13 @@ class UnsignedFields {
   int u32Fixed = 0;
 
   @Uint64Type(encoding: LongEncoding.varint)
-  int u64Var = 0;
+  Uint64 u64Var = Uint64(0);
 
   @Uint64Type(encoding: LongEncoding.fixed)
-  int u64Fixed = 0;
+  Uint64 u64Fixed = Uint64(0);
 
   @Uint64Type(encoding: LongEncoding.tagged)
-  int u64Tagged = 0;
+  Uint64 u64Tagged = Uint64(0);
 
   @Uint8Type()
   int? u8Nullable;
@@ -65,13 +65,13 @@ class UnsignedFields {
   int? u32FixedNullable;
 
   @Uint64Type(encoding: LongEncoding.varint)
-  int? u64VarNullable;
+  Uint64? u64VarNullable;
 
   @Uint64Type(encoding: LongEncoding.fixed)
-  int? u64FixedNullable;
+  Uint64? u64FixedNullable;
 
   @Uint64Type(encoding: LongEncoding.tagged)
-  int? u64TaggedNullable;
+  Uint64? u64TaggedNullable;
 }
 
 @ForyStruct()
@@ -144,9 +144,9 @@ UnsignedFields _nullUnsignedFields() {
     ..u16 = 2
     ..u32Var = 3
     ..u32Fixed = 4
-    ..u64Var = 5
-    ..u64Fixed = 6
-    ..u64Tagged = 7
+    ..u64Var = Uint64(5)
+    ..u64Fixed = Uint64(6)
+    ..u64Tagged = Uint64(7)
     ..u8Nullable = null
     ..u16Nullable = null
     ..u32VarNullable = null

@@ -24,6 +24,9 @@ import 'package:test/test.dart';
 
 part 'scalar_and_typed_array_serializer_test.fory.dart';
 
+Timestamp _timestamp(int seconds, int nanoseconds) =>
+    Timestamp(Int64(seconds), nanoseconds);
+
 @ForyStruct()
 class ScalarAndArrayEnvelope {
   ScalarAndArrayEnvelope();
@@ -45,7 +48,7 @@ class ScalarAndArrayEnvelope {
   Bfloat16 brain = Bfloat16(0);
   Float32 single = Float32(0);
   LocalDate date = const LocalDate(1970, 1, 1);
-  Timestamp timestamp = const Timestamp(0, 0);
+  Timestamp timestamp = _timestamp(0, 0);
 }
 
 void _registerScalarTypes(Fory fory) {
@@ -88,7 +91,7 @@ ScalarAndArrayEnvelope _sampleEnvelope() {
     ..brain = const Bfloat16.fromBits(0x7fc0)
     ..single = Float32(3.5)
     ..date = LocalDate.fromEpochDay(-1)
-    ..timestamp = const Timestamp(-123, 456789123);
+    ..timestamp = _timestamp(-123, 456789123);
 }
 
 void _expectUint8ListEquals(Uint8List actual, Uint8List expected) {
@@ -205,7 +208,7 @@ void main() {
       );
       final negativeTimestamp = _roundTripRoot<DateTime>(
         fory,
-        const Timestamp(-123, 456789000),
+        _timestamp(-123, 456789000),
       );
       final fromDateTime = _roundTripRoot<DateTime>(
         fory,
@@ -216,7 +219,7 @@ void main() {
       expect(leapDay, equals(const LocalDate(2024, 2, 29)));
       expect(
         negativeTimestamp,
-        equals(const Timestamp(-123, 456789000).toDateTime()),
+        equals(_timestamp(-123, 456789000).toDateTime()),
       );
       expect(
         fromDateTime,

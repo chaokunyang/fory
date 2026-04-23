@@ -71,7 +71,11 @@ Object? readTypeInfoValue(
   bool hasPreservedRef = false,
 }) {
   if (TypeIds.isPrimitive(typeInfo.typeId)) {
-    return PrimitiveSerializer.readPayload(context, typeInfo.typeId);
+    return convertResolvedPrimitiveValue(
+      PrimitiveSerializer.readPayload(context, typeInfo.typeId),
+      typeInfo,
+      fieldType,
+    );
   }
   if (typeInfo.typeId == TypeIds.string) {
     return StringSerializer.readPayload(context);

@@ -17,45 +17,27 @@
  * under the License.
  */
 
-import 'dart:convert';
-import 'dart:typed_data';
+// ignore_for_file: use_string_in_part_of_directives
 
-import 'package:meta/meta.dart';
+part of fory.src.memory.buffer;
 
-import 'package:fory/src/types/bfloat16.dart';
-import 'package:fory/src/types/float16.dart';
-import 'package:fory/src/types/int64.dart';
-import 'package:fory/src/types/uint64.dart';
-import 'package:fory/src/util/int64_codec.dart';
-
-/// A reusable byte buffer with explicit reader and writer indices.
-///
-/// Fory uses little-endian fixed-width encodings and varint helpers on top of
-/// this buffer. The same buffer can be reused across many operations by calling
-/// [clear].
-final class Buffer {
-  Uint8List _bytes;
+mixin _BufferMixin {
+  late Uint8List _bytes;
   late ByteData _view;
-  int _readerIndex;
-  int _writerIndex;
+  int _readerIndex = 0;
+  int _writerIndex = 0;
 
-  /// Creates an empty buffer with [initialCapacity] bytes of storage.
-  Buffer([int initialCapacity = 256])
-      : _bytes = Uint8List(initialCapacity),
-        _readerIndex = 0,
-        _writerIndex = 0 {
+  void _initBuffer(int initialCapacity) {
+    _bytes = Uint8List(initialCapacity);
     _view = ByteData.sublistView(_bytes);
   }
 
-  /// Creates a buffer that reads from and writes into [bytes].
-  ///
-  /// The writer index starts at `bytes.length`, so the wrapped bytes are
-  /// immediately readable.
-  Buffer.wrap(Uint8List bytes)
-      : _bytes = bytes,
-        _view = ByteData.sublistView(bytes),
-        _readerIndex = 0,
-        _writerIndex = bytes.length;
+  void _wrapBuffer(Uint8List bytes) {
+    _bytes = bytes;
+    _view = ByteData.sublistView(bytes);
+    _readerIndex = 0;
+    _writerIndex = bytes.length;
+  }
 
   /// Number of unread bytes between the reader and writer indices.
   int get readableBytes => _writerIndex - _readerIndex;
@@ -73,10 +55,7 @@ final class Buffer {
 
   /// Replaces the underlying storage with [bytes] and resets both indices.
   void wrap(Uint8List bytes) {
-    _bytes = bytes;
-    _view = ByteData.sublistView(bytes);
-    _readerIndex = 0;
-    _writerIndex = bytes.length;
+    _wrapBuffer(bytes);
   }
 
   /// Ensures there is room for [additionalBytes] bytes past the writer index.
@@ -190,34 +169,6 @@ final class Buffer {
     return value;
   }
 
-  /// Writes a signed little-endian 64-bit integer.
-  void writeInt64(Int64 value) {
-    ensureWritable(8);
-    writeInt64LittleEndian(_view, _writerIndex, value);
-    _writerIndex += 8;
-  }
-
-  /// Reads a signed little-endian 64-bit integer.
-  Int64 readInt64() {
-    final value = readInt64LittleEndian(_view, _readerIndex);
-    _readerIndex += 8;
-    return value;
-  }
-
-  /// Writes an unsigned little-endian 64-bit integer.
-  void writeUint64(Uint64 value) {
-    ensureWritable(8);
-    writeUint64LittleEndian(_view, _writerIndex, value);
-    _writerIndex += 8;
-  }
-
-  /// Reads an unsigned little-endian 64-bit integer.
-  Uint64 readUint64() {
-    final value = readUint64LittleEndian(_view, _readerIndex);
-    _readerIndex += 8;
-    return value;
-  }
-
   /// Writes a single-precision floating-point value.
   void writeFloat32(double value) {
     ensureWritable(4);
@@ -323,74 +274,9 @@ final class Buffer {
     return ((value >>> 1) ^ -(value & 1)).toSigned(32);
   }
 
-  /// Writes an unsigned 64-bit varint.
-  void writeVarUint64(Uint64 value) {
-    writeVarUint64Bytes(value, writeUint8);
-  }
+  void writeVarUint64(Uint64 value);
 
-  /// Reads an unsigned 64-bit varint.
-  Uint64 readVarUint64() {
-    return readVarUint64Bytes(readUint8);
-  }
-
-  /// Writes a zig-zag encoded signed 64-bit varint.
-  void writeVarInt64(Int64 value) {
-    writeVarUint64(zigZagEncodeInt64(value));
-  }
-
-  /// Reads a zig-zag encoded signed 64-bit varint.
-  Int64 readVarInt64() {
-    return zigZagDecodeInt64(readVarUint64());
-  }
-
-  /// Writes a tagged signed 64-bit integer.
-  ///
-  /// Small values use four bytes. Larger values use a tag byte plus eight data
-  /// bytes.
-  void writeTaggedInt64(Int64 value) {
-    if (value >= -0x40000000 && value <= 0x3fffffff) {
-      writeInt32((value.toInt() << 1).toSigned(32));
-      return;
-    }
-    writeUint8(0x01);
-    writeInt64(value);
-  }
-
-  /// Reads a signed 64-bit integer written by [writeTaggedInt64].
-  Int64 readTaggedInt64() {
-    final readIndex = _readerIndex;
-    final first = _view.getInt32(readIndex, Endian.little);
-    if ((first & 1) == 0) {
-      _readerIndex = readIndex + 4;
-      return Int64(first.toSigned(32) ~/ 2);
-    }
-    final value = readInt64LittleEndian(_view, readIndex + 1);
-    _readerIndex = readIndex + 9;
-    return value;
-  }
-
-  /// Writes a tagged unsigned 64-bit integer.
-  void writeTaggedUint64(Uint64 value) {
-    if (value >= 0 && value <= 0x7fffffff) {
-      writeInt32(value.toInt() << 1);
-      return;
-    }
-    writeUint8(0x01);
-    writeUint64(value);
-  }
-
-  /// Reads an unsigned 64-bit integer written by [writeTaggedUint64].
-  Uint64 readTaggedUint64() {
-    final readIndex = _readerIndex;
-    final first = _view.getUint32(readIndex, Endian.little);
-    if ((first & 1) == 0) {
-      _readerIndex = readIndex + 4;
-      return Uint64(first >>> 1);
-    }
-    final value = readUint64LittleEndian(_view, readIndex + 1);
-    _readerIndex = readIndex + 9;
-    return value;
-  }
+  Uint64 readVarUint64();
 
   /// Writes a small unsigned integer using the same varint path as
   /// [writeVarUint32].

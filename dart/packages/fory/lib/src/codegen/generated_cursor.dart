@@ -17,4 +17,5 @@
  * under the License.
  */
 
-const bool useNativeInt64FastPath = true;
+export 'generated_cursor_native.dart'
+    if (dart.library.js_interop) 'generated_cursor_web.dart';

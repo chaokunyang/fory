@@ -19,7 +19,7 @@
 
 import 'dart:typed_data';
 
-import 'package:fory/src/buffer.dart';
+import 'package:fory/src/memory/buffer.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/types/int64.dart';

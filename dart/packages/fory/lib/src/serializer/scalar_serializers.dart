@@ -24,7 +24,6 @@ import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/types/uint64.dart';
-import 'package:fory/src/util/int64_codec.dart';
 import 'package:fory/src/util/string_util.dart';
 import 'package:fory/src/types/decimal.dart';
 
@@ -57,6 +56,20 @@ BigInt _decimalMagnitudeFromCanonicalLittleEndian(Uint8List payload) {
     magnitude = (magnitude << 8) | BigInt.from(payload[index]);
   }
   return magnitude;
+}
+
+Uint64 _zigZagEncodeInt64(Int64 value) {
+  final encoded = (value << 1) ^ (value >> 63);
+  return Uint64.fromWords(encoded.low32, encoded.high32Unsigned);
+}
+
+Int64 _zigZagDecodeInt64(Uint64 encoded) {
+  final magnitude = encoded >> 1;
+  final decoded = Int64.fromWords(magnitude.low32, magnitude.high32Unsigned);
+  if ((encoded.low32 & 1) == 0) {
+    return decoded;
+  }
+  return -(decoded + 1);
 }
 
 final class NoneSerializer extends Serializer<Null> {
@@ -160,7 +173,7 @@ final class DecimalSerializer extends Serializer<Decimal> {
     final unscaled = value.unscaledValue;
     buffer.writeVarInt32(value.scale);
     if (_canUseSmallDecimalEncoding(unscaled)) {
-      final zigZag = zigZagEncodeInt64(Int64.fromBigInt(unscaled));
+      final zigZag = _zigZagEncodeInt64(Int64.fromBigInt(unscaled));
       buffer.writeVarUint64(zigZag << 1);
       return;
     }
@@ -177,7 +190,7 @@ final class DecimalSerializer extends Serializer<Decimal> {
     final header = context.buffer.readVarUint64();
     if ((header.low32 & 1) == 0) {
       final zigZag = header >>> 1;
-      return Decimal(zigZagDecodeInt64(zigZag).toBigInt(), scale);
+      return Decimal(_zigZagDecodeInt64(zigZag).toBigInt(), scale);
     }
 
     final meta = header >>> 1;

@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-sidebar_position: 10
+sidebar_position: 11
 id: dart_troubleshooting
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more

@@ -1234,10 +1234,19 @@ GeneratedFieldType(
       case TypeIds.varInt32:
         return 'buffer.writeVarInt32(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.int64:
+        if (field.type.isDartCoreInt) {
+          return 'buffer.writeInt64FromInt($valueExpression)';
+        }
         return 'buffer.writeInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.varInt64:
+        if (field.type.isDartCoreInt) {
+          return 'buffer.writeVarInt64FromInt($valueExpression)';
+        }
         return 'buffer.writeVarInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.taggedInt64:
+        if (field.type.isDartCoreInt) {
+          return 'buffer.writeTaggedInt64FromInt($valueExpression)';
+        }
         return 'buffer.writeTaggedInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.uint8:
         return 'buffer.writeUint8(${_directGeneratedScalarExpression(field, valueExpression)})';
@@ -1400,15 +1409,15 @@ GeneratedFieldType(
             : 'Int32(buffer.readVarInt32())';
       case TypeIds.int64:
         return field.type.isDartCoreInt
-            ? 'buffer.readInt64().toInt()'
+            ? 'buffer.readInt64AsInt()'
             : 'buffer.readInt64()';
       case TypeIds.varInt64:
         return field.type.isDartCoreInt
-            ? 'buffer.readVarInt64().toInt()'
+            ? 'buffer.readVarInt64AsInt()'
             : 'buffer.readVarInt64()';
       case TypeIds.taggedInt64:
         return field.type.isDartCoreInt
-            ? 'buffer.readTaggedInt64().toInt()'
+            ? 'buffer.readTaggedInt64AsInt()'
             : 'buffer.readTaggedInt64()';
       case TypeIds.uint8:
         return field.type.isDartCoreInt

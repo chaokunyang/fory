@@ -23,7 +23,7 @@ import 'dart:collection';
 
 import 'package:meta/meta.dart';
 
-import 'package:fory/src/buffer.dart';
+import 'package:fory/src/memory/buffer.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/context/meta_string_writer.dart';
 import 'package:fory/src/context/ref_writer.dart';
@@ -107,7 +107,7 @@ final class WriteContext {
   set structWriteSlots(StructWriteSlots? value) {
     _structWriteSlots = value;
   }
-  
+
   int get depth => _depth;
 
   /// Records entry into one more nested write frame.

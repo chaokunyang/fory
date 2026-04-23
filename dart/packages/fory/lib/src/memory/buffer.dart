@@ -17,5 +17,4 @@
  * under the License.
  */
 
-export 'int64_platform_native.dart'
-    if (dart.library.js_interop) 'int64_platform_web.dart';
+export 'buffer_native.dart' if (dart.library.js_interop) 'buffer_web.dart';

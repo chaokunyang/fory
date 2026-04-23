@@ -20,7 +20,7 @@
 import 'dart:collection';
 import 'dart:typed_data';
 
-import 'package:fory/src/buffer.dart';
+import 'package:fory/src/memory/buffer.dart';
 import 'package:fory/src/codegen/generated_registry.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/context/meta_string_reader.dart';

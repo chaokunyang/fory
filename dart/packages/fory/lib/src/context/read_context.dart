@@ -19,7 +19,7 @@
 
 import 'package:meta/meta.dart';
 
-import 'package:fory/src/buffer.dart';
+import 'package:fory/src/memory/buffer.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/context/meta_string_reader.dart';
 import 'package:fory/src/context/ref_reader.dart';

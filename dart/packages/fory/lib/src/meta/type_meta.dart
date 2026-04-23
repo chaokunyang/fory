@@ -19,7 +19,7 @@
 
 import 'dart:collection';
 
-import 'package:fory/src/buffer.dart';
+import 'package:fory/src/memory/buffer.dart';
 import 'package:fory/src/config.dart';
 import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/meta/type_ids.dart';

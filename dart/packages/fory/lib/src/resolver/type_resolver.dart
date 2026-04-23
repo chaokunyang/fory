@@ -629,6 +629,7 @@ final class TypeResolver {
     );
   }
 
+  @pragma('vm:prefer-inline')
   TypeInfo readTypeMeta(
     Buffer buffer, {
     TypeInfo? expectedNamedType,
@@ -653,6 +654,7 @@ final class TypeResolver {
       readTypeDef: () => _readTypeDef(
         buffer,
         sharedTypes: sharedTypes,
+        expectedType: expectedNamedType,
       ),
       readPackageMetaString: ([expected]) =>
           metaStringReader.readMetaString(buffer, expected),
@@ -854,9 +856,11 @@ final class TypeResolver {
     return fieldType.ref ? TypeIds.unknown : fieldType.typeId;
   }
 
+  @pragma('vm:prefer-inline')
   WireTypeMeta _readTypeDef(
     Buffer buffer, {
     required List<TypeInfo> sharedTypes,
+    TypeInfo? expectedType,
   }) {
     final marker = buffer.readVarUint32Small14();
     final isRef = (marker & 1) == 1;
@@ -865,6 +869,12 @@ final class TypeResolver {
       return wireTypeMetaForResolved(sharedTypes[index]);
     }
     final header = TypeHeader(buffer.readInt64());
+    final expectedTypeDef = expectedType?.typeDef;
+    if (expectedTypeDef != null && expectedTypeDef.header == header.value) {
+      header.skipRemaining(buffer);
+      sharedTypes.add(expectedType!);
+      return wireTypeMetaForResolved(expectedType);
+    }
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       header.skipRemaining(buffer);
@@ -1434,6 +1444,19 @@ final class TypeResolver {
   }
 
   Type _builtinTypeForFieldType(FieldType fieldType) {
+    switch (fieldType.typeId) {
+      case TypeIds.int64:
+      case TypeIds.varInt64:
+      case TypeIds.taggedInt64:
+      case TypeIds.uint64:
+      case TypeIds.varUint64:
+      case TypeIds.taggedUint64:
+      case TypeIds.int64Array:
+      case TypeIds.uint64Array:
+        break;
+      default:
+        return fieldType.type;
+    }
     final declaredTypeName = fieldType.declaredTypeName;
     if (declaredTypeName != null) {
       if (_matchesDeclaredTypeName(declaredTypeName, 'Int64')) {

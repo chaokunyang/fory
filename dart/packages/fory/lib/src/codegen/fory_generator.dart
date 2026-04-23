@@ -1316,10 +1316,19 @@ GeneratedFieldType(
       case TypeIds.varInt32:
         return '$cursorExpression.writeVarInt32(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.int64:
+        if (field.type.isDartCoreInt) {
+          return '$cursorExpression.writeInt64FromInt($valueExpression)';
+        }
         return '$cursorExpression.writeInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.varInt64:
+        if (field.type.isDartCoreInt) {
+          return '$cursorExpression.writeVarInt64FromInt($valueExpression)';
+        }
         return '$cursorExpression.writeVarInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.taggedInt64:
+        if (field.type.isDartCoreInt) {
+          return '$cursorExpression.writeTaggedInt64FromInt($valueExpression)';
+        }
         return '$cursorExpression.writeTaggedInt64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.uint8:
         return '$cursorExpression.writeUint8(${_directGeneratedScalarExpression(field, valueExpression)})';
@@ -1330,10 +1339,19 @@ GeneratedFieldType(
       case TypeIds.varUint32:
         return '$cursorExpression.writeVarUint32(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.uint64:
+        if (field.type.isDartCoreInt) {
+          return '$cursorExpression.writeUint64FromInt($valueExpression)';
+        }
         return '$cursorExpression.writeUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.varUint64:
+        if (field.type.isDartCoreInt) {
+          return '$cursorExpression.writeVarUint64FromInt($valueExpression)';
+        }
         return '$cursorExpression.writeVarUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.taggedUint64:
+        if (field.type.isDartCoreInt) {
+          return '$cursorExpression.writeTaggedUint64FromInt($valueExpression)';
+        }
         return '$cursorExpression.writeTaggedUint64(${_directGeneratedScalarExpression(field, valueExpression)})';
       case TypeIds.float16:
         return '$cursorExpression.writeFloat16($valueExpression)';
@@ -1500,15 +1518,15 @@ GeneratedFieldType(
             : 'Int32($cursorExpression.readVarInt32())';
       case TypeIds.int64:
         return field.type.isDartCoreInt
-            ? '$cursorExpression.readInt64().toInt()'
+            ? '$cursorExpression.readInt64AsInt()'
             : '$cursorExpression.readInt64()';
       case TypeIds.varInt64:
         return field.type.isDartCoreInt
-            ? '$cursorExpression.readVarInt64().toInt()'
+            ? '$cursorExpression.readVarInt64AsInt()'
             : '$cursorExpression.readVarInt64()';
       case TypeIds.taggedInt64:
         return field.type.isDartCoreInt
-            ? '$cursorExpression.readTaggedInt64().toInt()'
+            ? '$cursorExpression.readTaggedInt64AsInt()'
             : '$cursorExpression.readTaggedInt64()';
       case TypeIds.uint8:
         return field.type.isDartCoreInt
@@ -1528,15 +1546,15 @@ GeneratedFieldType(
             : 'Uint32($cursorExpression.readVarUint32())';
       case TypeIds.uint64:
         return field.type.isDartCoreInt
-            ? '$cursorExpression.readUint64().toInt()'
+            ? '$cursorExpression.readUint64AsInt()'
             : '$cursorExpression.readUint64()';
       case TypeIds.varUint64:
         return field.type.isDartCoreInt
-            ? '$cursorExpression.readVarUint64().toInt()'
+            ? '$cursorExpression.readVarUint64AsInt()'
             : '$cursorExpression.readVarUint64()';
       case TypeIds.taggedUint64:
         return field.type.isDartCoreInt
-            ? '$cursorExpression.readTaggedUint64().toInt()'
+            ? '$cursorExpression.readTaggedUint64AsInt()'
             : '$cursorExpression.readTaggedUint64()';
       case TypeIds.float16:
         return '$cursorExpression.readFloat16()';

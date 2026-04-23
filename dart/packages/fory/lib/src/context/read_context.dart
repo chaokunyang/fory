@@ -99,12 +99,14 @@ final class ReadContext {
   }
 
   @internal
+  @pragma('vm:prefer-inline')
   TypeInfo readTypeMetaValue([
     TypeInfo? expectedNamedType,
   ]) =>
       _readTypeMeta(expectedNamedType);
 
   @internal
+  @pragma('vm:prefer-inline')
   Object? readSerializerPayload(
       Serializer<Object?> serializer, TypeInfo resolved,
       {required bool hasCurrentPreservedRef}) {
@@ -131,6 +133,7 @@ final class ReadContext {
   int get depth => _depth;
 
   /// Records entry into one more nested read frame.
+  @pragma('vm:prefer-inline')
   void increaseDepth() {
     _depth += 1;
     if (_depth > config.maxDepth) {
@@ -139,6 +142,7 @@ final class ReadContext {
   }
 
   /// Records exit from a nested read frame.
+  @pragma('vm:prefer-inline')
   void decreaseDepth() {
     _depth -= 1;
   }
@@ -192,11 +196,13 @@ final class ReadContext {
   Uint64 readTaggedUint64() => _buffer.readTaggedUint64();
 
   /// Binds [value] to the most recently preserved Ref slot.
+  @pragma('vm:prefer-inline')
   void reference(Object? value) {
     _refReader.reference(value);
   }
 
   /// Reads a non-null string payload without ref/null handling.
+  @pragma('vm:prefer-inline')
   String readString() => StringSerializer.readPayload(this);
 
   /// Reads a ref-or-null header and resolves back-references immediately.
@@ -277,6 +283,7 @@ final class ReadContext {
       PrimitiveSerializer.readPayload(this, typeId);
 
   @internal
+  @pragma('vm:prefer-inline')
   Object? readResolvedValue(TypeInfo resolved, FieldType? declaredFieldType,
       {bool hasPreservedRef = false}) {
     if (!_tracksDepth(resolved)) {
@@ -394,6 +401,7 @@ final class ReadContext {
     }
   }
 
+  @pragma('vm:prefer-inline')
   TypeInfo _readTypeMeta([
     TypeInfo? expectedNamedType,
   ]) {
@@ -405,6 +413,7 @@ final class ReadContext {
     );
   }
 
+  @pragma('vm:prefer-inline')
   bool _tracksDepth(TypeInfo resolved) {
     if (TypeIds.isContainer(resolved.typeId)) {
       return true;

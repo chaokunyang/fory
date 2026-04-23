@@ -57,14 +57,16 @@ final class TypeHeader {
 
   const TypeHeader(this.value);
 
+  @pragma('vm:prefer-inline')
   int readMetaSize(Buffer buffer) {
-    final lowBits = (value & 0xff).toInt();
+    final lowBits = value.low32 & 0xff;
     if (lowBits == 0xff) {
       return 0xff + buffer.readVarUint32Small14();
     }
     return lowBits;
   }
 
+  @pragma('vm:prefer-inline')
   void skipRemaining(Buffer buffer) {
     buffer.skip(readMetaSize(buffer));
   }
@@ -73,10 +75,12 @@ final class TypeHeader {
 final class ParsedTypeMetaCache {
   static const int maxEntries = 8192;
 
-  final LinkedHashMap<Int64, TypeInfo> _entries = LinkedHashMap<Int64, TypeInfo>();
+  final LinkedHashMap<Int64, TypeInfo> _entries =
+      LinkedHashMap<Int64, TypeInfo>();
   Int64? _lastHeader;
   TypeInfo? _lastResolved;
 
+  @pragma('vm:prefer-inline')
   TypeInfo? lookup(TypeHeader header) {
     if (_lastHeader == header.value) {
       return _lastResolved;
@@ -89,6 +93,7 @@ final class ParsedTypeMetaCache {
     return resolved;
   }
 
+  @pragma('vm:prefer-inline')
   void remember(TypeHeader header, TypeInfo resolved) {
     if (!_entries.containsKey(header.value) && _entries.length >= maxEntries) {
       _entries.remove(_entries.keys.first);

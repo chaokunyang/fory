@@ -27,12 +27,13 @@ const int _int64HighBits = 20;
 const int _int64HighMask = (1 << _int64HighBits) - 1;
 const int _int64HighBase = 1 << _int64HighBits;
 const int _int64HighSignBit = 1 << (_int64HighBits - 1);
+const int _int64SafeHighMax = 0x1ff;
+const int _int64SafeHighMin = -0x200;
+const int _int64HighValueBase = 17592186044416;
 const int _int64WordBase = 0x100000000;
 final BigInt _int64Mask64Big = (BigInt.one << 64) - BigInt.one;
 final BigInt _int64Mask32Big = (BigInt.one << 32) - BigInt.one;
 final BigInt _int64SignBit64Big = BigInt.one << 63;
-final BigInt _int64SafeMinBig = BigInt.from(-9007199254740991);
-final BigInt _int64SafeMaxBig = BigInt.from(9007199254740991);
 
 /// Signed 64-bit integer wrapper used by the xlang type system on web builds.
 final class Int64 implements Comparable<Int64> {
@@ -104,11 +105,12 @@ final class Int64 implements Comparable<Int64> {
 
   /// Returns this value as a Dart [int] when it is JS-safe.
   int toInt() {
-    final exact = toBigInt();
-    if (exact < _int64SafeMinBig || exact > _int64SafeMaxBig) {
-      throw StateError('Int64 value $exact is not a JS-safe int.');
+    if (_h > _int64SafeHighMax ||
+        _h < _int64SafeHighMin ||
+        (_h == _int64SafeHighMin && _m == 0 && _l == 0)) {
+      throw StateError('Int64 value ${toBigInt()} is not a JS-safe int.');
     }
-    return exact.toInt();
+    return _h * _int64HighValueBase + _m * _int64SegmentBase + _l;
   }
 
   @override
@@ -159,9 +161,9 @@ final class Int64 implements Comparable<Int64> {
 
   Int64 operator %(Object other) => switch (other) {
         int otherValue =>
-          Int64.fromBigInt(toBigInt().remainder(BigInt.from(otherValue))),
+          Int64.fromBigInt(toBigInt() % BigInt.from(otherValue)),
         Int64 otherValue =>
-          Int64.fromBigInt(toBigInt().remainder(otherValue.toBigInt())),
+          Int64.fromBigInt(toBigInt() % otherValue.toBigInt()),
         _ => throw ArgumentError.value(
             other, 'other', 'Expected an int or Int64.'),
       };
@@ -246,9 +248,7 @@ final class Int64 implements Comparable<Int64> {
       return Int64._parts(
         ((_l >>> shift) | ((_m & _int64LowBitsMask(shift)) << (22 - shift))) &
             _int64SegmentMask,
-        ((_m >>> shift) |
-                (((_h & _int64HighMask) & _int64LowBitsMask(shift)) <<
-                    (22 - shift))) &
+        ((_m >>> shift) | ((_h & _int64LowBitsMask(shift)) << (22 - shift))) &
             _int64SegmentMask,
         _normalizeInt64High(_h >> shift),
       );
@@ -270,6 +270,17 @@ final class Int64 implements Comparable<Int64> {
       _h < 0 ? _int64SegmentMask : 0,
       _h < 0 ? -1 : 0,
     );
+  }
+
+  Int64 operator >>>(int shift) {
+    RangeError.checkNotNegative(shift, 'shift');
+    if (shift == 0) {
+      return this;
+    }
+    if (shift >= 64) {
+      return Int64(0);
+    }
+    return _logicalShiftRight(shift);
   }
 
   bool operator <(Object other) => switch (other) {
@@ -358,6 +369,33 @@ final class Int64 implements Comparable<Int64> {
         _m ^ other._m,
         _normalizeInt64High(_h ^ other._h),
       );
+
+  Int64 _logicalShiftRight(int shift) {
+    final highBits = _h & _int64HighMask;
+    if (shift < 22) {
+      return Int64._parts(
+        ((_l >>> shift) | ((_m & _int64LowBitsMask(shift)) << (22 - shift))) &
+            _int64SegmentMask,
+        ((_m >>> shift) |
+                ((highBits & _int64LowBitsMask(shift)) << (22 - shift))) &
+            _int64SegmentMask,
+        highBits >>> shift,
+      );
+    }
+    if (shift < 44) {
+      final segmentShift = shift - 22;
+      return Int64._parts(
+        ((_m >>> segmentShift) |
+                ((highBits & _int64LowBitsMask(segmentShift)) <<
+                    (22 - segmentShift))) &
+            _int64SegmentMask,
+        highBits >>> segmentShift,
+        0,
+      );
+    }
+    final segmentShift = shift - 44;
+    return Int64._parts(highBits >>> segmentShift, 0, 0);
+  }
 }
 
 /// Fixed-length contiguous storage for [Int64] values on web builds.

@@ -37,6 +37,7 @@ import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/util/int64_codec.dart';
+import 'package:fory/src/util/int64_platform.dart';
 
 @internal
 final class GeneratedWriteCursor {
@@ -66,69 +67,103 @@ final class GeneratedWriteCursor {
     bufferSetWriterIndex(_buffer, _offset);
   }
 
+  @pragma('vm:prefer-inline')
   void writeBool(bool value) {
     _bytes[_offset] = value ? 1 : 0;
     _offset += 1;
   }
 
+  @pragma('vm:prefer-inline')
   void writeByte(int value) {
     _view.setInt8(_offset, value);
     _offset += 1;
   }
 
+  @pragma('vm:prefer-inline')
   void writeUint8(int value) {
     _view.setUint8(_offset, value);
     _offset += 1;
   }
 
+  @pragma('vm:prefer-inline')
   void writeInt16(int value) {
     _view.setInt16(_offset, value, Endian.little);
     _offset += 2;
   }
 
+  @pragma('vm:prefer-inline')
   void writeUint16(int value) {
     _view.setUint16(_offset, value, Endian.little);
     _offset += 2;
   }
 
+  @pragma('vm:prefer-inline')
   void writeInt32(int value) {
     _view.setInt32(_offset, value, Endian.little);
     _offset += 4;
   }
 
+  @pragma('vm:prefer-inline')
   void writeUint32(int value) {
     _view.setUint32(_offset, value, Endian.little);
     _offset += 4;
   }
 
+  @pragma('vm:prefer-inline')
   void writeInt64(Int64 value) {
     writeInt64LittleEndian(_view, _offset, value);
     _offset += 8;
   }
 
+  @pragma('vm:prefer-inline')
+  void writeInt64FromInt(int value) {
+    if (useNativeInt64FastPath) {
+      _view.setInt64(_offset, value, Endian.little);
+      _offset += 8;
+      return;
+    }
+    writeInt64(Int64(value));
+  }
+
+  @pragma('vm:prefer-inline')
   void writeUint64(Uint64 value) {
     writeUint64LittleEndian(_view, _offset, value);
     _offset += 8;
   }
 
+  @pragma('vm:prefer-inline')
+  void writeUint64FromInt(int value) {
+    if (useNativeInt64FastPath) {
+      _view.setUint64(_offset, value, Endian.little);
+      _offset += 8;
+      return;
+    }
+    writeUint64(Uint64(value));
+  }
+
+  @pragma('vm:prefer-inline')
   void writeFloat16(Float16 value) {
     writeUint16(value.toBits());
   }
 
+  @pragma('vm:prefer-inline')
   void writeBfloat16(Bfloat16 value) {
     writeUint16(value.toBits());
   }
 
+  @pragma('vm:prefer-inline')
   void writeFloat32(double value) {
     _view.setFloat32(_offset, value, Endian.little);
     _offset += 4;
   }
 
+  @pragma('vm:prefer-inline')
   void writeFloat64(double value) {
     _view.setFloat64(_offset, value, Endian.little);
     _offset += 8;
   }
 
+  @pragma('vm:prefer-inline')
   void writeVarUint32(int value) {
     var remaining = value;
     while (remaining >= 0x80) {
@@ -140,10 +175,15 @@ final class GeneratedWriteCursor {
     _offset += 1;
   }
 
+  @pragma('vm:prefer-inline')
   void writeVarInt32(int value) {
-    writeVarUint32(((value << 1) ^ (value >> 31)).toUnsigned(32));
+    final encoded = (value << 1) ^ (value >> 31);
+    writeVarUint32(
+      useNativeInt64FastPath ? encoded : encoded.toUnsigned(32),
+    );
   }
 
+  @pragma('vm:prefer-inline')
   void writeVarUint64(Uint64 value) {
     writeVarUint64Bytes(value, (byte) {
       _bytes[_offset] = byte;
@@ -151,10 +191,30 @@ final class GeneratedWriteCursor {
     });
   }
 
+  @pragma('vm:prefer-inline')
+  void writeVarUint64FromInt(int value) {
+    if (useNativeInt64FastPath) {
+      _writeVarUint64Int(value);
+      return;
+    }
+    writeVarUint64(Uint64(value));
+  }
+
+  @pragma('vm:prefer-inline')
   void writeVarInt64(Int64 value) {
     writeVarUint64(zigZagEncodeInt64(value));
   }
 
+  @pragma('vm:prefer-inline')
+  void writeVarInt64FromInt(int value) {
+    if (useNativeInt64FastPath) {
+      _writeVarUint64Int((value << 1) ^ (value >> 63));
+      return;
+    }
+    writeVarInt64(Int64(value));
+  }
+
+  @pragma('vm:prefer-inline')
   void writeTaggedInt64(Int64 value) {
     if (value >= -0x40000000 && value <= 0x3fffffff) {
       writeInt32((value.toInt() << 1).toSigned(32));
@@ -164,6 +224,17 @@ final class GeneratedWriteCursor {
     writeInt64(value);
   }
 
+  @pragma('vm:prefer-inline')
+  void writeTaggedInt64FromInt(int value) {
+    if (value >= -0x40000000 && value <= 0x3fffffff) {
+      writeInt32((value << 1).toSigned(32));
+      return;
+    }
+    writeUint8(0x01);
+    writeInt64FromInt(value);
+  }
+
+  @pragma('vm:prefer-inline')
   void writeTaggedUint64(Uint64 value) {
     if (value >= 0 && value <= 0x7fffffff) {
       writeInt32(value.toInt() << 1);
@@ -171,6 +242,34 @@ final class GeneratedWriteCursor {
     }
     writeUint8(0x01);
     writeUint64(value);
+  }
+
+  @pragma('vm:prefer-inline')
+  void writeTaggedUint64FromInt(int value) {
+    if (value >= 0 && value <= 0x7fffffff) {
+      writeInt32(value << 1);
+      return;
+    }
+    writeUint8(0x01);
+    writeUint64FromInt(value);
+  }
+
+  @pragma('vm:prefer-inline')
+  void _writeVarUint64Int(int value) {
+    var remaining = value;
+    for (var index = 0; index < 8; index += 1) {
+      final chunk = remaining & 0x7f;
+      remaining = remaining >>> 7;
+      if (remaining == 0) {
+        _bytes[_offset] = chunk;
+        _offset += 1;
+        return;
+      }
+      _bytes[_offset] = chunk | 0x80;
+      _offset += 1;
+    }
+    _bytes[_offset] = remaining & 0xff;
+    _offset += 1;
   }
 }
 
@@ -198,72 +297,106 @@ final class GeneratedReadCursor {
     bufferSetReaderIndex(_buffer, _offset);
   }
 
+  @pragma('vm:prefer-inline')
   bool readBool() => readUint8() != 0;
 
+  @pragma('vm:prefer-inline')
   int readByte() {
     final value = _view.getInt8(_offset);
     _offset += 1;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
   int readUint8() {
     final value = _view.getUint8(_offset);
     _offset += 1;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
   int readInt16() {
     final value = _view.getInt16(_offset, Endian.little);
     _offset += 2;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
   int readUint16() {
     final value = _view.getUint16(_offset, Endian.little);
     _offset += 2;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
   int readInt32() {
     final value = _view.getInt32(_offset, Endian.little);
     _offset += 4;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
   int readUint32() {
     final value = _view.getUint32(_offset, Endian.little);
     _offset += 4;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
   Int64 readInt64() {
     final value = readInt64LittleEndian(_view, _offset);
     _offset += 8;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
+  int readInt64AsInt() {
+    if (useNativeInt64FastPath) {
+      final value = _view.getInt64(_offset, Endian.little);
+      _offset += 8;
+      return value;
+    }
+    return readInt64().toInt();
+  }
+
+  @pragma('vm:prefer-inline')
   Uint64 readUint64() {
     final value = readUint64LittleEndian(_view, _offset);
     _offset += 8;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
+  int readUint64AsInt() {
+    if (useNativeInt64FastPath) {
+      final value = _view.getUint64(_offset, Endian.little);
+      _offset += 8;
+      return value;
+    }
+    return readUint64().toInt();
+  }
+
+  @pragma('vm:prefer-inline')
   Float16 readFloat16() => Float16.fromBits(readUint16());
 
+  @pragma('vm:prefer-inline')
   Bfloat16 readBfloat16() => Bfloat16.fromBits(readUint16());
 
+  @pragma('vm:prefer-inline')
   double readFloat32() {
     final value = _view.getFloat32(_offset, Endian.little);
     _offset += 4;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
   double readFloat64() {
     final value = _view.getFloat64(_offset, Endian.little);
     _offset += 8;
     return value;
   }
 
+  @pragma('vm:prefer-inline')
   int readVarUint32() {
     var shift = 0;
     var result = 0;
@@ -277,19 +410,41 @@ final class GeneratedReadCursor {
     }
   }
 
+  @pragma('vm:prefer-inline')
   int readVarInt32() {
     final value = readVarUint32();
-    return ((value >>> 1) ^ -(value & 1)).toSigned(32);
+    final decoded = (value >>> 1) ^ -(value & 1);
+    return useNativeInt64FastPath ? decoded : decoded.toSigned(32);
   }
 
+  @pragma('vm:prefer-inline')
   Uint64 readVarUint64() {
     return readVarUint64Bytes(readUint8);
   }
 
+  @pragma('vm:prefer-inline')
+  int readVarUint64AsInt() {
+    if (useNativeInt64FastPath) {
+      return _readVarUint64Int();
+    }
+    return readVarUint64().toInt();
+  }
+
+  @pragma('vm:prefer-inline')
   Int64 readVarInt64() {
     return zigZagDecodeInt64(readVarUint64());
   }
 
+  @pragma('vm:prefer-inline')
+  int readVarInt64AsInt() {
+    if (useNativeInt64FastPath) {
+      final encoded = _readVarUint64Int();
+      return (encoded >>> 1) ^ -(encoded & 1);
+    }
+    return readVarInt64().toInt();
+  }
+
+  @pragma('vm:prefer-inline')
   Int64 readTaggedInt64() {
     final readIndex = _offset;
     final first = _view.getInt32(readIndex, Endian.little);
@@ -302,6 +457,23 @@ final class GeneratedReadCursor {
     return value;
   }
 
+  @pragma('vm:prefer-inline')
+  int readTaggedInt64AsInt() {
+    if (useNativeInt64FastPath) {
+      final readIndex = _offset;
+      final first = _view.getInt32(readIndex, Endian.little);
+      if ((first & 1) == 0) {
+        _offset = readIndex + 4;
+        return first >> 1;
+      }
+      final value = _view.getInt64(readIndex + 1, Endian.little);
+      _offset = readIndex + 9;
+      return value;
+    }
+    return readTaggedInt64().toInt();
+  }
+
+  @pragma('vm:prefer-inline')
   Uint64 readTaggedUint64() {
     final readIndex = _offset;
     final first = _view.getUint32(readIndex, Endian.little);
@@ -312,6 +484,37 @@ final class GeneratedReadCursor {
     final value = readUint64LittleEndian(_view, readIndex + 1);
     _offset = readIndex + 9;
     return value;
+  }
+
+  @pragma('vm:prefer-inline')
+  int readTaggedUint64AsInt() {
+    if (useNativeInt64FastPath) {
+      final readIndex = _offset;
+      final first = _view.getUint32(readIndex, Endian.little);
+      if ((first & 1) == 0) {
+        _offset = readIndex + 4;
+        return first >>> 1;
+      }
+      final value = _view.getUint64(readIndex + 1, Endian.little);
+      _offset = readIndex + 9;
+      return value;
+    }
+    return readTaggedUint64().toInt();
+  }
+
+  @pragma('vm:prefer-inline')
+  int _readVarUint64Int() {
+    var shift = 0;
+    var result = 0;
+    while (shift < 56) {
+      final byte = readUint8();
+      result |= (byte & 0x7f) << shift;
+      if ((byte & 0x80) == 0) {
+        return result;
+      }
+      shift += 7;
+    }
+    return result | (readUint8() << 56);
   }
 }
 
@@ -675,6 +878,7 @@ void writeGeneratedStructFieldInfoValue(
 }
 
 @internal
+@pragma('vm:prefer-inline')
 Object? readGeneratedStructFieldInfoValue(
   ReadContext context,
   GeneratedStructFieldInfo field, [
@@ -695,15 +899,14 @@ Object? readGeneratedStructFieldInfoValue(
     if (fieldUsesDeclaredType(context.typeResolver, field)) {
       return context.readResolvedValue(resolved, fieldType);
     }
-    final actualResolved = context.readTypeMetaValue(
-      resolved.isNamed ? resolved : null,
-    );
+    final actualResolved = context.readTypeMetaValue(resolved);
     return context.readResolvedValue(actualResolved, fieldType);
   }
   return readFieldValue(context, field, fallback);
 }
 
 @internal
+@pragma('vm:prefer-inline')
 Object? readGeneratedStructDeclaredValue(
   ReadContext context,
   GeneratedStructFieldInfo field,
@@ -712,13 +915,12 @@ Object? readGeneratedStructDeclaredValue(
   if (fieldUsesDeclaredType(context.typeResolver, field)) {
     return context.readResolvedValue(resolved, field.fieldType);
   }
-  final actualResolved = context.readTypeMetaValue(
-    resolved.isNamed ? resolved : null,
-  );
+  final actualResolved = context.readTypeMetaValue(resolved);
   return context.readResolvedValue(actualResolved, field.fieldType);
 }
 
 @internal
+@pragma('vm:prefer-inline')
 Object readGeneratedStructDirectValue(
   ReadContext context,
   GeneratedStructFieldInfo field,
@@ -728,7 +930,7 @@ Object readGeneratedStructDirectValue(
   if (fieldUsesDeclaredType(context.typeResolver, field)) {
     resolved = declared;
   } else {
-    resolved = context.readTypeMetaValue(declared.isNamed ? declared : null);
+    resolved = context.readTypeMetaValue(declared);
   }
   context.increaseDepth();
   final value = resolved.structSerializer!.readValue(context, resolved);
@@ -737,6 +939,7 @@ Object readGeneratedStructDirectValue(
 }
 
 @internal
+@pragma('vm:prefer-inline')
 List<T> readGeneratedDirectListValue<T>(
   ReadContext context,
   GeneratedStructFieldInfo field,
@@ -757,6 +960,7 @@ List<T> readGeneratedDirectListValue<T>(
 }
 
 @internal
+@pragma('vm:prefer-inline')
 Set<T> readGeneratedDirectSetValue<T>(
   ReadContext context,
   GeneratedStructFieldInfo field,
@@ -777,6 +981,7 @@ Set<T> readGeneratedDirectSetValue<T>(
 }
 
 @internal
+@pragma('vm:prefer-inline')
 Map<K, V> readGeneratedDirectMapValue<K, V>(
   ReadContext context,
   GeneratedStructFieldInfo field,

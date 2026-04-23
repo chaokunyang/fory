@@ -28,9 +28,8 @@ extension type Int64._(int _value) implements int {
   factory Int64.fromBigInt(BigInt value) => Int64._(_normalizeSigned64(value));
 
   /// Creates a signed 64-bit value from little-endian 32-bit words.
-  factory Int64.fromWords(int low32, int high32) =>
-      Int64._(((high32 & 0xffffffff) << 32 | (low32 & 0xffffffff))
-          .toSigned(64));
+  factory Int64.fromWords(int low32, int high32) => Int64._(
+      ((high32 & 0xffffffff) << 32 | (low32 & 0xffffffff)).toSigned(64));
 
   /// Parses a hexadecimal two's-complement payload.
   factory Int64.parseHex(String value) =>
@@ -150,6 +149,8 @@ extension type Int64._(int _value) implements int {
   Int64 operator <<(int shift) => Int64(_value << shift);
 
   Int64 operator >>(int shift) => Int64(_value >> shift);
+
+  Int64 operator >>>(int shift) => Int64(_value >>> shift);
 
   bool operator <(Object other) => switch (other) {
         int otherValue => _value < otherValue,

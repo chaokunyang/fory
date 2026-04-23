@@ -25,10 +25,11 @@ const int _uint64SegmentMask = (1 << _uint64SegmentBits) - 1;
 const int _uint64SegmentBase = 1 << _uint64SegmentBits;
 const int _uint64HighBits = 20;
 const int _uint64HighMask = (1 << _uint64HighBits) - 1;
+const int _uint64SafeHighMax = 0x1ff;
+const int _uint64HighValueBase = 17592186044416;
 const int _uint64WordBase = 0x100000000;
 final BigInt _uint64Mask64Big = (BigInt.one << 64) - BigInt.one;
 final BigInt _uint64Mask32Big = (BigInt.one << 32) - BigInt.one;
-final BigInt _uint64SafeMaxBig = BigInt.from(9007199254740991);
 
 /// Unsigned 64-bit integer wrapper used by the xlang type system on web builds.
 final class Uint64 implements Comparable<Uint64> {
@@ -85,11 +86,10 @@ final class Uint64 implements Comparable<Uint64> {
 
   /// Returns this value as a Dart [int] when it is JS-safe.
   int toInt() {
-    final exact = toBigInt();
-    if (exact > _uint64SafeMaxBig) {
-      throw StateError('Uint64 value $exact is not a JS-safe int.');
+    if (_h > _uint64SafeHighMax) {
+      throw StateError('Uint64 value ${toBigInt()} is not a JS-safe int.');
     }
-    return exact.toInt();
+    return _h * _uint64HighValueBase + _m * _uint64SegmentBase + _l;
   }
 
   @override

@@ -21,13 +21,21 @@ import 'dart:typed_data';
 
 import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/types/uint64.dart';
+import 'package:fory/src/util/int64_platform.dart';
 
 void writeInt64LittleEndian(ByteData view, int offset, Int64 value) {
+  if (useNativeInt64FastPath) {
+    view.setInt64(offset, value.toInt(), Endian.little);
+    return;
+  }
   view.setUint32(offset, value.low32, Endian.little);
   view.setUint32(offset + 4, value.high32Unsigned, Endian.little);
 }
 
 Int64 readInt64LittleEndian(ByteData view, int offset) {
+  if (useNativeInt64FastPath) {
+    return Int64(view.getInt64(offset, Endian.little));
+  }
   return Int64.fromWords(
     view.getUint32(offset, Endian.little),
     view.getInt32(offset + 4, Endian.little),

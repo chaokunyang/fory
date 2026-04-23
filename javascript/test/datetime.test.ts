@@ -41,11 +41,45 @@ describe('datetime', () => {
     const fory = new Fory({ ref: true });    
     const serializer = fory.register(typeinfo).serializer;
     const d = new Date('2021/10/20 09:13');
-    const input = fory.serialize({ a:  d, b: d}, serializer);
+    const input = fory.serialize({ a: d, b: d.getTime() }, serializer);
     const result = fory.deserialize(
       input
     );
     expect(result).toEqual({ a: d, b: d.getTime() })
+  });
+  test('should use signed varint64 seconds and signed int32 nanos for duration payloads', () => {
+    const fory = new Fory({ ref: true });
+    const serializer = fory.register(Type.duration()).serializer;
+
+    const encoded = fory.serialize(1500, serializer);
+    expect(Array.from(encoded)).toEqual([
+      0x02,
+      0xff,
+      TypeId.DURATION,
+      0x02,
+      0x00,
+      0x65,
+      0xcd,
+      0x1d,
+    ]);
+    expect(fory.deserialize(encoded, serializer)).toEqual(1500);
+  });
+  test('should normalize negative sub-second duration payloads', () => {
+    const fory = new Fory({ ref: true });
+    const serializer = fory.register(Type.duration()).serializer;
+
+    const encoded = fory.serialize(-500, serializer);
+    expect(Array.from(encoded)).toEqual([
+      0x02,
+      0xff,
+      TypeId.DURATION,
+      0x01,
+      0x00,
+      0x65,
+      0xcd,
+      0x1d,
+    ]);
+    expect(fory.deserialize(encoded, serializer)).toEqual(-500);
   });
   test('should use signed varint64 for date payloads', () => {
     const fory = new Fory({ ref: true });

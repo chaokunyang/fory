@@ -139,7 +139,7 @@ class JavaScriptGenerator(BaseGenerator):
         PrimitiveKind.VAR_UINT64: "bigint | number",
         PrimitiveKind.TAGGED_UINT64: "bigint | number",
         PrimitiveKind.FLOAT16: "number",
-        PrimitiveKind.BFLOAT16: "number",
+        PrimitiveKind.BFLOAT16: "BFloat16 | number",
         PrimitiveKind.FLOAT32: "number",
         PrimitiveKind.FLOAT64: "number",
         PrimitiveKind.STRING: "string",
@@ -514,7 +514,7 @@ class JavaScriptGenerator(BaseGenerator):
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                nullable=False,
+                nullable=field_type.value_optional,
                 parent_stack=parent_stack,
             )
             type_str = f"Map<{key_type}, {value_type}>"
@@ -533,6 +533,8 @@ class JavaScriptGenerator(BaseGenerator):
 
         if self._schema_uses_primitive_kind(PrimitiveKind.DECIMAL):
             lines.append("import { Decimal } from '@apache-fory/core';")
+        if self._schema_uses_primitive_kind(PrimitiveKind.BFLOAT16):
+            lines.append("import { BFloat16 } from '@apache-fory/core';")
 
         # Collect all imported types used in this schema
         imported_types_by_module: Dict[str, Set[str]] = {}
@@ -916,13 +918,21 @@ class JavaScriptGenerator(BaseGenerator):
             # Unresolved — fall back to any
             return "Type.any()"
         elif isinstance(field_type, ListType):
-            if isinstance(field_type.element_type, PrimitiveType):
+            if (
+                not field_type.element_optional
+                and not field_type.element_ref
+                and isinstance(field_type.element_type, PrimitiveType)
+            ):
                 array_expr = self.PRIMITIVE_ARRAY_RUNTIME_MAP.get(
                     field_type.element_type.kind
                 )
                 if array_expr:
                     return array_expr
-            elif isinstance(field_type.element_type, NamedType):
+            elif (
+                not field_type.element_optional
+                and not field_type.element_ref
+                and isinstance(field_type.element_type, NamedType)
+            ):
                 lower = field_type.element_type.name.lower()
                 shorthand_map = {
                     "float": PrimitiveKind.FLOAT32,
@@ -940,10 +950,14 @@ class JavaScriptGenerator(BaseGenerator):
                         return array_expr
 
             inner = self._field_type_expr(field_type.element_type, parent_stack)
+            if field_type.element_optional:
+                inner += ".setNullable(true)"
             return f"Type.array({inner})"
         elif isinstance(field_type, MapType):
             key = self._field_type_expr(field_type.key_type, parent_stack)
             value = self._field_type_expr(field_type.value_type, parent_stack)
+            if field_type.value_optional:
+                value += ".setNullable(true)"
             return f"Type.map({key}, {value})"
         return "Type.any()"
 

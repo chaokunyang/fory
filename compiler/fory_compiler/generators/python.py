@@ -61,13 +61,15 @@ class PythonGenerator(BaseGenerator):
         PrimitiveKind.UINT64: "pyfory.fixed_uint64",
         PrimitiveKind.VAR_UINT64: "pyfory.uint64",
         PrimitiveKind.TAGGED_UINT64: "pyfory.tagged_uint64",
-        PrimitiveKind.FLOAT16: "pyfory.float32",
+        PrimitiveKind.FLOAT16: "pyfory.float16",
+        PrimitiveKind.BFLOAT16: "pyfory.bfloat16",
         PrimitiveKind.FLOAT32: "pyfory.float32",
         PrimitiveKind.FLOAT64: "pyfory.float64",
         PrimitiveKind.STRING: "str",
         PrimitiveKind.BYTES: "bytes",
         PrimitiveKind.DATE: "datetime.date",
         PrimitiveKind.TIMESTAMP: "datetime.datetime",
+        PrimitiveKind.DURATION: "datetime.timedelta",
         PrimitiveKind.DECIMAL: "decimal.Decimal",
         PrimitiveKind.ANY: "Any",
     }
@@ -89,7 +91,7 @@ class PythonGenerator(BaseGenerator):
         PrimitiveKind.UINT64: "np.uint64",
         PrimitiveKind.VAR_UINT64: "np.uint64",
         PrimitiveKind.TAGGED_UINT64: "np.uint64",
-        PrimitiveKind.FLOAT16: "np.float32",
+        PrimitiveKind.FLOAT16: "np.float16",
         PrimitiveKind.FLOAT32: "np.float32",
         PrimitiveKind.FLOAT64: "np.float64",
     }
@@ -110,7 +112,8 @@ class PythonGenerator(BaseGenerator):
         PrimitiveKind.UINT64: "pyfory.uint64_ndarray",
         PrimitiveKind.VAR_UINT64: "pyfory.uint64_ndarray",
         PrimitiveKind.TAGGED_UINT64: "pyfory.uint64_ndarray",
-        PrimitiveKind.FLOAT16: "pyfory.float32_ndarray",
+        PrimitiveKind.FLOAT16: "pyfory.float16array",
+        PrimitiveKind.BFLOAT16: "pyfory.bfloat16array",
         PrimitiveKind.FLOAT32: "pyfory.float32_ndarray",
         PrimitiveKind.FLOAT64: "pyfory.float64_ndarray",
     }
@@ -132,13 +135,15 @@ class PythonGenerator(BaseGenerator):
         PrimitiveKind.UINT64: "0",
         PrimitiveKind.VAR_UINT64: "0",
         PrimitiveKind.TAGGED_UINT64: "0",
-        PrimitiveKind.FLOAT16: "0.0",
+        PrimitiveKind.FLOAT16: "pyfory.float16(0.0)",
+        PrimitiveKind.BFLOAT16: "pyfory.bfloat16(0.0)",
         PrimitiveKind.FLOAT32: "0.0",
         PrimitiveKind.FLOAT64: "0.0",
         PrimitiveKind.STRING: '""',
         PrimitiveKind.BYTES: 'b""',
         PrimitiveKind.DATE: "None",
         PrimitiveKind.TIMESTAMP: "None",
+        PrimitiveKind.DURATION: "datetime.timedelta()",
         PrimitiveKind.DECIMAL: 'decimal.Decimal("0")',
         PrimitiveKind.ANY: "None",
     }
@@ -645,6 +650,11 @@ class PythonGenerator(BaseGenerator):
         """Return True if a list should be represented as a numpy array."""
         if not isinstance(field_type.element_type, PrimitiveType):
             return False
+        if field_type.element_type.kind in (
+            PrimitiveKind.FLOAT16,
+            PrimitiveKind.BFLOAT16,
+        ):
+            return False
         return (
             field_type.element_type.kind in self.ARRAY_TYPE_HINTS
             and not element_optional
@@ -704,6 +714,12 @@ class PythonGenerator(BaseGenerator):
         if field.optional:
             return None
         if isinstance(field.field_type, ListType):
+            if (
+                isinstance(field.field_type.element_type, PrimitiveType)
+                and field.field_type.element_type.kind
+                in (PrimitiveKind.FLOAT16, PrimitiveKind.BFLOAT16)
+            ):
+                return None
             if self.uses_numpy_array(field.field_type, field.element_optional):
                 return None
             return "list"
@@ -803,7 +819,11 @@ class PythonGenerator(BaseGenerator):
                 field_type.key_type, False, False, False, parent_stack
             )
             value_type = self.generate_type(
-                field_type.value_type, False, False, False, parent_stack
+                field_type.value_type,
+                field_type.value_optional,
+                False,
+                False,
+                parent_stack,
             )
             value_type = self.wrap_ref_type(
                 field_type.value_type,
@@ -893,6 +913,8 @@ class PythonGenerator(BaseGenerator):
         if isinstance(field.field_type, PrimitiveType):
             base = self.PRIMITIVE_MAP[field.field_type.kind]
             if base.startswith("pyfory."):
+                if base in ("pyfory.float16", "pyfory.bfloat16"):
+                    return f"isinstance({value_expr}, {base})"
                 if "float" in base:
                     return f"isinstance({value_expr}, float)"
                 return f"isinstance({value_expr}, int)"
@@ -906,6 +928,8 @@ class PythonGenerator(BaseGenerator):
                 return f"isinstance({value_expr}, datetime.date)"
             if base == "datetime.datetime":
                 return f"isinstance({value_expr}, datetime.datetime)"
+            if base == "datetime.timedelta":
+                return f"isinstance({value_expr}, datetime.timedelta)"
         if isinstance(field.field_type, NamedType):
             type_name = self.resolve_nested_type_name(
                 field.field_type.name, parent_stack
@@ -944,6 +968,10 @@ class PythonGenerator(BaseGenerator):
         elif isinstance(field_type, ListType):
             # Use numpy empty array for numeric types
             if isinstance(field_type.element_type, PrimitiveType):
+                if field_type.element_type.kind == PrimitiveKind.FLOAT16:
+                    return "pyfory.float16array()"
+                if field_type.element_type.kind == PrimitiveKind.BFLOAT16:
+                    return "pyfory.bfloat16array()"
                 if field_type.element_type.kind in self.NUMPY_DTYPE_MAP:
                     dtype = self.NUMPY_DTYPE_MAP[field_type.element_type.kind]
                     return f"None  # Use np.array([], dtype={dtype}) to initialize"
@@ -962,7 +990,11 @@ class PythonGenerator(BaseGenerator):
     ):
         """Collect required imports for a field type."""
         if isinstance(field_type, PrimitiveType):
-            if field_type.kind in (PrimitiveKind.DATE, PrimitiveKind.TIMESTAMP):
+            if field_type.kind in (
+                PrimitiveKind.DATE,
+                PrimitiveKind.TIMESTAMP,
+                PrimitiveKind.DURATION,
+            ):
                 imports.add("import datetime")
             elif field_type.kind == PrimitiveKind.DECIMAL:
                 imports.add("import decimal")
@@ -976,6 +1008,11 @@ class PythonGenerator(BaseGenerator):
                     field_type.element_type.kind in self.ARRAY_TYPE_HINTS
                     and not element_optional
                 ):
+                    if field_type.element_type.kind in (
+                        PrimitiveKind.FLOAT16,
+                        PrimitiveKind.BFLOAT16,
+                    ):
+                        return
                     imports.add("import numpy as np")
                     return
             self.collect_imports(field_type.element_type, imports)

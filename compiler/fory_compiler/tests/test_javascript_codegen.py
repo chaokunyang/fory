@@ -242,6 +242,25 @@ def test_javascript_decimal_generation_uses_runtime_decimal_type():
     assert "amount: Type.decimal()" in output
 
 
+def test_javascript_bfloat16_and_nullable_map_value_generation():
+    source = dedent(
+        """
+        package example;
+
+        message Data [id=100] {
+            bfloat16 bf16 = 1;
+            map<string, optional bfloat16> maybe_by_name = 2;
+        }
+        """
+    )
+    output = generate_javascript(source)
+
+    assert "import { BFloat16 } from '@apache-fory/core';" in output
+    assert "bf16: BFloat16 | number;" in output
+    assert "maybeByName: Map<string, BFloat16 | number | null>;" in output
+    assert "maybeByName: Type.map(Type.string(), Type.bfloat16().setNullable(true))" in output
+
+
 def test_javascript_map_key_fallback_to_map():
     """Test that map keys not valid for Record use Map<K, V> instead."""
     source = dedent(

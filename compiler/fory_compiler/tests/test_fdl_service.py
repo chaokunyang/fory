@@ -190,6 +190,32 @@ def test_invalid_syntax_missing_returns():
         parse(source)
 
 
+def test_map_value_optional_parses_and_validates():
+    source = """
+    package test;
+
+    message Holder {
+        map<string, optional int32> maybe_counts = 1;
+        map<string, optional ref Item> maybe_items = 2;
+    }
+
+    message Item {
+        string name = 1;
+    }
+    """
+    schema = parse(source)
+    holder = schema.messages[0]
+    maybe_counts = holder.fields[0].field_type
+    maybe_items = holder.fields[1].field_type
+    assert maybe_counts.value_optional is True
+    assert maybe_counts.value_ref is False
+    assert maybe_items.value_optional is True
+    assert maybe_items.value_ref is True
+
+    validator = SchemaValidator(schema)
+    assert validator.validate(), validator.errors
+
+
 def test_invalid_syntax_missing_parens():
     source = """
     package test;

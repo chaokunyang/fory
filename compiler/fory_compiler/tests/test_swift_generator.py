@@ -126,6 +126,23 @@ def test_swift_generator_maps_date_to_local_date():
     assert "case instant(Date)" in content
 
 
+def test_swift_generator_supports_duration_fields_and_unions():
+    source = """
+    package demo;
+
+    message Temporal [id=100] {
+        duration span = 1;
+    }
+
+    union Value [id=101] {
+        duration span = 1;
+    }
+    """
+    content = generate_swift(source)
+    assert "public var span: Duration = Duration.foryDefault()" in content
+    assert "case span(Duration)" in content
+
+
 def test_swift_generator_uses_class_for_ref_targets_and_weak_fields():
     source = """
     package tree;

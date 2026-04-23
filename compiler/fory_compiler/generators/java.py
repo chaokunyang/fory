@@ -227,6 +227,7 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.VAR_UINT64: "long",
         PrimitiveKind.TAGGED_UINT64: "long",
         PrimitiveKind.FLOAT16: "Float16",
+        PrimitiveKind.BFLOAT16: "BFloat16",
         PrimitiveKind.FLOAT32: "float",
         PrimitiveKind.FLOAT64: "double",
         PrimitiveKind.STRING: "String",
@@ -256,6 +257,7 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.VAR_UINT64: "Long",
         PrimitiveKind.TAGGED_UINT64: "Long",
         PrimitiveKind.FLOAT16: "Float16",
+        PrimitiveKind.BFLOAT16: "BFloat16",
         PrimitiveKind.FLOAT32: "Float",
         PrimitiveKind.FLOAT64: "Double",
         PrimitiveKind.ANY: "Object",
@@ -279,6 +281,7 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.VAR_UINT64: "long[]",
         PrimitiveKind.TAGGED_UINT64: "long[]",
         PrimitiveKind.FLOAT16: "Float16[]",
+        PrimitiveKind.BFLOAT16: "BFloat16[]",
         PrimitiveKind.FLOAT32: "float[]",
         PrimitiveKind.FLOAT64: "double[]",
     }
@@ -300,6 +303,7 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.VAR_UINT64: "Uint64List",
         PrimitiveKind.TAGGED_UINT64: "Uint64List",
         PrimitiveKind.FLOAT16: "Float16List",
+        PrimitiveKind.BFLOAT16: "BFloat16List",
     }
 
     def generate(self) -> List[GeneratedFile]:
@@ -872,12 +876,15 @@ class JavaGenerator(BaseGenerator):
                 PrimitiveKind.VAR_UINT64: "Types.VAR_UINT64",
                 PrimitiveKind.TAGGED_UINT64: "Types.TAGGED_UINT64",
                 PrimitiveKind.FLOAT16: "Types.FLOAT16",
+                PrimitiveKind.BFLOAT16: "Types.BFLOAT16",
                 PrimitiveKind.FLOAT32: "Types.FLOAT32",
                 PrimitiveKind.FLOAT64: "Types.FLOAT64",
                 PrimitiveKind.STRING: "Types.STRING",
                 PrimitiveKind.BYTES: "Types.BINARY",
                 PrimitiveKind.DATE: "Types.DATE",
                 PrimitiveKind.TIMESTAMP: "Types.TIMESTAMP",
+                PrimitiveKind.DURATION: "Types.DURATION",
+                PrimitiveKind.DECIMAL: "Types.DECIMAL",
                 PrimitiveKind.ANY: "Types.UNKNOWN",
             }
             return primitive_type_ids.get(kind, "Types.UNKNOWN")
@@ -905,6 +912,7 @@ class JavaGenerator(BaseGenerator):
                     PrimitiveKind.VAR_UINT64: "Types.UINT64_ARRAY",
                     PrimitiveKind.TAGGED_UINT64: "Types.UINT64_ARRAY",
                     PrimitiveKind.FLOAT16: "Types.FLOAT16_ARRAY",
+                    PrimitiveKind.BFLOAT16: "Types.BFLOAT16_ARRAY",
                     PrimitiveKind.FLOAT32: "Types.FLOAT32_ARRAY",
                     PrimitiveKind.FLOAT64: "Types.FLOAT64_ARRAY",
                 }
@@ -1164,7 +1172,7 @@ class JavaGenerator(BaseGenerator):
             if isinstance(field_type.element_type, PrimitiveType):
                 kind = field_type.element_type.kind
                 if not element_optional and not element_ref:
-                    if kind == PrimitiveKind.FLOAT16:
+                    if kind in (PrimitiveKind.FLOAT16, PrimitiveKind.BFLOAT16):
                         return self.PRIMITIVE_LIST_MAP[kind]
                     if kind in self.PRIMITIVE_LIST_MAP and not self.java_array(field):
                         return self.PRIMITIVE_LIST_MAP[kind]
@@ -1202,15 +1210,21 @@ class JavaGenerator(BaseGenerator):
                 imports.add("java.time.LocalDate")
             elif field_type.kind == PrimitiveKind.TIMESTAMP:
                 imports.add("java.time.Instant")
+            elif field_type.kind == PrimitiveKind.DURATION:
+                imports.add("java.time.Duration")
+            elif field_type.kind == PrimitiveKind.DECIMAL:
+                imports.add("java.math.BigDecimal")
             elif field_type.kind == PrimitiveKind.FLOAT16:
                 imports.add("org.apache.fory.type.Float16")
+            elif field_type.kind == PrimitiveKind.BFLOAT16:
+                imports.add("org.apache.fory.type.BFloat16")
 
         elif isinstance(field_type, ListType):
             # Specialized primitive lists/arrays don't need java.util.List imports.
             if isinstance(field_type.element_type, PrimitiveType):
                 kind = field_type.element_type.kind
                 if not element_optional and not element_ref:
-                    if kind == PrimitiveKind.FLOAT16:
+                    if kind in (PrimitiveKind.FLOAT16, PrimitiveKind.BFLOAT16):
                         imports.add(
                             "org.apache.fory.collection."
                             + self.PRIMITIVE_LIST_MAP[kind]

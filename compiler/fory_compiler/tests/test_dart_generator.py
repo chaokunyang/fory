@@ -159,8 +159,37 @@ def test_dart_generator_supports_decimal_fields_and_unions():
         """
     )
 
-    assert "Decimal amount = const Decimal.zero();" in file.content
+    assert "Decimal amount = Decimal.zero();" in file.content
     assert "factory ValueUnion.amount(Decimal value)" in file.content
+
+
+def test_dart_generator_supports_bfloat16_duration_and_nullable_map_values():
+    file = generate_dart(
+        """
+        package demo;
+
+        message Holder {
+            bfloat16 bf16 = 1;
+            duration span = 2;
+            list<float16> f16s = 3;
+            list<bfloat16> bf16s = 4;
+            map<string, optional bfloat16> maybe_by_name = 5;
+        }
+
+        union ValueUnion {
+            duration span = 1;
+            bfloat16 bf16 = 2;
+        }
+        """
+    )
+
+    assert "Bfloat16 bf16 = const Bfloat16.fromBits(0);" in file.content
+    assert "Duration span = Duration.zero;" in file.content
+    assert "Float16List f16s = Float16List(0);" in file.content
+    assert "Bfloat16List bf16s = Bfloat16List(0);" in file.content
+    assert "Map<String, Bfloat16?> maybeByName = <String, Bfloat16?>{};" in file.content
+    assert "factory ValueUnion.span(Duration value)" in file.content
+    assert "factory ValueUnion.bf16(Bfloat16 value)" in file.content
 
 
 def test_dart_generator_emits_container_ref_annotations_for_builder_metadata():

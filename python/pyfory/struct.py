@@ -625,6 +625,7 @@ basic_types = {
     float,
     str,
     bytes,
+    datetime.timedelta,
     datetime.datetime,
     datetime.date,
     datetime.time,

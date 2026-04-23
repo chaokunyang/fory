@@ -404,6 +404,9 @@ const (
 // For int32/int64/uint32/uint64, returns varint dispatch IDs by default since that's
 // the default encoding in xlang serialization (VARINT32, VARINT64, VAR_UINT32, VAR_UINT64).
 func GetDispatchId(t reflect.Type) DispatchId {
+	if t == durationType {
+		return UnknownDispatchId
+	}
 	switch t.Kind() {
 	case reflect.Bool:
 		return PrimitiveBoolDispatchId

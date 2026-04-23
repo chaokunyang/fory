@@ -107,6 +107,7 @@ var (
 	float16Type          = reflect.TypeOf((*float16.Float16)(nil)).Elem()
 	bfloat16Type         = reflect.TypeOf((*bfloat16.BFloat16)(nil)).Elem()
 	dateType             = reflect.TypeOf((*Date)(nil)).Elem()
+	durationType         = reflect.TypeOf((*time.Duration)(nil)).Elem()
 	timestampType        = reflect.TypeOf((*time.Time)(nil)).Elem()
 	decimalType          = reflect.TypeOf((*Decimal)(nil)).Elem()
 	genericSetType       = reflect.TypeOf((*Set[any])(nil)).Elem()
@@ -449,6 +450,7 @@ func (r *TypeResolver) initialize() {
 		{float16Type, FLOAT16, float16Serializer{}},
 		{bfloat16Type, BFLOAT16, bfloat16Serializer{}},
 		{dateType, DATE, dateSerializer{}},
+		{durationType, DURATION, durationSerializer{}},
 		{timestampType, TIMESTAMP, timeSerializer{}},
 		{decimalType, DECIMAL, decimalSerializer{}},
 		{genericSetType, SET, setSerializer{}},

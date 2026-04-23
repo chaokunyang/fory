@@ -38,6 +38,7 @@ from pyfory.serialization import Buffer
 from pyfory import Fory, EnumSerializer
 from pyfory.serializer import (
     DecimalSerializer,
+    DurationSerializer,
     TimestampSerializer,
     DateSerializer,
     PyArraySerializer,
@@ -143,6 +144,10 @@ def test_basic_serializer(xlang):
     assert isinstance(typeinfo.serializer, DecimalSerializer)
     if xlang:
         assert typeinfo.type_id == TypeId.DECIMAL
+    typeinfo = fory.type_resolver.get_type_info(datetime.timedelta)
+    assert isinstance(typeinfo.serializer, DurationSerializer)
+    if xlang:
+        assert typeinfo.type_id == TypeId.DURATION
     assert ser_de(fory, True) is True
     assert ser_de(fory, False) is False
     assert ser_de(fory, -1) == -1
@@ -162,13 +167,15 @@ def test_basic_serializer(xlang):
     assert ser_de(fory, now) == now
     day = datetime.date(2021, 11, 23)
     assert ser_de(fory, day) == day
-    list_ = ["a", 1, -1.0, True, now, day]
+    duration = datetime.timedelta(days=-1, seconds=1, microseconds=1)
+    assert ser_de(fory, duration) == duration
+    list_ = ["a", 1, -1.0, True, now, day, duration]
     assert ser_de(fory, list_) == list_
-    dict1_ = {"k1": "a", "k2": 1, "k3": -1.0, "k4": True, "k5": now, "k6": day}
+    dict1_ = {"k1": "a", "k2": 1, "k3": -1.0, "k4": True, "k5": now, "k6": day, "k7": duration}
     assert ser_de(fory, dict1_) == dict1_
     dict2_ = {"a": "a", 1: 1, -1.0: -1.0, True: True, now: now, day: day}  # noqa: F601
     assert ser_de(fory, dict2_) == dict2_
-    set_ = {"a", 1, -1.0, True, now, day}
+    set_ = {"a", 1, -1.0, True, now, day, duration}
     assert ser_de(fory, set_) == set_
 
 
@@ -391,6 +398,73 @@ def test_decimal_rejects_non_finite_values():
         serializer.write(buffer, decimal.Decimal("NaN"))
     with pytest.raises(ValueError, match="must be finite"):
         serializer.write(buffer, decimal.Decimal("Infinity"))
+
+
+@pytest.mark.parametrize(
+    "value, seconds, nanos",
+    [
+        (datetime.timedelta(0), 0, 0),
+        (datetime.timedelta(seconds=1, microseconds=234567), 1, 234_567_000),
+        (datetime.timedelta(microseconds=-500000), -1, 500_000_000),
+        (datetime.timedelta(seconds=-1, microseconds=-1), -2, 999_999_000),
+    ],
+)
+def test_duration_codec_canonical_payload(value, seconds, nanos):
+    fory = Fory(xlang=True, ref=False)
+    serializer = DurationSerializer(fory.type_resolver, datetime.timedelta)
+    buffer = Buffer.allocate(32)
+
+    serializer.write(buffer, value)
+    buffer.set_reader_index(0)
+
+    assert buffer.read_varint64() == seconds
+    assert buffer.read_int32() == nanos
+    assert buffer.get_reader_index() == buffer.get_writer_index()
+
+
+@pytest.mark.parametrize(
+    "seconds, nanos, expected",
+    [
+        (0, 0, datetime.timedelta(0)),
+        (1, 234_567_000, datetime.timedelta(seconds=1, microseconds=234567)),
+        (-1, 500_000_000, datetime.timedelta(microseconds=-500000)),
+        (-2, 999_999_000, datetime.timedelta(seconds=-1, microseconds=-1)),
+    ],
+)
+def test_duration_codec_reads_canonical_payload(seconds, nanos, expected):
+    fory = Fory(xlang=True, ref=False)
+    serializer = DurationSerializer(fory.type_resolver, datetime.timedelta)
+    buffer = Buffer.allocate(32)
+    buffer.write_varint64(seconds)
+    buffer.write_int32(nanos)
+    buffer.set_reader_index(0)
+
+    assert serializer.read(buffer) == expected
+
+
+@pytest.mark.parametrize("nanos", [-1, 1_000_000_000])
+def test_duration_codec_rejects_non_canonical_nanoseconds(nanos):
+    fory = Fory(xlang=True, ref=False)
+    serializer = DurationSerializer(fory.type_resolver, datetime.timedelta)
+    buffer = Buffer.allocate(32)
+    buffer.write_varint64(0)
+    buffer.write_int32(nanos)
+    buffer.set_reader_index(0)
+
+    with pytest.raises(ValueError, match="nanoseconds"):
+        serializer.read(buffer)
+
+
+def test_duration_codec_rejects_sub_microsecond_precision():
+    fory = Fory(xlang=True, ref=False)
+    serializer = DurationSerializer(fory.type_resolver, datetime.timedelta)
+    buffer = Buffer.allocate(32)
+    buffer.write_varint64(0)
+    buffer.write_int32(1)
+    buffer.set_reader_index(0)
+
+    with pytest.raises(ValueError, match="microsecond precision"):
+        serializer.read(buffer)
 
 
 @pytest.mark.parametrize("xlang", [True, False])

@@ -65,6 +65,7 @@ from pyfory.serializer import (
     StringSerializer,
     DecimalSerializer,
     DateSerializer,
+    DurationSerializer,
     TimestampSerializer,
     BytesSerializer,
     ListSerializer,
@@ -464,6 +465,7 @@ class TypeResolver:
         register(bfloat16, type_id=TypeId.BFLOAT16, serializer=BFloat16Serializer)
         register(str, type_id=TypeId.STRING, serializer=StringSerializer)
         register(decimal.Decimal, type_id=TypeId.DECIMAL, serializer=DecimalSerializer)
+        register(datetime.timedelta, type_id=TypeId.DURATION, serializer=DurationSerializer)
         register(datetime.datetime, type_id=TypeId.TIMESTAMP, serializer=TimestampSerializer)
         register(datetime.date, type_id=TypeId.DATE, serializer=DateSerializer)
         register(bytes, type_id=TypeId.BINARY, serializer=BytesSerializer)

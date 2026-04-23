@@ -25,7 +25,7 @@ use crate::resolver::RefMode;
 use crate::serializer::{ForyDefault, Serializer, StructSerializer};
 use crate::type_id::{get_ext_actual_type_id, is_enum_type_id};
 use crate::TypeId;
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime};
 use std::collections::{HashSet, LinkedList};
 use std::rc::Rc;
 use std::vec;
@@ -743,6 +743,7 @@ impl TypeResolver {
         self.register_internal_serializer::<String>(TypeId::STRING)?;
         self.register_internal_serializer::<NaiveDateTime>(TypeId::TIMESTAMP)?;
         self.register_internal_serializer::<NaiveDate>(TypeId::DATE)?;
+        self.register_internal_serializer::<ChronoDuration>(TypeId::DURATION)?;
         self.register_internal_serializer::<crate::types::Decimal>(TypeId::DECIMAL)?;
 
         self.register_internal_serializer::<Vec<bool>>(TypeId::BOOL_ARRAY)?;

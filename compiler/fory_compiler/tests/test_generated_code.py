@@ -622,3 +622,109 @@ def test_go_bfloat16_generation():
         in content
     )
     assert "\tListVal []bfloat16.BFloat16" in content
+
+
+def test_generators_support_extended_xlang_scalar_and_array_types():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message Item {
+                string name = 1;
+            }
+
+            message AllTypes {
+                bfloat16 bf16 = 1;
+                duration span = 2;
+                date day = 3;
+                timestamp instant = 4;
+                decimal amount = 5;
+                list<float16> f16s = 6;
+                list<bfloat16> bf16s = 7;
+                list<optional float16> maybe_f16s = 8;
+                list<optional bfloat16> maybe_bf16s = 9;
+                map<string, float16> by_name = 10;
+                map<string, optional bfloat16> maybe_by_name = 11;
+                map<string, optional ref Item> maybe_items = 12;
+            }
+
+            union AllUnion {
+                bfloat16 bf16 = 1;
+                duration span = 2;
+                date day = 3;
+                timestamp instant = 4;
+                decimal amount = 5;
+                list<float16> f16s = 6;
+                list<bfloat16> bf16s = 7;
+                Item item = 8;
+            }
+            """
+        )
+    )
+
+    java_output = render_files(generate_files(schema, JavaGenerator))
+    assert "import org.apache.fory.type.BFloat16;" in java_output
+    assert "import org.apache.fory.collection.BFloat16List;" in java_output
+    assert "Types.BFLOAT16" in java_output
+    assert "Types.BFLOAT16_ARRAY" in java_output
+    assert "Types.DURATION" in java_output
+    assert "Types.DECIMAL" in java_output
+
+    python_output = render_files(generate_files(schema, PythonGenerator))
+    assert "pyfory.bfloat16" in python_output
+    assert "datetime.timedelta" in python_output
+    assert "pyfory.float16array" in python_output
+    assert "pyfory.bfloat16array" in python_output
+    assert "Dict[str, Optional[pyfory.bfloat16]]" in python_output
+
+    cpp_output = render_files(generate_files(schema, CppGenerator))
+    assert '#include "fory/util/bfloat16.h"' in cpp_output
+    assert '#include "fory/serialization/temporal_serializers.h"' in cpp_output
+    assert "fory::bfloat16_t bf16" in cpp_output
+    assert "fory::serialization::Duration span" in cpp_output
+    assert "std::map<std::string, std::optional<fory::bfloat16_t>> maybe_by_name" in cpp_output
+
+    rust_output = render_files(generate_files(schema, RustGenerator))
+    assert "pub bf16: fory::BFloat16" in rust_output
+    assert "pub span: chrono::Duration" in rust_output
+    assert "pub f16s: Vec<fory::Float16>" in rust_output
+    assert "pub bf16s: Vec<fory::BFloat16>" in rust_output
+    assert "pub maybe_by_name: HashMap<String, Option<fory::BFloat16>>" in rust_output
+
+    go_output = render_files(generate_files(schema, GoGenerator))
+    assert 'bfloat16 "github.com/apache/fory/go/fory/bfloat16"' in go_output
+    assert '"time"' in go_output
+    assert "\tSpan time.Duration `fory:\"id=2\"`" in go_output
+    assert "\tBf16s []bfloat16.BFloat16" in go_output
+    assert "\tMaybeByName map[string]*bfloat16.BFloat16" in go_output
+    assert "TypeID: fory.BFLOAT16" in go_output
+    assert "TypeID: fory.DURATION" in go_output
+    assert "TypeID: fory.FLOAT16_ARRAY" in go_output
+    assert "TypeID: fory.BFLOAT16_ARRAY" in go_output
+
+    csharp_output = render_files(generate_files(schema, CSharpGenerator))
+    assert "public BFloat16 Bf16 { get; set; }" in csharp_output
+    assert "public TimeSpan Span { get; set; }" in csharp_output
+    assert "public ForyDecimal Amount { get; set; }" in csharp_output
+    assert "Dictionary<string, BFloat16?> MaybeByName" in csharp_output
+
+    javascript_output = render_files(generate_files(schema, JavaScriptGenerator))
+    assert "import { Decimal } from '@apache-fory/core';" in javascript_output
+    assert "import { BFloat16 } from '@apache-fory/core';" in javascript_output
+    assert "bf16: BFloat16 | number;" in javascript_output
+    assert "maybeByName: Map<string, BFloat16 | number | null>;" in javascript_output
+    assert "Type.bfloat16()" in javascript_output
+    assert "Type.duration()" in javascript_output
+
+    swift_output = render_files(generate_files(schema, SwiftGenerator))
+    assert "public var span: Duration = Duration.foryDefault()" in swift_output
+    assert "public var bf16: BFloat16 = 0" in swift_output
+    assert "case span(Duration)" in swift_output
+
+    dart_output = render_files(generate_files(schema, DartGenerator))
+    assert "Bfloat16 bf16 = const Bfloat16.fromBits(0);" in dart_output
+    assert "Duration span = Duration.zero;" in dart_output
+    assert "Float16List f16s = Float16List(0);" in dart_output
+    assert "Bfloat16List bf16s = Bfloat16List(0);" in dart_output
+    assert "Map<String, Bfloat16?> maybeByName = <String, Bfloat16?>{};" in dart_output

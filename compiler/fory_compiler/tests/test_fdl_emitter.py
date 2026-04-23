@@ -53,6 +53,35 @@ def test_emit_round_trip_preserves_list_modifiers():
     assert foo.fields[1].element_ref is True
 
 
+def test_emit_round_trip_preserves_map_value_modifiers():
+    source = """
+    package demo;
+
+    message Foo [id=10] {
+        map<string, optional int32> maybe_counts = 1;
+        map<string, ref Bar> refs = 2;
+        map<string, optional ref Bar> maybe_refs = 3;
+    }
+
+    message Bar [id=11] {
+        string name = 1;
+    }
+    """
+    schema = Parser(Lexer(source).tokenize()).parse()
+
+    emitted = FDLEmitter(schema).emit()
+    assert "map<string, optional int32> maybe_counts = 1;" in emitted
+    assert "map<string, ref Bar> refs = 2;" in emitted
+    assert "map<string, optional ref Bar> maybe_refs = 3;" in emitted
+
+    round_trip = Parser(Lexer(emitted).tokenize()).parse()
+    foo = round_trip.messages[0]
+    assert foo.fields[0].field_type.value_optional is True
+    assert foo.fields[1].field_type.value_ref is True
+    assert foo.fields[2].field_type.value_optional is True
+    assert foo.fields[2].field_type.value_ref is True
+
+
 def test_emit_from_proto_translation():
     proto_source = """
     syntax = "proto3";

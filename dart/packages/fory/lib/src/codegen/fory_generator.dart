@@ -95,7 +95,7 @@ final class ForyGenerator extends Generator {
         annotatedClasses.map(_analyzeStruct).toList(growable: false);
     final output = StringBuffer()
       ..writeln(
-        '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, no_leading_underscores_for_local_identifiers, unused_element, unused_element_parameter, unnecessary_null_comparison',
+        '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, no_leading_underscores_for_local_identifiers, unreachable_switch_case, unused_element, unused_element_parameter, unnecessary_null_comparison',
       )
       ..writeln();
 

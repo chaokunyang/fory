@@ -324,6 +324,9 @@ final class TypeResolver {
     if (value is Int32) {
       return _builtin(Int32, TypeIds.varInt32);
     }
+    // The native extension type is represented as `int`, but web needs this
+    // branch to keep explicit Int64 wrapper values distinct from plain ints.
+    // ignore: unnecessary_type_check
     if (value is Int64 && value is! int) {
       return _builtin(Int64, TypeIds.int64);
     }

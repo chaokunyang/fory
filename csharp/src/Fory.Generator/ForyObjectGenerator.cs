@@ -158,6 +158,26 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+        foreach (MemberModel member in model.SortedMembers.Where(m => m.CustomSerializerExpression is not null))
+        {
+            sb.AppendLine(
+                $"    private readonly global::Apache.Fory.Serializer<{member.TypeName}> {member.SerializerFieldName};");
+        }
+
+        if (model.SortedMembers.Any(m => m.CustomSerializerExpression is not null))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"    public {model.SerializerName}()");
+            sb.AppendLine("    {");
+            foreach (MemberModel member in model.SortedMembers.Where(m => m.CustomSerializerExpression is not null))
+            {
+                sb.AppendLine($"        {member.SerializerFieldName} = {member.CustomSerializerExpression};");
+            }
+
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("    private static global::Apache.Fory.RefMode __ForyRefMode(bool nullable, bool trackRef)");
         sb.AppendLine("    {");
         sb.AppendLine("        if (trackRef)");
@@ -225,6 +245,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    private static T __ForyReadCompatibleField<T>(");
+        sb.AppendLine("        global::Apache.Fory.Serializer<T> serializer,");
         sb.AppendLine("        global::Apache.Fory.ReadContext context,");
         sb.AppendLine("        global::Apache.Fory.TypeMetaFieldType fieldType,");
         sb.AppendLine("        global::Apache.Fory.RefMode refMode,");
@@ -258,7 +279,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("                    break;");
         sb.AppendLine("                }");
         sb.AppendLine("                default:");
-        sb.AppendLine("                    return context.TypeResolver.GetSerializer<T>().Read(context, refMode, readTypeInfo);");
+        sb.AppendLine("                    return serializer.Read(context, refMode, readTypeInfo);");
         sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            if (value is null)");
@@ -281,7 +302,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        return context.TypeResolver.GetSerializer<T>().Read(context, refMode, readTypeInfo);");
+        sb.AppendLine("        return serializer.Read(context, refMode, readTypeInfo);");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine(
@@ -630,6 +651,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         string refModeExpr = BuildWriteRefModeExpression(member);
         string memberAccess = $"value.{member.Name}";
         string hasGenerics = member.IsCollection ? "true" : "false";
+        string serializerAccessor = BuildSerializerAccessor(member);
         string writeTypeInfo = compatibleMode
             ? BuildFieldTypeInfoLiteral(member)
             : "false";
@@ -676,7 +698,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             if (CanUseDirectWriteDataInvocation(member))
             {
                 sb.AppendLine(
-                    $"            context.TypeResolver.GetSerializer<{member.TypeName}>().WriteData(context, {memberAccess}, {hasGenerics});");
+                    $"            {serializerAccessor}.WriteData(context, {memberAccess}, {hasGenerics});");
                 return;
             }
 
@@ -685,19 +707,19 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                 sb.AppendLine("            if (context.TrackRef)");
                 sb.AppendLine("            {");
                 sb.AppendLine(
-                    $"                context.TypeResolver.GetSerializer<{member.TypeName}>().Write(context, {memberAccess}, global::Apache.Fory.RefMode.Tracking, false, {hasGenerics});");
+                    $"                {serializerAccessor}.Write(context, {memberAccess}, global::Apache.Fory.RefMode.Tracking, false, {hasGenerics});");
                 sb.AppendLine("            }");
                 sb.AppendLine("            else");
                 sb.AppendLine("            {");
                 sb.AppendLine(
-                    $"                context.TypeResolver.GetSerializer<{member.TypeName}>().WriteData(context, {memberAccess}, {hasGenerics});");
+                    $"                {serializerAccessor}.WriteData(context, {memberAccess}, {hasGenerics});");
                 sb.AppendLine("            }");
                 return;
             }
         }
 
         sb.AppendLine(
-            $"            context.TypeResolver.GetSerializer<{member.TypeName}>().Write(context, {memberAccess}, {refModeExpr}, {writeTypeInfo}, {hasGenerics});");
+            $"            {serializerAccessor}.Write(context, {memberAccess}, {refModeExpr}, {writeTypeInfo}, {hasGenerics});");
     }
 
     private static void EmitWriteDictionaryWithTypeInfoCache(
@@ -709,6 +731,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         string hasGenerics,
         bool compatibleMode)
     {
+        string serializerAccessor = BuildSerializerAccessor(member);
         string memberId = Sanitize(member.Name);
         string modeSuffix = compatibleMode ? "Compat" : "Schema";
         string fieldValueVar = $"__{memberId}DictValue{modeSuffix}";
@@ -718,7 +741,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"            if ({fieldValueVar} is null)");
         sb.AppendLine("            {");
         sb.AppendLine(
-            $"                context.TypeResolver.GetSerializer<{member.TypeName}>().Write(context, ({member.TypeName})null!, {refModeExpr}, {writeTypeInfo}, {hasGenerics});");
+            $"                {serializerAccessor}.Write(context, ({member.TypeName})null!, {refModeExpr}, {writeTypeInfo}, {hasGenerics});");
         sb.AppendLine("            }");
         sb.AppendLine("            else");
         sb.AppendLine("            {");
@@ -742,6 +765,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         string indent = new(' ', indentLevel * 2);
         string assignmentTarget = $"{valueVar}.{member.Name}";
         string typeOfTypeName = StripNullableForTypeOf(member.TypeName);
+        string serializerAccessor = BuildSerializerAccessor(member);
         switch (member.DynamicAnyKind)
         {
             case DynamicAnyKind.AnyValue:
@@ -769,17 +793,22 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         if (variableSuffix == "Compat")
         {
             sb.AppendLine(
-                $"{indent}{assignmentTarget} = __ForyReadCompatibleField<{member.TypeName}>(context, remoteField.FieldType, {refModeExpr}, {readTypeInfoExpr});");
+                $"{indent}{assignmentTarget} = __ForyReadCompatibleField<{member.TypeName}>({serializerAccessor}, context, remoteField.FieldType, {refModeExpr}, {readTypeInfoExpr});");
             return;
         }
 
         sb.AppendLine(
-            $"{indent}{assignmentTarget} = context.TypeResolver.GetSerializer<{member.TypeName}>().Read(context, {refModeExpr}, {readTypeInfoExpr});");
+            $"{indent}{assignmentTarget} = {serializerAccessor}.Read(context, {refModeExpr}, {readTypeInfoExpr});");
     }
 
     private static string StripNullableForTypeOf(string typeName)
     {
         return typeName.Replace("?", string.Empty);
+    }
+
+    private static string BuildSerializerAccessor(MemberModel member)
+    {
+        return member.SerializerFieldName ?? $"context.TypeResolver.GetSerializer<{member.TypeName}>()";
     }
 
     private static bool TryBuildDirectFieldWrite(MemberModel member, string memberAccess, out string? writeCode)
@@ -1092,6 +1121,333 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         return fieldId.HasValue ? $"(short){fieldId.Value}" : "null";
     }
 
+    private static FieldEncoding GetNestedEncoding(
+        IReadOnlyDictionary<string, FieldEncoding> nestedEncodings,
+        string path)
+    {
+        return nestedEncodings.TryGetValue(path, out FieldEncoding encoding)
+            ? encoding
+            : FieldEncoding.None;
+    }
+
+    private static string AppendNestedPath(string path, string segment)
+    {
+        return string.IsNullOrEmpty(path)
+            ? segment
+            : $"{path}.{segment}";
+    }
+
+    private static uint? TryResolvePackedArrayTypeIdForTypeId(uint typeId)
+    {
+        return typeId switch
+        {
+            1 => 43,
+            2 => 44,
+            3 => 45,
+            4 => 46,
+            6 => 47,
+            9 => 48,
+            10 => 49,
+            11 => 50,
+            13 => 51,
+            17 => 53,
+            18 => 54,
+            19 => 55,
+            20 => 56,
+            _ => null,
+        };
+    }
+
+    private static string? BuildCustomSerializerExpression(SerializerFieldTypeModel fieldType)
+    {
+        return fieldType.ShapeKind switch
+        {
+            TypeShapeKind.Array => BuildArraySerializerExpression(fieldType),
+            TypeShapeKind.List => BuildListLikeSerializerExpression(fieldType),
+            TypeShapeKind.Set => BuildSetSerializerExpression(fieldType),
+            TypeShapeKind.Map => BuildDictionarySerializerExpression(fieldType),
+            _ => null,
+        };
+    }
+
+    private static string? BuildArraySerializerExpression(SerializerFieldTypeModel fieldType)
+    {
+        switch (fieldType.TypeMeta.TypeIdExpr)
+        {
+            case "46":
+                return "new global::Apache.Fory.FixedInt32ArraySerializer()";
+            case "47":
+                return "new global::Apache.Fory.FixedInt64ArraySerializer()";
+            case "49":
+                return "new global::Apache.Fory.FixedUInt16ArraySerializer()";
+            case "50":
+                return "new global::Apache.Fory.FixedUInt32ArraySerializer()";
+            case "51":
+                return "new global::Apache.Fory.FixedUInt64ArraySerializer()";
+            case "53":
+                return "new global::Apache.Fory.FixedFloat16ArraySerializer()";
+            case "54":
+                return "new global::Apache.Fory.FixedBFloat16ArraySerializer()";
+            case "55":
+                return "new global::Apache.Fory.FixedFloat32ArraySerializer()";
+            case "56":
+                return "new global::Apache.Fory.FixedFloat64ArraySerializer()";
+        }
+
+        if (fieldType.ElementType is null)
+        {
+            return null;
+        }
+
+        if (TryBuildPrimitiveArraySerializerExpression(fieldType.ElementType, out string? primitiveExpr))
+        {
+            return primitiveExpr;
+        }
+
+        string? elementSerializerExpression = BuildCustomSerializerExpression(fieldType.ElementType);
+        if (elementSerializerExpression is null)
+        {
+            return null;
+        }
+
+        return $"new global::Apache.Fory.ArraySerializer<{fieldType.ElementType.TypeName}>({elementSerializerExpression})";
+    }
+
+    private static string? BuildListLikeSerializerExpression(SerializerFieldTypeModel fieldType)
+    {
+        if (fieldType.ElementType is null)
+        {
+            return null;
+        }
+
+        bool isLinkedList = ContainsGenericTypeName(fieldType.TypeName, "System.Collections.Generic.LinkedList<");
+        bool isQueue = ContainsGenericTypeName(fieldType.TypeName, "System.Collections.Generic.Queue<");
+        bool isStack = ContainsGenericTypeName(fieldType.TypeName, "System.Collections.Generic.Stack<");
+        string primitiveSerializerName = isLinkedList
+            ? "PrimitiveLinkedListSerializer"
+            : isQueue
+                ? "PrimitiveQueueSerializer"
+                : isStack
+                    ? "PrimitiveStackSerializer"
+                    : "PrimitiveListSerializer";
+        string fallbackSerializerName = isLinkedList
+            ? "LinkedListSerializer"
+            : isQueue
+                ? "QueueSerializer"
+                : isStack
+                    ? "StackSerializer"
+                    : "ListSerializer";
+
+        if (TryGetPrimitiveCodecTypeName(fieldType.ElementType, out string? codecTypeName))
+        {
+            return
+                $"new global::Apache.Fory.{primitiveSerializerName}<{fieldType.ElementType.TypeName}, {codecTypeName}>()";
+        }
+
+        string? elementSerializerExpression = BuildCustomSerializerExpression(fieldType.ElementType);
+        if (elementSerializerExpression is null)
+        {
+            return null;
+        }
+
+        return $"new global::Apache.Fory.{fallbackSerializerName}<{fieldType.ElementType.TypeName}>({elementSerializerExpression})";
+    }
+
+    private static string? BuildSetSerializerExpression(SerializerFieldTypeModel fieldType)
+    {
+        if (fieldType.ElementType is null)
+        {
+            return null;
+        }
+
+        string containerTypeName = fieldType.TypeName;
+        if (ContainsGenericTypeName(containerTypeName, "System.Collections.Generic.HashSet<"))
+        {
+            if (TryGetPrimitiveCodecTypeName(fieldType.ElementType, out string? hashSetCodecTypeName))
+            {
+                return
+                    $"new global::Apache.Fory.PrimitiveSetSerializer<{fieldType.ElementType.TypeName}, {hashSetCodecTypeName}>()";
+            }
+
+            string? hashSetElementSerializer = BuildCustomSerializerExpression(fieldType.ElementType);
+            return hashSetElementSerializer is null
+                ? null
+                : $"new global::Apache.Fory.SetSerializer<{fieldType.ElementType.TypeName}>({hashSetElementSerializer})";
+        }
+
+            if (TryGetPrimitiveCodecTypeName(fieldType.ElementType, out string? codecTypeName))
+            {
+                if (ContainsGenericTypeName(containerTypeName, "System.Collections.Generic.SortedSet<"))
+                {
+                    return
+                    $"new global::Apache.Fory.PrimitiveSortedSetSerializer<{fieldType.ElementType.TypeName}, {codecTypeName}>()";
+                }
+
+                if (ContainsGenericTypeName(containerTypeName, "System.Collections.Immutable.ImmutableHashSet<"))
+                {
+                    return
+                    $"new global::Apache.Fory.PrimitiveImmutableHashSetSerializer<{fieldType.ElementType.TypeName}, {codecTypeName}>()";
+                }
+            }
+
+        string? elementSerializerExpression = BuildCustomSerializerExpression(fieldType.ElementType);
+        if (elementSerializerExpression is null)
+        {
+            return null;
+        }
+
+        return containerTypeName switch
+        {
+            var typeName when ContainsGenericTypeName(typeName, "System.Collections.Generic.SortedSet<") =>
+                $"new global::Apache.Fory.SortedSetSerializer<{fieldType.ElementType.TypeName}>({elementSerializerExpression})",
+            var typeName when ContainsGenericTypeName(typeName, "System.Collections.Immutable.ImmutableHashSet<") =>
+                $"new global::Apache.Fory.ImmutableHashSetSerializer<{fieldType.ElementType.TypeName}>({elementSerializerExpression})",
+            _ => null,
+        };
+    }
+
+    private static string? BuildDictionarySerializerExpression(SerializerFieldTypeModel fieldType)
+    {
+        if (fieldType.KeyType is null || fieldType.ValueType is null)
+        {
+            return null;
+        }
+
+        if (TryGetDictionaryCodecTypeName(fieldType.KeyType, out string? keyCodecTypeName) &&
+            TryGetDictionaryCodecTypeName(fieldType.ValueType, out string? valueCodecTypeName))
+        {
+            string serializerTypeName = fieldType.TypeName switch
+            {
+                var typeName when ContainsGenericTypeName(typeName, "System.Collections.Generic.Dictionary<") =>
+                    "PrimitiveDictionarySerializer",
+                var typeName when ContainsGenericTypeName(typeName, "System.Collections.Generic.SortedDictionary<") =>
+                    "PrimitiveSortedDictionarySerializer",
+                var typeName when ContainsGenericTypeName(typeName, "System.Collections.Generic.SortedList<") =>
+                    "PrimitiveSortedListSerializer",
+                var typeName when ContainsGenericTypeName(typeName, "System.Collections.Concurrent.ConcurrentDictionary<") =>
+                    "PrimitiveConcurrentDictionarySerializer",
+                _ => string.Empty,
+            };
+            if (!string.IsNullOrEmpty(serializerTypeName))
+            {
+                return
+                    $"new global::Apache.Fory.{serializerTypeName}<{fieldType.KeyType.TypeName}, {fieldType.ValueType.TypeName}, {keyCodecTypeName}, {valueCodecTypeName}>()";
+            }
+        }
+
+        string? keySerializerExpression = BuildCustomSerializerExpression(fieldType.KeyType);
+        string? valueSerializerExpression = BuildCustomSerializerExpression(fieldType.ValueType);
+        if (keySerializerExpression is null && valueSerializerExpression is null)
+        {
+            return null;
+        }
+
+        string keyArg = keySerializerExpression ?? "null";
+        string valueArg = valueSerializerExpression ?? "null";
+        return fieldType.TypeName switch
+        {
+            var typeName when ContainsGenericTypeName(typeName, "System.Collections.Generic.Dictionary<") =>
+                $"new global::Apache.Fory.DictionarySerializer<{fieldType.KeyType.TypeName}, {fieldType.ValueType.TypeName}>({keyArg}, {valueArg})",
+            var typeName when ContainsGenericTypeName(typeName, "System.Collections.Generic.SortedDictionary<") =>
+                $"new global::Apache.Fory.SortedDictionarySerializer<{fieldType.KeyType.TypeName}, {fieldType.ValueType.TypeName}>({keyArg}, {valueArg})",
+            var typeName when ContainsGenericTypeName(typeName, "System.Collections.Generic.SortedList<") =>
+                $"new global::Apache.Fory.SortedListSerializer<{fieldType.KeyType.TypeName}, {fieldType.ValueType.TypeName}>({keyArg}, {valueArg})",
+            var typeName when ContainsGenericTypeName(typeName, "System.Collections.Concurrent.ConcurrentDictionary<") =>
+                $"new global::Apache.Fory.ConcurrentDictionarySerializer<{fieldType.KeyType.TypeName}, {fieldType.ValueType.TypeName}>({keyArg}, {valueArg})",
+            _ => null,
+        };
+    }
+
+    private static bool TryBuildPrimitiveArraySerializerExpression(
+        SerializerFieldTypeModel elementType,
+        out string? expression)
+    {
+        expression = elementType.Classification.TypeId switch
+        {
+            4 => "new global::Apache.Fory.FixedInt32ArraySerializer()",
+            5 => "new global::Apache.Fory.VarInt32ArraySerializer()",
+            6 => "new global::Apache.Fory.FixedInt64ArraySerializer()",
+            7 => "new global::Apache.Fory.VarInt64ArraySerializer()",
+            8 => "new global::Apache.Fory.TaggedInt64ArraySerializer()",
+            11 => "new global::Apache.Fory.FixedUInt32ArraySerializer()",
+            12 => "new global::Apache.Fory.VarUInt32ArraySerializer()",
+            13 => "new global::Apache.Fory.FixedUInt64ArraySerializer()",
+            14 => "new global::Apache.Fory.VarUInt64ArraySerializer()",
+            15 => "new global::Apache.Fory.TaggedUInt64ArraySerializer()",
+            _ => null,
+        };
+        return expression is not null;
+    }
+
+    private static bool TryGetDictionaryCodecTypeName(
+        SerializerFieldTypeModel fieldType,
+        out string? codecTypeName)
+    {
+        if (fieldType.ShapeKind == TypeShapeKind.Scalar &&
+            fieldType.Classification.TypeId == 21)
+        {
+            codecTypeName = "global::Apache.Fory.StringPrimitiveDictionaryCodec";
+            return true;
+        }
+
+        return TryGetPrimitiveCodecTypeName(fieldType, out codecTypeName);
+    }
+
+    private static bool TryGetPrimitiveCodecTypeName(
+        SerializerFieldTypeModel fieldType,
+        out string? codecTypeName)
+    {
+        if (fieldType.ShapeKind != TypeShapeKind.Scalar)
+        {
+            codecTypeName = null;
+            return false;
+        }
+
+        string? baseCodecTypeName = fieldType.Classification.TypeId switch
+        {
+            1 => "global::Apache.Fory.BoolPrimitiveDictionaryCodec",
+            2 => "global::Apache.Fory.Int8PrimitiveDictionaryCodec",
+            3 => "global::Apache.Fory.Int16PrimitiveDictionaryCodec",
+            4 => "global::Apache.Fory.FixedInt32PrimitiveDictionaryCodec",
+            5 => "global::Apache.Fory.VarInt32PrimitiveDictionaryCodec",
+            6 => "global::Apache.Fory.FixedInt64PrimitiveDictionaryCodec",
+            7 => "global::Apache.Fory.VarInt64PrimitiveDictionaryCodec",
+            8 => "global::Apache.Fory.TaggedInt64PrimitiveDictionaryCodec",
+            9 => "global::Apache.Fory.UInt8PrimitiveDictionaryCodec",
+            10 => "global::Apache.Fory.UInt16PrimitiveDictionaryCodec",
+            11 => "global::Apache.Fory.FixedUInt32PrimitiveDictionaryCodec",
+            12 => "global::Apache.Fory.VarUInt32PrimitiveDictionaryCodec",
+            13 => "global::Apache.Fory.FixedUInt64PrimitiveDictionaryCodec",
+            14 => "global::Apache.Fory.VarUInt64PrimitiveDictionaryCodec",
+            15 => "global::Apache.Fory.TaggedUInt64PrimitiveDictionaryCodec",
+            17 => "global::Apache.Fory.Float16PrimitiveDictionaryCodec",
+            18 => "global::Apache.Fory.BFloat16PrimitiveDictionaryCodec",
+            19 => "global::Apache.Fory.Float32PrimitiveDictionaryCodec",
+            20 => "global::Apache.Fory.Float64PrimitiveDictionaryCodec",
+            _ => null,
+        };
+        if (baseCodecTypeName is null)
+        {
+            codecTypeName = null;
+            return false;
+        }
+
+        if (!fieldType.Nullable)
+        {
+            codecTypeName = baseCodecTypeName;
+            return true;
+        }
+
+        codecTypeName =
+            $"global::Apache.Fory.NullablePrimitiveDictionaryCodec<{StripNullableForTypeOf(fieldType.TypeName)}, {baseCodecTypeName}>";
+        return true;
+    }
+
+    private static bool ContainsGenericTypeName(string typeName, string genericTypeName)
+    {
+        return typeName.IndexOf(genericTypeName, StringComparison.Ordinal) >= 0;
+    }
+
     private static string BuildWriteRefModeExpression(MemberModel member)
     {
         return member.DynamicAnyKind switch
@@ -1221,9 +1577,32 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         (bool isOptional, ITypeSymbol unwrappedType) = UnwrapNullable(memberType);
         FieldEncoding fieldEncoding = FieldEncoding.None;
         short? fieldId = null;
+        Dictionary<string, FieldEncoding> nestedEncodings = new(StringComparer.Ordinal);
         foreach (AttributeData attribute in memberSymbol.GetAttributes())
         {
             string? attrName = attribute.AttributeClass?.ToDisplayString();
+            if (string.Equals(attrName, "Apache.Fory.NestedTypeAttribute", StringComparison.Ordinal))
+            {
+                if (attribute.ConstructorArguments.Length == 1 &&
+                    attribute.ConstructorArguments[0].Value is string path &&
+                    !string.IsNullOrWhiteSpace(path))
+                {
+                    FieldEncoding nestedEncoding = FieldEncoding.None;
+                    foreach (KeyValuePair<string, TypedConstant> namedArg in attribute.NamedArguments)
+                    {
+                        if (string.Equals(namedArg.Key, "Encoding", StringComparison.Ordinal) &&
+                            namedArg.Value.Value is int nestedEncodingValue)
+                        {
+                            nestedEncoding = (FieldEncoding)nestedEncodingValue;
+                        }
+                    }
+
+                    nestedEncodings[path] = nestedEncoding;
+                }
+
+                continue;
+            }
+
             if (!string.Equals(attrName, "Apache.Fory.FieldAttribute", StringComparison.Ordinal))
             {
                 continue;
@@ -1254,13 +1633,19 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         }
 
         DynamicAnyKind dynamicAnyKind = ResolveDynamicAnyKind(unwrappedType);
-        TypeResolution resolution = ResolveTypeResolution(unwrappedType, fieldEncoding);
-        if (!resolution.Supported)
+        SerializerFieldTypeModel? fieldType = BuildSerializerFieldTypeModel(
+            memberType,
+            isOptional,
+            dynamicAnyKind,
+            fieldEncoding,
+            nestedEncodings,
+            string.Empty);
+        if (fieldType is null)
         {
             return null;
         }
 
-        TypeClassification classification = resolution.Classification;
+        TypeClassification classification = fieldType.Classification;
         bool javaInternalReducedPrecisionScalar =
             !isOptional &&
             (classification.TypeId == 17 || classification.TypeId == 18);
@@ -1284,11 +1669,10 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         }
 
         string typeName = memberType.ToDisplayString(FullNameFormat);
-        TypeMetaFieldTypeModel typeMeta = BuildTypeMetaFieldTypeModel(
-            memberType,
-            isOptional,
-            dynamicAnyKind,
-            resolution.Classification.TypeId);
+        string? customSerializerExpression = BuildCustomSerializerExpression(fieldType);
+        string? serializerFieldName = customSerializerExpression is null
+            ? null
+            : $"__ForySerializer_{Sanitize(name)}";
 
         return new MemberModel(
             name,
@@ -1303,129 +1687,247 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             classification,
             group,
             classification.IsCollection || classification.IsMap,
-            classification.IsMap && !IsTypeSealed(unwrappedType),
+            customSerializerExpression is null &&
+            classification.IsMap &&
+            !IsTypeSealed(unwrappedType),
             !unwrappedType.IsValueType && classification.TypeId != 21,
             FieldNeedsTypeInfo(classification, dynamicAnyKind, unwrappedType),
             dynamicAnyKind == DynamicAnyKind.None ? DynamicAnyKind.None : dynamicAnyKind,
-            typeMeta);
+            fieldType.TypeMeta,
+            serializerFieldName,
+            customSerializerExpression,
+            fieldType);
     }
 
-    private static TypeMetaFieldTypeModel BuildTypeMetaFieldTypeModel(
+    private static SerializerFieldTypeModel? BuildSerializerFieldTypeModel(
         ITypeSymbol memberType,
         bool nullable,
         DynamicAnyKind dynamicAnyKind,
-        uint explicitTypeId)
+        FieldEncoding encoding,
+        IReadOnlyDictionary<string, FieldEncoding> nestedEncodings,
+        string path)
     {
         (bool _, ITypeSymbol unwrapped) = UnwrapNullable(memberType);
+        TypeResolution resolution = ResolveTypeResolution(unwrapped, encoding);
+        if (!resolution.Supported)
+        {
+            return null;
+        }
+
+        TypeClassification classification = resolution.Classification;
+        string typeName = memberType.ToDisplayString(FullNameFormat);
+
+        if (unwrapped is IArrayTypeSymbol arrayType)
+        {
+            string childPath = AppendNestedPath(path, "element");
+            bool elementNullable = GenericNullable(arrayType.ElementType);
+            FieldEncoding childEncoding = GetNestedEncoding(nestedEncodings, childPath);
+            SerializerFieldTypeModel? element = BuildSerializerFieldTypeModel(
+                arrayType.ElementType,
+                elementNullable,
+                ResolveDynamicAnyKind(UnwrapNullable(arrayType.ElementType).Item2),
+                childEncoding,
+                nestedEncodings,
+                childPath);
+            if (element is null)
+            {
+                return null;
+            }
+
+            bool usePackedArrayType =
+                childEncoding == FieldEncoding.None &&
+                classification.TypeId is 41 or 43 or 44 or 45 or 46 or 47 or 49 or 50 or 51 or 53 or 54 or 55 or 56;
+
+            TypeMetaFieldTypeModel typeMeta = usePackedArrayType
+                ? new TypeMetaFieldTypeModel(
+                    classification.TypeId.ToString(),
+                    nullable,
+                    false,
+                    ImmutableArray<TypeMetaFieldTypeModel>.Empty)
+                : new TypeMetaFieldTypeModel(
+                    "(uint)global::Apache.Fory.TypeId.Array",
+                    nullable,
+                    false,
+                    ImmutableArray.Create(element.TypeMeta));
+            return new SerializerFieldTypeModel(
+                typeName,
+                nullable,
+                classification,
+                TypeShapeKind.Array,
+                typeMeta,
+                element,
+                null,
+                null);
+        }
 
         if (TryGetListElementType(unwrapped, out ITypeSymbol? listElementType))
         {
+            string childPath = AppendNestedPath(path, "element");
             bool elementNullable = GenericNullable(listElementType!);
-            if (!elementNullable &&
-                TryResolvePackedArrayTypeIdForElement(listElementType!) is uint packedArrayTypeId &&
-                explicitTypeId == packedArrayTypeId)
-            {
-                // Align compatible TypeMeta with C++ vector arithmetic handling:
-                // when the wire type is already classified as a packed array (e.g. int[]),
-                // use the specialized array TypeId directly instead of LIST<elem>.
-                // This keeps schema/type-meta bytes consistent across languages.
-                return new TypeMetaFieldTypeModel(
-                    packedArrayTypeId.ToString(),
-                    nullable,
-                    false,
-                    ImmutableArray<TypeMetaFieldTypeModel>.Empty);
-            }
-
-            TypeMetaFieldTypeModel element = BuildTypeMetaFieldTypeModel(
+            FieldEncoding childEncoding = GetNestedEncoding(nestedEncodings, childPath);
+            SerializerFieldTypeModel? element = BuildSerializerFieldTypeModel(
                 listElementType!,
                 elementNullable,
                 ResolveDynamicAnyKind(UnwrapNullable(listElementType!).Item2),
-                0);
-            return new TypeMetaFieldTypeModel(
-                "(uint)global::Apache.Fory.TypeId.List",
+                childEncoding,
+                nestedEncodings,
+                childPath);
+            if (element is null)
+            {
+                return null;
+            }
+
+            return new SerializerFieldTypeModel(
+                typeName,
                 nullable,
-                false,
-                ImmutableArray.Create(element));
+                classification,
+                TypeShapeKind.List,
+                new TypeMetaFieldTypeModel(
+                    "(uint)global::Apache.Fory.TypeId.List",
+                    nullable,
+                    false,
+                    ImmutableArray.Create(element.TypeMeta)),
+                element,
+                null,
+                null);
         }
 
         if (TryGetSetElementType(unwrapped, out ITypeSymbol? setElementType))
         {
+            string childPath = AppendNestedPath(path, "element");
             bool elementNullable = GenericNullable(setElementType!);
-            TypeMetaFieldTypeModel element = BuildTypeMetaFieldTypeModel(
+            FieldEncoding childEncoding = GetNestedEncoding(nestedEncodings, childPath);
+            SerializerFieldTypeModel? element = BuildSerializerFieldTypeModel(
                 setElementType!,
                 elementNullable,
                 ResolveDynamicAnyKind(UnwrapNullable(setElementType!).Item2),
-                0);
-            return new TypeMetaFieldTypeModel(
-                "(uint)global::Apache.Fory.TypeId.Set",
+                childEncoding,
+                nestedEncodings,
+                childPath);
+            if (element is null)
+            {
+                return null;
+            }
+
+            return new SerializerFieldTypeModel(
+                typeName,
                 nullable,
-                false,
-                ImmutableArray.Create(element));
+                classification,
+                TypeShapeKind.Set,
+                new TypeMetaFieldTypeModel(
+                    "(uint)global::Apache.Fory.TypeId.Set",
+                    nullable,
+                    false,
+                    ImmutableArray.Create(element.TypeMeta)),
+                element,
+                null,
+                null);
         }
 
         if (TryGetMapTypeArguments(unwrapped, out ITypeSymbol? keyType, out ITypeSymbol? valueType))
         {
+            string keyPath = AppendNestedPath(path, "key");
+            string valuePath = AppendNestedPath(path, "value");
             bool keyNullable = GenericNullable(keyType!);
             bool valueNullable = GenericNullable(valueType!);
-            TypeMetaFieldTypeModel key = BuildTypeMetaFieldTypeModel(
+            SerializerFieldTypeModel? key = BuildSerializerFieldTypeModel(
                 keyType!,
                 keyNullable,
                 ResolveDynamicAnyKind(UnwrapNullable(keyType!).Item2),
-                0);
-            TypeMetaFieldTypeModel value = BuildTypeMetaFieldTypeModel(
+                GetNestedEncoding(nestedEncodings, keyPath),
+                nestedEncodings,
+                keyPath);
+            SerializerFieldTypeModel? value = BuildSerializerFieldTypeModel(
                 valueType!,
                 valueNullable,
                 ResolveDynamicAnyKind(UnwrapNullable(valueType!).Item2),
-                0);
-            return new TypeMetaFieldTypeModel(
-                "(uint)global::Apache.Fory.TypeId.Map",
-                nullable,
-                false,
-                ImmutableArray.Create(key, value));
-        }
+                GetNestedEncoding(nestedEncodings, valuePath),
+                nestedEncodings,
+                valuePath);
+            if (key is null || value is null)
+            {
+                return null;
+            }
 
-        TypeClassification classification = ClassifyType(unwrapped);
-        if (explicitTypeId != 0 && classification.IsPrimitive && classification.TypeId != explicitTypeId)
-        {
-            return new TypeMetaFieldTypeModel(
-                explicitTypeId.ToString(),
+            return new SerializerFieldTypeModel(
+                typeName,
                 nullable,
-                false,
-                ImmutableArray<TypeMetaFieldTypeModel>.Empty);
+                classification,
+                TypeShapeKind.Map,
+                new TypeMetaFieldTypeModel(
+                    "(uint)global::Apache.Fory.TypeId.Map",
+                    nullable,
+                    false,
+                    ImmutableArray.Create(key.TypeMeta, value.TypeMeta)),
+                null,
+                key,
+                value);
         }
 
         if (IsUnionType(unwrapped))
         {
-            return new TypeMetaFieldTypeModel(
-                "(uint)global::Apache.Fory.TypeId.Union",
+            return new SerializerFieldTypeModel(
+                typeName,
                 nullable,
-                true,
-                ImmutableArray<TypeMetaFieldTypeModel>.Empty);
+                classification,
+                TypeShapeKind.Scalar,
+                new TypeMetaFieldTypeModel(
+                    "(uint)global::Apache.Fory.TypeId.Union",
+                    nullable,
+                    true,
+                    ImmutableArray<TypeMetaFieldTypeModel>.Empty),
+                null,
+                null,
+                null);
         }
 
         if (dynamicAnyKind == DynamicAnyKind.AnyValue)
         {
-            return new TypeMetaFieldTypeModel(
-                "(uint)global::Apache.Fory.TypeId.Unknown",
+            return new SerializerFieldTypeModel(
+                typeName,
                 nullable,
-                true,
-                ImmutableArray<TypeMetaFieldTypeModel>.Empty);
+                classification,
+                TypeShapeKind.Scalar,
+                new TypeMetaFieldTypeModel(
+                    "(uint)global::Apache.Fory.TypeId.Unknown",
+                    nullable,
+                    true,
+                    ImmutableArray<TypeMetaFieldTypeModel>.Empty),
+                null,
+                null,
+                null);
         }
 
         if (unwrapped.TypeKind == TypeKind.Enum)
         {
-            return new TypeMetaFieldTypeModel(
-                "(uint)global::Apache.Fory.TypeId.Enum",
+            return new SerializerFieldTypeModel(
+                typeName,
                 nullable,
-                false,
-                ImmutableArray<TypeMetaFieldTypeModel>.Empty);
+                classification,
+                TypeShapeKind.Scalar,
+                new TypeMetaFieldTypeModel(
+                    "(uint)global::Apache.Fory.TypeId.Enum",
+                    nullable,
+                    false,
+                    ImmutableArray<TypeMetaFieldTypeModel>.Empty),
+                null,
+                null,
+                null);
         }
 
-        return new TypeMetaFieldTypeModel(
-            $"(uint){classification.TypeId}",
+        return new SerializerFieldTypeModel(
+            typeName,
             nullable,
-            !classification.IsBuiltIn && unwrapped.TypeKind != TypeKind.Enum,
-            ImmutableArray<TypeMetaFieldTypeModel>.Empty);
+            classification,
+            TypeShapeKind.Scalar,
+            new TypeMetaFieldTypeModel(
+                $"(uint){classification.TypeId}",
+                nullable,
+                !classification.IsBuiltIn && unwrapped.TypeKind != TypeKind.Enum,
+                ImmutableArray<TypeMetaFieldTypeModel>.Empty),
+            null,
+            null,
+            null);
     }
 
     private static bool TryGetNonNegativeShort(TypedConstant value, out short fieldId)
@@ -1577,66 +2079,75 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             return new TypeResolution(true, baseType);
         }
 
-        bool isInt32 = type.SpecialType == SpecialType.System_Int32;
-        bool isUInt32 = type.SpecialType == SpecialType.System_UInt32;
-        bool isInt64 = type.SpecialType == SpecialType.System_Int64;
-        bool isUInt64 = type.SpecialType == SpecialType.System_UInt64;
+        if (TryResolveEncodedNumericClassification(type, encoding, out TypeClassification classification))
+        {
+            return new TypeResolution(true, classification);
+        }
+
+        return new TypeResolution(false, baseType);
+    }
+
+    private static bool TryResolveEncodedNumericClassification(
+        ITypeSymbol type,
+        FieldEncoding encoding,
+        out TypeClassification classification)
+    {
+        (bool _, ITypeSymbol unwrapped) = UnwrapNullable(type);
+        TypeClassification baseType = ClassifyType(unwrapped);
+
+        bool isInt32 = unwrapped.SpecialType == SpecialType.System_Int32;
+        bool isUInt32 = unwrapped.SpecialType == SpecialType.System_UInt32;
+        bool isInt64 = unwrapped.SpecialType == SpecialType.System_Int64;
+        bool isUInt64 = unwrapped.SpecialType == SpecialType.System_UInt64;
 
         if (isInt32)
         {
-            return encoding switch
+            classification = encoding switch
             {
-                FieldEncoding.Varint => new TypeResolution(true, baseType),
-                FieldEncoding.Fixed => new TypeResolution(
-                    true,
-                    new TypeClassification(4, true, true, false, false, false, 4)),
-                _ => new TypeResolution(false, baseType),
+                FieldEncoding.Varint => baseType,
+                FieldEncoding.Fixed => new TypeClassification(4, true, true, false, false, false, 4),
+                _ => baseType,
             };
+            return encoding is FieldEncoding.Varint or FieldEncoding.Fixed;
         }
 
         if (isUInt32)
         {
-            return encoding switch
+            classification = encoding switch
             {
-                FieldEncoding.Varint => new TypeResolution(true, baseType),
-                FieldEncoding.Fixed => new TypeResolution(
-                    true,
-                    new TypeClassification(11, true, true, false, false, false, 4)),
-                _ => new TypeResolution(false, baseType),
+                FieldEncoding.Varint => baseType,
+                FieldEncoding.Fixed => new TypeClassification(11, true, true, false, false, false, 4),
+                _ => baseType,
             };
+            return encoding is FieldEncoding.Varint or FieldEncoding.Fixed;
         }
 
         if (isInt64)
         {
-            return encoding switch
+            classification = encoding switch
             {
-                FieldEncoding.Varint => new TypeResolution(true, baseType),
-                FieldEncoding.Fixed => new TypeResolution(
-                    true,
-                    new TypeClassification(6, true, true, false, false, false, 8)),
-                FieldEncoding.Tagged => new TypeResolution(
-                    true,
-                    new TypeClassification(8, true, true, false, false, true, 8)),
-                _ => new TypeResolution(false, baseType),
+                FieldEncoding.Varint => baseType,
+                FieldEncoding.Fixed => new TypeClassification(6, true, true, false, false, false, 8),
+                FieldEncoding.Tagged => new TypeClassification(8, true, true, false, false, true, 8),
+                _ => baseType,
             };
+            return encoding is FieldEncoding.Varint or FieldEncoding.Fixed or FieldEncoding.Tagged;
         }
 
         if (isUInt64)
         {
-            return encoding switch
+            classification = encoding switch
             {
-                FieldEncoding.Varint => new TypeResolution(true, baseType),
-                FieldEncoding.Fixed => new TypeResolution(
-                    true,
-                    new TypeClassification(13, true, true, false, false, false, 8)),
-                FieldEncoding.Tagged => new TypeResolution(
-                    true,
-                    new TypeClassification(15, true, true, false, false, true, 8)),
-                _ => new TypeResolution(false, baseType),
+                FieldEncoding.Varint => baseType,
+                FieldEncoding.Fixed => new TypeClassification(13, true, true, false, false, false, 8),
+                FieldEncoding.Tagged => new TypeClassification(15, true, true, false, false, true, 8),
+                _ => baseType,
             };
+            return encoding is FieldEncoding.Varint or FieldEncoding.Fixed or FieldEncoding.Tagged;
         }
 
-        return new TypeResolution(false, baseType);
+        classification = baseType;
+        return false;
     }
 
     private static TypeClassification ClassifyType(ITypeSymbol type)
@@ -2094,7 +2605,10 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             bool isRefType,
             bool needsFieldTypeInfo,
             DynamicAnyKind dynamicAnyKind,
-            TypeMetaFieldTypeModel typeMeta)
+            TypeMetaFieldTypeModel typeMeta,
+            string? serializerFieldName,
+            string? customSerializerExpression,
+            SerializerFieldTypeModel fieldType)
         {
             Name = name;
             FieldIdentifier = fieldIdentifier;
@@ -2112,6 +2626,9 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             NeedsFieldTypeInfo = needsFieldTypeInfo;
             DynamicAnyKind = dynamicAnyKind;
             TypeMeta = typeMeta;
+            SerializerFieldName = serializerFieldName;
+            CustomSerializerExpression = customSerializerExpression;
+            FieldType = fieldType;
         }
 
         public string Name { get; }
@@ -2130,6 +2647,41 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         public bool NeedsFieldTypeInfo { get; }
         public DynamicAnyKind DynamicAnyKind { get; }
         public TypeMetaFieldTypeModel TypeMeta { get; }
+        public string? SerializerFieldName { get; }
+        public string? CustomSerializerExpression { get; }
+        public SerializerFieldTypeModel FieldType { get; }
+    }
+
+    private sealed class SerializerFieldTypeModel
+    {
+        public SerializerFieldTypeModel(
+            string typeName,
+            bool nullable,
+            TypeClassification classification,
+            TypeShapeKind shapeKind,
+            TypeMetaFieldTypeModel typeMeta,
+            SerializerFieldTypeModel? elementType,
+            SerializerFieldTypeModel? keyType,
+            SerializerFieldTypeModel? valueType)
+        {
+            TypeName = typeName;
+            Nullable = nullable;
+            Classification = classification;
+            ShapeKind = shapeKind;
+            TypeMeta = typeMeta;
+            ElementType = elementType;
+            KeyType = keyType;
+            ValueType = valueType;
+        }
+
+        public string TypeName { get; }
+        public bool Nullable { get; }
+        public TypeClassification Classification { get; }
+        public TypeShapeKind ShapeKind { get; }
+        public TypeMetaFieldTypeModel TypeMeta { get; }
+        public SerializerFieldTypeModel? ElementType { get; }
+        public SerializerFieldTypeModel? KeyType { get; }
+        public SerializerFieldTypeModel? ValueType { get; }
     }
 
     private enum MemberDeclKind
@@ -2150,6 +2702,15 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
     {
         None,
         AnyValue,
+    }
+
+    private enum TypeShapeKind
+    {
+        Scalar,
+        Array,
+        List,
+        Set,
+        Map,
     }
 
     private enum FieldEncoding

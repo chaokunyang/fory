@@ -49,793 +49,382 @@ internal static class PrimitiveCollectionHeader
     }
 }
 
-internal sealed class ListBoolSerializer : Serializer<List<bool>>
+internal static class PrimitiveCollectionCodec
 {
-    private static readonly ListSerializer<bool> Fallback = new();
-
-
-
-
-    public override List<bool> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<bool> value, bool hasGenerics)
+    public static void WriteValues<T, TCodec>(WriteContext context, IReadOnlyList<T> values, bool hasGenerics)
+        where TCodec : struct, IPrimitiveDictionaryCodec<T>
     {
-        List<bool> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.Bool, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteUInt8(list[i] ? (byte)1 : (byte)0);
-        }
-    }
-
-    public override List<bool> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListInt8Serializer : Serializer<List<sbyte>>
-{
-    private static readonly ListSerializer<sbyte> Fallback = new();
-
-
-
-
-    public override List<sbyte> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<sbyte> value, bool hasGenerics)
-    {
-        List<sbyte> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.Int8, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteInt8(list[i]);
-        }
-    }
-
-    public override List<sbyte> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListInt16Serializer : Serializer<List<short>>
-{
-    private static readonly ListSerializer<short> Fallback = new();
-
-
-
-
-    public override List<short> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<short> value, bool hasGenerics)
-    {
-        List<short> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.Int16, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteInt16(list[i]);
-        }
-    }
-
-    public override List<short> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListIntSerializer : Serializer<List<int>>
-{
-    private static readonly ListSerializer<int> Fallback = new();
-
-
-
-
-    public override List<int> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<int> value, bool hasGenerics)
-    {
-        List<int> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.VarInt32, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteVarInt32(list[i]);
-        }
-    }
-
-    public override List<int> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListLongSerializer : Serializer<List<long>>
-{
-    private static readonly ListSerializer<long> Fallback = new();
-
-
-
-
-    public override List<long> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<long> value, bool hasGenerics)
-    {
-        List<long> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.VarInt64, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteVarInt64(list[i]);
-        }
-    }
-
-    public override List<long> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListUInt8Serializer : Serializer<List<byte>>
-{
-    private static readonly ListSerializer<byte> Fallback = new();
-
-
-
-
-    public override List<byte> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<byte> value, bool hasGenerics)
-    {
-        List<byte> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.UInt8, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteUInt8(list[i]);
-        }
-    }
-
-    public override List<byte> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListUInt16Serializer : Serializer<List<ushort>>
-{
-    private static readonly ListSerializer<ushort> Fallback = new();
-
-
-
-
-    public override List<ushort> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<ushort> value, bool hasGenerics)
-    {
-        List<ushort> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.UInt16, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteUInt16(list[i]);
-        }
-    }
-
-    public override List<ushort> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListUIntSerializer : Serializer<List<uint>>
-{
-    private static readonly ListSerializer<uint> Fallback = new();
-
-
-
-
-    public override List<uint> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<uint> value, bool hasGenerics)
-    {
-        List<uint> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.VarUInt32, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteVarUInt32(list[i]);
-        }
-    }
-
-    public override List<uint> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListULongSerializer : Serializer<List<ulong>>
-{
-    private static readonly ListSerializer<ulong> Fallback = new();
-
-
-
-
-    public override List<ulong> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<ulong> value, bool hasGenerics)
-    {
-        List<ulong> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.VarUInt64, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteVarUInt64(list[i]);
-        }
-    }
-
-    public override List<ulong> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListHalfSerializer : Serializer<List<Half>>
-{
-    private static readonly ListSerializer<Half> Fallback = new();
-
-
-
-
-    public override List<Half> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<Half> value, bool hasGenerics)
-    {
-        List<Half> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.Float16, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteUInt16(BitConverter.HalfToUInt16Bits(list[i]));
-        }
-    }
-
-    public override List<Half> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListBFloat16Serializer : Serializer<List<BFloat16>>
-{
-    private static readonly ListSerializer<BFloat16> Fallback = new();
-
-
-
-
-    public override List<BFloat16> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<BFloat16> value, bool hasGenerics)
-    {
-        List<BFloat16> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.BFloat16, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteUInt16(list[i].ToBits());
-        }
-    }
-
-    public override List<BFloat16> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListFloatSerializer : Serializer<List<float>>
-{
-    private static readonly ListSerializer<float> Fallback = new();
-
-
-
-
-    public override List<float> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<float> value, bool hasGenerics)
-    {
-        List<float> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.Float32, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteFloat32(list[i]);
-        }
-    }
-
-    public override List<float> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListDoubleSerializer : Serializer<List<double>>
-{
-    private static readonly ListSerializer<double> Fallback = new();
-
-
-
-
-    public override List<double> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<double> value, bool hasGenerics)
-    {
-        List<double> list = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.Float64, false);
-        for (int i = 0; i < list.Count; i++)
-        {
-            context.Writer.WriteFloat64(list[i]);
-        }
-    }
-
-    public override List<double> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class ListStringSerializer : Serializer<List<string>>
-{
-    private static readonly ListSerializer<string> Fallback = new();
-
-
-
-
-    public override List<string> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in List<string> value, bool hasGenerics)
-    {
-        List<string> list = value ?? [];
         bool hasNull = false;
-        for (int i = 0; i < list.Count; i++)
+        if (TCodec.IsNullable)
         {
-            if (list[i] is null)
+            for (int i = 0; i < values.Count; i++)
             {
-                hasNull = true;
-                break;
+                if (TCodec.IsNone(values[i]))
+                {
+                    hasNull = true;
+                    break;
+                }
             }
         }
 
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TypeId.String, hasNull);
-        if (hasNull)
+        PrimitiveCollectionHeader.WriteListHeader(context, values.Count, hasGenerics, TCodec.WireTypeId, hasNull);
+        if (!hasNull)
         {
-            for (int i = 0; i < list.Count; i++)
+            for (int i = 0; i < values.Count; i++)
             {
-                string? item = list[i];
-                if (item is null)
-                {
-                    context.Writer.WriteInt8((sbyte)RefFlag.Null);
-                    continue;
-                }
-
-                context.Writer.WriteInt8((sbyte)RefFlag.NotNullValue);
-                StringSerializer.WriteString(context, item);
+                TCodec.Write(context, values[i]);
             }
 
             return;
         }
 
-        for (int i = 0; i < list.Count; i++)
+        for (int i = 0; i < values.Count; i++)
         {
-            StringSerializer.WriteString(context, list[i]);
+            T value = values[i];
+            if (TCodec.IsNone(value))
+            {
+                context.Writer.WriteInt8((sbyte)RefFlag.Null);
+            }
+            else
+            {
+                context.Writer.WriteInt8((sbyte)RefFlag.NotNullValue);
+                TCodec.Write(context, value);
+            }
         }
     }
 
-    public override List<string> ReadData(ReadContext context)
+    public static List<T> ReadValues<T, TCodec>(ReadContext context)
+        where TCodec : struct, IPrimitiveDictionaryCodec<T>
     {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetInt8Serializer : Serializer<HashSet<sbyte>>
-{
-    private static readonly SetSerializer<sbyte> Fallback = new();
-
-
-
-
-    public override HashSet<sbyte> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<sbyte> value, bool hasGenerics)
-    {
-        HashSet<sbyte> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.Int8, false);
-        foreach (sbyte item in set)
+        int length = checked((int)context.Reader.ReadVarUInt32());
+        if (length == 0)
         {
-            context.Writer.WriteInt8(item);
+            return [];
         }
-    }
 
-    public override HashSet<sbyte> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetInt16Serializer : Serializer<HashSet<short>>
-{
-    private static readonly SetSerializer<short> Fallback = new();
-
-
-
-
-    public override HashSet<short> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<short> value, bool hasGenerics)
-    {
-        HashSet<short> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.Int16, false);
-        foreach (short item in set)
+        byte header = context.Reader.ReadUInt8();
+        bool trackRef = (header & CollectionBits.TrackingRef) != 0;
+        bool hasNull = (header & CollectionBits.HasNull) != 0;
+        bool declared = (header & CollectionBits.DeclaredElementType) != 0;
+        bool sameType = (header & CollectionBits.SameType) != 0;
+        if (!sameType)
         {
-            context.Writer.WriteInt16(item);
+            throw new InvalidDataException("primitive collection codecs require same-type payloads");
         }
-    }
 
-    public override HashSet<short> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetIntSerializer : Serializer<HashSet<int>>
-{
-    private static readonly SetSerializer<int> Fallback = new();
-
-
-
-
-    public override HashSet<int> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<int> value, bool hasGenerics)
-    {
-        HashSet<int> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.VarInt32, false);
-        foreach (int item in set)
+        if (trackRef)
         {
-            context.Writer.WriteVarInt32(item);
+            throw new InvalidDataException("primitive collection codecs do not support reference-tracking payloads");
         }
-    }
 
-    public override HashSet<int> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetLongSerializer : Serializer<HashSet<long>>
-{
-    private static readonly SetSerializer<long> Fallback = new();
-
-
-
-
-    public override HashSet<long> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<long> value, bool hasGenerics)
-    {
-        HashSet<long> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.VarInt64, false);
-        foreach (long item in set)
+        if (!declared)
         {
-            context.Writer.WriteVarInt64(item);
+            byte actualTypeId = context.Reader.ReadUInt8();
+            if (actualTypeId != (byte)TCodec.WireTypeId)
+            {
+                throw new TypeMismatchException((uint)TCodec.WireTypeId, actualTypeId);
+            }
         }
-    }
 
-    public override HashSet<long> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetUInt8Serializer : Serializer<HashSet<byte>>
-{
-    private static readonly SetSerializer<byte> Fallback = new();
-
-
-
-
-    public override HashSet<byte> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<byte> value, bool hasGenerics)
-    {
-        HashSet<byte> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.UInt8, false);
-        foreach (byte item in set)
+        List<T> values = new(length);
+        if (!hasNull)
         {
-            context.Writer.WriteUInt8(item);
+            for (int i = 0; i < length; i++)
+            {
+                values.Add(TCodec.Read(context));
+            }
+
+            return values;
         }
-    }
 
-    public override HashSet<byte> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetUInt16Serializer : Serializer<HashSet<ushort>>
-{
-    private static readonly SetSerializer<ushort> Fallback = new();
-
-
-
-
-    public override HashSet<ushort> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<ushort> value, bool hasGenerics)
-    {
-        HashSet<ushort> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.UInt16, false);
-        foreach (ushort item in set)
+        if (!TCodec.IsNullable)
         {
-            context.Writer.WriteUInt16(item);
+            throw new InvalidDataException("non-nullable primitive collection codec cannot read null elements");
         }
-    }
 
-    public override HashSet<ushort> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetUIntSerializer : Serializer<HashSet<uint>>
-{
-    private static readonly SetSerializer<uint> Fallback = new();
-
-
-
-
-    public override HashSet<uint> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<uint> value, bool hasGenerics)
-    {
-        HashSet<uint> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.VarUInt32, false);
-        foreach (uint item in set)
+        for (int i = 0; i < length; i++)
         {
-            context.Writer.WriteVarUInt32(item);
+            sbyte refFlag = context.Reader.ReadInt8();
+            if (refFlag == (sbyte)RefFlag.Null)
+            {
+                values.Add(TCodec.DefaultValue);
+            }
+            else if (refFlag == (sbyte)RefFlag.NotNullValue)
+            {
+                values.Add(TCodec.Read(context));
+            }
+            else
+            {
+                throw new RefException($"invalid nullability flag {refFlag}");
+            }
         }
-    }
 
-    public override HashSet<uint> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
+        return values;
     }
 }
 
-internal sealed class SetULongSerializer : Serializer<HashSet<ulong>>
-{
-    private static readonly SetSerializer<ulong> Fallback = new();
-
-
-
-
-    public override HashSet<ulong> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<ulong> value, bool hasGenerics)
-    {
-        HashSet<ulong> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.VarUInt64, false);
-        foreach (ulong item in set)
-        {
-            context.Writer.WriteVarUInt64(item);
-        }
-    }
-
-    public override HashSet<ulong> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetFloatSerializer : Serializer<HashSet<float>>
-{
-    private static readonly SetSerializer<float> Fallback = new();
-
-
-
-
-    public override HashSet<float> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<float> value, bool hasGenerics)
-    {
-        HashSet<float> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.Float32, false);
-        foreach (float item in set)
-        {
-            context.Writer.WriteFloat32(item);
-        }
-    }
-
-    public override HashSet<float> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal sealed class SetDoubleSerializer : Serializer<HashSet<double>>
-{
-    private static readonly SetSerializer<double> Fallback = new();
-
-
-
-
-    public override HashSet<double> DefaultValue => null!;
-
-    public override void WriteData(WriteContext context, in HashSet<double> value, bool hasGenerics)
-    {
-        HashSet<double> set = value ?? [];
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TypeId.Float64, false);
-        foreach (double item in set)
-        {
-            context.Writer.WriteFloat64(item);
-        }
-    }
-
-    public override HashSet<double> ReadData(ReadContext context)
-    {
-        return Fallback.ReadData(context);
-    }
-}
-
-internal class PrimitiveLinkedListSerializer<T, TCodec> : Serializer<LinkedList<T>>
+public class PrimitiveListSerializer<T, TCodec> : Serializer<List<T>>
     where TCodec : struct, IPrimitiveDictionaryCodec<T>
 {
-    private static readonly LinkedListSerializer<T> Fallback = new();
+    public override List<T> DefaultValue => null!;
 
+    public override void WriteData(WriteContext context, in List<T> value, bool hasGenerics)
+    {
+        PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, value ?? [], hasGenerics);
+    }
 
+    public override List<T> ReadData(ReadContext context)
+    {
+        return PrimitiveCollectionCodec.ReadValues<T, TCodec>(context);
+    }
+}
 
+public class PrimitiveSetSerializer<T, TCodec> : Serializer<HashSet<T>>
+    where T : notnull
+    where TCodec : struct, IPrimitiveDictionaryCodec<T>
+{
+    public override HashSet<T> DefaultValue => null!;
 
+    public override void WriteData(WriteContext context, in HashSet<T> value, bool hasGenerics)
+    {
+        HashSet<T> set = value ?? [];
+        List<T> values = new(set.Count);
+        foreach (T item in set)
+        {
+            values.Add(item);
+        }
+
+        PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, values, hasGenerics);
+    }
+
+    public override HashSet<T> ReadData(ReadContext context)
+    {
+        return [.. PrimitiveCollectionCodec.ReadValues<T, TCodec>(context)];
+    }
+}
+
+public class PrimitiveLinkedListSerializer<T, TCodec> : Serializer<LinkedList<T>>
+    where TCodec : struct, IPrimitiveDictionaryCodec<T>
+{
     public override LinkedList<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in LinkedList<T> value, bool hasGenerics)
     {
-        if (TCodec.IsNullable)
-        {
-            throw new InvalidDataException("nullable primitive codecs are not supported for linked-list fast path");
-        }
-
         LinkedList<T> list = value ?? new LinkedList<T>();
-        PrimitiveCollectionHeader.WriteListHeader(context, list.Count, hasGenerics, TCodec.WireTypeId, false);
+        List<T> values = new(list.Count);
         foreach (T item in list)
         {
-            TCodec.Write(context, item);
+            values.Add(item);
         }
+
+        PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, values, hasGenerics);
     }
 
     public override LinkedList<T> ReadData(ReadContext context)
     {
-        return Fallback.ReadData(context);
+        return new LinkedList<T>(PrimitiveCollectionCodec.ReadValues<T, TCodec>(context));
     }
 }
 
-internal class PrimitiveQueueSerializer<T, TCodec> : Serializer<Queue<T>>
+public class PrimitiveQueueSerializer<T, TCodec> : Serializer<Queue<T>>
     where TCodec : struct, IPrimitiveDictionaryCodec<T>
 {
-    private static readonly QueueSerializer<T> Fallback = new();
-
-
-
-
     public override Queue<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in Queue<T> value, bool hasGenerics)
     {
-        if (TCodec.IsNullable)
-        {
-            throw new InvalidDataException("nullable primitive codecs are not supported for queue fast path");
-        }
-
         Queue<T> queue = value ?? new Queue<T>();
-        PrimitiveCollectionHeader.WriteListHeader(context, queue.Count, hasGenerics, TCodec.WireTypeId, false);
+        List<T> values = new(queue.Count);
         foreach (T item in queue)
         {
-            TCodec.Write(context, item);
+            values.Add(item);
         }
+
+        PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, values, hasGenerics);
     }
 
     public override Queue<T> ReadData(ReadContext context)
     {
-        return Fallback.ReadData(context);
+        List<T> values = PrimitiveCollectionCodec.ReadValues<T, TCodec>(context);
+        Queue<T> queue = new(values.Count);
+        for (int i = 0; i < values.Count; i++)
+        {
+            queue.Enqueue(values[i]);
+        }
+
+        return queue;
     }
 }
 
-internal class PrimitiveStackSerializer<T, TCodec> : Serializer<Stack<T>>
+public class PrimitiveStackSerializer<T, TCodec> : Serializer<Stack<T>>
     where TCodec : struct, IPrimitiveDictionaryCodec<T>
 {
-    private static readonly StackSerializer<T> Fallback = new();
-
-
-
-
     public override Stack<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in Stack<T> value, bool hasGenerics)
     {
-        if (TCodec.IsNullable)
-        {
-            throw new InvalidDataException("nullable primitive codecs are not supported for stack fast path");
-        }
-
         Stack<T> stack = value ?? new Stack<T>();
-        PrimitiveCollectionHeader.WriteListHeader(context, stack.Count, hasGenerics, TCodec.WireTypeId, false);
         if (stack.Count == 0)
         {
+            PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, [], hasGenerics);
             return;
         }
 
         T[] topToBottom = stack.ToArray();
+        List<T> bottomToTop = new(topToBottom.Length);
         for (int i = topToBottom.Length - 1; i >= 0; i--)
         {
-            TCodec.Write(context, topToBottom[i]);
+            bottomToTop.Add(topToBottom[i]);
         }
+
+        PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, bottomToTop, hasGenerics);
     }
 
     public override Stack<T> ReadData(ReadContext context)
     {
-        return Fallback.ReadData(context);
+        List<T> values = PrimitiveCollectionCodec.ReadValues<T, TCodec>(context);
+        Stack<T> stack = new(values.Count);
+        for (int i = 0; i < values.Count; i++)
+        {
+            stack.Push(values[i]);
+        }
+
+        return stack;
     }
 }
 
-internal class PrimitiveSortedSetSerializer<T, TCodec> : Serializer<SortedSet<T>>
+public class PrimitiveSortedSetSerializer<T, TCodec> : Serializer<SortedSet<T>>
     where T : notnull
     where TCodec : struct, IPrimitiveDictionaryCodec<T>
 {
-    private static readonly SortedSetSerializer<T> Fallback = new();
-
-
-
-
     public override SortedSet<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in SortedSet<T> value, bool hasGenerics)
     {
-        if (TCodec.IsNullable)
-        {
-            throw new InvalidDataException("nullable primitive codecs are not supported for sorted-set fast path");
-        }
-
         SortedSet<T> set = value ?? new SortedSet<T>();
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TCodec.WireTypeId, false);
+        List<T> values = new(set.Count);
         foreach (T item in set)
         {
-            TCodec.Write(context, item);
+            values.Add(item);
         }
+
+        PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, values, hasGenerics);
     }
 
     public override SortedSet<T> ReadData(ReadContext context)
     {
-        return Fallback.ReadData(context);
+        return [.. PrimitiveCollectionCodec.ReadValues<T, TCodec>(context)];
     }
 }
 
-internal class PrimitiveImmutableHashSetSerializer<T, TCodec> : Serializer<ImmutableHashSet<T>>
+public class PrimitiveImmutableHashSetSerializer<T, TCodec> : Serializer<ImmutableHashSet<T>>
     where T : notnull
     where TCodec : struct, IPrimitiveDictionaryCodec<T>
 {
-    private static readonly ImmutableHashSetSerializer<T> Fallback = new();
-
-
-
-
     public override ImmutableHashSet<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in ImmutableHashSet<T> value, bool hasGenerics)
     {
-        if (TCodec.IsNullable)
-        {
-            throw new InvalidDataException("nullable primitive codecs are not supported for immutable-hash-set fast path");
-        }
-
         ImmutableHashSet<T> set = value ?? ImmutableHashSet<T>.Empty;
-        PrimitiveCollectionHeader.WriteListHeader(context, set.Count, hasGenerics, TCodec.WireTypeId, false);
+        List<T> values = new(set.Count);
         foreach (T item in set)
         {
-            TCodec.Write(context, item);
+            values.Add(item);
         }
+
+        PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, values, hasGenerics);
     }
 
     public override ImmutableHashSet<T> ReadData(ReadContext context)
     {
-        return Fallback.ReadData(context);
+        return ImmutableHashSet.CreateRange(PrimitiveCollectionCodec.ReadValues<T, TCodec>(context));
     }
 }
+
+internal sealed class ListBoolSerializer : PrimitiveListSerializer<bool, BoolPrimitiveDictionaryCodec> { }
+
+internal sealed class ListInt8Serializer : PrimitiveListSerializer<sbyte, Int8PrimitiveDictionaryCodec> { }
+
+internal sealed class ListInt16Serializer : PrimitiveListSerializer<short, Int16PrimitiveDictionaryCodec> { }
+
+internal sealed class ListIntSerializer : PrimitiveListSerializer<int, VarInt32PrimitiveDictionaryCodec> { }
+
+public sealed class ListVarInt32Serializer : PrimitiveListSerializer<int, VarInt32PrimitiveDictionaryCodec> { }
+
+public sealed class ListFixedInt32Serializer : PrimitiveListSerializer<int, FixedInt32PrimitiveDictionaryCodec> { }
+
+internal sealed class ListLongSerializer : PrimitiveListSerializer<long, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class ListVarInt64Serializer : PrimitiveListSerializer<long, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class ListFixedInt64Serializer : PrimitiveListSerializer<long, FixedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class ListTaggedInt64Serializer : PrimitiveListSerializer<long, TaggedInt64PrimitiveDictionaryCodec> { }
+
+internal sealed class ListUInt8Serializer : PrimitiveListSerializer<byte, UInt8PrimitiveDictionaryCodec> { }
+
+internal sealed class ListUInt16Serializer : PrimitiveListSerializer<ushort, UInt16PrimitiveDictionaryCodec> { }
+
+internal sealed class ListUIntSerializer : PrimitiveListSerializer<uint, VarUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class ListVarUInt32Serializer : PrimitiveListSerializer<uint, VarUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class ListFixedUInt32Serializer : PrimitiveListSerializer<uint, FixedUInt32PrimitiveDictionaryCodec> { }
+
+internal sealed class ListULongSerializer : PrimitiveListSerializer<ulong, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class ListVarUInt64Serializer : PrimitiveListSerializer<ulong, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class ListFixedUInt64Serializer : PrimitiveListSerializer<ulong, FixedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class ListTaggedUInt64Serializer : PrimitiveListSerializer<ulong, TaggedUInt64PrimitiveDictionaryCodec> { }
+
+internal sealed class ListHalfSerializer : PrimitiveListSerializer<Half, Float16PrimitiveDictionaryCodec> { }
+
+internal sealed class ListBFloat16Serializer : PrimitiveListSerializer<BFloat16, BFloat16PrimitiveDictionaryCodec> { }
+
+internal sealed class ListFloatSerializer : PrimitiveListSerializer<float, Float32PrimitiveDictionaryCodec> { }
+
+internal sealed class ListDoubleSerializer : PrimitiveListSerializer<double, Float64PrimitiveDictionaryCodec> { }
+
+internal sealed class ListStringSerializer : PrimitiveListSerializer<string, StringPrimitiveDictionaryCodec> { }
+
+internal sealed class SetInt8Serializer : PrimitiveSetSerializer<sbyte, Int8PrimitiveDictionaryCodec> { }
+
+internal sealed class SetInt16Serializer : PrimitiveSetSerializer<short, Int16PrimitiveDictionaryCodec> { }
+
+internal sealed class SetIntSerializer : PrimitiveSetSerializer<int, VarInt32PrimitiveDictionaryCodec> { }
+
+public sealed class SetVarInt32Serializer : PrimitiveSetSerializer<int, VarInt32PrimitiveDictionaryCodec> { }
+
+public sealed class SetFixedInt32Serializer : PrimitiveSetSerializer<int, FixedInt32PrimitiveDictionaryCodec> { }
+
+internal sealed class SetLongSerializer : PrimitiveSetSerializer<long, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class SetVarInt64Serializer : PrimitiveSetSerializer<long, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class SetFixedInt64Serializer : PrimitiveSetSerializer<long, FixedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class SetTaggedInt64Serializer : PrimitiveSetSerializer<long, TaggedInt64PrimitiveDictionaryCodec> { }
+
+internal sealed class SetUInt8Serializer : PrimitiveSetSerializer<byte, UInt8PrimitiveDictionaryCodec> { }
+
+internal sealed class SetUInt16Serializer : PrimitiveSetSerializer<ushort, UInt16PrimitiveDictionaryCodec> { }
+
+internal sealed class SetUIntSerializer : PrimitiveSetSerializer<uint, VarUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class SetVarUInt32Serializer : PrimitiveSetSerializer<uint, VarUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class SetFixedUInt32Serializer : PrimitiveSetSerializer<uint, FixedUInt32PrimitiveDictionaryCodec> { }
+
+internal sealed class SetULongSerializer : PrimitiveSetSerializer<ulong, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class SetVarUInt64Serializer : PrimitiveSetSerializer<ulong, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class SetFixedUInt64Serializer : PrimitiveSetSerializer<ulong, FixedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class SetTaggedUInt64Serializer : PrimitiveSetSerializer<ulong, TaggedUInt64PrimitiveDictionaryCodec> { }
+
+internal sealed class SetFloatSerializer : PrimitiveSetSerializer<float, Float32PrimitiveDictionaryCodec> { }
+
+internal sealed class SetDoubleSerializer : PrimitiveSetSerializer<double, Float64PrimitiveDictionaryCodec> { }

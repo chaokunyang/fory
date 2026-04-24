@@ -540,6 +540,17 @@ internal static class DynamicContainerCodec
 
 public sealed class ArraySerializer<T> : Serializer<T[]>
 {
+    private readonly Serializer<T>? _elementSerializer;
+
+    public ArraySerializer()
+    {
+    }
+
+    public ArraySerializer(Serializer<T> elementSerializer)
+    {
+        _elementSerializer = elementSerializer;
+    }
+
     public override T[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in T[] value, bool hasGenerics)
@@ -547,111 +558,177 @@ public sealed class ArraySerializer<T> : Serializer<T[]>
         T[] safe = value ?? [];
         CollectionCodec.WriteCollectionData(
             safe,
-            context.TypeResolver.GetSerializer<T>(),
+            _elementSerializer ?? context.TypeResolver.GetSerializer<T>(),
             context,
             hasGenerics);
     }
 
     public override T[] ReadData(ReadContext context)
     {
-        List<T> values = CollectionCodec.ReadCollectionData<T>(context.TypeResolver.GetSerializer<T>(), context);
+        List<T> values = CollectionCodec.ReadCollectionData<T>(_elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context);
         return values.ToArray();
     }
 }
 
 public class ListSerializer<T> : Serializer<List<T>>
 {
+    private readonly Serializer<T>? _elementSerializer;
+
+    public ListSerializer()
+    {
+    }
+
+    public ListSerializer(Serializer<T> elementSerializer)
+    {
+        _elementSerializer = elementSerializer;
+    }
+
     public override List<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in List<T> value, bool hasGenerics)
     {
         List<T> safe = value ?? [];
-        CollectionCodec.WriteCollectionData(safe, context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
+        CollectionCodec.WriteCollectionData(safe, _elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
     }
 
     public override List<T> ReadData(ReadContext context)
     {
-        return CollectionCodec.ReadCollectionData(context.TypeResolver.GetSerializer<T>(), context);
+        return CollectionCodec.ReadCollectionData(_elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context);
     }
 }
 
 public sealed class SetSerializer<T> : Serializer<HashSet<T>> where T : notnull
 {
+    private readonly Serializer<T>? _elementSerializer;
+
+    public SetSerializer()
+    {
+    }
+
+    public SetSerializer(Serializer<T> elementSerializer)
+    {
+        _elementSerializer = elementSerializer;
+    }
+
     public override HashSet<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in HashSet<T> value, bool hasGenerics)
     {
         HashSet<T> safe = value ?? [];
-        CollectionCodec.WriteCollectionData(safe, context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
+        CollectionCodec.WriteCollectionData(safe, _elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
     }
 
     public override HashSet<T> ReadData(ReadContext context)
     {
-        return [.. CollectionCodec.ReadCollectionData(context.TypeResolver.GetSerializer<T>(), context)];
+        return [.. CollectionCodec.ReadCollectionData(_elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context)];
     }
 }
 
 public sealed class SortedSetSerializer<T> : Serializer<SortedSet<T>> where T : notnull
 {
+    private readonly Serializer<T>? _elementSerializer;
+
+    public SortedSetSerializer()
+    {
+    }
+
+    public SortedSetSerializer(Serializer<T> elementSerializer)
+    {
+        _elementSerializer = elementSerializer;
+    }
+
     public override SortedSet<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in SortedSet<T> value, bool hasGenerics)
     {
         SortedSet<T> safe = value ?? new SortedSet<T>();
-        CollectionCodec.WriteCollectionData(safe, context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
+        CollectionCodec.WriteCollectionData(safe, _elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
     }
 
     public override SortedSet<T> ReadData(ReadContext context)
     {
-        return [.. CollectionCodec.ReadCollectionData(context.TypeResolver.GetSerializer<T>(), context)];
+        return [.. CollectionCodec.ReadCollectionData(_elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context)];
     }
 }
 
 public sealed class ImmutableHashSetSerializer<T> : Serializer<ImmutableHashSet<T>> where T : notnull
 {
+    private readonly Serializer<T>? _elementSerializer;
+
+    public ImmutableHashSetSerializer()
+    {
+    }
+
+    public ImmutableHashSetSerializer(Serializer<T> elementSerializer)
+    {
+        _elementSerializer = elementSerializer;
+    }
+
     public override ImmutableHashSet<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in ImmutableHashSet<T> value, bool hasGenerics)
     {
         ImmutableHashSet<T> safe = value ?? ImmutableHashSet<T>.Empty;
-        CollectionCodec.WriteCollectionData(safe, context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
+        CollectionCodec.WriteCollectionData(safe, _elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
     }
 
     public override ImmutableHashSet<T> ReadData(ReadContext context)
     {
-        return ImmutableHashSet.CreateRange(CollectionCodec.ReadCollectionData(context.TypeResolver.GetSerializer<T>(), context));
+        return ImmutableHashSet.CreateRange(CollectionCodec.ReadCollectionData(_elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context));
     }
 }
 
 public sealed class LinkedListSerializer<T> : Serializer<LinkedList<T>>
 {
+    private readonly Serializer<T>? _elementSerializer;
+
+    public LinkedListSerializer()
+    {
+    }
+
+    public LinkedListSerializer(Serializer<T> elementSerializer)
+    {
+        _elementSerializer = elementSerializer;
+    }
+
     public override LinkedList<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in LinkedList<T> value, bool hasGenerics)
     {
         LinkedList<T> safe = value ?? new LinkedList<T>();
-        CollectionCodec.WriteCollectionData(safe, context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
+        CollectionCodec.WriteCollectionData(safe, _elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
     }
 
     public override LinkedList<T> ReadData(ReadContext context)
     {
-        return new LinkedList<T>(CollectionCodec.ReadCollectionData(context.TypeResolver.GetSerializer<T>(), context));
+        return new LinkedList<T>(CollectionCodec.ReadCollectionData(_elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context));
     }
 }
 
 public sealed class QueueSerializer<T> : Serializer<Queue<T>>
 {
+    private readonly Serializer<T>? _elementSerializer;
+
+    public QueueSerializer()
+    {
+    }
+
+    public QueueSerializer(Serializer<T> elementSerializer)
+    {
+        _elementSerializer = elementSerializer;
+    }
+
     public override Queue<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in Queue<T> value, bool hasGenerics)
     {
         Queue<T> safe = value ?? new Queue<T>();
-        CollectionCodec.WriteCollectionData(safe, context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
+        CollectionCodec.WriteCollectionData(safe, _elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
     }
 
     public override Queue<T> ReadData(ReadContext context)
     {
-        List<T> values = CollectionCodec.ReadCollectionData(context.TypeResolver.GetSerializer<T>(), context);
+        List<T> values = CollectionCodec.ReadCollectionData(_elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context);
         Queue<T> queue = new(values.Count);
         for (int i = 0; i < values.Count; i++)
         {
@@ -664,6 +741,17 @@ public sealed class QueueSerializer<T> : Serializer<Queue<T>>
 
 public sealed class StackSerializer<T> : Serializer<Stack<T>>
 {
+    private readonly Serializer<T>? _elementSerializer;
+
+    public StackSerializer()
+    {
+    }
+
+    public StackSerializer(Serializer<T> elementSerializer)
+    {
+        _elementSerializer = elementSerializer;
+    }
+
     public override Stack<T> DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in Stack<T> value, bool hasGenerics)
@@ -671,7 +759,7 @@ public sealed class StackSerializer<T> : Serializer<Stack<T>>
         Stack<T> safe = value ?? new Stack<T>();
         if (safe.Count == 0)
         {
-            CollectionCodec.WriteCollectionData(Array.Empty<T>(), context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
+            CollectionCodec.WriteCollectionData(Array.Empty<T>(), _elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
             return;
         }
 
@@ -682,12 +770,12 @@ public sealed class StackSerializer<T> : Serializer<Stack<T>>
             bottomToTop.Add(topToBottom[i]);
         }
 
-        CollectionCodec.WriteCollectionData(bottomToTop, context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
+        CollectionCodec.WriteCollectionData(bottomToTop, _elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context, hasGenerics);
     }
 
     public override Stack<T> ReadData(ReadContext context)
     {
-        List<T> values = CollectionCodec.ReadCollectionData(context.TypeResolver.GetSerializer<T>(), context);
+        List<T> values = CollectionCodec.ReadCollectionData(_elementSerializer ?? context.TypeResolver.GetSerializer<T>(), context);
         Stack<T> stack = new(values.Count);
         for (int i = 0; i < values.Count; i++)
         {

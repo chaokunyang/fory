@@ -118,9 +118,8 @@ type sliceSerializer struct {
 }
 
 // newSliceSerializer creates a sliceSerializer for slices with concrete element types.
-// It returns an error if the element type is an interface, pointer to interface, or a primitive type.
-// Primitive numeric types (bool, int8, int16, int32, int64, uint8, float32, float64) must use
-// dedicated primitive slice serializers that use ARRAY protocol (binary size + binary).
+// It returns an error if the element type is an interface, pointer to interface, or a type
+// that should use the dedicated primitive-array fast path instead of the generic LIST path.
 func newSliceSerializer(type_ reflect.Type, elemSerializer Serializer, xlang bool) (*sliceSerializer, error) {
 	elem := type_.Elem()
 	if elem.Kind() == reflect.Interface {
@@ -129,11 +128,8 @@ func newSliceSerializer(type_ reflect.Type, elemSerializer Serializer, xlang boo
 	if elem.Kind() == reflect.Ptr && elem.Elem().Kind() == reflect.Interface {
 		return nil, fmt.Errorf("sliceSerializer does not support pointer to interface element type: %v", type_)
 	}
-	// Primitive numeric types must use dedicated primitive slice serializers (ARRAY protocol)
-	switch elem.Kind() {
-	case reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint8, reflect.Float32, reflect.Float64:
-		return nil, fmt.Errorf("sliceSerializer does not support primitive element type %v: use dedicated primitive slice serializer", type_)
+	if shouldUsePrimitiveArrayType(elem) {
+		return nil, fmt.Errorf("sliceSerializer does not support primitive-array element type %v: use dedicated primitive slice serializer", type_)
 	}
 	return &sliceSerializer{
 		type_:          type_,

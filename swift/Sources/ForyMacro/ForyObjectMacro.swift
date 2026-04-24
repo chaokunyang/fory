@@ -1528,7 +1528,13 @@ TypeMeta.FieldType(
 
 private func compatibleFieldTypeIDExpression(_ typeText: String) -> String {
     let staticTypeIDExpr = "\(typeText).staticTypeId"
-    return "UInt32((\(staticTypeIDExpr) == .structType ? TypeId.compatibleStruct : \(staticTypeIDExpr)).rawValue)"
+    return """
+UInt32((
+    \(staticTypeIDExpr) == .structType
+        ? TypeId.compatibleStruct
+        : (\(staticTypeIDExpr) == .typedUnion ? TypeId.union : \(staticTypeIDExpr))
+).rawValue)
+"""
 }
 
 private func compatibleGenericNullableExpression(_ typeText: String) -> String {
@@ -1581,16 +1587,28 @@ private func classifyType(
         return .init(typeID: 3, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 2)
     case "Int32":
         return .init(typeID: 5, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: true, primitiveSize: 4)
+    case "ForyInt32Fixed":
+        return .init(typeID: 4, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 4)
     case "Int64", "Int":
         return .init(typeID: 7, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: true, primitiveSize: 8)
+    case "ForyInt64Fixed":
+        return .init(typeID: 6, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 8)
+    case "ForyInt64Tagged":
+        return .init(typeID: 8, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: true, primitiveSize: 8)
     case "UInt8":
         return .init(typeID: 9, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 1)
     case "UInt16":
         return .init(typeID: 10, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 2)
     case "UInt32":
         return .init(typeID: 12, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: true, primitiveSize: 4)
+    case "ForyUInt32Fixed":
+        return .init(typeID: 11, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 4)
     case "UInt64", "UInt":
         return .init(typeID: 14, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: true, primitiveSize: 8)
+    case "ForyUInt64Fixed":
+        return .init(typeID: 13, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 8)
+    case "ForyUInt64Tagged":
+        return .init(typeID: 15, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: true, primitiveSize: 8)
     case "Float16":
         return .init(typeID: 17, isPrimitive: true, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 2)
     case "BFloat16":
@@ -1605,7 +1623,7 @@ private func classifyType(
         return .init(typeID: 41, isPrimitive: false, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 0)
     case "Duration":
         return .init(typeID: 37, isPrimitive: false, isBuiltIn: true, isCollection: false, isMap: false, isCompressedNumeric: false, primitiveSize: 0)
-    case "Date":
+    case "Date", "Timestamp":
         return .init(
             typeID: 38,
             isPrimitive: false,

@@ -256,12 +256,76 @@ public struct LocalDate: Serializer, Equatable, Hashable, Comparable {
     }
 }
 
+public struct Timestamp: Serializer, Equatable, Hashable, Comparable {
+    public var seconds: Int64
+    public var nanos: UInt32
+
+    public init(seconds: Int64 = 0, nanos: UInt32 = 0) {
+        self.seconds = seconds
+        self.nanos = nanos
+    }
+
+    public init(date: Date) {
+        let normalized = normalizeTimestampComponents(for: date)
+        self.seconds = normalized.seconds
+        self.nanos = normalized.nanos
+    }
+
+    public func toDate() -> Date {
+        timestampDate(seconds: seconds, nanos: nanos)
+    }
+
+    public static func < (lhs: Timestamp, rhs: Timestamp) -> Bool {
+        if lhs.seconds != rhs.seconds {
+            return lhs.seconds < rhs.seconds
+        }
+        return lhs.nanos < rhs.nanos
+    }
+
+    public static func foryDefault() -> Timestamp {
+        .init()
+    }
+
+    public static var staticTypeId: TypeId {
+        .timestamp
+    }
+
+    public static func foryWriteStaticTypeInfo(_ context: WriteContext) throws {
+        context.writeStaticTypeInfo(staticTypeId)
+    }
+
+    public static func foryReadTypeInfo(_ context: ReadContext) throws -> TypeInfo? {
+        try context.readStaticTypeInfo(staticTypeId)
+    }
+
+    public func foryWriteData(_ context: WriteContext, hasGenerics: Bool) throws {
+        _ = hasGenerics
+        try context.writeTimestamp(self)
+    }
+
+    public static func foryReadData(_ context: ReadContext) throws -> Timestamp {
+        try context.readTimestampValue()
+    }
+
+    public static func foryRead(
+        _ context: ReadContext,
+        refMode: RefMode,
+        readTypeInfo: Bool
+    ) throws -> Timestamp {
+        try context.readTimestampValue(refMode: refMode, readTypeInfo: readTypeInfo)
+    }
+}
+
 public extension WriteContext {
     @inline(__always)
+    func writeTimestamp(_ value: Timestamp) throws {
+        buffer.writeInt64(value.seconds)
+        buffer.writeUInt32(value.nanos)
+    }
+
+    @inline(__always)
     func writeTimestamp(_ value: Date) throws {
-        let normalized = normalizeTimestampComponents(for: value)
-        buffer.writeInt64(normalized.seconds)
-        buffer.writeUInt32(normalized.nanos)
+        try writeTimestamp(Timestamp(date: value))
     }
 
     @inline(__always)
@@ -271,6 +335,22 @@ public extension WriteContext {
         } else {
             buffer.writeInt32(value.daysSinceEpoch)
         }
+    }
+
+    @inline(__always)
+    func writeTimestamp(
+        _ value: Timestamp?,
+        refMode: RefMode,
+        writeTypeInfo: Bool
+    ) throws {
+        try writeScalarValue(
+            value,
+            context: self,
+            refMode: refMode,
+            writeTypeInfo: writeTypeInfo,
+            typeID: .timestamp,
+            writePayload: { try self.writeTimestamp($0) }
+        )
     }
 
     @inline(__always)
@@ -308,8 +388,13 @@ public extension WriteContext {
 
 public extension ReadContext {
     @inline(__always)
+    func readTimestampValue() throws -> Timestamp {
+        .init(seconds: try buffer.readInt64(), nanos: try buffer.readUInt32())
+    }
+
+    @inline(__always)
     func readTimestamp() throws -> Date {
-        timestampDate(seconds: try buffer.readInt64(), nanos: try buffer.readUInt32())
+        try readTimestampValue().toDate()
     }
 
     @inline(__always)
@@ -337,11 +422,32 @@ public extension ReadContext {
     }
 
     @inline(__always)
+    func readNullableTimestampValue(
+        refMode: RefMode,
+        readTypeInfo: Bool
+    ) throws -> Timestamp? {
+        try readScalarNullableValue(context: self, refMode: refMode) {
+            if readTypeInfo {
+                _ = try readTypeID(self, expectedTypeIDs: [.timestamp])
+            }
+            return try self.readTimestampValue()
+        }
+    }
+
+    @inline(__always)
     func readTimestamp(
         refMode: RefMode,
         readTypeInfo: Bool
     ) throws -> Date {
         try readNullableTimestamp(refMode: refMode, readTypeInfo: readTypeInfo) ?? Date.foryDefault()
+    }
+
+    @inline(__always)
+    func readTimestampValue(
+        refMode: RefMode,
+        readTypeInfo: Bool
+    ) throws -> Timestamp {
+        try readNullableTimestampValue(refMode: refMode, readTypeInfo: readTypeInfo) ?? Timestamp.foryDefault()
     }
 
     @inline(__always)

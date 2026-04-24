@@ -339,7 +339,7 @@ class RustGenerator(BaseGenerator):
         type_name = enum.name
 
         # Derive macros
-        lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Default)]")
+        lines.append("#[derive(ForyObject, Debug, Clone, PartialEq, Eq, Hash, Default)]")
         lines.append("#[repr(i32)]")
 
         lines.append(f"pub enum {type_name} {{")

@@ -20,6 +20,10 @@
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/config.dart';
+import 'package:fory/src/meta/field_type.dart';
+import 'package:fory/src/meta/type_ids.dart';
+import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:test/test.dart';
 
 part 'time_serializer_test.fory.dart';
@@ -41,12 +45,61 @@ class TimeEnvelope {
   Duration? optionalDuration;
 }
 
+@ForyStruct()
+class CompatibleTimestampSkipWriter {
+  CompatibleTimestampSkipWriter();
+
+  @ForyField(id: 1)
+  String name = '';
+
+  @ForyField(id: 2)
+  Timestamp ignoredTimestamp = _timestamp(0, 0);
+
+  @ForyField(id: 3)
+  List<Timestamp> ignoredTimestampList = <Timestamp>[];
+
+  @ForyField(id: 4)
+  Map<Timestamp, String> ignoredByTimestamp = <Timestamp, String>{};
+
+  @ForyField(id: 5)
+  String tail = '';
+}
+
+@ForyStruct()
+class CompatibleTimestampSkipReader {
+  CompatibleTimestampSkipReader();
+
+  @ForyField(id: 1)
+  String name = '';
+
+  @ForyField(id: 5)
+  String tail = '';
+}
+
 void _registerTimeTypes(Fory fory) {
   TimeSerializerTestFory.register(
     fory,
     TimeEnvelope,
     namespace: 'time',
     typeName: 'TimeEnvelope',
+  );
+}
+
+void _registerCompatibleTimestampSkipWriter(Fory fory) {
+  TimeSerializerTestFory.register(
+    fory,
+    CompatibleTimestampSkipWriter,
+    namespace: 'time',
+    typeName: 'CompatibleTimestampSkip',
+  );
+}
+
+void _registerCompatibleTimestampSkipReader(Fory fory) {
+  TimeSerializerTestFory.register(
+    fory,
+    CompatibleTimestampSkipReader,
+    namespace: 'time',
+    typeName: 'CompatibleTimestampSkip',
   );
 }
 
@@ -156,6 +209,38 @@ void main() {
     });
 
     test(
+        'resolves compatible timestamp field metadata to Timestamp when Dart type info is absent',
+        () {
+      final resolver = TypeResolver(const Config(compatible: true));
+
+      final remoteTimestamp = resolver.resolveFieldType(
+        const FieldType(
+          type: Object,
+          declaredTypeName: null,
+          typeId: TypeIds.timestamp,
+          nullable: false,
+          ref: false,
+          dynamic: false,
+          arguments: <FieldType>[],
+        ),
+      );
+      final declaredDateTime = resolver.resolveFieldType(
+        const FieldType(
+          type: DateTime,
+          declaredTypeName: 'DateTime',
+          typeId: TypeIds.timestamp,
+          nullable: false,
+          ref: false,
+          dynamic: false,
+          arguments: <FieldType>[],
+        ),
+      );
+
+      expect(remoteTimestamp.type, equals(Timestamp));
+      expect(declaredDateTime.type, equals(DateTime));
+    });
+
+    test(
         'root containers without declared element types decode timestamps as DateTime',
         () {
       final fory = Fory();
@@ -246,6 +331,35 @@ void main() {
       final roundTrip = fory.deserialize<TimeEnvelope>(fory.serialize(value));
 
       _expectTimeEnvelope(roundTrip, value);
+    });
+
+    test(
+        'compatible reads skip unknown timestamp fields with nanosecond precision',
+        () {
+      final writer = Fory(compatible: true);
+      final reader = Fory(compatible: true);
+      _registerCompatibleTimestampSkipWriter(writer);
+      _registerCompatibleTimestampSkipReader(reader);
+
+      final roundTrip = reader.deserialize<CompatibleTimestampSkipReader>(
+        writer.serialize(
+          CompatibleTimestampSkipWriter()
+            ..name = 'Ada'
+            ..ignoredTimestamp = _timestamp(1709210096, 789123456)
+            ..ignoredTimestampList = <Timestamp>[
+              _timestamp(1709210096, 789123456),
+              _timestamp(1709210101, 123456789),
+            ]
+            ..ignoredByTimestamp = <Timestamp, String>{
+              _timestamp(1709210096, 789123456): 'first',
+              _timestamp(1709210101, 123456789): 'second',
+            }
+            ..tail = 'kept',
+        ),
+      );
+
+      expect(roundTrip.name, equals('Ada'));
+      expect(roundTrip.tail, equals('kept'));
     });
 
     test('does not preserve references for repeated temporal values', () {

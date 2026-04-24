@@ -765,6 +765,16 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				if fieldSerializer == nil {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
 				}
+				// Declared container element nullability and user-defined nested types can collapse
+				// during remote TypeDef reconstruction, so use the local container serializer when
+				// the matched Go field shape is more specific than the reconstructed remote type.
+				if localType != nil &&
+					(localType.Kind() == reflect.Slice ||
+						localType.Kind() == reflect.Map ||
+						isSetReflectType(localType)) &&
+					localType != remoteType {
+					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
+				}
 				// For Set fields (fory.Set[T] = map[T]struct{}), get the setSerializer
 				if defTypeId == SET && isSetReflectType(localType) && fieldSerializer == nil {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
@@ -981,11 +991,13 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				break
 			}
 			remoteTypeId := TypeId(s.fieldDefs[i].fieldType.TypeId())
-			localTypeId := typeResolver.getTypeIdByType(field.Meta.Type)
+			localTypeId := TypeId(field.Meta.TypeId)
 			if localTypeId == 0 {
-				localTypeId = typeIdFromKind(field.Meta.Type)
+				localTypeId = typeResolver.getTypeIdByType(field.Meta.Type)
+				if localTypeId == 0 {
+					localTypeId = typeIdFromKind(field.Meta.Type)
+				}
 			}
-			localTypeId = TypeId(localTypeId)
 			if !typeIdEqualForDiff(remoteTypeId, localTypeId) {
 				if DebugOutputEnabled && s.type_ != nil {
 					fmt.Printf("[Go][fory-debug] [%s] typeDefDiffers: type ID mismatch idx=%d name=%q tagID=%d remote=%d local=%d\n",

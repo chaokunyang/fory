@@ -44,6 +44,13 @@ final class ForyField {
   /// means "write runtime type information".
   final bool? dynamic;
 
+  /// Pins the generated xlang wire type for this field.
+  ///
+  /// Use this only when the Dart surface type cannot express the intended
+  /// schema wire type by itself, such as distinguishing `Uint8List` binary
+  /// blobs from `uint8[]` typed arrays.
+  final int? wireTypeId;
+
   /// Creates field-level generation overrides.
   const ForyField({
     this.skip = false,
@@ -51,5 +58,6 @@ final class ForyField {
     this.nullable,
     this.ref = false,
     this.dynamic,
+    this.wireTypeId,
   });
 }

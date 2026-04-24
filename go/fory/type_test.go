@@ -20,6 +20,7 @@ package fory
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/apache/fory/go/fory/bfloat16"
 	"github.com/apache/fory/go/fory/float16"
@@ -168,6 +169,25 @@ func TestGetSliceSerializerReducedPrecisionTypes(t *testing.T) {
 	serializer, err = r.GetSliceSerializer(reflect.TypeOf([]bfloat16.BFloat16{}))
 	require.NoError(t, err)
 	require.IsType(t, bfloat16SliceSerializer{}, serializer)
+}
+
+func TestGetSliceSerializerLogicalPrimitiveKindTypes(t *testing.T) {
+	fory := NewFory(WithXlang(true))
+	r := fory.typeResolver
+
+	type exampleState int32
+
+	require.False(t, shouldUsePrimitiveArrayType(durationType))
+	require.False(t, shouldUsePrimitiveArrayType(reflect.TypeOf(exampleState(0))))
+	require.NoError(t, fory.RegisterEnum(exampleState(0), 1001))
+
+	serializer, err := r.GetSliceSerializer(reflect.TypeOf([]time.Duration{}))
+	require.NoError(t, err)
+	require.IsType(t, &sliceSerializer{}, serializer)
+
+	serializer, err = r.GetSliceSerializer(reflect.TypeOf([]exampleState{}))
+	require.NoError(t, err)
+	require.IsType(t, &sliceSerializer{}, serializer)
 }
 
 func TestGetArraySerializerReducedPrecisionTypes(t *testing.T) {

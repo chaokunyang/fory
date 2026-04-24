@@ -26,6 +26,7 @@ public sealed class WriteContext
 
     private readonly Dictionary<MetaString, uint> _metaStringIndexByKey = [];
     private uint _nextMetaStringIndex;
+    private readonly List<ContainerWireTypeOverride> _containerWireTypeOverrides = [];
 
     public WriteContext(
         ByteWriter writer,
@@ -123,6 +124,60 @@ public sealed class WriteContext
         }
     }
 
+    internal void PushContainerWireTypeOverride(ContainerWireTypeOverride wireTypeOverride)
+    {
+        _containerWireTypeOverrides.Add(wireTypeOverride);
+    }
+
+    internal void PopContainerWireTypeOverride()
+    {
+        if (_containerWireTypeOverrides.Count == 0)
+        {
+            throw new InvalidDataException("container wire type override stack underflow");
+        }
+
+        _containerWireTypeOverrides.RemoveAt(_containerWireTypeOverrides.Count - 1);
+    }
+
+    internal bool TryGetCollectionElementWireTypeOverride(out TypeId typeId)
+    {
+        if (_containerWireTypeOverrides.Count > 0 &&
+            _containerWireTypeOverrides[^1].ElementTypeId is TypeId elementTypeId)
+        {
+            typeId = elementTypeId;
+            return true;
+        }
+
+        typeId = default;
+        return false;
+    }
+
+    internal bool TryGetMapKeyWireTypeOverride(out TypeId typeId)
+    {
+        if (_containerWireTypeOverrides.Count > 0 &&
+            _containerWireTypeOverrides[^1].KeyTypeId is TypeId keyTypeId)
+        {
+            typeId = keyTypeId;
+            return true;
+        }
+
+        typeId = default;
+        return false;
+    }
+
+    internal bool TryGetMapValueWireTypeOverride(out TypeId typeId)
+    {
+        if (_containerWireTypeOverrides.Count > 0 &&
+            _containerWireTypeOverrides[^1].ValueTypeId is TypeId valueTypeId)
+        {
+            typeId = valueTypeId;
+            return true;
+        }
+
+        typeId = default;
+        return false;
+    }
+
     internal void Reset()
     {
         RefWriter.Reset();
@@ -132,5 +187,6 @@ public sealed class WriteContext
         _nextTypeMetaIndex = 0;
         _metaStringIndexByKey.Clear();
         _nextMetaStringIndex = 0;
+        _containerWireTypeOverrides.Clear();
     }
 }

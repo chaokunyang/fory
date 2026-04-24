@@ -1702,46 +1702,48 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 		return &ptrToValueSerializer{valueSerializer}, nil
 	case reflect.Slice:
 		elem := type_.Elem()
-		// Use optimized primitive slice serializers for all primitive numeric types
-		// These use direct memory copy on little-endian systems for maximum performance
-		switch elem.Kind() {
-		case reflect.Bool:
-			return boolSliceSerializer{}, nil
-		case reflect.Int8:
-			return int8SliceSerializer{}, nil
-		case reflect.Int16:
-			return int16SliceSerializer{}, nil
-		case reflect.Int32:
-			return int32SliceSerializer{}, nil
-		case reflect.Int64:
-			return int64SliceSerializer{}, nil
-		case reflect.Float32:
-			return float32SliceSerializer{}, nil
-		case reflect.Float64:
-			return float64SliceSerializer{}, nil
-		case reflect.Int:
-			return intSliceSerializer{}, nil
-		case reflect.Uint:
-			return uintSliceSerializer{}, nil
-		case reflect.Uint8:
-			// []byte uses byteSliceSerializer
-			return byteSliceSerializer{}, nil
-		case reflect.Uint16:
-			// Check for fory.Float16 (aliased to uint16)
-			if elem == float16Type {
-				return float16SliceSerializer{}, nil
+		if shouldUsePrimitiveArrayType(elem) {
+			// Use optimized primitive slice serializers for all primitive numeric types
+			// These use direct memory copy on little-endian systems for maximum performance
+			switch elem.Kind() {
+			case reflect.Bool:
+				return boolSliceSerializer{}, nil
+			case reflect.Int8:
+				return int8SliceSerializer{}, nil
+			case reflect.Int16:
+				return int16SliceSerializer{}, nil
+			case reflect.Int32:
+				return int32SliceSerializer{}, nil
+			case reflect.Int64:
+				return int64SliceSerializer{}, nil
+			case reflect.Float32:
+				return float32SliceSerializer{}, nil
+			case reflect.Float64:
+				return float64SliceSerializer{}, nil
+			case reflect.Int:
+				return intSliceSerializer{}, nil
+			case reflect.Uint:
+				return uintSliceSerializer{}, nil
+			case reflect.Uint8:
+				// []byte uses byteSliceSerializer
+				return byteSliceSerializer{}, nil
+			case reflect.Uint16:
+				// Check for fory.Float16 (aliased to uint16)
+				if elem == float16Type {
+					return float16SliceSerializer{}, nil
+				}
+				// Check for fory.BFloat16 (aliased to uint16)
+				if elem == bfloat16Type {
+					return bfloat16SliceSerializer{}, nil
+				}
+				return uint16SliceSerializer{}, nil
+			case reflect.Uint32:
+				return uint32SliceSerializer{}, nil
+			case reflect.Uint64:
+				return uint64SliceSerializer{}, nil
+			case reflect.String:
+				return stringSliceSerializer{}, nil
 			}
-			// Check for fory.BFloat16 (aliased to uint16)
-			if elem == bfloat16Type {
-				return bfloat16SliceSerializer{}, nil
-			}
-			return uint16SliceSerializer{}, nil
-		case reflect.Uint32:
-			return uint32SliceSerializer{}, nil
-		case reflect.Uint64:
-			return uint64SliceSerializer{}, nil
-		case reflect.String:
-			return stringSliceSerializer{}, nil
 		}
 		// For dynamic types, use dynamic slice serializer
 		if isDynamicType(elem) {
@@ -1897,35 +1899,37 @@ func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, e
 	}
 	elemType := sliceType.Elem()
 	// For primitive element types, use dedicated primitive slice serializers (ARRAY protocol)
-	switch elemType.Kind() {
-	case reflect.Bool:
-		return boolSliceSerializer{}, nil
-	case reflect.Int8:
-		return int8SliceSerializer{}, nil
-	case reflect.Int16:
-		return int16SliceSerializer{}, nil
-	case reflect.Int32:
-		return int32SliceSerializer{}, nil
-	case reflect.Int64:
-		return int64SliceSerializer{}, nil
-	case reflect.Uint8:
-		return byteSliceSerializer{}, nil
-	case reflect.Uint16:
-		if elemType == float16Type {
-			return float16SliceSerializer{}, nil
+	if shouldUsePrimitiveArrayType(elemType) {
+		switch elemType.Kind() {
+		case reflect.Bool:
+			return boolSliceSerializer{}, nil
+		case reflect.Int8:
+			return int8SliceSerializer{}, nil
+		case reflect.Int16:
+			return int16SliceSerializer{}, nil
+		case reflect.Int32:
+			return int32SliceSerializer{}, nil
+		case reflect.Int64:
+			return int64SliceSerializer{}, nil
+		case reflect.Uint8:
+			return byteSliceSerializer{}, nil
+		case reflect.Uint16:
+			if elemType == float16Type {
+				return float16SliceSerializer{}, nil
+			}
+			if elemType == bfloat16Type {
+				return bfloat16SliceSerializer{}, nil
+			}
+			return uint16SliceSerializer{}, nil
+		case reflect.Float32:
+			return float32SliceSerializer{}, nil
+		case reflect.Float64:
+			return float64SliceSerializer{}, nil
+		case reflect.Int:
+			return intSliceSerializer{}, nil
+		case reflect.Uint:
+			return uintSliceSerializer{}, nil
 		}
-		if elemType == bfloat16Type {
-			return bfloat16SliceSerializer{}, nil
-		}
-		return uint16SliceSerializer{}, nil
-	case reflect.Float32:
-		return float32SliceSerializer{}, nil
-	case reflect.Float64:
-		return float64SliceSerializer{}, nil
-	case reflect.Int:
-		return intSliceSerializer{}, nil
-	case reflect.Uint:
-		return uintSliceSerializer{}, nil
 	}
 	// For non-primitive element types, use sliceSerializer
 	elemSerializer, err := r.getSerializerByType(elemType, false)
@@ -1953,37 +1957,39 @@ func (r *TypeResolver) GetArraySerializer(arrayType reflect.Type) (Serializer, e
 	}
 	elemType := arrayType.Elem()
 	// For primitive element types, use dedicated primitive array serializers (ARRAY protocol)
-	switch elemType.Kind() {
-	case reflect.Bool:
-		return boolArraySerializer{arrayType: arrayType}, nil
-	case reflect.Int8:
-		return int8ArraySerializer{arrayType: arrayType}, nil
-	case reflect.Int16:
-		return int16ArraySerializer{arrayType: arrayType}, nil
-	case reflect.Int32:
-		return int32ArraySerializer{arrayType: arrayType}, nil
-	case reflect.Int64:
-		return int64ArraySerializer{arrayType: arrayType}, nil
-	case reflect.Uint8:
-		return uint8ArraySerializer{arrayType: arrayType}, nil
-	case reflect.Uint16:
-		if elemType == float16Type {
-			return float16ArraySerializer{arrayType: arrayType}, nil
-		}
-		if elemType == bfloat16Type {
-			return bfloat16ArraySerializer{arrayType: arrayType}, nil
-		}
-		return uint16ArraySerializer{arrayType: arrayType}, nil
-	case reflect.Float32:
-		return float32ArraySerializer{arrayType: arrayType}, nil
-	case reflect.Float64:
-		return float64ArraySerializer{arrayType: arrayType}, nil
-	case reflect.Int:
-		// Platform-dependent int type
-		if reflect.TypeOf(int(0)).Size() == 8 {
+	if shouldUsePrimitiveArrayType(elemType) {
+		switch elemType.Kind() {
+		case reflect.Bool:
+			return boolArraySerializer{arrayType: arrayType}, nil
+		case reflect.Int8:
+			return int8ArraySerializer{arrayType: arrayType}, nil
+		case reflect.Int16:
+			return int16ArraySerializer{arrayType: arrayType}, nil
+		case reflect.Int32:
+			return int32ArraySerializer{arrayType: arrayType}, nil
+		case reflect.Int64:
 			return int64ArraySerializer{arrayType: arrayType}, nil
+		case reflect.Uint8:
+			return uint8ArraySerializer{arrayType: arrayType}, nil
+		case reflect.Uint16:
+			if elemType == float16Type {
+				return float16ArraySerializer{arrayType: arrayType}, nil
+			}
+			if elemType == bfloat16Type {
+				return bfloat16ArraySerializer{arrayType: arrayType}, nil
+			}
+			return uint16ArraySerializer{arrayType: arrayType}, nil
+		case reflect.Float32:
+			return float32ArraySerializer{arrayType: arrayType}, nil
+		case reflect.Float64:
+			return float64ArraySerializer{arrayType: arrayType}, nil
+		case reflect.Int:
+			// Platform-dependent int type
+			if reflect.TypeOf(int(0)).Size() == 8 {
+				return int64ArraySerializer{arrayType: arrayType}, nil
+			}
+			return int32ArraySerializer{arrayType: arrayType}, nil
 		}
-		return int32ArraySerializer{arrayType: arrayType}, nil
 	}
 	// For non-primitive element types, use sliceSerializer
 	elemSerializer, err := r.getSerializerByType(elemType, false)

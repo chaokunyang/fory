@@ -1015,37 +1015,39 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
   for (auto &remote_field : remote_fields) {
     size_t local_index = static_cast<size_t>(-1);
 
-    // 0) If remote field carries a tag ID, map directly by ID.
+    // 0) If remote field carries a tag ID, match only by that explicit ID.
+    // Tagged fields are schema-identified by ID, so they must not fall back
+    // to name/type or type-only matching.
     if (remote_field.field_id >= 0) {
       auto id_it = local_field_id_map.find(remote_field.field_id);
-      if (id_it != local_field_id_map.end()) {
+      if (id_it != local_field_id_map.end() && !used[id_it->second]) {
         local_index = id_it->second;
       }
-    }
-
-    // 1) Try exact name + type match first (fast path for same-language
-    //    schemas and most C++-only cases).
-    if (local_index == static_cast<size_t>(-1)) {
+    } else {
+      // 1) Try exact name + type match first (fast path for same-language
+      //    schemas and most C++-only cases).
       auto it = local_field_index_map.find(remote_field.field_name);
       if (it != local_field_index_map.end()) {
         size_t idx = it->second;
         const FieldInfo &local_field = local_fields[idx];
-        if (types_match(remote_field.field_type, local_field.field_type)) {
+        if (!remote_field.field_name.empty() && !local_field.field_name.empty() &&
+            !used[idx] &&
+            types_match(remote_field.field_type, local_field.field_type)) {
           local_index = idx;
         }
       }
-    }
 
-    // 2) Fallback: match by type signature and position when field names
-    //    are not available or differ across languages.
-    if (local_index == static_cast<size_t>(-1)) {
-      for (size_t i = 0; i < local_fields.size(); ++i) {
-        if (used[i]) {
-          continue;
-        }
-        if (types_match(remote_field.field_type, local_fields[i].field_type)) {
-          local_index = i;
-          break;
+      // 2) Fallback: match by type signature and position when field names
+      //    are not available or differ across languages.
+      if (local_index == static_cast<size_t>(-1)) {
+        for (size_t i = 0; i < local_fields.size(); ++i) {
+          if (used[i]) {
+            continue;
+          }
+          if (types_match(remote_field.field_type, local_fields[i].field_type)) {
+            local_index = i;
+            break;
+          }
         }
       }
     }

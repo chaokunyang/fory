@@ -282,7 +282,7 @@ internal sealed class UInt64ArraySerializer : Serializer<ulong[]>
         int payloadSize = checked((int)context.Reader.ReadVarUInt32());
         if ((payloadSize & 7) != 0)
         {
-            throw new InvalidDataException("uint64 array payload size mismatch");
+            throw new InvalidDataException($"uint64 array payload size mismatch ({payloadSize})");
         }
 
         ulong[] values = new ulong[payloadSize / 8];

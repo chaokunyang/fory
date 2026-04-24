@@ -827,10 +827,14 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	if err != nil {
 		return TypeInfo{}, err
 	}
+	elemType := elemInfo.Type
+	if elemType == nil {
+		elemType = interfaceType
+	}
 
 	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
 	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
+		setType := reflect.MapOf(elemType, reflect.TypeOf(struct{}{}))
 		setSerializer, serErr := f.GetTypeResolver().GetSetSerializer(setType)
 		if serErr != nil {
 			return TypeInfo{}, serErr
@@ -839,7 +843,10 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	}
 
 	// For LIST type, use slice
-	collectionType := reflect.SliceOf(elemInfo.Type)
+	collectionType := reflect.SliceOf(elemType)
+	if elemType == interfaceType {
+		return TypeInfo{Type: collectionType, Serializer: mustNewSliceDynSerializer(elemType)}, nil
+	}
 	// Use TypeResolver helper to get the appropriate slice serializer
 	sliceSerializer, serErr := f.GetTypeResolver().GetSliceSerializer(collectionType)
 	if serErr != nil {
@@ -853,10 +860,14 @@ func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (T
 	if err != nil {
 		return TypeInfo{}, err
 	}
+	elemType := elemInfo.Type
+	if elemType == nil {
+		elemType = interfaceType
+	}
 
 	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
 	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
+		setType := reflect.MapOf(elemType, reflect.TypeOf(struct{}{}))
 		setSerializer, serErr := resolver.GetSetSerializer(setType)
 		if serErr != nil {
 			return TypeInfo{}, serErr
@@ -865,7 +876,10 @@ func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (T
 	}
 
 	// For LIST type, use slice
-	collectionType := reflect.SliceOf(elemInfo.Type)
+	collectionType := reflect.SliceOf(elemType)
+	if elemType == interfaceType {
+		return TypeInfo{Type: collectionType, Serializer: mustNewSliceDynSerializer(elemType)}, nil
+	}
 	// Use TypeResolver helper to get the appropriate slice serializer
 	sliceSerializer, serErr := resolver.GetSliceSerializer(collectionType)
 	if serErr != nil {
@@ -917,19 +931,26 @@ func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	if err != nil {
 		return TypeInfo{}, err
 	}
-	var mapType reflect.Type
-	if keyInfo.Type != nil && valueInfo.Type != nil {
-		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
+	keyType := keyInfo.Type
+	if keyType == nil {
+		keyType = interfaceType
 	}
+	valueType := valueInfo.Type
+	if valueType == nil {
+		valueType = interfaceType
+	}
+	var mapType reflect.Type
+	mapType = reflect.MapOf(keyType, valueType)
 	keyReferencable := true
-	if keyInfo.Type != nil {
-		keyReferencable = isRefType(keyInfo.Type, f.config.IsXlang)
+	if keyType != interfaceType {
+		keyReferencable = isRefType(keyType, f.config.IsXlang)
 	}
 	valueReferencable := true
-	if valueInfo.Type != nil {
-		valueReferencable = isRefType(valueInfo.Type, f.config.IsXlang)
+	if valueType != interfaceType {
+		valueReferencable = isRefType(valueType, f.config.IsXlang)
 	}
 	mapSerializer := &mapSerializer{
+		type_:             mapType,
 		keySerializer:     keyInfo.Serializer,
 		valueSerializer:   valueInfo.Serializer,
 		keyReferencable:   keyReferencable,
@@ -948,19 +969,26 @@ func (m *MapFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo
 	if err != nil {
 		return TypeInfo{}, err
 	}
-	var mapType reflect.Type
-	if keyInfo.Type != nil && valueInfo.Type != nil {
-		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
+	keyType := keyInfo.Type
+	if keyType == nil {
+		keyType = interfaceType
 	}
+	valueType := valueInfo.Type
+	if valueType == nil {
+		valueType = interfaceType
+	}
+	var mapType reflect.Type
+	mapType = reflect.MapOf(keyType, valueType)
 	keyReferencable := true
-	if keyInfo.Type != nil {
-		keyReferencable = isRefType(keyInfo.Type, resolver.isXlang)
+	if keyType != interfaceType {
+		keyReferencable = isRefType(keyType, resolver.isXlang)
 	}
 	valueReferencable := true
-	if valueInfo.Type != nil {
-		valueReferencable = isRefType(valueInfo.Type, resolver.isXlang)
+	if valueType != interfaceType {
+		valueReferencable = isRefType(valueType, resolver.isXlang)
 	}
 	mapSerializer := &mapSerializer{
+		type_:             mapType,
 		keySerializer:     keyInfo.Serializer,
 		valueSerializer:   valueInfo.Serializer,
 		keyReferencable:   keyReferencable,
@@ -1049,29 +1077,37 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		// Check if element is a primitive type that maps to a primitive array type ID
 		// Both slices and fixed-size arrays with primitive elements use primitive array format
 		// This matches typeIdFromKind in field_info.go for consistent field sorting
-		switch elemType.Kind() {
-		case reflect.Bool:
-			return NewSimpleFieldType(BOOL_ARRAY), nil
-		case reflect.Int8:
-			return NewSimpleFieldType(INT8_ARRAY), nil
-		case reflect.Uint8:
-			return NewSimpleFieldType(BINARY), nil
-		case reflect.Int16:
-			return NewSimpleFieldType(INT16_ARRAY), nil
-		case reflect.Uint16:
-			return NewSimpleFieldType(UINT16_ARRAY), nil
-		case reflect.Int32:
-			return NewSimpleFieldType(INT32_ARRAY), nil
-		case reflect.Uint32:
-			return NewSimpleFieldType(UINT32_ARRAY), nil
-		case reflect.Int64, reflect.Int:
-			return NewSimpleFieldType(INT64_ARRAY), nil
-		case reflect.Uint64, reflect.Uint:
-			return NewSimpleFieldType(UINT64_ARRAY), nil
-		case reflect.Float32:
-			return NewSimpleFieldType(FLOAT32_ARRAY), nil
-		case reflect.Float64:
-			return NewSimpleFieldType(FLOAT64_ARRAY), nil
+		if shouldUsePrimitiveArrayType(elemType) {
+			switch elemType.Kind() {
+			case reflect.Bool:
+				return NewSimpleFieldType(BOOL_ARRAY), nil
+			case reflect.Int8:
+				return NewSimpleFieldType(INT8_ARRAY), nil
+			case reflect.Uint8:
+				return NewSimpleFieldType(BINARY), nil
+			case reflect.Int16:
+				return NewSimpleFieldType(INT16_ARRAY), nil
+			case reflect.Uint16:
+				if elemType == float16Type {
+					return NewSimpleFieldType(FLOAT16_ARRAY), nil
+				}
+				if elemType == bfloat16Type {
+					return NewSimpleFieldType(BFLOAT16_ARRAY), nil
+				}
+				return NewSimpleFieldType(UINT16_ARRAY), nil
+			case reflect.Int32:
+				return NewSimpleFieldType(INT32_ARRAY), nil
+			case reflect.Uint32:
+				return NewSimpleFieldType(UINT32_ARRAY), nil
+			case reflect.Int64, reflect.Int:
+				return NewSimpleFieldType(INT64_ARRAY), nil
+			case reflect.Uint64, reflect.Uint:
+				return NewSimpleFieldType(UINT64_ARRAY), nil
+			case reflect.Float32:
+				return NewSimpleFieldType(FLOAT32_ARRAY), nil
+			case reflect.Float64:
+				return NewSimpleFieldType(FLOAT64_ARRAY), nil
+			}
 		}
 
 		// For non-primitive elements, use collection format (LIST with element type)

@@ -83,13 +83,24 @@ export class Gen {
         return;
       }
       const options = (typeInfo).options;
-      if (options?.props && Object.keys(options.props).length > 0) {
+      const hasStructProps = !!options?.props && Object.keys(options.props).length > 0;
+      const hasEnumDefinition = !!options?.enumProps;
+      const hasUnionCases = !!options?.cases;
+      if (hasStructProps || hasEnumDefinition || hasUnionCases) {
         this.register(typeInfo);
-        Object.values(options.props).forEach((x) => {
-          this.traversalContainer(x);
-        });
+        if (hasStructProps) {
+          Object.values(options.props!).forEach((x) => {
+            this.traversalContainer(x);
+          });
+        }
+        if (hasUnionCases) {
+          Object.values(options.cases!).forEach((caseTypeInfo) => {
+            this.traversalContainer(caseTypeInfo);
+          });
+        }
         const func = this.generate(typeInfo);
         this.register(typeInfo, func()(this.typeResolver, Gen.external, typeInfo, this.regOptions));
+        return;
       } else if (!this.isRegistered(typeInfo) && TypeId.structType(typeInfo.typeId)) {
         // Forward reference to a struct type not yet fully defined — register a
         // placeholder so that serializer factories can capture the object

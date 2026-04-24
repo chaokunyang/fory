@@ -38,6 +38,7 @@ import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 
@@ -169,14 +170,57 @@ public class TypeRef<T> {
         componentType = component;
       }
     }
-    TypeExtMeta meta = null;
+    TypeExtMeta meta = resolveTypeExtMeta(annotatedType, includeRefMeta);
+    return new TypeRef<>(type, meta, typeArguments, componentType);
+  }
+
+  private static TypeExtMeta resolveTypeExtMeta(
+      AnnotatedType annotatedType, boolean includeRefMeta) {
+    int typeId = Types.UNKNOWN;
+    Class<?> rawType = TypeUtils.getRawType(annotatedType.getType());
+    for (Annotation annotation : annotatedType.getAnnotations()) {
+      if (annotation instanceof Ref) {
+        continue;
+      }
+      try {
+        typeId = TypeAnnotationUtils.getTypeId(annotation, rawType);
+        break;
+      } catch (IllegalArgumentException ignored) {
+        // Ignore unrelated annotations on the same declaration.
+      }
+    }
+    boolean trackingRef = defaultTrackingRef(typeId, rawType);
+    boolean hasRefMeta = false;
     if (includeRefMeta) {
       Ref ref = annotatedType.getAnnotation(Ref.class);
       if (ref != null) {
-        meta = TypeExtMeta.of(Types.UNKNOWN, true, ref.enable());
+        trackingRef = ref.enable();
+        hasRefMeta = true;
       }
     }
-    return new TypeRef<>(type, meta, typeArguments, componentType);
+    if (typeId == Types.UNKNOWN && !hasRefMeta) {
+      return null;
+    }
+    return TypeExtMeta.of(typeId, true, trackingRef);
+  }
+
+  private static boolean defaultTrackingRef(int typeId, Class<?> rawType) {
+    if (Types.isPrimitiveType(typeId)) {
+      return false;
+    }
+    if (Types.isPrimitiveArray(typeId)) {
+      return true;
+    }
+    if (rawType == null) {
+      return true;
+    }
+    if (rawType == String.class) {
+      return true;
+    }
+    if (rawType.isEnum()) {
+      return false;
+    }
+    return !TypeUtils.isBoxed(TypeUtils.wrap(rawType));
   }
 
   /** Returns the captured type. */
@@ -265,6 +309,35 @@ public class TypeRef<T> {
           .collect(Collectors.toList());
     }
     return new ArrayList<>();
+  }
+
+  public String getGenericTypeKey() {
+    StringBuilder builder = new StringBuilder();
+    appendGenericTypeKey(builder);
+    return builder.toString();
+  }
+
+  private void appendGenericTypeKey(StringBuilder builder) {
+    if (componentType != null) {
+      componentType.appendGenericTypeKey(builder);
+      builder.append("[]");
+    } else if (typeArguments != null) {
+      builder.append(getRawType().getTypeName());
+      builder.append('<');
+      for (int i = 0; i < typeArguments.size(); i++) {
+        if (i > 0) {
+          builder.append(',');
+        }
+        typeArguments.get(i).appendGenericTypeKey(builder);
+      }
+      builder.append('>');
+    } else {
+      builder.append(type.getTypeName());
+    }
+    if (typeExtMeta != null) {
+      builder.append('#').append(typeExtMeta.typeId()).append(':');
+      builder.append(typeExtMeta.trackingRef() ? '1' : '0');
+    }
   }
 
   /** Returns true if this type is one of the primitive types (including {@code void}). */
@@ -451,7 +524,11 @@ public class TypeRef<T> {
     if (componentType != null) {
       return componentType;
     }
-    return of(getComponentType(type));
+    Type resolvedComponentType = getComponentType(type);
+    if (resolvedComponentType == null) {
+      return null;
+    }
+    return of(resolvedComponentType);
   }
 
   /**
@@ -1088,8 +1165,62 @@ public class TypeRef<T> {
     TypeVariableKey typeVariableKey = new TypeVariableKey(typeParam.typeVariable);
     @SuppressWarnings("unchecked")
     TypeRef<T> result =
-        (TypeRef<T>) resolveType0(type, Collections.singletonMap(typeVariableKey, typeArg.type));
+        (TypeRef<T>)
+            resolveTypeRef0(this, Collections.singletonMap(typeVariableKey, (TypeRef<?>) typeArg));
     return result;
+  }
+
+  private static TypeRef<?> resolveTypeRef0(
+      TypeRef<?> source, Map<TypeVariableKey, TypeRef<?>> mappings) {
+    Type sourceType = source.type;
+    if (sourceType instanceof TypeVariable) {
+      TypeVariable<?> typeVariable = (TypeVariable<?>) sourceType;
+      TypeRef<?> resolved = mappings.get(new TypeVariableKey(typeVariable));
+      if (resolved == null) {
+        return source;
+      }
+      return resolveTypeRef0(resolved, mappings);
+    } else if (sourceType instanceof ParameterizedType) {
+      ParameterizedType parameterizedType = (ParameterizedType) sourceType;
+      Type owner = parameterizedType.getOwnerType();
+      TypeRef<?> resolvedOwner =
+          owner == null ? null : resolveTypeRef0(of(owner), mappings);
+      TypeRef<?> resolvedRawType = resolveTypeRef0(of(parameterizedType.getRawType()), mappings);
+
+      Type[] args = parameterizedType.getActualTypeArguments();
+      List<TypeRef<?>> sourceArgs = source.typeArguments;
+      Type[] resolvedArgs = new Type[args.length];
+      List<TypeRef<?>> resolvedArgRefs = new ArrayList<>(args.length);
+      boolean preserveTypeArgs = false;
+      for (int i = 0; i < args.length; i++) {
+        TypeRef<?> sourceArg = sourceArgs != null ? sourceArgs.get(i) : of(args[i]);
+        TypeRef<?> resolvedArg = resolveTypeRef0(sourceArg, mappings);
+        resolvedArgs[i] = resolvedArg.type;
+        resolvedArgRefs.add(resolvedArg);
+        preserveTypeArgs |= resolvedArg.hasTypeExtMeta();
+      }
+
+      List<TypeRef<?>> explicitTypeArguments =
+          preserveTypeArgs ? Collections.unmodifiableList(resolvedArgRefs) : null;
+      return new TypeRef<>(
+          new ParameterizedTypeImpl(
+              resolvedOwner == null ? null : resolvedOwner.type, resolvedRawType.type, resolvedArgs),
+          source.typeExtMeta,
+          explicitTypeArguments,
+          null);
+    } else if (sourceType instanceof GenericArrayType) {
+      TypeRef<?> sourceComponent =
+          source.componentType != null
+              ? source.componentType
+              : of(((GenericArrayType) sourceType).getGenericComponentType());
+      TypeRef<?> resolvedComponent = resolveTypeRef0(sourceComponent, mappings);
+      return new TypeRef<>(
+          newArrayType(resolvedComponent.type),
+          source.typeExtMeta,
+          null,
+          resolvedComponent.hasTypeExtMeta() ? resolvedComponent : null);
+    }
+    return source;
   }
 
   private boolean isWrapper() {

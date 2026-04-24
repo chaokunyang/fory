@@ -133,3 +133,28 @@ def test_emit_union_round_trip():
     union = round_trip.unions[0]
     assert union.name == "Animal"
     assert [f.name for f in union.fields] == ["dog", "cat"]
+
+
+def test_emit_union_round_trip_preserves_list_modifiers():
+    source = """
+    message Item [id=10] {
+        string name = 1;
+    }
+
+    union Value [id=11] {
+        list<optional float16> maybe_f16s = 1;
+        list<ref Item> item_refs = 2;
+    }
+    """
+    schema = Parser(Lexer(source).tokenize()).parse()
+    emitted = FDLEmitter(schema).emit()
+
+    assert "list<optional float16> maybe_f16s = 1;" in emitted
+    assert "list<ref Item> item_refs = 2;" in emitted
+
+    round_trip = Parser(Lexer(emitted).tokenize()).parse()
+    union = round_trip.unions[0]
+    assert union.fields[0].element_optional is True
+    assert union.fields[0].field_type.element_optional is True
+    assert union.fields[1].element_ref is True
+    assert union.fields[1].field_type.element_ref is True

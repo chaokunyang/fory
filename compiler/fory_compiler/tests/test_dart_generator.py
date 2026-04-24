@@ -113,11 +113,48 @@ def test_dart_generator_keeps_union_serializers_direct_and_marks_union_types():
         "final class _AnimalForySerializer extends UnionSerializer<Animal>"
         in file.content
     )
-    assert "context.writeVarUint32(value.caseId);" in file.content
+    assert "int caseId(Animal value) => value.caseId;" in file.content
+    assert "Object? caseValue(Animal value) => value.value;" in file.content
+    assert "Animal buildValue(int caseId, Object? value) {" in file.content
+    assert "context.writeVarUint32(value.caseId);" not in file.content
+    assert "Animal read(ReadContext context) {" not in file.content
     assert (
         "fory.registerSerializer(Animal, const _AnimalForySerializer(), id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);"
         in file.content
     )
+
+
+def test_dart_generator_uses_current_unsigned_wrapper_names():
+    file = generate_dart(
+        """
+        package demo;
+
+        message UnsignedHolder {
+            uint8 u8 = 1;
+            uint16 u16 = 2;
+            fixed_uint32 fixed_u32 = 3;
+            uint32 var_u32 = 4;
+            map<uint8, string> names_by_u8 = 5;
+        }
+
+        union UnsignedValue {
+            uint16 u16 = 1;
+            fixed_uint32 fixed_u32 = 2;
+        }
+        """
+    )
+
+    assert "Uint8 u8 = Uint8(0);" in file.content
+    assert "Uint16 u16 = Uint16(0);" in file.content
+    assert "@Uint32Type(compress: false)" in file.content
+    assert "Uint32 fixedU32 = Uint32(0);" in file.content
+    assert "Uint32 varU32 = Uint32(0);" in file.content
+    assert "Map<Uint8, String> namesByU8 = <Uint8, String>{};" in file.content
+    assert "factory UnsignedValue.u16(Uint16 value)" in file.content
+    assert "factory UnsignedValue.fixedU32(Uint32 value)" in file.content
+    assert "UInt8" not in file.content
+    assert "UInt16" not in file.content
+    assert "UInt32" not in file.content
 
 
 def test_dart_generator_uses_typed_lists_for_non_nullable_primitive_lists():
@@ -141,6 +178,24 @@ def test_dart_generator_uses_typed_lists_for_non_nullable_primitive_lists():
     assert "List<Int32?> nullableInts = <Int32?>[];" in file.content
     assert "Int32List? maybeInts = null;" in file.content
     assert "factory ValueUnion.values(Uint32List value)" in file.content
+
+
+def test_dart_generator_emits_uint8_array_wire_override_for_uint8_lists():
+    file = generate_dart(
+        """
+        package demo;
+
+        message Holder {
+            list<uint8> uint8_values = 1;
+            bytes bytes_value = 2;
+        }
+        """
+    )
+
+    assert "@ForyField(id: 1, wireTypeId: TypeIds.uint8Array)" in file.content
+    assert "Uint8List uint8Values = Uint8List(0);" in file.content
+    assert "@ForyField(id: 2)" in file.content
+    assert "Uint8List bytesValue = Uint8List(0);" in file.content
 
 
 def test_dart_generator_supports_decimal_fields_and_unions():
@@ -192,6 +247,20 @@ def test_dart_generator_supports_bfloat16_duration_and_nullable_map_values():
     assert "factory ValueUnion.bf16(Bfloat16 value)" in file.content
 
 
+def test_dart_generator_uses_current_timestamp_default_value():
+    file = generate_dart(
+        """
+        package demo;
+
+        message Holder {
+            timestamp created_at = 1;
+        }
+        """
+    )
+
+    assert "Timestamp createdAt = Timestamp(Int64(0), 0);" in file.content
+
+
 def test_dart_generator_emits_container_ref_annotations_for_builder_metadata():
     file = generate_dart(
         """
@@ -226,6 +295,32 @@ def test_dart_generator_marks_map_value_ref_messages_as_ref_capable():
     assert "@ForyField(id: 1)" in file.content
     assert "@MapType(value: ValueType.ref())" in file.content
     assert "Map<String, Node> byName = <String, Node>{};" in file.content
+
+
+def test_dart_generator_emits_container_wire_type_annotations_for_fixed_map_types():
+    file = generate_dart(
+        """
+        package demo;
+
+        message Holder {
+            map<fixed_int32, string> names_by_fixed_i32 = 1;
+            map<fixed_uint32, fixed_int32> fixed_values = 2;
+            map<tagged_int64, fixed_uint64> names_by_tagged_i64 = 3;
+            map<uint64, string> names_by_var_u64 = 4;
+        }
+        """
+    )
+
+    assert "@MapType(key: ValueType(wireTypeId: TypeIds.int32))" in file.content
+    assert (
+        "@MapType(key: ValueType(wireTypeId: TypeIds.uint32), value: ValueType(wireTypeId: TypeIds.int32))"
+        in file.content
+    )
+    assert (
+        "@MapType(key: ValueType(wireTypeId: TypeIds.taggedInt64), value: ValueType(wireTypeId: TypeIds.uint64))"
+        in file.content
+    )
+    assert "@MapType(key: ValueType(wireTypeId: TypeIds.varUint64))" in file.content
 
 
 def test_dart_generator_preserves_multi_word_enum_value_suffixes():

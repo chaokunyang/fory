@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import dataclasses
+import decimal
 import datetime
 import enum
 import inspect
@@ -625,6 +626,7 @@ basic_types = {
     float,
     str,
     bytes,
+    decimal.Decimal,
     datetime.timedelta,
     datetime.datetime,
     datetime.date,

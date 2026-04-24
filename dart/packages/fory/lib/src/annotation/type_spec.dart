@@ -46,19 +46,28 @@ final class NullableOption extends TypeOption {
 /// Base class for type specifications that carry [TypeOption]s.
 abstract class TypeSpec {
   final List<TypeOption> options;
-  const TypeSpec([this.options = const []]);
+  final int? wireTypeId;
+
+  const TypeSpec({this.options = const [], this.wireTypeId});
 }
 
 /// Specifies options for a scalar or object value type.
 final class ValueType extends TypeSpec {
-  const ValueType([super.options]);
+  const ValueType({
+    List<TypeOption> options = const [],
+    super.wireTypeId,
+  }) : super(options: options);
 
-  const ValueType.ref() : super(const [TypeOption.ref()]);
-  const ValueType.noRef() : super(const [TypeOption.ref(false)]);
-  const ValueType.nullable() : super(const [TypeOption.nullable()]);
-  const ValueType.nonNullable() : super(const [TypeOption.nullable(false)]);
-  const ValueType.refNullable()
-      : super(const [TypeOption.ref(), TypeOption.nullable()]);
+  const ValueType.ref({super.wireTypeId})
+      : super(options: const [TypeOption.ref()]);
+  const ValueType.noRef({super.wireTypeId})
+      : super(options: const [TypeOption.ref(false)]);
+  const ValueType.nullable({super.wireTypeId})
+      : super(options: const [TypeOption.nullable()]);
+  const ValueType.nonNullable({super.wireTypeId})
+      : super(options: const [TypeOption.nullable(false)]);
+  const ValueType.refNullable({super.wireTypeId})
+      : super(options: const [TypeOption.ref(), TypeOption.nullable()]);
 }
 
 /// Specifies options for a list or set field, including its element type.
@@ -68,19 +77,23 @@ final class ListType extends TypeSpec {
   const ListType({
     this.element = const ValueType(),
     List<TypeOption> options = const [],
-  }) : super(options);
+    super.wireTypeId,
+  }) : super(options: options);
 
   const ListType.ref({
     this.element = const ValueType(),
-  }) : super(const [TypeOption.ref()]);
+    super.wireTypeId,
+  }) : super(options: const [TypeOption.ref()]);
 
   const ListType.noRef({
     this.element = const ValueType(),
-  }) : super(const [TypeOption.ref(false)]);
+    super.wireTypeId,
+  }) : super(options: const [TypeOption.ref(false)]);
 
   const ListType.nullable({
     this.element = const ValueType(),
-  }) : super(const [TypeOption.nullable()]);
+    super.wireTypeId,
+  }) : super(options: const [TypeOption.nullable()]);
 }
 
 /// Specifies options for a map field, including its key and value types.
@@ -92,20 +105,24 @@ final class MapType extends TypeSpec {
     this.key = const ValueType(),
     this.value = const ValueType(),
     List<TypeOption> options = const [],
-  }) : super(options);
+    super.wireTypeId,
+  }) : super(options: options);
 
   const MapType.ref({
     this.key = const ValueType(),
     this.value = const ValueType(),
-  }) : super(const [TypeOption.ref()]);
+    super.wireTypeId,
+  }) : super(options: const [TypeOption.ref()]);
 
   const MapType.noRef({
     this.key = const ValueType(),
     this.value = const ValueType(),
-  }) : super(const [TypeOption.ref(false)]);
+    super.wireTypeId,
+  }) : super(options: const [TypeOption.ref(false)]);
 
   const MapType.nullable({
     this.key = const ValueType(),
     this.value = const ValueType(),
-  }) : super(const [TypeOption.nullable()]);
+    super.wireTypeId,
+  }) : super(options: const [TypeOption.nullable()]);
 }

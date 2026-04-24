@@ -1008,6 +1008,23 @@ class JavaScriptGenerator(BaseGenerator):
 
         return f"{target_var}.register(Type.struct({name_info}{props_arg}));"
 
+    def _register_enum_line(
+        self,
+        enum_def: Enum,
+        target_var: str = "fory",
+    ) -> str:
+        props = ", ".join(f"{member.name}: {member.value}" for member in enum_def.values)
+        props_arg = f", {{ {props} }}" if props else ""
+
+        if self.should_register_by_id(enum_def):
+            name_info = str(enum_def.type_id)
+        else:
+            ns = self.schema.package or "default"
+            qname = self._qualified_type_names.get(id(enum_def), enum_def.name)
+            name_info = f'{{ namespace: "{ns}", typeName: "{qname}" }}'
+
+        return f"{target_var}.register(Type.enum({name_info}{props_arg}));"
+
     def _register_union_line(
         self,
         union_def,
@@ -1083,6 +1100,26 @@ class JavaScriptGenerator(BaseGenerator):
             if reg_fn == fn_name:
                 continue
             lines.append(f"  {reg_fn}(fory, Type);")
+
+        emitted_enums: Set[int] = set()
+
+        def emit_enum(enum_def: Enum) -> None:
+            if id(enum_def) in emitted_enums or self.is_imported_type(enum_def):
+                return
+            emitted_enums.add(id(enum_def))
+            lines.append(f"  {self._register_enum_line(enum_def, 'fory')}")
+
+        def emit_nested_enums(message: Message) -> None:
+            for nested_enum in message.nested_enums:
+                emit_enum(nested_enum)
+            for nested_msg in message.nested_messages:
+                emit_nested_enums(nested_msg)
+
+        for enum_def in self.schema.enums:
+            emit_enum(enum_def)
+        for message in self.schema.messages:
+            if not self.is_imported_type(message):
+                emit_nested_enums(message)
 
         # DFS emit: visit dependencies before the type itself.
         # The visited set also breaks cycles (e.g. self-referential trees).

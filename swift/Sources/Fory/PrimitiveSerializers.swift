@@ -215,7 +215,7 @@ extension UInt64: Serializer {
     }
 }
 
-public struct ForyInt32Fixed: Serializer, Equatable {
+public struct ForyInt32Fixed: Serializer, Equatable, Hashable {
     public var rawValue: Int32 = 0
     public init(rawValue: Int32 = 0) {
         self.rawValue = rawValue
@@ -242,7 +242,7 @@ public struct ForyInt32Fixed: Serializer, Equatable {
     }
 }
 
-public struct ForyInt64Fixed: Serializer, Equatable {
+public struct ForyInt64Fixed: Serializer, Equatable, Hashable {
     public var rawValue: Int64 = 0
     public init(rawValue: Int64 = 0) {
         self.rawValue = rawValue
@@ -269,7 +269,7 @@ public struct ForyInt64Fixed: Serializer, Equatable {
     }
 }
 
-public struct ForyInt64Tagged: Serializer, Equatable {
+public struct ForyInt64Tagged: Serializer, Equatable, Hashable {
     public var rawValue: Int64 = 0
     public init(rawValue: Int64 = 0) {
         self.rawValue = rawValue
@@ -296,7 +296,7 @@ public struct ForyInt64Tagged: Serializer, Equatable {
     }
 }
 
-public struct ForyUInt32Fixed: Serializer, Equatable {
+public struct ForyUInt32Fixed: Serializer, Equatable, Hashable {
     public var rawValue: UInt32 = 0
     public init(rawValue: UInt32 = 0) {
         self.rawValue = rawValue
@@ -323,7 +323,7 @@ public struct ForyUInt32Fixed: Serializer, Equatable {
     }
 }
 
-public struct ForyUInt64Fixed: Serializer, Equatable {
+public struct ForyUInt64Fixed: Serializer, Equatable, Hashable {
     public var rawValue: UInt64 = 0
     public init(rawValue: UInt64 = 0) {
         self.rawValue = rawValue
@@ -350,7 +350,7 @@ public struct ForyUInt64Fixed: Serializer, Equatable {
     }
 }
 
-public struct ForyUInt64Tagged: Serializer, Equatable {
+public struct ForyUInt64Tagged: Serializer, Equatable, Hashable {
     public var rawValue: UInt64 = 0
     public init(rawValue: UInt64 = 0) {
         self.rawValue = rawValue

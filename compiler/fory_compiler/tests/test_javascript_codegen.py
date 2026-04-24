@@ -140,7 +140,7 @@ def test_javascript_nested_enum():
 
 
 def test_javascript_nested_enum_registration_uses_simple_name():
-    """Test that nested enums are registered with simple names, not qualified names."""
+    """Test that nested enums are registered and not referenced by qualified runtime names."""
     source = dedent(
         """
         package example;
@@ -157,13 +157,11 @@ def test_javascript_nested_enum_registration_uses_simple_name():
     )
     output = generate_javascript(source)
 
-    # Enums are skipped during registration in JavaScript (they are numeric
-    # values at runtime and don't need separate Fory registration).
-    assert "fory.register('PhoneType'" not in output
+    assert "fory.register(Type.enum(101, { MOBILE: 0, HOME: 1 }));" in output
     # Messages are registered via fory.register(Type.struct(...)).
     assert "fory.register(Type.struct(100" in output
-    # Ensure qualified names are NOT used
-    assert "Person.PhoneType" not in output
+    # Ensure runtime registration stays id-based instead of qualified names.
+    assert 'Type.enum({ namespace: "example", typeName: "Person.PhoneType" }' not in output
 
 
 def test_javascript_union_generation():

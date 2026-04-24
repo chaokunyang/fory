@@ -91,13 +91,15 @@ assert(fromBuffer == person)
 
 ### Date and time
 
-- `Date`
+- `Timestamp`
 - `LocalDate`
 - `Duration`
 
-Use `Date` for timestamp values and `LocalDate` for day-only dates. `LocalDate`
-supports epoch-day and `Date` conversions through `fromEpochDay(_:)`,
-`toEpochDay()`, `init(date:)`, and `toDate()`.
+Use `Timestamp` for xlang timestamp values and `LocalDate` for day-only dates.
+`Timestamp` stores exact epoch seconds plus nanoseconds and can bridge to
+Foundation `Date` through `init(date:)` and `toDate()`. `LocalDate` supports
+epoch-day and `Date` conversions through `fromEpochDay(_:)`, `toEpochDay()`,
+`init(date:)`, and `toDate()`.
 
 ### Collections
 

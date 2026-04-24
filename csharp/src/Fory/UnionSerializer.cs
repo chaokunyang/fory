@@ -15,7 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -171,102 +170,23 @@ public sealed class UnionSerializer<TUnion> : Serializer<TUnion>
 
     private static void WriteTypedCaseValue(WriteContext context, Type caseType, object? value)
     {
-        object? normalized = NormalizeCaseValue(value, caseType);
+        object? normalized = NormalizeWriteCaseValue(value, caseType);
         DynamicAnyCodec.WriteAny(context, normalized, RefMode.Tracking, writeTypeInfo: true, hasGenerics: caseType.IsGenericType);
     }
 
     private static object? ReadTypedCaseValue(ReadContext context, Type caseType)
     {
         object? value = DynamicAnyCodec.ReadAny(context, RefMode.Tracking, readTypeInfo: true);
-        return NormalizeCaseValue(value, caseType);
+        return CollectionValueAdapter.Normalize(value, caseType);
     }
 
-    private static object? NormalizeCaseValue(object? value, Type targetType)
+    private static object? NormalizeWriteCaseValue(object? value, Type caseType)
     {
-        if (value is null || targetType.IsInstanceOfType(value))
+        if (CollectionValueAdapter.TryGetPrimitiveArrayCarrier(caseType, out Type? carrierType))
         {
-            return value;
+            return CollectionValueAdapter.Normalize(value, carrierType!);
         }
 
-        if (TryConvertListValue(value, targetType, out object? converted))
-        {
-            return converted;
-        }
-
-        return value;
-    }
-
-    private static bool TryConvertListValue(object value, Type targetType, out object? converted)
-    {
-        converted = null;
-        if (!TryGetListElementType(targetType, out Type? elementType))
-        {
-            return false;
-        }
-
-        if (value is not IEnumerable source)
-        {
-            return false;
-        }
-
-        IList typedList = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType!))!;
-        foreach (object? item in source)
-        {
-            typedList.Add(ConvertListElement(item, elementType!));
-        }
-
-        converted = typedList;
-        return true;
-    }
-
-    private static bool TryGetListElementType(Type targetType, out Type? elementType)
-    {
-        if (targetType.IsArray)
-        {
-            elementType = targetType.GetElementType();
-            return elementType is not null;
-        }
-
-        if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(List<>))
-        {
-            elementType = targetType.GetGenericArguments()[0];
-            return true;
-        }
-
-        foreach (Type iface in targetType.GetInterfaces())
-        {
-            if (!iface.IsGenericType)
-            {
-                continue;
-            }
-
-            Type genericDef = iface.GetGenericTypeDefinition();
-            if (genericDef == typeof(IList<>) || genericDef == typeof(IReadOnlyList<>) || genericDef == typeof(IEnumerable<>))
-            {
-                elementType = iface.GetGenericArguments()[0];
-                return true;
-            }
-        }
-
-        elementType = null;
-        return false;
-    }
-
-    private static object? ConvertListElement(object? value, Type elementType)
-    {
-        if (value is null || elementType.IsInstanceOfType(value))
-        {
-            return value;
-        }
-
-        Type target = Nullable.GetUnderlyingType(elementType) ?? elementType;
-        try
-        {
-            return Convert.ChangeType(value, target);
-        }
-        catch
-        {
-            return value;
-        }
+        return CollectionValueAdapter.Normalize(value, caseType);
     }
 }

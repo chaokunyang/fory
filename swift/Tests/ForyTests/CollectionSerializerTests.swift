@@ -55,6 +55,14 @@ private struct RefKeyChunkHolder {
     var map: [RefKeyNode: Int32] = [:]
 }
 
+@ForyObject
+private struct EncodedNumericMapHolder: Equatable {
+    var fixedInt32Keys: [ForyInt32Fixed: String] = [:]
+    var taggedInt64Keys: [ForyInt64Tagged: String] = [:]
+    var fixedUint32Values: [String: ForyUInt32Fixed] = [:]
+    var taggedUint64Values: [String: ForyUInt64Tagged] = [:]
+}
+
 @Test
 func primitiveArrayTypeIDsAndRoundTripsCoverSwiftCollectionSurface() throws {
     #expect([Bool].staticTypeId == .boolArray)
@@ -210,6 +218,22 @@ func nestedCollectionsAndNullabilityRoundTrip() throws {
     ]
     let decodedMap: [Int32?: [String?]?] = try fory.deserialize(try fory.serialize(map))
     #expect(decodedMap == map)
+}
+
+@Test
+func encodedNumericMapWrappersRoundTrip() throws {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    fory.register(EncodedNumericMapHolder.self, id: 9505)
+
+    let value = EncodedNumericMapHolder(
+        fixedInt32Keys: [.init(rawValue: 123_456_789): "fixed-int32"],
+        taggedInt64Keys: [.init(rawValue: 1_073_741_824): "tagged-int64"],
+        fixedUint32Values: ["fixed": .init(rawValue: 2_000_000_000)],
+        taggedUint64Values: ["tagged": .init(rawValue: 2_222_222_222)]
+    )
+
+    let decoded: EncodedNumericMapHolder = try fory.deserialize(try fory.serialize(value))
+    #expect(decoded == value)
 }
 
 @Test

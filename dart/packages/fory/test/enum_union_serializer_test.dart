@@ -18,6 +18,8 @@
  */
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/meta/field_type.dart';
+import 'package:fory/src/serializer/compatible_struct_metadata.dart';
 import 'package:test/test.dart';
 
 part 'enum_union_serializer_test.fory.dart';
@@ -142,6 +144,22 @@ class UnionEnvelope {
   TestUnion? payload;
 }
 
+@ForyStruct()
+class UnionMetadataEnvelope {
+  UnionMetadataEnvelope();
+
+  TestUnion payload = TestUnion.ofString('');
+  List<TestUnion> payloads = <TestUnion>[];
+  Map<String, TestUnion> payloadByName = <String, TestUnion>{};
+}
+
+@ForyStruct()
+class UnionMetadataReader {
+  UnionMetadataReader();
+
+  int extra = 0;
+}
+
 void _registerEnumAndUnionTypes(Fory fory) {
   EnumUnionSerializerTestFory.register(
     fory,
@@ -167,12 +185,60 @@ void _registerEnumAndUnionTypes(Fory fory) {
     namespace: 'test',
     typeName: 'UnionEnvelope',
   );
+  EnumUnionSerializerTestFory.register(
+    fory,
+    UnionMetadataEnvelope,
+    namespace: 'test',
+    typeName: 'UnionMetadataEnvelope',
+  );
   fory.registerSerializer(
     TestUnion,
     const TestUnionSerializer(),
     namespace: 'test',
     typeName: 'TestUnion',
   );
+}
+
+void _registerUnionMetadataReader(Fory fory) {
+  EnumUnionSerializerTestFory.register(
+    fory,
+    UnionLeaf,
+    namespace: 'test',
+    typeName: 'UnionLeaf',
+  );
+  fory.registerSerializer(
+    TestUnion,
+    const TestUnionSerializer(),
+    namespace: 'test',
+    typeName: 'TestUnion',
+  );
+  EnumUnionSerializerTestFory.register(
+    fory,
+    UnionMetadataReader,
+    namespace: 'test',
+    typeName: 'UnionMetadataEnvelope',
+  );
+}
+
+int _remoteFieldTypeId(Object value, String identifier) {
+  final typeDef = CompatibleStructMetadata.remoteTypeDefFor(value);
+  if (typeDef == null) {
+    throw StateError('No remote type definition recorded.');
+  }
+  final field = typeDef.fields.firstWhere(
+    (candidate) => candidate.identifier == identifier,
+  );
+  return field.fieldType.typeId;
+}
+
+FieldType _remoteFieldType(Object value, String identifier) {
+  final typeDef = CompatibleStructMetadata.remoteTypeDefFor(value);
+  if (typeDef == null) {
+    throw StateError('No remote type definition recorded.');
+  }
+  return typeDef.fields
+      .firstWhere((candidate) => candidate.identifier == identifier)
+      .fieldType;
 }
 
 void _registerRawEnumV1(Fory fory) {
@@ -224,6 +290,17 @@ void main() {
         equals(StableCodeV2.betaRenamed),
       );
     });
+
+    test('writes raw enum payloads with unsigned varuint encoding', () {
+      final fory = Fory();
+      _registerRawEnumV1(fory);
+
+      final alphaBytes = fory.serialize(StableCodeV1.alpha);
+      final betaBytes = fory.serialize(StableCodeV1.beta);
+
+      expect(alphaBytes.last, equals(7));
+      expect(betaBytes.last, equals(11));
+    });
   });
 
   group('union serializer', () {
@@ -273,6 +350,37 @@ void main() {
       );
 
       expect(roundTrip.payload, equals(TestUnion.ofString('compatible')));
+    });
+
+    test('writes union field metadata using union field kinds', () {
+      final writer = Fory(compatible: true);
+      final reader = Fory(compatible: true);
+      _registerEnumAndUnionTypes(writer);
+      _registerUnionMetadataReader(reader);
+
+      final roundTrip = reader.deserialize<UnionMetadataReader>(
+        writer.serialize(
+          UnionMetadataEnvelope()
+            ..payload = TestUnion.ofLeaf(UnionLeaf()..label = 'leaf')
+            ..payloads = <TestUnion>[
+              TestUnion.ofString('alpha'),
+              TestUnion.ofInt(Int64(7)),
+            ]
+            ..payloadByName = <String, TestUnion>{
+              'leaf': TestUnion.ofLeaf(UnionLeaf()..label = 'mapped'),
+            },
+        ),
+      );
+
+      expect(roundTrip.extra, equals(0));
+      expect(_remoteFieldTypeId(roundTrip, 'payload'), equals(TypeIds.union));
+      final payloadsType = _remoteFieldType(roundTrip, 'payloads');
+      expect(payloadsType.typeId, equals(TypeIds.list));
+      expect(payloadsType.arguments.single.typeId, equals(TypeIds.union));
+      final payloadByNameType = _remoteFieldType(roundTrip, 'payload_by_name');
+      expect(payloadByNameType.typeId, equals(TypeIds.map));
+      expect(payloadByNameType.arguments[0].typeId, equals(TypeIds.string));
+      expect(payloadByNameType.arguments[1].typeId, equals(TypeIds.union));
     });
   });
 }

@@ -628,11 +628,7 @@ public final class ReadContext {
 
   /** Reads only the payload for a value whose {@link TypeInfo} was already decoded. */
   public Object readData(TypeInfo typeInfo) {
-    increaseDepth();
-    Serializer<?> serializer = typeInfo.getSerializer();
-    Object read = serializer.read(this);
-    decreaseDepth();
-    return read;
+    return readDataInternal(typeInfo);
   }
 
   private Object readDataInternal(TypeInfo typeInfo) {

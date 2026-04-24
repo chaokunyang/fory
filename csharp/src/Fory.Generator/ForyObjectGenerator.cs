@@ -1322,13 +1322,11 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         {
             bool elementNullable = GenericNullable(listElementType!);
             if (!elementNullable &&
-                TryResolvePackedArrayTypeIdForElement(listElementType!) is uint packedArrayTypeId &&
-                explicitTypeId == packedArrayTypeId)
+                TryResolvePackedArrayTypeIdForElement(listElementType!) is uint packedArrayTypeId)
             {
-                // Align compatible TypeMeta with C++ vector arithmetic handling:
-                // when the wire type is already classified as a packed array (e.g. int[]),
-                // use the specialized array TypeId directly instead of LIST<elem>.
-                // This keeps schema/type-meta bytes consistent across languages.
+                // Generated C# IDL models keep List<T> carriers for public ergonomics, but
+                // xlang metadata must still advertise the packed-array wire type so peer
+                // runtimes read the same payload shape as Java/C++.
                 return new TypeMetaFieldTypeModel(
                     packedArrayTypeId.ToString(),
                     nullable,
@@ -1577,66 +1575,96 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             return new TypeResolution(true, baseType);
         }
 
-        bool isInt32 = type.SpecialType == SpecialType.System_Int32;
-        bool isUInt32 = type.SpecialType == SpecialType.System_UInt32;
-        bool isInt64 = type.SpecialType == SpecialType.System_Int64;
-        bool isUInt64 = type.SpecialType == SpecialType.System_UInt64;
+        if (TryResolveEncodedNumericClassification(type, encoding, out TypeClassification classification))
+        {
+            return new TypeResolution(true, classification);
+        }
+
+        if (SupportsContainerEncoding(type, encoding))
+        {
+            return new TypeResolution(true, baseType);
+        }
+
+        return new TypeResolution(false, baseType);
+    }
+
+    private static bool SupportsContainerEncoding(ITypeSymbol type, FieldEncoding encoding)
+    {
+        if (TryGetListElementType(type, out ITypeSymbol? elementType))
+        {
+            return TryResolveEncodedNumericClassification(elementType!, encoding, out _);
+        }
+
+        if (TryGetMapTypeArguments(type, out ITypeSymbol? keyType, out ITypeSymbol? valueType))
+        {
+            return TryResolveEncodedNumericClassification(keyType!, encoding, out _) ||
+                   TryResolveEncodedNumericClassification(valueType!, encoding, out _);
+        }
+
+        return false;
+    }
+
+    private static bool TryResolveEncodedNumericClassification(
+        ITypeSymbol type,
+        FieldEncoding encoding,
+        out TypeClassification classification)
+    {
+        (bool _, ITypeSymbol unwrapped) = UnwrapNullable(type);
+        TypeClassification baseType = ClassifyType(unwrapped);
+
+        bool isInt32 = unwrapped.SpecialType == SpecialType.System_Int32;
+        bool isUInt32 = unwrapped.SpecialType == SpecialType.System_UInt32;
+        bool isInt64 = unwrapped.SpecialType == SpecialType.System_Int64;
+        bool isUInt64 = unwrapped.SpecialType == SpecialType.System_UInt64;
 
         if (isInt32)
         {
-            return encoding switch
+            classification = encoding switch
             {
-                FieldEncoding.Varint => new TypeResolution(true, baseType),
-                FieldEncoding.Fixed => new TypeResolution(
-                    true,
-                    new TypeClassification(4, true, true, false, false, false, 4)),
-                _ => new TypeResolution(false, baseType),
+                FieldEncoding.Varint => baseType,
+                FieldEncoding.Fixed => new TypeClassification(4, true, true, false, false, false, 4),
+                _ => baseType,
             };
+            return encoding is FieldEncoding.Varint or FieldEncoding.Fixed;
         }
 
         if (isUInt32)
         {
-            return encoding switch
+            classification = encoding switch
             {
-                FieldEncoding.Varint => new TypeResolution(true, baseType),
-                FieldEncoding.Fixed => new TypeResolution(
-                    true,
-                    new TypeClassification(11, true, true, false, false, false, 4)),
-                _ => new TypeResolution(false, baseType),
+                FieldEncoding.Varint => baseType,
+                FieldEncoding.Fixed => new TypeClassification(11, true, true, false, false, false, 4),
+                _ => baseType,
             };
+            return encoding is FieldEncoding.Varint or FieldEncoding.Fixed;
         }
 
         if (isInt64)
         {
-            return encoding switch
+            classification = encoding switch
             {
-                FieldEncoding.Varint => new TypeResolution(true, baseType),
-                FieldEncoding.Fixed => new TypeResolution(
-                    true,
-                    new TypeClassification(6, true, true, false, false, false, 8)),
-                FieldEncoding.Tagged => new TypeResolution(
-                    true,
-                    new TypeClassification(8, true, true, false, false, true, 8)),
-                _ => new TypeResolution(false, baseType),
+                FieldEncoding.Varint => baseType,
+                FieldEncoding.Fixed => new TypeClassification(6, true, true, false, false, false, 8),
+                FieldEncoding.Tagged => new TypeClassification(8, true, true, false, false, true, 8),
+                _ => baseType,
             };
+            return encoding is FieldEncoding.Varint or FieldEncoding.Fixed or FieldEncoding.Tagged;
         }
 
         if (isUInt64)
         {
-            return encoding switch
+            classification = encoding switch
             {
-                FieldEncoding.Varint => new TypeResolution(true, baseType),
-                FieldEncoding.Fixed => new TypeResolution(
-                    true,
-                    new TypeClassification(13, true, true, false, false, false, 8)),
-                FieldEncoding.Tagged => new TypeResolution(
-                    true,
-                    new TypeClassification(15, true, true, false, false, true, 8)),
-                _ => new TypeResolution(false, baseType),
+                FieldEncoding.Varint => baseType,
+                FieldEncoding.Fixed => new TypeClassification(13, true, true, false, false, false, 8),
+                FieldEncoding.Tagged => new TypeClassification(15, true, true, false, false, true, 8),
+                _ => baseType,
             };
+            return encoding is FieldEncoding.Varint or FieldEncoding.Fixed or FieldEncoding.Tagged;
         }
 
-        return new TypeResolution(false, baseType);
+        classification = baseType;
+        return false;
     }
 
     private static TypeClassification ClassifyType(ITypeSymbol type)

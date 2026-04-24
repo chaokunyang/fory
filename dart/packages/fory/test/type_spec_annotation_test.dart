@@ -59,6 +59,7 @@ void main() {
     test('default constructor has empty options', () {
       const vt = ValueType();
       expect(vt.options, isEmpty);
+      expect(vt.wireTypeId, isNull);
     });
 
     test('ValueType.ref() sets ref option', () {
@@ -92,6 +93,11 @@ void main() {
       expect(vt.options[0], isA<RefOption>());
       expect(vt.options[1], isA<NullableOption>());
     });
+
+    test('ValueType stores an explicit wire type id', () {
+      const vt = ValueType(wireTypeId: 123);
+      expect(vt.wireTypeId, equals(123));
+    });
   });
 
   group('ListType', () {
@@ -124,6 +130,11 @@ void main() {
       const lt = ListType(element: ValueType.ref());
       expect(lt.element.options, hasLength(1));
       expect((lt.element.options.first as RefOption).tracked, isTrue);
+    });
+
+    test('stores an explicit wire type id', () {
+      const lt = ListType(wireTypeId: 234);
+      expect(lt.wireTypeId, equals(234));
     });
 
     test('nested MapType element', () {
@@ -173,6 +184,17 @@ void main() {
       );
       expect(mt.key.options, hasLength(1));
       expect(mt.value.options, hasLength(2));
+    });
+
+    test('stores explicit wire type ids on the map and its value specs', () {
+      const mt = MapType(
+        wireTypeId: 345,
+        key: ValueType(wireTypeId: 456),
+        value: ValueType.ref(wireTypeId: 567),
+      );
+      expect(mt.wireTypeId, equals(345));
+      expect((mt.key as ValueType).wireTypeId, equals(456));
+      expect((mt.value as ValueType).wireTypeId, equals(567));
     });
   });
 }

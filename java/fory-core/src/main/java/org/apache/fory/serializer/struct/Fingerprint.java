@@ -23,7 +23,9 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
+import org.apache.fory.collection.Float16List;
 import org.apache.fory.collection.Float32List;
 import org.apache.fory.collection.Float64List;
 import org.apache.fory.collection.Int16List;
@@ -221,6 +223,12 @@ public class Fingerprint {
     }
     if (cls == Float64List.class) {
       return Types.FLOAT64_ARRAY;
+    }
+    if (cls == Float16List.class) {
+      return Types.FLOAT16_ARRAY;
+    }
+    if (cls == BFloat16List.class) {
+      return Types.BFLOAT16_ARRAY;
     }
     return null;
   }

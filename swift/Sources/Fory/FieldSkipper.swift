@@ -166,7 +166,7 @@ public extension ReadContext {
         case .duration:
             return try Duration.foryRead(self, refMode: .none, readTypeInfo: false)
         case .timestamp:
-            return try Date.foryRead(self, refMode: .none, readTypeInfo: false)
+            return try Timestamp.foryRead(self, refMode: .none, readTypeInfo: false)
         case .date:
             return try LocalDate.foryRead(self, refMode: .none, readTypeInfo: false)
         case .decimal:

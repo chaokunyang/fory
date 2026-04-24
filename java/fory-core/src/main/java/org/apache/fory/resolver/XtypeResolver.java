@@ -1076,7 +1076,31 @@ public class XtypeResolver extends TypeResolver {
         new org.apache.fory.serializer.collection.MapSerializers.LinkedHashMapSerializer(this));
     registerType(Types.MAP, Map.class, new XlangMapSerializer(this, Map.class));
 
+    overrideBuiltinTypeSerializer(
+        Types.INT32, new PrimitiveSerializers.FixedInt32Serializer(config, Integer.class));
+    overrideBuiltinTypeSerializer(
+        Types.UINT32, new PrimitiveSerializers.FixedInt32Serializer(config, Integer.class));
+    overrideBuiltinTypeSerializer(
+        Types.INT64, new PrimitiveSerializers.FixedInt64Serializer(config, Long.class));
+    overrideBuiltinTypeSerializer(
+        Types.UINT64, new PrimitiveSerializers.FixedInt64Serializer(config, Long.class));
+    overrideBuiltinTypeSerializer(
+        Types.TAGGED_INT64, new PrimitiveSerializers.TaggedInt64Serializer(config, Long.class));
+    overrideBuiltinTypeSerializer(
+        Types.TAGGED_UINT64,
+        new PrimitiveSerializers.TaggedUint64Serializer(config, Long.class));
+
     registerUnionTypes();
+  }
+
+  private void overrideBuiltinTypeSerializer(int typeId, Serializer<?> serializer) {
+    TypeInfo typeInfo = getInternalTypeInfoByTypeId(typeId);
+    if (typeInfo == null) {
+      throw new IllegalStateException("Missing built-in xlang type info for type id " + typeId);
+    }
+    TypeInfo updated =
+        new TypeInfo(typeInfo.type, typeInfo.namespace, typeInfo.typeName, serializer, typeId, -1);
+    putInternalTypeInfo(typeId, updated);
   }
 
   private void registerType(int xtypeId, Class<?> type, Serializer<?> serializer) {

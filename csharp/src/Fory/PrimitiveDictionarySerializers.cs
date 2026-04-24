@@ -502,6 +502,44 @@ internal readonly struct ArrayPrimitiveMapWriteOps<TKey, TValue>
 
 internal static class PrimitiveDictionaryCodecWriter
 {
+    private static TypeId ResolveWireTypeId<T, TCodec>(WriteContext context, bool isKey)
+        where TCodec : struct, IPrimitiveDictionaryCodec<T>
+    {
+        bool hasOverride = isKey
+            ? context.TryGetMapKeyWireTypeOverride(out TypeId wireTypeId)
+            : context.TryGetMapValueWireTypeOverride(out wireTypeId);
+        if (!hasOverride)
+        {
+            return TCodec.WireTypeId;
+        }
+
+        if (!NumericWireTypeCodec.Supports(typeof(T), wireTypeId))
+        {
+            string role = isKey ? "map key" : "map value";
+            throw new InvalidDataException($"wire type override {wireTypeId} is not supported for {role} type {typeof(T)}");
+        }
+
+        return wireTypeId;
+    }
+
+    private static void WriteValue<T, TCodec>(WriteContext context, T value, TypeId wireTypeId, bool isKey)
+        where TCodec : struct, IPrimitiveDictionaryCodec<T>
+    {
+        if (wireTypeId == TCodec.WireTypeId)
+        {
+            TCodec.Write(context, value);
+            return;
+        }
+
+        if (!NumericWireTypeCodec.Supports(typeof(T), wireTypeId))
+        {
+            string role = isKey ? "map key" : "map value";
+            throw new InvalidDataException($"wire type override {wireTypeId} is not supported for {role} type {typeof(T)}");
+        }
+
+        NumericWireTypeCodec.WriteValue(context, wireTypeId, value!);
+    }
+
     public static void WriteMap<TMap, TKey, TValue, TKeyCodec, TValueCodec, TMapOps, TEnumerator>(
         WriteContext context,
         TMap map,
@@ -519,8 +557,8 @@ internal static class PrimitiveDictionaryCodecWriter
             return;
         }
 
-        TypeId keyTypeId = TKeyCodec.WireTypeId;
-        TypeId valueTypeId = TValueCodec.WireTypeId;
+        TypeId keyTypeId = ResolveWireTypeId<TKey, TKeyCodec>(context, isKey: true);
+        TypeId valueTypeId = ResolveWireTypeId<TValue, TValueCodec>(context, isKey: false);
         bool keyDeclared = hasGenerics && !TypeResolver.NeedToWriteTypeInfoForField(keyTypeId);
         bool valueDeclared = hasGenerics && !TypeResolver.NeedToWriteTypeInfoForField(valueTypeId);
         bool keyNullable = TKeyCodec.IsNullable;
@@ -568,7 +606,7 @@ internal static class PrimitiveDictionaryCodecWriter
                         context.Writer.WriteUInt8((byte)keyTypeId);
                     }
 
-                    TKeyCodec.Write(context, pair.Key);
+                    WriteValue<TKey, TKeyCodec>(context, pair.Key, keyTypeId, isKey: true);
                 }
 
                 if (!valueNull)
@@ -578,7 +616,7 @@ internal static class PrimitiveDictionaryCodecWriter
                         context.Writer.WriteUInt8((byte)valueTypeId);
                     }
 
-                    TValueCodec.Write(context, pair.Value);
+                    WriteValue<TValue, TValueCodec>(context, pair.Value, valueTypeId, isKey: false);
                 }
 
                 writtenCount += 1;
@@ -615,8 +653,8 @@ internal static class PrimitiveDictionaryCodecWriter
             byte chunkSize = 0;
             while (true)
             {
-                TKeyCodec.Write(context, pair.Key);
-                TValueCodec.Write(context, pair.Value);
+                WriteValue<TKey, TKeyCodec>(context, pair.Key, keyTypeId, isKey: true);
+                WriteValue<TValue, TValueCodec>(context, pair.Value, valueTypeId, isKey: false);
                 chunkSize += 1;
                 writtenCount += 1;
                 if (writtenCount > totalLength)
@@ -663,6 +701,43 @@ internal static class PrimitiveDictionaryCodecWriter
 
 internal static class PrimitiveDictionaryCodecReader
 {
+    private static TypeId ResolveWireTypeId<T, TCodec>(ReadContext context, bool isKey)
+        where TCodec : struct, IPrimitiveDictionaryCodec<T>
+    {
+        bool hasOverride = isKey
+            ? context.TryGetMapKeyWireTypeOverride(out TypeId wireTypeId)
+            : context.TryGetMapValueWireTypeOverride(out wireTypeId);
+        if (!hasOverride)
+        {
+            return TCodec.WireTypeId;
+        }
+
+        if (!NumericWireTypeCodec.Supports(typeof(T), wireTypeId))
+        {
+            string role = isKey ? "map key" : "map value";
+            throw new InvalidDataException($"wire type override {wireTypeId} is not supported for {role} type {typeof(T)}");
+        }
+
+        return wireTypeId;
+    }
+
+    private static T ReadValue<T, TCodec>(ReadContext context, TypeId wireTypeId, bool isKey)
+        where TCodec : struct, IPrimitiveDictionaryCodec<T>
+    {
+        if (wireTypeId == TCodec.WireTypeId)
+        {
+            return TCodec.Read(context);
+        }
+
+        if (!NumericWireTypeCodec.Supports(typeof(T), wireTypeId))
+        {
+            string role = isKey ? "map key" : "map value";
+            throw new InvalidDataException($"wire type override {wireTypeId} is not supported for {role} type {typeof(T)}");
+        }
+
+        return (T)NumericWireTypeCodec.ReadValue(context, wireTypeId);
+    }
+
     public static TMap ReadMap<TMap, TKey, TValue, TKeyCodec, TValueCodec, TMapOps>(ReadContext context)
         where TKey : notnull
         where TKeyCodec : struct, IPrimitiveDictionaryCodec<TKey>
@@ -676,8 +751,8 @@ internal static class PrimitiveDictionaryCodecReader
             return map;
         }
 
-        TypeId keyTypeId = TKeyCodec.WireTypeId;
-        TypeId valueTypeId = TValueCodec.WireTypeId;
+        TypeId keyTypeId = ResolveWireTypeId<TKey, TKeyCodec>(context, isKey: true);
+        TypeId valueTypeId = ResolveWireTypeId<TValue, TValueCodec>(context, isKey: false);
         bool keyNullable = TKeyCodec.IsNullable;
         int readCount = 0;
         while (readCount < totalLength)
@@ -712,7 +787,7 @@ internal static class PrimitiveDictionaryCodecReader
                     ReadAndValidateTypeInfo(context, valueTypeId);
                 }
 
-                _ = TValueCodec.Read(context);
+                _ = ReadValue<TValue, TValueCodec>(context, valueTypeId, isKey: false);
                 readCount += 1;
                 continue;
             }
@@ -724,7 +799,7 @@ internal static class PrimitiveDictionaryCodecReader
                     ReadAndValidateTypeInfo(context, keyTypeId);
                 }
 
-                TKey key = TKeyCodec.Read(context);
+                TKey key = ReadValue<TKey, TKeyCodec>(context, keyTypeId, isKey: true);
                 TMapOps.Put(map, key, TValueCodec.DefaultValue);
                 readCount += 1;
                 continue;
@@ -748,8 +823,8 @@ internal static class PrimitiveDictionaryCodecReader
 
             for (int i = 0; i < chunkSize; i++)
             {
-                TKey key = TKeyCodec.Read(context);
-                TValue value = TValueCodec.Read(context);
+                TKey key = ReadValue<TKey, TKeyCodec>(context, keyTypeId, isKey: true);
+                TValue value = ReadValue<TValue, TValueCodec>(context, valueTypeId, isKey: false);
                 TMapOps.Put(map, key, value);
             }
 

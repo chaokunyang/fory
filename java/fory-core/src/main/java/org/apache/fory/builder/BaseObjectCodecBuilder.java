@@ -119,6 +119,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
@@ -181,6 +182,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected final TypeResolver typeResolver;
   protected final Config config;
   private final Map<Class<?>, Reference> serializerMap = new HashMap<>();
+  private final Map<String, Reference> serializerByTypeKeyMap = new HashMap<>();
   private final Map<String, Object> sharedFieldMap = new HashMap<>();
   protected final Class<?> parentSerializerClass;
   private final Map<String, Expression> jitCallbackUpdateFields;
@@ -583,6 +585,111 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
   }
 
+  private int getPrimitiveTypeRefDispatchId(TypeRef<?> typeRef, Class<?> rawType) {
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (extMeta == null) {
+      return DispatchId.UNKNOWN;
+    }
+    int typeId = extMeta.typeId();
+    if (typeId == Types.UNKNOWN || Types.isUserDefinedType(typeId)) {
+      return DispatchId.UNKNOWN;
+    }
+    Class<?> unwrapped = TypeUtils.unwrap(rawType);
+    if (unwrapped == boolean.class) {
+      return typeId == Types.BOOL ? DispatchId.BOOL : DispatchId.UNKNOWN;
+    }
+    if (unwrapped == byte.class) {
+      if (typeId == Types.INT8) {
+        return DispatchId.INT8;
+      }
+      return typeId == Types.UINT8 ? DispatchId.UINT8 : DispatchId.UNKNOWN;
+    }
+    if (unwrapped == short.class) {
+      if (typeId == Types.INT16) {
+        return DispatchId.INT16;
+      }
+      return typeId == Types.UINT16 ? DispatchId.UINT16 : DispatchId.UNKNOWN;
+    }
+    if (unwrapped == int.class) {
+      switch (typeId) {
+        case Types.INT32:
+          return DispatchId.INT32;
+        case Types.VARINT32:
+          return DispatchId.VARINT32;
+        case Types.UINT32:
+          return DispatchId.UINT32;
+        case Types.VAR_UINT32:
+          return DispatchId.VAR_UINT32;
+        default:
+          return DispatchId.UNKNOWN;
+      }
+    }
+    if (unwrapped == long.class) {
+      switch (typeId) {
+        case Types.INT64:
+          return DispatchId.INT64;
+        case Types.VARINT64:
+          return DispatchId.VARINT64;
+        case Types.TAGGED_INT64:
+          return DispatchId.TAGGED_INT64;
+        case Types.UINT64:
+          return DispatchId.UINT64;
+        case Types.VAR_UINT64:
+          return DispatchId.VAR_UINT64;
+        case Types.TAGGED_UINT64:
+          return DispatchId.TAGGED_UINT64;
+        default:
+          return DispatchId.UNKNOWN;
+      }
+    }
+    if (unwrapped == float.class) {
+      return typeId == Types.FLOAT32 ? DispatchId.FLOAT32 : DispatchId.UNKNOWN;
+    }
+    if (unwrapped == double.class) {
+      return typeId == Types.FLOAT64 ? DispatchId.FLOAT64 : DispatchId.UNKNOWN;
+    }
+    return DispatchId.UNKNOWN;
+  }
+
+  private Expression serializePrimitive(Expression inputObject, Expression buffer, int dispatchId) {
+    switch (dispatchId) {
+      case DispatchId.BOOL:
+        return new Invoke(buffer, "writeBoolean", inputObject);
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+        return new Invoke(buffer, "writeByte", inputObject);
+      case DispatchId.CHAR:
+        return new Invoke(buffer, "writeChar", inputObject);
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+        return new Invoke(buffer, "writeInt16", inputObject);
+      case DispatchId.INT32:
+      case DispatchId.UINT32:
+        return new Invoke(buffer, "writeInt32", inputObject);
+      case DispatchId.VARINT32:
+        return new Invoke(buffer, "writeVarInt32", inputObject);
+      case DispatchId.VAR_UINT32:
+        return new Invoke(buffer, "writeVarUint32", inputObject);
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        return new Invoke(buffer, "writeInt64", inputObject);
+      case DispatchId.VARINT64:
+        return new Invoke(buffer, "writeVarInt64", inputObject);
+      case DispatchId.TAGGED_INT64:
+        return new Invoke(buffer, "writeTaggedInt64", inputObject);
+      case DispatchId.VAR_UINT64:
+        return new Invoke(buffer, "writeVarUint64", inputObject);
+      case DispatchId.TAGGED_UINT64:
+        return new Invoke(buffer, "writeTaggedUint64", inputObject);
+      case DispatchId.FLOAT32:
+        return new Invoke(buffer, "writeFloat32", inputObject);
+      case DispatchId.FLOAT64:
+        return new Invoke(buffer, "writeFloat64", inputObject);
+      default:
+        throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
+    }
+  }
+
   private Expression serializeForNotNullObjectForField(
       Expression inputObject, Expression buffer, Descriptor descriptor, Expression serializer) {
     TypeRef<?> typeRef = descriptor.getTypeRef();
@@ -672,6 +779,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       boolean generateNewMethod) {
     Class<?> clz = getRawType(typeRef);
     if (isPrimitive(clz) || isBoxed(clz)) {
+      int dispatchId = getPrimitiveTypeRefDispatchId(typeRef, clz);
+      if (dispatchId != DispatchId.UNKNOWN) {
+        return serializePrimitive(inputObject, buffer, dispatchId);
+      }
       return serializePrimitive(inputObject, buffer, clz);
     } else {
       if (clz == String.class) {
@@ -822,6 +933,32 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return getOrCreateSerializer(cls, false);
   }
 
+  protected Expression getOrCreateSerializer(TypeRef<?> typeRef) {
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (extMeta == null
+        || extMeta.typeId() == Types.UNKNOWN
+        || Types.isUserDefinedType(extMeta.typeId())) {
+      return getOrCreateSerializer(typeRef.getRawType());
+    }
+    String typeKey = typeRef.getGenericTypeKey();
+    Reference serializerRef = serializerByTypeKeyMap.get(typeKey);
+    if (serializerRef == null) {
+      serializerRef =
+          getOrCreateField(
+              false,
+              Serializer.class,
+              "serializerByType" + serializerByTypeKeyMap.size(),
+              () ->
+                  new Invoke(
+                      typeResolverRef,
+                      "getSerializerByTypeId",
+                      SERIALIZER_TYPE,
+                      Literal.ofInt(extMeta.typeId())));
+      serializerByTypeKeyMap.put(typeKey, serializerRef);
+    }
+    return serializerRef;
+  }
+
   private Expression getOrCreateSerializer(Class<?> cls, boolean isField) {
     // Not need to check cls final, take collection writeSameTypeElements as an example.
     // Preconditions.checkArgument(isMonomorphic(cls), cls);
@@ -929,14 +1066,15 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     }
   }
 
-  private final Map<TypeRef<?>, String> namesForSharedGenericTypeFields = new HashMap<>();
+  private final Map<String, String> namesForSharedGenericTypeFields = new HashMap<>();
 
   protected Expression getGenericTypeField(TypeRef<?> typeRef) {
     // create a field name from generic type, so multiple call of same generic type will reuse the
     // same field.
+    String genericTypeKey = typeRef.getGenericTypeKey();
     String name =
         namesForSharedGenericTypeFields.computeIfAbsent(
-            typeRef,
+            genericTypeKey,
             k -> {
               String prefix;
               if (typeRef.getRawType().isArray()) {
@@ -959,7 +1097,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
                 "getGenericTypeInStruct",
                 GENERIC_TYPE,
                 beanClassExpr(),
-                ofString(typeRef.getType().getTypeName())));
+                ofString(genericTypeKey)));
   }
 
   /**
@@ -1502,8 +1640,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> valueTypeRawType = valueType.getRawType();
     boolean trackingKeyRef = needWriteRef(keyType);
     boolean trackingValueRef = needWriteRef(valueType);
-    Tuple2<Expression, Expression> mapKVSerializer =
-        getMapKVSerializer(keyTypeRawType, valueTypeRawType);
+    Tuple2<Expression, Expression> mapKVSerializer = getMapKVSerializer(keyType, valueType);
     Expression keySerializer = mapKVSerializer.f0;
     Expression valueSerializer = mapKVSerializer.f1;
     While whileAction =
@@ -1560,7 +1697,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         new Invoke(serializer, "onMapWriteFinish", map));
   }
 
-  private Tuple2<Expression, Expression> getMapKVSerializer(Class<?> keyType, Class<?> valueType) {
+  private Tuple2<Expression, Expression> getMapKVSerializer(
+      TypeRef<?> keyType, TypeRef<?> valueType) {
     Expression keySerializer, valueSerializer;
     boolean keyMonomorphic = isMonomorphic(keyType);
     boolean valueMonomorphic = isMonomorphic(valueType);
@@ -1639,8 +1777,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Expression valueWriteRef = Literal.ofBoolean(trackingValueRef);
     boolean inline = keyMonomorphic && valueMonomorphic;
     if (keyMonomorphic && valueMonomorphic) {
-      keySerializer = getOrCreateSerializer(keyTypeRawType);
-      valueSerializer = getOrCreateSerializer(valueTypeRawType);
+      keySerializer = getOrCreateSerializer(keyType);
+      valueSerializer = getOrCreateSerializer(valueType);
       int header = KEY_DECL_TYPE | VALUE_DECL_TYPE;
       if (trackingKeyRef) {
         header |= TRACKING_KEY_REF;
@@ -1655,7 +1793,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       if (trackingKeyRef) {
         header |= TRACKING_KEY_REF;
       }
-      keySerializer = getOrCreateSerializer(keyTypeRawType);
+      keySerializer = getOrCreateSerializer(keyType);
       walkPath.add("value:" + valueType);
       valueSerializer = writeTypeInfo(buffer, valueTypeExpr, valueTypeRawType, true);
       walkPath.removeLast();
@@ -1674,7 +1812,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       walkPath.add("key:" + keyType);
       keySerializer = writeTypeInfo(buffer, keyTypeExpr, keyTypeRawType, true);
       walkPath.removeLast();
-      valueSerializer = getOrCreateSerializer(valueTypeRawType);
+      valueSerializer = getOrCreateSerializer(valueType);
       int header = VALUE_DECL_TYPE;
       if (trackingValueRef) {
         header |= TRACKING_VALUE_REF;
@@ -1982,6 +2120,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       Expression buffer, TypeRef<?> typeRef, Expression serializer, InvokeHint invokeHint) {
     Class<?> cls = getRawType(typeRef);
     if (isPrimitive(cls) || isBoxed(cls)) {
+      int dispatchId = getPrimitiveTypeRefDispatchId(typeRef, cls);
+      if (dispatchId != DispatchId.UNKNOWN) {
+        return deserializePrimitive(buffer, cls, dispatchId);
+      }
       return deserializePrimitive(buffer, cls);
     } else {
       if (cls == String.class) {
@@ -2109,7 +2251,34 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   private Expression deserializePrimitiveField(Expression buffer, Descriptor descriptor) {
     int dispatchId = getNumericDescriptorDispatchId(descriptor);
-    boolean isPrimitive = descriptor.getRawType().isPrimitive();
+    return deserializePrimitive(buffer, descriptor.getRawType(), dispatchId);
+  }
+
+  private Expression deserializePrimitive(Expression buffer, Class<?> cls) {
+    // for primitive, inline call here to avoid java boxing
+    if (cls == byte.class || cls == Byte.class) {
+      return new Invoke(buffer, "readByte", PRIMITIVE_BYTE_TYPE);
+    } else if (cls == boolean.class || cls == Boolean.class) {
+      return new Invoke(buffer, "readBoolean", PRIMITIVE_BOOLEAN_TYPE);
+    } else if (cls == char.class || cls == Character.class) {
+      return readChar(buffer);
+    } else if (cls == short.class || cls == Short.class) {
+      return readInt16(buffer);
+    } else if (cls == int.class || cls == Integer.class) {
+      return config.compressInt() ? readVarInt32(buffer) : readInt32(buffer);
+    } else if (cls == long.class || cls == Long.class) {
+      return LongSerializer.readInt64(buffer, config.longEncoding());
+    } else if (cls == float.class || cls == Float.class) {
+      return readFloat32(buffer);
+    } else if (cls == double.class || cls == Double.class) {
+      return readFloat64(buffer);
+    } else {
+      throw new IllegalStateException("impossible");
+    }
+  }
+
+  private Expression deserializePrimitive(Expression buffer, Class<?> cls, int dispatchId) {
+    boolean isPrimitive = cls.isPrimitive();
     switch (dispatchId) {
       case DispatchId.BOOL:
         return new Invoke(
@@ -2159,29 +2328,6 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             BFloat16.class, "fromBits", TypeRef.of(BFloat16.class), readInt16(buffer));
       default:
         throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
-    }
-  }
-
-  private Expression deserializePrimitive(Expression buffer, Class<?> cls) {
-    // for primitive, inline call here to avoid java boxing
-    if (cls == byte.class || cls == Byte.class) {
-      return new Invoke(buffer, "readByte", PRIMITIVE_BYTE_TYPE);
-    } else if (cls == boolean.class || cls == Boolean.class) {
-      return new Invoke(buffer, "readBoolean", PRIMITIVE_BOOLEAN_TYPE);
-    } else if (cls == char.class || cls == Character.class) {
-      return readChar(buffer);
-    } else if (cls == short.class || cls == Short.class) {
-      return readInt16(buffer);
-    } else if (cls == int.class || cls == Integer.class) {
-      return config.compressInt() ? readVarInt32(buffer) : readInt32(buffer);
-    } else if (cls == long.class || cls == Long.class) {
-      return LongSerializer.readInt64(buffer, config.longEncoding());
-    } else if (cls == float.class || cls == Float.class) {
-      return readFloat32(buffer);
-    } else if (cls == double.class || cls == Double.class) {
-      return readFloat64(buffer);
-    } else {
-      throw new IllegalStateException("impossible");
     }
   }
 
@@ -2522,7 +2668,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     boolean refKey = needWriteRef(keyType);
     boolean refValue = needWriteRef(valueType);
     boolean inline = keyMonomorphic && valueMonomorphic && (!refKey || !refValue);
-    Tuple2<Expression, Expression> mapKVSerializer = getMapKVSerializer(keyCls, valueCls);
+    Tuple2<Expression, Expression> mapKVSerializer = getMapKVSerializer(keyType, valueType);
     Expression keySerializer = mapKVSerializer.f0;
     Expression valueSerializer = mapKVSerializer.f1;
     While chunksLoop =
@@ -2642,19 +2788,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
     Expression keySerializer, valueSerializer;
     if (!keyMonomorphic && !valueMonomorphic) {
-      keySerializer = readOrGetSerializerForDeclaredType(buffer, keyTypeRawType, keyIsDeclaredType);
-      valueSerializer =
-          readOrGetSerializerForDeclaredType(buffer, valueTypeRawType, valueIsDeclaredType);
+      keySerializer = readOrGetSerializerForDeclaredType(buffer, keyType, keyIsDeclaredType);
+      valueSerializer = readOrGetSerializerForDeclaredType(buffer, valueType, valueIsDeclaredType);
     } else if (!keyMonomorphic) {
-      keySerializer = readOrGetSerializerForDeclaredType(buffer, keyTypeRawType, keyIsDeclaredType);
-      valueSerializer = getOrCreateSerializer(valueTypeRawType);
+      keySerializer = readOrGetSerializerForDeclaredType(buffer, keyType, keyIsDeclaredType);
+      valueSerializer = getOrCreateSerializer(valueType);
     } else if (!valueMonomorphic) {
-      keySerializer = getOrCreateSerializer(keyTypeRawType);
-      valueSerializer =
-          readOrGetSerializerForDeclaredType(buffer, valueTypeRawType, valueIsDeclaredType);
+      keySerializer = getOrCreateSerializer(keyType);
+      valueSerializer = readOrGetSerializerForDeclaredType(buffer, valueType, valueIsDeclaredType);
     } else {
-      keySerializer = getOrCreateSerializer(keyTypeRawType);
-      valueSerializer = getOrCreateSerializer(valueTypeRawType);
+      keySerializer = getOrCreateSerializer(keyType);
+      valueSerializer = getOrCreateSerializer(valueType);
     }
     Expression keySerializerExpr = uninline(keySerializer);
     Expression valueSerializerExpr = uninline(valueSerializer);
@@ -2741,18 +2885,19 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   private Expression readOrGetSerializerForDeclaredType(
-      Expression buffer, Class<?> type, Expression isDeclaredType) {
+      Expression buffer, TypeRef<?> type, Expression isDeclaredType) {
+    Class<?> rawType = type.getRawType();
     if (isMonomorphic(type)) {
       return getOrCreateSerializer(type);
     }
     TypeRef<?> serializerType = getSerializerType(type);
-    if (ReflectionUtils.isAbstract(type) || type.isInterface()) {
-      return invoke(readTypeInfo(type, buffer), "getSerializer", "serializer", serializerType);
+    if (ReflectionUtils.isAbstract(rawType) || rawType.isInterface()) {
+      return invoke(readTypeInfo(rawType, buffer), "getSerializer", "serializer", serializerType);
     } else {
       return new If(
           isDeclaredType,
           getOrCreateSerializer(type),
-          invokeInline(readTypeInfo(type, buffer), "getSerializer", serializerType),
+          invokeInline(readTypeInfo(rawType, buffer), "getSerializer", serializerType),
           false);
     }
   }

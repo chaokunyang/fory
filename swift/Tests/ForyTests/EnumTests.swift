@@ -45,6 +45,13 @@ private struct StructWithUnion: Equatable {
 }
 
 @ForyObject
+private struct StructWithUnionContainers: Equatable {
+    var unionField: StringOrLong = .foryDefault()
+    var unionList: [StringOrLong] = []
+    var unionValuesByName: [String: StringOrLong] = [:]
+}
+
+@ForyObject
 private indirect enum Token: Equatable {
     case plus
     case number(Int64)
@@ -90,6 +97,28 @@ func taggedUnionXlangRoundTrip() throws {
 
     #expect(firstDecoded == first)
     #expect(secondDecoded == second)
+}
+
+@Test
+func compatibleTypeMetaUsesCanonicalUnionFieldTypeID() {
+    let fields = StructWithUnionContainers.foryFieldsInfo(trackRef: false)
+    #expect(fields.count == 3)
+
+    let byName = Dictionary(uniqueKeysWithValues: fields.map { ($0.fieldName, $0.fieldType) })
+
+    let unionField = byName["unionField"]!
+    #expect(unionField.typeID == TypeId.union.rawValue)
+
+    let unionList = byName["unionList"]!
+    #expect(unionList.typeID == TypeId.list.rawValue)
+    #expect(unionList.generics.count == 1)
+    #expect(unionList.generics[0].typeID == TypeId.union.rawValue)
+
+    let unionValuesByName = byName["unionValuesByName"]!
+    #expect(unionValuesByName.typeID == TypeId.map.rawValue)
+    #expect(unionValuesByName.generics.count == 2)
+    #expect(unionValuesByName.generics[0].typeID == TypeId.string.rawValue)
+    #expect(unionValuesByName.generics[1].typeID == TypeId.union.rawValue)
 }
 
 @Test

@@ -25,6 +25,7 @@ from fory_compiler.frontend.fbs import FBSFrontend
 from fory_compiler.frontend.fdl.lexer import Lexer
 from fory_compiler.frontend.fdl.parser import Parser
 from fory_compiler.frontend.proto import ProtoFrontend
+from fory_compiler.cli import resolve_imports
 from fory_compiler.generators.base import BaseGenerator, GeneratorOptions
 from fory_compiler.generators.cpp import CppGenerator
 from fory_compiler.generators.go import GoGenerator
@@ -543,6 +544,105 @@ def test_java_repeated_float16_generation_uses_float16_list():
     assert "private Float16List vals;" in java_output
 
 
+def test_java_imported_ref_types_use_simple_names_in_generic_annotations(tmp_path: Path):
+    common_path = tmp_path / "common.fdl"
+    common_path.write_text(
+        dedent(
+            """
+            package common;
+
+            message Node {
+                string name = 1;
+            }
+
+            union Choice {
+                Node node = 1;
+            }
+            """
+        )
+    )
+    root_path = tmp_path / "root.fdl"
+    root_path.write_text(
+        dedent(
+            """
+            package root;
+            import "common.fdl";
+
+            message Holder {
+                list<Node> nodes = 1;
+                map<string, Choice> choices = 2;
+            }
+            """
+        )
+    )
+
+    java_output = render_files(generate_files(resolve_imports(root_path), JavaGenerator))
+    assert "import common.Node;" in java_output
+    assert "import common.Choice;" in java_output
+    assert "private List<@Ref(enable=false) Node> nodes;" in java_output
+    assert "private Map<String, @Ref(enable=false) Choice> choices;" in java_output
+    assert "@Ref(enable=false) common.Node" not in java_output
+    assert "@Ref(enable=false) common.Choice" not in java_output
+
+
+def test_java_union_float16_list_wrapping_uses_packed_short_arrays():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            union Example {
+                list<float16> f16s = 1;
+                list<bfloat16> bf16s = 2;
+                list<optional float16> maybe_f16s = 3;
+                list<optional bfloat16> maybe_bf16s = 4;
+            }
+            """
+        )
+    )
+
+    java_output = render_files(generate_files(schema, JavaGenerator))
+    assert "if (value instanceof short[]) {" in java_output
+    assert "value = new Float16List((short[]) value);" in java_output
+    assert "value = new BFloat16List((short[]) value);" in java_output
+    assert "new Float16List((Float16[]) value)" not in java_output
+    assert "new BFloat16List((BFloat16[]) value)" not in java_output
+
+
+def test_java_numeric_container_annotations_are_emitted():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message ContainerKinds {
+                list<i32> fixed_int32s = 1;
+                list<vi32> varint32s = 2;
+                map<i32, string> names_by_fixed_int32 = 3;
+                map<vu64, string> names_by_var_uint64 = 4;
+                map<u8, string> names_by_uint8 = 5;
+            }
+            """
+        )
+    )
+
+    java_output = render_files(generate_files(schema, JavaGenerator))
+    assert "import org.apache.fory.annotation.Int32Type;" in java_output
+    assert "import org.apache.fory.annotation.Uint8Type;" in java_output
+    assert "import org.apache.fory.annotation.Uint64Type;" in java_output
+    assert "private Int32List fixedInt32s;" in java_output
+    assert "private Int32List varint32s;" in java_output
+    assert (
+        "private Map<@Int32Type(compress = false) Integer, String> namesByFixedInt32;"
+        in java_output
+    )
+    assert (
+        "private Map<@Uint64Type(encoding = LongEncoding.VARINT) Long, String>"
+        " namesByVarUint64;" in java_output
+    )
+    assert "private Map<@Uint8Type Byte, String> namesByUint8;" in java_output
+
+
 def test_cpp_generator_supports_decimal_fields_and_unions():
     schema = parse_fdl(
         dedent(
@@ -566,6 +666,64 @@ def test_cpp_generator_supports_decimal_fields_and_unions():
     assert "const fory::serialization::Decimal& amount() const" in cpp_output
     assert "std::variant<fory::serialization::Decimal, Money> value_" in cpp_output
     assert "(fory::serialization::Decimal, amount, fory::F(1))" in cpp_output
+
+
+def test_cpp_union_generation_uses_variant_indices_for_duplicate_carriers():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            union EncodedNumber {
+                fixed_int32 fixed_i32 = 1;
+                int32 var_i32 = 2;
+                fixed_int64 fixed_i64 = 3;
+                int64 var_i64 = 4;
+            }
+            """
+        )
+    )
+
+    cpp_output = render_files(generate_files(schema, CppGenerator))
+    assert "std::variant<int32_t, int32_t, int64_t, int64_t> value_" in cpp_output
+    assert "return EncodedNumber(std::in_place_index<0>, std::move(v));" in cpp_output
+    assert "return EncodedNumber(std::in_place_index<1>, std::move(v));" in cpp_output
+    assert "return EncodedNumber(std::in_place_index<2>, std::move(v));" in cpp_output
+    assert "return EncodedNumber(std::in_place_index<3>, std::move(v));" in cpp_output
+    assert "return value_.index() == 0;" in cpp_output
+    assert "return value_.index() == 1;" in cpp_output
+    assert "return std::get_if<0>(&value_);" in cpp_output
+    assert "return std::get_if<1>(&value_);" in cpp_output
+    assert "return std::get<2>(value_);" in cpp_output
+    assert "return std::get<3>(value_);" in cpp_output
+    assert "std::holds_alternative<int32_t>" not in cpp_output
+    assert "std::get_if<int32_t>" not in cpp_output
+    assert "std::get<int32_t>" not in cpp_output
+    assert "std::in_place_type<int32_t>" not in cpp_output
+
+
+def test_cpp_large_union_case_macros_wrap_template_types():
+    fields = "\n".join(f"                int32 value_{i} = {i};" for i in range(1, 17))
+    schema = parse_fdl(
+        dedent(
+            f"""
+            package gen;
+
+            union BigValue {{
+{fields}
+                map<string, optional float16> by_name = 17;
+            }}
+            """
+        )
+    )
+
+    cpp_output = render_files(generate_files(schema, CppGenerator))
+    assert "FORY_UNION_IDS(gen::BigValue, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17);" in cpp_output
+    assert (
+        "FORY_UNION_CASE(gen::BigValue, 17, "
+        "FORY_UNION_TYPE(std::map<std::string, std::optional<fory::float16_t>>), "
+        "gen::BigValue::by_name, fory::F(17));"
+    ) in cpp_output
 
 
 def test_java_enum_generation_uses_fory_enum_ids():
@@ -719,7 +877,7 @@ def test_generators_support_extended_xlang_scalar_and_array_types():
 
     swift_output = render_files(generate_files(schema, SwiftGenerator))
     assert "public var span: Duration = Duration.foryDefault()" in swift_output
-    assert "public var bf16: BFloat16 = 0" in swift_output
+    assert "public var bf16: BFloat16 = BFloat16.foryDefault()" in swift_output
     assert "case span(Duration)" in swift_output
 
     dart_output = render_files(generate_files(schema, DartGenerator))
@@ -728,3 +886,25 @@ def test_generators_support_extended_xlang_scalar_and_array_types():
     assert "Float16List f16s = Float16List(0);" in dart_output
     assert "Bfloat16List bf16s = Bfloat16List(0);" in dart_output
     assert "Map<String, Bfloat16?> maybeByName = <String, Bfloat16?>{};" in dart_output
+
+
+def test_java_union_optional_half_float_lists_preserve_list_type():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            union Value {
+                list<optional float16> maybe_f16s = 1;
+                list<optional bfloat16> maybe_bf16s = 2;
+            }
+            """
+        )
+    )
+
+    java_output = render_files(generate_files(schema, JavaGenerator))
+    assert "public static Value ofMaybeF16s(List<Float16> v)" in java_output
+    assert "public static Value ofMaybeBf16s(List<BFloat16> v)" in java_output
+    assert "return Types.LIST;" in java_output
+    assert "Types.FLOAT16_ARRAY" not in java_output
+    assert "Types.BFLOAT16_ARRAY" not in java_output

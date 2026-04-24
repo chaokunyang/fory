@@ -22,8 +22,10 @@ package org.apache.fory.reflect;
 import static org.testng.Assert.*;
 
 import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.WildcardType;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,12 +34,19 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class TypeRefTest extends ForyTestBase {
+  static class AnnotatedGenericFields {
+    Map<String, @Int32Type(compress = true) Integer> scores;
+  }
+
   static class MapObject extends LinkedHashMap<String, Object> {}
 
   @Test
@@ -224,5 +233,52 @@ public class TypeRefTest extends ForyTestBase {
     assertTrue(valueType.isWildcard());
     resolved = valueType.resolveWildcard();
     assertEquals(resolved.getRawType(), Number.class);
+  }
+
+  @Test
+  public void testWherePreservesNestedTypeExtMetaForMapTypeArguments() {
+    TypeExtMeta mapMeta = TypeExtMeta.of(Types.MAP, false, false);
+    TypeRef<Integer> fixedIntKey = TypeRef.of(Integer.class, TypeExtMeta.of(Types.INT32, true, true));
+    TypeRef<Map<Integer, String>> mapType =
+        TypeUtils.mapOf(fixedIntKey, TypeRef.of(String.class), mapMeta);
+
+    assertTrue(mapType.hasExplicitTypeArguments());
+    assertNotNull(mapType.getTypeExtMeta());
+    assertEquals(mapType.getTypeExtMeta().typeId(), Types.MAP);
+    assertEquals(mapType.getTypeArguments().size(), 2);
+    assertNotNull(mapType.getTypeArguments().get(0).getTypeExtMeta());
+    assertEquals(mapType.getTypeArguments().get(0).getTypeExtMeta().typeId(), Types.INT32);
+    assertEquals(mapType.getTypeArguments().get(0).getType(), Integer.class);
+    assertEquals(mapType.getTypeArguments().get(1).getType(), String.class);
+  }
+
+  @Test
+  public void testWherePreservesNestedTypeExtMetaThroughCollectionSubstitution() {
+    TypeRef<Integer> fixedIntKey = TypeRef.of(Integer.class, TypeExtMeta.of(Types.INT32, true, true));
+    TypeRef<Map<Integer, String>> mapType = TypeUtils.mapOf(fixedIntKey, TypeRef.of(String.class));
+    TypeRef<Collection<Map<Integer, String>>> collectionType =
+        TypeUtils.collectionOf(mapType, TypeExtMeta.of(Types.LIST, true, false));
+
+    assertTrue(collectionType.hasExplicitTypeArguments());
+    assertNotNull(collectionType.getTypeExtMeta());
+    assertEquals(collectionType.getTypeExtMeta().typeId(), Types.LIST);
+    TypeRef<?> mapElementType = collectionType.getTypeArguments().get(0);
+    assertTrue(mapElementType.hasExplicitTypeArguments());
+    assertEquals(mapElementType.getTypeArguments().size(), 2);
+    assertNotNull(mapElementType.getTypeArguments().get(0).getTypeExtMeta());
+    assertEquals(mapElementType.getTypeArguments().get(0).getTypeExtMeta().typeId(), Types.INT32);
+    assertEquals(mapElementType.getTypeArguments().get(1).getType(), String.class);
+  }
+
+  @Test
+  public void testAnnotatedTypeRefDefaultTrackingMatchesEncodedType() throws NoSuchFieldException {
+    AnnotatedParameterizedType scoresType =
+        (AnnotatedParameterizedType)
+            AnnotatedGenericFields.class.getDeclaredField("scores").getAnnotatedType();
+    TypeRef<?> scoresRef = TypeRef.of(scoresType);
+    TypeRef<?> scoreValueRef = scoresRef.getTypeArguments().get(1);
+    assertNotNull(scoreValueRef.getTypeExtMeta());
+    assertEquals(scoreValueRef.getTypeExtMeta().typeId(), Types.VARINT32);
+    assertFalse(scoreValueRef.getTypeExtMeta().trackingRef());
   }
 }

@@ -1100,11 +1100,11 @@ public abstract class TypeResolver {
   public abstract <T> Serializer<T> getSerializer(Class<T> cls);
 
   public final Serializer<?> getSerializer(TypeRef<?> typeRef) {
-    if (!isCrossLanguage()) {
-      return getSerializer(typeRef.getRawType());
+    TypeExtMeta meta = typeRef.getTypeExtMeta();
+    if (meta != null && meta.typeId() != Types.UNKNOWN) {
+      return getSerializerByTypeId(meta.typeId());
     }
-    Class<?> rawType = typeRef.getRawType();
-    return getSerializer(rawType);
+    return getSerializer(typeRef.getRawType());
   }
 
   public abstract Serializer<?> getRawSerializer(Class<?> cls);
@@ -1546,12 +1546,13 @@ public abstract class TypeResolver {
     Map<String, GenericType> map = new HashMap<>();
     Map<String, GenericType> map2 = new HashMap<>();
     for (Field field : ReflectionUtils.getFields(cls, true)) {
-      Type type = field.getGenericType();
-      GenericType genericType = buildGenericType(type);
       AnnotatedType annotatedType = field.getAnnotatedType();
+      TypeRef<?> annotatedTypeRef =
+          annotatedType != null ? TypeRef.of(annotatedType) : TypeRef.of(field.getGenericType());
+      GenericType genericType = buildGenericType(annotatedTypeRef);
       TypeUtils.applyRefTrackingOverride(genericType, annotatedType, trackingRef());
       buildGenericMap(map, genericType);
-      TypeRef<?> typeRef = TypeRef.of(type);
+      TypeRef<?> typeRef = TypeRef.of(field.getGenericType());
       buildGenericMap(map2, typeRef);
     }
     for (Map.Entry<String, GenericType> entry : map2.entrySet()) {
@@ -1561,10 +1562,11 @@ public abstract class TypeResolver {
   }
 
   private void buildGenericMap(Map<String, GenericType> map, TypeRef<?> typeRef) {
-    if (map.containsKey(typeRef.getType().getTypeName())) {
+    String typeKey = typeRef.getGenericTypeKey();
+    if (map.containsKey(typeKey)) {
       return;
     }
-    map.put(typeRef.getType().getTypeName(), buildGenericType(typeRef));
+    map.put(typeKey, buildGenericType(typeRef));
     Class<?> rawType = typeRef.getRawType();
     if (TypeUtils.isMap(rawType)) {
       Tuple2<TypeRef<?>, TypeRef<?>> kvTypes = TypeUtils.getMapKeyValueType(typeRef);
@@ -1580,10 +1582,11 @@ public abstract class TypeResolver {
   }
 
   private void buildGenericMap(Map<String, GenericType> map, GenericType genericType) {
-    if (map.containsKey(genericType.getType().getTypeName())) {
+    String typeKey = genericType.getTypeRef().getGenericTypeKey();
+    if (map.containsKey(typeKey)) {
       return;
     }
-    map.put(genericType.getType().getTypeName(), genericType);
+    map.put(typeKey, genericType);
     for (GenericType t : genericType.getTypeParameters()) {
       buildGenericMap(map, t);
     }

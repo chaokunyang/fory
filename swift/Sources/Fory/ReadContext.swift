@@ -446,7 +446,7 @@ public final class ReadContext {
         case .duration:
             value = try Duration.foryRead(self, refMode: .none, readTypeInfo: false)
         case .timestamp:
-            value = try Date.foryRead(self, refMode: .none, readTypeInfo: false)
+            value = try Timestamp.foryRead(self, refMode: .none, readTypeInfo: false)
         case .date:
             value = try LocalDate.foryRead(self, refMode: .none, readTypeInfo: false)
         case .decimal:

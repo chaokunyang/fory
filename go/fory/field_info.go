@@ -844,6 +844,39 @@ func isIntUintWidthCompatible(actualKind, expectedKind reflect.Kind) bool {
 		(actualKind == reflect.Uint64 && expectedKind == reflect.Uint)
 }
 
+func shouldUsePrimitiveArrayType(elemType reflect.Type) bool {
+	if elemType == nil {
+		return false
+	}
+	if elemType == float16Type || elemType == bfloat16Type {
+		return true
+	}
+	if elemType == dateType || elemType == durationType || elemType == timestampType || elemType == decimalType {
+		return false
+	}
+	if elemType.Name() != "" && elemType.PkgPath() != "" && isNumericKind(elemType.Kind()) {
+		return false
+	}
+	switch elemType.Kind() {
+	case reflect.Bool,
+		reflect.Int8,
+		reflect.Int16,
+		reflect.Int32,
+		reflect.Int64,
+		reflect.Int,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64,
+		reflect.Uint,
+		reflect.Float32,
+		reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
 func elementTypesCompatible(actual, expected reflect.Type) bool {
 	if actual == nil || expected == nil {
 		return false
@@ -917,8 +950,12 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 	case reflect.String:
 		return STRING
 	case reflect.Slice:
+		elemType := type_.Elem()
+		if !shouldUsePrimitiveArrayType(elemType) {
+			return LIST
+		}
 		// For slices, return the appropriate primitive array type ID based on element type
-		elemKind := type_.Elem().Kind()
+		elemKind := elemType.Kind()
 		switch elemKind {
 		case reflect.Bool:
 			return BOOL_ARRAY
@@ -929,10 +966,10 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 		case reflect.Int16:
 			return INT16_ARRAY
 		case reflect.Uint16:
-			if type_.Elem() == float16Type {
+			if elemType == float16Type {
 				return FLOAT16_ARRAY
 			}
-			if type_.Elem() == bfloat16Type {
+			if elemType == bfloat16Type {
 				return BFLOAT16_ARRAY
 			}
 			return UINT16_ARRAY
@@ -953,8 +990,12 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 			return LIST
 		}
 	case reflect.Array:
+		elemType := type_.Elem()
+		if !shouldUsePrimitiveArrayType(elemType) {
+			return LIST
+		}
 		// For arrays, return the appropriate primitive array type ID based on element type
-		elemKind := type_.Elem().Kind()
+		elemKind := elemType.Kind()
 		switch elemKind {
 		case reflect.Bool:
 			return BOOL_ARRAY
@@ -965,10 +1006,10 @@ func typeIdFromKind(type_ reflect.Type) TypeId {
 		case reflect.Int16:
 			return INT16_ARRAY
 		case reflect.Uint16:
-			if type_.Elem() == float16Type {
+			if elemType == float16Type {
 				return FLOAT16_ARRAY
 			}
-			if type_.Elem() == bfloat16Type {
+			if elemType == bfloat16Type {
 				return BFLOAT16_ARRAY
 			}
 			return UINT16_ARRAY

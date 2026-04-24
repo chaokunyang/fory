@@ -73,6 +73,29 @@ describe("decimal", () => {
     expect(roundTrip.note).toBe("principal");
   });
 
+  test("round-trips small decimal fields without dropping trailing fields", () => {
+    const fory = new Fory({ compatible: true });
+    const serializer = fory.register(Type.struct({
+      typeId: 1001,
+    }, {
+      amount: Type.decimal(),
+      note: Type.string(),
+    })).serializer;
+    const value = {
+      amount: decimal("1234567890123456789", 4),
+      note: "tail-field",
+    };
+
+    const roundTrip = fory.deserialize(fory.serialize(value, serializer), serializer) as {
+      amount: Decimal;
+      note: string;
+    };
+
+    expect(roundTrip.amount).toBeInstanceOf(Decimal);
+    expect(roundTrip.amount.equals(value.amount)).toBe(true);
+    expect(roundTrip.note).toBe("tail-field");
+  });
+
   test("rejects non-canonical big decimal payloads", () => {
     const fory = new Fory();
     const zeroBigEncoding = Buffer.from([

@@ -22,11 +22,11 @@ import Testing
 private let secondsPerDay = 86_400.0
 
 @ForyObject
-private struct DateMacroHolder {
+private struct TimestampMacroHolder {
     var day: LocalDate = .foryDefault()
 
-    var instant: Date = .foryDefault()
-    var timestamp: Date = .foryDefault()
+    var instant: Timestamp = .foryDefault()
+    var timestamp: Timestamp = .foryDefault()
 }
 
 @ForyObject
@@ -67,6 +67,7 @@ private func encodedDurationComponents(_ duration: Duration) throws -> (seconds:
 func dateAndTimestampTypeIds() {
     #expect(Duration.staticTypeId == .duration)
     #expect(LocalDate.staticTypeId == .date)
+    #expect(Timestamp.staticTypeId == .timestamp)
     #expect(Date.staticTypeId == .timestamp)
 }
 
@@ -97,10 +98,15 @@ func dateAndTimestampRoundTrip() throws {
     let durationDecoded: Duration = try fory.deserialize(durationData)
     #expect(durationDecoded == duration)
 
-    let instant = Date(timeIntervalSince1970: 1_731_234_567.123_456_7)
+    let instant = Timestamp(seconds: 1_731_234_567, nanos: 123_456_700)
     let instantData = try fory.serialize(instant)
-    let instantDecoded: Date = try fory.deserialize(instantData)
-    let diff = abs(instantDecoded.timeIntervalSince1970 - instant.timeIntervalSince1970)
+    let instantDecoded: Timestamp = try fory.deserialize(instantData)
+    #expect(instantDecoded == instant)
+
+    let bridgedInstant = Date(timeIntervalSince1970: 1_731_234_567.123_456_7)
+    let bridgedInstantData = try fory.serialize(bridgedInstant)
+    let bridgedInstantDecoded: Date = try fory.deserialize(bridgedInstantData)
+    let diff = abs(bridgedInstantDecoded.timeIntervalSince1970 - bridgedInstant.timeIntervalSince1970)
     #expect(diff < 0.000_001)
 }
 
@@ -210,7 +216,7 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
         checkClassVersion: true,
         maxDepth: 5
     )
-    let instant = Date(timeIntervalSince1970: 123_456.000_001)
+    let instant = Timestamp(seconds: 123_456, nanos: 1_000)
     try timestampWriteContext.writeTimestamp(instant, refMode: .nullOnly, writeTypeInfo: true)
 
     let timestampReadContext = ReadContext(
@@ -224,8 +230,11 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
         maxBinarySize: 64 * 1024 * 1024,
         maxDepth: 5
     )
-    let timestampDecoded = try timestampReadContext.readTimestamp(refMode: RefMode.nullOnly, readTypeInfo: true)
-    #expect(abs(timestampDecoded.timeIntervalSince1970 - instant.timeIntervalSince1970) < 0.000_001)
+    let timestampDecoded = try timestampReadContext.readTimestampValue(
+        refMode: RefMode.nullOnly,
+        readTypeInfo: true
+    )
+    #expect(timestampDecoded == instant)
 }
 
 @Test
@@ -262,20 +271,18 @@ func durationMacroFieldsUseXlangTypeId() throws {
 @Test
 func dateAndTimestampMacroFieldRoundTrip() throws {
     let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
-    fory.register(DateMacroHolder.self, id: 901)
+    fory.register(TimestampMacroHolder.self, id: 901)
 
-    let value = DateMacroHolder(
+    let value = TimestampMacroHolder(
         day: localDate(20_001),
-        instant: Date(timeIntervalSince1970: 123_456.000_001),
-        timestamp: Date(timeIntervalSince1970: 44.000_012_345)
+        instant: Timestamp(seconds: 123_456, nanos: 1_000),
+        timestamp: Timestamp(seconds: 44, nanos: 12_345)
     )
 
     let data = try fory.serialize(value)
-    let decoded: DateMacroHolder = try fory.deserialize(data)
+    let decoded: TimestampMacroHolder = try fory.deserialize(data)
 
     #expect(decoded.day == value.day)
-    let instantDiff = abs(decoded.instant.timeIntervalSince1970 - value.instant.timeIntervalSince1970)
-    #expect(instantDiff < 0.000_001)
-    let timestampDiff = abs(decoded.timestamp.timeIntervalSince1970 - value.timestamp.timeIntervalSince1970)
-    #expect(timestampDiff < 0.000_001)
+    #expect(decoded.instant == value.instant)
+    #expect(decoded.timestamp == value.timestamp)
 }

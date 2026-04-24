@@ -164,6 +164,7 @@ final class ForyGenerator extends Generator {
     final idValue = reader?.peek('id');
     final nullableValue = reader?.peek('nullable');
     final dynamicValue = reader?.peek('dynamic');
+    final wireTypeIdValue = reader?.peek('wireTypeId');
     final fieldId = idValue == null || idValue.isNull ? null : idValue.intValue;
     final nullable = nullableValue == null || nullableValue.isNull
         ? _isNullable(field.type)
@@ -171,6 +172,9 @@ final class ForyGenerator extends Generator {
     final dynamic = dynamicValue == null || dynamicValue.isNull
         ? _autoDynamic(field.type)
         : dynamicValue.boolValue;
+    final wireTypeId = wireTypeIdValue == null || wireTypeIdValue.isNull
+        ? null
+        : wireTypeIdValue.intValue;
     final ref = reader?.peek('ref')?.boolValue ?? false;
 
     // Read container TypeSpec annotations (@ListType / @MapType).
@@ -193,6 +197,7 @@ final class ForyGenerator extends Generator {
         nullable: nullable,
         ref: ref,
         dynamic: dynamic,
+        wireTypeIdOverride: wireTypeId,
         typeSpec: typeSpec,
         integerAnnotation: _analyzeIntegerAnnotation(field),
       ),
@@ -204,6 +209,7 @@ final class ForyGenerator extends Generator {
     required bool nullable,
     required bool ref,
     required bool? dynamic,
+    int? wireTypeIdOverride,
     _TypeSpecInfo? typeSpec,
     _IntegerAnnotationSpec? integerAnnotation,
   }) {
@@ -213,6 +219,7 @@ final class ForyGenerator extends Generator {
       if (specRef != null) ref = specRef;
       final specNullable = typeSpec.nullable;
       if (specNullable != null) nullable = specNullable;
+      wireTypeIdOverride = typeSpec.wireTypeId ?? wireTypeIdOverride;
     }
     if (_isList(type) || _isSet(type)) {
       final argument = (type as InterfaceType).typeArguments.single;
@@ -221,7 +228,7 @@ final class ForyGenerator extends Generator {
       return _GeneratedFieldTypeSpec(
         typeLiteral: _typeReferenceLiteral(type),
         declaredTypeName: _typeReferenceLiteral(type),
-        typeId: _typeIdFor(type),
+        typeId: wireTypeIdOverride ?? _typeIdFor(type),
         nullable: nullable,
         ref: ref,
         dynamic: dynamic,
@@ -243,7 +250,7 @@ final class ForyGenerator extends Generator {
       return _GeneratedFieldTypeSpec(
         typeLiteral: _typeReferenceLiteral(type),
         declaredTypeName: _typeReferenceLiteral(type),
-        typeId: _typeIdFor(type),
+        typeId: wireTypeIdOverride ?? _typeIdFor(type),
         nullable: nullable,
         ref: ref,
         dynamic: dynamic,
@@ -268,7 +275,8 @@ final class ForyGenerator extends Generator {
     return _GeneratedFieldTypeSpec(
       typeLiteral: _typeReferenceLiteral(type),
       declaredTypeName: _typeReferenceLiteral(type),
-      typeId: _typeIdFor(type, integerAnnotation: integerAnnotation),
+      typeId: wireTypeIdOverride ??
+          _typeIdFor(type, integerAnnotation: integerAnnotation),
       nullable: nullable,
       ref: ref,
       dynamic: dynamic,
@@ -360,10 +368,10 @@ final class ForyGenerator extends Generator {
   void _writeEnum(StringBuffer output, _GeneratedEnumSpec enumSpec) {
     final serializerClassName = '_${enumSpec.name}ForySerializer';
     final writeExpression = enumSpec.usesRawValue
-        ? 'context.writeVarInt32(value.rawValue);'
+        ? 'context.writeVarUint32(value.rawValue);'
         : 'context.writeVarUint32(value.index);';
     final readExpression = enumSpec.usesRawValue
-        ? 'return ${enumSpec.name}.fromRawValue(context.readVarInt32());'
+        ? 'return ${enumSpec.name}.fromRawValue(context.readVarUint32());'
         : 'return ${enumSpec.name}.values[context.readVarUint32()];';
     output
       ..writeln(
@@ -1943,6 +1951,7 @@ GeneratedFieldType(
       case TypeIds.int16:
       case TypeIds.uint16:
       case TypeIds.float16:
+      case TypeIds.bfloat16:
         return 2;
       case TypeIds.int32:
       case TypeIds.varInt32:
@@ -2113,9 +2122,11 @@ GeneratedFieldType(
     final element = elementObj != null && !elementObj.isNull
         ? _readTypeSpecObj(elementObj)
         : null;
+    final wireTypeId = _readWireTypeId(reader);
     return _ListTypeSpecInfo(
       ref: options.ref,
       nullable: options.nullable,
+      wireTypeId: wireTypeId,
       element: element,
     );
   }
@@ -2129,9 +2140,11 @@ GeneratedFieldType(
     final value = valueObj != null && !valueObj.isNull
         ? _readTypeSpecObj(valueObj)
         : null;
+    final wireTypeId = _readWireTypeId(reader);
     return _MapTypeSpecInfo(
       ref: options.ref,
       nullable: options.nullable,
+      wireTypeId: wireTypeId,
       key: key,
       value: value,
     );
@@ -2147,7 +2160,11 @@ GeneratedFieldType(
     }
     // ValueType or fallback
     final options = _readTypeOptions(reader);
-    return _TypeSpecInfo(ref: options.ref, nullable: options.nullable);
+    return _TypeSpecInfo(
+      ref: options.ref,
+      nullable: options.nullable,
+      wireTypeId: _readWireTypeId(reader),
+    );
   }
 
   ({bool? ref, bool? nullable}) _readTypeOptions(ConstantReader reader) {
@@ -2167,6 +2184,14 @@ GeneratedFieldType(
       }
     }
     return (ref: ref, nullable: nullable);
+  }
+
+  int? _readWireTypeId(ConstantReader reader) {
+    final wireTypeIdReader = reader.peek('wireTypeId');
+    if (wireTypeIdReader == null || wireTypeIdReader.isNull) {
+      return null;
+    }
+    return wireTypeIdReader.intValue;
   }
 
   int _typeIdFor(DartType type, {_IntegerAnnotationSpec? integerAnnotation}) {
@@ -2297,7 +2322,7 @@ GeneratedFieldType(
 
   String _enumWriteExpression(DartType type, String valueExpression) {
     if (_enumUsesRawValue(type)) {
-      return 'buffer.writeVarInt32($valueExpression.rawValue)';
+      return 'buffer.writeVarUint32($valueExpression.rawValue)';
     }
     return 'buffer.writeVarUint32($valueExpression.index)';
   }
@@ -2308,7 +2333,7 @@ GeneratedFieldType(
     String valueExpression,
   ) {
     if (_enumUsesRawValue(type)) {
-      return '$cursorExpression.writeVarInt32($valueExpression.rawValue)';
+      return '$cursorExpression.writeVarUint32($valueExpression.rawValue)';
     }
     return '$cursorExpression.writeVarUint32($valueExpression.index)';
   }
@@ -2316,7 +2341,7 @@ GeneratedFieldType(
   String _enumReadExpression(DartType type, String contextExpression) {
     final typeDisplay = _typeReferenceLiteral(type);
     if (_enumUsesRawValue(type)) {
-      return '$typeDisplay.fromRawValue($contextExpression.readVarInt32())';
+      return '$typeDisplay.fromRawValue($contextExpression.readVarUint32())';
     }
     return '$typeDisplay.values[$contextExpression.readVarUint32()]';
   }
@@ -2324,7 +2349,7 @@ GeneratedFieldType(
   String _enumCursorReadExpression(DartType type, String cursorExpression) {
     final typeDisplay = _typeReferenceLiteral(type);
     if (_enumUsesRawValue(type)) {
-      return '$typeDisplay.fromRawValue($cursorExpression.readVarInt32())';
+      return '$typeDisplay.fromRawValue($cursorExpression.readVarUint32())';
     }
     return '$typeDisplay.values[$cursorExpression.readVarUint32()]';
   }
@@ -2580,19 +2605,31 @@ final class _IntegerAnnotationSpec {
 class _TypeSpecInfo {
   final bool? ref;
   final bool? nullable;
+  final int? wireTypeId;
 
-  const _TypeSpecInfo({this.ref, this.nullable});
+  const _TypeSpecInfo({this.ref, this.nullable, this.wireTypeId});
 }
 
 final class _ListTypeSpecInfo extends _TypeSpecInfo {
   final _TypeSpecInfo? element;
 
-  const _ListTypeSpecInfo({super.ref, super.nullable, this.element});
+  const _ListTypeSpecInfo({
+    super.ref,
+    super.nullable,
+    super.wireTypeId,
+    this.element,
+  });
 }
 
 final class _MapTypeSpecInfo extends _TypeSpecInfo {
   final _TypeSpecInfo? key;
   final _TypeSpecInfo? value;
 
-  const _MapTypeSpecInfo({super.ref, super.nullable, this.key, this.value});
+  const _MapTypeSpecInfo({
+    super.ref,
+    super.nullable,
+    super.wireTypeId,
+    this.key,
+    this.value,
+  });
 }

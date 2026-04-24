@@ -48,6 +48,7 @@ public sealed class ReadContext
     internal readonly UInt64Map<TypeInfo> _readTypeInfoByType = new();
     internal readonly Dictionary<CanonicalRefSignature, List<CanonicalRefEntry>> _canonicalRefCache = [];
     internal readonly List<uint> _reservedRefIds = [];
+    private readonly List<ContainerWireTypeOverride> _containerWireTypeOverrides = [];
     private readonly int _maxDynamicReadDepth;
     internal Type? _typeMetaType;
     internal TypeMeta? _typeMeta;
@@ -352,6 +353,60 @@ public sealed class ReadContext
         }
     }
 
+    internal void PushContainerWireTypeOverride(ContainerWireTypeOverride wireTypeOverride)
+    {
+        _containerWireTypeOverrides.Add(wireTypeOverride);
+    }
+
+    internal void PopContainerWireTypeOverride()
+    {
+        if (_containerWireTypeOverrides.Count == 0)
+        {
+            throw new InvalidDataException("container wire type override stack underflow");
+        }
+
+        _containerWireTypeOverrides.RemoveAt(_containerWireTypeOverrides.Count - 1);
+    }
+
+    internal bool TryGetCollectionElementWireTypeOverride(out TypeId typeId)
+    {
+        if (_containerWireTypeOverrides.Count > 0 &&
+            _containerWireTypeOverrides[^1].ElementTypeId is TypeId elementTypeId)
+        {
+            typeId = elementTypeId;
+            return true;
+        }
+
+        typeId = default;
+        return false;
+    }
+
+    internal bool TryGetMapKeyWireTypeOverride(out TypeId typeId)
+    {
+        if (_containerWireTypeOverrides.Count > 0 &&
+            _containerWireTypeOverrides[^1].KeyTypeId is TypeId keyTypeId)
+        {
+            typeId = keyTypeId;
+            return true;
+        }
+
+        typeId = default;
+        return false;
+    }
+
+    internal bool TryGetMapValueWireTypeOverride(out TypeId typeId)
+    {
+        if (_containerWireTypeOverrides.Count > 0 &&
+            _containerWireTypeOverrides[^1].ValueTypeId is TypeId valueTypeId)
+        {
+            typeId = valueTypeId;
+            return true;
+        }
+
+        typeId = default;
+        return false;
+    }
+
     internal void IncreaseReadDepth()
     {
         _currentDynamicReadDepth += 1;
@@ -419,5 +474,6 @@ public sealed class ReadContext
         _hasFirstReadTypeMeta = false;
         _readTypeMetas.Clear();
         _readMetaStrings.Clear();
+        _containerWireTypeOverrides.Clear();
     }
 }

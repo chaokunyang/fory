@@ -18,6 +18,7 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace Apache.Fory;
@@ -94,8 +95,9 @@ public sealed class TypeInfo
 
     internal static TypeInfo Create<T>(Type type, Serializer<T> serializer)
     {
+        serializer = FieldIdentifierGeneratedSerializer.TryCreate(type, serializer) ?? serializer;
         Func<bool, IReadOnlyList<TypeMetaFieldInfo>> typeMetaFields =
-            CreateTypeMetaFieldsProvider(serializer, out bool hasTypeMetaFieldsProvider);
+            CreateTypeMetaFieldsProvider(type, serializer, out bool hasTypeMetaFieldsProvider);
         (TypeId? builtInTypeId, UserTypeKind? userTypeKind, bool isDynamicType) = ResolveTypeShape(
             type,
             hasTypeMetaFieldsProvider);
@@ -128,6 +130,7 @@ public sealed class TypeInfo
     }
 
     private static Func<bool, IReadOnlyList<TypeMetaFieldInfo>> CreateTypeMetaFieldsProvider(
+        Type type,
         object serializer,
         out bool hasProvider)
     {
@@ -146,8 +149,16 @@ public sealed class TypeInfo
         try
         {
             Delegate del = method.CreateDelegate(typeof(Func<bool, IReadOnlyList<TypeMetaFieldInfo>>), serializer);
+            Func<bool, IReadOnlyList<TypeMetaFieldInfo>> provider =
+                (Func<bool, IReadOnlyList<TypeMetaFieldInfo>>)del;
+            IReadOnlyDictionary<string, short>? reflectedFieldIds = CreateReflectedFieldIdLookup(type);
             hasProvider = true;
-            return (Func<bool, IReadOnlyList<TypeMetaFieldInfo>>)del;
+            if (reflectedFieldIds is null || reflectedFieldIds.Count == 0)
+            {
+                return provider;
+            }
+
+            return trackRef => OverlayReflectedFieldIds(provider(trackRef), reflectedFieldIds);
         }
         catch
         {
@@ -159,6 +170,123 @@ public sealed class TypeInfo
     private static IReadOnlyList<TypeMetaFieldInfo> EmptyTypeMetaFieldsProvider(bool _)
     {
         return EmptyTypeMetaFields;
+    }
+
+    private static IReadOnlyDictionary<string, short>? CreateReflectedFieldIdLookup(Type type)
+    {
+        Type inspectedType = Nullable.GetUnderlyingType(type) ?? type;
+        Dictionary<string, short>? lookup = null;
+        foreach (MemberInfo member in inspectedType.GetMembers(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (!TryGetFieldAttribute(
+                    member,
+                    out FieldAttribute? fieldAttribute,
+                    out Type? memberType) ||
+                fieldAttribute.Id < 0)
+            {
+                continue;
+            }
+
+            lookup ??= new Dictionary<string, short>(StringComparer.Ordinal);
+            AddFieldIdLookupEntry(lookup, inspectedType, member.Name, memberType, fieldAttribute.Id);
+        }
+
+        return lookup;
+    }
+
+    private static bool TryGetFieldAttribute(
+        MemberInfo member,
+        [NotNullWhen(true)]
+        out FieldAttribute? fieldAttribute,
+        [NotNullWhen(true)]
+        out Type? memberType)
+    {
+        switch (member)
+        {
+            case PropertyInfo property when property.GetMethod is not null &&
+                                           property.GetMethod.IsPublic &&
+                                           property.GetIndexParameters().Length == 0:
+                fieldAttribute = property.GetCustomAttribute<FieldAttribute>();
+                memberType = property.PropertyType;
+                return fieldAttribute is not null;
+            case FieldInfo field when field.IsPublic:
+                fieldAttribute = field.GetCustomAttribute<FieldAttribute>();
+                memberType = field.FieldType;
+                return fieldAttribute is not null;
+            default:
+                fieldAttribute = null;
+                memberType = null;
+                return false;
+        }
+    }
+
+    private static void AddFieldIdLookupEntry(
+        Dictionary<string, short> lookup,
+        Type declaringType,
+        string memberName,
+        Type memberType,
+        short fieldId)
+    {
+        AddResolvedFieldId(lookup, memberName, fieldId);
+        string normalizedName = TypeMetaUtils.LowerCamelToLowerUnderscore(memberName);
+        if (!string.Equals(normalizedName, memberName, StringComparison.Ordinal))
+        {
+            AddResolvedFieldId(lookup, normalizedName, fieldId);
+        }
+
+        if (GeneratedFieldNameResolver.TryGetGeneratedAlias(
+                declaringType,
+                memberName,
+                memberType,
+                out string alias))
+        {
+            AddResolvedFieldId(lookup, alias, fieldId);
+        }
+    }
+
+    private static void AddResolvedFieldId(
+        Dictionary<string, short> lookup,
+        string fieldName,
+        short fieldId)
+    {
+        if (lookup.TryGetValue(fieldName, out short existing) && existing != fieldId)
+        {
+            throw new InvalidDataException(
+                $"conflicting reflected field ids for {fieldName}: {existing} vs {fieldId}");
+        }
+
+        lookup[fieldName] = fieldId;
+    }
+
+    private static IReadOnlyList<TypeMetaFieldInfo> OverlayReflectedFieldIds(
+        IReadOnlyList<TypeMetaFieldInfo> fields,
+        IReadOnlyDictionary<string, short> reflectedFieldIds)
+    {
+        TypeMetaFieldInfo[]? rewritten = null;
+        for (int i = 0; i < fields.Count; i++)
+        {
+            TypeMetaFieldInfo field = fields[i];
+            if (field.FieldId.HasValue ||
+                !reflectedFieldIds.TryGetValue(field.FieldName, out short fieldId))
+            {
+                if (rewritten is not null)
+                {
+                    rewritten[i] = field;
+                }
+
+                continue;
+            }
+
+            rewritten ??= new TypeMetaFieldInfo[fields.Count];
+            for (int copied = 0; copied < i; copied++)
+            {
+                rewritten[copied] = fields[copied];
+            }
+
+            rewritten[i] = new TypeMetaFieldInfo(fieldId, field.FieldName, field.FieldType);
+        }
+
+        return rewritten ?? fields;
     }
 
     private static bool ResolveStructEvolving(Type type, UserTypeKind? userTypeKind)

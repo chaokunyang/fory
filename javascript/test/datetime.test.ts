@@ -47,6 +47,18 @@ describe('datetime', () => {
     );
     expect(result).toEqual({ a: d, b: d.getTime() })
   });
+  test('should preserve sub-millisecond timestamp payloads across deserialize and serialize', () => {
+    const fory = new Fory({ ref: true });
+    const serializer = fory.register(Type.timestamp()).serializer;
+    const value = 1709210096789.123;
+
+    const encoded = fory.serialize(value, serializer);
+    const decoded = fory.deserialize(encoded, serializer) as Date;
+
+    expect(decoded).toBeInstanceOf(Date);
+    expect(decoded.getTime()).toEqual(1709210096789);
+    expect(Array.from(fory.serialize(decoded, serializer))).toEqual(Array.from(encoded));
+  });
   test('should use signed varint64 seconds and signed int32 nanos for duration payloads', () => {
     const fory = new Fory({ ref: true });
     const serializer = fory.register(Type.duration()).serializer;
@@ -63,6 +75,17 @@ describe('datetime', () => {
       0x1d,
     ]);
     expect(fory.deserialize(encoded, serializer)).toEqual(1500);
+  });
+  test('should preserve fractional millisecond duration payloads', () => {
+    const fory = new Fory({ ref: true });
+    const serializer = fory.register(Type.duration()).serializer;
+    const value = 3723456.789;
+
+    const encoded = fory.serialize(value, serializer);
+    expect(fory.deserialize(encoded, serializer)).toEqual(value);
+    expect(Array.from(fory.serialize(fory.deserialize(encoded, serializer), serializer))).toEqual(
+      Array.from(encoded),
+    );
   });
   test('should normalize negative sub-second duration payloads', () => {
     const fory = new Fory({ ref: true });

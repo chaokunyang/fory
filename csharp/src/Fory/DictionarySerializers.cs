@@ -53,6 +53,8 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         Serializer<TValue> valueSerializer = context.TypeResolver.GetSerializer<TValue>();
         TypeInfo keyTypeInfo = context.TypeResolver.GetTypeInfo<TKey>();
         TypeInfo valueTypeInfo = context.TypeResolver.GetTypeInfo<TValue>();
+        bool hasKeyWireTypeOverride = TryResolveNumericWireTypeOverride<TKey>(context, isKey: true, out TypeId keyWireTypeId);
+        bool hasValueWireTypeOverride = TryResolveNumericWireTypeOverride<TValue>(context, isKey: false, out TypeId valueWireTypeId);
         TDictionary map = value ?? CreateMap(0);
         context.Writer.WriteVarUInt32((uint)map.Count);
         if (map.Count == 0)
@@ -62,8 +64,14 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
         bool trackKeyRef = context.TrackRef && keyTypeInfo.IsRefType;
         bool trackValueRef = context.TrackRef && valueTypeInfo.IsRefType;
-        bool keyDeclared = hasGenerics && !TypeResolver.NeedToWriteTypeInfoForField(keyTypeInfo);
-        bool valueDeclared = hasGenerics && !TypeResolver.NeedToWriteTypeInfoForField(valueTypeInfo);
+        bool keyNeedsTypeInfo = hasKeyWireTypeOverride
+            ? TypeResolver.NeedToWriteTypeInfoForField(keyWireTypeId)
+            : TypeResolver.NeedToWriteTypeInfoForField(keyTypeInfo);
+        bool valueNeedsTypeInfo = hasValueWireTypeOverride
+            ? TypeResolver.NeedToWriteTypeInfoForField(valueWireTypeId)
+            : TypeResolver.NeedToWriteTypeInfoForField(valueTypeInfo);
+        bool keyDeclared = hasGenerics && !keyNeedsTypeInfo;
+        bool valueDeclared = hasGenerics && !valueNeedsTypeInfo;
         bool keyDynamicType = keyTypeInfo.IsDynamicType;
         bool valueDynamicType = valueTypeInfo.IsDynamicType;
 
@@ -80,6 +88,10 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                 valueDeclared,
                 keyDynamicType,
                 valueDynamicType,
+                hasKeyWireTypeOverride,
+                hasValueWireTypeOverride,
+                keyWireTypeId,
+                valueWireTypeId,
                 keyTypeInfo,
                 valueTypeInfo,
                 keySerializer,
@@ -131,20 +143,42 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                 {
                     if (!keyDeclared)
                     {
-                        context.TypeResolver.WriteTypeInfo(keySerializer, context);
+                        WriteMapElementTypeInfo(
+                            context,
+                            keySerializer,
+                            hasKeyWireTypeOverride,
+                            keyWireTypeId);
                     }
 
-                    keySerializer.Write(context, pair.Key, trackKeyRef ? RefMode.Tracking : RefMode.None, false, hasGenerics);
+                    WriteMapElement(
+                        context,
+                        keySerializer,
+                        pair.Key,
+                        trackKeyRef ? RefMode.Tracking : RefMode.None,
+                        hasGenerics,
+                        hasKeyWireTypeOverride,
+                        keyWireTypeId);
                 }
 
                 if (!valueIsNull)
                 {
                     if (!valueDeclared)
                     {
-                        context.TypeResolver.WriteTypeInfo(valueSerializer, context);
+                        WriteMapElementTypeInfo(
+                            context,
+                            valueSerializer,
+                            hasValueWireTypeOverride,
+                            valueWireTypeId);
                     }
 
-                    valueSerializer.Write(context, pair.Value, trackValueRef ? RefMode.Tracking : RefMode.None, false, hasGenerics);
+                    WriteMapElement(
+                        context,
+                        valueSerializer,
+                        pair.Value,
+                        trackValueRef ? RefMode.Tracking : RefMode.None,
+                        hasGenerics,
+                        hasValueWireTypeOverride,
+                        valueWireTypeId);
                 }
 
                 index += 1;
@@ -177,12 +211,20 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
             context.Writer.WriteUInt8(0);
             if (!keyDeclared)
             {
-                context.TypeResolver.WriteTypeInfo(keySerializer, context);
+                WriteMapElementTypeInfo(
+                    context,
+                    keySerializer,
+                    hasKeyWireTypeOverride,
+                    keyWireTypeId);
             }
 
             if (!valueDeclared)
             {
-                context.TypeResolver.WriteTypeInfo(valueSerializer, context);
+                WriteMapElementTypeInfo(
+                    context,
+                    valueSerializer,
+                    hasValueWireTypeOverride,
+                    valueWireTypeId);
             }
 
             byte chunkSize = 0;
@@ -195,8 +237,22 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                     break;
                 }
 
-                keySerializer.Write(context, current.Key, trackKeyRef ? RefMode.Tracking : RefMode.None, false, hasGenerics);
-                valueSerializer.Write(context, current.Value, trackValueRef ? RefMode.Tracking : RefMode.None, false, hasGenerics);
+                WriteMapElement(
+                    context,
+                    keySerializer,
+                    current.Key,
+                    trackKeyRef ? RefMode.Tracking : RefMode.None,
+                    hasGenerics,
+                    hasKeyWireTypeOverride,
+                    keyWireTypeId);
+                WriteMapElement(
+                    context,
+                    valueSerializer,
+                    current.Value,
+                    trackValueRef ? RefMode.Tracking : RefMode.None,
+                    hasGenerics,
+                    hasValueWireTypeOverride,
+                    valueWireTypeId);
                 chunkSize += 1;
                 index += 1;
             }
@@ -211,6 +267,8 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         Serializer<TValue> valueSerializer = context.TypeResolver.GetSerializer<TValue>();
         TypeInfo keyTypeInfo = context.TypeResolver.GetTypeInfo<TKey>();
         TypeInfo valueTypeInfo = context.TypeResolver.GetTypeInfo<TValue>();
+        bool hasKeyWireTypeOverride = TryResolveNumericWireTypeOverride<TKey>(context, isKey: true, out TypeId keyWireTypeId);
+        bool hasValueWireTypeOverride = TryResolveNumericWireTypeOverride<TValue>(context, isKey: false, out TypeId valueWireTypeId);
         int totalLength = checked((int)context.Reader.ReadVarUInt32());
         if (totalLength == 0)
         {
@@ -248,7 +306,9 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                     trackValueRef,
                     !valueDeclared,
                     canonicalizeValues,
-                    valueSerializer);
+                    valueSerializer,
+                    hasValueWireTypeOverride,
+                    valueWireTypeId);
 
                 // Preserve stream/reference state by reading value payload, then skip null-key entry.
                 readCount += 1;
@@ -257,10 +317,13 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
             if (valueNull)
             {
-                TKey key = keySerializer.Read(
+                TKey key = ReadKeyElement(
                     context,
                     trackKeyRef ? RefMode.Tracking : RefMode.None,
-                    !keyDeclared);
+                    !keyDeclared,
+                    keySerializer,
+                    hasKeyWireTypeOverride,
+                    keyWireTypeId);
 
                 SetValue(map, key, (TValue)valueSerializer.DefaultObject!);
                 readCount += 1;
@@ -283,7 +346,11 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                         }
                         else
                         {
-                            context.TypeResolver.ReadTypeInfo(keySerializer, context);
+                            ReadMapElementTypeInfo(
+                                context,
+                                keySerializer,
+                                hasKeyWireTypeOverride,
+                                keyWireTypeId);
                         }
                     }
 
@@ -295,7 +362,11 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                         }
                         else
                         {
-                            context.TypeResolver.ReadTypeInfo(valueSerializer, context);
+                            ReadMapElementTypeInfo(
+                                context,
+                                valueSerializer,
+                                hasValueWireTypeOverride,
+                                valueWireTypeId);
                         }
                     }
 
@@ -304,7 +375,13 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                         context.SetReadTypeInfo(typeof(TKey), keyTypeInfoForRead);
                     }
 
-                    TKey key = keySerializer.Read(context, trackKeyRef ? RefMode.Tracking : RefMode.None, false);
+                    TKey key = ReadKeyElement(
+                        context,
+                        trackKeyRef ? RefMode.Tracking : RefMode.None,
+                        false,
+                        keySerializer,
+                        hasKeyWireTypeOverride,
+                        keyWireTypeId);
                     if (keyTypeInfoForRead is not null)
                     {
                         context.ClearReadTypeInfo(typeof(TKey));
@@ -320,7 +397,9 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                         trackValueRef,
                         false,
                         canonicalizeValues,
-                        valueSerializer);
+                        valueSerializer,
+                        hasValueWireTypeOverride,
+                        valueWireTypeId);
                     if (valueTypeInfoForRead is not null)
                     {
                         context.ClearReadTypeInfo(typeof(TValue));
@@ -335,18 +414,39 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
             if (!keyDeclared)
             {
-                context.TypeResolver.ReadTypeInfo(keySerializer, context);
+                ReadMapElementTypeInfo(
+                    context,
+                    keySerializer,
+                    hasKeyWireTypeOverride,
+                    keyWireTypeId);
             }
 
             if (!valueDeclared)
             {
-                context.TypeResolver.ReadTypeInfo(valueSerializer, context);
+                ReadMapElementTypeInfo(
+                    context,
+                    valueSerializer,
+                    hasValueWireTypeOverride,
+                    valueWireTypeId);
             }
 
             for (int i = 0; i < chunkSize; i++)
             {
-                TKey key = keySerializer.Read(context, trackKeyRef ? RefMode.Tracking : RefMode.None, false);
-                TValue value = ReadValueElement(context, trackValueRef, false, canonicalizeValues, valueSerializer);
+                TKey key = ReadKeyElement(
+                    context,
+                    trackKeyRef ? RefMode.Tracking : RefMode.None,
+                    false,
+                    keySerializer,
+                    hasKeyWireTypeOverride,
+                    keyWireTypeId);
+                TValue value = ReadValueElement(
+                    context,
+                    trackValueRef,
+                    false,
+                    canonicalizeValues,
+                    valueSerializer,
+                    hasValueWireTypeOverride,
+                    valueWireTypeId);
                 SetValue(map, key, value);
             }
 
@@ -366,6 +466,50 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         return map;
     }
 
+    private static bool TryResolveNumericWireTypeOverride<T>(
+        WriteContext context,
+        bool isKey,
+        out TypeId wireTypeId)
+    {
+        bool hasOverride = isKey
+            ? context.TryGetMapKeyWireTypeOverride(out wireTypeId)
+            : context.TryGetMapValueWireTypeOverride(out wireTypeId);
+        if (!hasOverride)
+        {
+            return false;
+        }
+
+        if (!NumericWireTypeCodec.Supports(typeof(T), wireTypeId))
+        {
+            string role = isKey ? "map key" : "map value";
+            throw new InvalidDataException($"wire type override {wireTypeId} is not supported for {role} type {typeof(T)}");
+        }
+
+        return true;
+    }
+
+    private static bool TryResolveNumericWireTypeOverride<T>(
+        ReadContext context,
+        bool isKey,
+        out TypeId wireTypeId)
+    {
+        bool hasOverride = isKey
+            ? context.TryGetMapKeyWireTypeOverride(out wireTypeId)
+            : context.TryGetMapValueWireTypeOverride(out wireTypeId);
+        if (!hasOverride)
+        {
+            return false;
+        }
+
+        if (!NumericWireTypeCodec.Supports(typeof(T), wireTypeId))
+        {
+            string role = isKey ? "map key" : "map value";
+            throw new InvalidDataException($"wire type override {wireTypeId} is not supported for {role} type {typeof(T)}");
+        }
+
+        return true;
+    }
+
     private static void WriteDynamicMapPairs(
         KeyValuePair<TKey, TValue>[] pairs,
         WriteContext context,
@@ -376,6 +520,10 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         bool valueDeclared,
         bool keyDynamicType,
         bool valueDynamicType,
+        bool hasKeyWireTypeOverride,
+        bool hasValueWireTypeOverride,
+        TypeId keyWireTypeId,
+        TypeId valueWireTypeId,
         TypeInfo keyTypeInfo,
         TypeInfo valueTypeInfo,
         Serializer<TKey> keySerializer,
@@ -422,23 +570,59 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
             if (keyIsNull)
             {
-                valueSerializer.Write(
+                if (!valueDeclared)
+                {
+                    if (valueDynamicType)
+                    {
+                        DynamicAnyCodec.WriteAnyTypeInfo(pair.Value!, context);
+                    }
+                    else
+                    {
+                        WriteMapElementTypeInfo(
+                            context,
+                            valueSerializer,
+                            hasValueWireTypeOverride,
+                            valueWireTypeId);
+                    }
+                }
+
+                WriteMapElement(
                     context,
+                    valueSerializer,
                     pair.Value,
                     trackValueRef ? RefMode.Tracking : RefMode.None,
-                    !valueDeclared,
-                    hasGenerics);
+                    hasGenerics,
+                    hasValueWireTypeOverride,
+                    valueWireTypeId);
                 continue;
             }
 
             if (valueIsNull)
             {
-                keySerializer.Write(
+                if (!keyDeclared)
+                {
+                    if (keyDynamicType)
+                    {
+                        DynamicAnyCodec.WriteAnyTypeInfo(pair.Key!, context);
+                    }
+                    else
+                    {
+                        WriteMapElementTypeInfo(
+                            context,
+                            keySerializer,
+                            hasKeyWireTypeOverride,
+                            keyWireTypeId);
+                    }
+                }
+
+                WriteMapElement(
                     context,
+                    keySerializer,
                     pair.Key,
                     trackKeyRef ? RefMode.Tracking : RefMode.None,
-                    !keyDeclared,
-                    hasGenerics);
+                    hasGenerics,
+                    hasKeyWireTypeOverride,
+                    keyWireTypeId);
                 continue;
             }
 
@@ -451,7 +635,11 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                 }
                 else
                 {
-                    context.TypeResolver.WriteTypeInfo(keySerializer, context);
+                    WriteMapElementTypeInfo(
+                        context,
+                        keySerializer,
+                        hasKeyWireTypeOverride,
+                        keyWireTypeId);
                 }
             }
 
@@ -463,13 +651,100 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                 }
                 else
                 {
-                    context.TypeResolver.WriteTypeInfo(valueSerializer, context);
+                    WriteMapElementTypeInfo(
+                        context,
+                        valueSerializer,
+                        hasValueWireTypeOverride,
+                        valueWireTypeId);
                 }
             }
 
-            keySerializer.Write(context, pair.Key, trackKeyRef ? RefMode.Tracking : RefMode.None, false, hasGenerics);
-            valueSerializer.Write(context, pair.Value, trackValueRef ? RefMode.Tracking : RefMode.None, false, hasGenerics);
+            WriteMapElement(
+                context,
+                keySerializer,
+                pair.Key,
+                trackKeyRef ? RefMode.Tracking : RefMode.None,
+                hasGenerics,
+                hasKeyWireTypeOverride,
+                keyWireTypeId);
+            WriteMapElement(
+                context,
+                valueSerializer,
+                pair.Value,
+                trackValueRef ? RefMode.Tracking : RefMode.None,
+                hasGenerics,
+                hasValueWireTypeOverride,
+                valueWireTypeId);
         }
+    }
+
+    private static void WriteMapElementTypeInfo<T>(
+        WriteContext context,
+        Serializer<T> serializer,
+        bool hasWireTypeOverride,
+        TypeId wireTypeId)
+    {
+        if (hasWireTypeOverride)
+        {
+            NumericWireTypeCodec.WriteTypeInfo(context, wireTypeId);
+            return;
+        }
+
+        context.TypeResolver.WriteTypeInfo(serializer, context);
+    }
+
+    private static void WriteMapElement<T>(
+        WriteContext context,
+        Serializer<T> serializer,
+        T value,
+        RefMode refMode,
+        bool hasGenerics,
+        bool hasWireTypeOverride,
+        TypeId wireTypeId)
+    {
+        if (hasWireTypeOverride)
+        {
+            NumericWireTypeCodec.WriteValue(context, wireTypeId, value!);
+            return;
+        }
+
+        serializer.Write(context, value, refMode, false, hasGenerics);
+    }
+
+    private static void ReadMapElementTypeInfo<T>(
+        ReadContext context,
+        Serializer<T> serializer,
+        bool hasWireTypeOverride,
+        TypeId wireTypeId)
+    {
+        if (hasWireTypeOverride)
+        {
+            NumericWireTypeCodec.ReadAndValidateTypeInfo(context, wireTypeId);
+            return;
+        }
+
+        context.TypeResolver.ReadTypeInfo(serializer, context);
+    }
+
+    private static TKey ReadKeyElement(
+        ReadContext context,
+        RefMode refMode,
+        bool readTypeInfo,
+        Serializer<TKey> keySerializer,
+        bool hasWireTypeOverride,
+        TypeId wireTypeId)
+    {
+        if (hasWireTypeOverride)
+        {
+            if (readTypeInfo)
+            {
+                NumericWireTypeCodec.ReadAndValidateTypeInfo(context, wireTypeId);
+            }
+
+            return (TKey)NumericWireTypeCodec.ReadValue(context, wireTypeId);
+        }
+
+        return keySerializer.Read(context, refMode, readTypeInfo);
     }
 
     private static TValue ReadValueElement(
@@ -477,8 +752,20 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         bool trackValueRef,
         bool readTypeInfo,
         bool canonicalizeValues,
-        Serializer<TValue> valueSerializer)
+        Serializer<TValue> valueSerializer,
+        bool hasWireTypeOverride,
+        TypeId wireTypeId)
     {
+        if (hasWireTypeOverride)
+        {
+            if (readTypeInfo)
+            {
+                NumericWireTypeCodec.ReadAndValidateTypeInfo(context, wireTypeId);
+            }
+
+            return (TValue)NumericWireTypeCodec.ReadValue(context, wireTypeId);
+        }
+
         if (trackValueRef || !canonicalizeValues)
         {
             return valueSerializer.Read(context, trackValueRef ? RefMode.Tracking : RefMode.None, readTypeInfo);

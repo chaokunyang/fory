@@ -49,6 +49,7 @@ import org.apache.fory.collection.Uint8List;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -84,7 +85,11 @@ public class FieldTypes {
   /** Build field type from generics, nested generics will be extracted too. */
   static FieldType buildFieldType(TypeResolver resolver, Field field) {
     Preconditions.checkNotNull(field);
-    GenericType genericType = resolver.buildGenericType(field.getGenericType());
+    TypeRef<?> typeRef =
+        field.getAnnotatedType() != null
+            ? TypeRef.of(field.getAnnotatedType())
+            : TypeRef.of(field.getGenericType());
+    GenericType genericType = resolver.buildGenericType(typeRef);
     return buildFieldType(resolver, field, genericType);
   }
 
@@ -97,7 +102,10 @@ public class FieldTypes {
     // Get type ID for both xlang and native mode
     // This supports unsigned types and field-configurable compression in both modes
     int typeId;
-    if (TypeUtils.unwrap(rawType).isPrimitive()) {
+    TypeExtMeta extMeta = genericType.getTypeRef().getTypeExtMeta();
+    if (extMeta != null && extMeta.typeId() != Types.UNKNOWN) {
+      typeId = extMeta.typeId();
+    } else if (TypeUtils.unwrap(rawType).isPrimitive()) {
       if (field != null) {
         typeId = Types.getDescriptorTypeId(resolver, field);
       } else {

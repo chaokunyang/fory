@@ -107,15 +107,14 @@ internal static class CollectionCodec
         }
 
         bool trackRef = context.TrackRef && elementTypeInfo.IsRefType;
+        bool elementNeedsTypeInfo = !elementTypeInfo.IsDynamicType &&
+                                    TypeResolver.NeedToWriteTypeInfoForField(elementTypeInfo);
         bool declaredElementType = hasGenerics &&
                                    (CanDeclareElementType<T>(elementTypeInfo) ||
-                                    CanDeclareRuntimeElementType(list, elementTypeInfo));
+                                    CanDeclareRuntimeElementType(list, elementTypeInfo)) &&
+                                   (!context.Compatible || !elementNeedsTypeInfo);
         bool dynamicElementType = elementTypeInfo.IsDynamicType;
-        bool writeDeclaredTypeMeta =
-            context.Compatible &&
-            declaredElementType &&
-            !dynamicElementType &&
-            TypeResolver.NeedToWriteTypeInfoForField(elementTypeInfo);
+        bool writeDeclaredTypeMeta = false;
 
         byte header = dynamicElementType ? (byte)0 : CollectionBits.SameType;
         if (trackRef)

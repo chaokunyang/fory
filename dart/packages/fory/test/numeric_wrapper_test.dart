@@ -172,15 +172,22 @@ void main() {
       expect(Uint8(0xff) + 1, equals(Uint8(0)));
       expect(Uint8(0) - 1, equals(Uint8(0xff)));
       expect(Uint8(0xf0) >> 4, equals(Uint8(0x0f)));
+      expect(Uint8(0xf0) >>> 4, equals(Uint8(0x0f)));
+      expect(Uint8(0xff) >> 1, equals(Uint8(0x7f)));
+      expect(Uint8(0xff) >>> 1, equals(Uint8(0x7f)));
       expect(-Uint8(1), equals(Uint8(0xff)));
 
       expect(Uint16(0xffff) + 1, equals(Uint16(0)));
       expect(Uint16(0) - 1, equals(Uint16(0xffff)));
+      expect(Uint16(0xffff) >> 1, equals(Uint16(0x7fff)));
+      expect(Uint16(0xffff) >>> 1, equals(Uint16(0x7fff)));
 
       expect(Uint32(0xffffffff) + 1, equals(Uint32(0)));
       expect(Uint32(0) - 1, equals(Uint32(0xffffffff)));
       expect(
           Uint32(0xf0f0f0f0) & Uint32(0x0ff00ff0), equals(Uint32(0x00f000f0)));
+      expect(Uint32(0xffffffff) >> 1, equals(Uint32(0x7fffffff)));
+      expect(Uint32(0xffffffff) >>> 1, equals(Uint32(0x7fffffff)));
 
       expect(_u64Hex('ffffffffffffffff') + 1, equals(Uint64(0)));
       expect(Uint64(0) - 1, equals(_u64Hex('ffffffffffffffff')));

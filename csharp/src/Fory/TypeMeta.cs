@@ -151,7 +151,9 @@ public sealed class TypeMetaFieldType : IEquatable<TypeMetaFieldType>
             writer.WriteUInt8(unchecked((byte)TypeId));
         }
 
-        if (TypeId is (uint)global::Apache.Fory.TypeId.List or (uint)global::Apache.Fory.TypeId.Set)
+        if (TypeId is (uint)global::Apache.Fory.TypeId.Array or
+            (uint)global::Apache.Fory.TypeId.List or
+            (uint)global::Apache.Fory.TypeId.Set)
         {
             TypeMetaFieldType element = Generics.Count > 0
                 ? Generics[0]
@@ -195,7 +197,9 @@ public sealed class TypeMetaFieldType : IEquatable<TypeMetaFieldType>
             resolvedTrackRef = trackRef ?? false;
         }
 
-        if (typeId is (uint)global::Apache.Fory.TypeId.List or (uint)global::Apache.Fory.TypeId.Set)
+        if (typeId is (uint)global::Apache.Fory.TypeId.Array or
+            (uint)global::Apache.Fory.TypeId.List or
+            (uint)global::Apache.Fory.TypeId.Set)
         {
             TypeMetaFieldType element = Read(reader, true);
             return new TypeMetaFieldType(typeId, resolvedNullable, resolvedTrackRef, [element]);

@@ -33,6 +33,19 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
     where TDictionary : class, IDictionary<TKey, TValue>
     where TKey : notnull
 {
+    private readonly Serializer<TKey>? _keySerializer;
+    private readonly Serializer<TValue>? _valueSerializer;
+
+    protected DictionaryLikeSerializer()
+    {
+    }
+
+    protected DictionaryLikeSerializer(Serializer<TKey>? keySerializer, Serializer<TValue>? valueSerializer)
+    {
+        _keySerializer = keySerializer;
+        _valueSerializer = valueSerializer;
+    }
+
     public override TDictionary DefaultValue => null!;
 
     protected abstract TDictionary CreateMap(int capacity);
@@ -49,8 +62,8 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
     public override void WriteData(WriteContext context, in TDictionary value, bool hasGenerics)
     {
-        Serializer<TKey> keySerializer = context.TypeResolver.GetSerializer<TKey>();
-        Serializer<TValue> valueSerializer = context.TypeResolver.GetSerializer<TValue>();
+        Serializer<TKey> keySerializer = _keySerializer ?? context.TypeResolver.GetSerializer<TKey>();
+        Serializer<TValue> valueSerializer = _valueSerializer ?? context.TypeResolver.GetSerializer<TValue>();
         TypeInfo keyTypeInfo = context.TypeResolver.GetTypeInfo<TKey>();
         TypeInfo valueTypeInfo = context.TypeResolver.GetTypeInfo<TValue>();
         TDictionary map = value ?? CreateMap(0);
@@ -207,8 +220,8 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 
     public override TDictionary ReadData(ReadContext context)
     {
-        Serializer<TKey> keySerializer = context.TypeResolver.GetSerializer<TKey>();
-        Serializer<TValue> valueSerializer = context.TypeResolver.GetSerializer<TValue>();
+        Serializer<TKey> keySerializer = _keySerializer ?? context.TypeResolver.GetSerializer<TKey>();
+        Serializer<TValue> valueSerializer = _valueSerializer ?? context.TypeResolver.GetSerializer<TValue>();
         TypeInfo keyTypeInfo = context.TypeResolver.GetTypeInfo<TKey>();
         TypeInfo valueTypeInfo = context.TypeResolver.GetTypeInfo<TValue>();
         int totalLength = checked((int)context.Reader.ReadVarUInt32());
@@ -494,6 +507,15 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
 public class DictionarySerializer<TKey, TValue> : DictionaryLikeSerializer<Dictionary<TKey, TValue>, TKey, TValue>
     where TKey : notnull
 {
+    public DictionarySerializer()
+    {
+    }
+
+    public DictionarySerializer(Serializer<TKey>? keySerializer, Serializer<TValue>? valueSerializer)
+        : base(keySerializer, valueSerializer)
+    {
+    }
+
     protected override Dictionary<TKey, TValue> CreateMap(int capacity)
     {
         return new Dictionary<TKey, TValue>(capacity);
@@ -503,6 +525,15 @@ public class DictionarySerializer<TKey, TValue> : DictionaryLikeSerializer<Dicti
 public class SortedDictionarySerializer<TKey, TValue> : DictionaryLikeSerializer<SortedDictionary<TKey, TValue>, TKey, TValue>
     where TKey : notnull
 {
+    public SortedDictionarySerializer()
+    {
+    }
+
+    public SortedDictionarySerializer(Serializer<TKey>? keySerializer, Serializer<TValue>? valueSerializer)
+        : base(keySerializer, valueSerializer)
+    {
+    }
+
     protected override SortedDictionary<TKey, TValue> CreateMap(int capacity)
     {
         _ = capacity;
@@ -513,6 +544,15 @@ public class SortedDictionarySerializer<TKey, TValue> : DictionaryLikeSerializer
 public class SortedListSerializer<TKey, TValue> : DictionaryLikeSerializer<SortedList<TKey, TValue>, TKey, TValue>
     where TKey : notnull
 {
+    public SortedListSerializer()
+    {
+    }
+
+    public SortedListSerializer(Serializer<TKey>? keySerializer, Serializer<TValue>? valueSerializer)
+        : base(keySerializer, valueSerializer)
+    {
+    }
+
     protected override SortedList<TKey, TValue> CreateMap(int capacity)
     {
         return new SortedList<TKey, TValue>(capacity);
@@ -522,6 +562,15 @@ public class SortedListSerializer<TKey, TValue> : DictionaryLikeSerializer<Sorte
 public class ConcurrentDictionarySerializer<TKey, TValue> : DictionaryLikeSerializer<ConcurrentDictionary<TKey, TValue>, TKey, TValue>
     where TKey : notnull
 {
+    public ConcurrentDictionarySerializer()
+    {
+    }
+
+    public ConcurrentDictionarySerializer(Serializer<TKey>? keySerializer, Serializer<TValue>? valueSerializer)
+        : base(keySerializer, valueSerializer)
+    {
+    }
+
     protected override ConcurrentDictionary<TKey, TValue> CreateMap(int capacity)
     {
         int initialCapacity = Math.Max(capacity, 1);

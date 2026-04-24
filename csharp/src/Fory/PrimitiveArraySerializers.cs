@@ -17,11 +17,24 @@
 
 namespace Apache.Fory;
 
+public class PrimitiveArraySerializer<T, TCodec> : Serializer<T[]>
+    where TCodec : struct, IPrimitiveDictionaryCodec<T>
+{
+    public override T[] DefaultValue => null!;
+
+    public override void WriteData(WriteContext context, in T[] value, bool hasGenerics)
+    {
+        PrimitiveCollectionCodec.WriteValues<T, TCodec>(context, value ?? [], hasGenerics);
+    }
+
+    public override T[] ReadData(ReadContext context)
+    {
+        return PrimitiveCollectionCodec.ReadValues<T, TCodec>(context).ToArray();
+    }
+}
+
 internal sealed class BoolArraySerializer : Serializer<bool[]>
 {
-
-
-
     public override bool[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in bool[] value, bool hasGenerics)
@@ -50,9 +63,6 @@ internal sealed class BoolArraySerializer : Serializer<bool[]>
 
 internal sealed class Int8ArraySerializer : Serializer<sbyte[]>
 {
-
-
-
     public override sbyte[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in sbyte[] value, bool hasGenerics)
@@ -81,9 +91,6 @@ internal sealed class Int8ArraySerializer : Serializer<sbyte[]>
 
 internal sealed class Int16ArraySerializer : Serializer<short[]>
 {
-
-
-
     public override short[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in short[] value, bool hasGenerics)
@@ -115,11 +122,8 @@ internal sealed class Int16ArraySerializer : Serializer<short[]>
     }
 }
 
-internal sealed class Int32ArraySerializer : Serializer<int[]>
+public class FixedInt32ArraySerializer : Serializer<int[]>
 {
-
-
-
     public override int[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in int[] value, bool hasGenerics)
@@ -151,11 +155,12 @@ internal sealed class Int32ArraySerializer : Serializer<int[]>
     }
 }
 
-internal sealed class Int64ArraySerializer : Serializer<long[]>
+internal sealed class Int32ArraySerializer : FixedInt32ArraySerializer { }
+
+public sealed class VarInt32ArraySerializer : PrimitiveArraySerializer<int, VarInt32PrimitiveDictionaryCodec> { }
+
+public class FixedInt64ArraySerializer : Serializer<long[]>
 {
-
-
-
     public override long[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in long[] value, bool hasGenerics)
@@ -187,11 +192,14 @@ internal sealed class Int64ArraySerializer : Serializer<long[]>
     }
 }
 
-internal sealed class UInt16ArraySerializer : Serializer<ushort[]>
+internal sealed class Int64ArraySerializer : FixedInt64ArraySerializer { }
+
+public sealed class VarInt64ArraySerializer : PrimitiveArraySerializer<long, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class TaggedInt64ArraySerializer : PrimitiveArraySerializer<long, TaggedInt64PrimitiveDictionaryCodec> { }
+
+public class FixedUInt16ArraySerializer : Serializer<ushort[]>
 {
-
-
-
     public override ushort[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in ushort[] value, bool hasGenerics)
@@ -223,11 +231,10 @@ internal sealed class UInt16ArraySerializer : Serializer<ushort[]>
     }
 }
 
-internal sealed class UInt32ArraySerializer : Serializer<uint[]>
+internal sealed class UInt16ArraySerializer : FixedUInt16ArraySerializer { }
+
+public class FixedUInt32ArraySerializer : Serializer<uint[]>
 {
-
-
-
     public override uint[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in uint[] value, bool hasGenerics)
@@ -259,11 +266,12 @@ internal sealed class UInt32ArraySerializer : Serializer<uint[]>
     }
 }
 
-internal sealed class UInt64ArraySerializer : Serializer<ulong[]>
+internal sealed class UInt32ArraySerializer : FixedUInt32ArraySerializer { }
+
+public sealed class VarUInt32ArraySerializer : PrimitiveArraySerializer<uint, VarUInt32PrimitiveDictionaryCodec> { }
+
+public class FixedUInt64ArraySerializer : Serializer<ulong[]>
 {
-
-
-
     public override ulong[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in ulong[] value, bool hasGenerics)
@@ -295,11 +303,14 @@ internal sealed class UInt64ArraySerializer : Serializer<ulong[]>
     }
 }
 
-internal sealed class Float16ArraySerializer : Serializer<Half[]>
+internal sealed class UInt64ArraySerializer : FixedUInt64ArraySerializer { }
+
+public sealed class VarUInt64ArraySerializer : PrimitiveArraySerializer<ulong, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class TaggedUInt64ArraySerializer : PrimitiveArraySerializer<ulong, TaggedUInt64PrimitiveDictionaryCodec> { }
+
+public class FixedFloat16ArraySerializer : Serializer<Half[]>
 {
-
-
-
     public override Half[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in Half[] value, bool hasGenerics)
@@ -331,11 +342,10 @@ internal sealed class Float16ArraySerializer : Serializer<Half[]>
     }
 }
 
-internal sealed class BFloat16ArraySerializer : Serializer<BFloat16[]>
+internal sealed class Float16ArraySerializer : FixedFloat16ArraySerializer { }
+
+public class FixedBFloat16ArraySerializer : Serializer<BFloat16[]>
 {
-
-
-
     public override BFloat16[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in BFloat16[] value, bool hasGenerics)
@@ -367,11 +377,10 @@ internal sealed class BFloat16ArraySerializer : Serializer<BFloat16[]>
     }
 }
 
-internal sealed class Float32ArraySerializer : Serializer<float[]>
+internal sealed class BFloat16ArraySerializer : FixedBFloat16ArraySerializer { }
+
+public class FixedFloat32ArraySerializer : Serializer<float[]>
 {
-
-
-
     public override float[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in float[] value, bool hasGenerics)
@@ -403,11 +412,10 @@ internal sealed class Float32ArraySerializer : Serializer<float[]>
     }
 }
 
-internal sealed class Float64ArraySerializer : Serializer<double[]>
+internal sealed class Float32ArraySerializer : FixedFloat32ArraySerializer { }
+
+public class FixedFloat64ArraySerializer : Serializer<double[]>
 {
-
-
-
     public override double[] DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in double[] value, bool hasGenerics)
@@ -438,3 +446,5 @@ internal sealed class Float64ArraySerializer : Serializer<double[]>
         return values;
     }
 }
+
+internal sealed class Float64ArraySerializer : FixedFloat64ArraySerializer { }

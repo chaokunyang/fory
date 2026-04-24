@@ -18,6 +18,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Reflection;
 using System.Threading.Tasks;
 using Apache.Fory;
 using ForyRuntime = Apache.Fory.Fory;
@@ -76,6 +77,84 @@ public sealed class EncodedNumbers
 
     [Field(Encoding = FieldEncoding.Tagged)]
     public ulong U64Tagged { get; set; }
+}
+
+[ForyObject]
+public sealed class VarUInt64ListHolder
+{
+    public List<ulong> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class FixedUInt64ListHolder
+{
+    [NestedType("element", Encoding = FieldEncoding.Fixed)]
+    public List<ulong> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class NullableVarIntListHolder
+{
+    public List<int?> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class NullableFixedIntListHolder
+{
+    [NestedType("element", Encoding = FieldEncoding.Fixed)]
+    public List<int?> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class VarUInt64SetHolder
+{
+    public HashSet<ulong> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class TaggedUInt64SetHolder
+{
+    [NestedType("element", Encoding = FieldEncoding.Tagged)]
+    public HashSet<ulong> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class VarIntMapValueHolder
+{
+    public Dictionary<string, int> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class FixedIntMapValueHolder
+{
+    [NestedType("value", Encoding = FieldEncoding.Fixed)]
+    public Dictionary<string, int> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class VarUInt64ArrayHolder
+{
+    [NestedType("element", Encoding = FieldEncoding.Varint)]
+    public ulong[] Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class FixedUInt64ArrayHolder
+{
+    public ulong[] Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class NestedVarMapListHolder
+{
+    public List<Dictionary<int, int>> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class NestedFixedMapListHolder
+{
+    [NestedType("element.value", Encoding = FieldEncoding.Fixed)]
+    public List<Dictionary<int, int>> Values { get; set; } = [];
 }
 
 [ForyObject]
@@ -840,6 +919,172 @@ public sealed class ForyRuntimeTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void ManualNestedTypeAnnotationSupportsEncodedPrimitiveLists(bool compatible)
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(compatible).Build();
+        fory.Register<VarUInt64ListHolder>(310);
+        fory.Register<FixedUInt64ListHolder>(311);
+
+        List<ulong> values = [ulong.MaxValue - 7, ulong.MaxValue - 11, ulong.MaxValue - 19];
+        VarUInt64ListHolder varHolder = new() { Values = [.. values] };
+        FixedUInt64ListHolder fixedHolder = new() { Values = [.. values] };
+
+        Assert.Equal(values, fory.Deserialize<VarUInt64ListHolder>(fory.Serialize(varHolder)).Values);
+        Assert.Equal(values, fory.Deserialize<FixedUInt64ListHolder>(fory.Serialize(fixedHolder)).Values);
+
+        if (!compatible)
+        {
+            Serializer<List<ulong>> varSerializer = GetGeneratedFieldSerializer<VarUInt64ListHolder, List<ulong>>(fory, "Values");
+            Serializer<List<ulong>> fixedSerializer = GetGeneratedFieldSerializer<FixedUInt64ListHolder, List<ulong>>(fory, "Values");
+            Assert.True(
+                SerializeFieldPayload(fixedSerializer, fixedHolder.Values) < SerializeFieldPayload(varSerializer, varHolder.Values));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ManualNestedTypeAnnotationSupportsNullablePrimitiveListElements(bool compatible)
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(compatible).Build();
+        fory.Register<NullableVarIntListHolder>(320);
+        fory.Register<NullableFixedIntListHolder>(321);
+
+        List<int?> values = [0x11223344, null, 0x22334455];
+        NullableVarIntListHolder varHolder = new() { Values = [.. values] };
+        NullableFixedIntListHolder fixedHolder = new() { Values = [.. values] };
+
+        Assert.Equal(values, fory.Deserialize<NullableVarIntListHolder>(fory.Serialize(varHolder)).Values);
+        Assert.Equal(values, fory.Deserialize<NullableFixedIntListHolder>(fory.Serialize(fixedHolder)).Values);
+
+        if (!compatible)
+        {
+            Serializer<List<int?>> varSerializer = GetGeneratedFieldSerializer<NullableVarIntListHolder, List<int?>>(fory, "Values");
+            Serializer<List<int?>> fixedSerializer = GetGeneratedFieldSerializer<NullableFixedIntListHolder, List<int?>>(fory, "Values");
+            Assert.Equal(
+                typeof(PrimitiveListSerializer<int?, NullablePrimitiveDictionaryCodec<int, FixedInt32PrimitiveDictionaryCodec>>),
+                fixedSerializer.GetType());
+            Assert.True(
+                SerializeFieldPayload(fixedSerializer, fixedHolder.Values) < SerializeFieldPayload(varSerializer, varHolder.Values));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ManualNestedTypeAnnotationSupportsEncodedPrimitiveSets(bool compatible)
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(compatible).Build();
+        fory.Register<VarUInt64SetHolder>(312);
+        fory.Register<TaggedUInt64SetHolder>(313);
+
+        HashSet<ulong> values = [300_000_000uL, 400_000_000uL, 500_000_000uL];
+        VarUInt64SetHolder varHolder = new() { Values = [.. values] };
+        TaggedUInt64SetHolder taggedHolder = new() { Values = [.. values] };
+
+        Assert.Equal(values.OrderBy(v => v), fory.Deserialize<VarUInt64SetHolder>(fory.Serialize(varHolder)).Values.OrderBy(v => v));
+        Assert.Equal(values.OrderBy(v => v), fory.Deserialize<TaggedUInt64SetHolder>(fory.Serialize(taggedHolder)).Values.OrderBy(v => v));
+
+        if (!compatible)
+        {
+            Serializer<HashSet<ulong>> varSerializer = GetGeneratedFieldSerializer<VarUInt64SetHolder, HashSet<ulong>>(fory, "Values");
+            Serializer<HashSet<ulong>> taggedSerializer = GetGeneratedFieldSerializer<TaggedUInt64SetHolder, HashSet<ulong>>(fory, "Values");
+            Assert.True(
+                SerializeFieldPayload(taggedSerializer, taggedHolder.Values) < SerializeFieldPayload(varSerializer, varHolder.Values));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ManualNestedTypeAnnotationSupportsEncodedPrimitiveMapValues(bool compatible)
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(compatible).Build();
+        fory.Register<VarIntMapValueHolder>(314);
+        fory.Register<FixedIntMapValueHolder>(315);
+
+        Dictionary<string, int> values = new()
+        {
+            ["a"] = 0x11223344,
+            ["b"] = 0x22334455,
+            ["c"] = 0x33445566,
+        };
+        VarIntMapValueHolder varHolder = new() { Values = new Dictionary<string, int>(values) };
+        FixedIntMapValueHolder fixedHolder = new() { Values = new Dictionary<string, int>(values) };
+
+        Assert.Equal(values, fory.Deserialize<VarIntMapValueHolder>(fory.Serialize(varHolder)).Values);
+        Assert.Equal(values, fory.Deserialize<FixedIntMapValueHolder>(fory.Serialize(fixedHolder)).Values);
+
+        if (!compatible)
+        {
+            Serializer<Dictionary<string, int>> varSerializer = GetGeneratedFieldSerializer<VarIntMapValueHolder, Dictionary<string, int>>(fory, "Values");
+            Serializer<Dictionary<string, int>> fixedSerializer = GetGeneratedFieldSerializer<FixedIntMapValueHolder, Dictionary<string, int>>(fory, "Values");
+            Assert.Equal(
+                typeof(PrimitiveDictionarySerializer<string, int, StringPrimitiveDictionaryCodec, FixedInt32PrimitiveDictionaryCodec>),
+                fixedSerializer.GetType());
+            Assert.True(
+                SerializeFieldPayload(fixedSerializer, fixedHolder.Values) < SerializeFieldPayload(varSerializer, varHolder.Values));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ManualNestedTypeAnnotationSupportsNestedMapElementValues(bool compatible)
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(compatible).Build();
+        fory.Register<NestedVarMapListHolder>(316);
+        fory.Register<NestedFixedMapListHolder>(317);
+
+        List<Dictionary<int, int>> values =
+        [
+            new Dictionary<int, int> { [1] = 0x11223344, [2] = 0x22334455 },
+            new Dictionary<int, int> { [3] = 0x33445566, [4] = 0x44556677 },
+        ];
+        NestedVarMapListHolder varHolder = new() { Values = values.Select(m => new Dictionary<int, int>(m)).ToList() };
+        NestedFixedMapListHolder fixedHolder = new() { Values = values.Select(m => new Dictionary<int, int>(m)).ToList() };
+
+        AssertNestedMapsEqual(values, fory.Deserialize<NestedVarMapListHolder>(fory.Serialize(varHolder)).Values);
+        AssertNestedMapsEqual(values, fory.Deserialize<NestedFixedMapListHolder>(fory.Serialize(fixedHolder)).Values);
+
+        if (!compatible)
+        {
+            Serializer<List<Dictionary<int, int>>> varSerializer = GetGeneratedFieldSerializer<NestedVarMapListHolder, List<Dictionary<int, int>>>(fory, "Values");
+            Serializer<List<Dictionary<int, int>>> fixedSerializer = GetGeneratedFieldSerializer<NestedFixedMapListHolder, List<Dictionary<int, int>>>(fory, "Values");
+            Assert.True(
+                SerializeFieldPayload(fixedSerializer, fixedHolder.Values) < SerializeFieldPayload(varSerializer, varHolder.Values));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ManualNestedTypeAnnotationSupportsEncodedPrimitiveArrays(bool compatible)
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(compatible).Build();
+        fory.Register<VarUInt64ArrayHolder>(318);
+        fory.Register<FixedUInt64ArrayHolder>(319);
+
+        ulong[] values = [ulong.MaxValue - 7, ulong.MaxValue - 11, ulong.MaxValue - 19];
+        VarUInt64ArrayHolder varHolder = new() { Values = [.. values] };
+        FixedUInt64ArrayHolder fixedHolder = new() { Values = [.. values] };
+
+        Assert.Equal(values, fory.Deserialize<VarUInt64ArrayHolder>(fory.Serialize(varHolder)).Values);
+        Assert.Equal(values, fory.Deserialize<FixedUInt64ArrayHolder>(fory.Serialize(fixedHolder)).Values);
+
+        if (!compatible)
+        {
+            Serializer<ulong[]> fixedSerializer = GetGeneratedFieldSerializer<FixedUInt64ArrayHolder, ulong[]>(fory, "Values");
+            Serializer<ulong[]> varSerializer = GetGeneratedFieldSerializer<VarUInt64ArrayHolder, ulong[]>(fory, "Values");
+            Assert.Equal(typeof(VarUInt64ArraySerializer), varSerializer.GetType());
+            Assert.True(
+                SerializeFieldPayload(fixedSerializer, fixedHolder.Values) < SerializeFieldPayload(varSerializer, varHolder.Values));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void UnsignedFieldsRoundTrip(bool compatible)
     {
         ForyRuntime fory = ForyRuntime.Builder().Compatible(compatible).Build();
@@ -1532,6 +1777,37 @@ public sealed class ForyRuntimeTests
         string decoded = StringSerializer.ReadString(readContext);
         Assert.Equal(0, readContext.Reader.Remaining);
         return (encoding, decoded);
+    }
+
+    private static void AssertNestedMapsEqual(
+        IReadOnlyList<Dictionary<int, int>> expected,
+        IReadOnlyList<Dictionary<int, int>> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        for (int i = 0; i < expected.Count; i++)
+        {
+            Assert.Equal(expected[i], actual[i]);
+        }
+    }
+
+    private static Serializer<TField> GetGeneratedFieldSerializer<THolder, TField>(ForyRuntime fory, string memberName)
+    {
+        FieldInfo resolverField = typeof(ForyRuntime).GetField("_typeResolver", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        TypeResolver resolver = (TypeResolver)resolverField.GetValue(fory)!;
+        Serializer<THolder> holderSerializer = resolver.GetSerializer<THolder>();
+        FieldInfo serializerField = holderSerializer.GetType().GetField(
+            $"__ForySerializer_{memberName}",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (Serializer<TField>)serializerField.GetValue(holderSerializer)!;
+    }
+
+    private static int SerializeFieldPayload<T>(Serializer<T> serializer, T value)
+    {
+        ByteWriter writer = new();
+        TypeResolver resolver = new();
+        WriteContext context = new(writer, resolver, trackRef: false, compatible: false);
+        serializer.WriteData(context, value, hasGenerics: true);
+        return writer.Count;
     }
 
     private static void AssertUnsignedEqual(UnsignedFields expected, UnsignedFields actual)

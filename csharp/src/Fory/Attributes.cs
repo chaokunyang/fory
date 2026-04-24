@@ -35,6 +35,10 @@ public sealed class ForyObjectAttribute : Attribute
 public enum FieldEncoding
 {
     /// <summary>
+    /// Use the default encoding for the declared CLR type.
+    /// </summary>
+    None = -1,
+    /// <summary>
     /// Variable-length integer encoding.
     /// </summary>
     Varint,
@@ -63,5 +67,28 @@ public sealed class FieldAttribute : Attribute
     /// <summary>
     /// Gets or sets the field encoding strategy used by generated serializers.
     /// </summary>
-    public FieldEncoding Encoding { get; set; } = FieldEncoding.Varint;
+    public FieldEncoding Encoding { get; set; } = FieldEncoding.None;
+}
+
+/// <summary>
+/// Overrides the encoding metadata for a nested generic type node on a field or property.
+/// Path segments use <c>element</c>, <c>key</c>, and <c>value</c>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = true)]
+public sealed class NestedTypeAttribute : Attribute
+{
+    public NestedTypeAttribute(string path)
+    {
+        Path = path;
+    }
+
+    /// <summary>
+    /// Gets the nested generic path from the annotated member root.
+    /// </summary>
+    public string Path { get; }
+
+    /// <summary>
+    /// Gets or sets the encoding override for the nested type node.
+    /// </summary>
+    public FieldEncoding Encoding { get; set; } = FieldEncoding.None;
 }

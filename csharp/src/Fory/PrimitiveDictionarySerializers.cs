@@ -41,7 +41,7 @@ internal static class PrimitiveDictionaryHeader
     }
 }
 
-internal interface IPrimitiveDictionaryCodec<T>
+public interface IPrimitiveDictionaryCodec<T>
 {
     static abstract TypeId WireTypeId { get; }
 
@@ -56,7 +56,30 @@ internal interface IPrimitiveDictionaryCodec<T>
     static abstract T Read(ReadContext context);
 }
 
-internal readonly struct StringPrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<string>
+public readonly struct NullablePrimitiveDictionaryCodec<T, TCodec> : IPrimitiveDictionaryCodec<T?>
+    where T : struct
+    where TCodec : struct, IPrimitiveDictionaryCodec<T>
+{
+    public static TypeId WireTypeId => TCodec.WireTypeId;
+
+    public static bool IsNullable => true;
+
+    public static T? DefaultValue => null;
+
+    public static bool IsNone(T? value) => !value.HasValue;
+
+    public static void Write(WriteContext context, T? value)
+    {
+        TCodec.Write(context, value.GetValueOrDefault());
+    }
+
+    public static T? Read(ReadContext context)
+    {
+        return TCodec.Read(context);
+    }
+}
+
+public readonly struct StringPrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<string>
 {
     public static TypeId WireTypeId => TypeId.String;
 
@@ -77,7 +100,7 @@ internal readonly struct StringPrimitiveDictionaryCodec : IPrimitiveDictionaryCo
     }
 }
 
-internal readonly struct BoolPrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<bool>
+public readonly struct BoolPrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<bool>
 {
     public static TypeId WireTypeId => TypeId.Bool;
 
@@ -98,7 +121,7 @@ internal readonly struct BoolPrimitiveDictionaryCodec : IPrimitiveDictionaryCode
     }
 }
 
-internal readonly struct Int8PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<sbyte>
+public readonly struct Int8PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<sbyte>
 {
     public static TypeId WireTypeId => TypeId.Int8;
 
@@ -119,7 +142,7 @@ internal readonly struct Int8PrimitiveDictionaryCodec : IPrimitiveDictionaryCode
     }
 }
 
-internal readonly struct Int16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<short>
+public readonly struct Int16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<short>
 {
     public static TypeId WireTypeId => TypeId.Int16;
 
@@ -140,7 +163,7 @@ internal readonly struct Int16PrimitiveDictionaryCodec : IPrimitiveDictionaryCod
     }
 }
 
-internal readonly struct Int32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<int>
+public readonly struct VarInt32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<int>
 {
     public static TypeId WireTypeId => TypeId.VarInt32;
 
@@ -161,7 +184,28 @@ internal readonly struct Int32PrimitiveDictionaryCodec : IPrimitiveDictionaryCod
     }
 }
 
-internal readonly struct Int64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<long>
+public readonly struct FixedInt32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<int>
+{
+    public static TypeId WireTypeId => TypeId.Int32;
+
+    public static bool IsNullable => false;
+
+    public static int DefaultValue => 0;
+
+    public static bool IsNone(int value) => false;
+
+    public static void Write(WriteContext context, int value)
+    {
+        context.Writer.WriteInt32(value);
+    }
+
+    public static int Read(ReadContext context)
+    {
+        return context.Reader.ReadInt32();
+    }
+}
+
+public readonly struct VarInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<long>
 {
     public static TypeId WireTypeId => TypeId.VarInt64;
 
@@ -182,7 +226,70 @@ internal readonly struct Int64PrimitiveDictionaryCodec : IPrimitiveDictionaryCod
     }
 }
 
-internal readonly struct UInt16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<ushort>
+public readonly struct FixedInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<long>
+{
+    public static TypeId WireTypeId => TypeId.Int64;
+
+    public static bool IsNullable => false;
+
+    public static long DefaultValue => 0;
+
+    public static bool IsNone(long value) => false;
+
+    public static void Write(WriteContext context, long value)
+    {
+        context.Writer.WriteInt64(value);
+    }
+
+    public static long Read(ReadContext context)
+    {
+        return context.Reader.ReadInt64();
+    }
+}
+
+public readonly struct TaggedInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<long>
+{
+    public static TypeId WireTypeId => TypeId.TaggedInt64;
+
+    public static bool IsNullable => false;
+
+    public static long DefaultValue => 0;
+
+    public static bool IsNone(long value) => false;
+
+    public static void Write(WriteContext context, long value)
+    {
+        context.Writer.WriteTaggedInt64(value);
+    }
+
+    public static long Read(ReadContext context)
+    {
+        return context.Reader.ReadTaggedInt64();
+    }
+}
+
+public readonly struct UInt8PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<byte>
+{
+    public static TypeId WireTypeId => TypeId.UInt8;
+
+    public static bool IsNullable => false;
+
+    public static byte DefaultValue => 0;
+
+    public static bool IsNone(byte value) => false;
+
+    public static void Write(WriteContext context, byte value)
+    {
+        context.Writer.WriteUInt8(value);
+    }
+
+    public static byte Read(ReadContext context)
+    {
+        return context.Reader.ReadUInt8();
+    }
+}
+
+public readonly struct UInt16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<ushort>
 {
     public static TypeId WireTypeId => TypeId.UInt16;
 
@@ -203,7 +310,7 @@ internal readonly struct UInt16PrimitiveDictionaryCodec : IPrimitiveDictionaryCo
     }
 }
 
-internal readonly struct UInt32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<uint>
+public readonly struct VarUInt32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<uint>
 {
     public static TypeId WireTypeId => TypeId.VarUInt32;
 
@@ -224,7 +331,28 @@ internal readonly struct UInt32PrimitiveDictionaryCodec : IPrimitiveDictionaryCo
     }
 }
 
-internal readonly struct UInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<ulong>
+public readonly struct FixedUInt32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<uint>
+{
+    public static TypeId WireTypeId => TypeId.UInt32;
+
+    public static bool IsNullable => false;
+
+    public static uint DefaultValue => 0;
+
+    public static bool IsNone(uint value) => false;
+
+    public static void Write(WriteContext context, uint value)
+    {
+        context.Writer.WriteUInt32(value);
+    }
+
+    public static uint Read(ReadContext context)
+    {
+        return context.Reader.ReadUInt32();
+    }
+}
+
+public readonly struct VarUInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<ulong>
 {
     public static TypeId WireTypeId => TypeId.VarUInt64;
 
@@ -245,7 +373,133 @@ internal readonly struct UInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCo
     }
 }
 
-internal readonly struct Float16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<Half>
+public readonly struct FixedUInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<ulong>
+{
+    public static TypeId WireTypeId => TypeId.UInt64;
+
+    public static bool IsNullable => false;
+
+    public static ulong DefaultValue => 0;
+
+    public static bool IsNone(ulong value) => false;
+
+    public static void Write(WriteContext context, ulong value)
+    {
+        context.Writer.WriteUInt64(value);
+    }
+
+    public static ulong Read(ReadContext context)
+    {
+        return context.Reader.ReadUInt64();
+    }
+}
+
+public readonly struct TaggedUInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<ulong>
+{
+    public static TypeId WireTypeId => TypeId.TaggedUInt64;
+
+    public static bool IsNullable => false;
+
+    public static ulong DefaultValue => 0;
+
+    public static bool IsNone(ulong value) => false;
+
+    public static void Write(WriteContext context, ulong value)
+    {
+        context.Writer.WriteTaggedUInt64(value);
+    }
+
+    public static ulong Read(ReadContext context)
+    {
+        return context.Reader.ReadTaggedUInt64();
+    }
+}
+
+public readonly struct Int32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<int>
+{
+    public static TypeId WireTypeId => VarInt32PrimitiveDictionaryCodec.WireTypeId;
+
+    public static bool IsNullable => VarInt32PrimitiveDictionaryCodec.IsNullable;
+
+    public static int DefaultValue => VarInt32PrimitiveDictionaryCodec.DefaultValue;
+
+    public static bool IsNone(int value) => VarInt32PrimitiveDictionaryCodec.IsNone(value);
+
+    public static void Write(WriteContext context, int value)
+    {
+        VarInt32PrimitiveDictionaryCodec.Write(context, value);
+    }
+
+    public static int Read(ReadContext context)
+    {
+        return VarInt32PrimitiveDictionaryCodec.Read(context);
+    }
+}
+
+public readonly struct Int64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<long>
+{
+    public static TypeId WireTypeId => VarInt64PrimitiveDictionaryCodec.WireTypeId;
+
+    public static bool IsNullable => VarInt64PrimitiveDictionaryCodec.IsNullable;
+
+    public static long DefaultValue => VarInt64PrimitiveDictionaryCodec.DefaultValue;
+
+    public static bool IsNone(long value) => VarInt64PrimitiveDictionaryCodec.IsNone(value);
+
+    public static void Write(WriteContext context, long value)
+    {
+        VarInt64PrimitiveDictionaryCodec.Write(context, value);
+    }
+
+    public static long Read(ReadContext context)
+    {
+        return VarInt64PrimitiveDictionaryCodec.Read(context);
+    }
+}
+
+public readonly struct UInt32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<uint>
+{
+    public static TypeId WireTypeId => VarUInt32PrimitiveDictionaryCodec.WireTypeId;
+
+    public static bool IsNullable => VarUInt32PrimitiveDictionaryCodec.IsNullable;
+
+    public static uint DefaultValue => VarUInt32PrimitiveDictionaryCodec.DefaultValue;
+
+    public static bool IsNone(uint value) => VarUInt32PrimitiveDictionaryCodec.IsNone(value);
+
+    public static void Write(WriteContext context, uint value)
+    {
+        VarUInt32PrimitiveDictionaryCodec.Write(context, value);
+    }
+
+    public static uint Read(ReadContext context)
+    {
+        return VarUInt32PrimitiveDictionaryCodec.Read(context);
+    }
+}
+
+public readonly struct UInt64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<ulong>
+{
+    public static TypeId WireTypeId => VarUInt64PrimitiveDictionaryCodec.WireTypeId;
+
+    public static bool IsNullable => VarUInt64PrimitiveDictionaryCodec.IsNullable;
+
+    public static ulong DefaultValue => VarUInt64PrimitiveDictionaryCodec.DefaultValue;
+
+    public static bool IsNone(ulong value) => VarUInt64PrimitiveDictionaryCodec.IsNone(value);
+
+    public static void Write(WriteContext context, ulong value)
+    {
+        VarUInt64PrimitiveDictionaryCodec.Write(context, value);
+    }
+
+    public static ulong Read(ReadContext context)
+    {
+        return VarUInt64PrimitiveDictionaryCodec.Read(context);
+    }
+}
+
+public readonly struct Float16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<Half>
 {
     public static TypeId WireTypeId => TypeId.Float16;
 
@@ -266,7 +520,7 @@ internal readonly struct Float16PrimitiveDictionaryCodec : IPrimitiveDictionaryC
     }
 }
 
-internal readonly struct BFloat16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<BFloat16>
+public readonly struct BFloat16PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<BFloat16>
 {
     public static TypeId WireTypeId => TypeId.BFloat16;
 
@@ -287,7 +541,7 @@ internal readonly struct BFloat16PrimitiveDictionaryCodec : IPrimitiveDictionary
     }
 }
 
-internal readonly struct Float32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<float>
+public readonly struct Float32PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<float>
 {
     public static TypeId WireTypeId => TypeId.Float32;
 
@@ -308,7 +562,7 @@ internal readonly struct Float32PrimitiveDictionaryCodec : IPrimitiveDictionaryC
     }
 }
 
-internal readonly struct Float64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<double>
+public readonly struct Float64PrimitiveDictionaryCodec : IPrimitiveDictionaryCodec<double>
 {
     public static TypeId WireTypeId => TypeId.Float64;
 
@@ -769,7 +1023,7 @@ internal static class PrimitiveDictionaryCodecReader
     }
 }
 
-internal class PrimitiveDictionarySerializer<TKey, TValue, TKeyCodec, TValueCodec> : Serializer<Dictionary<TKey, TValue>>
+public class PrimitiveDictionarySerializer<TKey, TValue, TKeyCodec, TValueCodec> : Serializer<Dictionary<TKey, TValue>>
     where TKey : notnull
     where TKeyCodec : struct, IPrimitiveDictionaryCodec<TKey>
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
@@ -804,20 +1058,20 @@ internal class PrimitiveDictionarySerializer<TKey, TValue, TKeyCodec, TValueCode
     }
 }
 
-internal class PrimitiveStringKeyDictionarySerializer<TValue, TValueCodec>
+public class PrimitiveStringKeyDictionarySerializer<TValue, TValueCodec>
     : PrimitiveDictionarySerializer<string, TValue, StringPrimitiveDictionaryCodec, TValueCodec>
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
 {
 }
 
-internal class PrimitiveSameTypeDictionarySerializer<TValue, TValueCodec>
+public class PrimitiveSameTypeDictionarySerializer<TValue, TValueCodec>
     : PrimitiveDictionarySerializer<TValue, TValue, TValueCodec, TValueCodec>
     where TValue : notnull
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
 {
 }
 
-internal class PrimitiveSortedDictionarySerializer<TKey, TValue, TKeyCodec, TValueCodec> : Serializer<SortedDictionary<TKey, TValue>>
+public class PrimitiveSortedDictionarySerializer<TKey, TValue, TKeyCodec, TValueCodec> : Serializer<SortedDictionary<TKey, TValue>>
     where TKey : notnull
     where TKeyCodec : struct, IPrimitiveDictionaryCodec<TKey>
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
@@ -852,20 +1106,20 @@ internal class PrimitiveSortedDictionarySerializer<TKey, TValue, TKeyCodec, TVal
     }
 }
 
-internal class PrimitiveStringKeySortedDictionarySerializer<TValue, TValueCodec>
+public class PrimitiveStringKeySortedDictionarySerializer<TValue, TValueCodec>
     : PrimitiveSortedDictionarySerializer<string, TValue, StringPrimitiveDictionaryCodec, TValueCodec>
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
 {
 }
 
-internal class PrimitiveSameTypeSortedDictionarySerializer<TValue, TValueCodec>
+public class PrimitiveSameTypeSortedDictionarySerializer<TValue, TValueCodec>
     : PrimitiveSortedDictionarySerializer<TValue, TValue, TValueCodec, TValueCodec>
     where TValue : notnull
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
 {
 }
 
-internal class PrimitiveSortedListSerializer<TKey, TValue, TKeyCodec, TValueCodec> : Serializer<SortedList<TKey, TValue>>
+public class PrimitiveSortedListSerializer<TKey, TValue, TKeyCodec, TValueCodec> : Serializer<SortedList<TKey, TValue>>
     where TKey : notnull
     where TKeyCodec : struct, IPrimitiveDictionaryCodec<TKey>
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
@@ -900,20 +1154,20 @@ internal class PrimitiveSortedListSerializer<TKey, TValue, TKeyCodec, TValueCode
     }
 }
 
-internal class PrimitiveStringKeySortedListSerializer<TValue, TValueCodec>
+public class PrimitiveStringKeySortedListSerializer<TValue, TValueCodec>
     : PrimitiveSortedListSerializer<string, TValue, StringPrimitiveDictionaryCodec, TValueCodec>
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
 {
 }
 
-internal class PrimitiveSameTypeSortedListSerializer<TValue, TValueCodec>
+public class PrimitiveSameTypeSortedListSerializer<TValue, TValueCodec>
     : PrimitiveSortedListSerializer<TValue, TValue, TValueCodec, TValueCodec>
     where TValue : notnull
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
 {
 }
 
-internal class PrimitiveConcurrentDictionarySerializer<TKey, TValue, TKeyCodec, TValueCodec> : Serializer<ConcurrentDictionary<TKey, TValue>>
+public class PrimitiveConcurrentDictionarySerializer<TKey, TValue, TKeyCodec, TValueCodec> : Serializer<ConcurrentDictionary<TKey, TValue>>
     where TKey : notnull
     where TKeyCodec : struct, IPrimitiveDictionaryCodec<TKey>
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
@@ -949,13 +1203,13 @@ internal class PrimitiveConcurrentDictionarySerializer<TKey, TValue, TKeyCodec, 
     }
 }
 
-internal class PrimitiveStringKeyConcurrentDictionarySerializer<TValue, TValueCodec>
+public class PrimitiveStringKeyConcurrentDictionarySerializer<TValue, TValueCodec>
     : PrimitiveConcurrentDictionarySerializer<string, TValue, StringPrimitiveDictionaryCodec, TValueCodec>
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
 {
 }
 
-internal class PrimitiveSameTypeConcurrentDictionarySerializer<TValue, TValueCodec>
+public class PrimitiveSameTypeConcurrentDictionarySerializer<TValue, TValueCodec>
     : PrimitiveConcurrentDictionarySerializer<TValue, TValue, TValueCodec, TValueCodec>
     where TValue : notnull
     where TValueCodec : struct, IPrimitiveDictionaryCodec<TValue>
@@ -993,3 +1247,75 @@ internal sealed class DictionaryLongLongSerializer : PrimitiveSameTypeDictionary
 internal sealed class DictionaryUIntUIntSerializer : PrimitiveSameTypeDictionarySerializer<uint, UInt32PrimitiveDictionaryCodec> { }
 
 internal sealed class DictionaryULongULongSerializer : PrimitiveSameTypeDictionarySerializer<ulong, UInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringVarInt32Serializer : PrimitiveStringKeyDictionarySerializer<int, VarInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringFixedInt32Serializer : PrimitiveStringKeyDictionarySerializer<int, FixedInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringVarInt64Serializer : PrimitiveStringKeyDictionarySerializer<long, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringFixedInt64Serializer : PrimitiveStringKeyDictionarySerializer<long, FixedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringTaggedInt64Serializer : PrimitiveStringKeyDictionarySerializer<long, TaggedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringVarUInt32Serializer : PrimitiveStringKeyDictionarySerializer<uint, VarUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringFixedUInt32Serializer : PrimitiveStringKeyDictionarySerializer<uint, FixedUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringVarUInt64Serializer : PrimitiveStringKeyDictionarySerializer<ulong, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringFixedUInt64Serializer : PrimitiveStringKeyDictionarySerializer<ulong, FixedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryStringTaggedUInt64Serializer : PrimitiveStringKeyDictionarySerializer<ulong, TaggedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarInt32VarInt32Serializer : PrimitiveDictionarySerializer<int, int, VarInt32PrimitiveDictionaryCodec, VarInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarInt32FixedInt32Serializer : PrimitiveDictionarySerializer<int, int, VarInt32PrimitiveDictionaryCodec, FixedInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedInt32VarInt32Serializer : PrimitiveDictionarySerializer<int, int, FixedInt32PrimitiveDictionaryCodec, VarInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedInt32FixedInt32Serializer : PrimitiveDictionarySerializer<int, int, FixedInt32PrimitiveDictionaryCodec, FixedInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarInt64VarInt64Serializer : PrimitiveDictionarySerializer<long, long, VarInt64PrimitiveDictionaryCodec, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarInt64FixedInt64Serializer : PrimitiveDictionarySerializer<long, long, VarInt64PrimitiveDictionaryCodec, FixedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarInt64TaggedInt64Serializer : PrimitiveDictionarySerializer<long, long, VarInt64PrimitiveDictionaryCodec, TaggedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedInt64VarInt64Serializer : PrimitiveDictionarySerializer<long, long, FixedInt64PrimitiveDictionaryCodec, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedInt64FixedInt64Serializer : PrimitiveDictionarySerializer<long, long, FixedInt64PrimitiveDictionaryCodec, FixedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedInt64TaggedInt64Serializer : PrimitiveDictionarySerializer<long, long, FixedInt64PrimitiveDictionaryCodec, TaggedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryTaggedInt64VarInt64Serializer : PrimitiveDictionarySerializer<long, long, TaggedInt64PrimitiveDictionaryCodec, VarInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryTaggedInt64FixedInt64Serializer : PrimitiveDictionarySerializer<long, long, TaggedInt64PrimitiveDictionaryCodec, FixedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryTaggedInt64TaggedInt64Serializer : PrimitiveDictionarySerializer<long, long, TaggedInt64PrimitiveDictionaryCodec, TaggedInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarUInt32VarUInt32Serializer : PrimitiveDictionarySerializer<uint, uint, VarUInt32PrimitiveDictionaryCodec, VarUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarUInt32FixedUInt32Serializer : PrimitiveDictionarySerializer<uint, uint, VarUInt32PrimitiveDictionaryCodec, FixedUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedUInt32VarUInt32Serializer : PrimitiveDictionarySerializer<uint, uint, FixedUInt32PrimitiveDictionaryCodec, VarUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedUInt32FixedUInt32Serializer : PrimitiveDictionarySerializer<uint, uint, FixedUInt32PrimitiveDictionaryCodec, FixedUInt32PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarUInt64VarUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, VarUInt64PrimitiveDictionaryCodec, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarUInt64FixedUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, VarUInt64PrimitiveDictionaryCodec, FixedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryVarUInt64TaggedUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, VarUInt64PrimitiveDictionaryCodec, TaggedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedUInt64VarUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, FixedUInt64PrimitiveDictionaryCodec, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedUInt64FixedUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, FixedUInt64PrimitiveDictionaryCodec, FixedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryFixedUInt64TaggedUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, FixedUInt64PrimitiveDictionaryCodec, TaggedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryTaggedUInt64VarUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, TaggedUInt64PrimitiveDictionaryCodec, VarUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryTaggedUInt64FixedUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, TaggedUInt64PrimitiveDictionaryCodec, FixedUInt64PrimitiveDictionaryCodec> { }
+
+public sealed class DictionaryTaggedUInt64TaggedUInt64Serializer : PrimitiveDictionarySerializer<ulong, ulong, TaggedUInt64PrimitiveDictionaryCodec, TaggedUInt64PrimitiveDictionaryCodec> { }
